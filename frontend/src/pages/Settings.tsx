@@ -1,7 +1,9 @@
+import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
-import { api, setApiKey } from '../api/client'
+import { api, clearToken } from '../api/client'
 import { ErrorBox, Loading } from '../components/Loading'
+import SymbolPicker from '../components/SymbolPicker'
 
 export default function Settings() {
   const queryClient = useQueryClient()
@@ -10,6 +12,16 @@ export default function Settings() {
   const watchlist = useQuery({ queryKey: ['watchlist'], queryFn: api.watchlist })
   const coverage = useQuery({ queryKey: ['coverage'], queryFn: api.coverage })
   const telegram = useQuery({ queryKey: ['telegram'], queryFn: api.telegramStatus })
+  const me = useQuery({ queryKey: ['me'], queryFn: api.me })
+
+  const [symbols, setSymbols] = useState<string[]>([])
+  const seeded = useRef(false)
+  useEffect(() => {
+    if (watchlist.data && !seeded.current) {
+      setSymbols(watchlist.data.map((i) => i.tradingsymbol))
+      seeded.current = true
+    }
+  }, [watchlist.data])
 
   const saveWatchlist = useMutation({
     mutationFn: (symbols: string[]) => api.setWatchlist(symbols),
@@ -108,20 +120,11 @@ export default function Settings() {
         style={{ marginBottom: '1.5rem' }}
         onSubmit={(event) => {
           event.preventDefault()
-          const raw = String(new FormData(event.currentTarget).get('symbols') ?? '')
-          const symbols = raw
-            .split(',')
-            .map((x) => x.trim().toUpperCase())
-            .filter(Boolean)
           if (symbols.length) saveWatchlist.mutate(symbols)
         }}
       >
-        <div className="stat-label">NSE symbols, comma separated</div>
-        <input
-          name="symbols"
-          defaultValue={watchlist.data?.map((i) => i.tradingsymbol).join(', ') ?? ''}
-          placeholder="RELIANCE, TCS, INFY"
-        />
+        <div className="stat-label">NSE symbols — search by name or code</div>
+        <SymbolPicker value={symbols} onChange={setSymbols} placeholder="Search RELIANCE, TCS, INFY…" />
         <div className="row" style={{ marginTop: '0.8rem' }}>
           <button className="primary" type="submit" disabled={saveWatchlist.isPending}>
             Save watchlist
@@ -188,24 +191,28 @@ export default function Settings() {
         {testTelegram.error && <ErrorBox error={testTelegram.error} />}
       </div>
 
-      <h2>API key</h2>
-      <form
-        className="card"
-        onSubmit={(event) => {
-          event.preventDefault()
-          const value = new FormData(event.currentTarget).get('key')
-          if (typeof value === 'string' && value.trim()) {
-            setApiKey(value)
-            window.location.reload()
-          }
-        }}
-      >
-        <div className="stat-label">Replace the stored API key</div>
-        <input name="key" type="password" placeholder="New API key" />
-        <button className="primary" type="submit" style={{ marginTop: '0.8rem' }}>
-          Save and reload
-        </button>
-      </form>
+      <h2>Account</h2>
+      <div className="card">
+        <div className="row" style={{ justifyContent: 'space-between' }}>
+          <div>
+            <div className="stat-value" style={{ fontSize: '1.1rem' }}>
+              {me.data?.username ?? '…'}
+            </div>
+            <div className="stat-sub">
+              {me.data?.email ?? 'no email'} · signed in via {me.data?.auth_provider ?? '—'}
+            </div>
+          </div>
+          <button
+            className="danger"
+            onClick={() => {
+              clearToken()
+              window.location.reload()
+            }}
+          >
+            Log out
+          </button>
+        </div>
+      </div>
     </>
   )
 }

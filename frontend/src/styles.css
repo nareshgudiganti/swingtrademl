@@ -318,6 +318,105 @@ select:focus {
   flex-wrap: wrap;
 }
 
+/* ------------------------------------------------------ symbol picker -- */
+
+.symbol-picker {
+  position: relative;
+}
+
+.symbol-picker-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+  padding: 0.35rem 0.5rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.symbol-picker-chips:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.symbol-picker input {
+  flex: 1;
+  min-width: 90px;
+  border: none;
+  background: transparent;
+  padding: 0.15rem 0.1rem;
+  width: auto;
+}
+
+.symbol-picker input:focus {
+  outline: none;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  padding: 0.1rem 0.3rem 0.1rem 0.6rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.chip button {
+  border: none;
+  background: transparent;
+  padding: 0 0.3rem;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 0.9rem;
+  line-height: 1;
+}
+
+.chip button:hover {
+  color: var(--neg);
+  background: transparent;
+}
+
+.symbol-picker-dropdown {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 240px;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.symbol-picker-option {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  font-size: 0.85rem;
+}
+
+.symbol-picker-option:hover {
+  background: var(--surface-2);
+}
+
+.symbol-picker-empty {
+  padding: 0.6rem 0.75rem;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+
 /* -------------------------------------------------------------- misc -- */
 
 .banner {

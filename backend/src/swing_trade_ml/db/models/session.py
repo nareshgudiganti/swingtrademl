@@ -23,7 +23,15 @@ class User(Base, TimestampMixin):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     username: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     email: Mapped[str | None] = mapped_column(String(255), unique=True)
-    hashed_password: Mapped[str] = mapped_column(String(255))
+    # Null for accounts created via Google — there is no local password to
+    # check for those, sign-in happens entirely through Google's identity.
+    hashed_password: Mapped[str | None] = mapped_column(String(255))
+    # "local" | "google" — which flow created/authenticates this account.
+    auth_provider: Mapped[str] = mapped_column(String(16), default="local")
+    # Google's stable per-account identifier, used to find the local row on
+    # repeat logins. Email alone isn't a safe join key long-term (Google lets
+    # the same email be reused across accounts in edge cases); this is.
+    google_id: Mapped[str | None] = mapped_column(String(64), unique=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_superuser: Mapped[bool] = mapped_column(Boolean, default=False)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

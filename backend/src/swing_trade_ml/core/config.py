@@ -47,6 +47,26 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_MINUTES: int = 720
 
+    # Self-registration. Fine to leave on for local development; turn off
+    # before this is reachable from anywhere but your own machine — an open
+    # signup endpoint on a system that can place real trades is a genuine
+    # account-takeover surface, not just a nuisance.
+    ALLOW_SIGNUP: bool = True
+
+    # Google "Sign in with Google" — from console.cloud.google.com, an OAuth
+    # 2.0 Client ID (type: Web application) with this exact redirect URI added.
+    GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_CLIENT_SECRET: str = ""
+    GOOGLE_REDIRECT_URL: str = "http://localhost:8000/api/v1/auth/google/callback"
+    # Where the browser lands after a successful Google login, with the JWT
+    # appended as a query param for the SPA to pick up.
+    FRONTEND_URL: str = "http://localhost:5173"
+    # Comma-separated allow-list. Deliberately required (not "empty means
+    # allow everyone") — this is a personal trading tool, not a public SaaS,
+    # and Google login must never become "any Google account gets a trading
+    # bot" just because the button exists.
+    GOOGLE_ALLOWED_EMAILS: str = ""
+
     # ------------------------------------------------------------ database --
     DATABASE_URL: str = (
         "postgresql+psycopg://swingtrade:swingtrade_local_pw@localhost:5432/swing_trade_ml"
@@ -168,6 +188,21 @@ class Settings(BaseSettings):
     @property
     def kite_configured(self) -> bool:
         return bool(self.KITE_API_KEY and self.KITE_API_SECRET)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def google_allowed_emails(self) -> set[str]:
+        return {e.strip().lower() for e in self.GOOGLE_ALLOWED_EMAILS.split(",") if e.strip()}
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def google_oauth_configured(self) -> bool:
+        """Both the OAuth app credentials AND at least one allowed email must
+        be set — see GOOGLE_ALLOWED_EMAILS above for why the latter is not
+        optional."""
+        return bool(
+            self.GOOGLE_CLIENT_ID and self.GOOGLE_CLIENT_SECRET and self.google_allowed_emails
+        )
 
 
 @lru_cache

@@ -5,6 +5,14 @@
 export type TradingMode = 'paper' | 'live'
 export type SignalType = 'BUY' | 'SELL' | 'HOLD' | 'EXIT'
 
+export interface CurrentUser {
+  id: number
+  username: string
+  email: string | null
+  auth_provider: 'local' | 'google'
+  is_superuser: boolean
+}
+
 export interface SystemStatus {
   app: string
   environment: string
@@ -174,6 +182,15 @@ export interface Instrument {
   tick_size: number
   is_watchlisted: boolean
   is_active: boolean
+}
+
+export interface PredictionRun {
+  symbol: string
+  instrument_id: number
+  probability: number
+  predicted_class: number
+  price: number
+  ts: string
 }
 
 export interface ScanResult {

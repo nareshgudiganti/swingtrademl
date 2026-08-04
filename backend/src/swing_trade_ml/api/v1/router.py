@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends
 
+from swing_trade_ml.api.deps import require_auth
 from swing_trade_ml.api.v1.endpoints import (
     auth,
     instruments,
@@ -16,20 +17,21 @@ from swing_trade_ml.api.v1.endpoints import (
     strategies,
     system,
 )
-from swing_trade_ml.core.security import require_api_key
 
 api_router = APIRouter()
 
 # Unauthenticated by design:
 #  - system: health/readiness probes are called by the orchestrator, which
-#    cannot carry an API key.
-#  - auth: /auth/kite/callback is loaded by Zerodha's redirect in a browser,
-#    which cannot send custom headers.
+#    cannot carry credentials.
+#  - auth: /auth/login has no credential yet by definition, and
+#    /auth/kite/callback is loaded by Zerodha's redirect in a browser, which
+#    cannot send custom headers.
 api_router.include_router(system.router)
 api_router.include_router(auth.router)
 
-# Everything that can read positions or move money requires the API key.
-protected = [Depends(require_api_key)]
+# Everything that can read positions or move money requires either a real
+# dashboard login (JWT) or the shared X-API-Key (for scripts/automation).
+protected = [Depends(require_auth)]
 api_router.include_router(instruments.router, dependencies=protected)
 api_router.include_router(market_data.router, dependencies=protected)
 api_router.include_router(strategies.router, dependencies=protected)

@@ -1,9 +1,11 @@
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 
-import { api, getApiKey, setApiKey } from './api/client'
+import { api, captureTokenFromRedirect, clearToken, getToken } from './api/client'
+import AuthScreen from './components/AuthScreen'
 import Dashboard from './pages/Dashboard'
 import Positions from './pages/Positions'
+import Recommendations from './pages/Recommendations'
 import Signals from './pages/Signals'
 import Strategies from './pages/Strategies'
 import Models from './pages/Models'
@@ -12,6 +14,7 @@ import Settings from './pages/Settings'
 
 const NAV = [
   { to: '/dashboard', label: 'Dashboard' },
+  { to: '/recommendations', label: 'Recommendations' },
   { to: '/positions', label: 'Positions' },
   { to: '/signals', label: 'Signals' },
   { to: '/trades', label: 'Trades' },
@@ -20,17 +23,30 @@ const NAV = [
   { to: '/settings', label: 'Settings' },
 ]
 
+// Runs once at module load, before the first render decides whether to show
+// the auth screen — a Google login redirect lands here with ?token=... and
+// must be captured before that check runs, or it would flash the login
+// screen and drop the token.
+captureTokenFromRedirect()
+
 export default function App() {
+  const hasToken = !!getToken()
+
   const { data: status } = useQuery({
     queryKey: ['status'],
     queryFn: api.status,
     refetchInterval: 30_000,
+    enabled: hasToken,
+  })
+  const { data: me } = useQuery({
+    queryKey: ['me'],
+    queryFn: api.me,
+    enabled: hasToken,
+    retry: false,
   })
 
-  // First run: no key stored yet, so every protected call would 401. Prompt for
-  // it once rather than showing a dashboard full of errors.
-  if (!getApiKey()) {
-    return <ApiKeyPrompt />
+  if (!hasToken) {
+    return <AuthScreen />
   }
 
   return (
@@ -68,9 +84,22 @@ export default function App() {
               {status?.broker_authenticated ? 'connected' : 'no session'}
             </span>
           </div>
-          <div className="row">
+          <div className="row" style={{ marginBottom: '0.6rem' }}>
             <span className="muted">Model</span>
             <span className="muted">{status?.active_model ?? 'none'}</span>
+          </div>
+          <div className="row" style={{ justifyContent: 'space-between' }}>
+            <span className="muted" title={me?.email ?? undefined}>
+              {me?.username ?? '…'}
+            </span>
+            <button
+              onClick={() => {
+                clearToken()
+                window.location.reload()
+              }}
+            >
+              Log out
+            </button>
           </div>
         </div>
       </aside>
@@ -94,6 +123,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/recommendations" element={<Recommendations />} />
           <Route path="/positions" element={<Positions />} />
           <Route path="/signals" element={<Signals />} />
           <Route path="/trades" element={<Trades />} />
@@ -102,34 +132,6 @@ export default function App() {
           <Route path="/settings" element={<Settings />} />
         </Routes>
       </main>
-    </div>
-  )
-}
-
-function ApiKeyPrompt() {
-  return (
-    <div style={{ display: 'grid', placeItems: 'center', minHeight: '100vh', padding: '1rem' }}>
-      <form
-        className="card"
-        style={{ maxWidth: 420, width: '100%' }}
-        onSubmit={(event) => {
-          event.preventDefault()
-          const value = new FormData(event.currentTarget).get('key')
-          if (typeof value === 'string' && value.trim()) {
-            setApiKey(value)
-            window.location.reload()
-          }
-        }}
-      >
-        <h1 style={{ marginBottom: '0.5rem' }}>Swing Trade ML</h1>
-        <p className="muted" style={{ marginTop: 0 }}>
-          Enter the <code>API_KEY</code> from your <code>.env</code> file to connect to the backend.
-        </p>
-        <input name="key" type="password" placeholder="API key" autoFocus />
-        <button className="primary" type="submit" style={{ marginTop: '0.8rem', width: '100%' }}>
-          Connect
-        </button>
-      </form>
     </div>
   )
 }

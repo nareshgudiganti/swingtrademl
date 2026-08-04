@@ -3,11 +3,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api } from '../api/client'
 import { Empty, ErrorBox, Loading } from '../components/Loading'
+import SymbolPicker from '../components/SymbolPicker'
 import { formatDate } from '../lib/format'
 
 export default function Strategies() {
   const queryClient = useQueryClient()
   const [showForm, setShowForm] = useState(false)
+  const [symbols, setSymbols] = useState<string[]>([])
 
   const strategies = useQuery({ queryKey: ['strategies'], queryFn: api.strategies })
   const types = useQuery({ queryKey: ['strategyTypes'], queryFn: api.strategyTypes })
@@ -30,6 +32,7 @@ export default function Strategies() {
     onSuccess: () => {
       invalidate()
       setShowForm(false)
+      setSymbols([])
     },
   })
 
@@ -80,10 +83,6 @@ export default function Strategies() {
           onSubmit={(event) => {
             event.preventDefault()
             const form = new FormData(event.currentTarget)
-            const symbols = String(form.get('symbols') ?? '')
-              .split(',')
-              .map((s) => s.trim().toUpperCase())
-              .filter(Boolean)
             create.mutate({
               name: String(form.get('name')),
               strategy_type: String(form.get('strategy_type')),
@@ -111,7 +110,11 @@ export default function Strategies() {
             </label>
             <label>
               <div className="stat-label">Symbols (blank = whole watchlist)</div>
-              <input name="symbols" placeholder="INFY, TCS, RELIANCE" />
+              <SymbolPicker
+                value={symbols}
+                onChange={setSymbols}
+                placeholder="Search INFY, TCS, RELIANCE…"
+              />
             </label>
             <label>
               <div className="stat-label">Description</div>

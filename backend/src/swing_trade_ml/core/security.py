@@ -6,21 +6,27 @@ import hmac
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+import bcrypt
 import jwt
 from fastapi import Header, HTTPException, status
-from passlib.context import CryptContext
 
 from swing_trade_ml.core.config import settings
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# bcrypt directly, not passlib's CryptContext wrapper: passlib has been
+# unmaintained since 2020 and its bcrypt handler breaks against bcrypt>=4.0's
+# API (misreports "password too long" for ordinary short passwords). bcrypt
+# itself needs no wrapper — hash/checkpw is the whole interface.
+_BCRYPT_MAX_BYTES = 72  # bcrypt's own hard limit; truncate rather than error
 
 
 def hash_password(plain: str) -> str:
-    return pwd_context.hash(plain)
+    truncated = plain.encode("utf-8")[:_BCRYPT_MAX_BYTES]
+    return bcrypt.hashpw(truncated, bcrypt.gensalt()).decode("utf-8")
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+    truncated = plain.encode("utf-8")[:_BCRYPT_MAX_BYTES]
+    return bcrypt.checkpw(truncated, hashed.encode("utf-8"))
 
 
 def create_access_token(subject: str, extra: dict[str, Any] | None = None) -> str:

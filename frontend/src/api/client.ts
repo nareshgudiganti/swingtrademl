@@ -1,6 +1,7 @@
 // Thin fetch wrapper around the FastAPI backend.
 
 import type {
+  CurrentUser,
   DetailedPosition,
   EquityPoint,
   Instrument,
@@ -8,6 +9,7 @@ import type {
   MLModel,
   MessageResponse,
   PortfolioSummary,
+  PredictionRun,
   ScanResult,
   Strategy,
   StrategyType,
@@ -17,18 +19,39 @@ import type {
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000/api/v1'
 
-// The backend guards protected routes with a shared X-API-Key. Storing it in
-// localStorage is acceptable for a single-operator dashboard on localhost; it
-// must be replaced with the JWT flow (POST /auth/login) before this is exposed
-// on any public address.
-const API_KEY_STORAGE = 'stml.apiKey'
+// The dashboard authenticates as a real user: POST /auth/login or /auth/signup
+// returns a JWT, which is what every subsequent request carries as a bearer
+// token. (The backend also accepts a shared X-API-Key as an alternative, but
+// that path exists for scripts/automation — the dashboard never uses it.)
+const TOKEN_STORAGE = 'stml.token'
 
-export function getApiKey(): string {
-  return localStorage.getItem(API_KEY_STORAGE) ?? ''
+export function getToken(): string {
+  return localStorage.getItem(TOKEN_STORAGE) ?? ''
 }
 
-export function setApiKey(key: string): void {
-  localStorage.setItem(API_KEY_STORAGE, key.trim())
+export function setToken(token: string): void {
+  localStorage.setItem(TOKEN_STORAGE, token.trim())
+}
+
+export function clearToken(): void {
+  localStorage.removeItem(TOKEN_STORAGE)
+}
+
+/**
+ * Google sign-in redirects the whole browser back to this app's own URL with
+ * `?token=...` attached (see the backend's /auth/google/callback). Called
+ * once on startup, before anything renders, so a fresh Google login is picked
+ * up and the token never lingers visibly in the address bar.
+ */
+export function captureTokenFromRedirect(): boolean {
+  const url = new URL(window.location.href)
+  const token = url.searchParams.get('token')
+  if (!token) return false
+
+  setToken(token)
+  url.searchParams.delete('token')
+  window.history.replaceState({}, '', url.toString())
+  return true
 }
 
 export class ApiError extends Error {
@@ -42,16 +65,24 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = getToken()
   const response = await fetch(`${BASE_URL}${path}`, {
     ...init,
     headers: {
       'Content-Type': 'application/json',
-      'X-API-Key': getApiKey(),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...init?.headers,
     },
   })
 
   if (!response.ok) {
+    // A 401 on an authenticated request means the token expired or was
+    // revoked — drop it so the app falls back to the login screen instead of
+    // looping on the same failing request.
+    if (response.status === 401 && token) {
+      clearToken()
+    }
+
     // FastAPI returns {detail: ...}; fall back to the status line when the
     // body is empty or not JSON (a proxy error page, for instance).
     let detail = response.statusText
@@ -77,10 +108,23 @@ const put = <T>(path: string, body: unknown) =>
   request<T>(path, { method: 'PUT', body: JSON.stringify(body) })
 const del = <T>(path: string) => request<T>(path, { method: 'DELETE' })
 
+/** Full-page navigation, not a fetch: Google's consent screen must be a real
+ * browser redirect, and the backend replies with one too. */
+export function googleLoginUrl(): string {
+  return `${BASE_URL}/auth/google/login`
+}
+
 export const api = {
   // ------------------------------------------------------------- system --
   status: () => get<SystemStatus>('/status'),
   health: () => get<{ status: string; version: string }>('/health'),
+
+  // -------------------------------------------------------------- auth --
+  login: (username: string, password: string) =>
+    post<{ access_token: string }>('/auth/login', { username, password }),
+  signup: (username: string, password: string, email?: string) =>
+    post<{ access_token: string }>('/auth/signup', { username, password, email }),
+  me: () => get<CurrentUser>('/auth/me'),
 
   // ---------------------------------------------------------- portfolio --
   summary: (mode?: string) =>
@@ -114,11 +158,16 @@ export const api = {
     get<{ evaluated_predictions: number; correct: number; accuracy: number }>(
       '/ml/predictions/accuracy',
     ),
+  // Scores the whole watchlist now, ranked by probability — the "what should
+  // I focus on" view. persist=true also feeds the accuracy metric above.
+  predict: (persist = true) => post<PredictionRun[]>(`/ml/predict?persist=${persist}`),
 
   // -------------------------------------------------------- instruments --
   watchlist: () => get<Instrument[]>('/instruments/watchlist'),
   setWatchlist: (symbols: string[]) => put<Instrument[]>('/instruments/watchlist', { symbols }),
   syncInstruments: () => post<MessageResponse>('/instruments/sync'),
+  instruments: (search: string, limit = 8) =>
+    get<Instrument[]>(`/instruments?search=${encodeURIComponent(search)}&limit=${limit}`),
 
   // -------------------------------------------------------- market data --
   backfill: (body: Record<string, unknown>) => post<MessageResponse>('/market-data/backfill', body),

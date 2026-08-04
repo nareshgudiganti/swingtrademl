@@ -56,10 +56,25 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class SignupRequest(BaseModel):
+    username: str = Field(..., min_length=3, max_length=64)
+    password: str = Field(..., min_length=8)
+    email: str | None = None
+
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     expires_in_minutes: int
+
+
+class CurrentUserOut(BaseModel):
+    model_config = ORM
+    id: int
+    username: str
+    email: str | None
+    auth_provider: str
+    is_superuser: bool
 
 
 class KiteLoginResponse(BaseModel):

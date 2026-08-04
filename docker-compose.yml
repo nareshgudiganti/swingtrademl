@@ -104,9 +104,10 @@ services:
         condition: service_started
       postgres:
         condition: service_healthy
-    # Runs the same app, but this instance is the one with the scheduler on.
-    # Bound to 8001 internally so its health endpoint stays reachable.
-    command: ["uvicorn", "swing_trade_ml.main:app", "--host", "0.0.0.0", "--port", "8001"]
+    # Runs the same app as `api`, but this is the instance with the scheduler
+    # on. Not published to the host, so there is no port collision with `api`
+    # to avoid — stays on 8000 (the Dockerfile's baked-in HEALTHCHECK probes
+    # that port; overriding it here would just reintroduce the mismatch).
 
   frontend:
     build:

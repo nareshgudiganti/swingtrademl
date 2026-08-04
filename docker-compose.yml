@@ -1,0 +1,135 @@
+# Swing Trade ML — local development stack.
+#
+#   docker compose up -d          start everything
+#   docker compose logs -f api    follow the API
+#   docker compose down           stop (data survives in named volumes)
+#   docker compose down -v        stop and DELETE all data
+#
+# The api and worker are separate services deliberately. Only the worker runs
+# the scheduler, so scaling the API to multiple replicas later cannot result in
+# several schedulers each placing the same trade.
+
+name: swing-trade-ml
+
+services:
+  postgres:
+    image: timescale/timescaledb:latest-pg17
+    container_name: stml-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-swingtrade}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-swingtrade_local_pw}
+      POSTGRES_DB: ${POSTGRES_DB:-swing_trade_ml}
+      # Postgres defaults to the C collation; en_US.UTF-8 keeps symbol sorting
+      # sane and matches what managed cloud instances use.
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8"
+    ports:
+      # Published on 5433, not 5432. A locally installed PostgreSQL commonly
+      # already owns 5432 on Windows, and `localhost:5432` would silently
+      # resolve to that instance instead of this container — which fails with a
+      # confusing "password authentication failed" rather than a port clash.
+      # Inside the compose network the port is still 5432 (see DATABASE_URL_DOCKER).
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/postgres:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      # Dependants must wait for readiness, not just for the container to start —
+      # Postgres restarts once during first-run initialisation.
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-swingtrade} -d ${POSTGRES_DB:-swing_trade_ml}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  redis:
+    image: redis:7-alpine
+    container_name: stml-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: stml-api
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # In-network hostnames override the localhost URLs in .env
+      DATABASE_URL: ${DATABASE_URL_DOCKER:-postgresql+psycopg://swingtrade:swingtrade_local_pw@postgres:5432/swing_trade_ml}
+      REDIS_URL: ${REDIS_URL_DOCKER:-redis://redis:6379/0}
+      # The worker owns the scheduler; the API must not run a second copy.
+      ENABLE_SCHEDULER: "false"
+    ports:
+      - "8000:8000"
+    volumes:
+      # Trained models are shared with the worker and must outlive the container
+      - model_data:/app/data/models
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: stml-worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL_DOCKER:-postgresql+psycopg://swingtrade:swingtrade_local_pw@postgres:5432/swing_trade_ml}
+      REDIS_URL: ${REDIS_URL_DOCKER:-redis://redis:6379/0}
+      ENABLE_SCHEDULER: "true"
+      # The API already migrated the schema; two processes racing on `alembic
+      # upgrade` at boot can deadlock.
+      DB_AUTO_MIGRATE: "false"
+    volumes:
+      - model_data:/app/data/models
+    depends_on:
+      api:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+    # Runs the same app, but this instance is the one with the scheduler on.
+    # Bound to 8001 internally so its health endpoint stays reachable.
+    command: ["uvicorn", "swing_trade_ml.main:app", "--host", "0.0.0.0", "--port", "8001"]
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: development
+    container_name: stml-frontend
+    restart: unless-stopped
+    environment:
+      # Points at the host-published API port, because this URL is resolved by
+      # the browser, not from inside the container network.
+      VITE_API_BASE_URL: http://localhost:8000/api/v1
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      # Anonymous volume keeps the container's own node_modules from being
+      # shadowed by the host bind mount (which has none on Windows).
+      - /app/node_modules
+    depends_on:
+      - api
+
+volumes:
+  postgres_data:
+  redis_data:
+  model_data:

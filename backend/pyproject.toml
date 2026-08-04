@@ -1,0 +1,95 @@
+[project]
+name = "swing-trade-ml"
+version = "0.1.0"
+description = "ML-driven swing trading bot for Indian equities — FastAPI, PostgreSQL/TimescaleDB, Zerodha Kite, Telegram"
+# No `readme` key: the README lives at the repo root, outside this package's
+# directory, and setuptools refuses to read files above the project root (the
+# Docker build context is backend/ only, so it would not be there either).
+requires-python = ">=3.11,<3.14"
+
+dependencies = [
+    # --- Web framework ---
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "python-multipart>=0.0.12",
+
+    # --- Config & validation ---
+    "pydantic>=2.9.0",
+    "pydantic-settings>=2.6.0",
+    "python-dotenv>=1.0.1",
+
+    # --- Database: SQLAlchemy ORM + psycopg 3 driver + Alembic migrations ---
+    "sqlalchemy>=2.0.36",
+    "psycopg[binary,pool]>=3.2.3",
+    "alembic>=1.14.0",
+
+    # --- Auth ---
+    "passlib[bcrypt]>=1.7.4",
+    "pyjwt>=2.10.0",
+
+    # --- Broker ---
+    "kiteconnect>=5.0.1",
+
+    # --- Scheduling & async HTTP ---
+    "apscheduler>=3.11.0",
+    "httpx>=0.28.0",
+    "tenacity>=9.0.0",
+    "redis>=5.2.0",
+
+    # --- Data & ML ---
+    "pandas>=2.2.3",
+    "numpy>=2.1.0",
+    "scikit-learn>=1.5.2",
+    "lightgbm>=4.5.0",
+    "joblib>=1.4.2",
+
+    # --- Observability ---
+    "structlog>=24.4.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.3",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=6.0.0",
+    "ruff>=0.8.0",
+    "mypy>=1.13.0",
+    "types-requests",
+]
+
+[project.scripts]
+# Operational entrypoints — see backend/src/swing_trade_ml/cli.py
+swingtrade = "swing_trade_ml.cli:main"
+
+[build-system]
+requires = ["setuptools>=75.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+# 110 rather than 100: SQLAlchemy ForeignKey column declarations and Alembic's
+# generated constraint names are naturally long, and wrapping them hurts
+# readability more than the extra width does.
+line-length = 110
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+# BLE is selected so that every blanket `except Exception` must carry an
+# explicit `# noqa: BLE001`. Background jobs and per-symbol loops genuinely need
+# them — one bad symbol must not abort a scan — but each one should be a
+# deliberate, visible decision rather than a reflex.
+select = ["E", "F", "I", "N", "UP", "B", "C4", "SIM", "RUF", "BLE"]
+ignore = ["B008"]  # FastAPI's Depends() in defaults is the documented idiom
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.mypy]
+python_version = "3.12"
+plugins = ["pydantic.mypy"]
+ignore_missing_imports = true

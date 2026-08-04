@@ -16,6 +16,14 @@ import sys
 
 from swing_trade_ml.core.logging import configure_logging, get_logger
 
+# Windows' console defaults to the system codepage (cp1252/cp437), which
+# cannot encode the checkmark/cross glyphs used for CLI feedback below — that
+# raises UnicodeEncodeError and makes an otherwise-successful command look
+# like it crashed. Force UTF-8 on stdout/stderr regardless of platform.
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+
 configure_logging()
 log = get_logger("cli")
 

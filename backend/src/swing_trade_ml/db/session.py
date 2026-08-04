@@ -58,9 +58,30 @@ def session_scope() -> Iterator[Session]:
         db.close()
 
 
-def _backend_dir() -> Path:
-    # db/session.py -> swing_trade_ml -> src -> backend
-    return Path(__file__).resolve().parents[3]
+def _find_alembic_dir() -> Path:
+    """Locate the directory containing alembic.ini.
+
+    Two layouts need to resolve here, and neither can be assumed:
+    - Local dev (`pip install -e .`): this file lives under
+      `backend/src/swing_trade_ml/db/session.py`, so alembic.ini sits three
+      parents up, at `backend/`.
+    - The Docker image: the package is installed as a real wheel into
+      site-packages, so `__file__`-relative traversal lands somewhere under
+      `/usr/local/lib/pythonX.Y/` instead — nowhere near alembic.ini, which the
+      Dockerfile copies to `/app/alembic.ini` (the container's cwd).
+
+    Checking cwd first covers both the container (WORKDIR /app) and a normal
+    local run (`uvicorn` launched from `backend/`); the `__file__` heuristic is
+    a fallback for anything invoked from an unrelated working directory.
+    """
+    candidates = [Path.cwd(), Path(__file__).resolve().parents[3]]
+    for candidate in candidates:
+        if (candidate / "alembic.ini").is_file():
+            return candidate
+
+    raise FileNotFoundError(
+        "Could not find alembic.ini in any of: " + ", ".join(str(c) for c in candidates)
+    )
 
 
 def run_migrations() -> None:
@@ -72,12 +93,12 @@ def run_migrations() -> None:
     from alembic import command
     from alembic.config import Config
 
-    backend = _backend_dir()
+    backend = _find_alembic_dir()
     cfg = Config(str(backend / "alembic.ini"))
     cfg.set_main_option("script_location", str(backend / "alembic"))
     cfg.set_main_option("sqlalchemy.url", settings.DATABASE_URL.replace("%", "%%"))
 
-    log.info("db.migrate.start")
+    log.info("db.migrate.start", alembic_dir=str(backend))
     command.upgrade(cfg, "head")
     log.info("db.migrate.done")
 

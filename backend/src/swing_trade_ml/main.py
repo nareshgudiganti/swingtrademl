@@ -87,7 +87,11 @@ async def lifespan(app: FastAPI):
         if settings.is_live_trading
         else "📝 PAPER mode — all orders are simulated"
     )
-    notifier.send_sync(f"🚀 <b>Swing Trade ML started</b>\n\n{mode_line}", "system")
+    # await, not send_sync: lifespan is an async function running on uvicorn's
+    # event loop, and send_sync's internal asyncio.run() always raises "cannot
+    # be called from a running event loop" from here. send_sync exists for
+    # truly synchronous callers (APScheduler's worker threads), not this one.
+    await notifier.send(f"🚀 <b>Swing Trade ML started</b>\n\n{mode_line}", "system")
 
     if settings.is_live_trading:
         # Loud on purpose. This is the one state where a bug costs real money.
@@ -97,7 +101,7 @@ async def lifespan(app: FastAPI):
 
     log.info("app.stopping")
     stop_scheduler()
-    notifier.send_sync("🛑 <b>Swing Trade ML stopped</b>", "system")
+    await notifier.send("🛑 <b>Swing Trade ML stopped</b>", "system")
 
 
 app = FastAPI(

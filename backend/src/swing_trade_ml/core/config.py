@@ -132,11 +132,21 @@ class Settings(BaseSettings):
     @field_validator("MODEL_ARTIFACT_DIR")
     @classmethod
     def _resolve_artifact_dir(cls, v: str) -> str:
-        """Make relative artifact paths absolute against the repo root, so the
-        directory resolves identically whether the app is started from the repo
-        root, from backend/, or from inside a container."""
+        """Make relative artifact paths absolute against the current working
+        directory, not REPO_ROOT.
+
+        REPO_ROOT is computed by walking up from this file's own location,
+        which only lands on the actual repo root in the editable/src install
+        layout. Inside the Docker image the package is a real wheel under
+        site-packages, so that walk lands somewhere under
+        /usr/local/lib/python3.x instead — not writable by the non-root
+        `appuser` the container runs as, and training crashed outright the
+        first time this ran against real data. cwd is correct in both cases:
+        it's /app in the container (where the Dockerfile already creates and
+        chowns data/models) and `backend/` for a normal local run.
+        """
         p = Path(v)
-        return str(p if p.is_absolute() else (REPO_ROOT / p).resolve())
+        return str(p if p.is_absolute() else (Path.cwd() / p).resolve())
 
     @computed_field  # type: ignore[prop-decorator]
     @property

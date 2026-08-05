@@ -83,21 +83,29 @@ def sync_instruments(db: Session, exchange: str = "NSE", equity_only: bool = Tru
         log.warning("ingestion.instruments.empty", exchange=exchange)
         return 0
 
-    # Upsert on instrument_token: the same symbol may reappear with updated
-    # metadata, and is_watchlisted must survive the refresh.
-    stmt = pg_insert(Instrument).values(rows)
-    stmt = stmt.on_conflict_do_update(
-        index_elements=[Instrument.instrument_token],
-        set_={
-            "tradingsymbol": stmt.excluded.tradingsymbol,
-            "name": stmt.excluded.name,
-            "segment": stmt.excluded.segment,
-            "lot_size": stmt.excluded.lot_size,
-            "tick_size": stmt.excluded.tick_size,
-            "is_active": True,
-        },
-    )
-    db.execute(stmt)
+    # Postgres caps a single query at 65535 bind parameters. NSE's "EQ" dump
+    # (main board + SME + ETFs, all typed EQ) comfortably exceeds
+    # 65535 / 10 columns ≈ 6553 rows in one INSERT, so this must be batched —
+    # a single-statement bulk insert broke outright the first time this ran
+    # against a real Kite instrument dump.
+    batch_size = 3000
+    for i in range(0, len(rows), batch_size):
+        batch = rows[i : i + batch_size]
+        # Upsert on instrument_token: the same symbol may reappear with
+        # updated metadata, and is_watchlisted must survive the refresh.
+        stmt = pg_insert(Instrument).values(batch)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=[Instrument.instrument_token],
+            set_={
+                "tradingsymbol": stmt.excluded.tradingsymbol,
+                "name": stmt.excluded.name,
+                "segment": stmt.excluded.segment,
+                "lot_size": stmt.excluded.lot_size,
+                "tick_size": stmt.excluded.tick_size,
+                "is_active": True,
+            },
+        )
+        db.execute(stmt)
     db.commit()
 
     log.info("ingestion.instruments.done", exchange=exchange, count=len(rows))

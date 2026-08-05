@@ -6,7 +6,7 @@ a single file is worth more here than package-per-domain ceremony.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -390,6 +390,49 @@ class PredictionRunOut(BaseModel):
     predicted_class: int
     price: float
     ts: datetime
+
+
+# ------------------------------------------------------------- backtest --
+
+
+class BacktestRequest(BaseModel):
+    strategy_type: str = Field(pattern="^(ml_swing|sma_crossover)$")
+    symbols: list[str] | None = None
+    start: date
+    end: date | None = None
+    interval: str = "day"
+    params: dict[str, Any] | None = None
+    starting_capital: float | None = None
+
+
+class BacktestTradeOut(BaseModel):
+    # BacktestTrade is a plain dataclass, not a dict — from_attributes lets
+    # pydantic build this from its attributes the same way ORM rows validate.
+    model_config = ORM
+    symbol: str
+    entry_date: date
+    exit_date: date
+    entry_price: float
+    exit_price: float
+    quantity: int
+    gross_pnl: float
+    charges: float
+    net_pnl: float
+    return_pct: float
+    holding_days: int
+    exit_reason: str
+
+
+class BacktestResponse(BaseModel):
+    strategy_type: str
+    symbols: list[str]
+    start: date
+    end: date
+    starting_capital: float
+    ending_value: float
+    stats: dict[str, Any]
+    trades: list[BacktestTradeOut]
+    equity_curve: list[dict[str, Any]]
 
 
 # ------------------------------------------------------------ notifications --

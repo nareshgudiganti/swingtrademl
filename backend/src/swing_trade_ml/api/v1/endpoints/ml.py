@@ -7,6 +7,7 @@ from sqlalchemy import Integer, cast, func, select
 
 from swing_trade_ml.api.deps import DbSession
 from swing_trade_ml.core.logging import get_logger
+from swing_trade_ml.db.models.market import Instrument
 from swing_trade_ml.db.models.ml import MLModel, Prediction
 from swing_trade_ml.db.session import session_scope
 from swing_trade_ml.ml import predict as predict_service
@@ -133,13 +134,37 @@ def list_predictions(
     model_id: int | None = None,
     evaluated_only: bool = False,
     limit: int = Query(100, le=1000),
-) -> list[Prediction]:
-    stmt = select(Prediction).order_by(Prediction.ts.desc()).limit(limit)
+) -> list[dict]:
+    """Symbol-resolved so the dashboard can show "what we predicted and what
+    actually happened" without a second lookup per row."""
+    stmt = (
+        select(Prediction, Instrument.tradingsymbol)
+        .join(Instrument, Instrument.id == Prediction.instrument_id)
+        .order_by(Prediction.ts.desc())
+        .limit(limit)
+    )
     if model_id:
         stmt = stmt.where(Prediction.model_id == model_id)
     if evaluated_only:
         stmt = stmt.where(Prediction.evaluated_at.isnot(None))
-    return list(db.execute(stmt).scalars().all())
+
+    rows = db.execute(stmt).all()
+    return [
+        {
+            "id": pred.id,
+            "model_id": pred.model_id,
+            "instrument_id": pred.instrument_id,
+            "symbol": symbol,
+            "ts": pred.ts,
+            "predicted_class": pred.predicted_class,
+            "probability": pred.probability,
+            "price_at_prediction": pred.price_at_prediction,
+            "actual_return": pred.actual_return,
+            "was_correct": pred.was_correct,
+            "evaluated_at": pred.evaluated_at,
+        }
+        for pred, symbol in rows
+    ]
 
 
 @router.get("/predictions/accuracy", response_model=dict)

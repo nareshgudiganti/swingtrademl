@@ -62,6 +62,12 @@ def start_scheduler() -> None:
         replace_existing=True,
     )
     scheduler.add_job(
+        jobs.job_predict_watchlist,
+        CronTrigger(day_of_week=WEEKDAYS, hour=15, minute=42),
+        id="predict_watchlist",
+        replace_existing=True,
+    )
+    scheduler.add_job(
         jobs.job_signal_scan,
         CronTrigger(
             day_of_week=WEEKDAYS,

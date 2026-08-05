@@ -194,6 +194,20 @@ export interface PredictionRun {
   ts: string
 }
 
+export interface Prediction {
+  id: number
+  model_id: number
+  instrument_id: number
+  symbol: string
+  ts: string
+  predicted_class: number
+  probability: number
+  price_at_prediction: number
+  actual_return: number | null
+  was_correct: boolean | null
+  evaluated_at: string | null
+}
+
 export interface ScanResult {
   strategies_run: number
   instruments_evaluated: number

@@ -90,6 +90,26 @@ def job_signal_scan() -> None:
         _report_error("signal_scan", exc)
 
 
+def job_predict_watchlist() -> None:
+    """Persist a prediction for every watchlisted symbol against today's close.
+
+    This is what turns "prediction accuracy" from a number you get only by
+    remembering to click Refresh on the Recommendations page into an actual
+    history: every scored symbol lands in `predictions`, and
+    evaluate_pending_predictions() later backfills whether each one panned
+    out. Runs after daily_ingest so it sees the same completed bar the signal
+    scan does.
+    """
+    try:
+        from swing_trade_ml.ml.predict import predict_watchlist
+
+        with session_scope() as db:
+            results = predict_watchlist(db, interval="day", persist=True)
+            log.info("job.predict.done", scored=len(results))
+    except Exception as exc:  # noqa: BLE001
+        _report_error("predict_watchlist", exc)
+
+
 def job_daily_summary() -> None:
     """Snapshot the equity curve and push the end-of-day Telegram digest."""
     try:

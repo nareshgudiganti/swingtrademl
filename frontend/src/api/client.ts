@@ -9,6 +9,7 @@ import type {
   MLModel,
   MessageResponse,
   PortfolioSummary,
+  Prediction,
   PredictionRun,
   ScanResult,
   Strategy,
@@ -161,6 +162,9 @@ export const api = {
   // Scores the whole watchlist now, ranked by probability — the "what should
   // I focus on" view. persist=true also feeds the accuracy metric above.
   predict: (persist = true) => post<PredictionRun[]>(`/ml/predict?persist=${persist}`),
+  // The history behind the accuracy stat: every prediction the bot has ever
+  // made, symbol-resolved, with the outcome once its horizon has elapsed.
+  predictions: (limit = 100) => get<Prediction[]>(`/ml/predictions?limit=${limit}`),
 
   // -------------------------------------------------------- instruments --
   watchlist: () => get<Instrument[]>('/instruments/watchlist'),

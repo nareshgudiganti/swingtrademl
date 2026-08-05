@@ -402,16 +402,17 @@ class MLModelDetail(MLModelOut):
 
 
 class PredictionOut(BaseModel):
-    model_config = ORM
     id: int
     model_id: int
     instrument_id: int
+    symbol: str
     ts: datetime
     predicted_class: int
     probability: float
     price_at_prediction: float
     actual_return: float | None
     was_correct: bool | None
+    evaluated_at: datetime | None
 
 
 class PredictionRunOut(BaseModel):

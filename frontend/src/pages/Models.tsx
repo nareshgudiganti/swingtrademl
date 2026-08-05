@@ -3,12 +3,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api/client'
 import Stat from '../components/Stat'
 import { Empty, ErrorBox, Loading } from '../components/Loading'
-import { formatDate, formatPercent } from '../lib/format'
+import { formatCurrency, formatDate, formatDateTime, formatPercent, formatSignedPercent } from '../lib/format'
 
 export default function Models() {
   const queryClient = useQueryClient()
   const models = useQuery({ queryKey: ['models'], queryFn: api.models })
   const accuracy = useQuery({ queryKey: ['predAccuracy'], queryFn: api.predictionAccuracy })
+  const predictions = useQuery({ queryKey: ['predictions', 100], queryFn: () => api.predictions(100) })
 
   const train = useMutation({
     mutationFn: (algorithm: string) => api.train({ algorithm, auto_activate: false }),
@@ -123,6 +124,66 @@ export default function Models() {
                       >
                         Activate
                       </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <h2 style={{ marginTop: '2rem' }}>Prediction history</h2>
+      <div className="banner banner-info">
+        What the bot actually predicted for each symbol, and — once the prediction&apos;s horizon
+        has elapsed — what really happened in the market. This is the same data the accuracy stat
+        above is computed from, one row per prediction. A fresh row is recorded for the whole
+        watchlist automatically every trading day after the close.
+      </div>
+      <div className="table-wrap">
+        {predictions.isLoading ? (
+          <Loading />
+        ) : predictions.error ? (
+          <ErrorBox error={predictions.error} />
+        ) : !predictions.data?.length ? (
+          <Empty label="No predictions recorded yet — check back after the next trading day's close." />
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>Predicted</th>
+                <th>Symbol</th>
+                <th>Called</th>
+                <th className="num">Confidence</th>
+                <th className="num">Price then</th>
+                <th className="num">Actual return</th>
+                <th>Outcome</th>
+              </tr>
+            </thead>
+            <tbody>
+              {predictions.data.map((p) => (
+                <tr key={p.id}>
+                  <td className="muted">{formatDateTime(p.ts)}</td>
+                  <td>
+                    <strong>{p.symbol}</strong>
+                  </td>
+                  <td>
+                    <span className={`badge ${p.predicted_class ? 'badge-buy' : 'badge-sell'}`}>
+                      {p.predicted_class ? 'UP' : 'NO MOVE'}
+                    </span>
+                  </td>
+                  <td className="num">{formatPercent(p.probability, 1)}</td>
+                  <td className="num">{formatCurrency(p.price_at_prediction)}</td>
+                  <td className="num">
+                    {p.actual_return !== null ? formatSignedPercent(p.actual_return, 1) : '—'}
+                  </td>
+                  <td>
+                    {p.was_correct === null ? (
+                      <span className="badge badge-hold">pending</span>
+                    ) : p.was_correct ? (
+                      <span className="badge badge-on">correct</span>
+                    ) : (
+                      <span className="badge badge-off">wrong</span>
                     )}
                   </td>
                 </tr>

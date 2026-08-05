@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 import {
   Area,
   AreaChart,
@@ -37,6 +38,16 @@ export default function Dashboard() {
         <span className={`badge ${s.mode === 'live' ? 'badge-live' : 'badge-paper'}`}>
           {s.mode.toUpperCase()}
         </span>
+      </div>
+
+      <div className="banner banner-info" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem' }}>
+        <span>
+          Not sure which stocks to act on? <strong>Recommendations</strong> ranks the whole
+          watchlist by the model&apos;s confidence in a move over the next day to two weeks.
+        </span>
+        <Link to="/recommendations">
+          <button className="primary">View recommendations</button>
+        </Link>
       </div>
 
       <div className="grid">

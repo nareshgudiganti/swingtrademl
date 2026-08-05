@@ -58,6 +58,16 @@ class Strategy(Base, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     mode: Mapped[str] = mapped_column(String(8), default=TradingMode.PAPER, index=True)
 
+    # "auto" places real (paper/live) orders as today; "advisory" only ever
+    # notifies with a recommendation — see services/execution.py. Never
+    # auto-executed regardless of mode once set to advisory.
+    execution_mode: Mapped[str] = mapped_column(String(16), default="auto", index=True)
+
+    # Opt-in: add another tranche to an already-open, currently-profitable
+    # position instead of rejecting the entry outright. See services/risk.py
+    # open_exposure_value().
+    allow_pyramiding: Mapped[bool] = mapped_column(Boolean, default=False)
+
     # Empty means "every watchlisted instrument"
     symbols: Mapped[list[str]] = mapped_column(JSON, default=list)
 
@@ -106,6 +116,11 @@ class Signal(Base, TimestampMixin):
 
     was_executed: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     rejection_reason: Mapped[str | None] = mapped_column(Text)
+
+    # True when this was a recommendation only (strategy.execution_mode ==
+    # "advisory") — distinct from a rejection: nothing blocked it, it just
+    # wasn't auto-acted on. was_executed stays False either way.
+    advisory_only: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
 
     generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
 
@@ -210,6 +225,11 @@ class Position(Base, TimestampMixin):
     unrealized_pnl: Mapped[float] = mapped_column(Float, default=0.0)
     realized_pnl: Mapped[float | None] = mapped_column(Float)
     total_charges: Mapped[float] = mapped_column(Float, default=0.0)
+
+    # Set the first time check_exits() alerts on a triggered stop/target for
+    # an advisory-mode position, so the 60s job sends exactly one alert
+    # instead of re-notifying every minute until the user confirms the exit.
+    advisory_alert_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     notes: Mapped[str | None] = mapped_column(Text)
 

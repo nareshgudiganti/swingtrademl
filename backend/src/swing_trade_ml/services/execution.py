@@ -28,6 +28,7 @@ from swing_trade_ml.db.models.market import Instrument
 from swing_trade_ml.db.models.trading import Order, Position, Signal, Strategy, Trade
 from swing_trade_ml.notifications import notifier
 from swing_trade_ml.services import risk
+from swing_trade_ml.services.costs import compute_charges
 from swing_trade_ml.services.portfolio import portfolio_value_and_cash
 
 log = get_logger(__name__)
@@ -59,6 +60,42 @@ def record_signal(
     db.commit()
     db.refresh(signal)
     return signal
+
+
+def _finalize_open_position(
+    db: Session,
+    strategy: Strategy,
+    instrument: Instrument,
+    mode: str,
+    quantity: int,
+    fill_price: float,
+    brokerage: float,
+    taxes: float,
+    stop_loss: float | None,
+    take_profit: float | None,
+    entry_at: datetime,
+) -> Position:
+    """Shared by the broker-filled path and the manual (self-reported) path —
+    both end up with the same fill_price/brokerage/taxes, just sourced
+    differently."""
+    position = Position(
+        strategy_id=strategy.id,
+        instrument_id=instrument.id,
+        mode=mode,
+        status=PositionStatus.OPEN,
+        quantity=quantity,
+        entry_price=fill_price,
+        entry_at=entry_at,
+        stop_loss=stop_loss,
+        take_profit=take_profit,
+        highest_price=fill_price,
+        current_price=fill_price,
+        total_charges=brokerage + taxes,
+    )
+    db.add(position)
+    db.commit()
+    db.refresh(position)
+    return position
 
 
 def open_position(
@@ -131,23 +168,19 @@ def open_position(
         return None
 
     fill_price = result.average_price or signal.price
-    position = Position(
-        strategy_id=strategy.id,
-        instrument_id=instrument.id,
-        mode=broker.mode,
-        status=PositionStatus.OPEN,
-        quantity=result.filled_quantity,
-        entry_price=fill_price,
-        entry_at=now,
-        stop_loss=signal.stop_loss,
-        take_profit=signal.take_profit,
-        highest_price=fill_price,
-        current_price=fill_price,
-        total_charges=result.brokerage + result.taxes,
+    position = _finalize_open_position(
+        db,
+        strategy,
+        instrument,
+        broker.mode,
+        result.filled_quantity,
+        fill_price,
+        result.brokerage,
+        result.taxes,
+        signal.stop_loss,
+        signal.take_profit,
+        now,
     )
-    db.add(position)
-    db.commit()
-    db.refresh(position)
 
     order.position_id = position.id
     signal.was_executed = True
@@ -166,6 +199,116 @@ def open_position(
         "fill",
     )
     return position
+
+
+def manual_open_position(
+    db: Session,
+    strategy: Strategy,
+    instrument: Instrument,
+    quantity: int,
+    entry_price: float,
+    stop_loss: float | None = None,
+    take_profit: float | None = None,
+    brokerage: float | None = None,
+    taxes: float | None = None,
+    signal: Signal | None = None,
+) -> Position:
+    """Record a position the user filled themselves (e.g. an advisory-mode
+    recommendation they acted on manually in Zerodha), rather than one this
+    app placed through a broker.
+
+    No Order row is created — there is no broker order to reconcile against.
+    Charges default to the same paper cost-model estimate everything else
+    uses (services/costs.py) when the caller doesn't supply their own.
+    """
+    broker = get_broker()
+    now = datetime.now(UTC)
+
+    if brokerage is None or taxes is None:
+        default_brokerage, default_taxes = compute_charges(entry_price * quantity)
+        brokerage = default_brokerage if brokerage is None else brokerage
+        taxes = default_taxes if taxes is None else taxes
+
+    position = _finalize_open_position(
+        db, strategy, instrument, broker.mode, quantity, entry_price, brokerage, taxes,
+        stop_loss, take_profit, now,
+    )
+
+    if signal is not None:
+        signal.was_executed = True
+        db.commit()
+
+    log.info(
+        "execution.manual_entry.recorded",
+        symbol=instrument.tradingsymbol,
+        qty=quantity,
+        price=entry_price,
+        mode=broker.mode,
+    )
+
+    notifier.send_sync(_manual_entry_message(instrument, position, broker.mode), "fill")
+    return position
+
+
+def _finalize_close_position(
+    db: Session,
+    position: Position,
+    instrument: Instrument,
+    fill_price: float,
+    exit_brokerage: float,
+    exit_taxes: float,
+    reason: ExitReason,
+    closed_at: datetime,
+    note: str | None = None,
+) -> Trade:
+    """Shared by the broker-filled path and the manual (self-reported) path —
+    both end up computing the same P&L off a fill_price/brokerage/taxes,
+    just sourced differently."""
+    exit_charges = exit_brokerage + exit_taxes
+    total_charges = position.total_charges + exit_charges
+
+    gross_pnl = (fill_price - position.entry_price) * position.quantity
+    net_pnl = gross_pnl - total_charges
+    # Return is measured against capital deployed, so charges are correctly
+    # reflected as a drag on the actual investment.
+    invested = position.entry_price * position.quantity
+    return_pct = net_pnl / invested if invested else 0.0
+    holding_days = max(0, (closed_at - position.entry_at).days)
+
+    position.status = PositionStatus.CLOSED
+    position.exit_price = fill_price
+    position.exit_at = closed_at
+    position.exit_reason = reason
+    position.realized_pnl = net_pnl
+    position.unrealized_pnl = 0.0
+    position.current_price = fill_price
+    position.total_charges = total_charges
+    if note:
+        position.notes = note
+
+    trade = Trade(
+        position_id=position.id,
+        strategy_id=position.strategy_id,
+        instrument_id=instrument.id,
+        mode=position.mode,
+        symbol=instrument.tradingsymbol,
+        quantity=position.quantity,
+        entry_price=position.entry_price,
+        exit_price=fill_price,
+        entry_at=position.entry_at,
+        exit_at=closed_at,
+        holding_days=holding_days,
+        gross_pnl=gross_pnl,
+        charges=total_charges,
+        net_pnl=net_pnl,
+        return_pct=return_pct,
+        exit_reason=reason,
+        is_win=net_pnl > 0,
+    )
+    db.add(trade)
+    db.commit()
+    db.refresh(trade)
+    return trade
 
 
 def close_position(
@@ -231,56 +374,15 @@ def close_position(
 
     order.filled_at = now
     fill_price = result.average_price or exit_price or position.entry_price
-    exit_charges = result.brokerage + result.taxes
-    total_charges = position.total_charges + exit_charges
-
-    gross_pnl = (fill_price - position.entry_price) * position.quantity
-    net_pnl = gross_pnl - total_charges
-    # Return is measured against capital deployed, so charges are correctly
-    # reflected as a drag on the actual investment.
-    invested = position.entry_price * position.quantity
-    return_pct = net_pnl / invested if invested else 0.0
-    holding_days = max(0, (now - position.entry_at).days)
-
-    position.status = PositionStatus.CLOSED
-    position.exit_price = fill_price
-    position.exit_at = now
-    position.exit_reason = reason
-    position.realized_pnl = net_pnl
-    position.unrealized_pnl = 0.0
-    position.current_price = fill_price
-    position.total_charges = total_charges
-    if note:
-        position.notes = note
-
-    trade = Trade(
-        position_id=position.id,
-        strategy_id=position.strategy_id,
-        instrument_id=instrument.id,
-        mode=broker.mode,
-        symbol=instrument.tradingsymbol,
-        quantity=position.quantity,
-        entry_price=position.entry_price,
-        exit_price=fill_price,
-        entry_at=position.entry_at,
-        exit_at=now,
-        holding_days=holding_days,
-        gross_pnl=gross_pnl,
-        charges=total_charges,
-        net_pnl=net_pnl,
-        return_pct=return_pct,
-        exit_reason=reason,
-        is_win=net_pnl > 0,
+    trade = _finalize_close_position(
+        db, position, instrument, fill_price, result.brokerage, result.taxes, reason, now, note
     )
-    db.add(trade)
-    db.commit()
-    db.refresh(trade)
 
     log.info(
         "execution.exit.filled",
         symbol=instrument.tradingsymbol,
-        pnl=round(net_pnl, 2),
-        return_pct=round(return_pct, 4),
+        pnl=round(trade.net_pnl, 2),
+        return_pct=round(trade.return_pct, 4),
         reason=reason,
     )
 
@@ -288,6 +390,44 @@ def close_position(
         _exit_message(instrument, trade, reason, broker.mode),
         "fill",
     )
+    return trade
+
+
+def manual_close_position(
+    db: Session,
+    position: Position,
+    exit_price: float,
+    reason: ExitReason = ExitReason.MANUAL,
+    brokerage: float | None = None,
+    taxes: float | None = None,
+) -> Trade:
+    """Record the exit fill for a position the user closed themselves.
+
+    No Order row is created — there is no broker order to reconcile against.
+    Charges default to the same paper cost-model estimate everything else
+    uses (services/costs.py) when the caller doesn't supply their own.
+    """
+    instrument = db.get(Instrument, position.instrument_id)
+    if instrument is None:
+        raise ValueError(f"Instrument {position.instrument_id} not found for position {position.id}")
+
+    if brokerage is None or taxes is None:
+        default_brokerage, default_taxes = compute_charges(exit_price * position.quantity)
+        brokerage = default_brokerage if brokerage is None else brokerage
+        taxes = default_taxes if taxes is None else taxes
+
+    now = datetime.now(UTC)
+    trade = _finalize_close_position(db, position, instrument, exit_price, brokerage, taxes, reason, now)
+
+    log.info(
+        "execution.manual_exit.recorded",
+        symbol=instrument.tradingsymbol,
+        pnl=round(trade.net_pnl, 2),
+        return_pct=round(trade.return_pct, 4),
+        reason=reason,
+    )
+
+    notifier.send_sync(_exit_message(instrument, trade, reason, position.mode), "fill")
     return trade
 
 
@@ -306,31 +446,62 @@ def process_decision(
     if decision.signal == SignalType.HOLD:
         return record_signal(db, strategy, instrument, decision, mode)
 
-    existing = db.execute(
-        select(Position).where(
-            Position.mode == mode,
-            Position.instrument_id == instrument.id,
-            Position.status == PositionStatus.OPEN,
+    # Scoped by strategy, not just mode+instrument: each strategy manages its
+    # own book independently (the SMA-crossover benchmark and ml_swing can
+    # both hold the same symbol at once — that's the point of running them
+    # side by side). Pyramiding also means this can legitimately be more than
+    # one row, so it's a list, not a single scalar.
+    existing_positions = list(
+        db.execute(
+            select(Position).where(
+                Position.mode == mode,
+                Position.strategy_id == strategy.id,
+                Position.instrument_id == instrument.id,
+                Position.status == PositionStatus.OPEN,
+            )
         )
-    ).scalar_one_or_none()
+        .scalars()
+        .all()
+    )
 
     if decision.signal in (SignalType.EXIT, SignalType.SELL):
         signal = record_signal(db, strategy, instrument, decision, mode)
-        if existing is None:
+        if not existing_positions:
             signal.rejection_reason = "No open position to exit"
             db.commit()
             return signal
-        trade = close_position(db, existing, decision.price, ExitReason.SIGNAL_EXIT, decision.reason)
-        signal.was_executed = trade is not None
+        if strategy.execution_mode == "advisory":
+            signal.advisory_only = True
+            db.commit()
+            for position in existing_positions:
+                notifier.send_sync(
+                    _advisory_exit_message(instrument, position, decision.reason, mode), "signal"
+                )
+            return signal
+        # An EXIT decision is strategy-level ("get out of this name"), so
+        # every open tranche closes together, not just the first one found.
+        executed = False
+        for position in existing_positions:
+            trade = close_position(db, position, decision.price, ExitReason.SIGNAL_EXIT, decision.reason)
+            executed = executed or trade is not None
+        signal.was_executed = executed
         db.commit()
         return signal
 
     # BUY
-    if existing is not None:
-        signal = record_signal(db, strategy, instrument, decision, mode)
-        signal.rejection_reason = "Position already open"
-        db.commit()
-        return signal
+    existing_exposure = 0.0
+    if existing_positions:
+        # Pyramiding is opt-in per strategy, and only into a book that is
+        # currently working — scaling into a loser is not pyramiding, it is
+        # averaging down, which this deliberately does not do.
+        total_unrealized = sum(p.unrealized_pnl or 0.0 for p in existing_positions)
+        pyramiding_allowed = strategy.allow_pyramiding and total_unrealized > 0
+        if not pyramiding_allowed:
+            signal = record_signal(db, strategy, instrument, decision, mode)
+            signal.rejection_reason = "Position already open"
+            db.commit()
+            return signal
+        existing_exposure = risk.open_exposure_value(db, mode, strategy.id, instrument.id)
 
     total_value, cash = portfolio_value_and_cash(db, mode)
     verdict = risk.check_entry(
@@ -342,6 +513,7 @@ def process_decision(
         portfolio_value=total_value,
         available_cash=cash,
         strategy=strategy,
+        existing_exposure=existing_exposure,
     )
 
     signal = record_signal(db, strategy, instrument, decision, mode, verdict.quantity)
@@ -353,6 +525,15 @@ def process_decision(
             "execution.entry.blocked",
             symbol=instrument.tradingsymbol,
             reason=verdict.reason,
+        )
+        return signal
+
+    if strategy.execution_mode == "advisory":
+        signal.advisory_only = True
+        db.commit()
+        notifier.send_sync(
+            _advisory_entry_message(instrument, decision, strategy, verdict.quantity, mode),
+            "signal",
         )
         return signal
 
@@ -410,10 +591,20 @@ def check_exits(db: Session) -> list[Trade]:
             # regardless of whether it is slightly up or down.
             reason = ExitReason.TIME_STOP
 
-        if reason is not None:
-            trade = close_position(db, position, price, reason)
-            if trade:
-                closed.append(trade)
+        if reason is None:
+            continue
+
+        if position.strategy is not None and position.strategy.execution_mode == "advisory":
+            # Alert once, not every 60s — the position stays open until the
+            # user records the exit via manual_close_position().
+            if position.advisory_alert_sent_at is None:
+                notifier.send_sync(_advisory_exit_message(instrument, position, reason, mode), "signal")
+                position.advisory_alert_sent_at = datetime.now(UTC)
+            continue
+
+        trade = close_position(db, position, price, reason)
+        if trade:
+            closed.append(trade)
 
     db.commit()
     return closed
@@ -468,4 +659,60 @@ def _exit_message(instrument, trade, reason, mode) -> str:
         f"P&amp;L: <b>₹{trade.net_pnl:,.2f}</b>  (<b>{trade.return_pct:+.2%}</b>)\n"
         f"Held: {trade.holding_days} days\n"
         f"Reason: {reason}"
+    )
+
+
+def _manual_entry_message(instrument, position, mode) -> str:
+    badge = "📝 PAPER" if mode == "paper" else "💰 <b>LIVE</b>"
+    return (
+        f"✅ <b>RECORDED · {instrument.tradingsymbol}</b>  ({badge})\n\n"
+        f"BUY <b>{position.quantity:,}</b> @ <b>₹{position.entry_price:,.2f}</b>  "
+        f"(self-reported fill)\n"
+        f"Value: ₹{position.entry_price * position.quantity:,.2f}\n"
+        f"Charges: ₹{position.total_charges:,.2f}\n"
+        f"Stop: ₹{position.stop_loss or 0:,.2f}  ·  Target: ₹{position.take_profit or 0:,.2f}"
+    )
+
+
+def _advisory_entry_message(instrument, decision, strategy, quantity, mode) -> str:
+    badge = "📝 PAPER" if mode == "paper" else "💰 <b>LIVE</b>"
+    lines = [
+        f"🔔 <b>RECOMMENDATION · {instrument.tradingsymbol}</b>  ({badge})",
+        "",
+        f"Suggested price: <b>₹{decision.price:,.2f}</b>",
+        f"Suggested quantity: <b>{quantity:,}</b>  (₹{decision.price * quantity:,.0f})",
+    ]
+    if decision.confidence is not None:
+        lines.append(f"Confidence: <b>{decision.confidence:.1%}</b>")
+    if decision.stop_loss:
+        lines.append(
+            f"Stop: ₹{decision.stop_loss:,.2f}  ({decision.stop_loss / decision.price - 1:+.1%})"
+        )
+    if decision.take_profit:
+        lines.append(
+            f"Target: ₹{decision.take_profit:,.2f}  "
+            f"({decision.take_profit / decision.price - 1:+.1%})"
+        )
+    lines += [
+        "",
+        "Enter at tomorrow's ~09:15 IST open, at/near this price, or as a "
+        "limit order at it — the model only judges completed daily bars, it "
+        "has no intraday timing signal beyond that.",
+        "",
+        f"Strategy: <i>{strategy.name}</i>",
+        f"Reason: {decision.reason}",
+        "",
+        "Took this trade? Record it: POST /portfolio/positions/manual",
+    ]
+    return "\n".join(lines)
+
+
+def _advisory_exit_message(instrument, position, reason, mode) -> str:
+    badge = "📝 PAPER" if mode == "paper" else "💰 <b>LIVE</b>"
+    return (
+        f"🔔 <b>EXIT RECOMMENDED · {instrument.tradingsymbol}</b>  ({badge})\n\n"
+        f"Reason: {reason}\n"
+        f"Entry: ₹{position.entry_price:,.2f}  ·  Current: ₹{position.current_price or 0:,.2f}\n"
+        f"Quantity: {position.quantity:,}\n\n"
+        f"Sold this? Record it: POST /portfolio/positions/{position.id}/manual-close"
     )

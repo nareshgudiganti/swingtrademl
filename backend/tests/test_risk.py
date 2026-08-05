@@ -70,3 +70,44 @@ def test_insufficient_capital_yields_zero():
     )
     assert quantity == 0
     assert "below 1 share" in note
+
+
+# --------------------------------------------------------- pyramiding sizing --
+
+
+def test_existing_exposure_shrinks_the_concentration_cap():
+    """A second tranche must respect *total* exposure to the name, not just its own."""
+    portfolio, price, stop = 1_000_000.0, 100.0, 99.5  # tight stop -> concentration binds
+
+    fresh_qty, _ = calculate_quantity(price, stop, portfolio, available_cash=portfolio)
+    already_committed = fresh_qty * price  # pretend the first tranche used the whole cap
+
+    second_qty, note = calculate_quantity(
+        price, stop, portfolio, available_cash=portfolio, existing_exposure=already_committed
+    )
+
+    assert second_qty < fresh_qty
+    assert "concentration" in note
+
+
+def test_exposure_at_the_cap_leaves_no_room_for_another_tranche():
+    portfolio, price, stop = 1_000_000.0, 100.0, 99.5
+    max_by_concentration = (portfolio * settings.MAX_POSITION_PCT) / price
+    at_the_cap = max_by_concentration * price  # exactly the rupee cap, already spent
+
+    quantity, note = calculate_quantity(
+        price, stop, portfolio, available_cash=portfolio, existing_exposure=at_the_cap
+    )
+    assert quantity == 0
+    assert "below 1 share" in note
+
+
+def test_existing_exposure_never_produces_a_negative_cap():
+    """Exposure larger than the cap (e.g. price moved) must floor at zero, not go negative."""
+    portfolio, price, stop = 1_000_000.0, 100.0, 99.5
+    absurdly_large_exposure = portfolio * 10
+
+    quantity, _ = calculate_quantity(
+        price, stop, portfolio, available_cash=portfolio, existing_exposure=absurdly_large_exposure
+    )
+    assert quantity == 0

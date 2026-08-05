@@ -37,17 +37,37 @@ def open_position_count(db: Session, mode: str, strategy_id: int | None = None) 
     return int(db.execute(stmt).scalar_one() or 0)
 
 
-def has_open_position(db: Session, mode: str, instrument_id: int) -> bool:
-    return (
-        db.execute(
-            select(Position.id).where(
-                Position.mode == mode,
-                Position.instrument_id == instrument_id,
-                Position.status == PositionStatus.OPEN,
-            )
-        ).first()
-        is not None
+def has_open_position(
+    db: Session, mode: str, instrument_id: int, strategy_id: int | None = None
+) -> bool:
+    """Scoped per-strategy when strategy_id is given: each strategy manages
+    its own book independently, so two different strategies holding the same
+    symbol at once is not a duplicate entry — that is what running the
+    ml_swing and sma_crossover strategies side by side as a comparison
+    depends on."""
+    stmt = select(Position.id).where(
+        Position.mode == mode,
+        Position.instrument_id == instrument_id,
+        Position.status == PositionStatus.OPEN,
     )
+    if strategy_id is not None:
+        stmt = stmt.where(Position.strategy_id == strategy_id)
+    return db.execute(stmt).first() is not None
+
+
+def open_exposure_value(db: Session, mode: str, strategy_id: int | None, instrument_id: int) -> float:
+    """Rupees already committed to this instrument across all open tranches
+    for this strategy — the pyramiding case, where more than one Position row
+    can be open for the same instrument at once."""
+    total = db.execute(
+        select(func.coalesce(func.sum(Position.entry_price * Position.quantity), 0.0)).where(
+            Position.mode == mode,
+            Position.instrument_id == instrument_id,
+            Position.strategy_id == strategy_id,
+            Position.status == PositionStatus.OPEN,
+        )
+    ).scalar_one()
+    return float(total)
 
 
 def current_drawdown(db: Session, mode: str) -> float:
@@ -69,6 +89,7 @@ def calculate_quantity(
     portfolio_value: float,
     available_cash: float,
     strategy: Strategy | None = None,
+    existing_exposure: float = 0.0,
 ) -> tuple[int, str]:
     """Size the position off the distance to the stop, not off a fixed rupee amount.
 
@@ -78,7 +99,9 @@ def calculate_quantity(
     risk control in the system.
 
     Two ceilings then apply: the max share of portfolio in one name, and the
-    cash actually on hand.
+    cash actually on hand. `existing_exposure` is rupees already committed to
+    this instrument by an earlier tranche (pyramiding) — the concentration
+    cap applies to *total* exposure across tranches, not each one separately.
     """
     if price <= 0:
         return 0, "Invalid price"
@@ -102,7 +125,8 @@ def calculate_quantity(
         if strategy and strategy.capital_allocation
         else settings.MAX_POSITION_PCT
     )
-    qty_by_concentration = (portfolio_value * max_position_pct) / price
+    remaining_concentration_room = max(0.0, (portfolio_value * max_position_pct) - existing_exposure)
+    qty_by_concentration = remaining_concentration_room / price
     qty_by_cash = available_cash / price
 
     # floor, never round: rounding up would breach whichever limit was binding.
@@ -132,10 +156,20 @@ def check_entry(
     portfolio_value: float,
     available_cash: float,
     strategy: Strategy | None = None,
+    existing_exposure: float = 0.0,
 ) -> RiskDecision:
     """Gate an entry. Checks run cheapest-first so an obvious rejection does not
-    pay for a portfolio-wide query."""
-    if has_open_position(db, mode, instrument_id):
+    pay for a portfolio-wide query.
+
+    `existing_exposure` > 0 signals that the caller has already vetted this as
+    a pyramiding add (strategy.allow_pyramiding and the open position is
+    currently profitable — see services/execution.py process_decision) and
+    computed the rupees already committed via open_exposure_value(); the
+    has_open_position block below only applies to the normal, non-pyramiding
+    case.
+    """
+    strategy_id = strategy.id if strategy else None
+    if existing_exposure <= 0 and has_open_position(db, mode, instrument_id, strategy_id):
         return RiskDecision(False, 0, "Position already open in this instrument")
 
     max_positions = (
@@ -156,7 +190,9 @@ def check_entry(
             f"{settings.MAX_PORTFOLIO_DRAWDOWN_PCT:.0%} — new entries halted",
         )
 
-    quantity, note = calculate_quantity(price, stop_loss, portfolio_value, available_cash, strategy)
+    quantity, note = calculate_quantity(
+        price, stop_loss, portfolio_value, available_cash, strategy, existing_exposure
+    )
     if quantity < 1:
         return RiskDecision(False, 0, note)
 

@@ -158,6 +158,10 @@ class StrategyCreate(BaseModel):
     capital_allocation: float | None = None
     stop_loss_pct: float | None = None
     take_profit_pct: float | None = None
+    # "auto" places real orders as before; "advisory" only ever recommends —
+    # see services/execution.py.
+    execution_mode: str = Field("auto", pattern="^(auto|advisory)$")
+    allow_pyramiding: bool = False
 
 
 class StrategyUpdate(BaseModel):
@@ -169,6 +173,8 @@ class StrategyUpdate(BaseModel):
     capital_allocation: float | None = None
     stop_loss_pct: float | None = None
     take_profit_pct: float | None = None
+    execution_mode: str | None = Field(None, pattern="^(auto|advisory)$")
+    allow_pyramiding: bool | None = None
 
 
 class StrategyOut(BaseModel):
@@ -185,6 +191,8 @@ class StrategyOut(BaseModel):
     capital_allocation: float | None
     stop_loss_pct: float | None
     take_profit_pct: float | None
+    execution_mode: str
+    allow_pyramiding: bool
     created_at: datetime
 
 
@@ -224,6 +232,7 @@ class SignalOut(BaseModel):
     features: dict[str, Any]
     was_executed: bool
     rejection_reason: str | None
+    advisory_only: bool
     generated_at: datetime
 
 
@@ -312,6 +321,28 @@ class TradeOut(BaseModel):
 class ClosePositionRequest(BaseModel):
     reason: str = "MANUAL"
     note: str | None = None
+
+
+class ManualEntryRequest(BaseModel):
+    """Record a position filled outside the app — e.g. an advisory-mode
+    recommendation the user acted on manually in Zerodha."""
+
+    strategy_id: int
+    instrument_id: int
+    quantity: int = Field(gt=0)
+    entry_price: float = Field(gt=0)
+    stop_loss: float | None = None
+    take_profit: float | None = None
+    brokerage: float | None = None
+    taxes: float | None = None
+    signal_id: int | None = None
+
+
+class ManualExitRequest(BaseModel):
+    exit_price: float = Field(gt=0)
+    exit_reason: str = "MANUAL"
+    brokerage: float | None = None
+    taxes: float | None = None
 
 
 class EquityPoint(BaseModel):

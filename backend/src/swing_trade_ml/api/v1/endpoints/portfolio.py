@@ -11,16 +11,18 @@ from swing_trade_ml.api.deps import DbSession
 from swing_trade_ml.brokers import get_broker
 from swing_trade_ml.core.enums import ExitReason, PositionStatus
 from swing_trade_ml.db.models.market import Instrument
-from swing_trade_ml.db.models.trading import Position, Trade
+from swing_trade_ml.db.models.trading import Position, Signal, Strategy, Trade
 from swing_trade_ml.schemas import (
     ClosePositionRequest,
     EquityPoint,
+    ManualEntryRequest,
+    ManualExitRequest,
     MessageResponse,
     PositionOut,
     TradeOut,
 )
 from swing_trade_ml.services import portfolio as portfolio_service
-from swing_trade_ml.services.execution import close_position
+from swing_trade_ml.services.execution import close_position, manual_close_position, manual_open_position
 
 router = APIRouter(prefix="/portfolio", tags=["portfolio"])
 
@@ -86,6 +88,56 @@ def detailed_positions(db: DbSession) -> list[dict[str, Any]]:
             }
         )
     return result
+
+
+@router.post("/positions/manual", response_model=PositionOut, status_code=status.HTTP_201_CREATED)
+def create_manual_position(payload: ManualEntryRequest, db: DbSession) -> Position:
+    """Record a position filled outside the app — the counterpart to
+    advisory-mode recommendations, which never place a real order."""
+    strategy = db.get(Strategy, payload.strategy_id)
+    if strategy is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Strategy not found")
+    instrument = db.get(Instrument, payload.instrument_id)
+    if instrument is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Instrument not found")
+
+    signal = None
+    if payload.signal_id is not None:
+        signal = db.get(Signal, payload.signal_id)
+        if signal is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Signal not found")
+
+    return manual_open_position(
+        db,
+        strategy,
+        instrument,
+        payload.quantity,
+        payload.entry_price,
+        payload.stop_loss,
+        payload.take_profit,
+        payload.brokerage,
+        payload.taxes,
+        signal,
+    )
+
+
+@router.post("/positions/{position_id}/manual-close", response_model=TradeOut)
+def close_manual_position(position_id: int, payload: ManualExitRequest, db: DbSession) -> Trade:
+    """Record the exit fill for a position closed outside the app."""
+    position = db.get(Position, position_id)
+    if position is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Position not found")
+    if position.status != PositionStatus.OPEN:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Position is already closed")
+
+    try:
+        reason = ExitReason(payload.exit_reason)
+    except ValueError:
+        reason = ExitReason.MANUAL
+
+    return manual_close_position(
+        db, position, payload.exit_price, reason, payload.brokerage, payload.taxes
+    )
 
 
 @router.post("/positions/{position_id}/close", response_model=MessageResponse)

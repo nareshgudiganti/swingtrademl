@@ -322,8 +322,17 @@ swingtrade backtest --strategy ml_swing --symbols RELIANCE,TCS,INFY \
   --start 2023-01-01 --end 2025-01-01
 ```
 
-`--symbols` defaults to the watchlist. Requires `swingtrade backfill` to
-have already ingested history for the requested range and warm-up window.
+Also available as `POST /api/v1/backtest` (same parameters, JSON body) for
+anything that wants the trade log and equity curve programmatically rather
+than printed to a terminal. It's synchronous, unlike `/ml/train` — a
+backtest writes nothing to persist, so there's no natural resource to poll
+afterward. A handful of symbols over a few years returns in seconds over
+HTTP; a full-watchlist, multi-year sweep can take minutes and belongs on the
+CLI, which has no HTTP timeout to race against.
+
+`symbols` defaults to the watchlist either way. Requires `swingtrade
+backfill` to have already ingested history for the requested range and
+warm-up window.
 
 Design point: it reuses the exact cost formulas (slippage bps, brokerage per
 order, tax bps) and the exact `calculate_quantity` sizing function that
@@ -529,13 +538,15 @@ strategies side by side during the paper phase.
 
 ## 7. What's not yet built (as of this document)
 
-- **Trading holidays** are not modelled — the scheduler is weekday-only;
-  running on an NSE holiday just produces zero new candles, nothing breaks.
 - **Live order reconciliation** is polling-based (`POST /orders/sync`), not a
-  websocket order-update stream.
-- **Backtest results are CLI-only.** `swingtrade backtest` (see §4.7) prints
-  to the terminal; there's no API endpoint or dashboard page yet to browse a
-  run's trade log or equity curve without re-running it.
+  websocket order-update stream. This is a genuinely bigger lift than the
+  other items here — persistent connection management, reconnect/backoff
+  logic, and wiring Kite's postback/ticker stream into the existing
+  order-status flow — not attempted yet.
+- **Backtest results have no dashboard page.** Both the CLI
+  (`swingtrade backtest`, §4.7) and `POST /api/v1/backtest` return the full
+  trade log and equity curve, but there's nowhere in the React app to browse
+  one without calling the API directly.
 
 ---
 

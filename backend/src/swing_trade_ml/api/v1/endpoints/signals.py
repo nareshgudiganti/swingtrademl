@@ -69,6 +69,7 @@ def latest_actionable(db: DbSession, limit: int = Query(20, le=100)) -> list[dic
             "take_profit": signal.take_profit,
             "reason": signal.reason,
             "executed": signal.was_executed,
+            "advisory_only": signal.advisory_only,
             "rejection_reason": signal.rejection_reason,
             "generated_at": signal.generated_at,
         }

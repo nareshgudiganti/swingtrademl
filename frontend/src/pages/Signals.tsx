@@ -63,9 +63,15 @@ export default function Signals() {
                     {s.take_profit ? formatCurrency(s.take_profit) : '—'}
                   </td>
                   <td>
-                    <span className={`badge ${s.executed ? 'badge-on' : 'badge-off'}`}>
-                      {s.executed ? 'executed' : 'not taken'}
-                    </span>
+                    {s.executed ? (
+                      <span className="badge badge-on">executed</span>
+                    ) : s.advisory_only ? (
+                      <span className="badge badge-recommend" title="Recommended — not auto-executed. Record the fill via POST /portfolio/positions/manual once taken.">
+                        recommended
+                      </span>
+                    ) : (
+                      <span className="badge badge-off">not taken</span>
+                    )}
                   </td>
                   <td className="reason muted" title={s.rejection_reason ?? s.reason ?? ''}>
                     {s.rejection_reason ?? s.reason ?? '—'}

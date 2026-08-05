@@ -95,6 +95,7 @@ export interface LatestSignal {
   take_profit: number | null
   reason: string | null
   executed: boolean
+  advisory_only: boolean
   rejection_reason: string | null
   generated_at: string
 }

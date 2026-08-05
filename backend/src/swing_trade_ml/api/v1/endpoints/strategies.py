@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import asdict
+
 from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import select
 
@@ -137,14 +139,14 @@ def scan_one(strategy_id: int, db: DbSession, interval: str = "day") -> ScanResp
     if strategy is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Strategy not found")
     result = engine.run_strategy(db, strategy, interval)
-    return ScanResponse(**result.__dict__)
+    return ScanResponse(**asdict(result))
 
 
 @router.post("/scan-all", response_model=ScanResponse)
 def scan_all(db: DbSession, interval: str = "day") -> ScanResponse:
     """Run every active strategy now, without waiting for the scheduled time."""
     result = engine.run_all_active(db, interval)
-    return ScanResponse(**result.__dict__)
+    return ScanResponse(**asdict(result))
 
 
 @router.get("/{strategy_id}/signals", response_model=list[SignalOut])

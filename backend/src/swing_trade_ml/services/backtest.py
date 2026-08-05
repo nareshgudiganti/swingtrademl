@@ -41,12 +41,13 @@ from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.db.models.market import Instrument
 from swing_trade_ml.db.models.trading import Strategy as StrategyModel
 from swing_trade_ml.ml.dataset import load_candles
+from swing_trade_ml.services.costs import apply_slippage as _apply_slippage
+from swing_trade_ml.services.costs import compute_charges as _charges
 from swing_trade_ml.services.risk import calculate_quantity
 from swing_trade_ml.strategies import get_strategy
 
 log = get_logger(__name__)
 
-BPS = 10_000.0
 TRADING_DAYS_PER_YEAR = 252
 
 
@@ -85,17 +86,6 @@ class BacktestResult:
     trades: list[BacktestTrade] = field(default_factory=list)
     equity_curve: list[dict[str, Any]] = field(default_factory=list)
     stats: dict[str, Any] = field(default_factory=dict)
-
-
-def _apply_slippage(price: float, side: str) -> float:
-    """Mirrors PaperBroker._apply_slippage (brokers/paper.py) — keep in sync."""
-    delta = price * (settings.PAPER_SLIPPAGE_BPS / BPS)
-    return price + delta if side == "BUY" else price - delta
-
-
-def _charges(turnover: float) -> tuple[float, float]:
-    """Mirrors PaperBroker._charges (brokers/paper.py) — keep in sync."""
-    return settings.PAPER_BROKERAGE_PER_ORDER, turnover * (settings.PAPER_TAX_BPS / BPS)
 
 
 def _last_close(df: pd.DataFrame, day: date) -> float:

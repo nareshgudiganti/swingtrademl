@@ -44,10 +44,9 @@ from swing_trade_ml.core.enums import (
 from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.db.models.market import Candle, Instrument, Quote
 from swing_trade_ml.db.models.trading import Order, Position
+from swing_trade_ml.services.costs import apply_slippage, compute_charges
 
 log = get_logger(__name__)
-
-BPS = 10_000.0
 
 
 class PaperBroker(Broker):
@@ -96,21 +95,10 @@ class PaperBroker(Broker):
         return float(candle.close) if candle else None
 
     def _apply_slippage(self, price: float, side: TransactionType) -> float:
-        """Move the fill against us — buys pay up, sells receive less."""
-        delta = price * (settings.PAPER_SLIPPAGE_BPS / BPS)
-        return price + delta if side == TransactionType.BUY else price - delta
+        return apply_slippage(price, side)
 
     def _charges(self, turnover: float) -> tuple[float, float]:
-        """(brokerage, taxes) for one executed order.
-
-        Approximates Zerodha's equity-delivery cost stack — STT, exchange
-        transaction charges, SEBI fees, stamp duty and GST — with a single
-        basis-point figure on turnover. Exact to the rupee it is not; the point
-        is that paper P&L is never reported gross.
-        """
-        brokerage = settings.PAPER_BROKERAGE_PER_ORDER
-        taxes = turnover * (settings.PAPER_TAX_BPS / BPS)
-        return brokerage, taxes
+        return compute_charges(turnover)
 
     # ------------------------------------------------------------ balance --
 

@@ -110,3 +110,18 @@ def test_compute_stats_with_no_trades_is_all_zero():
     assert stats["win_rate"] == 0.0
     assert stats["profit_factor"] == 0.0
     assert stats["total_return_pct"] == 0.0
+
+
+def test_backtest_and_paper_broker_share_the_literal_same_cost_functions():
+    """Not just equivalent behaviour — the same function objects, imported
+    from services/costs.py, so the two paths can never silently drift apart
+    again the way the old duplicated pair could."""
+    from swing_trade_ml.brokers.paper import PaperBroker
+    from swing_trade_ml.services import costs
+
+    broker = PaperBroker()
+    assert broker._apply_slippage.__func__ is not costs.apply_slippage  # bound method, not the fn itself
+    assert broker._apply_slippage(100.0, "BUY") == costs.apply_slippage(100.0, "BUY")
+    assert broker._charges(50_000.0) == costs.compute_charges(50_000.0)
+    assert _apply_slippage is costs.apply_slippage
+    assert _charges is costs.compute_charges

@@ -311,6 +311,46 @@ Only the `worker` container runs the scheduler (`ENABLE_SCHEDULER=true`); the
 `api` container does not. Running it in both would mean two schedulers racing
 to place the same trade.
 
+### 4.7 Backtesting (`services/backtest.py`)
+
+Replays a strategy against candles already sitting in the `candles` table —
+years of history in seconds, instead of waiting out the six-month paper
+phase to get six months of evidence.
+
+```powershell
+swingtrade backtest --strategy ml_swing --symbols RELIANCE,TCS,INFY \
+  --start 2023-01-01 --end 2025-01-01
+```
+
+Also available as `POST /api/v1/backtest` (same parameters, JSON body) for
+anything that wants the trade log and equity curve programmatically rather
+than printed to a terminal. It's synchronous, unlike `/ml/train` — a
+backtest writes nothing to persist, so there's no natural resource to poll
+afterward. A handful of symbols over a few years returns in seconds over
+HTTP; a full-watchlist, multi-year sweep can take minutes and belongs on the
+CLI, which has no HTTP timeout to race against.
+
+`symbols` defaults to the watchlist either way. Requires `swingtrade
+backfill` to have already ingested history for the requested range and
+warm-up window.
+
+Design point: it reuses the exact cost formulas (slippage bps, brokerage per
+order, tax bps) and the exact `calculate_quantity` sizing function that
+`PaperBroker` and `services/risk.py` use — so a backtest number and a paper
+number mean the same thing, not two different accounting conventions.
+Deliberately **not** shared: nothing is written to `signals`/`orders`/
+`positions`/`trades`. Portfolio state lives in memory for the duration of one
+run and is discarded after printing the summary — a five-year run across 50
+symbols would otherwise flood those tables with rows unrelated to actual
+paper trading.
+
+Two approximations worth knowing when reading a result:
+- Exits are checked once per day against that day's high/low (stop takes
+  priority over target if both fall inside the same day's range), rather
+  than the live system's continuous intraday check.
+- An entry fills at that day's close plus slippage, mirroring the live
+  system's post-close scan filling near-immediately at the live quote.
+
 ---
 
 ## 5. Business rules
@@ -498,16 +538,15 @@ strategies side by side during the paper phase.
 
 ## 7. What's not yet built (as of this document)
 
-- **Backtesting engine** — currently the only way to see historical
-  performance is to let the paper broker run forward in real time. A module
-  that replays a strategy against stored historical candles (reusing the same
-  cost model as the paper broker) would let you evaluate years of history in
-  seconds instead of waiting six months. This is the next planned piece of
-  work.
-- **Trading holidays** are not modelled — the scheduler is weekday-only;
-  running on an NSE holiday just produces zero new candles, nothing breaks.
 - **Live order reconciliation** is polling-based (`POST /orders/sync`), not a
-  websocket order-update stream.
+  websocket order-update stream. This is a genuinely bigger lift than the
+  other items here — persistent connection management, reconnect/backoff
+  logic, and wiring Kite's postback/ticker stream into the existing
+  order-status flow — not attempted yet.
+- **Backtest results have no dashboard page.** Both the CLI
+  (`swingtrade backtest`, §4.7) and `POST /api/v1/backtest` return the full
+  trade log and equity curve, but there's nowhere in the React app to browse
+  one without calling the API directly.
 
 ---
 

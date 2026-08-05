@@ -1,12 +1,12 @@
 """Operational CLI — the setup and maintenance tasks that are awkward over HTTP.
 
-    swingtrade init-db
-    swingtrade create-user --username admin --password secret
-    swingtrade sync-instruments
-    swingtrade backfill --days 1825
-    swingtrade train --algorithm lightgbm --activate
-    swingtrade scan
-    swingtrade status
+swingtrade init-db
+swingtrade create-user --username admin --password secret
+swingtrade sync-instruments
+swingtrade backfill --days 1825
+swingtrade train --algorithm lightgbm --activate
+swingtrade scan
+swingtrade status
 """
 
 from __future__ import annotations
@@ -109,6 +109,8 @@ def cmd_train(args: argparse.Namespace) -> int:
                 name=args.name,
                 algorithm=args.algorithm,
                 interval=args.interval,
+                horizon_days=args.horizon_days,
+                target_return=args.target_return,
                 auto_activate=args.activate,
             )
         except ValueError as exc:
@@ -116,13 +118,16 @@ def cmd_train(args: argparse.Namespace) -> int:
             return 1
 
         print(f"✅ Trained {model.name}:{model.version} ({model.algorithm})")
+        print(f"   horizon/target   {model.prediction_horizon_days}d / +{model.target_return_pct:.1%}")
         print(f"   samples          {model.n_samples:,}")
         print(f"   accuracy         {model.accuracy:.4f}")
         print(f"   precision        {model.precision:.4f}")
         print(f"   recall           {model.recall:.4f}")
         print(f"   ROC AUC          {model.roc_auc:.4f}")
-        print(f"   precision @ {model.metrics.get('threshold', 0):.2f}  "
-              f"{model.metrics.get('precision_at_threshold', 0):.4f}")
+        print(
+            f"   precision @ {model.metrics.get('threshold', 0):.2f}  "
+            f"{model.metrics.get('precision_at_threshold', 0):.4f}"
+        )
         print(f"   status           {model.status}")
         if not args.activate:
             print(f"\n   Activate it with: POST /api/v1/ml/models/{model.id}/activate")
@@ -151,6 +156,45 @@ def cmd_scan(args: argparse.Namespace) -> int:
         print(f"   errors       {len(result.errors)}")
         for err in result.errors[:10]:
             print(f"     • {err}")
+    return 0
+
+
+def cmd_backtest(args: argparse.Namespace) -> int:
+    from datetime import date
+
+    from swing_trade_ml.core.config import settings
+    from swing_trade_ml.db.session import session_scope
+    from swing_trade_ml.services.backtest import run_backtest
+
+    symbols = [s.strip().upper() for s in args.symbols.split(",")] if args.symbols else settings.watchlist
+    start = date.fromisoformat(args.start)
+    end = date.fromisoformat(args.end) if args.end else date.today()
+
+    with session_scope() as db:
+        try:
+            result = run_backtest(
+                db,
+                strategy_type=args.strategy,
+                symbols=symbols,
+                start=start,
+                end=end,
+                interval=args.interval,
+            )
+        except ValueError as exc:
+            print(f"❌ {exc}")
+            return 1
+
+    stats = result.stats
+    print(f"✅ Backtest complete — {args.strategy}, {len(symbols)} symbols, {start} to {end}")
+    print(f"   starting capital   ₹{result.starting_capital:,.2f}")
+    print(f"   ending value       ₹{result.ending_value:,.2f}")
+    print(f"   total return       {stats['total_return_pct']:+.2%}")
+    print(f"   trades             {stats['total_trades']}  (win rate {stats['win_rate']:.1%})")
+    print(f"   profit factor      {stats['profit_factor']:.2f}")
+    print(f"   expectancy/trade   ₹{stats['expectancy']:,.2f}")
+    print(f"   max drawdown       {stats['max_drawdown_pct']:.2%}")
+    print(f"   sharpe / sortino   {stats['sharpe_ratio']:.2f} / {stats['sortino_ratio']:.2f}")
+    print(f"   total charges      ₹{stats['total_charges']:,.2f}")
     return 0
 
 
@@ -189,9 +233,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="swingtrade", description="Swing Trade ML operations")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    sub.add_parser("init-db", help="Create or migrate the database schema").set_defaults(
-        func=cmd_init_db
-    )
+    sub.add_parser("init-db", help="Create or migrate the database schema").set_defaults(func=cmd_init_db)
 
     p = sub.add_parser("create-user", help="Create a dashboard login")
     p.add_argument("--username", required=True)
@@ -217,12 +259,37 @@ def build_parser() -> argparse.ArgumentParser:
         choices=["lightgbm", "random_forest", "gradient_boosting", "logistic_regression"],
     )
     p.add_argument("--interval", default="day")
+    p.add_argument(
+        "--horizon-days",
+        type=int,
+        default=None,
+        help="Prediction horizon in trading days (default: settings.ML_PREDICTION_HORIZON_DAYS)",
+    )
+    p.add_argument(
+        "--target-return",
+        type=float,
+        default=None,
+        help="Forward return threshold for a positive label, e.g. 0.02 for 2%% "
+        "(default: settings.ML_TARGET_RETURN_PCT)",
+    )
     p.add_argument("--activate", action="store_true", help="Promote to ACTIVE after training")
     p.set_defaults(func=cmd_train)
 
     p = sub.add_parser("scan", help="Run all active strategies now")
     p.add_argument("--interval", default="day")
     p.set_defaults(func=cmd_scan)
+
+    p = sub.add_parser("backtest", help="Replay a strategy against stored historical candles")
+    p.add_argument(
+        "--strategy", required=True, choices=["ml_swing", "sma_crossover"], help="Strategy type"
+    )
+    p.add_argument(
+        "--symbols", default=None, help="Comma-separated tradingsymbols (default: the watchlist)"
+    )
+    p.add_argument("--start", required=True, help="YYYY-MM-DD")
+    p.add_argument("--end", default=None, help="YYYY-MM-DD (default: today)")
+    p.add_argument("--interval", default="day")
+    p.set_defaults(func=cmd_backtest)
 
     sub.add_parser("status", help="Show system and portfolio status").set_defaults(func=cmd_status)
 

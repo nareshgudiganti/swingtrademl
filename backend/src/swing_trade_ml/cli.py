@@ -159,6 +159,45 @@ def cmd_scan(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_backtest(args: argparse.Namespace) -> int:
+    from datetime import date
+
+    from swing_trade_ml.core.config import settings
+    from swing_trade_ml.db.session import session_scope
+    from swing_trade_ml.services.backtest import run_backtest
+
+    symbols = [s.strip().upper() for s in args.symbols.split(",")] if args.symbols else settings.watchlist
+    start = date.fromisoformat(args.start)
+    end = date.fromisoformat(args.end) if args.end else date.today()
+
+    with session_scope() as db:
+        try:
+            result = run_backtest(
+                db,
+                strategy_type=args.strategy,
+                symbols=symbols,
+                start=start,
+                end=end,
+                interval=args.interval,
+            )
+        except ValueError as exc:
+            print(f"❌ {exc}")
+            return 1
+
+    stats = result.stats
+    print(f"✅ Backtest complete — {args.strategy}, {len(symbols)} symbols, {start} to {end}")
+    print(f"   starting capital   ₹{result.starting_capital:,.2f}")
+    print(f"   ending value       ₹{result.ending_value:,.2f}")
+    print(f"   total return       {stats['total_return_pct']:+.2%}")
+    print(f"   trades             {stats['total_trades']}  (win rate {stats['win_rate']:.1%})")
+    print(f"   profit factor      {stats['profit_factor']:.2f}")
+    print(f"   expectancy/trade   ₹{stats['expectancy']:,.2f}")
+    print(f"   max drawdown       {stats['max_drawdown_pct']:.2%}")
+    print(f"   sharpe / sortino   {stats['sharpe_ratio']:.2f} / {stats['sortino_ratio']:.2f}")
+    print(f"   total charges      ₹{stats['total_charges']:,.2f}")
+    return 0
+
+
 def cmd_status(args: argparse.Namespace) -> int:
     from swing_trade_ml.brokers import get_broker
     from swing_trade_ml.core.config import settings
@@ -239,6 +278,18 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("scan", help="Run all active strategies now")
     p.add_argument("--interval", default="day")
     p.set_defaults(func=cmd_scan)
+
+    p = sub.add_parser("backtest", help="Replay a strategy against stored historical candles")
+    p.add_argument(
+        "--strategy", required=True, choices=["ml_swing", "sma_crossover"], help="Strategy type"
+    )
+    p.add_argument(
+        "--symbols", default=None, help="Comma-separated tradingsymbols (default: the watchlist)"
+    )
+    p.add_argument("--start", required=True, help="YYYY-MM-DD")
+    p.add_argument("--end", default=None, help="YYYY-MM-DD (default: today)")
+    p.add_argument("--interval", default="day")
+    p.set_defaults(func=cmd_backtest)
 
     sub.add_parser("status", help="Show system and portfolio status").set_defaults(func=cmd_status)
 

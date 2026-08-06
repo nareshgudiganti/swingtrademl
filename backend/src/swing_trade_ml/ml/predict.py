@@ -22,6 +22,7 @@ from swing_trade_ml.db.models.market import Candle, Instrument
 from swing_trade_ml.db.models.ml import MLModel, Prediction
 from swing_trade_ml.ml.dataset import load_candles
 from swing_trade_ml.ml.features import build_features
+from swing_trade_ml.ml.market_context import load_index_candles
 from swing_trade_ml.ml.registry import get_active_model, load_artifact
 
 log = get_logger(__name__)
@@ -70,7 +71,8 @@ def predict_instrument(
     bundle = _get_bundle(model)
     feature_names: list[str] = bundle["feature_names"]
 
-    featured = build_features(df)
+    index_df = load_index_candles(db, interval)
+    featured = build_features(df, index_df)
     row = featured.iloc[[-1]]
     x = row[feature_names]
     if x.isna().to_numpy().any():

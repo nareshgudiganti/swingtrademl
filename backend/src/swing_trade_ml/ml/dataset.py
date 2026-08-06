@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.db.models.market import Candle, Instrument
 from swing_trade_ml.ml.features import FEATURE_COLUMNS, build_features, build_label
+from swing_trade_ml.ml.market_context import load_index_candles
 
 log = get_logger(__name__)
 
@@ -70,6 +71,11 @@ def build_training_dataset(
         log.warning("dataset.no_instruments")
         return pd.DataFrame()
 
+    # Loaded once, outside the loop — the same benchmark history joins onto
+    # every symbol, and this is real historical training data (not a
+    # simulated "as of" date), so no upto bound is needed here.
+    index_df = load_index_candles(db, interval)
+
     frames: list[pd.DataFrame] = []
     for inst in instruments:
         raw = load_candles(db, inst.id, interval)
@@ -79,7 +85,7 @@ def build_training_dataset(
             log.debug("dataset.skip_short", symbol=inst.tradingsymbol, rows=len(raw))
             continue
 
-        featured = build_features(raw)
+        featured = build_features(raw, index_df)
         labelled = build_label(featured, horizon_days, target_return)
         labelled = labelled.dropna(subset=[*FEATURE_COLUMNS, "target"])
         if labelled.empty:

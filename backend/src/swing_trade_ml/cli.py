@@ -78,6 +78,26 @@ def cmd_sync_instruments(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_sync_index(args: argparse.Namespace) -> int:
+    from swing_trade_ml.brokers.kite import kite_broker
+    from swing_trade_ml.core.config import settings
+    from swing_trade_ml.db.session import session_scope
+    from swing_trade_ml.services import ingestion
+
+    with session_scope() as db:
+        if not kite_broker.load_session(db):
+            print("❌ No active Kite session. Log in at /api/v1/auth/kite/login first.")
+            return 1
+        try:
+            count = ingestion.backfill_index(db, interval=args.interval, days=args.days)
+        except ValueError as exc:
+            print(f"❌ {exc}")
+            return 1
+
+    print(f"✅ Ingested {count:,} candles for {settings.BENCHMARK_INDEX_SYMBOL}")
+    return 0
+
+
 def cmd_backfill(args: argparse.Namespace) -> int:
     from swing_trade_ml.brokers.kite import kite_broker
     from swing_trade_ml.db.session import session_scope
@@ -244,6 +264,13 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("sync-instruments", help="Refresh the instrument master from Kite")
     p.add_argument("--exchange", default="NSE")
     p.set_defaults(func=cmd_sync_instruments)
+
+    p = sub.add_parser(
+        "sync-index", help="Ingest the benchmark index (settings.BENCHMARK_INDEX_SYMBOL)"
+    )
+    p.add_argument("--interval", default="day")
+    p.add_argument("--days", type=int, default=None)
+    p.set_defaults(func=cmd_sync_index)
 
     p = sub.add_parser("backfill", help="Download historical candles")
     p.add_argument("--interval", default="day")

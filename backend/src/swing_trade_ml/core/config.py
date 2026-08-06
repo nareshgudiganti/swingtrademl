@@ -95,6 +95,11 @@ class Settings(BaseSettings):
     # -------------------------------------------------------- market data --
     DEFAULT_WATCHLIST: str = "RELIANCE,TCS,INFY,HDFCBANK,ICICIBANK"
     HISTORICAL_BACKFILL_DAYS: int = 1825
+    # Market-context benchmark for relative-strength/regime features. Kite's
+    # own tradingsymbol for the index — confirmed live against the instrument
+    # dump (segment="INDICES", instrument_type is unhelpfully "EQ" like every
+    # equity, so this is matched by exact tradingsymbol, not type/segment).
+    BENCHMARK_INDEX_SYMBOL: str = "NIFTY 50"
     LIVE_CANDLE_INTERVAL: str = "15minute"
     LIVE_POLL_SECONDS: int = 60
     MARKET_OPEN_TIME: str = "09:15"

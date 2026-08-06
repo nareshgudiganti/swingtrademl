@@ -21,6 +21,7 @@ from swing_trade_ml.core.enums import SignalType
 from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.db.models.market import Instrument
 from swing_trade_ml.ml.features import atr, build_features
+from swing_trade_ml.ml.market_context import load_index_candles
 from swing_trade_ml.ml.predict import _get_bundle
 from swing_trade_ml.ml.registry import get_active_model
 from swing_trade_ml.strategies.base import BaseStrategy, SignalDecision, register_strategy
@@ -67,7 +68,12 @@ class MLSwingStrategy(BaseStrategy):
             return None
 
         d = df.sort_values("ts").reset_index(drop=True)
-        featured = build_features(d)
+        # Bounded to this instrument's own most recent visible bar — the same
+        # look-ahead guarantee `d` already carries (live: only up-to-now
+        # candles; backtest: the caller's pre-sliced window), reused rather
+        # than threading a new parameter through evaluate()/BaseStrategy.
+        index_df = load_index_candles(db, interval="day", upto=d["ts"].max())
+        featured = build_features(d, index_df)
         row = featured.iloc[[-1]]
 
         bundle = _get_bundle(model)

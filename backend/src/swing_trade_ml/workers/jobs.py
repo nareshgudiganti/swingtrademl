@@ -55,11 +55,18 @@ def job_check_exits() -> None:
 
 
 def job_daily_ingest() -> None:
-    """Top up daily candles after the close, before the scan runs."""
+    """Top up daily candles after the close, before the scan runs.
+
+    Also tops up the benchmark index used for relative-strength/regime ML
+    features — it needs to be current before predict_watchlist/signal_scan
+    fire right after this job.
+    """
     try:
         with session_scope() as db:
             results = ingestion.backfill_watchlist(db, interval="day", incremental=True)
             log.info("job.ingest.done", symbols=len(results), bars=sum(results.values()))
+            index_bars = ingestion.backfill_index(db, interval="day")
+            log.info("job.ingest.index_done", bars=index_bars)
     except Exception as exc:  # noqa: BLE001
         _report_error("daily_ingest", exc)
 

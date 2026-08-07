@@ -12,6 +12,7 @@ from swing_trade_ml.brokers import get_broker
 from swing_trade_ml.core.enums import ExitReason, PositionStatus
 from swing_trade_ml.db.models.market import Instrument
 from swing_trade_ml.db.models.trading import Position, Signal, Strategy, Trade
+from swing_trade_ml.ml.registry import get_active_model
 from swing_trade_ml.schemas import (
     ClosePositionRequest,
     EquityPoint,
@@ -64,6 +65,13 @@ def detailed_positions(db: DbSession) -> list[dict[str, Any]]:
         .order_by(Position.entry_at.desc())
     ).all()
 
+    # The active model's own horizon — the "X days" a BUY signal was actually
+    # judged against. Positions opened under an earlier model version are
+    # shown against the CURRENT model's horizon as the best available
+    # context, not a stored-forever value from whichever version bought it.
+    active_model = get_active_model(db)
+    horizon_days = active_model.prediction_horizon_days if active_model else None
+
     result = []
     for position, symbol, name in rows:
         current = position.current_price or position.entry_price
@@ -85,6 +93,9 @@ def detailed_positions(db: DbSession) -> list[dict[str, Any]]:
                 "entry_at": position.entry_at,
                 "holding_days": position.holding_days,
                 "strategy_id": position.strategy_id,
+                "entry_confidence": position.entry_confidence,
+                "last_confidence": position.last_confidence,
+                "horizon_days": horizon_days,
             }
         )
     return result

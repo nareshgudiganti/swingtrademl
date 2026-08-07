@@ -81,6 +81,9 @@ export interface DetailedPosition {
   entry_at: string
   holding_days: number
   strategy_id: number | null
+  entry_confidence: number | null
+  last_confidence: number | null
+  horizon_days: number | null
 }
 
 export interface LatestSignal {
@@ -192,6 +195,16 @@ export interface PredictionRun {
   predicted_class: number
   price: number
   ts: string
+}
+
+export interface HorizonAccuracy {
+  horizon_days: number
+  target_return: number
+  total_predictions: number
+  evaluable: number
+  correct: number
+  accuracy: number
+  avg_actual_return: number
 }
 
 export interface Prediction {

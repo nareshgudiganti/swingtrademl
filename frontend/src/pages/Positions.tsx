@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api } from '../api/client'
 import { Empty, ErrorBox, Loading } from '../components/Loading'
-import { formatCurrency, formatDate, formatSignedPercent, pnlClass } from '../lib/format'
+import { formatCurrency, formatDate, formatPercent, formatSignedPercent, pnlClass } from '../lib/format'
 
 export default function Positions() {
   const queryClient = useQueryClient()
@@ -53,7 +53,8 @@ export default function Positions() {
                 <th className="num">Return</th>
                 <th className="num">Stop</th>
                 <th className="num">Target</th>
-                <th className="num">Days</th>
+                <th className="num">Day</th>
+                <th className="num">Confidence</th>
                 <th />
               </tr>
             </thead>
@@ -82,7 +83,26 @@ export default function Positions() {
                   <td className="num muted">
                     {p.take_profit ? formatCurrency(p.take_profit) : '—'}
                   </td>
-                  <td className="num">{p.holding_days}</td>
+                  <td className="num">
+                    {p.horizon_days ? `${p.holding_days} / ${p.horizon_days}` : p.holding_days}
+                  </td>
+                  <td className="num">
+                    {p.entry_confidence == null ? (
+                      <span className="muted">—</span>
+                    ) : (
+                      <span
+                        className={
+                          p.last_confidence != null && p.last_confidence < p.entry_confidence - 0.1
+                            ? 'neg'
+                            : undefined
+                        }
+                        title="Entry confidence → most recently seen confidence"
+                      >
+                        {formatPercent(p.entry_confidence, 0)}
+                        {p.last_confidence != null && ` → ${formatPercent(p.last_confidence, 0)}`}
+                      </span>
+                    )}
+                  </td>
                   <td>
                     <button
                       className="danger"

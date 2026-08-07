@@ -198,6 +198,36 @@ def prediction_accuracy(db: DbSession, model_id: int | None = None) -> dict:
     }
 
 
+@router.get("/predictions/accuracy/horizon", response_model=dict)
+def prediction_accuracy_at_horizon(
+    db: DbSession,
+    horizon_days: int = Query(..., ge=1, le=60),
+    target_return: float | None = None,
+    model_id: int | None = None,
+) -> dict:
+    """"What if we judged this model on X days instead of the horizon it was
+    trained for?" — entirely read-only, re-scores every prediction against
+    an arbitrary horizon without touching the stored (permanent) evaluation.
+
+    Answers "is the app guessing properly" for any X you want to test, using
+    the same predictions already on record rather than requiring a retrain.
+    """
+    try:
+        result = predict_service.accuracy_at_horizon(db, horizon_days, target_return, model_id)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+    return {
+        "horizon_days": result.horizon_days,
+        "target_return": result.target_return,
+        "total_predictions": result.total_predictions,
+        "evaluable": result.evaluable,
+        "correct": result.correct,
+        "accuracy": result.accuracy,
+        "avg_actual_return": result.avg_actual_return,
+    }
+
+
 @router.post("/predictions/evaluate", response_model=MessageResponse)
 def evaluate_predictions(db: DbSession) -> MessageResponse:
     """Backfill outcomes for predictions whose horizon has elapsed."""

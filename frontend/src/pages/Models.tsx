@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api } from '../api/client'
@@ -10,6 +11,14 @@ export default function Models() {
   const models = useQuery({ queryKey: ['models'], queryFn: api.models })
   const accuracy = useQuery({ queryKey: ['predAccuracy'], queryFn: api.predictionAccuracy })
   const predictions = useQuery({ queryKey: ['predictions', 100], queryFn: () => api.predictions(100) })
+
+  const [horizonInput, setHorizonInput] = useState('5')
+  const [testedHorizon, setTestedHorizon] = useState<number | null>(null)
+  const horizonAccuracy = useQuery({
+    queryKey: ['predAccuracyHorizon', testedHorizon],
+    queryFn: () => api.predictionAccuracyAtHorizon(testedHorizon as number),
+    enabled: testedHorizon !== null,
+  })
 
   const train = useMutation({
     mutationFn: (algorithm: string) => api.train({ algorithm, auto_activate: false }),
@@ -71,6 +80,58 @@ export default function Models() {
           sub={rows.find((m) => m.status === 'ACTIVE')?.name ?? 'Train and activate one'}
         />
       </div>
+
+      <h2>Test a custom horizon</h2>
+      <div className="banner banner-info">
+        The live accuracy above is locked to whatever horizon the active model was trained for.
+        This re-scores every prediction already on record against a horizon <em>you</em> pick —
+        read-only, nothing is retrained or overwritten — so you can check "is the app guessing
+        properly" at 3 days, 10 days, or anything else, using the same predictions it already made.
+      </div>
+      <div className="row" style={{ marginBottom: '1rem' }}>
+        <input
+          type="number"
+          min={1}
+          max={60}
+          value={horizonInput}
+          onChange={(e) => setHorizonInput(e.target.value)}
+          style={{ width: '5rem' }}
+        />
+        <span className="muted">days</span>
+        <button
+          onClick={() => setTestedHorizon(Number(horizonInput))}
+          disabled={horizonAccuracy.isFetching || !horizonInput}
+        >
+          {horizonAccuracy.isFetching ? 'Checking…' : 'Check accuracy at this horizon'}
+        </button>
+      </div>
+      {horizonAccuracy.error && <ErrorBox error={horizonAccuracy.error} />}
+      {horizonAccuracy.data && (
+        <div className="grid" style={{ marginBottom: '1.5rem' }}>
+          <Stat
+            label={`Accuracy at ${horizonAccuracy.data.horizon_days}d`}
+            value={
+              horizonAccuracy.data.evaluable
+                ? formatPercent(horizonAccuracy.data.accuracy, 1)
+                : '—'
+            }
+            sub={
+              horizonAccuracy.data.evaluable
+                ? `${horizonAccuracy.data.correct} correct of ${horizonAccuracy.data.evaluable} old enough to check`
+                : 'No predictions are old enough yet to test this horizon'
+            }
+          />
+          <Stat
+            label="Avg actual return"
+            value={
+              horizonAccuracy.data.evaluable
+                ? formatPercent(horizonAccuracy.data.avg_actual_return, 2)
+                : '—'
+            }
+            sub={`vs. the +${formatPercent(horizonAccuracy.data.target_return, 0)} target`}
+          />
+        </div>
+      )}
 
       <div className="table-wrap">
         {!rows.length ? (

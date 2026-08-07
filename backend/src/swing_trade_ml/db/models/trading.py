@@ -220,6 +220,18 @@ class Position(Base, TimestampMixin):
     # Highest close seen since entry — the anchor for a trailing stop
     highest_price: Mapped[float | None] = mapped_column(Float)
 
+    # The model's confidence at entry, and the most recent value seen since —
+    # neither the stop-loss nor the target reacts to the thesis itself
+    # weakening, only to price. See services/execution.py's confidence-decay
+    # check: an early warning when confidence falls meaningfully below entry
+    # without yet reaching the strategy's hard exit_confidence.
+    entry_confidence: Mapped[float | None] = mapped_column(Float)
+    last_confidence: Mapped[float | None] = mapped_column(Float)
+    # Set the first time a decay alert fires, cleared again if confidence
+    # recovers — so a fresh decline can alert again rather than staying
+    # permanently silenced by one earlier warning.
+    confidence_alert_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
     # Refreshed by the mark-to-market job while the position is open
     current_price: Mapped[float | None] = mapped_column(Float)
     unrealized_pnl: Mapped[float] = mapped_column(Float, default=0.0)

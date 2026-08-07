@@ -14,6 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from swing_trade_ml.brokers import OrderRequest, get_broker
+from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.enums import (
     ExitReason,
     OrderStatus,
@@ -74,6 +75,7 @@ def _finalize_open_position(
     stop_loss: float | None,
     take_profit: float | None,
     entry_at: datetime,
+    entry_confidence: float | None = None,
 ) -> Position:
     """Shared by the broker-filled path and the manual (self-reported) path —
     both end up with the same fill_price/brokerage/taxes, just sourced
@@ -91,6 +93,8 @@ def _finalize_open_position(
         highest_price=fill_price,
         current_price=fill_price,
         total_charges=brokerage + taxes,
+        entry_confidence=entry_confidence,
+        last_confidence=entry_confidence,
     )
     db.add(position)
     db.commit()
@@ -180,6 +184,7 @@ def open_position(
         signal.stop_loss,
         signal.take_profit,
         now,
+        signal.confidence,
     )
 
     order.position_id = position.id
@@ -232,6 +237,7 @@ def manual_open_position(
     position = _finalize_open_position(
         db, strategy, instrument, broker.mode, quantity, entry_price, brokerage, taxes,
         stop_loss, take_profit, now,
+        signal.confidence if signal is not None else None,
     )
 
     if signal is not None:
@@ -431,6 +437,74 @@ def manual_close_position(
     return trade
 
 
+def confidence_decay_status(
+    entry_confidence: float | None,
+    current_confidence: float,
+    exit_confidence: float,
+    already_alerted: bool,
+    min_confidence: float | None = None,
+    drop_threshold: float | None = None,
+) -> str:
+    """Pure decision: "alert" | "reset" | "none" — no DB, fully testable.
+
+    Two conditions must BOTH hold before "alert": the drop from entry is at
+    least drop_threshold, AND confidence has fallen into the "weakening"
+    zone (the midpoint between min_confidence and exit_confidence). A single
+    day's normal probability jitter right after a purchase (e.g. 66% -> 63%)
+    must never trigger this on its own — only a real decline into genuinely
+    weaker territory does.
+    """
+    min_confidence = settings.ML_MIN_CONFIDENCE if min_confidence is None else min_confidence
+    drop_threshold = settings.CONFIDENCE_DECAY_ALERT_PCT if drop_threshold is None else drop_threshold
+
+    if entry_confidence is None:
+        return "none"
+
+    warning_zone = (min_confidence + exit_confidence) / 2
+    in_weak_zone = current_confidence < warning_zone
+    drop = entry_confidence - current_confidence
+
+    if in_weak_zone and drop >= drop_threshold:
+        return "none" if already_alerted else "alert"
+    if not in_weak_zone and already_alerted:
+        return "reset"
+    return "none"
+
+
+def _check_confidence_decay(
+    db: Session, position: Position, strategy: Strategy, instrument: Instrument,
+    current_confidence: float | None, mode: str,
+) -> None:
+    """Warn once when a held position's confidence has genuinely declined.
+
+    Neither the stop-loss nor the target reacts to the thesis itself
+    weakening, only to price — this is the early warning for that gap.
+    """
+    if current_confidence is None:
+        return
+    position.last_confidence = current_confidence
+
+    exit_confidence = float(strategy.params.get("exit_confidence", 0.35))
+    status = confidence_decay_status(
+        position.entry_confidence,
+        current_confidence,
+        exit_confidence,
+        already_alerted=position.confidence_alert_sent_at is not None,
+    )
+
+    if status == "alert":
+        position.confidence_alert_sent_at = datetime.now(UTC)
+        db.commit()
+        notifier.send_sync(
+            _confidence_decay_message(instrument, position, current_confidence, mode), "signal"
+        )
+        return
+    if status == "reset":
+        position.confidence_alert_sent_at = None
+
+    db.commit()
+
+
 def process_decision(
     db: Session, strategy: Strategy, instrument: Instrument, decision
 ) -> Signal | None:
@@ -442,9 +516,6 @@ def process_decision(
     """
     broker = get_broker()
     mode = broker.mode
-
-    if decision.signal == SignalType.HOLD:
-        return record_signal(db, strategy, instrument, decision, mode)
 
     # Scoped by strategy, not just mode+instrument: each strategy manages its
     # own book independently (the SMA-crossover benchmark and ml_swing can
@@ -463,6 +534,11 @@ def process_decision(
         .scalars()
         .all()
     )
+
+    if decision.signal == SignalType.HOLD:
+        for position in existing_positions:
+            _check_confidence_decay(db, position, strategy, instrument, decision.confidence, mode)
+        return record_signal(db, strategy, instrument, decision, mode)
 
     if decision.signal in (SignalType.EXIT, SignalType.SELL):
         signal = record_signal(db, strategy, instrument, decision, mode)
@@ -715,4 +791,20 @@ def _advisory_exit_message(instrument, position, reason, mode) -> str:
         f"Entry: ₹{position.entry_price:,.2f}  ·  Current: ₹{position.current_price or 0:,.2f}\n"
         f"Quantity: {position.quantity:,}\n\n"
         f"Sold this? Record it: POST /portfolio/positions/{position.id}/manual-close"
+    )
+
+
+def _confidence_decay_message(instrument, position, current_confidence, mode) -> str:
+    badge = "📝 PAPER" if mode == "paper" else "💰 <b>LIVE</b>"
+    drop = (position.entry_confidence or 0.0) - current_confidence
+    return (
+        f"⚠️ <b>CONFIDENCE FALLING · {instrument.tradingsymbol}</b>  ({badge})\n\n"
+        f"Entry confidence: <b>{position.entry_confidence:.0%}</b> → now "
+        f"<b>{current_confidence:.0%}</b>  (down {drop:.0%})\n\n"
+        f"This is a warning, not an exit — price hasn't hit the stop or target, "
+        f"but the model's conviction is fading before either of those trigger. "
+        f"Your call whether to trim or wait.\n\n"
+        f"Entry: ₹{position.entry_price:,.2f}  ·  "
+        f"Current: ₹{position.current_price or position.entry_price:,.2f}\n"
+        f"Stop: ₹{position.stop_loss or 0:,.2f}  ·  Target: ₹{position.take_profit or 0:,.2f}"
     )

@@ -117,6 +117,13 @@ class Settings(BaseSettings):
     DEFAULT_STOP_LOSS_PCT: float = 0.05
     DEFAULT_TAKE_PROFIT_PCT: float = 0.15
     MAX_PORTFOLIO_DRAWDOWN_PCT: float = 0.20
+    # A held position's model confidence has to fall this many percentage
+    # points below what it was at entry, AND into the "weakening" zone
+    # (below the midpoint of ML_MIN_CONFIDENCE and the strategy's own
+    # exit_confidence), before a decay alert fires. Two conditions, not one:
+    # a single day's normal probability jitter (e.g. 66% -> 63%) must never
+    # trigger this — only a real decline into genuinely weaker territory.
+    CONFIDENCE_DECAY_ALERT_PCT: float = 0.15
 
     # ----------------------------------------------------------------- ml --
     MODEL_ARTIFACT_DIR: str = "./data/models"

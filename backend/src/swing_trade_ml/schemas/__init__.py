@@ -297,6 +297,8 @@ class PositionOut(BaseModel):
     unrealized_pnl: float
     realized_pnl: float | None
     total_charges: float
+    entry_confidence: float | None
+    last_confidence: float | None
 
 
 class TradeOut(BaseModel):

@@ -9,6 +9,7 @@ from swing_trade_ml.api.deps import DbSession
 from swing_trade_ml.brokers import get_broker
 from swing_trade_ml.db.models.market import Candle, Instrument, Quote
 from swing_trade_ml.db.session import session_scope
+from swing_trade_ml.ml.market_context import current_regime
 from swing_trade_ml.schemas import BackfillRequest, CandleOut, MessageResponse, QuoteOut
 from swing_trade_ml.services import ingestion
 
@@ -113,6 +114,16 @@ def backfill(payload: BackfillRequest, background: BackgroundTasks) -> MessageRe
         message=f"Backfill started for {target}",
         detail="This can take several minutes; watch the server logs for progress.",
     )
+
+
+@router.get("/regime", response_model=dict)
+def market_regime(db: DbSession, interval: str = "day") -> dict:
+    """Bullish/bearish trend and a volatility level for the broad market —
+    not a new model, just the NIFTY-relative context ml_swing already uses
+    internally (see strategies/ml_swing.py's bear-market/falling-knife
+    filters), surfaced directly instead of buried inside a feature column.
+    """
+    return current_regime(db, interval)
 
 
 @router.get("/coverage", response_model=list[dict])

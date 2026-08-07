@@ -7,6 +7,7 @@ import type {
   Instrument,
   LatestSignal,
   HorizonAccuracy,
+  MarketRegime,
   MLModel,
   MessageResponse,
   PortfolioSummary,
@@ -184,6 +185,7 @@ export const api = {
     get<{ symbol: string; candles: number; from: string | null; to: string | null }[]>(
       '/market-data/coverage',
     ),
+  marketRegime: () => get<MarketRegime>('/market-data/regime'),
 
   // ------------------------------------------------------ notifications --
   telegramStatus: () =>

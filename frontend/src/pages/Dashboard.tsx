@@ -16,6 +16,7 @@ import { ErrorBox, Loading } from '../components/Loading'
 import {
   formatCompact,
   formatCurrency,
+  formatDate,
   formatPercent,
   formatSignedPercent,
   pnlClass,
@@ -25,11 +26,13 @@ export default function Dashboard() {
   const summary = useQuery({ queryKey: ['summary'], queryFn: () => api.summary() })
   const equity = useQuery({ queryKey: ['equity'], queryFn: () => api.equityCurve(180) })
   const signals = useQuery({ queryKey: ['signals', 5], queryFn: () => api.latestSignals(5) })
+  const regime = useQuery({ queryKey: ['marketRegime'], queryFn: api.marketRegime })
 
   if (summary.isLoading) return <Loading />
   if (summary.error) return <ErrorBox error={summary.error} />
 
   const s = summary.data!
+  const r = regime.data
 
   return (
     <>
@@ -39,6 +42,31 @@ export default function Dashboard() {
           {s.mode.toUpperCase()}
         </span>
       </div>
+
+      {r && r.regime !== 'unknown' && (
+        <div
+          className="banner banner-info"
+          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem' }}
+        >
+          <span>
+            NIFTY 50 is{' '}
+            <span className={`badge ${r.regime === 'bullish' ? 'badge-buy' : 'badge-sell'}`}>
+              {r.regime}
+            </span>{' '}
+            {r.volatility_level !== 'unknown' && (
+              <>
+                with <span className="badge badge-hold">{r.volatility_level} volatility</span>{' '}
+              </>
+            )}
+            {r.regime === 'bearish' &&
+              '— new BUY signals need extra confidence and sharp 5-day drops are filtered as falling knives.'}
+            {r.regime === 'bullish' && '— normal confidence thresholds apply.'}
+          </span>
+          <span className="muted" style={{ fontSize: '0.8rem', whiteSpace: 'nowrap' }}>
+            {formatCurrency(r.nifty_close ?? 0)} · as of {r.as_of ? formatDate(r.as_of) : '—'}
+          </span>
+        </div>
+      )}
 
       <div className="banner banner-info" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem' }}>
         <span>

@@ -221,6 +221,15 @@ export interface Prediction {
   evaluated_at: string | null
 }
 
+export interface MarketRegime {
+  regime: 'bullish' | 'bearish' | 'unknown'
+  volatility_level: 'elevated' | 'normal' | 'low' | 'unknown'
+  nifty_close: number | null
+  sma_50: number | null
+  sma_200: number | null
+  as_of: string | null
+}
+
 export interface ScanResult {
   strategies_run: number
   instruments_evaluated: number

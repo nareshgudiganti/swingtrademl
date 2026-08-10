@@ -634,9 +634,18 @@ def process_decision(
         .all()
     )
 
+    # Track the model's freshest read on anything already held, regardless of
+    # what today's decision turns out to be — a currently-open position can
+    # just as easily re-trigger BUY (rejected below as a duplicate) or EXIT
+    # as it can HOLD, and the Positions page's "what does the model think
+    # right now" read must not go stale just because today's verdict wasn't
+    # literally HOLD. (Previously scoped to the HOLD branch only, which is
+    # exactly why a position the model was newly bullish enough on to BUY
+    # again showed a stale "no reading yet" instead of that fresh number.)
+    for position in existing_positions:
+        _check_confidence_decay(db, position, strategy, instrument, decision.confidence, mode)
+
     if decision.signal == SignalType.HOLD:
-        for position in existing_positions:
-            _check_confidence_decay(db, position, strategy, instrument, decision.confidence, mode)
         return record_signal(db, strategy, instrument, decision, mode)
 
     if decision.signal in (SignalType.EXIT, SignalType.SELL):

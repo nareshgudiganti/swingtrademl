@@ -5,15 +5,17 @@ import type { DetailedPosition } from '../api/types'
 import { Empty, ErrorBox, Loading } from '../components/Loading'
 import { formatCurrency, formatDate, formatPercent, formatSignedPercent, pnlClass } from '../lib/format'
 
-// Severity, loosely: red needs a look today, amber is worth watching, grey
-// is a soft early cue, green means the trade is on track — matches the
-// badge classes already used for signals/status elsewhere in the app.
+// Escalation by the model's CURRENT confidence, not by elapsed time: green
+// means it's still bullish today, grey is unremarkable/early, amber is
+// fading toward the exit floor, red is a real exit signal or an alert
+// already sent — matches the badge classes already used elsewhere.
 const ACTION_BADGE: Record<DetailedPosition['action_code'], string> = {
   exit: 'badge-sell',
-  alert: 'badge-recommend',
-  horizon: 'badge-recommend',
+  alert: 'badge-sell',
+  weak: 'badge-recommend',
   dip: 'badge-hold',
-  hold: 'badge-buy',
+  hold: 'badge-hold',
+  bullish: 'badge-buy',
 }
 
 export default function Positions() {

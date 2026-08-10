@@ -69,64 +69,81 @@ def test_exact_threshold_drop_alerts():
 
 
 # ------------------------------------------------------------- position_action --
-# The Positions page's single "what should I do" read — priority order:
-# exit signal > alert already sent > horizon elapsed > early dip > hold.
+# The Positions page's single "what should I do" read. Leads with the MODEL'S
+# CURRENT confidence (a fresh re-ask, not a memory of the original call) —
+# bullish (>= 60% buy bar) / weak (below the 47.5% midpoint, approaching the
+# 35% exit floor) / dip (a modest, early decline) / hold (steady, below the
+# buy bar but not weak). "Day X elapsed" is folded in as a note, never the
+# headline — the whole point is that elapsed time alone answers nothing.
+# Priority above all of that: a pending exit signal, then an already-sent
+# decay alert.
+
+
+def _action(entry, last, alert_sent=False, holding_days=1, horizon_days=5, exit_signal_pending=False):
+    return position_action(
+        entry, last, alert_sent, holding_days, horizon_days,
+        exit_confidence=EXIT_CONFIDENCE, exit_signal_pending=exit_signal_pending,
+    )
 
 
 def test_pending_exit_signal_wins_regardless_of_everything_else():
-    code, _ = position_action(
-        entry_confidence=0.70, last_confidence=0.68, alert_sent=False,
-        holding_days=1, horizon_days=5, exit_signal_pending=True,
-    )
+    code, _ = _action(entry=0.70, last=0.68, exit_signal_pending=True)
     assert code == "exit"
 
 
-def test_alert_already_sent_outranks_horizon_and_dip():
-    code, label = position_action(
-        entry_confidence=0.66, last_confidence=0.40, alert_sent=True,
-        holding_days=6, horizon_days=5,
-    )
+def test_alert_already_sent_outranks_the_fresh_confidence_read():
+    """Even though 40% would otherwise read as "weak" rather than fully
+    exit-worthy, an alert already having fired takes priority — the user
+    was already notified of a real decline, so that's what the label says."""
+    code, label = _action(entry=0.66, last=0.40, alert_sent=True, holding_days=6, horizon_days=5)
     assert code == "alert"
     assert "40%" in label
 
 
-def test_horizon_reached_outranks_early_dip():
-    code, label = position_action(
-        entry_confidence=0.66, last_confidence=0.60, alert_sent=False,
-        holding_days=5, horizon_days=5,
-    )
-    assert code == "horizon"
-    assert "5 of 5" in label
+def test_confidence_still_above_buy_bar_reads_bullish_even_past_horizon():
+    """The actual gap this was built to close: 'day 5 of 5, still red' is not
+    itself informative. What matters is today's confidence — if the model
+    would still buy this fresh, that's a real, current bullish read, not a
+    stale one, regardless of P&L or elapsed days."""
+    code, label = _action(entry=0.60, last=0.665, holding_days=5, horizon_days=5)
+    assert code == "bullish"
+    assert "67%" in label or "66%" in label  # 0.665 rounds to 66% or 67% depending on the platform
+    assert "5-day call has passed" in label
+
+
+def test_confidence_below_buy_bar_but_above_warning_zone_is_a_neutral_hold():
+    code, label = _action(entry=0.50, last=0.48, holding_days=1, horizon_days=5)
+    assert code == "hold"
+    assert "48%" in label
+
+
+def test_confidence_in_the_warning_zone_reads_as_weak():
+    """The ADANIPORTS case: below the 47.5% midpoint but not yet alerted —
+    genuinely closer to the exit floor than the other tiers."""
+    code, label = _action(entry=0.612, last=0.427, holding_days=5, horizon_days=5)
+    assert code == "weak"
+    assert "43%" in label or "42%" in label
 
 
 def test_early_dip_shows_before_the_real_alert_threshold():
-    """A 6-point drop is real movement but below the 15-point alert
-    threshold — should read as a soft "easing" cue, not silence."""
-    code, label = position_action(
-        entry_confidence=0.66, last_confidence=0.60, alert_sent=False,
-        holding_days=2, horizon_days=5,
-    )
+    """An 11-point drop that's still above the warning-zone midpoint — real
+    movement, not yet weak, worth a soft "easing" cue rather than silence."""
+    code, label = _action(entry=0.66, last=0.55, holding_days=2, horizon_days=5)
     assert code == "dip"
-    assert "66%" in label and "60%" in label
+    assert "66%" in label and "55%" in label
 
 
-def test_ordinary_day_after_purchase_jitter_reads_as_hold():
+def test_ordinary_day_after_purchase_jitter_does_not_read_as_weak_or_dip():
     """Mirrors confidence_decay_status's own noise boundary: a 3-point drop
-    must not look alarming here either."""
-    code, label = position_action(
-        entry_confidence=0.66, last_confidence=0.63, alert_sent=False,
-        holding_days=1, horizon_days=5,
-    )
-    assert code == "hold"
-    assert "day 1 of 5" in label
+    must not look alarming here either — it lands as bullish (still above
+    the buy bar), the best-case tier, not a warning."""
+    code, _ = _action(entry=0.66, last=0.63, holding_days=1, horizon_days=5)
+    assert code == "bullish"
 
 
-def test_no_entry_confidence_still_reports_a_plain_hold():
-    """Manual trades with no tracked entry confidence must degrade cleanly,
-    not error."""
-    code, label = position_action(
-        entry_confidence=None, last_confidence=None, alert_sent=False,
-        holding_days=3, horizon_days=None,
-    )
+def test_no_confidence_reading_reports_a_plain_hold():
+    """Manual trades with no tracked confidence have nothing to read
+    directionally — must degrade cleanly, not error or fabricate a read."""
+    code, label = _action(entry=None, last=None, holding_days=3, horizon_days=None)
     assert code == "hold"
     assert "day 3" in label

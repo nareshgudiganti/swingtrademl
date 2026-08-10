@@ -519,46 +519,71 @@ def position_action(
     alert_sent: bool,
     holding_days: int,
     horizon_days: int | None,
+    exit_confidence: float,
     exit_signal_pending: bool = False,
+    min_confidence: float | None = None,
 ) -> tuple[str, str]:
     """Pure: the single "what should I do" read for one open position —
     what the Positions page shows instead of making the user cross-reference
     the Day column, the Confidence column, and a signal on a different page.
 
+    Leads with the model's CURRENT, freshly re-evaluated confidence — not a
+    fact about elapsed time. The model has no memory of its own earlier call;
+    every day it re-asks "what's the probability of a move from here", so
+    "day 5 of 5 and still red" is not itself informative — what matters is
+    whether today's confidence still leans bullish, is fading toward the
+    exit floor, or has already crossed it. Day count and any horizon-elapsed
+    note are folded in as supporting detail, not the headline.
+
     Priority, strongest first: a real EXIT signal the strategy hasn't acted
-    on (advisory mode only — "auto" strategies close automatically, so a
+    on (advisory mode only — an "auto" strategy closes automatically, so a
     still-open position can never actually have one) outranks an already-
-    sent confidence-decay alert, which outranks the horizon merely having
-    elapsed, which outranks an early, unconfirmed dip, which outranks a
-    quiet, on-track hold.
+    sent confidence-decay alert, which outranks the fresh directional read.
     """
+    min_confidence = settings.ML_MIN_CONFIDENCE if min_confidence is None else min_confidence
+
     if exit_signal_pending:
         return "exit", "Exit signal — model wants out, not yet closed"
 
+    horizon_note = ""
+    if horizon_days is not None and holding_days >= horizon_days:
+        horizon_note = f" (original {horizon_days}-day call has passed, day {holding_days})"
+
     if alert_sent:
         conf = f"{last_confidence:.0%}" if last_confidence is not None else "?"
-        return "alert", f"Watch closely — confidence weakened to {conf}"
+        return "alert", f"Losing conviction ({conf} today) — alert already sent{horizon_note}"
 
-    if horizon_days is not None and holding_days >= horizon_days:
+    if last_confidence is None:
+        detail = (
+            f"day {holding_days} of {horizon_days}" if horizon_days is not None else f"day {holding_days}"
+        )
+        return "hold", f"Hold — {detail}, no fresh confidence reading yet"
+
+    if last_confidence >= min_confidence:
         return (
-            "horizon",
-            f"Horizon reached — day {holding_days} of {horizon_days}, "
-            "the model's original call has expired",
+            "bullish",
+            f"Still bullish ({last_confidence:.0%} today) — model would buy this fresh right now"
+            f"{horizon_note}",
+        )
+
+    warning_zone = (min_confidence + exit_confidence) / 2
+    if last_confidence < warning_zone:
+        return (
+            "weak",
+            f"Losing conviction ({last_confidence:.0%} today) — approaching exit level{horizon_note}",
         )
 
     if (
         entry_confidence is not None
-        and last_confidence is not None
         and entry_confidence - last_confidence >= EARLY_DIP_DROP_PCT
     ):
         return (
             "dip",
-            f"Confidence easing ({entry_confidence:.0%} → {last_confidence:.0%}), "
-            "not at exit level yet",
+            f"Confidence easing ({entry_confidence:.0%} → {last_confidence:.0%}) today — "
+            f"below the buy bar but not weak yet{horizon_note}",
         )
 
-    detail = f"day {holding_days} of {horizon_days}" if horizon_days is not None else f"day {holding_days}"
-    return "hold", f"Hold — {detail}, confidence steady"
+    return "hold", f"Neutral ({last_confidence:.0%} today) — below buy bar, holding steady{horizon_note}"
 
 
 def process_decision(

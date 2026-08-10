@@ -106,12 +106,18 @@ def detailed_positions(db: DbSession) -> list[dict[str, Any]]:
 
         pending_at = latest_pending_exit.get((position.instrument_id, position.strategy_id))
         exit_signal_pending = pending_at is not None and pending_at >= position.entry_at
+        # Falls back to ml_swing's own default when the strategy doesn't
+        # override it — same lookup _check_confidence_decay() uses.
+        exit_confidence = float(
+            (position.strategy.params.get("exit_confidence", 0.35)) if position.strategy else 0.35
+        )
         action_code, action_label = position_action(
             position.entry_confidence,
             position.last_confidence,
             alert_sent=position.confidence_alert_sent_at is not None,
             holding_days=position.holding_days,
             horizon_days=horizon_days,
+            exit_confidence=exit_confidence,
             exit_signal_pending=exit_signal_pending,
         )
 

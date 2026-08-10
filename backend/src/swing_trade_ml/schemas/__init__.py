@@ -158,6 +158,9 @@ class StrategyCreate(BaseModel):
     capital_allocation: float | None = None
     stop_loss_pct: float | None = None
     take_profit_pct: float | None = None
+    # Caps how many new entries a scan acts on, ranked by confidence, even
+    # when more position slots are free. Null = uncapped.
+    max_daily_buys: int | None = None
     # "auto" places real orders as before; "advisory" only ever recommends —
     # see services/execution.py.
     execution_mode: str = Field("auto", pattern="^(auto|advisory)$")
@@ -173,6 +176,7 @@ class StrategyUpdate(BaseModel):
     capital_allocation: float | None = None
     stop_loss_pct: float | None = None
     take_profit_pct: float | None = None
+    max_daily_buys: int | None = None
     execution_mode: str | None = Field(None, pattern="^(auto|advisory)$")
     allow_pyramiding: bool | None = None
 
@@ -191,6 +195,7 @@ class StrategyOut(BaseModel):
     capital_allocation: float | None
     stop_loss_pct: float | None
     take_profit_pct: float | None
+    max_daily_buys: int | None
     execution_mode: str
     allow_pyramiding: bool
     created_at: datetime

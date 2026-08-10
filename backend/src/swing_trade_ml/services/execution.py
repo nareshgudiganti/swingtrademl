@@ -506,16 +506,34 @@ def _check_confidence_decay(
 
 
 def process_decision(
-    db: Session, strategy: Strategy, instrument: Instrument, decision
+    db: Session,
+    strategy: Strategy,
+    instrument: Instrument,
+    decision,
+    *,
+    ranked_out_reason: str | None = None,
 ) -> Signal | None:
     """Route one strategy decision through risk checks to execution.
 
     Always records the signal — including rejected ones, with the reason —
     because a strategy's rejected entries are as much a part of its track record
     as its filled ones.
+
+    `ranked_out_reason` is set by the scan loop (engine.run_strategy /
+    backtest.run_backtest) when this BUY lost out to higher-confidence
+    candidates from the same scan — see services/risk.rank_buy_candidates().
+    Short-circuits straight to a rejected signal, skipping the risk/position
+    queries below entirely since this candidate was never going to be acted
+    on regardless of what they'd say.
     """
     broker = get_broker()
     mode = broker.mode
+
+    if decision.signal == SignalType.BUY and ranked_out_reason:
+        signal = record_signal(db, strategy, instrument, decision, mode)
+        signal.rejection_reason = ranked_out_reason
+        db.commit()
+        return signal
 
     # Scoped by strategy, not just mode+instrument: each strategy manages its
     # own book independently (the SMA-crossover benchmark and ml_swing can

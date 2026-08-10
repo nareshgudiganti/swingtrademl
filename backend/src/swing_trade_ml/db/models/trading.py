@@ -76,6 +76,10 @@ class Strategy(Base, TimestampMixin):
     capital_allocation: Mapped[float | None] = mapped_column(Float)
     stop_loss_pct: Mapped[float | None] = mapped_column(Float)
     take_profit_pct: Mapped[float | None] = mapped_column(Float)
+    # Caps how many NEW entries a scan acts on, ranked by confidence, even
+    # when more position slots are free — null means uncapped (only
+    # max_positions governs). See services/risk.rank_buy_candidates().
+    max_daily_buys: Mapped[int | None] = mapped_column(Integer)
 
     signals: Mapped[list[Signal]] = relationship(back_populates="strategy")
     positions: Mapped[list[Position]] = relationship(back_populates="strategy")

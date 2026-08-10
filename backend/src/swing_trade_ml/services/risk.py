@@ -28,6 +28,19 @@ class RiskDecision:
     reason: str = ""
 
 
+def rank_buy_candidates(candidates: list[tuple[int, float]]) -> list[tuple[int, float]]:
+    """BUY candidates from one scan — (instrument_id, confidence) pairs —
+    ordered strongest-first.
+
+    When more stocks clear the confidence bar than there are free position
+    slots, this decides who gets them: the strategy's best ideas, not
+    whichever instrument happened to be evaluated first. A stable sort keeps
+    ties in their original (evaluation) order rather than reshuffling them
+    arbitrarily on every scan.
+    """
+    return sorted(candidates, key=lambda c: c[1], reverse=True)
+
+
 def open_position_count(db: Session, mode: str, strategy_id: int | None = None) -> int:
     stmt = select(func.count(Position.id)).where(
         Position.mode == mode, Position.status == PositionStatus.OPEN

@@ -43,8 +43,9 @@ from swing_trade_ml.db.models.trading import Strategy as StrategyModel
 from swing_trade_ml.ml.dataset import load_candles
 from swing_trade_ml.services.costs import apply_slippage as _apply_slippage
 from swing_trade_ml.services.costs import compute_charges as _charges
-from swing_trade_ml.services.risk import calculate_quantity
+from swing_trade_ml.services.risk import calculate_quantity, rank_buy_candidates
 from swing_trade_ml.strategies import get_strategy
+from swing_trade_ml.strategies.base import SignalDecision
 
 log = get_logger(__name__)
 
@@ -287,7 +288,8 @@ def run_backtest(
                 cash += _close_position(pos, exit_price, trades, reason, day)
                 del open_positions[inst_id]
 
-        # ---- signal-driven exits and entries ----
+        # ---- signal-driven exits, and BUY candidates for this day ----
+        buy_candidates: list[tuple[Instrument, SignalDecision]] = []
         for inst in instruments:
             df = history.get(inst.id)
             if df is None:
@@ -303,6 +305,30 @@ def run_backtest(
             existing = open_positions.get(inst.id)
 
             if decision.signal == SignalType.BUY and existing is None:
+                # Not opened yet — several instruments can clear the bar on
+                # the same day, and whichever is evaluated first should not
+                # automatically win a scarce slot. Collected and ranked
+                # below, same as the live scan loop (services/engine.py).
+                buy_candidates.append((inst, decision))
+
+            elif decision.signal in (SignalType.EXIT, SignalType.SELL) and existing is not None:
+                cash += _close_position(existing, decision.price, trades, "SIGNAL_EXIT", day)
+                del open_positions[inst.id]
+
+        # ---- rank today's BUY candidates by confidence, strongest first ----
+        if buy_candidates:
+            by_id = {inst.id: (inst, decision) for inst, decision in buy_candidates}
+            ranked_ids = rank_buy_candidates(
+                [(inst.id, decision.confidence or 0.0) for inst, decision in buy_candidates]
+            )
+            cap = (
+                min(strategy_row.max_daily_buys, len(ranked_ids))
+                if strategy_row.max_daily_buys is not None
+                else len(ranked_ids)
+            )
+            for inst_id, _confidence in ranked_ids[:cap]:
+                inst, decision = by_id[inst_id]
+
                 holdings_value = sum(
                     p.quantity * _last_close(history[i], day) for i, p in open_positions.items()
                 )
@@ -339,10 +365,6 @@ def run_backtest(
                     take_profit=decision.take_profit,
                     charges_so_far=brokerage + taxes,
                 )
-
-            elif decision.signal in (SignalType.EXIT, SignalType.SELL) and existing is not None:
-                cash += _close_position(existing, decision.price, trades, "SIGNAL_EXIT", day)
-                del open_positions[inst.id]
 
         holdings_value = sum(
             p.quantity * _last_close(history[i], day) for i, p in open_positions.items()

@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from swing_trade_ml.core.config import settings
-from swing_trade_ml.services.risk import calculate_quantity
+from swing_trade_ml.services.risk import calculate_quantity, rank_buy_candidates
 
 
 def test_size_is_bounded_by_risk_per_trade():
@@ -111,3 +111,32 @@ def test_existing_exposure_never_produces_a_negative_cap():
         price, stop, portfolio, available_cash=portfolio, existing_exposure=absurdly_large_exposure
     )
     assert quantity == 0
+
+
+# ------------------------------------------------------ cross-sectional ranking --
+
+
+def test_rank_buy_candidates_orders_strongest_first():
+    ranked = rank_buy_candidates([(1, 0.55), (2, 0.71), (3, 0.63)])
+    assert [inst_id for inst_id, _ in ranked] == [2, 3, 1]
+
+
+def test_rank_buy_candidates_empty_list():
+    assert rank_buy_candidates([]) == []
+
+
+def test_rank_buy_candidates_single_candidate():
+    assert rank_buy_candidates([(1, 0.6)]) == [(1, 0.6)]
+
+
+def test_rank_buy_candidates_ties_keep_original_order():
+    """A stable sort: two candidates at the same confidence must not shuffle
+    on every scan — whichever was evaluated first among equals stays first."""
+    ranked = rank_buy_candidates([(1, 0.6), (2, 0.6), (3, 0.6)])
+    assert [inst_id for inst_id, _ in ranked] == [1, 2, 3]
+
+
+def test_rank_buy_candidates_all_same_confidence_preserves_count():
+    ranked = rank_buy_candidates([(1, 0.5), (2, 0.5)])
+    assert len(ranked) == 2
+    assert {inst_id for inst_id, _ in ranked} == {1, 2}

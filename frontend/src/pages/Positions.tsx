@@ -1,8 +1,20 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api } from '../api/client'
+import type { DetailedPosition } from '../api/types'
 import { Empty, ErrorBox, Loading } from '../components/Loading'
 import { formatCurrency, formatDate, formatPercent, formatSignedPercent, pnlClass } from '../lib/format'
+
+// Severity, loosely: red needs a look today, amber is worth watching, grey
+// is a soft early cue, green means the trade is on track — matches the
+// badge classes already used for signals/status elsewhere in the app.
+const ACTION_BADGE: Record<DetailedPosition['action_code'], string> = {
+  exit: 'badge-sell',
+  alert: 'badge-recommend',
+  horizon: 'badge-recommend',
+  dip: 'badge-hold',
+  hold: 'badge-buy',
+}
 
 export default function Positions() {
   const queryClient = useQueryClient()
@@ -45,6 +57,7 @@ export default function Positions() {
             <thead>
               <tr>
                 <th>Symbol</th>
+                <th>Action</th>
                 <th className="num">Qty</th>
                 <th className="num">Entry</th>
                 <th className="num">Current</th>
@@ -65,6 +78,12 @@ export default function Positions() {
                     <strong>{p.symbol}</strong>
                     <div className="muted" style={{ fontSize: '0.75rem' }}>
                       {formatDate(p.entry_at)}
+                    </div>
+                  </td>
+                  <td>
+                    <span className={`badge ${ACTION_BADGE[p.action_code]}`}>{p.action_code}</span>
+                    <div className="muted" style={{ fontSize: '0.75rem', maxWidth: '16rem' }}>
+                      {p.action_label}
                     </div>
                   </td>
                   <td className="num">{p.quantity}</td>

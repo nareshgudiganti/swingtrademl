@@ -7,7 +7,7 @@ tests pin exactly that boundary.
 
 from __future__ import annotations
 
-from swing_trade_ml.services.execution import confidence_decay_status
+from swing_trade_ml.services.execution import confidence_decay_status, position_action
 
 # Matches ml_swing's default exit_confidence and settings.ML_MIN_CONFIDENCE,
 # so the "weakening zone" midpoint is (0.60 + 0.35) / 2 = 0.475.
@@ -66,3 +66,67 @@ def test_exact_threshold_drop_alerts():
     entry = 0.475 + DROP_THRESHOLD  # 0.625
     current = 0.47  # just inside the weak zone (< 0.475)
     assert _status(entry=entry, current=current) == "alert"
+
+
+# ------------------------------------------------------------- position_action --
+# The Positions page's single "what should I do" read — priority order:
+# exit signal > alert already sent > horizon elapsed > early dip > hold.
+
+
+def test_pending_exit_signal_wins_regardless_of_everything_else():
+    code, _ = position_action(
+        entry_confidence=0.70, last_confidence=0.68, alert_sent=False,
+        holding_days=1, horizon_days=5, exit_signal_pending=True,
+    )
+    assert code == "exit"
+
+
+def test_alert_already_sent_outranks_horizon_and_dip():
+    code, label = position_action(
+        entry_confidence=0.66, last_confidence=0.40, alert_sent=True,
+        holding_days=6, horizon_days=5,
+    )
+    assert code == "alert"
+    assert "40%" in label
+
+
+def test_horizon_reached_outranks_early_dip():
+    code, label = position_action(
+        entry_confidence=0.66, last_confidence=0.60, alert_sent=False,
+        holding_days=5, horizon_days=5,
+    )
+    assert code == "horizon"
+    assert "5 of 5" in label
+
+
+def test_early_dip_shows_before_the_real_alert_threshold():
+    """A 6-point drop is real movement but below the 15-point alert
+    threshold — should read as a soft "easing" cue, not silence."""
+    code, label = position_action(
+        entry_confidence=0.66, last_confidence=0.60, alert_sent=False,
+        holding_days=2, horizon_days=5,
+    )
+    assert code == "dip"
+    assert "66%" in label and "60%" in label
+
+
+def test_ordinary_day_after_purchase_jitter_reads_as_hold():
+    """Mirrors confidence_decay_status's own noise boundary: a 3-point drop
+    must not look alarming here either."""
+    code, label = position_action(
+        entry_confidence=0.66, last_confidence=0.63, alert_sent=False,
+        holding_days=1, horizon_days=5,
+    )
+    assert code == "hold"
+    assert "day 1 of 5" in label
+
+
+def test_no_entry_confidence_still_reports_a_plain_hold():
+    """Manual trades with no tracked entry confidence must degrade cleanly,
+    not error."""
+    code, label = position_action(
+        entry_confidence=None, last_confidence=None, alert_sent=False,
+        holding_days=3, horizon_days=None,
+    )
+    assert code == "hold"
+    assert "day 3" in label

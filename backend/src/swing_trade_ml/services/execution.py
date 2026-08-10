@@ -505,6 +505,62 @@ def _check_confidence_decay(
     db.commit()
 
 
+# Smaller than settings.CONFIDENCE_DECAY_ALERT_PCT (0.15) on purpose: this is
+# a cosmetic "starting to ease" cue for the Positions page, not a trading
+# decision or a notification trigger, so it's fine for it to catch smaller
+# moves than the real alert does. 0.66 -> 0.63 (0.03) still reads as "hold" —
+# consistent with confidence_decay_status() never firing on that jitter.
+EARLY_DIP_DROP_PCT = 0.05
+
+
+def position_action(
+    entry_confidence: float | None,
+    last_confidence: float | None,
+    alert_sent: bool,
+    holding_days: int,
+    horizon_days: int | None,
+    exit_signal_pending: bool = False,
+) -> tuple[str, str]:
+    """Pure: the single "what should I do" read for one open position —
+    what the Positions page shows instead of making the user cross-reference
+    the Day column, the Confidence column, and a signal on a different page.
+
+    Priority, strongest first: a real EXIT signal the strategy hasn't acted
+    on (advisory mode only — "auto" strategies close automatically, so a
+    still-open position can never actually have one) outranks an already-
+    sent confidence-decay alert, which outranks the horizon merely having
+    elapsed, which outranks an early, unconfirmed dip, which outranks a
+    quiet, on-track hold.
+    """
+    if exit_signal_pending:
+        return "exit", "Exit signal — model wants out, not yet closed"
+
+    if alert_sent:
+        conf = f"{last_confidence:.0%}" if last_confidence is not None else "?"
+        return "alert", f"Watch closely — confidence weakened to {conf}"
+
+    if horizon_days is not None and holding_days >= horizon_days:
+        return (
+            "horizon",
+            f"Horizon reached — day {holding_days} of {horizon_days}, "
+            "the model's original call has expired",
+        )
+
+    if (
+        entry_confidence is not None
+        and last_confidence is not None
+        and entry_confidence - last_confidence >= EARLY_DIP_DROP_PCT
+    ):
+        return (
+            "dip",
+            f"Confidence easing ({entry_confidence:.0%} → {last_confidence:.0%}), "
+            "not at exit level yet",
+        )
+
+    detail = f"day {holding_days} of {horizon_days}" if horizon_days is not None else f"day {holding_days}"
+    return "hold", f"Hold — {detail}, confidence steady"
+
+
 def process_decision(
     db: Session,
     strategy: Strategy,

@@ -9,7 +9,7 @@ from sqlalchemy import select
 
 from swing_trade_ml.api.deps import DbSession
 from swing_trade_ml.brokers import get_broker
-from swing_trade_ml.core.enums import ExitReason, PositionStatus
+from swing_trade_ml.core.enums import ExitReason, PositionStatus, SignalType
 from swing_trade_ml.db.models.market import Instrument
 from swing_trade_ml.db.models.trading import Position, Signal, Strategy, Trade
 from swing_trade_ml.ml.registry import get_active_model
@@ -23,7 +23,12 @@ from swing_trade_ml.schemas import (
     TradeOut,
 )
 from swing_trade_ml.services import portfolio as portfolio_service
-from swing_trade_ml.services.execution import close_position, manual_close_position, manual_open_position
+from swing_trade_ml.services.execution import (
+    close_position,
+    manual_close_position,
+    manual_open_position,
+    position_action,
+)
 
 router = APIRouter(prefix="/portfolio", tags=["portfolio"])
 
@@ -72,10 +77,44 @@ def detailed_positions(db: DbSession) -> list[dict[str, Any]]:
     active_model = get_active_model(db)
     horizon_days = active_model.prediction_horizon_days if active_model else None
 
+    # A still-open position can only have an unactioned EXIT/SELL signal
+    # against it under an "advisory" strategy — an "auto" one closes the
+    # position the moment such a signal fires (see process_decision), so
+    # this is otherwise always empty. Batched once rather than per-position:
+    # position counts here are small, but there is no reason to N+1 anyway.
+    latest_pending_exit: dict[tuple[int, int], object] = {}
+    if rows:
+        instrument_ids = {position.instrument_id for position, _, _ in rows}
+        strategy_ids = {position.strategy_id for position, _, _ in rows}
+        for inst_id, strat_id, generated_at in db.execute(
+            select(Signal.instrument_id, Signal.strategy_id, Signal.generated_at).where(
+                Signal.mode == get_broker().mode,
+                Signal.instrument_id.in_(instrument_ids),
+                Signal.strategy_id.in_(strategy_ids),
+                Signal.signal_type.in_([SignalType.EXIT, SignalType.SELL]),
+                Signal.was_executed.is_(False),
+            )
+        ):
+            key = (inst_id, strat_id)
+            if key not in latest_pending_exit or generated_at > latest_pending_exit[key]:
+                latest_pending_exit[key] = generated_at
+
     result = []
     for position, symbol, name in rows:
         current = position.current_price or position.entry_price
         invested = position.entry_price * position.quantity
+
+        pending_at = latest_pending_exit.get((position.instrument_id, position.strategy_id))
+        exit_signal_pending = pending_at is not None and pending_at >= position.entry_at
+        action_code, action_label = position_action(
+            position.entry_confidence,
+            position.last_confidence,
+            alert_sent=position.confidence_alert_sent_at is not None,
+            holding_days=position.holding_days,
+            horizon_days=horizon_days,
+            exit_signal_pending=exit_signal_pending,
+        )
+
         result.append(
             {
                 "id": position.id,
@@ -96,6 +135,8 @@ def detailed_positions(db: DbSession) -> list[dict[str, Any]]:
                 "entry_confidence": position.entry_confidence,
                 "last_confidence": position.last_confidence,
                 "horizon_days": horizon_days,
+                "action_code": action_code,
+                "action_label": action_label,
             }
         )
     return result

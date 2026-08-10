@@ -84,6 +84,8 @@ export interface DetailedPosition {
   entry_confidence: number | null
   last_confidence: number | null
   horizon_days: number | null
+  action_code: 'exit' | 'alert' | 'horizon' | 'dip' | 'hold'
+  action_label: string
 }
 
 export interface LatestSignal {

@@ -10,8 +10,11 @@ close" means anything.
 
 from __future__ import annotations
 
+from sqlalchemy import select
+
 from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.logging import get_logger
+from swing_trade_ml.db.models.trading import Strategy
 from swing_trade_ml.db.session import session_scope
 from swing_trade_ml.notifications import notifier
 from swing_trade_ml.services import engine, ingestion, portfolio
@@ -59,7 +62,9 @@ def job_daily_ingest() -> None:
 
     Also tops up the benchmark index used for relative-strength/regime ML
     features — it needs to be current before predict_watchlist/signal_scan
-    fire right after this job.
+    fire right after this job — and any strategy running its own,
+    deliberately unwatchlisted symbol list (e.g. ml_swing_midcap), which
+    backfill_watchlist() above never touches.
     """
     try:
         with session_scope() as db:
@@ -67,6 +72,17 @@ def job_daily_ingest() -> None:
             log.info("job.ingest.done", symbols=len(results), bars=sum(results.values()))
             index_bars = ingestion.backfill_index(db, interval="day")
             log.info("job.ingest.index_done", bars=index_bars)
+
+            midcap = db.execute(
+                select(Strategy).where(Strategy.name == "ml_swing_midcap")
+            ).scalar_one_or_none()
+            if midcap and midcap.symbols:
+                midcap_results = ingestion.backfill_symbols(db, midcap.symbols, interval="day")
+                log.info(
+                    "job.ingest.midcap_done",
+                    symbols=len(midcap_results),
+                    bars=sum(midcap_results.values()),
+                )
     except Exception as exc:  # noqa: BLE001
         _report_error("daily_ingest", exc)
 

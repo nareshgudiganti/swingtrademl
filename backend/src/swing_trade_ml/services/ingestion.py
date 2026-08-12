@@ -334,6 +334,36 @@ def backfill_watchlist(
         log.warning("ingestion.backfill.no_watchlist")
         return {}
 
+    return _backfill_many(db, instruments, interval, days, incremental)
+
+
+def backfill_symbols(
+    db: Session, symbols: list[str], interval: str = "day",
+    days: int | None = None, incremental: bool = True,
+) -> dict[str, int]:
+    """Backfill an explicit symbol list, independent of the watchlist flag —
+    the daily top-up for a strategy that deliberately keeps its own
+    instruments unwatchlisted (see strategies/ml_swing.py's model_name param
+    and the mid-cap strategy, which stays out of every is_watchlisted=True
+    path — predict_watchlist/Recommendations, refresh_quotes, coverage — on
+    purpose, so it's never scored with the wrong model)."""
+    wanted = [s.strip().upper() for s in symbols if s.strip()]
+    instruments = list(
+        db.execute(select(Instrument).where(Instrument.tradingsymbol.in_(wanted)))
+        .scalars()
+        .all()
+    )
+    if not instruments:
+        log.warning("ingestion.backfill.no_symbols_matched", symbols=wanted)
+        return {}
+
+    return _backfill_many(db, instruments, interval, days, incremental)
+
+
+def _backfill_many(
+    db: Session, instruments: list[Instrument], interval: str,
+    days: int | None, incremental: bool,
+) -> dict[str, int]:
     results: dict[str, int] = {}
     for inst in instruments:
         try:

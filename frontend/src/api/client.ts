@@ -4,7 +4,15 @@ import type {
   CurrentUser,
   DetailedPosition,
   EquityPoint,
+  FinanceCategorySummary,
+  FinanceIngestedFile,
+  FinanceIngestResult,
+  FinanceMerchantSummary,
+  FinanceMonthlyCategorySummary,
+  FinanceMonthlySummary,
+  FinanceTransaction,
   Instrument,
+  KiteLoginResponse,
   LatestSignal,
   HorizonAccuracy,
   MarketRegime,
@@ -15,12 +23,13 @@ import type {
   PredictionRun,
   ScanResult,
   Strategy,
+  StrategySignal,
   StrategyType,
   SystemStatus,
   Trade,
 } from './types'
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000/api/v1'
+export const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000/api/v1'
 
 // The dashboard authenticates as a real user: POST /auth/login or /auth/signup
 // returns a JWT, which is what every subsequent request carries as a bearer
@@ -102,6 +111,33 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>
 }
 
+/** Same as request<T>() but for multipart bodies (file uploads) — must NOT
+ * set Content-Type itself, so the browser attaches the multipart boundary. */
+async function requestForm<T>(path: string, form: FormData): Promise<T> {
+  const token = getToken()
+  const response = await fetch(`${BASE_URL}${path}`, {
+    method: 'POST',
+    body: form,
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  })
+
+  if (!response.ok) {
+    if (response.status === 401 && token) {
+      clearToken()
+    }
+    let detail = response.statusText
+    try {
+      const body = await response.json()
+      detail = typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail)
+    } catch {
+      /* keep statusText */
+    }
+    throw new ApiError(detail, response.status)
+  }
+
+  return response.json() as Promise<T>
+}
+
 const get = <T>(path: string) => request<T>(path)
 const post = <T>(path: string, body?: unknown) =>
   request<T>(path, { method: 'POST', body: body ? JSON.stringify(body) : undefined })
@@ -128,6 +164,7 @@ export const api = {
   signup: (username: string, password: string, email?: string) =>
     post<{ access_token: string }>('/auth/signup', { username, password, email }),
   me: () => get<CurrentUser>('/auth/me'),
+  kiteLogin: () => get<KiteLoginResponse>('/auth/kite/login'),
 
   // ---------------------------------------------------------- portfolio --
   summary: (mode?: string) =>
@@ -152,14 +189,19 @@ export const api = {
   activateStrategy: (id: number) => post<Strategy>(`/strategies/${id}/activate`),
   deactivateStrategy: (id: number) => post<Strategy>(`/strategies/${id}/deactivate`),
   scanAll: () => post<ScanResult>('/strategies/scan-all'),
+  // Every signal type (including HOLD), symbol-resolved, newest first. A
+  // strategy's most recent scan always sorts to the top `limit` rows, since
+  // each scan writes a fresh batch strictly after the previous one.
+  strategySignals: (id: number, limit = 100) =>
+    get<StrategySignal[]>(`/strategies/${id}/signals?limit=${limit}`),
 
   // ---------------------------------------------------------------- ml --
   models: () => get<MLModel[]>('/ml/models'),
   activateModel: (id: number) => post<MLModel>(`/ml/models/${id}/activate`),
   train: (body: Record<string, unknown>) => post<MessageResponse>('/ml/train', body),
-  predictionAccuracy: () =>
+  predictionAccuracy: (modelId?: number) =>
     get<{ evaluated_predictions: number; correct: number; accuracy: number }>(
-      '/ml/predictions/accuracy',
+      modelId ? `/ml/predictions/accuracy?model_id=${modelId}` : '/ml/predictions/accuracy',
     ),
   // Scores the whole watchlist now, ranked by probability — the "what should
   // I focus on" view. persist=true also feeds the accuracy metric above.
@@ -191,4 +233,28 @@ export const api = {
   telegramStatus: () =>
     get<{ ok: boolean; bot: string | null; error: string | null }>('/notifications/telegram/status'),
   telegramTest: () => post<MessageResponse>('/notifications/telegram/test'),
+
+  // ------------------------------------------------------------ finance --
+  uploadFinanceStatement: (file: File, password?: string) => {
+    const form = new FormData()
+    form.append('file', file)
+    if (password) form.append('password', password)
+    return requestForm<FinanceIngestResult>('/finance/statements', form)
+  },
+  financeTransactions: (params: { month?: string; category?: string; direction?: string; search?: string } = {}) => {
+    const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => !!v) as [string, string][])
+    const suffix = qs.toString() ? `?${qs.toString()}` : ''
+    return get<FinanceTransaction[]>(`/finance/transactions${suffix}`)
+  },
+  recategorizeFinanceTransaction: (id: number, category: string) =>
+    patch<FinanceTransaction>(`/finance/transactions/${id}`, { category }),
+  financeCategories: () => get<string[]>('/finance/categories'),
+  financeMonthlySummary: () => get<FinanceMonthlySummary[]>('/finance/summary/monthly'),
+  financeCategorySummary: () => get<FinanceCategorySummary[]>('/finance/summary/categories'),
+  financeMonthlyCategorySummary: () =>
+    get<FinanceMonthlyCategorySummary[]>('/finance/summary/monthly-categories'),
+  financeMerchants: (topN = 20) => get<FinanceMerchantSummary[]>(`/finance/merchants?top_n=${topN}`),
+  financeInsights: () => get<string[]>('/finance/insights'),
+  financeStatements: () => get<FinanceIngestedFile[]>('/finance/statements'),
+  deleteFinanceStatement: (id: number) => del<MessageResponse>(`/finance/statements/${id}`),
 }

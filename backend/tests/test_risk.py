@@ -49,6 +49,55 @@ def test_missing_stop_falls_back_to_default_distance():
     assert quantity == min(expected, int((1_000_000.0 * settings.MAX_POSITION_PCT) / 100.0))
 
 
+# ------------------------------------------------------- fixed_amount mode --
+# The small, capital-light live-rollout sizing: a flat rupee spend per
+# position instead of risk-per-trade, so per-order fixed costs (Zerodha's DP
+# charge on every sell, this app's own cost model) can't dominate a
+# precisely-risk-sized position that would otherwise come out too small.
+
+
+def test_fixed_amount_mode_ignores_stop_distance(monkeypatch):
+    """A very tight stop would blow up risk-based sizing into an enormous
+    position (see test_tight_stop_is_capped_by_concentration_limit) — fixed
+    mode must not care, since it isn't sizing off the stop at all."""
+    monkeypatch.setattr(settings, "POSITION_SIZING_MODE", "fixed_amount")
+    monkeypatch.setattr(settings, "FIXED_POSITION_AMOUNT_INR", 10_000.0)
+
+    quantity, note = calculate_quantity(
+        price=100.0, stop_loss=99.5, portfolio_value=1_000_000.0, available_cash=1_000_000.0
+    )
+    assert quantity == 100  # 10,000 / 100
+    assert "fixed amount" in note
+
+
+def test_fixed_amount_mode_still_respects_available_cash(monkeypatch):
+    """The flat target is a target, not a guarantee — cash is still a hard
+    ceiling, same as risk-based mode."""
+    monkeypatch.setattr(settings, "POSITION_SIZING_MODE", "fixed_amount")
+    monkeypatch.setattr(settings, "FIXED_POSITION_AMOUNT_INR", 10_000.0)
+
+    quantity, note = calculate_quantity(
+        price=100.0, stop_loss=95.0, portfolio_value=1_000_000.0, available_cash=500.0
+    )
+    assert quantity * 100.0 <= 500.0
+    assert "cash" in note
+
+
+def test_fixed_amount_mode_still_respects_concentration_cap(monkeypatch):
+    """A fixed amount larger than the concentration ceiling must still be
+    capped — the flat target is a floor-raiser, not an override of the
+    portfolio-level exposure limit."""
+    monkeypatch.setattr(settings, "POSITION_SIZING_MODE", "fixed_amount")
+    monkeypatch.setattr(settings, "FIXED_POSITION_AMOUNT_INR", 500_000.0)
+
+    quantity, note = calculate_quantity(
+        price=100.0, stop_loss=95.0, portfolio_value=1_000_000.0, available_cash=1_000_000.0
+    )
+    max_by_concentration = int((1_000_000.0 * settings.MAX_POSITION_PCT) / 100.0)
+    assert quantity == max_by_concentration
+    assert "concentration" in note
+
+
 def test_stop_above_price_is_treated_as_invalid():
     """A stop above entry is nonsense for a long; fall back rather than size negative."""
     quantity, _ = calculate_quantity(

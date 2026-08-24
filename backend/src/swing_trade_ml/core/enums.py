@@ -90,3 +90,20 @@ class NotificationEvent(StrEnum):
     ERROR = "error"
     DAILY_SUMMARY = "daily_summary"
     SYSTEM = "system"
+
+
+class FinanceDirection(StrEnum):
+    DEBIT = "DEBIT"
+    CREDIT = "CREDIT"
+    UNKNOWN = "UNKNOWN"
+
+
+class FinanceSourceType(StrEnum):
+    PHONEPE_PDF = "phonepe_pdf"
+    ICICI_PDF = "icici_pdf"
+    CSV = "csv"
+
+
+class FinanceIngestStatus(StrEnum):
+    SUCCESS = "SUCCESS"
+    FAILED = "FAILED"

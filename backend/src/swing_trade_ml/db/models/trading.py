@@ -219,10 +219,17 @@ class Position(Base, TimestampMixin):
     exit_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     exit_reason: Mapped[str | None] = mapped_column(String(24))  # ExitReason
 
+    # The ACTIVE stop — checked by check_exits(), and ratcheted upward as
+    # highest_price advances (see services/execution.py's trail_stop()).
     stop_loss: Mapped[float | None] = mapped_column(Float)
     take_profit: Mapped[float | None] = mapped_column(Float)
     # Highest close seen since entry — the anchor for a trailing stop
     highest_price: Mapped[float | None] = mapped_column(Float)
+    # The ATR-based distance the strategy set at entry, frozen. The trail
+    # needs this as a fixed reference: once stop_loss itself starts moving,
+    # "how far below the high should this trail" can't be recovered from it
+    # alone.
+    initial_stop_loss: Mapped[float | None] = mapped_column(Float)
 
     # The model's confidence at entry, and the most recent value seen since —
     # neither the stop-loss nor the target reacts to the thesis itself

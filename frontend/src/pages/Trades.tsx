@@ -32,7 +32,7 @@ export default function Trades() {
           <table>
             <thead>
               <tr>
-                <th>Symbol</th>
+                <th className="sticky-col">Symbol</th>
                 <th className="num">Qty</th>
                 <th className="num">Entry</th>
                 <th className="num">Exit</th>
@@ -47,7 +47,7 @@ export default function Trades() {
             <tbody>
               {rows.map((t) => (
                 <tr key={t.id}>
-                  <td>
+                  <td className="sticky-col">
                     <strong>{t.symbol}</strong>
                     <div className="muted" style={{ fontSize: '0.75rem' }}>
                       {formatDate(t.entry_at)} → {formatDate(t.exit_at)}

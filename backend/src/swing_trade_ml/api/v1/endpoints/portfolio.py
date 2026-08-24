@@ -219,7 +219,10 @@ def close(position_id: int, payload: ClosePositionRequest, db: DbSession) -> Mes
         )
     return MessageResponse(
         message=f"Closed position {position_id}",
-        detail=f"Net P&L ₹{trade.net_pnl:,.2f} ({trade.return_pct:+.2%})",
+        detail=(
+            f"Exited at ₹{trade.exit_price:,.2f} — "
+            f"Net P&L ₹{trade.net_pnl:,.2f} ({trade.return_pct:+.2%})"
+        ),
     )
 
 

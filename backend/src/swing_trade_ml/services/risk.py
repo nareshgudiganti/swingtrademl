@@ -104,34 +104,46 @@ def calculate_quantity(
     strategy: Strategy | None = None,
     existing_exposure: float = 0.0,
 ) -> tuple[int, str]:
-    """Size the position off the distance to the stop, not off a fixed rupee amount.
+    """Size the position — by default off the distance to the stop, not off a
+    fixed rupee amount.
 
     Risking a constant fraction of equity per trade means a wide stop
     automatically gets a smaller position and a tight stop a larger one, so
     every trade carries the same downside. That is the single highest-leverage
     risk control in the system.
 
-    Two ceilings then apply: the max share of portfolio in one name, and the
-    cash actually on hand. `existing_exposure` is rupees already committed to
-    this instrument by an earlier tranche (pyramiding) — the concentration
-    cap applies to *total* exposure across tranches, not each one separately.
+    settings.POSITION_SIZING_MODE == "fixed_amount" overrides this with a flat
+    rupee target instead (settings.FIXED_POSITION_AMOUNT_INR) — for a
+    deliberately small, capital-light live rollout where per-trade fixed costs
+    (Zerodha's DP charge on every sell, this app's own per-order cost model)
+    would otherwise dominate a tiny, precisely-risk-sized position. Both modes
+    still pass through the same two ceilings below.
+
+    `existing_exposure` is rupees already committed to this instrument by an
+    earlier tranche (pyramiding) — the concentration cap applies to *total*
+    exposure across tranches, not each one separately.
     """
     if price <= 0:
         return 0, "Invalid price"
 
-    risk_capital = portfolio_value * settings.RISK_PER_TRADE_PCT
-
-    if stop_loss and stop_loss > 0 and stop_loss < price:
-        risk_per_share = price - stop_loss
+    if settings.POSITION_SIZING_MODE == "fixed_amount":
+        qty_by_target = settings.FIXED_POSITION_AMOUNT_INR / price
+        target_label = "fixed amount"
     else:
-        # No stop supplied — assume the default stop distance so sizing stays
-        # bounded rather than falling back to "as much as cash allows".
-        risk_per_share = price * settings.DEFAULT_STOP_LOSS_PCT
+        risk_capital = portfolio_value * settings.RISK_PER_TRADE_PCT
 
-    if risk_per_share <= 0:
-        return 0, "Non-positive risk per share"
+        if stop_loss and stop_loss > 0 and stop_loss < price:
+            risk_per_share = price - stop_loss
+        else:
+            # No stop supplied — assume the default stop distance so sizing
+            # stays bounded rather than falling back to "as much as cash allows".
+            risk_per_share = price * settings.DEFAULT_STOP_LOSS_PCT
 
-    qty_by_risk = risk_capital / risk_per_share
+        if risk_per_share <= 0:
+            return 0, "Non-positive risk per share"
+
+        qty_by_target = risk_capital / risk_per_share
+        target_label = "risk-per-trade"
 
     max_position_pct = (
         strategy.capital_allocation
@@ -143,16 +155,16 @@ def calculate_quantity(
     qty_by_cash = available_cash / price
 
     # floor, never round: rounding up would breach whichever limit was binding.
-    quantity = math.floor(min(qty_by_risk, qty_by_concentration, qty_by_cash))
+    quantity = math.floor(min(qty_by_target, qty_by_concentration, qty_by_cash))
 
     if quantity < 1:
         return 0, (
-            f"Computed size below 1 share (risk-based {qty_by_risk:.2f}, "
+            f"Computed size below 1 share ({target_label} {qty_by_target:.2f}, "
             f"concentration {qty_by_concentration:.2f}, cash {qty_by_cash:.2f})"
         )
 
     binding = min(
-        ("risk-per-trade", qty_by_risk),
+        (target_label, qty_by_target),
         ("concentration cap", qty_by_concentration),
         ("available cash", qty_by_cash),
         key=lambda kv: kv[1],

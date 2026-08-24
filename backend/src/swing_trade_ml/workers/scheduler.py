@@ -51,6 +51,12 @@ def start_scheduler() -> None:
         id="check_exits",
         replace_existing=True,
     )
+    scheduler.add_job(
+        jobs.job_reconcile_orders,
+        IntervalTrigger(seconds=max(60, settings.LIVE_POLL_SECONDS)),
+        id="reconcile_orders",
+        replace_existing=True,
+    )
 
     # --- after the close ----------------------------------------------------
     # Ingest at 15:40 so the day's final candle is settled, then scan at the

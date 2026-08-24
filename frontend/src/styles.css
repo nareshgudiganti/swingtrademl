@@ -40,12 +40,17 @@ a {
   display: grid;
   grid-template-columns: 220px 1fr;
   min-height: 100vh;
+  /* On the iPhone home-screen shell there's no browser chrome to absorb the
+     notch/home-indicator, so the layout has to (viewport-fit=cover in
+     index.html is what makes these env() vars non-zero in the first place). */
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
 }
 
 .sidebar {
   background: var(--surface);
   border-right: 1px solid var(--border);
-  padding: 1.25rem 1rem;
+  padding: calc(1.25rem + env(safe-area-inset-top)) 1rem 1.25rem;
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
@@ -74,7 +79,11 @@ a {
   padding: 0.55rem 0.75rem;
   border-radius: var(--radius);
   color: var(--text-dim);
-  transition: background 0.15s, color 0.15s;
+  transition: background 0.15s, color 0.15s, transform 0.1s;
+}
+
+.nav a:active {
+  transform: scale(0.97);
 }
 
 .nav a:hover {
@@ -88,8 +97,27 @@ a {
 }
 
 .content {
-  padding: 1.5rem 2rem 3rem;
+  padding: 1.5rem 2rem calc(3rem + env(safe-area-inset-bottom));
   overflow-x: auto;
+}
+
+/* A quiet page-change cue — replayed on every route change because App.tsx
+   keys this wrapper on the current path, forcing a remount. Off entirely
+   under prefers-reduced-motion rather than just shortened, per that media
+   query's actual contract. */
+.page-transition {
+  animation: page-in 0.22s ease both;
+}
+
+@keyframes page-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-transition {
+    animation: none;
+  }
 }
 
 .page-head {
@@ -168,7 +196,12 @@ h2 {
 /* -------------------------------------------------------------- table -- */
 
 .table-wrap {
-  overflow-x: auto;
+  /* Bounded on both axes so long/wide tables scroll inside this box rather
+     than the whole page — that's what makes "sticky" below have something
+     to stick to. Without a max-height, the header has nowhere to pin: the
+     box just grows and the header scrolls away with the page. */
+  overflow: auto;
+  max-height: 72vh;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
@@ -189,6 +222,11 @@ th {
   color: var(--text-dim);
   border-bottom: 1px solid var(--border);
   white-space: nowrap;
+  /* Pinned while scrolling down a tall table. */
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  z-index: 2;
 }
 
 td {
@@ -197,12 +235,47 @@ td {
   white-space: nowrap;
 }
 
+/* First column (row identity — time, symbol, name) stays put while
+   scrolling right through a wide table, so you never lose track of which
+   row you're reading. Opt in per-table via `.sticky-col` on the first
+   <th>/<td>, since not every table's first column is the right thing to
+   pin. */
+th.sticky-col,
+td.sticky-col {
+  position: sticky;
+  left: 0;
+  background: var(--surface);
+  z-index: 1;
+}
+
+th.sticky-col {
+  z-index: 3;
+}
+
+tbody tr:hover td.sticky-col {
+  background: var(--surface-2);
+}
+
 tbody tr:last-child td {
   border-bottom: none;
 }
 
 tbody tr:hover {
   background: var(--surface-2);
+}
+
+th.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+th.sortable:hover {
+  color: var(--text);
+}
+
+.sort-arrow {
+  font-size: 0.65em;
+  color: var(--accent);
 }
 
 .num {
@@ -271,16 +344,27 @@ button {
   background: var(--surface-2);
   color: var(--text);
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
 }
 
 button:hover:not(:disabled) {
   background: var(--border);
 }
 
+button:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
 button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  button:active:not(:disabled),
+  .nav a:active {
+    transform: none;
+  }
 }
 
 button.primary {
@@ -432,12 +516,6 @@ select:focus {
   font-size: 0.88rem;
 }
 
-.banner-live {
-  background: rgba(239, 68, 68, 0.1);
-  border-color: var(--neg);
-  color: #fca5a5;
-}
-
 .banner-warn {
   background: rgba(245, 158, 11, 0.1);
   border-color: var(--warn);
@@ -465,6 +543,385 @@ select:focus {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.mono {
+  font-family: ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------- suggestions -- */
+
+tr.sig-row {
+  cursor: pointer;
+}
+
+tr.sig-row .sym {
+  font-weight: 600;
+}
+
+.held-tag {
+  margin-left: 0.4rem;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+  background: var(--surface-2);
+  border-radius: 4px;
+  padding: 0.05rem 0.35rem;
+}
+
+.sig-row .caret {
+  color: var(--text-dim);
+  text-align: right;
+  width: 1rem;
+}
+
+tr.sig-detail-row td {
+  padding: 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.sig-detail {
+  padding: 0.7rem 0.9rem 0.85rem;
+  font-size: 0.82rem;
+  /* td/th default to nowrap (see the table rules above) so compact rows never
+     wrap awkwardly — but that inherits into this expanded block too, which is
+     what forced the whole card to scroll sideways and clipped the reason text
+     mid-sentence. This is the one line that actually fixes it. */
+  white-space: normal;
+}
+
+.sig-detail-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.15rem 0;
+}
+
+.sig-detail-reason {
+  margin: 0.4rem 0 0;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+/* Technical readout — the actual feature values behind the call, not just
+   the headline confidence number. */
+.tech-grid {
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px dashed var(--border);
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.35rem 0.8rem;
+}
+
+.tech-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+}
+
+.tech-label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+}
+
+.tech-value {
+  font-family: ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.82rem;
+}
+
+/* ---- stat-card icon chips (Suggestions page summary row) ---- */
+
+.card-with-icon {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.icon-chip {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.chip-warn {
+  background: rgba(245, 158, 11, 0.12);
+  color: var(--warn);
+}
+
+.chip-accent {
+  background: rgba(79, 140, 255, 0.12);
+  color: var(--accent);
+}
+
+.chip-neutral {
+  background: var(--surface-2);
+  color: var(--text-dim);
+}
+
+/* ---- honest accuracy ring: real % once evaluated predictions exist, a
+   muted dashed "tracking" state otherwise — never a fabricated number ---- */
+
+.ring-wrap {
+  position: relative;
+  width: 52px;
+  height: 52px;
+  flex-shrink: 0;
+}
+
+.ring-wrap svg {
+  transform: rotate(-90deg);
+}
+
+.ring-track {
+  stroke: var(--border);
+}
+
+.ring-note {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.58rem;
+  color: var(--text-dim);
+  text-align: center;
+  line-height: 1.1;
+  font-weight: 700;
+}
+
+/* ---- confidence proximity bar: how close a HOLD is to the buy bar, so a
+   page full of HOLD calls is scannable without opening every row ---- */
+
+.conf-cell {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.45rem;
+}
+
+.conf-bar {
+  width: 36px;
+  height: 5px;
+  border-radius: 99px;
+  background: var(--border);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.conf-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 99px;
+}
+
+.conf-far > span {
+  background: var(--text-dim);
+}
+
+.conf-near > span {
+  background: var(--warn);
+}
+
+.conf-at > span {
+  background: var(--pos);
+}
+
+/* ------------------------------------------------ suggestions: master-detail -- */
+/* Replaces the old 3-column tier-card grid: clicking a stock there expanded
+   an inline table row squeezed into 1/3 of the page width, which is exactly
+   why the technical grid always looked cramped. This gives the detail pane
+   the full remaining width instead. */
+
+.tier-tabs {
+  display: flex;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.tier-tab {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.55rem 0.9rem;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  color: var(--text-dim);
+  font-weight: 600;
+  font-size: 0.88rem;
+  margin-bottom: -1px;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.tier-tab:hover:not(.active) {
+  color: var(--text);
+  background: none;
+}
+
+/* Each tab sets --tier-color inline (see Suggestions.tsx) so the three tiers
+   read as distinct at a glance — a visual "which column is this" identity,
+   kept out of the blue/violet/teal-vs-green/red/amber overlap so it never
+   competes with the BUY/HOLD/SELL badge colors for meaning. */
+.tier-tab.active {
+  color: var(--text);
+  border-bottom-color: var(--tier-color, var(--accent));
+}
+
+.tier-tab-icon {
+  display: flex;
+  color: var(--tier-color, var(--accent));
+  opacity: 0.55;
+}
+
+.tier-tab.active .tier-tab-icon {
+  opacity: 1;
+}
+
+.tier-tab-count {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-dim);
+  background: var(--surface-2);
+  border-radius: 99px;
+  padding: 0.05rem 0.45rem;
+}
+
+.tier-tab.active .tier-tab-count {
+  color: var(--tier-color, var(--accent));
+}
+
+/* ------------------------------------------------------------- modal -- */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(4, 8, 18, 0.6);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  z-index: 50;
+  animation: modal-fade 0.15s ease both;
+}
+
+@keyframes modal-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.modal-card {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.4rem 1.5rem;
+  max-width: 640px;
+  width: 100%;
+  max-height: 85vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+}
+
+.modal-close {
+  position: absolute;
+  top: 0.9rem;
+  right: 0.9rem;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  line-height: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .modal-backdrop {
+    animation: none;
+  }
+}
+
+/* A stock's full detail, rendered inside the modal above — no card chrome
+   of its own since .modal-card already supplies the surface/border/padding. */
+.detail-panel {
+  min-width: 0;
+}
+
+.detail-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 1.1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.detail-symbol {
+  font-size: 1.5rem;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.detail-sub {
+  color: var(--text-dim);
+  font-size: 0.82rem;
+  margin-top: 0.2rem;
+}
+
+.badge-lg {
+  font-size: 0.85rem;
+  padding: 0.3rem 0.8rem;
+}
+
+.detail-stat-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 1rem;
+  margin-bottom: 0.9rem;
+}
+
+.detail-stat-value {
+  font-family: ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin-top: 0.15rem;
+}
+
+.detail-reason {
+  color: var(--text-dim);
+  line-height: 1.6;
+  margin: 0.4rem 0 1.2rem;
+  padding: 0.7rem 0.9rem;
+  background: var(--surface-2);
+  border-radius: 8px;
+  font-size: 0.88rem;
+}
+
+.section-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+  font-weight: 700;
+  margin: 0 0 0.6rem;
 }
 
 @media (max-width: 800px) {

@@ -104,11 +104,21 @@ def activate(model_id: int, db: DbSession) -> MLModel:
 @router.post("/predict", response_model=list[PredictionRunOut])
 def run_predictions(
     db: DbSession,
-    model_name: str | None = None,
+    model_name: str | None = "swing_classifier",
     interval: str = "day",
     persist: bool = True,
 ) -> list[PredictionRunOut]:
-    """Score the whole watchlist now, ranked by probability."""
+    """Score the whole watchlist now, ranked by probability.
+
+    Defaulting to "swing_classifier" here, not just in predict_watchlist()'s
+    own signature, matters: a query param omitted by the caller arrives here
+    as a literal None, which is then passed through explicitly — Python does
+    not fall back to the callee's default in that case. Leaving this at None
+    is exactly the Aug 12 incident recurring: a mid/small-cap promotion
+    becomes "most recently activated" system-wide and silently shadows the
+    large-cap watchlist's own model. Pass model_name=None explicitly in the
+    request if that global-latest lookup is ever genuinely wanted.
+    """
     results = predict_service.predict_watchlist(db, model_name, interval, persist)
     if not results:
         raise HTTPException(

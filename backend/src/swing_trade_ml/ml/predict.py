@@ -105,9 +105,17 @@ def predict_instrument(
 
 
 def predict_watchlist(
-    db: Session, model_name: str | None = None, interval: str = "day", persist: bool = True
+    db: Session, model_name: str | None = "swing_classifier", interval: str = "day", persist: bool = True
 ) -> list[PredictionResult]:
-    """Score every watchlisted instrument with the active model."""
+    """Score every watchlisted instrument with the active model.
+
+    Defaults to "swing_classifier" rather than None, because the watchlist IS
+    the large-cap universe by definition — falling through to "whichever
+    model was most recently activated across every strategy" silently let a
+    mid-cap or small-cap promotion shadow this for over a week (see Aug 12
+    incident). Pass model_name=None explicitly if that global-latest lookup
+    is ever genuinely wanted.
+    """
     model = get_active_model(db, model_name)
     if model is None:
         log.warning("predict.no_active_model")

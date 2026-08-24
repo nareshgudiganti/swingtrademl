@@ -13,6 +13,11 @@ export interface CurrentUser {
   is_superuser: boolean
 }
 
+export interface KiteLoginResponse {
+  login_url: string
+  instructions: string
+}
+
 export interface SystemStatus {
   app: string
   environment: string
@@ -105,6 +110,42 @@ export interface LatestSignal {
   generated_at: string
 }
 
+// Shape returned by GET /strategies/{id}/signals — every signal from a scan
+// (BUY/HOLD/EXIT alike), symbol-resolved. Distinct from LatestSignal, which
+// is the cross-strategy "recent actionable signals" feed and excludes HOLD.
+export interface StrategySignal {
+  id: number
+  strategy_id: number
+  instrument_id: number
+  tradingsymbol: string
+  name: string
+  signal_type: SignalType
+  mode: TradingMode
+  price: number
+  confidence: number | null
+  suggested_quantity: number | null
+  stop_loss: number | null
+  take_profit: number | null
+  reason: string | null
+  // The model's actual technical readout at scoring time — see ml_swing.py's
+  // evaluate(). Shape is stable in practice (every ml_swing signal carries
+  // the same keys) but not schema-enforced, hence the loose typing.
+  features: {
+    probability?: number
+    atr_14?: number
+    avg_volume_20?: number
+    daily_volatility_20?: number
+    model?: string
+    threshold?: number
+    bear_market?: boolean
+    return_5d?: number
+  } | null
+  was_executed: boolean
+  rejection_reason: string | null
+  advisory_only: boolean
+  generated_at: string
+}
+
 export interface Trade {
   id: number
   symbol: string
@@ -146,6 +187,9 @@ export interface Strategy {
   capital_allocation: number | null
   stop_loss_pct: number | null
   take_profit_pct: number | null
+  max_daily_buys: number | null
+  execution_mode: 'auto' | 'advisory'
+  allow_pyramiding: boolean
   created_at: string
 }
 
@@ -245,4 +289,70 @@ export interface ScanResult {
 export interface MessageResponse {
   message: string
   detail: string | null
+}
+
+// --------------------------------------------------------------- finance --
+
+export type FinanceDirection = 'DEBIT' | 'CREDIT' | 'UNKNOWN'
+export type FinanceSourceType = 'phonepe_pdf' | 'icici_pdf' | 'csv'
+
+export interface FinanceTransaction {
+  id: number
+  txn_date: string
+  month: string
+  description: string
+  amount: number
+  direction: FinanceDirection
+  status: string | null
+  transaction_id: string | null
+  source: string | null
+  category: string
+  is_manual_override: boolean
+}
+
+export interface FinanceIngestResult {
+  file_name: string
+  source_type: FinanceSourceType
+  already_imported: boolean
+  transactions_parsed: number
+  transactions_imported: number
+  duplicates_skipped: number
+  message: string
+}
+
+export interface FinanceIngestedFile {
+  id: number
+  file_name: string
+  source_type: FinanceSourceType
+  status: string
+  transaction_count: number
+  message: string | null
+  created_at: string
+}
+
+export interface FinanceMonthlySummary {
+  month: string
+  total_expense: number
+  transaction_count: number
+  avg_transaction: number
+}
+
+export interface FinanceCategorySummary {
+  category: string
+  total_expense: number
+  transaction_count: number
+  avg_transaction: number
+}
+
+export interface FinanceMonthlyCategorySummary {
+  month: string
+  category: string
+  total_expense: number
+  transaction_count: number
+}
+
+export interface FinanceMerchantSummary {
+  description: string
+  total_expense: number
+  transaction_count: number
 }

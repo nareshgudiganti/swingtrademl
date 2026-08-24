@@ -13,7 +13,7 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from swing_trade_ml.brokers import OrderRequest, get_broker
+from swing_trade_ml.brokers import OrderRequest, OrderResult, get_broker
 from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.enums import (
     ExitReason,
@@ -89,6 +89,7 @@ def _finalize_open_position(
         entry_price=fill_price,
         entry_at=entry_at,
         stop_loss=stop_loss,
+        initial_stop_loss=stop_loss,
         take_profit=take_profit,
         highest_price=fill_price,
         current_price=fill_price,
@@ -728,6 +729,30 @@ def process_decision(
     return signal
 
 
+def trail_stop(position: Position) -> None:
+    """Ratchet the active stop up as the position moves favorably, keeping
+    the same rupee distance below the highest price seen since entry that
+    the strategy originally set at entry. Never moves the stop down.
+
+    Added after the first six paper trades showed a real asymmetry: the one
+    winner was cashed out on a 1-day confidence-exit, while three losers
+    were held long enough to fall most of the way to their original,
+    never-moving stop. `highest_price` was already being tracked on every
+    tick for exactly this purpose — see its docstring on the Position model
+    — but nothing ever read it. This closes that gap: once a trade is
+    ahead, its downside tightens instead of staying fixed at the original
+    entry-time risk.
+    """
+    if position.initial_stop_loss is None or position.stop_loss is None or position.highest_price is None:
+        return
+    distance = position.entry_price - position.initial_stop_loss
+    if distance <= 0:
+        return
+    trailed = position.highest_price - distance
+    if trailed > position.stop_loss:
+        position.stop_loss = trailed
+
+
 def check_exits(db: Session) -> list[Trade]:
     """Evaluate stop-loss, target and time-stop conditions on open positions.
 
@@ -765,6 +790,8 @@ def check_exits(db: Session) -> list[Trade]:
         if position.highest_price is None or price > position.highest_price:
             position.highest_price = price
 
+        trail_stop(position)
+
         reason: ExitReason | None = None
         if position.stop_loss and price <= position.stop_loss:
             reason = ExitReason.STOP_LOSS_HIT
@@ -792,6 +819,150 @@ def check_exits(db: Session) -> list[Trade]:
 
     db.commit()
     return closed
+
+
+def reconcile_pending_orders(db: Session) -> dict[str, int]:
+    """Catch up every order still PENDING/OPEN against its real broker status.
+
+    The gap this closes: KiteBroker.place_order() always returns PENDING —
+    Kite's REST API confirms an order was *accepted*, never that it filled —
+    so open_position()/close_position() defer creating the Position/Trade
+    until "the reconciliation job" (their own comment) checks back. That job
+    never existed; the only thing that did was the /orders/sync endpoint,
+    and even that only patched the Order row's status without ever finishing
+    the Position/Trade it was blocking on. Net effect: a live order could
+    fill for real at Zerodha — real money, real shares — while the app
+    stayed permanently unaware it existed. This is what actually finishes
+    the job, called from both that endpoint and job_reconcile_orders.
+
+    A no-op for paper mode, since PaperBroker fills synchronously and never
+    leaves an order non-terminal in the first place.
+    """
+    broker = get_broker()
+    pending = list(
+        db.execute(
+            select(Order).where(
+                Order.mode == broker.mode,
+                Order.status.in_([OrderStatus.PENDING, OrderStatus.OPEN]),
+                Order.broker_order_id.isnot(None),
+                Order.broker_order_id != "",
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    counts = {"checked": len(pending), "filled": 0, "failed": 0, "unchanged": 0}
+
+    for order in pending:
+        result = broker.get_order_status(order.broker_order_id, db)
+        if result is None or result.status == order.status:
+            counts["unchanged"] += 1
+            continue
+
+        order.status = result.status
+        order.filled_quantity = result.filled_quantity
+        order.average_price = result.average_price
+        order.status_message = result.message
+
+        if result.status == OrderStatus.COMPLETE:
+            order.filled_at = order.filled_at or datetime.now(UTC)
+            _finish_reconciled_order(db, order, result)
+            counts["filled"] += 1
+        elif result.status in (OrderStatus.REJECTED, OrderStatus.CANCELLED):
+            _fail_reconciled_order(db, order, result)
+            counts["failed"] += 1
+
+    db.commit()
+    log.info("execution.reconcile.done", **counts)
+    return counts
+
+
+def _finish_reconciled_order(db: Session, order: Order, result: OrderResult) -> None:
+    """An order just reached COMPLETE that placement couldn't finish
+    synchronously — do the part it deferred: create the Position for an
+    entry, or close it for an exit. Idempotent — safe to call again if a
+    later tick somehow sees the same transition twice."""
+    instrument = db.get(Instrument, order.instrument_id)
+    if instrument is None:
+        log.error("execution.reconcile.instrument_missing", order_id=order.id)
+        return
+
+    fill_price = result.average_price or order.price
+    if fill_price is None:
+        log.error("execution.reconcile.no_fill_price", order_id=order.id)
+        return
+
+    filled_qty = result.filled_quantity or order.quantity
+    brokerage, taxes = compute_charges(fill_price * filled_qty)
+    order.brokerage = brokerage
+    order.taxes = taxes
+    result.brokerage = brokerage
+    result.taxes = taxes
+
+    if order.transaction_type == TransactionType.BUY:
+        if order.position_id is not None:
+            return  # already finished
+        signal = db.get(Signal, order.signal_id) if order.signal_id else None
+        strategy = db.get(Strategy, order.strategy_id) if order.strategy_id else None
+        if strategy is None:
+            log.error("execution.reconcile.strategy_missing", order_id=order.id)
+            return
+
+        position = _finalize_open_position(
+            db, strategy, instrument, order.mode, filled_qty, fill_price, brokerage, taxes,
+            signal.stop_loss if signal else None,
+            signal.take_profit if signal else None,
+            order.filled_at or datetime.now(UTC),
+            signal.confidence if signal else None,
+        )
+        order.position_id = position.id
+        if signal is not None:
+            signal.was_executed = True
+
+        log.info(
+            "execution.reconcile.entry_filled",
+            symbol=instrument.tradingsymbol, order_id=order.id, price=fill_price, qty=filled_qty,
+        )
+        notifier.send_sync(_entry_message(instrument, position, signal, result, order.mode), "fill")
+    else:
+        if order.position_id is None:
+            log.error("execution.reconcile.exit_without_position", order_id=order.id)
+            return
+        position = db.get(Position, order.position_id)
+        if position is None or position.status != PositionStatus.OPEN:
+            return  # already closed some other way
+
+        trade = _finalize_close_position(
+            db, position, instrument, fill_price, brokerage, taxes,
+            ExitReason.MANUAL, order.filled_at or datetime.now(UTC),
+        )
+        log.info(
+            "execution.reconcile.exit_filled",
+            symbol=instrument.tradingsymbol, order_id=order.id, price=fill_price,
+        )
+        notifier.send_sync(_exit_message(instrument, trade, ExitReason.MANUAL, order.mode), "fill")
+
+
+def _fail_reconciled_order(db: Session, order: Order, result: OrderResult) -> None:
+    """An order that was never going to fill — surfaced as a signal rejection
+    (for an entry) so its history stays honest, and always as a Telegram
+    alert, since a rejected live order is exactly the kind of thing that
+    must not fail silently."""
+    if order.signal_id:
+        signal = db.get(Signal, order.signal_id)
+        if signal is not None:
+            signal.rejection_reason = result.message or f"Order {result.status}"
+
+    log.warning(
+        "execution.reconcile.order_failed",
+        order_id=order.id, status=str(result.status), message=result.message,
+    )
+    notifier.send_sync(
+        f"⚠️ <b>Order {result.status}</b> — instrument {order.instrument_id}, "
+        f"order {order.id}\n{result.message or 'No reason given.'}",
+        "error",
+    )
 
 
 # ------------------------------------------------------------- messages --

@@ -226,6 +226,8 @@ class SignalOut(BaseModel):
     id: int
     strategy_id: int
     instrument_id: int
+    tradingsymbol: str
+    name: str
     signal_type: str
     mode: str
     price: float
@@ -487,3 +489,73 @@ class TelegramTestResponse(BaseModel):
 class MessageResponse(BaseModel):
     message: str
     detail: str | None = None
+
+
+# ------------------------------------------------------------------ finance --
+
+
+class FinanceTransactionOut(BaseModel):
+    model_config = ORM
+    id: int
+    txn_date: datetime
+    month: str
+    description: str
+    amount: float
+    direction: str
+    status: str | None
+    transaction_id: str | None
+    source: str | None
+    category: str
+    is_manual_override: bool
+
+
+class FinanceTransactionUpdate(BaseModel):
+    category: str = Field(..., min_length=1, max_length=64)
+
+
+class FinanceIngestResult(BaseModel):
+    file_name: str
+    source_type: str
+    already_imported: bool
+    transactions_parsed: int
+    transactions_imported: int
+    duplicates_skipped: int
+    message: str
+
+
+class FinanceIngestedFileOut(BaseModel):
+    model_config = ORM
+    id: int
+    file_name: str
+    source_type: str
+    status: str
+    transaction_count: int
+    message: str | None
+    created_at: datetime
+
+
+class FinanceMonthlySummary(BaseModel):
+    month: str
+    total_expense: float
+    transaction_count: int
+    avg_transaction: float
+
+
+class FinanceCategorySummary(BaseModel):
+    category: str
+    total_expense: float
+    transaction_count: int
+    avg_transaction: float
+
+
+class FinanceMonthlyCategorySummary(BaseModel):
+    month: str
+    category: str
+    total_expense: float
+    transaction_count: int
+
+
+class FinanceMerchantSummary(BaseModel):
+    description: str
+    total_expense: float
+    transaction_count: int

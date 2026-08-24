@@ -44,6 +44,7 @@ class KiteBroker(Broker):
     def __init__(self) -> None:
         self._kite = KiteConnect(api_key=settings.KITE_API_KEY)
         self._token_loaded = False
+        self._loaded_session_id: int | None = None
 
     # ------------------------------------------------------------- session --
 
@@ -54,6 +55,14 @@ class KiteBroker(Broker):
     @property
     def is_authenticated(self) -> bool:
         return self._token_loaded
+
+    @property
+    def loaded_session_id(self) -> int | None:
+        """Which BrokerSession row is currently live in this process — lets a
+        caller (job_refresh_quotes) detect "just picked up a new login" vs.
+        "still the same session as last tick" without reaching into internals.
+        """
+        return self._loaded_session_id
 
     def login_url(self) -> str:
         return self._kite.login_url()
@@ -90,7 +99,12 @@ class KiteBroker(Broker):
         return session
 
     def load_session(self, db: Session) -> bool:
-        """Restore the newest active token at startup.
+        """Restore the newest active token — called at startup, and cheaply
+        re-checked on every refresh_quotes tick (job_refresh_quotes) so a
+        login completed on another process (the api container, which serves
+        the OAuth callback) reaches this one within a minute instead of
+        requiring a manual restart to notice it. Skips the redundant
+        set_access_token call when the same session is already loaded.
 
         Returns False if there is none or it has expired — the caller reports
         that as a degraded-but-running state rather than failing the boot,
@@ -104,18 +118,27 @@ class KiteBroker(Broker):
         )
         session = db.execute(stmt).scalar_one_or_none()
         if not session:
-            log.warning("kite.session.none")
+            if self._token_loaded:
+                log.warning("kite.session.none")
+            self._token_loaded = False
+            self._loaded_session_id = None
             return False
 
         if session.expires_at and session.expires_at < datetime.now(UTC):
             log.warning("kite.session.expired", expired_at=str(session.expires_at))
             session.is_active = False
             db.commit()
+            self._token_loaded = False
+            self._loaded_session_id = None
             return False
+
+        if self._token_loaded and self._loaded_session_id == session.id:
+            return True
 
         self._kite.set_access_token(session.access_token)
         self._token_loaded = True
-        log.info("kite.session.restored", user_id=session.kite_user_id)
+        self._loaded_session_id = session.id
+        log.info("kite.session.restored", user_id=session.kite_user_id, session_id=session.id)
         return True
 
     def _require_auth(self) -> None:

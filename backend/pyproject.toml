@@ -43,6 +43,10 @@ dependencies = [
     "lightgbm>=4.5.0",
     "joblib>=1.4.2",
 
+    # --- Personal finance module: statement parsing ---
+    "pdfplumber>=0.11.4",
+    "python-dateutil>=2.9.0",
+
     # --- Observability ---
     "structlog>=24.4.0",
 ]
@@ -67,6 +71,9 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+swing_trade_ml = ["services/finance/category_rules.csv"]
 
 [tool.ruff]
 # 110 rather than 100: SQLAlchemy ForeignKey column declarations and Alembic's

@@ -1,12 +1,14 @@
-import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
+import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 
 import { api, captureTokenFromRedirect, clearToken, getToken } from './api/client'
 import AuthScreen from './components/AuthScreen'
 import Dashboard from './pages/Dashboard'
+import Finance from './pages/Finance'
 import Positions from './pages/Positions'
 import Recommendations from './pages/Recommendations'
 import Signals from './pages/Signals'
+import Suggestions from './pages/Suggestions'
 import Strategies from './pages/Strategies'
 import Models from './pages/Models'
 import Trades from './pages/Trades'
@@ -14,12 +16,14 @@ import Settings from './pages/Settings'
 
 const NAV = [
   { to: '/dashboard', label: 'Dashboard' },
+  { to: '/suggestions', label: 'Suggestions' },
   { to: '/recommendations', label: 'Recommendations' },
   { to: '/positions', label: 'Positions' },
   { to: '/signals', label: 'Signals' },
   { to: '/trades', label: 'Trades' },
   { to: '/strategies', label: 'Strategies' },
   { to: '/models', label: 'ML Models' },
+  { to: '/finance', label: 'Finance' },
   { to: '/settings', label: 'Settings' },
 ]
 
@@ -31,6 +35,7 @@ captureTokenFromRedirect()
 
 export default function App() {
   const hasToken = !!getToken()
+  const location = useLocation()
 
   const { data: status } = useQuery({
     queryKey: ['status'],
@@ -105,32 +110,45 @@ export default function App() {
       </aside>
 
       <main className="content">
-        {status?.live_trading_enabled && (
-          <div className="banner banner-live">
-            <strong>LIVE TRADING IS ENABLED.</strong> Orders placed by this system use real money.
-          </div>
-        )}
         {status && !status.broker_authenticated && (
           <div className="banner banner-warn">
-            No active Zerodha session. Market data and new orders will fail until you log in —
-            Kite tokens expire daily at ~06:00 IST.{' '}
-            <a href="http://localhost:8000/api/v1/auth/kite/login" style={{ color: 'inherit', textDecoration: 'underline' }}>
+            No active Zerodha session — Kite tokens expire daily at ~06:00 IST.{' '}
+            {status.open_positions > 0 ? (
+              <strong>
+                Stop-loss/target checks are NOT running on your {status.open_positions} open
+                position{status.open_positions === 1 ? '' : 's'} until you log in.
+              </strong>
+            ) : (
+              'Market data and new orders will fail until you log in.'
+            )}{' '}
+            <a
+              href="#"
+              onClick={(e) => {
+                e.preventDefault()
+                api.kiteLogin().then((r) => window.open(r.login_url, '_blank'))
+              }}
+              style={{ color: 'inherit', textDecoration: 'underline' }}
+            >
               Log in to Kite
             </a>
           </div>
         )}
 
-        <Routes>
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/recommendations" element={<Recommendations />} />
-          <Route path="/positions" element={<Positions />} />
-          <Route path="/signals" element={<Signals />} />
-          <Route path="/trades" element={<Trades />} />
-          <Route path="/strategies" element={<Strategies />} />
-          <Route path="/models" element={<Models />} />
-          <Route path="/settings" element={<Settings />} />
-        </Routes>
+        <div key={location.pathname} className="page-transition">
+          <Routes>
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/suggestions" element={<Suggestions />} />
+            <Route path="/recommendations" element={<Recommendations />} />
+            <Route path="/positions" element={<Positions />} />
+            <Route path="/signals" element={<Signals />} />
+            <Route path="/trades" element={<Trades />} />
+            <Route path="/strategies" element={<Strategies />} />
+            <Route path="/models" element={<Models />} />
+            <Route path="/finance" element={<Finance />} />
+            <Route path="/settings" element={<Settings />} />
+          </Routes>
+        </div>
       </main>
     </div>
   )

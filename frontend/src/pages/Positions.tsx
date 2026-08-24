@@ -58,7 +58,7 @@ export default function Positions() {
           <table>
             <thead>
               <tr>
-                <th>Symbol</th>
+                <th className="sticky-col">Symbol</th>
                 <th>Action</th>
                 <th className="num">Qty</th>
                 <th className="num">Entry</th>
@@ -76,7 +76,7 @@ export default function Positions() {
             <tbody>
               {rows.map((p) => (
                 <tr key={p.id}>
-                  <td>
+                  <td className="sticky-col">
                     <strong>{p.symbol}</strong>
                     <div className="muted" style={{ fontSize: '0.75rem' }}>
                       {formatDate(p.entry_at)}

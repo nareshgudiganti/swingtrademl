@@ -23,10 +23,11 @@ def list_signals(
     executed_only: bool = False,
     days: int = Query(30, le=365),
     limit: int = Query(100, le=1000),
-) -> list[Signal]:
+) -> list[dict]:
     since = datetime.now(UTC) - timedelta(days=days)
     stmt = (
-        select(Signal)
+        select(Signal, Instrument.tradingsymbol, Instrument.name)
+        .join(Instrument, Instrument.id == Signal.instrument_id)
         .where(Signal.mode == get_broker().mode, Signal.generated_at >= since)
         .order_by(Signal.generated_at.desc())
         .limit(limit)
@@ -35,7 +36,29 @@ def list_signals(
         stmt = stmt.where(Signal.signal_type == signal_type.upper())
     if executed_only:
         stmt = stmt.where(Signal.was_executed.is_(True))
-    return list(db.execute(stmt).scalars().all())
+    return [
+        {
+            "id": signal.id,
+            "strategy_id": signal.strategy_id,
+            "instrument_id": signal.instrument_id,
+            "tradingsymbol": tradingsymbol,
+            "name": name,
+            "signal_type": signal.signal_type,
+            "mode": signal.mode,
+            "price": signal.price,
+            "confidence": signal.confidence,
+            "suggested_quantity": signal.suggested_quantity,
+            "stop_loss": signal.stop_loss,
+            "take_profit": signal.take_profit,
+            "reason": signal.reason,
+            "features": signal.features,
+            "was_executed": signal.was_executed,
+            "rejection_reason": signal.rejection_reason,
+            "advisory_only": signal.advisory_only,
+            "generated_at": signal.generated_at,
+        }
+        for signal, tradingsymbol, name in db.execute(stmt).all()
+    ]
 
 
 @router.get("/latest", response_model=list[dict])

@@ -4,12 +4,19 @@ import type {
   CurrentUser,
   DetailedPosition,
   EquityPoint,
+  FinanceCalculationSummary,
   FinanceCategorySummary,
+  FinanceCustomRule,
+  FinanceFilters,
   FinanceIngestedFile,
   FinanceIngestResult,
+  FinanceLoan,
   FinanceMerchantSummary,
   FinanceMonthlyCategorySummary,
   FinanceMonthlySummary,
+  FinanceNetWorth,
+  FinanceRecategorizeResult,
+  FinanceRuleUpsertResult,
   FinanceTransaction,
   Instrument,
   KiteLoginResponse,
@@ -138,6 +145,19 @@ async function requestForm<T>(path: string, form: FormData): Promise<T> {
   return response.json() as Promise<T>
 }
 
+/** Builds a `?a=1&b=2` suffix from a params object, dropping empty/undefined
+ * values — shared by every filterable finance endpoint. Takes `object` rather
+ * than `Record<string, ...>` so callers can pass a plain interface (e.g.
+ * `FinanceFilters`) without hitting Record's index-signature requirement. */
+function qs(params: object): string {
+  const entries = Object.entries(params as Record<string, string | number | undefined>).filter(
+    ([, v]) => v !== undefined && v !== '',
+  ) as [string, string | number][]
+  if (!entries.length) return ''
+  const search = new URLSearchParams(entries.map(([k, v]) => [k, String(v)]))
+  return `?${search.toString()}`
+}
+
 const get = <T>(path: string) => request<T>(path)
 const post = <T>(path: string, body?: unknown) =>
   request<T>(path, { method: 'POST', body: body ? JSON.stringify(body) : undefined })
@@ -156,6 +176,7 @@ export function googleLoginUrl(): string {
 export const api = {
   // ------------------------------------------------------------- system --
   status: () => get<SystemStatus>('/status'),
+  refreshData: () => post<SystemStatus>('/refresh-data'),
   health: () => get<{ status: string; version: string }>('/health'),
 
   // -------------------------------------------------------------- auth --
@@ -178,6 +199,8 @@ export const api = {
 
   // ------------------------------------------------------------ signals --
   latestSignals: (limit = 20) => get<LatestSignal[]>(`/signals/latest?limit=${limit}`),
+  signalHistory: (symbol: string) =>
+    get<LatestSignal[]>(`/signals/latest?symbol=${encodeURIComponent(symbol)}`),
 
   // --------------------------------------------------------- strategies --
   strategies: () => get<Strategy[]>('/strategies'),
@@ -241,20 +264,46 @@ export const api = {
     if (password) form.append('password', password)
     return requestForm<FinanceIngestResult>('/finance/statements', form)
   },
-  financeTransactions: (params: { month?: string; category?: string; direction?: string; search?: string } = {}) => {
-    const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => !!v) as [string, string][])
-    const suffix = qs.toString() ? `?${qs.toString()}` : ''
-    return get<FinanceTransaction[]>(`/finance/transactions${suffix}`)
-  },
+  financeTransactions: (params: FinanceFilters & { search?: string } = {}) =>
+    get<FinanceTransaction[]>(`/finance/transactions${qs(params)}`),
   recategorizeFinanceTransaction: (id: number, category: string) =>
     patch<FinanceTransaction>(`/finance/transactions/${id}`, { category }),
   financeCategories: () => get<string[]>('/finance/categories'),
-  financeMonthlySummary: () => get<FinanceMonthlySummary[]>('/finance/summary/monthly'),
-  financeCategorySummary: () => get<FinanceCategorySummary[]>('/finance/summary/categories'),
+  // Always spans every month by design — see the backend endpoint's own
+  // docstring. Still respects category/direction.
+  financeMonthlySummary: (filters: Omit<FinanceFilters, 'month'> = {}) =>
+    get<FinanceMonthlySummary[]>(`/finance/summary/monthly${qs(filters)}`),
+  financeCategorySummary: (filters: Omit<FinanceFilters, 'category'> = {}) =>
+    get<FinanceCategorySummary[]>(`/finance/summary/categories${qs(filters)}`),
   financeMonthlyCategorySummary: () =>
     get<FinanceMonthlyCategorySummary[]>('/finance/summary/monthly-categories'),
-  financeMerchants: (topN = 20) => get<FinanceMerchantSummary[]>(`/finance/merchants?top_n=${topN}`),
-  financeInsights: () => get<string[]>('/finance/insights'),
+  financeMerchants: (filters: FinanceFilters = {}, topN = 20) =>
+    get<FinanceMerchantSummary[]>(`/finance/merchants${qs({ ...filters, top_n: topN })}`),
+  financeInsights: (filters: FinanceFilters = {}) => get<string[]>(`/finance/insights${qs(filters)}`),
+  financeCalculation: (filters: FinanceFilters = {}) =>
+    get<FinanceCalculationSummary>(`/finance/calculation${qs(filters)}`),
+  financeNetWorth: (filters: FinanceFilters = {}) => get<FinanceNetWorth>(`/finance/net-worth${qs(filters)}`),
   financeStatements: () => get<FinanceIngestedFile[]>('/finance/statements'),
+  financeDeletedStatements: () => get<FinanceIngestedFile[]>('/finance/statements?deleted=true'),
+  // Soft delete — reversible via restoreFinanceStatement, so no confirmation
+  // dialog is needed at the call site.
   deleteFinanceStatement: (id: number) => del<MessageResponse>(`/finance/statements/${id}`),
+  restoreFinanceStatement: (id: number) => post<FinanceIngestedFile>(`/finance/statements/${id}/restore`),
+  permanentlyDeleteFinanceStatement: (id: number, filename: string) =>
+    del<MessageResponse>(`/finance/statements/${id}/permanent?confirm_filename=${encodeURIComponent(filename)}`),
+
+  // -------------------------------------------------------- finance loans --
+  financeLoans: () => get<FinanceLoan[]>('/finance/loans'),
+  createFinanceLoan: (body: Record<string, unknown>) => post<FinanceLoan>('/finance/loans', body),
+  updateFinanceLoan: (id: number, body: Record<string, unknown>) =>
+    patch<FinanceLoan>(`/finance/loans/${id}`, body),
+  deleteFinanceLoan: (id: number) => del<MessageResponse>(`/finance/loans/${id}`),
+
+  // -------------------------------------------------------- finance rules --
+  financeRules: () => get<FinanceCustomRule[]>('/finance/rules'),
+  upsertFinanceRule: (keyword: string, category: string, priority = 90) =>
+    put<FinanceRuleUpsertResult>('/finance/rules', { keyword, category, priority }),
+  deleteFinanceRule: (keyword: string) =>
+    del<MessageResponse>(`/finance/rules/${encodeURIComponent(keyword)}`),
+  recategorizeFinanceRules: () => post<FinanceRecategorizeResult>('/finance/rules/recategorize'),
 }

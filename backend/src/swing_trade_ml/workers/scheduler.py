@@ -38,6 +38,16 @@ def start_scheduler() -> None:
     if scheduler.running:
         return
 
+    # --- always on, every day, any hour — this is a liveness signal, not a
+    # trading job, so it must not go quiet just because the market is closed
+    # or it's a weekend. See workers/heartbeat.py for who reads it.
+    scheduler.add_job(
+        jobs.job_heartbeat,
+        IntervalTrigger(seconds=60),
+        id="heartbeat",
+        replace_existing=True,
+    )
+
     # --- intraday, market hours only (the jobs self-check the session) -------
     scheduler.add_job(
         jobs.job_refresh_quotes,
@@ -63,13 +73,13 @@ def start_scheduler() -> None:
     # configured time (15:45 by default) against complete data.
     scheduler.add_job(
         jobs.job_daily_ingest,
-        CronTrigger(day_of_week=WEEKDAYS, hour=15, minute=40),
+        CronTrigger(day_of_week=WEEKDAYS, hour=15, minute=40, timezone=IST),
         id="daily_ingest",
         replace_existing=True,
     )
     scheduler.add_job(
         jobs.job_predict_watchlist,
-        CronTrigger(day_of_week=WEEKDAYS, hour=15, minute=42),
+        CronTrigger(day_of_week=WEEKDAYS, hour=15, minute=42, timezone=IST),
         id="predict_watchlist",
         replace_existing=True,
     )
@@ -79,19 +89,20 @@ def start_scheduler() -> None:
             day_of_week=WEEKDAYS,
             hour=settings.SIGNAL_SCAN_CRON_HOUR,
             minute=settings.SIGNAL_SCAN_CRON_MINUTE,
+            timezone=IST,
         ),
         id="signal_scan",
         replace_existing=True,
     )
     scheduler.add_job(
         jobs.job_daily_summary,
-        CronTrigger(day_of_week=WEEKDAYS, hour=16, minute=0),
+        CronTrigger(day_of_week=WEEKDAYS, hour=16, minute=0, timezone=IST),
         id="daily_summary",
         replace_existing=True,
     )
     scheduler.add_job(
         jobs.job_evaluate_predictions,
-        CronTrigger(day_of_week=WEEKDAYS, hour=16, minute=15),
+        CronTrigger(day_of_week=WEEKDAYS, hour=16, minute=15, timezone=IST),
         id="evaluate_predictions",
         replace_existing=True,
     )
@@ -100,7 +111,7 @@ def start_scheduler() -> None:
     # Sunday: the instrument dump is stable and nothing is trading.
     scheduler.add_job(
         jobs.job_sync_instruments,
-        CronTrigger(day_of_week="sun", hour=8, minute=0),
+        CronTrigger(day_of_week="sun", hour=8, minute=0, timezone=IST),
         id="sync_instruments",
         replace_existing=True,
     )

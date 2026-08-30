@@ -109,7 +109,7 @@ def _close_position(
     """
     fill_price = _apply_slippage(exit_price, "SELL")
     turnover = fill_price * pos.quantity
-    brokerage, taxes = _charges(turnover)
+    brokerage, taxes = _charges(turnover, "SELL")
     total_charges = pos.charges_so_far + brokerage + taxes
     gross_pnl = (fill_price - pos.entry_price) * pos.quantity
     net_pnl = gross_pnl - total_charges
@@ -349,7 +349,7 @@ def run_backtest(
 
                 fill_price = _apply_slippage(decision.price, "BUY")
                 turnover = fill_price * qty
-                brokerage, taxes = _charges(turnover)
+                brokerage, taxes = _charges(turnover, "BUY")
                 cost = turnover + brokerage + taxes
                 if cost > cash:
                     continue

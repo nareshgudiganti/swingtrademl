@@ -1,15 +1,18 @@
 """Spending analytics over categorized transactions.
 
 Ported from the standalone finance-dashboard app, trimmed to the v1 "core"
-scope: no loans/EMI/investment-specific breakdowns (`expense_df` here simply
-excludes non-expense directions, unlike the source app's version which also
-carved out EMI/interest rows for a separate loans view that doesn't exist
-here).
+scope: no loans/EMI/investment-specific breakdowns.
 """
 
 from __future__ import annotations
 
 import pandas as pd
+
+# Categories that are internal movements, not real income/expense — a sweep
+# between a savings account and its linked OD/FD is not spend, and counting
+# it would inflate every total. See categorizer.CREDIT_OVERRIDE_CATEGORIES
+# for how a sweep-in (CREDIT direction) reaches this category at all.
+EXCLUDED_CATEGORIES = {"Internal Transfer"}
 
 
 def prepare(df: pd.DataFrame) -> pd.DataFrame:
@@ -25,7 +28,16 @@ def prepare(df: pd.DataFrame) -> pd.DataFrame:
 
 def expense_df(df: pd.DataFrame) -> pd.DataFrame:
     data = prepare(df)
-    return data[data["direction"].isin(["DEBIT", "UNKNOWN"])].copy()
+    data = data[data["direction"].isin(["DEBIT", "UNKNOWN"])]
+    return data[~data["category"].isin(EXCLUDED_CATEGORIES)].copy()
+
+
+def income_df(df: pd.DataFrame) -> pd.DataFrame:
+    """CREDIT-direction rows, same exclusion — the Calculation tab's total
+    credits figure."""
+    data = prepare(df)
+    data = data[data["direction"].eq("CREDIT")]
+    return data[~data["category"].isin(EXCLUDED_CATEGORIES)].copy()
 
 
 def monthly_summary(df: pd.DataFrame) -> pd.DataFrame:

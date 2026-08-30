@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Area,
   AreaChart,
@@ -15,22 +15,48 @@ import { ErrorBox, Loading } from '../components/Loading'
 import {
   formatCompact,
   formatCurrency,
+  formatDateTime,
   formatPercent,
   formatSignedPercent,
   pnlClass,
 } from '../lib/format'
 
+const EXIT_KIND: Record<string, { icon: string; label: string }> = {
+  STOP_LOSS_HIT: { icon: '🔴', label: 'Stop-loss' },
+  TARGET_HIT: { icon: '🟢', label: 'Target hit' },
+}
+
 export default function Dashboard() {
+  const queryClient = useQueryClient()
   const summary = useQuery({ queryKey: ['summary'], queryFn: () => api.summary() })
   const equity = useQuery({ queryKey: ['equity'], queryFn: () => api.equityCurve(180) })
   const signals = useQuery({ queryKey: ['signals', 5], queryFn: () => api.latestSignals(5) })
+  // Matches check_exits' own 60s cadence — no point polling faster than a
+  // new exit could possibly appear, but this is what makes the "Recent
+  // exits" card below actually live instead of only updating on page reload.
+  const trades = useQuery({
+    queryKey: ['trades', 50],
+    queryFn: () => api.trades(50),
+    refetchInterval: 60_000,
+  })
   const regime = useQuery({ queryKey: ['marketRegime'], queryFn: api.marketRegime })
+  const status = useQuery({ queryKey: ['status'], queryFn: api.status, refetchInterval: 30_000 })
+  const refresh = useMutation({
+    mutationFn: api.refreshData,
+    onSuccess: (data) => {
+      queryClient.setQueryData(['status'], data)
+      queryClient.invalidateQueries({ queryKey: ['signals'] })
+      queryClient.invalidateQueries({ queryKey: ['predictions'] })
+      queryClient.invalidateQueries({ queryKey: ['strategySignals'] })
+    },
+  })
 
   if (summary.isLoading) return <Loading />
   if (summary.error) return <ErrorBox error={summary.error} />
 
   const s = summary.data!
   const r = regime.data
+  const st = status.data
 
   return (
     <>
@@ -47,6 +73,30 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+
+      {st && (
+        <div className={`banner ${st.status_level === 'ok' ? 'banner-ok' : 'banner-warn'}`}>
+          {st.status_level === 'ok' ? '✅' : '⚠️'} {st.status_message}
+          {st.status_level === 'warning' && st.broker_authenticated && (
+            <>
+              {' '}
+              <a
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault()
+                  if (!refresh.isPending) refresh.mutate()
+                }}
+                style={{ color: 'inherit', textDecoration: 'underline' }}
+              >
+                {refresh.isPending ? 'Refreshing…' : 'Refresh now'}
+              </a>
+              {refresh.isError && (
+                <span> — {(refresh.error as Error)?.message ?? 'refresh failed'}</span>
+              )}
+            </>
+          )}
+        </div>
+      )}
 
       <div className="grid">
         <Stat
@@ -97,6 +147,53 @@ export default function Dashboard() {
           value={formatCurrency(s.total_charges)}
           sub="Brokerage, taxes, slippage"
         />
+      </div>
+
+      <h2>Recent exits — stop-loss &amp; target hits</h2>
+      <div className="card" style={{ marginBottom: '1.5rem', padding: '0.5rem 0' }}>
+        {trades.isLoading ? (
+          <Loading />
+        ) : (
+          (() => {
+            const exits = (trades.data ?? [])
+              .filter((t) => t.exit_reason === 'STOP_LOSS_HIT' || t.exit_reason === 'TARGET_HIT')
+              .slice(0, 8)
+            return !exits.length ? (
+              <div className="empty">
+                No stop-loss or target hits yet — this fills in the moment one fires. Telegram
+                already pushes these the instant they happen; this is just the at-a-glance history.
+              </div>
+            ) : (
+              exits.map((t) => {
+                const kind = EXIT_KIND[t.exit_reason!] ?? { icon: '⚪', label: t.exit_reason }
+                return (
+                  <div
+                    key={t.id}
+                    className="row"
+                    style={{
+                      justifyContent: 'space-between',
+                      padding: '0.6rem 1rem',
+                      borderBottom: '1px solid var(--border)',
+                    }}
+                  >
+                    <span className="row" style={{ gap: '0.6rem' }}>
+                      <span>{kind.icon}</span>
+                      <strong>{t.symbol}</strong>
+                      <span className="muted">{kind.label}</span>
+                    </span>
+                    <span className="muted mono">
+                      {formatCurrency(t.entry_price)} → {formatCurrency(t.exit_price)}
+                    </span>
+                    <span className={pnlClass(t.net_pnl)}>
+                      {formatSignedPercent(t.return_pct)} ({formatCurrency(t.net_pnl)})
+                    </span>
+                    <span className="muted">{formatDateTime(t.exit_at)}</span>
+                  </div>
+                )
+              })
+            )
+          })()
+        )}
       </div>
 
       <h2>Equity curve</h2>

@@ -2,16 +2,20 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from swing_trade_ml.api.deps import DbSession
 from swing_trade_ml.brokers import get_broker
 from swing_trade_ml.core.enums import ExitReason, PositionStatus, SignalType
-from swing_trade_ml.db.models.market import Instrument
+from swing_trade_ml.db.models.market import Candle, Instrument
 from swing_trade_ml.db.models.trading import Position, Signal, Strategy, Trade
+
+IST = ZoneInfo("Asia/Kolkata")
 from swing_trade_ml.ml.registry import get_active_model
 from swing_trade_ml.schemas import (
     ClosePositionRequest,
@@ -99,10 +103,44 @@ def detailed_positions(db: DbSession) -> list[dict[str, Any]]:
             if key not in latest_pending_exit or generated_at > latest_pending_exit[key]:
                 latest_pending_exit[key] = generated_at
 
+    # "Today's move" per position — current price vs. yesterday's close, or
+    # vs. entry price for anything bought today (never held "yesterday", so
+    # a previous close isn't the right reference — you can't have a day
+    # change on a position that didn't exist yet). One batched query rather
+    # than N+1: the most recent candle strictly before today, per instrument.
+    today_start_ist = datetime.now(IST).replace(hour=0, minute=0, second=0, microsecond=0)
+    prev_close_by_instrument: dict[int, float] = {}
+    if rows:
+        instrument_ids = {position.instrument_id for position, _, _ in rows}
+        latest_ts_per_instrument = (
+            select(Candle.instrument_id, func.max(Candle.ts).label("ts"))
+            .where(
+                Candle.instrument_id.in_(instrument_ids),
+                Candle.interval == "day",
+                Candle.ts < today_start_ist.astimezone(UTC),
+            )
+            .group_by(Candle.instrument_id)
+            .subquery()
+        )
+        for inst_id, close in db.execute(
+            select(Candle.instrument_id, Candle.close).join(
+                latest_ts_per_instrument,
+                (Candle.instrument_id == latest_ts_per_instrument.c.instrument_id)
+                & (Candle.ts == latest_ts_per_instrument.c.ts),
+            )
+        ):
+            prev_close_by_instrument[inst_id] = float(close)
+
     result = []
     for position, symbol, name in rows:
         current = position.current_price or position.entry_price
         invested = position.entry_price * position.quantity
+
+        entered_today = position.entry_at.astimezone(IST) >= today_start_ist
+        day_reference = (
+            position.entry_price if entered_today else prev_close_by_instrument.get(position.instrument_id)
+        )
+        day_pnl = (current - day_reference) * position.quantity if day_reference is not None else None
 
         pending_at = latest_pending_exit.get((position.instrument_id, position.strategy_id))
         exit_signal_pending = pending_at is not None and pending_at >= position.entry_at
@@ -133,6 +171,7 @@ def detailed_positions(db: DbSession) -> list[dict[str, Any]]:
                 "current_value": current * position.quantity,
                 "unrealized_pnl": position.unrealized_pnl,
                 "unrealized_pnl_pct": (current / position.entry_price - 1) if position.entry_price else 0.0,
+                "day_pnl": day_pnl,
                 "stop_loss": position.stop_loss,
                 "take_profit": position.take_profit,
                 "entry_at": position.entry_at,

@@ -86,6 +86,13 @@ class Settings(BaseSettings):
     PAPER_SLIPPAGE_BPS: float = 5.0
     PAPER_BROKERAGE_PER_ORDER: float = 20.0
     PAPER_TAX_BPS: float = 12.0
+    # Zerodha's DP (Depository Participant) charge: a flat per-scrip fee on
+    # every DELIVERY SELL, charged by the depository (CDSL/NSDL) + Zerodha,
+    # regardless of quantity or value. Never on buys, never on intraday (MIS)
+    # — only CNC sells, which is exactly what every exit in this app is. This
+    # was previously missing from the paper cost model entirely, silently
+    # understating real charges on every single trade.
+    PAPER_DP_CHARGE_PER_SELL: float = 20.0
 
     # ------------------------------------------------------------ zerodha --
     KITE_API_KEY: str = ""
@@ -127,6 +134,12 @@ class Settings(BaseSettings):
     DEFAULT_STOP_LOSS_PCT: float = 0.05
     DEFAULT_TAKE_PROFIT_PCT: float = 0.15
     MAX_PORTFOLIO_DRAWDOWN_PCT: float = 0.20
+    # Blocks re-entering a symbol for this many days after it stopped this
+    # same strategy out — added after the small-cap backtest showed the same
+    # name (LATENTVIEW) getting stopped out three separate times in a few
+    # months, re-bought each time the moment confidence cleared the bar
+    # again with no memory of just having lost money on it.
+    STOP_LOSS_COOLDOWN_DAYS: int = 5
     # A held position's model confidence has to fall this many percentage
     # points below what it was at entry, AND into the "weakening" zone
     # (below the midpoint of ML_MIN_CONFIDENCE and the strategy's own

@@ -46,6 +46,10 @@ class SystemStatus(BaseModel):
     watchlist_size: int
     active_strategies: int
     open_positions: int
+    latest_candle_date: date | None
+    last_scan_at: datetime | None
+    status_level: str
+    status_message: str
 
 
 # -------------------------------------------------------------------- auth --
@@ -507,6 +511,7 @@ class FinanceTransactionOut(BaseModel):
     source: str | None
     category: str
     is_manual_override: bool
+    is_reference_only: bool
 
 
 class FinanceTransactionUpdate(BaseModel):
@@ -532,6 +537,14 @@ class FinanceIngestedFileOut(BaseModel):
     transaction_count: int
     message: str | None
     created_at: datetime
+    deleted_at: datetime | None
+
+
+class FinanceCalculationSummary(BaseModel):
+    total_debits: float
+    total_credits: float
+    net: float
+    transaction_count: int
 
 
 class FinanceMonthlySummary(BaseModel):
@@ -559,3 +572,80 @@ class FinanceMerchantSummary(BaseModel):
     description: str
     total_expense: float
     transaction_count: int
+
+
+class FinanceLoanCreate(BaseModel):
+    account_number: str | None = None
+    name: str = Field(..., min_length=1, max_length=128)
+    principal: float = Field(..., gt=0)
+    annual_rate: float = Field(..., ge=0)
+    tenure_months: int = Field(..., gt=0)
+    emi: float = Field(..., gt=0)
+    extra_payment: float = Field(0.0, ge=0)
+    start_date: date
+
+
+class FinanceLoanUpdate(BaseModel):
+    account_number: str | None = None
+    name: str | None = Field(None, min_length=1, max_length=128)
+    principal: float | None = Field(None, gt=0)
+    annual_rate: float | None = Field(None, ge=0)
+    tenure_months: int | None = Field(None, gt=0)
+    emi: float | None = Field(None, gt=0)
+    extra_payment: float | None = Field(None, ge=0)
+    start_date: date | None = None
+
+
+class FinanceLoanOut(BaseModel):
+    id: int
+    account_number: str | None
+    name: str
+    principal: float
+    annual_rate: float
+    tenure_months: int
+    emi: float
+    extra_payment: float
+    start_date: datetime
+    outstanding: float
+    scheduled_end: date
+    estimated_close: date | None
+    scheduled_pending_label: str
+    pending_label: str
+    monthly_interest: float
+    yearly_interest: float
+    total_interest: float
+    estimated_interest: float
+    interest_saved: float
+    total_payable: float
+
+
+class FinanceNetWorth(BaseModel):
+    income_total: float
+    expense_total: float
+    cash_surplus: float
+    investments_total: float
+    liabilities: float
+    net_worth: float
+
+
+class FinanceCustomRuleIn(BaseModel):
+    keyword: str = Field(..., min_length=1, max_length=128)
+    category: str = Field(..., min_length=1, max_length=64)
+    priority: int = 90
+
+
+class FinanceCustomRuleOut(BaseModel):
+    model_config = ORM
+    id: int
+    keyword: str
+    category: str
+    priority: int
+
+
+class FinanceRuleUpsertResult(BaseModel):
+    rule: FinanceCustomRuleOut
+    recategorized_count: int
+
+
+class FinanceRecategorizeResult(BaseModel):
+    recategorized_count: int

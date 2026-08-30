@@ -36,6 +36,10 @@ class FinanceIngestedFile(Base, TimestampMixin):
     status: Mapped[str] = mapped_column(String(16), default=FinanceIngestStatus.SUCCESS)
     transaction_count: Mapped[int] = mapped_column(Integer, default=0)
     message: Mapped[str | None] = mapped_column(Text)
+    # Soft delete: reversible via the /restore endpoint. Only the separate
+    # "delete permanently" action (typed-filename-confirmed) actually removes
+    # the row — see api/v1/endpoints/finance.py.
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"<FinanceIngestedFile {self.file_name} ({self.transaction_count} txns)>"
@@ -74,5 +78,55 @@ class FinanceTransaction(Base, TimestampMixin):
     category: Mapped[str] = mapped_column(String(64), default="Uncategorised", index=True)
     is_manual_override: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
 
+    # A PhonePe-sourced row demoted because a bank statement covering the
+    # same month is also present — the same real payment would otherwise be
+    # counted twice. Stays visible in the transaction list; excluded from
+    # every total. See services/finance/ingestion.py::reconcile_source_priority.
+    is_reference_only: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+
+    # Soft delete, set together with the parent FinanceIngestedFile's — see
+    # that model's docstring.
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+
     def __repr__(self) -> str:  # pragma: no cover
         return f"<FinanceTransaction {self.txn_date:%Y-%m-%d} {self.description[:30]!r} {self.amount}>"
+
+
+class FinanceLoan(Base, TimestampMixin):
+    """A manually-entered loan account — EMI tracking is a separate ledger
+    from parsed transactions, not derived from statement rows. Outstanding
+    balance and interest projections are computed at read time from these
+    fields (see `services/finance/loans.py`), never stored, so editing a
+    loan's numbers is reflected immediately."""
+
+    __tablename__ = "finance_loans"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    account_number: Mapped[str | None] = mapped_column(String(64))
+    name: Mapped[str] = mapped_column(String(128))
+    principal: Mapped[float] = mapped_column(Float)
+    annual_rate: Mapped[float] = mapped_column(Float)
+    tenure_months: Mapped[int] = mapped_column(Integer)
+    emi: Mapped[float] = mapped_column(Float)
+    extra_payment: Mapped[float] = mapped_column(Float, default=0.0)
+    start_date: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"<FinanceLoan {self.name!r} principal={self.principal}>"
+
+
+class FinanceCustomRule(Base, TimestampMixin):
+    """A user-added keyword->category categorization rule, merged with the
+    bundled CSV rules at categorization time (see
+    `categorizer.combined_rules`). Defaults to a higher priority than the
+    bundled rules (90 vs. 50) so a user's own correction always wins."""
+
+    __tablename__ = "finance_custom_rules"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    keyword: Mapped[str] = mapped_column(String(128), unique=True, index=True)
+    category: Mapped[str] = mapped_column(String(64))
+    priority: Mapped[int] = mapped_column(Integer, default=90)
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"<FinanceCustomRule {self.keyword!r} -> {self.category!r}>"

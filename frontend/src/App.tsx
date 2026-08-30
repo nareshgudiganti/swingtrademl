@@ -1,5 +1,5 @@
 import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api, captureTokenFromRedirect, clearToken, getToken } from './api/client'
 import AuthScreen from './components/AuthScreen'
@@ -36,6 +36,7 @@ captureTokenFromRedirect()
 export default function App() {
   const hasToken = !!getToken()
   const location = useLocation()
+  const queryClient = useQueryClient()
 
   const { data: status } = useQuery({
     queryKey: ['status'],
@@ -48,6 +49,19 @@ export default function App() {
     queryFn: api.me,
     enabled: hasToken,
     retry: false,
+  })
+  const refresh = useMutation({
+    mutationFn: api.refreshData,
+    onSuccess: (data) => {
+      queryClient.setQueryData(['status'], data)
+      // Refetch everything data-dependent, not just status — a stale-data
+      // warning means predictions/signals were stale too, and the whole
+      // point of this button is not needing a page reload to see it fixed.
+      queryClient.invalidateQueries({ queryKey: ['signals'] })
+      queryClient.invalidateQueries({ queryKey: ['signalHistory'] })
+      queryClient.invalidateQueries({ queryKey: ['strategySignals'] })
+      queryClient.invalidateQueries({ queryKey: ['predictions'] })
+    },
   })
 
   if (!hasToken) {
@@ -110,27 +124,41 @@ export default function App() {
       </aside>
 
       <main className="content">
-        {status && !status.broker_authenticated && (
+        {status && status.status_level === 'warning' && (
           <div className="banner banner-warn">
-            No active Zerodha session — Kite tokens expire daily at ~06:00 IST.{' '}
-            {status.open_positions > 0 ? (
-              <strong>
-                Stop-loss/target checks are NOT running on your {status.open_positions} open
-                position{status.open_positions === 1 ? '' : 's'} until you log in.
-              </strong>
+            ⚠️ {status.status_message}
+            {!status.broker_authenticated ? (
+              <>
+                {' '}
+                <a
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault()
+                    api.kiteLogin().then((r) => window.open(r.login_url, '_blank'))
+                  }}
+                  style={{ color: 'inherit', textDecoration: 'underline' }}
+                >
+                  Log in to Kite
+                </a>
+              </>
             ) : (
-              'Market data and new orders will fail until you log in.'
-            )}{' '}
-            <a
-              href="#"
-              onClick={(e) => {
-                e.preventDefault()
-                api.kiteLogin().then((r) => window.open(r.login_url, '_blank'))
-              }}
-              style={{ color: 'inherit', textDecoration: 'underline' }}
-            >
-              Log in to Kite
-            </a>
+              <>
+                {' '}
+                <a
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault()
+                    if (!refresh.isPending) refresh.mutate()
+                  }}
+                  style={{ color: 'inherit', textDecoration: 'underline' }}
+                >
+                  {refresh.isPending ? 'Refreshing…' : 'Refresh now'}
+                </a>
+                {refresh.isError && (
+                  <span> — {(refresh.error as Error)?.message ?? 'refresh failed'}</span>
+                )}
+              </>
+            )}
           </div>
         )}
 

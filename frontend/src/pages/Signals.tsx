@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useEffect, useMemo, useState } from 'react'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 
 import { api } from '../api/client'
 import type { LatestSignal } from '../api/types'
@@ -35,18 +35,56 @@ function compare(a: LatestSignal, b: LatestSignal, key: SortKey): number {
 }
 
 export default function Signals() {
-  const signals = useQuery({ queryKey: ['signals', 100], queryFn: () => api.latestSignals(100) })
+  // `search` is the raw typed text (drives the suggestions dropdown);
+  // `selectedSymbol` is only set once an exact instrument is picked — the
+  // signal-history lookup is an exact match server-side, so typing "HDFC"
+  // alone must never be sent as the query, only "HDFCBANK" etc. once chosen.
+  const [search, setSearch] = useState('')
+  const [debouncedQuery, setDebouncedQuery] = useState('')
+  const [selectedSymbol, setSelectedSymbol] = useState('')
+  const [dropdownOpen, setDropdownOpen] = useState(false)
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(search.trim()), 250)
+    return () => clearTimeout(timer)
+  }, [search])
+
+  const suggestions = useQuery({
+    queryKey: ['instrumentSearch', debouncedQuery],
+    queryFn: () => api.instruments(debouncedQuery, 8),
+    enabled: debouncedQuery.length >= 1 && !selectedSymbol,
+    staleTime: 60_000,
+  })
+
+  const signals = useQuery({
+    queryKey: selectedSymbol ? ['signalHistory', selectedSymbol] : ['signals', 100],
+    queryFn: () => (selectedSymbol ? api.signalHistory(selectedSymbol) : api.latestSignals(100)),
+    // Keeps the previous result on screen while a new search resolves,
+    // instead of swapping to a loading state on every keystroke — that
+    // swap is also what was unmounting the input and losing focus/cursor
+    // position on each character typed.
+    placeholderData: keepPreviousData,
+  })
   const [sortKey, setSortKey] = useState<SortKey>('generated_at')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
+
+  function selectSymbol(symbol: string) {
+    setSelectedSymbol(symbol)
+    setSearch(symbol)
+    setDropdownOpen(false)
+  }
+
+  function clearSearch() {
+    setSelectedSymbol('')
+    setSearch('')
+    setDebouncedQuery('')
+  }
 
   const rows = useMemo(() => {
     const data = [...(signals.data ?? [])]
     data.sort((a, b) => compare(a, b, sortKey) * (sortDir === 'asc' ? 1 : -1))
     return data
   }, [signals.data, sortKey, sortDir])
-
-  if (signals.isLoading) return <Loading />
-  if (signals.error) return <ErrorBox error={signals.error} />
 
   function toggleSort(col: (typeof COLUMNS)[number]) {
     if (sortKey === col.key) {
@@ -61,17 +99,98 @@ export default function Signals() {
     <>
       <div className="page-head">
         <h1>Signals</h1>
-        <span className="muted">{rows.length} most recent actionable signals — click a column to sort</span>
+        <span className="row" style={{ gap: '0.5rem' }}>
+          <span style={{ position: 'relative', display: 'inline-block', minWidth: '240px' }}>
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value)
+                setSelectedSymbol('')
+                setDropdownOpen(true)
+              }}
+              onFocus={() => setDropdownOpen(true)}
+              // mousedown on an option fires before this blur, so the click
+              // still registers instead of the dropdown closing first
+              onBlur={() => setTimeout(() => setDropdownOpen(false), 150)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  const first = suggestions.data?.[0]
+                  selectSymbol(first ? first.tradingsymbol : search.trim().toUpperCase())
+                } else if (e.key === 'Escape') {
+                  setDropdownOpen(false)
+                }
+              }}
+              placeholder="Search a symbol or company name…"
+              style={{ width: '100%' }}
+            />
+            {dropdownOpen && debouncedQuery.length >= 1 && !selectedSymbol && (
+              <div className="symbol-picker-dropdown">
+                {(suggestions.data ?? []).length ? (
+                  suggestions.data!.map((inst) => (
+                    <button
+                      type="button"
+                      key={inst.id}
+                      className="symbol-picker-option"
+                      onMouseDown={(e) => {
+                        e.preventDefault()
+                        selectSymbol(inst.tradingsymbol)
+                      }}
+                    >
+                      <strong>{inst.tradingsymbol}</strong>
+                      <span className="muted">{inst.name}</span>
+                    </button>
+                  ))
+                ) : (
+                  <div className="symbol-picker-empty">
+                    {suggestions.isFetching ? 'Searching…' : `No match for "${debouncedQuery}"`}
+                  </div>
+                )}
+              </div>
+            )}
+          </span>
+          {signals.isFetching && <span className="muted">loading…</span>}
+        </span>
       </div>
 
-      <div className="banner banner-info">
-        Rejected signals are shown too. A signal the risk engine blocked is as much a part of the
-        strategy&apos;s record as one it took — the rejection reason explains why.
-      </div>
+      {selectedSymbol ? (
+        <div className="banner banner-info">
+          Showing every score for <strong>{selectedSymbol}</strong> — newest first, click a
+          column to sort. Includes HOLD days, not just BUY/EXIT, so you can see how confidence
+          has moved over time.{' '}
+          <a
+            href="#"
+            onClick={(e) => {
+              e.preventDefault()
+              clearSearch()
+            }}
+            style={{ color: 'inherit', textDecoration: 'underline' }}
+          >
+            Clear search
+          </a>
+        </div>
+      ) : (
+        <div className="banner banner-info">
+          {rows.length} most recent actionable signals across all strategies. Rejected signals are
+          shown too — a signal the risk engine blocked is as much a part of the record as one it
+          took, the rejection reason explains why.
+        </div>
+      )}
 
       <div className="table-wrap">
-        {!rows.length ? (
-          <Empty label="No signals yet. Activate a strategy, then run a scan." />
+        {signals.isLoading ? (
+          <Loading />
+        ) : signals.error ? (
+          <ErrorBox error={signals.error} />
+        ) : !rows.length ? (
+          <Empty
+            label={
+              selectedSymbol
+                ? `No signals found for ${selectedSymbol} — it may not be part of an active strategy's universe.`
+                : 'No signals yet. Activate a strategy, then run a scan.'
+            }
+          />
         ) : (
           <table>
             <thead>

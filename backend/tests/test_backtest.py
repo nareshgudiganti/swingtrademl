@@ -122,6 +122,7 @@ def test_backtest_and_paper_broker_share_the_literal_same_cost_functions():
     broker = PaperBroker()
     assert broker._apply_slippage.__func__ is not costs.apply_slippage  # bound method, not the fn itself
     assert broker._apply_slippage(100.0, "BUY") == costs.apply_slippage(100.0, "BUY")
-    assert broker._charges(50_000.0) == costs.compute_charges(50_000.0)
+    assert broker._charges(50_000.0, "BUY") == costs.compute_charges(50_000.0, "BUY")
+    assert broker._charges(50_000.0, "SELL") == costs.compute_charges(50_000.0, "SELL")
     assert _apply_slippage is costs.apply_slippage
     assert _charges is costs.compute_charges

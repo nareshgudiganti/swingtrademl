@@ -62,22 +62,33 @@ def list_signals(
 
 
 @router.get("/latest", response_model=list[dict])
-def latest_actionable(db: DbSession, limit: int = Query(20, le=100)) -> list[dict]:
+def latest_actionable(
+    db: DbSession,
+    limit: int = Query(20, le=100),
+    symbol: str | None = Query(
+        None, description="Look up one symbol's full score history instead of the cross-strategy feed"
+    ),
+) -> list[dict]:
     """The most recent BUY/EXIT signals, symbol-resolved for the dashboard.
 
-    HOLD signals are excluded — there is one per instrument per scan and they
-    would bury the actionable ones.
+    HOLD signals are excluded by default — there is one per instrument per
+    scan and they would bury the actionable ones. But when `symbol` narrows
+    this to one stock, HOLD *is* the useful history (most days for most
+    stocks are HOLD, not BUY/EXIT) — so it's included, and the limit ceiling
+    opens up, for a "search this stock, see every score, newest first" view.
     """
-    rows = db.execute(
+    stmt = (
         select(Signal, Instrument.tradingsymbol, Instrument.name)
         .join(Instrument, Instrument.id == Signal.instrument_id)
-        .where(
-            Signal.mode == get_broker().mode,
-            Signal.signal_type.in_(["BUY", "SELL", "EXIT"]),
-        )
+        .where(Signal.mode == get_broker().mode)
         .order_by(Signal.generated_at.desc())
-        .limit(limit)
-    ).all()
+    )
+    if symbol:
+        stmt = stmt.where(Instrument.tradingsymbol == symbol.strip().upper())
+        limit = max(limit, 200)
+    else:
+        stmt = stmt.where(Signal.signal_type.in_(["BUY", "SELL", "EXIT"]))
+    rows = db.execute(stmt.limit(limit)).all()
 
     return [
         {

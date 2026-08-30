@@ -231,7 +231,7 @@ def manual_open_position(
     now = datetime.now(UTC)
 
     if brokerage is None or taxes is None:
-        default_brokerage, default_taxes = compute_charges(entry_price * quantity)
+        default_brokerage, default_taxes = compute_charges(entry_price * quantity, TransactionType.BUY)
         brokerage = default_brokerage if brokerage is None else brokerage
         taxes = default_taxes if taxes is None else taxes
 
@@ -419,7 +419,7 @@ def manual_close_position(
         raise ValueError(f"Instrument {position.instrument_id} not found for position {position.id}")
 
     if brokerage is None or taxes is None:
-        default_brokerage, default_taxes = compute_charges(exit_price * position.quantity)
+        default_brokerage, default_taxes = compute_charges(exit_price * position.quantity, TransactionType.SELL)
         brokerage = default_brokerage if brokerage is None else brokerage
         taxes = default_taxes if taxes is None else taxes
 
@@ -894,7 +894,7 @@ def _finish_reconciled_order(db: Session, order: Order, result: OrderResult) -> 
         return
 
     filled_qty = result.filled_quantity or order.quantity
-    brokerage, taxes = compute_charges(fill_price * filled_qty)
+    brokerage, taxes = compute_charges(fill_price * filled_qty, order.transaction_type)
     order.brokerage = brokerage
     order.taxes = taxes
     result.brokerage = brokerage

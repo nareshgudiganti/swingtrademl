@@ -23,10 +23,18 @@ from swing_trade_ml.db.models.trading import Position, Strategy
 from swing_trade_ml.db.session import session_scope
 from swing_trade_ml.notifications import notifier
 from swing_trade_ml.services import engine, ingestion, portfolio
+from swing_trade_ml.workers import heartbeat
 
 log = get_logger(__name__)
 
 IST = ZoneInfo("Asia/Kolkata")
+
+
+def job_heartbeat() -> None:
+    """Proves the worker's scheduler is actually ticking, independent of
+    market hours or trading days — see workers/heartbeat.py for why /status
+    needs this instead of just checking the local scheduler.running flag."""
+    heartbeat.touch()
 
 
 def _report_error(context: str, exc: Exception) -> None:

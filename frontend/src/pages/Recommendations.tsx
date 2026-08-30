@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { api } from '../api/client'
 import type { StrategySignal } from '../api/types'
 import { Empty, ErrorBox, Loading } from '../components/Loading'
+import Modal from '../components/Modal'
 import { BuildingIcon } from '../components/icons'
 import { formatCurrency, formatDateTime, formatNumber, formatPercent, formatSignedPercent } from '../lib/format'
 
@@ -108,7 +109,6 @@ function SortableHead({
           <span className="sort-arrow">{sortKey === col.key ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</span>
         </th>
       ))}
-      <th />
     </tr>
   )
 }
@@ -142,58 +142,87 @@ function TechnicalGrid({ features }: { features: StrategySignal['features'] }) {
   )
 }
 
-/** One row plus its click-to-expand technical detail — shared by all three
- * tables on this page so "click a BUY/SELL to see the full picture" works
- * everywhere, not just the ranking table. */
+/** One row, click anywhere on it to open the full detail in a popup — shared
+ * by all three tables on this page so "click a BUY/SELL to see the full
+ * picture" works everywhere, not just the ranking table. Matches the
+ * click-to-popup pattern the Suggestions page already uses, instead of this
+ * page's old inline accordion-expand. */
 function ExpandableRow({
+  row,
+  buyBar,
+  showStatus,
+  onSelect,
+}: {
+  row: Row
+  buyBar: number
+  showStatus?: boolean
+  onSelect: (row: Row) => void
+}) {
+  return (
+    <tr className="sig-row" onClick={() => onSelect(row)}>
+      <td>
+        <strong>{row.symbol}</strong>
+      </td>
+      <td className="num">{formatCurrency(row.price)}</td>
+      <td className="num">
+        <span className="conf-cell">
+          <span>{formatPercent(row.probability, 1)}</span>
+          <ConfidenceBar probability={row.probability} buyBar={buyBar} />
+        </span>
+      </td>
+      {showStatus && (
+        <td>
+          {row.held ? <span className="badge badge-on">holding</span> : <span className="muted">—</span>}
+        </td>
+      )}
+      <td>
+        <span className={`badge badge-${row.action.tone}`}>{row.action.label}</span>
+      </td>
+    </tr>
+  )
+}
+
+/** Rendered inside the popup a row click opens — mirrors Suggestions'
+ * DetailPanel so both pages present a stock's full picture the same way. */
+function RecommendationDetail({
   row,
   features,
   buyBar,
-  showStatus,
 }: {
   row: Row
   features: StrategySignal['features'] | undefined
   buyBar: number
-  showStatus?: boolean
 }) {
-  const [open, setOpen] = useState(false)
   return (
-    <>
-      <tr className="sig-row" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
-        <td>
-          <strong>{row.symbol}</strong>
-        </td>
-        <td className="num">{formatCurrency(row.price)}</td>
-        <td className="num">
-          <span className="conf-cell">
-            <span>{formatPercent(row.probability, 1)}</span>
-            <ConfidenceBar probability={row.probability} buyBar={buyBar} />
-          </span>
-        </td>
-        {showStatus && (
-          <td>
-            {row.held ? <span className="badge badge-on">holding</span> : <span className="muted">—</span>}
-          </td>
-        )}
-        <td>
-          <span className={`badge badge-${row.action.tone}`}>{row.action.label}</span>
-        </td>
-        <td className="caret">{open ? '▾' : '▸'}</td>
-      </tr>
-      {open && (
-        <tr className="sig-detail-row">
-          <td colSpan={showStatus ? 6 : 5}>
-            <div className="sig-detail">
-              <div className="sig-detail-line muted">
-                <span>Scored {formatDateTime(row.ts)}</span>
-                <span>{row.held ? 'Currently held' : 'Not held'}</span>
-              </div>
-              <TechnicalGrid features={features ?? null} />
-            </div>
-          </td>
-        </tr>
-      )}
-    </>
+    <div className="detail-panel">
+      <div className="detail-head">
+        <div>
+          <h2 className="detail-symbol">{row.symbol}</h2>
+          <div className="detail-sub">
+            {row.held ? 'Currently held' : 'Not held'} · scored {formatDateTime(row.ts)}
+          </div>
+        </div>
+        <span className={`badge badge-lg badge-${row.action.tone}`}>{row.action.label}</span>
+      </div>
+
+      <div className="detail-stat-row">
+        <div className="detail-stat">
+          <div className="tech-label">Price</div>
+          <div className="detail-stat-value">{formatCurrency(row.price)}</div>
+        </div>
+        <div className="detail-stat">
+          <div className="tech-label">Confidence</div>
+          <div className="detail-stat-value">{formatPercent(row.probability, 1)}</div>
+        </div>
+        <div className="detail-stat">
+          <div className="tech-label">Buy bar</div>
+          <div className="detail-stat-value">{formatPercent(buyBar, 0)}</div>
+        </div>
+      </div>
+
+      <div className="section-label">Technical readout</div>
+      <TechnicalGrid features={features ?? null} />
+    </div>
   )
 }
 
@@ -251,6 +280,9 @@ export default function Recommendations() {
 
   const ranking = useSort(rows, compareRows, 'probability', 'desc')
 
+  const [selectedId, setSelectedId] = useState<number | null>(null)
+  const selectedRow = rows.find((r) => r.instrument_id === selectedId)
+
   return (
     <>
       <div className="page-head">
@@ -303,12 +335,11 @@ export default function Recommendations() {
                   <th className="num">Price</th>
                   <th className="num">Confidence</th>
                   <th>Action</th>
-                  <th />
                 </tr>
               </thead>
               <tbody>
                 {sellFocus.map((r) => (
-                  <ExpandableRow row={r} features={featuresBySymbol.get(r.symbol)} buyBar={buyBar} key={r.instrument_id} />
+                  <ExpandableRow row={r} buyBar={buyBar} onSelect={(row) => setSelectedId(row.instrument_id)} key={r.instrument_id} />
                 ))}
               </tbody>
             </table>
@@ -333,12 +364,11 @@ export default function Recommendations() {
                 <th className="num">Price</th>
                 <th className="num">Confidence</th>
                 <th>Action</th>
-                <th />
               </tr>
             </thead>
             <tbody>
               {buyFocus.map((r) => (
-                <ExpandableRow row={r} features={featuresBySymbol.get(r.symbol)} buyBar={buyBar} key={r.instrument_id} />
+                <ExpandableRow row={r} buyBar={buyBar} onSelect={(row) => setSelectedId(row.instrument_id)} key={r.instrument_id} />
               ))}
             </tbody>
           </table>
@@ -347,7 +377,7 @@ export default function Recommendations() {
 
       <h2>Full watchlist ranking</h2>
       <span className="muted" style={{ display: 'block', marginBottom: '0.5rem' }}>
-        Click a column to sort, or a row to expand
+        Click a column to sort, or a row for the full detail
       </span>
       <div className="table-wrap">
         {predictions.isLoading ? (
@@ -373,12 +403,28 @@ export default function Recommendations() {
             </thead>
             <tbody>
               {ranking.sorted.map((r) => (
-                <ExpandableRow row={r} features={featuresBySymbol.get(r.symbol)} buyBar={buyBar} showStatus key={r.instrument_id} />
+                <ExpandableRow
+                  row={r}
+                  buyBar={buyBar}
+                  showStatus
+                  onSelect={(row) => setSelectedId(row.instrument_id)}
+                  key={r.instrument_id}
+                />
               ))}
             </tbody>
           </table>
         )}
       </div>
+
+      {selectedRow && (
+        <Modal onClose={() => setSelectedId(null)}>
+          <RecommendationDetail
+            row={selectedRow}
+            features={featuresBySymbol.get(selectedRow.symbol)}
+            buyBar={buyBar}
+          />
+        </Modal>
+      )}
     </>
   )
 }

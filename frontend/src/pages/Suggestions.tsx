@@ -179,6 +179,32 @@ function buildRows(
 
 const callBadgeClass: Record<Call, string> = { BUY: 'badge-buy', SELL: 'badge-sell', HOLD: 'badge-hold' }
 
+type SortKey = 'symbol' | 'call' | 'confidence' | 'price' | 'date'
+type SortDir = 'asc' | 'desc'
+
+const SORT_COLUMNS: { key: SortKey; label: string; num?: boolean; defaultDir: SortDir }[] = [
+  { key: 'symbol', label: 'Symbol', defaultDir: 'asc' },
+  { key: 'call', label: 'Call', defaultDir: 'asc' },
+  { key: 'confidence', label: 'Confidence', num: true, defaultDir: 'desc' },
+  { key: 'price', label: 'Price', num: true, defaultDir: 'desc' },
+  { key: 'date', label: 'Date', defaultDir: 'desc' },
+]
+
+// nulls sort last regardless of direction — a row with no confidence reading
+// yet isn't "low", it just has nothing to compare.
+function compareRows(a: SuggestionRow, b: SuggestionRow, key: SortKey): number {
+  if (key === 'confidence') {
+    if (a.confidence == null && b.confidence == null) return 0
+    if (a.confidence == null) return 1
+    if (b.confidence == null) return -1
+    return a.confidence - b.confidence
+  }
+  if (key === 'price') return a.price - b.price
+  if (key === 'date') return new Date(a.date).getTime() - new Date(b.date).getTime()
+  if (key === 'call') return a.call.localeCompare(b.call)
+  return a.symbol.localeCompare(b.symbol)
+}
+
 function TechField({ label, value }: { label: string; value: string }) {
   return (
     <div className="tech-field">
@@ -311,6 +337,17 @@ export default function Suggestions() {
 
   const [activeTierIdx, setActiveTierIdx] = useState(0)
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
+  const [sortKey, setSortKey] = useState<SortKey>('confidence')
+  const [sortDir, setSortDir] = useState<SortDir>('desc')
+
+  function toggleSort(col: (typeof SORT_COLUMNS)[number]) {
+    if (sortKey === col.key) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setSortKey(col.key)
+      setSortDir(col.defaultDir)
+    }
+  }
 
   const tierStrategies = useMemo(() => {
     const list = strategies.data ?? []
@@ -354,10 +391,15 @@ export default function Suggestions() {
 
   const activeSignals = signalsByTier[activeTierIdx]?.data
   const activeStrategy = tierStrategies[activeTierIdx]?.strategy
-  const rows = useMemo(
+  const unsortedRows = useMemo(
     () => buildRows(activeStrategy?.id, activeSignals, positions.data ?? []),
     [activeStrategy, activeSignals, positions.data],
   )
+  const rows = useMemo(() => {
+    const data = [...unsortedRows]
+    data.sort((a, b) => compareRows(a, b, sortKey) * (sortDir === 'asc' ? 1 : -1))
+    return data
+  }, [unsortedRows, sortKey, sortDir])
   const featuresBySymbol = useMemo(
     () => new Map((activeSignals ?? []).map((s) => [s.tradingsymbol, s.features])),
     [activeSignals],
@@ -471,11 +513,19 @@ export default function Suggestions() {
           <table>
             <thead>
               <tr>
-                <th>Symbol</th>
-                <th>Call</th>
-                <th className="num">Confidence</th>
-                <th className="num">Price</th>
-                <th>Date</th>
+                {SORT_COLUMNS.map((col) => (
+                  <th
+                    key={col.key}
+                    className={`sortable${col.num ? ' num' : ''}`}
+                    onClick={() => toggleSort(col)}
+                    aria-sort={sortKey === col.key ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+                  >
+                    {col.label}
+                    <span className="sort-arrow">
+                      {sortKey === col.key ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}
+                    </span>
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>

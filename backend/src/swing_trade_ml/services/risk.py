@@ -9,12 +9,13 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from swing_trade_ml.core.config import settings
-from swing_trade_ml.core.enums import PositionStatus
+from swing_trade_ml.core.enums import ExitReason, PositionStatus
 from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.db.models.trading import PortfolioSnapshot, Position, Strategy
 
@@ -62,6 +63,27 @@ def has_open_position(
         Position.mode == mode,
         Position.instrument_id == instrument_id,
         Position.status == PositionStatus.OPEN,
+    )
+    if strategy_id is not None:
+        stmt = stmt.where(Position.strategy_id == strategy_id)
+    return db.execute(stmt).first() is not None
+
+
+def stopped_out_recently(
+    db: Session, mode: str, instrument_id: int, strategy_id: int | None, cooldown_days: int
+) -> bool:
+    """True if this instrument stopped this same strategy out within the
+    cooldown window — the guard against re-buying a name the moment
+    confidence clears the bar again, right after it just cost money."""
+    if cooldown_days <= 0:
+        return False
+    cutoff = datetime.now(UTC) - timedelta(days=cooldown_days)
+    stmt = select(Position.id).where(
+        Position.mode == mode,
+        Position.instrument_id == instrument_id,
+        Position.status == PositionStatus.CLOSED,
+        Position.exit_reason == ExitReason.STOP_LOSS_HIT,
+        Position.exit_at >= cutoff,
     )
     if strategy_id is not None:
         stmt = stmt.where(Position.strategy_id == strategy_id)
@@ -119,6 +141,14 @@ def calculate_quantity(
     would otherwise dominate a tiny, precisely-risk-sized position. Both modes
     still pass through the same two ceilings below.
 
+    A strategy can override the global mode via `params["position_sizing_mode"]`
+    — added after the small-cap backtest showed every position running near
+    the maximum allowed stop distance (small-caps are volatile enough that
+    2x ATR routinely exceeds the 10% ceiling) while still being sized at the
+    same flat amount as a tight-stop large-cap trade. Risk-based sizing on
+    that tier shrinks the position for a stock that needs a wide stop instead
+    of betting the same rupees on it as a calmer one.
+
     `existing_exposure` is rupees already committed to this instrument by an
     earlier tranche (pyramiding) — the concentration cap applies to *total*
     exposure across tranches, not each one separately.
@@ -126,7 +156,12 @@ def calculate_quantity(
     if price <= 0:
         return 0, "Invalid price"
 
-    if settings.POSITION_SIZING_MODE == "fixed_amount":
+    sizing_mode = (
+        (strategy.params.get("position_sizing_mode") if strategy else None)
+        or settings.POSITION_SIZING_MODE
+    )
+
+    if sizing_mode == "fixed_amount":
         qty_by_target = settings.FIXED_POSITION_AMOUNT_INR / price
         target_label = "fixed amount"
     else:
@@ -196,6 +231,15 @@ def check_entry(
     strategy_id = strategy.id if strategy else None
     if existing_exposure <= 0 and has_open_position(db, mode, instrument_id, strategy_id):
         return RiskDecision(False, 0, "Position already open in this instrument")
+
+    cooldown_days = int(
+        (strategy.params.get("stop_loss_cooldown_days") if strategy else None)
+        or settings.STOP_LOSS_COOLDOWN_DAYS
+    )
+    if stopped_out_recently(db, mode, instrument_id, strategy_id, cooldown_days):
+        return RiskDecision(
+            False, 0, f"Stopped out within the last {cooldown_days} days — cooling down"
+        )
 
     max_positions = (
         strategy.max_positions if strategy and strategy.max_positions else settings.MAX_OPEN_POSITIONS

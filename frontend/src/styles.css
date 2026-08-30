@@ -522,6 +522,12 @@ select:focus {
   color: #fcd34d;
 }
 
+.banner-ok {
+  background: rgba(34, 197, 94, 0.1);
+  border-color: var(--pos);
+  color: #86efac;
+}
+
 .banner-info {
   background: rgba(79, 140, 255, 0.1);
   border-color: var(--accent);

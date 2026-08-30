@@ -1,9 +1,13 @@
+import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api } from '../api/client'
 import type { DetailedPosition } from '../api/types'
 import { Empty, ErrorBox, Loading } from '../components/Loading'
 import { formatCurrency, formatDate, formatPercent, formatSignedPercent, pnlClass } from '../lib/format'
+
+type SortKey = 'unrealized_pnl' | 'unrealized_pnl_pct' | 'day_pnl'
+type SortDir = 'asc' | 'desc'
 
 // Escalation by the model's CURRENT confidence, not by elapsed time: green
 // means it's still bullish today, grey is unremarkable/early, amber is
@@ -33,19 +37,54 @@ export default function Positions() {
     },
   })
 
+  const [sortKey, setSortKey] = useState<SortKey | null>(null)
+  const [sortDir, setSortDir] = useState<SortDir>('desc')
+
+  const unsorted = positions.data ?? []
+  // Missing day_pnl (no previous close yet) sorts last regardless of
+  // direction — it isn't "zero", it's just not comparable yet.
+  const rows = useMemo(() => {
+    if (!sortKey) return unsorted
+    const data = [...unsorted]
+    data.sort((a, b) => {
+      const av = a[sortKey]
+      const bv = b[sortKey]
+      if (av == null && bv == null) return 0
+      if (av == null) return 1
+      if (bv == null) return -1
+      return (av - bv) * (sortDir === 'asc' ? 1 : -1)
+    })
+    return data
+  }, [unsorted, sortKey, sortDir])
+
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setSortKey(key)
+      setSortDir('desc')
+    }
+  }
+
   if (positions.isLoading) return <Loading />
   if (positions.error) return <ErrorBox error={positions.error} />
 
-  const rows = positions.data ?? []
-  const totalPnl = rows.reduce((sum, p) => sum + p.unrealized_pnl, 0)
+  const totalPnl = unsorted.reduce((sum, p) => sum + p.unrealized_pnl, 0)
+  const dayPnl = unsorted.reduce((sum, p) => sum + (p.day_pnl ?? 0), 0)
 
   return (
     <>
       <div className="page-head">
         <h1>Open positions</h1>
-        <div className="row">
-          <span className="muted">Unrealised</span>
-          <strong className={pnlClass(totalPnl)}>{formatCurrency(totalPnl)}</strong>
+        <div className="row" style={{ gap: '1.5rem' }}>
+          <span className="row" style={{ gap: '0.4rem' }}>
+            <span className="muted">Total unrealised</span>
+            <strong className={pnlClass(totalPnl)}>{formatCurrency(totalPnl)}</strong>
+          </span>
+          <span className="row" style={{ gap: '0.4rem' }}>
+            <span className="muted">Today</span>
+            <strong className={pnlClass(dayPnl)}>{formatCurrency(dayPnl)}</strong>
+          </span>
         </div>
       </div>
 
@@ -64,11 +103,47 @@ export default function Positions() {
                 <th className="num">Entry</th>
                 <th className="num">Current</th>
                 <th className="num">Invested</th>
-                <th className="num">P&L</th>
-                <th className="num">Return</th>
+                <th
+                  className="num sortable"
+                  onClick={() => toggleSort('unrealized_pnl')}
+                  aria-sort={
+                    sortKey === 'unrealized_pnl' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
+                  }
+                >
+                  P&L
+                  <span className="sort-arrow">
+                    {sortKey === 'unrealized_pnl' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}
+                  </span>
+                </th>
+                <th
+                  className="num sortable"
+                  onClick={() => toggleSort('unrealized_pnl_pct')}
+                  aria-sort={
+                    sortKey === 'unrealized_pnl_pct'
+                      ? sortDir === 'asc'
+                        ? 'ascending'
+                        : 'descending'
+                      : 'none'
+                  }
+                >
+                  Return
+                  <span className="sort-arrow">
+                    {sortKey === 'unrealized_pnl_pct' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}
+                  </span>
+                </th>
+                <th
+                  className="num sortable"
+                  onClick={() => toggleSort('day_pnl')}
+                  aria-sort={sortKey === 'day_pnl' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+                >
+                  Today
+                  <span className="sort-arrow">
+                    {sortKey === 'day_pnl' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}
+                  </span>
+                </th>
                 <th className="num">Stop</th>
                 <th className="num">Target</th>
-                <th className="num">Day</th>
+                <th className="num">Holding</th>
                 <th className="num">Confidence</th>
                 <th />
               </tr>
@@ -97,6 +172,9 @@ export default function Positions() {
                   </td>
                   <td className={`num ${pnlClass(p.unrealized_pnl)}`}>
                     {formatSignedPercent(p.unrealized_pnl_pct)}
+                  </td>
+                  <td className={`num ${p.day_pnl == null ? 'muted' : pnlClass(p.day_pnl)}`}>
+                    {p.day_pnl == null ? '—' : formatCurrency(p.day_pnl)}
                   </td>
                   <td className="num muted">
                     {p.stop_loss ? formatCurrency(p.stop_loss) : '—'}

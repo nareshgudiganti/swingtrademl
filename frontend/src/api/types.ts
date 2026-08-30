@@ -31,6 +31,10 @@ export interface SystemStatus {
   watchlist_size: number
   active_strategies: number
   open_positions: number
+  latest_candle_date: string | null
+  last_scan_at: string | null
+  status_level: 'ok' | 'warning'
+  status_message: string
 }
 
 export interface ScheduledJob {
@@ -81,6 +85,10 @@ export interface DetailedPosition {
   current_value: number
   unrealized_pnl: number
   unrealized_pnl_pct: number
+  // Today's move only — vs. yesterday's close, or vs. entry price if bought
+  // today. Null when there's no previous close to compare against yet
+  // (brand-new symbol, no history).
+  day_pnl: number | null
   stop_loss: number | null
   take_profit: number | null
   entry_at: string
@@ -296,6 +304,13 @@ export interface MessageResponse {
 export type FinanceDirection = 'DEBIT' | 'CREDIT' | 'UNKNOWN'
 export type FinanceSourceType = 'phonepe_pdf' | 'icici_pdf' | 'csv'
 
+/** The shared scope for Overview/Transactions/Net Worth — see Finance.tsx. */
+export interface FinanceFilters {
+  month?: string
+  category?: string
+  direction?: string
+}
+
 export interface FinanceTransaction {
   id: number
   txn_date: string
@@ -308,6 +323,7 @@ export interface FinanceTransaction {
   source: string | null
   category: string
   is_manual_override: boolean
+  is_reference_only: boolean
 }
 
 export interface FinanceIngestResult {
@@ -328,6 +344,14 @@ export interface FinanceIngestedFile {
   transaction_count: number
   message: string | null
   created_at: string
+  deleted_at: string | null
+}
+
+export interface FinanceCalculationSummary {
+  total_debits: number
+  total_credits: number
+  net: number
+  transaction_count: number
 }
 
 export interface FinanceMonthlySummary {
@@ -355,4 +379,52 @@ export interface FinanceMerchantSummary {
   description: string
   total_expense: number
   transaction_count: number
+}
+
+export interface FinanceLoan {
+  id: number
+  account_number: string | null
+  name: string
+  principal: number
+  annual_rate: number
+  tenure_months: number
+  emi: number
+  extra_payment: number
+  start_date: string
+  outstanding: number
+  scheduled_end: string
+  estimated_close: string | null
+  scheduled_pending_label: string
+  pending_label: string
+  monthly_interest: number
+  yearly_interest: number
+  total_interest: number
+  estimated_interest: number
+  interest_saved: number
+  total_payable: number
+}
+
+export interface FinanceNetWorth {
+  income_total: number
+  expense_total: number
+  cash_surplus: number
+  investments_total: number
+  liabilities: number
+  net_worth: number
+}
+
+export interface FinanceCustomRule {
+  id: number
+  keyword: string
+  category: string
+  priority: number
+}
+
+export interface FinanceRuleUpsertResult {
+  rule: FinanceCustomRule
+  recategorized_count: number
+}
+
+export interface FinanceRecategorizeResult {
+  recategorized_count: number
 }

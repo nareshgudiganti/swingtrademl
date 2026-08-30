@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import case, select
 
 from swing_trade_ml.api.deps import DbSession
 from swing_trade_ml.core.config import settings
@@ -27,11 +27,32 @@ def list_instruments(
     if watchlisted_only:
         stmt = stmt.where(Instrument.is_watchlisted.is_(True))
     if search:
-        pattern = f"%{search.upper()}%"
+        upper = search.strip().upper()
         stmt = stmt.where(
-            Instrument.tradingsymbol.ilike(pattern) | Instrument.name.ilike(pattern)
+            Instrument.tradingsymbol.ilike(f"%{upper}%") | Instrument.name.ilike(f"%{upper}%")
         )
-    return list(db.execute(stmt.order_by(Instrument.tradingsymbol).limit(limit)).scalars().all())
+        # Plain alphabetical sorting buries the stock someone's actually
+        # looking for behind bonds/ETFs/NAV trackers that happen to share the
+        # substring (e.g. "HDFC" -> "765HDFC34-N1" sorts before "HDFCBANK";
+        # even prefix-only ranking still buried HDFCBANK under HDFCGOLD,
+        # HDFCGROWTH, etc.). Each tier below combines "starts with the query"
+        # and "already on the watchlist" rather than treating them as
+        # mutually exclusive, so the stock actually being tracked wins over
+        # same-prefix ETFs/NAV trackers that just happen to alphabetize
+        # earlier.
+        starts_with = Instrument.tradingsymbol.ilike(f"{upper}%")
+        watchlisted = Instrument.is_watchlisted.is_(True)
+        priority = case(
+            (Instrument.tradingsymbol == upper, 0),
+            (starts_with & watchlisted, 1),
+            (starts_with, 2),
+            (watchlisted, 3),
+            else_=4,
+        )
+        stmt = stmt.order_by(priority, Instrument.tradingsymbol)
+    else:
+        stmt = stmt.order_by(Instrument.tradingsymbol)
+    return list(db.execute(stmt.limit(limit)).scalars().all())
 
 
 @router.post("/sync", response_model=MessageResponse, status_code=status.HTTP_202_ACCEPTED)

@@ -534,6 +534,31 @@ select:focus {
   color: #93c5fd;
 }
 
+.pwa-toast {
+  position: fixed;
+  left: 1rem;
+  right: 1rem;
+  bottom: calc(1rem + env(safe-area-inset-bottom));
+  max-width: 26rem;
+  margin: 0 auto 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  z-index: 1000;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.pwa-toast-dismiss {
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.85rem;
+  padding: 0 0.2rem;
+  flex-shrink: 0;
+}
+
 .muted {
   color: var(--text-dim);
 }
@@ -754,6 +779,13 @@ tr.sig-detail-row td {
   gap: 0.4rem;
   margin-bottom: 1rem;
   border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.tier-tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .tier-tab {
@@ -769,6 +801,8 @@ tr.sig-detail-row td {
   font-weight: 600;
   font-size: 0.88rem;
   margin-bottom: -1px;
+  flex-shrink: 0;
+  white-space: nowrap;
   transition: color 0.15s, border-color 0.15s;
 }
 
@@ -932,7 +966,13 @@ tr.sig-detail-row td {
 
 @media (max-width: 800px) {
   .layout {
-    grid-template-columns: 1fr;
+    /* minmax(0, 1fr), not bare 1fr: a bare fr track's default min-width is
+       auto (its content's min-content size), and .nav below is a nowrap flex
+       row whose min-content is the sum of all 11 links — without the 0 floor
+       here, that alone stretches this single column (and everything sharing
+       it, sidebar and content both) to fit nav instead of letting nav's own
+       overflow-x scroll it internally. */
+    grid-template-columns: minmax(0, 1fr);
   }
   .sidebar {
     border-right: none;
@@ -940,7 +980,18 @@ tr.sig-detail-row td {
   }
   .nav {
     flex-direction: row;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    margin: 0 -1rem;
+    padding: 0 1rem;
+  }
+  .nav::-webkit-scrollbar {
+    display: none;
+  }
+  .nav a {
+    flex-shrink: 0;
   }
   .content {
     padding: 1rem;

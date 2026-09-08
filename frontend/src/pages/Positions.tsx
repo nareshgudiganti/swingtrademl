@@ -232,10 +232,21 @@ export default function Positions() {
                     {sortKey === 'unrealized_pnl_pct' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}
                   </span>
                 </th>
-                <th>Model says</th>
-                <th className="num">Stop</th>
-                <th className="num">Target</th>
-                <th className="num">Confidence</th>
+                <th title="The strategy's current read on this position, from today's scan.">
+                  Model says
+                </th>
+                <th className="num" title="Auto-sell price if this drops too far — the built-in loss limit.">
+                  Stop
+                </th>
+                <th className="num" title="The price this position is aiming for before taking profit.">
+                  Target
+                </th>
+                <th
+                  className="num"
+                  title="How sure the model is about this call, 0-100%. Higher isn't a guarantee — it's a relative ranking against other candidates."
+                >
+                  Confidence
+                </th>
                 <th />
               </tr>
             </thead>

@@ -344,13 +344,25 @@ export default function Dashboard() {
           (via their counts) — a separate banner repeating the same number
           was just extra height above the fold for no new information. */}
       <div className="row" style={{ gap: '0.5rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
-        <button className={tab === 'attention' ? 'primary' : ''} onClick={() => setTab('attention')}>
+        <button
+          className={tab === 'attention' ? 'primary' : ''}
+          onClick={() => setTab('attention')}
+          title="Open positions whose stop, target, or confidence changed enough to be worth a look."
+        >
           Needs attention{attentionCount > 0 ? ` (${attentionCount})` : ''}
         </button>
-        <button className={tab === 'buy' ? 'primary' : ''} onClick={() => setTab('buy')}>
+        <button
+          className={tab === 'buy' ? 'primary' : ''}
+          onClick={() => setTab('buy')}
+          title="Fresh BUY signals from today's scan, not yet held. This is informational — the bot decides sizing and timing on its own schedule, there's nothing to click to buy here."
+        >
           Worth buying{buyRows.length > 0 ? ` (${buyRows.length})` : ''}
         </button>
-        <button className={tab === 'exits' ? 'primary' : ''} onClick={() => setTab('exits')}>
+        <button
+          className={tab === 'exits' ? 'primary' : ''}
+          onClick={() => setTab('exits')}
+          title="Positions closed in the last 14 days, so you can see whether the exit held up."
+        >
           Recent exits{recentExits.length > 0 ? ` (${recentExits.length})` : ''}
         </button>
       </div>
@@ -650,7 +662,12 @@ export default function Dashboard() {
                     <tr>
                       <th>Symbol</th>
                       <th className="num">Price</th>
-                      <th className="num">Confidence</th>
+                      <th
+                        className="num"
+                        title="How sure the model is about this call, 0-100%. Higher isn't a guarantee — it's a relative ranking against other candidates."
+                      >
+                        Confidence
+                      </th>
                       <th>Status</th>
                       <th>Action</th>
                     </tr>

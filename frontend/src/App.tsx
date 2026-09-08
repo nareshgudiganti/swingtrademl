@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
@@ -38,6 +39,12 @@ const TAB_BAR = [
   { to: '/search', label: 'Search', Icon: SearchIcon },
 ]
 
+// Real money is at stake once live_trading_enabled flips true — this must be
+// acknowledged explicitly per browser before the rest of the app is usable,
+// rather than trusting someone to notice the small PAPER/LIVE badge in the
+// sidebar on their own.
+const LIVE_ACK_STORAGE = 'stml_live_trading_ack'
+
 // Runs once at module load, before the first render decides whether to show
 // the auth screen — a Google login redirect lands here with ?token=... and
 // must be captured before that check runs, or it would flash the login
@@ -74,9 +81,36 @@ export default function App() {
       queryClient.invalidateQueries({ queryKey: ['predictions'] })
     },
   })
+  const [liveAcked, setLiveAcked] = useState(
+    () => localStorage.getItem(LIVE_ACK_STORAGE) === 'true',
+  )
 
   if (!hasToken) {
     return <AuthScreen />
+  }
+
+  if (status?.live_trading_enabled && !liveAcked) {
+    return (
+      <div className="layout" style={{ display: 'grid', placeItems: 'center', minHeight: '100vh' }}>
+        <div className="card" style={{ maxWidth: 480 }}>
+          <h1 style={{ marginTop: 0 }}>⚠️ Live trading is enabled</h1>
+          <p>
+            This account is currently placing <strong>real orders with real money</strong> on
+            Zerodha, not simulated paper trades. Signals, stop-losses, and everything else in
+            this app now affect an actual brokerage account.
+          </p>
+          <button
+            className="primary"
+            onClick={() => {
+              localStorage.setItem(LIVE_ACK_STORAGE, 'true')
+              setLiveAcked(true)
+            }}
+          >
+            I understand — continue
+          </button>
+        </div>
+      </div>
+    )
   }
 
   return (

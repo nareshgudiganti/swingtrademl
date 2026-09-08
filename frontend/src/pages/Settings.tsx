@@ -63,6 +63,18 @@ export default function Settings() {
         <h1>Settings</h1>
       </div>
 
+      {!me.data?.is_superuser && (
+        <div className="card" style={{ marginBottom: '1.5rem' }}>
+          <p className="muted" style={{ margin: 0 }}>
+            You're viewing the shared account — the operational details (scheduler, broker
+            session, watchlist, data ingestion) are managed by the account owner and aren't
+            shown here.
+          </p>
+        </div>
+      )}
+
+      {me.data?.is_superuser && (
+        <>
       <h2>System</h2>
       <div className="grid">
         <div className="card card-with-icon">
@@ -289,6 +301,8 @@ export default function Settings() {
           </div>
         </Link>
       </div>
+        </>
+      )}
 
       <h2>Account</h2>
       <div className="card">

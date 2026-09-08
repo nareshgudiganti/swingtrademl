@@ -17,15 +17,22 @@ from swing_trade_ml.api.deps import DbSession
 from swing_trade_ml.core.config import settings
 from swing_trade_ml.db.models.finance import (
     FinanceCustomRule,
+    FinanceDailyCategory,
     FinanceIngestedFile,
     FinanceLoan,
+    FinanceRecurringBill,
+    FinanceRecurringBillPayment,
     FinanceTransaction,
 )
 from swing_trade_ml.schemas import (
+    FinanceBillPaymentIn,
     FinanceCalculationSummary,
     FinanceCategorySummary,
     FinanceCustomRuleIn,
     FinanceCustomRuleOut,
+    FinanceDailyCategoryIn,
+    FinanceDailyCategoryOut,
+    FinanceDailyExpenseIn,
     FinanceIngestedFileOut,
     FinanceIngestResult,
     FinanceLoanCreate,
@@ -36,6 +43,9 @@ from swing_trade_ml.schemas import (
     FinanceMonthlySummary,
     FinanceNetWorth,
     FinanceRecategorizeResult,
+    FinanceRecurringBillCreate,
+    FinanceRecurringBillOut,
+    FinanceRecurringBillUpdate,
     FinanceRuleUpsertResult,
     FinanceTransactionOut,
     FinanceTransactionUpdate,
@@ -43,6 +53,7 @@ from swing_trade_ml.schemas import (
 )
 from swing_trade_ml.services.finance import analytics, categorizer
 from swing_trade_ml.services.finance import loans as loans_service
+from swing_trade_ml.services.finance import recurring as recurring_service
 from swing_trade_ml.services.finance.ingestion import (
     FinanceIngestError,
     ingest_statement,
@@ -451,3 +462,182 @@ def recategorize(db: DbSession) -> FinanceRecategorizeResult:
     rule upsert triggers automatically, exposed standalone for after adding
     several rules at once."""
     return FinanceRecategorizeResult(recategorized_count=recategorize_all(db))
+
+
+# --------------------------------------------------------- recurring bills --
+
+
+def _current_month() -> str:
+    return datetime.now(UTC).strftime("%Y-%m")
+
+
+def _bill_out(bill: FinanceRecurringBill, payment: FinanceRecurringBillPayment | None) -> dict[str, Any]:
+    return {
+        "id": bill.id,
+        "name": bill.name,
+        "category": bill.category,
+        "default_amount": bill.default_amount,
+        "is_active": bill.is_active,
+        "paid_this_month": payment is not None,
+        "amount_this_month": payment.amount if payment else None,
+        "paid_at": payment.paid_at if payment else None,
+    }
+
+
+@router.get("/recurring-bills", response_model=list[FinanceRecurringBillOut])
+def list_recurring_bills(db: DbSession, month: str | None = None) -> list[dict[str, Any]]:
+    """Every active bill, each resolved against `month` (default: this
+    month) so the page can render a paid/unpaid checklist in one call."""
+    month = month or _current_month()
+    bills = list(
+        db.execute(
+            select(FinanceRecurringBill)
+            .where(FinanceRecurringBill.is_active.is_(True))
+            .order_by(FinanceRecurringBill.name)
+        )
+        .scalars()
+        .all()
+    )
+    if not bills:
+        return []
+    payments = {
+        p.bill_id: p
+        for p in db.execute(
+            select(FinanceRecurringBillPayment).where(
+                FinanceRecurringBillPayment.bill_id.in_([b.id for b in bills]),
+                FinanceRecurringBillPayment.month == month,
+            )
+        )
+        .scalars()
+        .all()
+    }
+    return [_bill_out(bill, payments.get(bill.id)) for bill in bills]
+
+
+@router.post("/recurring-bills/defaults", response_model=list[FinanceRecurringBillOut])
+def add_default_recurring_bills(db: DbSession) -> list[dict[str, Any]]:
+    """Seeds the common household bills (rent, utilities, subscriptions…)
+    that aren't already present, so the user checks them off and fills in
+    the real amount instead of typing every bill from scratch."""
+    created = recurring_service.seed_default_bills(db)
+    return [_bill_out(bill, None) for bill in created]
+
+
+@router.post("/recurring-bills", response_model=FinanceRecurringBillOut, status_code=status.HTTP_201_CREATED)
+def create_recurring_bill(payload: FinanceRecurringBillCreate, db: DbSession) -> dict[str, Any]:
+    bill = FinanceRecurringBill(
+        name=payload.name, category=payload.category, default_amount=payload.default_amount
+    )
+    db.add(bill)
+    db.commit()
+    db.refresh(bill)
+    return _bill_out(bill, None)
+
+
+@router.patch("/recurring-bills/{bill_id}", response_model=FinanceRecurringBillOut)
+def update_recurring_bill(bill_id: int, payload: FinanceRecurringBillUpdate, db: DbSession) -> dict[str, Any]:
+    bill = db.get(FinanceRecurringBill, bill_id)
+    if bill is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Bill not found")
+    for key, value in payload.model_dump(exclude_unset=True).items():
+        setattr(bill, key, value)
+    db.commit()
+    db.refresh(bill)
+    payment = db.execute(
+        select(FinanceRecurringBillPayment).where(
+            FinanceRecurringBillPayment.bill_id == bill.id,
+            FinanceRecurringBillPayment.month == _current_month(),
+        )
+    ).scalar_one_or_none()
+    return _bill_out(bill, payment)
+
+
+@router.delete("/recurring-bills/{bill_id}", response_model=MessageResponse)
+def delete_recurring_bill(bill_id: int, db: DbSession) -> MessageResponse:
+    """Removes the template only — past months' logged payments (and the
+    transactions they created) are left alone, since deleting a bill you no
+    longer pay shouldn't erase what you already spent on it."""
+    bill = db.get(FinanceRecurringBill, bill_id)
+    if bill is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Bill not found")
+    name = bill.name
+    db.delete(bill)
+    db.commit()
+    return MessageResponse(message=f"Deleted recurring bill '{name}'")
+
+
+@router.post("/recurring-bills/{bill_id}/pay", response_model=FinanceRecurringBillOut)
+def pay_recurring_bill(bill_id: int, payload: FinanceBillPaymentIn, db: DbSession) -> dict[str, Any]:
+    bill = db.get(FinanceRecurringBill, bill_id)
+    if bill is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Bill not found")
+    paid_at = datetime.combine(payload.paid_at, datetime.min.time(), tzinfo=UTC) if payload.paid_at else datetime.now(UTC)
+    payment = recurring_service.record_bill_payment(db, bill, payload.month, payload.amount, paid_at)
+    return _bill_out(bill, payment)
+
+
+@router.delete("/recurring-bills/{bill_id}/pay/{month}", response_model=MessageResponse)
+def unpay_recurring_bill(bill_id: int, month: str, db: DbSession) -> MessageResponse:
+    payment = db.execute(
+        select(FinanceRecurringBillPayment).where(
+            FinanceRecurringBillPayment.bill_id == bill_id, FinanceRecurringBillPayment.month == month
+        )
+    ).scalar_one_or_none()
+    if payment is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No payment recorded for that month")
+    recurring_service.unpay_bill(db, payment)
+    return MessageResponse(message=f"Marked {month} unpaid")
+
+
+# ------------------------------------------------------------- daily spend --
+
+
+@router.get("/daily-categories", response_model=list[FinanceDailyCategoryOut])
+def list_daily_categories(db: DbSession) -> list[FinanceDailyCategory]:
+    stmt = (
+        select(FinanceDailyCategory)
+        .where(FinanceDailyCategory.is_active.is_(True))
+        .order_by(FinanceDailyCategory.name)
+    )
+    return list(db.execute(stmt).scalars().all())
+
+
+@router.post("/daily-categories", response_model=FinanceDailyCategoryOut, status_code=status.HTTP_201_CREATED)
+def create_daily_category(payload: FinanceDailyCategoryIn, db: DbSession) -> FinanceDailyCategory:
+    existing = db.execute(
+        select(FinanceDailyCategory).where(FinanceDailyCategory.name == payload.name)
+    ).scalar_one_or_none()
+    if existing:
+        if not existing.is_active:
+            existing.is_active = True
+            db.commit()
+            db.refresh(existing)
+        return existing
+    category = FinanceDailyCategory(name=payload.name)
+    db.add(category)
+    db.commit()
+    db.refresh(category)
+    return category
+
+
+@router.delete("/daily-categories/{category_id}", response_model=MessageResponse)
+def delete_daily_category(category_id: int, db: DbSession) -> MessageResponse:
+    category = db.get(FinanceDailyCategory, category_id)
+    if category is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Category not found")
+    name = category.name
+    category.is_active = False
+    db.commit()
+    return MessageResponse(message=f"Removed daily category '{name}'")
+
+
+@router.post("/daily-expenses", response_model=FinanceTransactionOut, status_code=status.HTTP_201_CREATED)
+def create_daily_expense(payload: FinanceDailyExpenseIn, db: DbSession) -> FinanceTransaction:
+    spent_at = (
+        datetime.combine(payload.spent_at, datetime.min.time(), tzinfo=UTC)
+        if payload.spent_at
+        else datetime.now(UTC)
+    )
+    return recurring_service.record_daily_expense(
+        db, category=payload.category, amount=payload.amount, spent_at=spent_at, note=payload.note
+    )

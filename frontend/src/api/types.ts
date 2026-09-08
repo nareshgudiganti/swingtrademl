@@ -33,6 +33,16 @@ export interface SystemStatus {
   open_positions: number
   latest_candle_date: string | null
   last_scan_at: string | null
+  last_scan_result: {
+    ts: string
+    strategies_run: number
+    instruments_evaluated: number
+    signals_generated: number
+    buys: number
+    exits: number
+    executed: number
+    errors: number
+  } | null
   status_level: 'ok' | 'warning'
   status_message: string
 }
@@ -121,6 +131,31 @@ export interface LatestSignal {
 // Shape returned by GET /strategies/{id}/signals — every signal from a scan
 // (BUY/HOLD/EXIT alike), symbol-resolved. Distinct from LatestSignal, which
 // is the cross-strategy "recent actionable signals" feed and excludes HOLD.
+// One row per symbol, deduped to its single most recent signal, kept only
+// when that signal is still BUY — see GET /signals/buy-list. If it's on this
+// list, it's a fresh, currently-valid entry candidate, full stop.
+export interface BuyListRow {
+  symbol: string
+  name: string | null
+  strategy_name: string
+  price: number
+  confidence: number | null
+  stop_loss: number | null
+  take_profit: number | null
+  reason: string | null
+  generated_at: string
+}
+
+/** Stored market candle used for short-term price-performance summaries. */
+export interface Candle {
+  ts: string
+  open: number
+  high: number
+  low: number
+  close: number
+  volume: number | null
+}
+
 export interface StrategySignal {
   id: number
   strategy_id: number
@@ -169,7 +204,18 @@ export interface Trade {
   net_pnl: number
   return_pct: number
   exit_reason: string | null
+  exit_reason_label: string | null
   is_win: boolean
+  stop_loss: number | null
+  take_profit: number | null
+  entry_confidence: number | null
+  last_confidence: number | null
+  // How the stock moved after we sold it — null until enough trading days
+  // have passed since exit_at for that checkpoint to exist yet.
+  price_5d_after_exit: number | null
+  return_5d_after_exit: number | null
+  price_15d_after_exit: number | null
+  return_15d_after_exit: number | null
 }
 
 export interface EquityPoint {
@@ -402,6 +448,26 @@ export interface FinanceLoan {
   estimated_interest: number
   interest_saved: number
   total_payable: number
+}
+
+// A monthly bill template, resolved against one month (default: the current
+// one) — paid_this_month/amount_this_month/paid_at describe that month only,
+// not the bill's whole history.
+export interface FinanceRecurringBill {
+  id: number
+  name: string
+  category: string | null
+  default_amount: number
+  is_active: boolean
+  paid_this_month: boolean
+  amount_this_month: number | null
+  paid_at: string | null
+}
+
+export interface FinanceDailyCategory {
+  id: number
+  name: string
+  is_active: boolean
 }
 
 export interface FinanceNetWorth {

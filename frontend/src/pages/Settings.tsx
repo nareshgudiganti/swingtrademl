@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 
 import { api, clearToken } from '../api/client'
 import { ErrorBox, Loading } from '../components/Loading'
@@ -127,6 +128,35 @@ export default function Settings() {
             <ClockIcon />
           </div>
         </div>
+        <div className="card card-with-icon">
+          <div>
+            <div className="stat-label">Last scan</div>
+            <div className="stat-value">
+              {s?.last_scan_result ? (
+                <span className={`badge ${s.last_scan_result.errors > 0 ? 'badge-warn' : 'badge-on'}`}>
+                  {s.last_scan_result.buys} buy{s.last_scan_result.buys === 1 ? '' : 's'} found
+                </span>
+              ) : (
+                <span className="badge badge-off">no data yet</span>
+              )}
+            </div>
+            <div className="stat-sub">
+              {s?.last_scan_result ? (
+                <>
+                  {new Date(s.last_scan_result.ts).toLocaleString('en-IN')} —{' '}
+                  {s.last_scan_result.instruments_evaluated} symbols checked across{' '}
+                  {s.last_scan_result.strategies_run} strateg{s.last_scan_result.strategies_run === 1 ? 'y' : 'ies'}
+                  {s.last_scan_result.errors > 0 ? `, ${s.last_scan_result.errors} error(s)` : ''}.
+                </>
+              ) : (
+                'Fills in after the next 15:45 IST scan.'
+              )}
+            </div>
+          </div>
+          <div className={`icon-chip ${s?.last_scan_result?.errors ? 'chip-warn' : 'chip-accent'}`}>
+            <ClockIcon />
+          </div>
+        </div>
       </div>
 
       {s?.scheduled_jobs.length ? (
@@ -240,6 +270,24 @@ export default function Settings() {
         <div className={`icon-chip ${telegram.data?.ok ? 'chip-accent' : 'chip-warn'}`}>
           <SendIcon />
         </div>
+      </div>
+
+      <h2>Advanced</h2>
+      <div className="grid" style={{ marginBottom: '1.5rem' }}>
+        <Link to="/strategies" className="card card-with-icon" style={{ textDecoration: 'none', color: 'inherit' }}>
+          <div>
+            <div className="stat-label">Strategies</div>
+            <div className="stat-sub">
+              Configure how signals get generated and whether they auto-execute or are advisory only.
+            </div>
+          </div>
+        </Link>
+        <Link to="/models" className="card card-with-icon" style={{ textDecoration: 'none', color: 'inherit' }}>
+          <div>
+            <div className="stat-label">ML Models</div>
+            <div className="stat-sub">Train, evaluate, and activate the models behind every signal.</div>
+          </div>
+        </Link>
       </div>
 
       <h2>Account</h2>

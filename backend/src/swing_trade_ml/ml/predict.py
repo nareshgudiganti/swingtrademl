@@ -15,6 +15,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from swing_trade_ml.core.logging import get_logger
@@ -154,33 +155,36 @@ def predict_watchlist(
 
 def _upsert_prediction(db: Session, model: MLModel, result: PredictionResult) -> None:
     """Idempotent per (model, instrument, bar) so re-running a scan the same day
-    updates rather than duplicating."""
-    existing = db.execute(
-        select(Prediction).where(
-            Prediction.model_id == model.id,
-            Prediction.instrument_id == result.instrument_id,
-            Prediction.ts == result.ts,
-        )
-    ).scalar_one_or_none()
+    updates rather than duplicating.
 
-    if existing:
-        existing.probability = result.probability
-        existing.predicted_class = result.predicted_class
-        existing.price_at_prediction = result.price
-        existing.features = result.features
-        return
-
-    db.add(
-        Prediction(
-            model_id=model.id,
-            instrument_id=result.instrument_id,
-            ts=result.ts,
-            predicted_class=result.predicted_class,
-            probability=result.probability,
-            price_at_prediction=result.price,
-            features=result.features,
-        )
+    A real database-level upsert, not a Python check-then-insert — the
+    latter raced two concurrent callers (e.g. the scheduled scan and a
+    manual "Refresh now" click landing close together): both would see "no
+    existing row" before either committed, both would try to INSERT, and
+    whichever committed second crashed the whole batch on the unique
+    constraint instead of just updating. ON CONFLICT is atomic at the
+    database level, so this can't happen regardless of what else is
+    writing predictions at the same time.
+    """
+    stmt = pg_insert(Prediction).values(
+        model_id=model.id,
+        instrument_id=result.instrument_id,
+        ts=result.ts,
+        predicted_class=result.predicted_class,
+        probability=result.probability,
+        price_at_prediction=result.price,
+        features=result.features,
     )
+    stmt = stmt.on_conflict_do_update(
+        index_elements=[Prediction.model_id, Prediction.instrument_id, Prediction.ts],
+        set_={
+            "predicted_class": stmt.excluded.predicted_class,
+            "probability": stmt.excluded.probability,
+            "price_at_prediction": stmt.excluded.price_at_prediction,
+            "features": stmt.excluded.features,
+        },
+    )
+    db.execute(stmt)
 
 
 def evaluate_pending_predictions(db: Session, interval: str = "day") -> int:

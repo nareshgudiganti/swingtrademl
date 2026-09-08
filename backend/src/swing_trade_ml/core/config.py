@@ -99,6 +99,16 @@ class Settings(BaseSettings):
     KITE_API_SECRET: str = ""
     KITE_REDIRECT_URL: str = "http://localhost:8000/api/v1/auth/kite/callback"
 
+    # Optional: credentials for the unattended daily login (see
+    # brokers/kite.py's auto_login). Kite access tokens expire ~06:00 IST
+    # every day regardless of trading mode, so without this someone has to
+    # remember to click "Log in to Kite" every single trading morning. Blank
+    # KITE_TOTP_SECRET disables the feature — the scheduled job just skips
+    # itself and the manual login flow keeps working as the fallback.
+    KITE_USER_ID: str = ""
+    KITE_PASSWORD: str = ""
+    KITE_TOTP_SECRET: str = ""
+
     # -------------------------------------------------------- market data --
     DEFAULT_WATCHLIST: str = "RELIANCE,TCS,INFY,HDFCBANK,ICICIBANK"
     HISTORICAL_BACKFILL_DAYS: int = 1825

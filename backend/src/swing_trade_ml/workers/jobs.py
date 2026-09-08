@@ -33,8 +33,20 @@ IST = ZoneInfo("Asia/Kolkata")
 def job_heartbeat() -> None:
     """Proves the worker's scheduler is actually ticking, independent of
     market hours or trading days — see workers/heartbeat.py for why /status
-    needs this instead of just checking the local scheduler.running flag."""
+    needs this instead of just checking the local scheduler.running flag.
+
+    Also snapshots the real job list for the same reason — the API process's
+    own scheduler.get_jobs() is always empty (see scheduler.list_jobs), so it
+    reads this snapshot back instead.
+    """
     heartbeat.touch()
+
+    # Not `from swing_trade_ml.workers import scheduler` — workers/__init__.py
+    # already re-exports the BackgroundScheduler *instance* under that same
+    # name, which shadows the scheduler submodule and has no .list_jobs().
+    from swing_trade_ml.workers import list_jobs
+
+    heartbeat.write_jobs(list_jobs())
 
 
 def _report_error(context: str, exc: Exception) -> None:
@@ -73,16 +85,41 @@ def _alert_missing_session(db) -> None:
     )
 
 
-def job_refresh_quotes() -> None:
-    """Poll live prices during market hours and mark positions to market.
+def job_kite_auto_login() -> None:
+    """Unattended daily login, timed for ~10 minutes after Zerodha expires
+    the previous day's token (~06:00 IST) and well before market open
+    (09:15) — see KiteBroker.auto_login. Skips itself quietly if the
+    credentials aren't configured, so this is opt-in by setting
+    KITE_USER_ID/KITE_PASSWORD/KITE_TOTP_SECRET rather than required.
 
-    Also re-checks the Kite session on every tick (cheap — see
-    KiteBroker.load_session) so a login completed on the api container
-    reaches this worker process within a minute, instead of needing a
-    manual restart to notice it — the daily pain point this used to be.
+    A failure here still leaves the manual "Log in to Kite" button as a
+    fallback for the day — that's why this reports through the normal
+    _report_error path instead of anything more alarming.
     """
-    if not ingestion.is_market_open():
+    from swing_trade_ml.brokers.kite import kite_broker
+
+    if not (settings.KITE_USER_ID and settings.KITE_PASSWORD and settings.KITE_TOTP_SECRET):
         return
+
+    try:
+        with session_scope() as db:
+            kite_broker.auto_login(db)
+    except Exception as exc:  # noqa: BLE001
+        _report_error("kite_auto_login", exc)
+
+
+def job_check_kite_login() -> None:
+    """Always-on, any hour — confirms a completed Kite login over Telegram
+    immediately, rather than only noticing it during market hours.
+
+    This used to live inside job_refresh_quotes, which only runs 09:15-15:30
+    — so logging in early (the actually-recommended time, to catch the whole
+    session's price/stop-loss monitoring) never got a confirmation, only a
+    login done mid-session did. That gap was the direct cause of a user
+    completing a real login and having no way to tell it had worked short of
+    asking. Session detection is cheap (see KiteBroker.load_session), so
+    checking every minute all day costs nothing.
+    """
     try:
         from swing_trade_ml.brokers.kite import kite_broker
 
@@ -92,11 +129,21 @@ def job_refresh_quotes() -> None:
             if session_ok and kite_broker.loaded_session_id != prev_session_id:
                 global _no_session_alert_date
                 _no_session_alert_date = None
-                notifier.send_sync(
-                    "🔑 Kite session picked up automatically — quotes and trading are live.",
-                    "system",
-                )
-            elif not session_ok:
+                notifier.send_sync("🔑 Kite login successful — session is active.", "system")
+    except Exception as exc:  # noqa: BLE001
+        _report_error("check_kite_login", exc)
+
+
+def job_refresh_quotes() -> None:
+    """Poll live prices during market hours and mark positions to market."""
+    if not ingestion.is_market_open():
+        return
+    try:
+        from swing_trade_ml.brokers.kite import kite_broker
+
+        with session_scope() as db:
+            session_ok = kite_broker.load_session(db)
+            if not session_ok:
                 _alert_missing_session(db)
 
             count = ingestion.refresh_quotes(db)
@@ -215,6 +262,18 @@ def job_signal_scan() -> None:
                 signals=result.signals_generated,
                 executed=result.executed,
             )
+            heartbeat.write_last_scan(
+                {
+                    "ts": datetime.now(IST).isoformat(),
+                    "strategies_run": result.strategies_run,
+                    "instruments_evaluated": result.instruments_evaluated,
+                    "signals_generated": result.signals_generated,
+                    "buys": result.buys,
+                    "exits": result.exits,
+                    "executed": result.executed,
+                    "errors": len(result.errors),
+                }
+            )
             if result.errors:
                 notifier.send_sync(
                     f"⚠️ Scan finished with {len(result.errors)} error(s):\n"
@@ -258,10 +317,11 @@ def job_daily_summary() -> None:
             portfolio.mark_to_market(db)
             portfolio.take_snapshot(db)
             stats = portfolio.performance_stats(db)
+            post_exit_watch = portfolio.recent_post_exit_watch(db, stats["mode"])
 
         import asyncio
 
-        asyncio.run(notifier.notify_daily_summary(stats, stats["mode"]))
+        asyncio.run(notifier.notify_daily_summary(stats, stats["mode"], post_exit_watch))
     except Exception as exc:  # noqa: BLE001
         _report_error("daily_summary", exc)
 

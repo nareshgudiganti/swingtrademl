@@ -47,6 +47,24 @@ def start_scheduler() -> None:
         id="heartbeat",
         replace_existing=True,
     )
+    # Also always-on: confirming a completed Kite login shouldn't depend on
+    # logging in during market hours — see job_check_kite_login's docstring.
+    scheduler.add_job(
+        jobs.job_check_kite_login,
+        IntervalTrigger(seconds=60),
+        id="check_kite_login",
+        replace_existing=True,
+    )
+
+    # Unattended login, timed just after Zerodha expires the previous day's
+    # token (~06:00 IST) and well before market open — see
+    # job_kite_auto_login's docstring. No-ops if credentials aren't set.
+    scheduler.add_job(
+        jobs.job_kite_auto_login,
+        CronTrigger(day_of_week=WEEKDAYS, hour=6, minute=10, timezone=IST),
+        id="kite_auto_login",
+        replace_existing=True,
+    )
 
     # --- intraday, market hours only (the jobs self-check the session) -------
     scheduler.add_job(
@@ -131,7 +149,7 @@ def stop_scheduler() -> None:
 
 
 def list_jobs() -> list[dict]:
-    return [
+    local = [
         {
             "id": job.id,
             "name": job.name,
@@ -140,3 +158,13 @@ def list_jobs() -> list[dict]:
         }
         for job in scheduler.get_jobs()
     ]
+    if local:
+        return local
+    # This process's own scheduler has nothing registered — true for the API
+    # container, which deliberately never runs one (see heartbeat.py's
+    # docstring). Fall back to the worker's last snapshot instead of
+    # reporting zero jobs, which the Settings page would otherwise render as
+    # "0 jobs registered" even while everything is running fine.
+    from swing_trade_ml.workers import heartbeat
+
+    return heartbeat.read_jobs()

@@ -6,25 +6,36 @@ import AuthScreen from './components/AuthScreen'
 import Dashboard from './pages/Dashboard'
 import Finance from './pages/Finance'
 import Positions from './pages/Positions'
-import Recommendations from './pages/Recommendations'
-import Signals from './pages/Signals'
-import Suggestions from './pages/Suggestions'
+import Reports from './pages/Reports'
+import Search from './pages/Search'
 import Strategies from './pages/Strategies'
 import Models from './pages/Models'
-import Trades from './pages/Trades'
 import Settings from './pages/Settings'
+import { BarChartIcon, BriefcaseIcon, HomeIcon, SearchIcon } from './components/icons'
 
+// Strategies and ML Models are still routed (linked from Settings' Advanced
+// section) but deliberately left out of the top-level nav — they're
+// admin/config screens, not something a day-to-day user needs to see
+// alongside Dashboard/Portfolio/Reports.
 const NAV = [
   { to: '/dashboard', label: 'Dashboard' },
-  { to: '/suggestions', label: 'Suggestions' },
-  { to: '/recommendations', label: 'Recommendations' },
-  { to: '/positions', label: 'Positions' },
-  { to: '/signals', label: 'Signals' },
-  { to: '/trades', label: 'Trades' },
-  { to: '/strategies', label: 'Strategies' },
-  { to: '/models', label: 'ML Models' },
+  { to: '/portfolio', label: 'Portfolio' },
+  { to: '/reports', label: 'Reports' },
+  { to: '/search', label: 'Search' },
   { to: '/finance', label: 'Finance' },
   { to: '/settings', label: 'Settings' },
+]
+
+// The 4 destinations worth a one-tap reach on a phone — a real bottom tab
+// bar, shown only under the same 800px breakpoint the sidebar already
+// collapses at. This sits alongside that collapsed horizontal strip rather
+// than replacing it: the strip stays the full 6-item list (Finance/Settings
+// included), the tab bar is just the handful used every day.
+const TAB_BAR = [
+  { to: '/dashboard', label: 'Dashboard', Icon: HomeIcon },
+  { to: '/portfolio', label: 'Portfolio', Icon: BriefcaseIcon },
+  { to: '/reports', label: 'Reports', Icon: BarChartIcon },
+  { to: '/search', label: 'Search', Icon: SearchIcon },
 ]
 
 // Runs once at module load, before the first render decides whether to show
@@ -166,18 +177,30 @@ export default function App() {
           <Routes>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/suggestions" element={<Suggestions />} />
-            <Route path="/recommendations" element={<Recommendations />} />
-            <Route path="/positions" element={<Positions />} />
-            <Route path="/signals" element={<Signals />} />
-            <Route path="/trades" element={<Trades />} />
+            <Route path="/portfolio" element={<Positions />} />
+            <Route path="/reports" element={<Reports />} />
+            <Route path="/search" element={<Search />} />
             <Route path="/strategies" element={<Strategies />} />
             <Route path="/models" element={<Models />} />
             <Route path="/finance" element={<Finance />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
         </div>
       </main>
+
+      <nav className="tab-bar">
+        {TAB_BAR.map((item) => (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            className={({ isActive }) => `tab-bar-item${isActive ? ' active' : ''}`}
+          >
+            <item.Icon />
+            <span>{item.label}</span>
+          </NavLink>
+        ))}
+      </nav>
     </div>
   )
 }

@@ -1,6 +1,7 @@
 // Thin fetch wrapper around the FastAPI backend.
 
 import type {
+  Candle,
   CurrentUser,
   DetailedPosition,
   EquityPoint,
@@ -18,6 +19,9 @@ import type {
   FinanceRecategorizeResult,
   FinanceRuleUpsertResult,
   FinanceTransaction,
+  BuyListRow,
+  FinanceDailyCategory,
+  FinanceRecurringBill,
   Instrument,
   KiteLoginResponse,
   LatestSignal,
@@ -201,6 +205,7 @@ export const api = {
   latestSignals: (limit = 20) => get<LatestSignal[]>(`/signals/latest?limit=${limit}`),
   signalHistory: (symbol: string) =>
     get<LatestSignal[]>(`/signals/latest?symbol=${encodeURIComponent(symbol)}`),
+  buyList: () => get<BuyListRow[]>('/signals/buy-list'),
 
   // --------------------------------------------------------- strategies --
   strategies: () => get<Strategy[]>('/strategies'),
@@ -245,6 +250,8 @@ export const api = {
     get<Instrument[]>(`/instruments?search=${encodeURIComponent(search)}&limit=${limit}`),
 
   // -------------------------------------------------------- market data --
+  candles: (symbol: string, limit = 11) =>
+    get<Candle[]>(`/market-data/candles/${encodeURIComponent(symbol)}?interval=day&limit=${limit}`),
   backfill: (body: Record<string, unknown>) => post<MessageResponse>('/market-data/backfill', body),
   coverage: () =>
     get<{ symbol: string; candles: number; from: string | null; to: string | null }[]>(
@@ -298,6 +305,29 @@ export const api = {
   updateFinanceLoan: (id: number, body: Record<string, unknown>) =>
     patch<FinanceLoan>(`/finance/loans/${id}`, body),
   deleteFinanceLoan: (id: number) => del<MessageResponse>(`/finance/loans/${id}`),
+
+  // ------------------------------------------------------- recurring bills --
+  recurringBills: (month?: string) =>
+    get<FinanceRecurringBill[]>(`/finance/recurring-bills${month ? `?month=${month}` : ''}`),
+  createRecurringBill: (body: Record<string, unknown>) =>
+    post<FinanceRecurringBill>('/finance/recurring-bills', body),
+  addDefaultRecurringBills: () =>
+    post<FinanceRecurringBill[]>('/finance/recurring-bills/defaults', {}),
+  updateRecurringBill: (id: number, body: Record<string, unknown>) =>
+    patch<FinanceRecurringBill>(`/finance/recurring-bills/${id}`, body),
+  deleteRecurringBill: (id: number) => del<MessageResponse>(`/finance/recurring-bills/${id}`),
+  payRecurringBill: (id: number, body: { month: string; amount: number; paid_at?: string }) =>
+    post<FinanceRecurringBill>(`/finance/recurring-bills/${id}/pay`, body),
+  unpayRecurringBill: (id: number, month: string) =>
+    del<MessageResponse>(`/finance/recurring-bills/${id}/pay/${month}`),
+
+  // ----------------------------------------------------------- daily spend --
+  dailyCategories: () => get<FinanceDailyCategory[]>('/finance/daily-categories'),
+  createDailyCategory: (name: string) =>
+    post<FinanceDailyCategory>('/finance/daily-categories', { name }),
+  deleteDailyCategory: (id: number) => del<MessageResponse>(`/finance/daily-categories/${id}`),
+  createDailyExpense: (body: { category: string; amount: number; spent_at?: string; note?: string }) =>
+    post<FinanceTransaction>('/finance/daily-expenses', body),
 
   // -------------------------------------------------------- finance rules --
   financeRules: () => get<FinanceCustomRule[]>('/finance/rules'),

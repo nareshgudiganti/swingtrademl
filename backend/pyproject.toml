@@ -29,6 +29,8 @@ dependencies = [
 
     # --- Broker ---
     "kiteconnect>=5.0.1",
+    "pyotp>=2.9.0",
+    "requests>=2.31.0",
 
     # --- Scheduling & async HTTP ---
     "apscheduler>=3.11.0",

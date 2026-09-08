@@ -98,6 +98,75 @@ class KiteBroker(Broker):
         log.info("kite.login.success", user_id=data.get("user_id"))
         return session
 
+    def auto_login(self, db: Session) -> BrokerSession:
+        """Unattended login using Zerodha credentials + TOTP, for the daily
+        06:10 IST scheduled job — the manual `/kite/login` flow this mirrors
+        exists because access tokens expire every day, and this exists so a
+        human doesn't have to remember to repeat it every trading morning.
+
+        Zerodha's Connect (OAuth-style) flow has no official
+        password-in/token-out API — it's designed to run in a browser. This
+        drives the same web endpoints their login page itself calls
+        (undocumented, but this is the standard pattern used for Kite
+        automation): POST credentials, POST the TOTP code, then walk the
+        Connect authorize redirect by hand to pull `request_token` out of the
+        Location header — never letting `requests` actually follow the final
+        hop, since that URL is our own public callback and would attempt a
+        second, redundant `generate_session` call against an already-used
+        request_token (Zerodha request_tokens are single-use).
+        """
+        if not (settings.KITE_USER_ID and settings.KITE_PASSWORD and settings.KITE_TOTP_SECRET):
+            raise RuntimeError(
+                "Kite auto-login is not configured — set KITE_USER_ID, KITE_PASSWORD, "
+                "and KITE_TOTP_SECRET to enable it."
+            )
+
+        import pyotp
+        import requests
+
+        http = requests.Session()
+
+        login_resp = http.post(
+            "https://kite.zerodha.com/api/login",
+            data={"user_id": settings.KITE_USER_ID, "password": settings.KITE_PASSWORD},
+            timeout=15,
+        )
+        login_resp.raise_for_status()
+        request_id = login_resp.json()["data"]["request_id"]
+
+        totp_code = pyotp.TOTP(settings.KITE_TOTP_SECRET).now()
+        twofa_resp = http.post(
+            "https://kite.zerodha.com/api/twofa",
+            data={
+                "user_id": settings.KITE_USER_ID,
+                "request_id": request_id,
+                "twofa_value": totp_code,
+                "twofa_type": "totp",
+            },
+            timeout=15,
+        )
+        twofa_resp.raise_for_status()
+
+        request_token = self._walk_authorize_redirect(http)
+        return self.complete_login(request_token, db)
+
+    def _walk_authorize_redirect(self, http, max_hops: int = 5) -> str:
+        from urllib.parse import parse_qs, urlparse
+
+        response = http.get(self.login_url(), allow_redirects=False, timeout=15)
+        for _ in range(max_hops):
+            location = response.headers.get("Location")
+            if not location:
+                break
+            token = parse_qs(urlparse(location).query).get("request_token")
+            if token:
+                return token[0]
+            response = http.get(location, allow_redirects=False, timeout=15)
+        raise KiteAuthError(
+            "Kite auto-login: no request_token found in the authorize redirect chain "
+            "— Zerodha may be asking for a fresh app authorization or CAPTCHA."
+        )
+
     def load_session(self, db: Session) -> bool:
         """Restore the newest active token — called at startup, and cheaply
         re-checked on every refresh_quotes tick (job_refresh_quotes) so a

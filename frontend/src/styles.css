@@ -106,7 +106,13 @@ a {
    under prefers-reduced-motion rather than just shortened, per that media
    query's actual contract. */
 .page-transition {
-  animation: page-in 0.22s ease both;
+  /* No fill-mode (defaults to `none`) on purpose: `both`/`forwards` would
+     keep the keyframe's `transform: translateY(0)` applied to this wrapper
+     forever after the 0.22s animation finishes. Any non-`none` transform on
+     an ancestor turns `position: fixed` descendants (the Modal backdrop)
+     into being positioned relative to THAT ancestor instead of the actual
+     viewport — which is what was sending every popup to the wrong place. */
+  animation: page-in 0.22s ease;
 }
 
 @keyframes page-in {
@@ -278,6 +284,30 @@ th.sortable:hover {
   color: var(--accent);
 }
 
+/* A date/section divider row inside an otherwise plain table — e.g. the
+   Daily expenses log grouped by day, so a repeated Date column isn't needed
+   on every single row. Tinted with the accent color (not just a grey shade)
+   so each day's boundary is unmistakable while scrolling a long log. */
+.table-group-row td {
+  background: rgba(79, 140, 255, 0.1);
+  border-bottom: 1px solid rgba(79, 140, 255, 0.3);
+  border-top: 2px solid var(--accent);
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+}
+
+.table-group-row:first-child td {
+  border-top: none;
+}
+
+.table-group-row:hover {
+  background: rgba(79, 140, 255, 0.1);
+}
+
+.table-group-row .group-label {
+  color: var(--accent);
+}
+
 .num {
   text-align: right;
 }
@@ -319,6 +349,11 @@ th.sortable:hover {
   color: var(--text-dim);
 }
 
+.badge-watch {
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--warn);
+}
+
 .badge-on {
   background: rgba(34, 197, 94, 0.15);
   color: var(--pos);
@@ -330,6 +365,11 @@ th.sortable:hover {
 }
 
 .badge-recommend {
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--warn);
+}
+
+.badge-warn {
   background: rgba(245, 158, 11, 0.15);
   color: var(--warn);
 }
@@ -381,6 +421,57 @@ button.danger {
   background: transparent;
   border-color: var(--neg);
   color: var(--neg);
+}
+
+button.symbol-button {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  font-weight: 700;
+}
+
+button.symbol-button:hover:not(:disabled) {
+  background: transparent;
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.performance-controls {
+  display: flex;
+  align-items: end;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.performance-controls label {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.performance-controls select {
+  min-width: 150px;
+}
+
+.performance-controls .performance-range {
+  flex: 1;
+}
+
+.performance-controls input[type='range'] {
+  width: 100%;
+}
+
+.performance-chart {
+  min-height: 260px;
+  margin-top: 0.5rem;
+}
+
+@media (max-width: 560px) {
+  .performance-controls {
+    align-items: stretch;
+    flex-direction: column;
+  }
 }
 
 input,
@@ -574,6 +665,23 @@ select:focus {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Badge + its one-line reason, stacked — the reason truncates with an
+   ellipsis (full text on hover via title) instead of overflowing into
+   neighbouring table cells, which is what a raw <div> with only a max-width
+   did before: nowrap from the table's own `td` rule let it spill sideways
+   rather than wrap or clip. */
+.action-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.3rem;
+}
+
+.action-cell .reason {
+  font-size: 0.78rem;
+  max-width: 22ch;
 }
 
 .mono {
@@ -910,6 +1018,11 @@ tr.sig-detail-row td {
   gap: 1rem;
   margin-bottom: 1.1rem;
   padding-bottom: 1rem;
+  /* Reserves room for .modal-close (28px, inset 0.9rem from the card edge)
+     sitting on top of this row — without it, a longer badge label ("STRONG
+     BUY", "Bullish") gets pushed under the close button instead of stopping
+     short of it. */
+  padding-right: 2.25rem;
   border-bottom: 1px solid var(--border);
 }
 
@@ -995,5 +1108,256 @@ tr.sig-detail-row td {
   }
   .content {
     padding: 1rem;
+  }
+}
+
+/* --------------------------------------------- today: plain-language cards -- */
+/* The "Today" page's plain-language redesign — solid action pills instead of
+   tiny tinted badges, and a strength bar instead of a raw confidence
+   percentage. Kept separate from the generic .card/.badge system above so
+   this page can read very differently (bigger type, fewer numbers) without
+   affecting the dense data tables the rest of the app still uses. No account
+   money summary lives here — that's the Portfolio page's job; Today only
+   answers "what do I do". */
+
+/* ------------------------------------------------ today: attention banner -- */
+
+.attention-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  border-radius: 16px;
+  padding: 1.1rem 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.attention-banner.alert {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+}
+
+.attention-banner.clear {
+  background: rgba(34, 197, 94, 0.12);
+  border: 1px solid rgba(34, 197, 94, 0.35);
+}
+
+.attention-icon {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.attention-banner.alert .attention-icon {
+  background: rgba(239, 68, 68, 0.18);
+  color: var(--neg);
+}
+
+.attention-banner.clear .attention-icon {
+  background: rgba(34, 197, 94, 0.18);
+  color: var(--pos);
+}
+
+.attention-headline {
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.attention-sub {
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  margin-top: 0.15rem;
+}
+
+/* ----------------------------------------------------- today: action cards -- */
+
+.action-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.action-card:last-child {
+  margin-bottom: 0;
+}
+
+.action-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.action-card-left {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.action-card-symbol {
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.action-card-reason {
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  margin-top: 0.55rem;
+  line-height: 1.45;
+}
+
+.pill-action {
+  flex-shrink: 0;
+  font-size: 0.72rem;
+  font-weight: 750;
+  letter-spacing: 0.03em;
+  padding: 0.3rem 0.7rem;
+  border-radius: 8px;
+}
+
+.pill-action.buy {
+  background: var(--pos);
+  color: #06210f;
+}
+
+.pill-action.sell {
+  background: var(--neg);
+  color: #fff;
+}
+
+.pill-action.watch {
+  background: rgba(245, 158, 11, 0.18);
+  color: var(--warn);
+}
+
+.pill-action.neutral {
+  background: var(--surface-2);
+  color: var(--text-dim);
+}
+
+.strength-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 0.6rem;
+}
+
+.strength-label {
+  font-size: 0.78rem;
+  font-weight: 650;
+  color: var(--pos);
+}
+
+.strength-bar {
+  display: flex;
+  gap: 3px;
+}
+
+.strength-seg {
+  width: 15px;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--border);
+}
+
+.strength-seg.filled {
+  background: var(--pos);
+}
+
+/* ----------------------------------------------------- today: exit list -- */
+
+.exit-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.7rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.exit-row:last-child {
+  border-bottom: none;
+}
+
+.exit-row .exit-icon {
+  flex-shrink: 0;
+}
+
+.exit-row .exit-icon.pos {
+  color: var(--pos);
+}
+
+.exit-row .exit-icon.neg {
+  color: var(--neg);
+}
+
+.exit-text {
+  flex: 1;
+  font-size: 0.86rem;
+  min-width: 0;
+}
+
+.advanced-link-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.85rem 1rem;
+  background: var(--surface-2);
+  border-radius: 12px;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+/* --------------------------------------------------- mobile bottom tabs -- */
+/* A real bottom tab bar for the mobile/Capacitor build — better reach and a
+   more familiar pattern than the horizontal-scrolling strip the sidebar nav
+   collapses to. Sits alongside that strip rather than replacing it: the
+   strip stays as the full 6-item list (useful once in a while, e.g. Settings
+   or Finance), the tab bar surfaces the handful of destinations worth a
+   one-tap reach on every screen. */
+
+.tab-bar {
+  display: none;
+}
+
+@media (max-width: 800px) {
+  .tab-bar {
+    display: flex;
+    justify-content: space-around;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    padding: 0.5rem 0.4rem calc(0.5rem + env(safe-area-inset-bottom));
+    z-index: 10;
+  }
+
+  .tab-bar-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.2rem;
+    min-width: 44px;
+    padding: 0.25rem;
+    color: var(--text-dim);
+    font-size: 0.65rem;
+  }
+
+  .tab-bar-item.active {
+    color: var(--accent);
+    font-weight: 650;
+  }
+
+  /* Room for the fixed tab bar so the last section of a page isn't hidden
+     behind it. */
+  .content {
+    padding-bottom: calc(4.5rem + env(safe-area-inset-bottom));
   }
 }

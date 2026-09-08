@@ -36,6 +36,11 @@ export default defineConfig({
     // 0.0.0.0 so the dev server is reachable when it runs inside the container
     host: '0.0.0.0',
     port: 5173,
+    // Vite's dev server rejects requests for any Host header not listed here
+    // (DNS-rebinding protection) — the nginx reverse proxy forwards the
+    // original Host, so the public domain and droplet IP both need to be
+    // allowed alongside the usual local ones.
+    allowedHosts: ['localhost', '127.0.0.1', '147.182.176.105', 'swingtrademl.com', 'www.swingtrademl.com'],
     watch: {
       // Windows bind mounts do not deliver inotify events into Linux
       // containers; polling is the only thing that makes hot reload work there.

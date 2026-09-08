@@ -6,8 +6,11 @@ module must be re-exported here.
 
 from swing_trade_ml.db.models.finance import (
     FinanceCustomRule,
+    FinanceDailyCategory,
     FinanceIngestedFile,
     FinanceLoan,
+    FinanceRecurringBill,
+    FinanceRecurringBillPayment,
     FinanceTransaction,
 )
 from swing_trade_ml.db.models.market import Candle, Instrument, Quote
@@ -26,8 +29,11 @@ __all__ = [
     "BrokerSession",
     "Candle",
     "FinanceCustomRule",
+    "FinanceDailyCategory",
     "FinanceIngestedFile",
     "FinanceLoan",
+    "FinanceRecurringBill",
+    "FinanceRecurringBillPayment",
     "FinanceTransaction",
     "Instrument",
     "MLModel",

@@ -12,7 +12,18 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import BigInteger, Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from swing_trade_ml.core.enums import FinanceIngestStatus
@@ -113,6 +124,76 @@ class FinanceLoan(Base, TimestampMixin):
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"<FinanceLoan {self.name!r} principal={self.principal}>"
+
+
+class FinanceRecurringBill(Base, TimestampMixin):
+    """A monthly bill entered once — rent, subscriptions, anything with a
+    roughly fixed monthly cost. Distinct from FinanceLoan, which tracks
+    payoff/interest projections: this just remembers what to expect each
+    month. The actual amount for a given month is logged separately (see
+    FinanceRecurringBillPayment) so a variable bill like electricity can
+    differ from the template without editing it."""
+
+    __tablename__ = "finance_recurring_bills"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    name: Mapped[str] = mapped_column(String(128))
+    # Optional — a bill without a category still totals fine (falls back to
+    # "Uncategorised" the same way a statement-derived transaction would, see
+    # record_bill_payment) but isn't forced into a bucket that doesn't fit.
+    category: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    default_amount: Mapped[float] = mapped_column(Float)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"<FinanceRecurringBill {self.name!r} default={self.default_amount}>"
+
+
+class FinanceRecurringBillPayment(Base, TimestampMixin):
+    """One month's actual payment against a recurring bill. Marking a bill
+    paid writes (and un-marking removes) a matching FinanceTransaction — see
+    services/finance/recurring.py — so it counts toward the same monthly and
+    category totals as every statement-derived transaction, instead of
+    living in a parallel ledger nothing else on the Finance page can see."""
+
+    __tablename__ = "finance_recurring_bill_payments"
+    __table_args__ = (UniqueConstraint("bill_id", "month", name="uq_recurring_bill_month"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    bill_id: Mapped[int] = mapped_column(
+        ForeignKey("finance_recurring_bills.id", ondelete="CASCADE"), index=True
+    )
+    month: Mapped[str] = mapped_column(String(7), index=True)
+    amount: Mapped[float] = mapped_column(Float)
+    paid_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    # SET NULL rather than CASCADE: deleting the transaction (e.g. via the
+    # Transactions tab) shouldn't be blocked by, or silently also delete,
+    # the payment record — it just becomes an unlinked historical payment.
+    transaction_id: Mapped[int | None] = mapped_column(
+        ForeignKey("finance_transactions.id", ondelete="SET NULL")
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"<FinanceRecurringBillPayment bill={self.bill_id} month={self.month} amount={self.amount}>"
+
+
+class FinanceDailyCategory(Base, TimestampMixin):
+    """A day-to-day spending category — Food, Transport, and the like.
+    Logging an entry against one writes straight to FinanceTransaction
+    (source='manual_daily'); this table exists only so the quick-entry form
+    offers a dropdown of the categories you've chosen to track instead of
+    free text every time. Deleting a category never touches transactions
+    already logged under its name — category is a plain string there, not
+    a foreign key."""
+
+    __tablename__ = "finance_daily_categories"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    name: Mapped[str] = mapped_column(String(64), unique=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"<FinanceDailyCategory {self.name!r}>"
 
 
 class FinanceCustomRule(Base, TimestampMixin):

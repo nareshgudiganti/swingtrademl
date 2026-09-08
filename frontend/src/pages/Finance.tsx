@@ -1,11 +1,11 @@
-import { useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api } from '../api/client'
 import { Empty, ErrorBox, Loading } from '../components/Loading'
 import Modal from '../components/Modal'
 import Stat from '../components/Stat'
-import type { FinanceFilters, FinanceIngestedFile, FinanceLoan } from '../api/types'
+import type { FinanceFilters, FinanceIngestedFile, FinanceLoan, FinanceRecurringBill } from '../api/types'
 import { calculateEmi } from '../lib/loans'
 import { formatCurrency, formatDate } from '../lib/format'
 
@@ -15,6 +15,8 @@ const TABS = [
   { key: 'calculation', label: 'Calculation' },
   { key: 'analysis', label: 'Analysis' },
   { key: 'loans', label: 'Loans' },
+  { key: 'monthly', label: 'Monthly' },
+  { key: 'daily', label: 'Daily' },
 ] as const
 type TabKey = (typeof TABS)[number]['key']
 
@@ -55,6 +57,8 @@ export default function Finance() {
       {tab === 'calculation' && <CalculationTab filters={filters} />}
       {tab === 'analysis' && <AnalysisTab filters={filters} />}
       {tab === 'loans' && <LoansTab />}
+      {tab === 'monthly' && <MonthlyBillsTab categoryList={categoryList.data ?? []} />}
+      {tab === 'daily' && <DailyExpensesTab />}
     </>
   )
 }
@@ -788,6 +792,524 @@ function LoansTab() {
           </button>
         </Modal>
       )}
+    </>
+  )
+}
+
+// -------------------------------------------------------------- monthly --
+
+const localDateParts = () => {
+  const date = new Date()
+  return {
+    year: date.getFullYear(),
+    month: String(date.getMonth() + 1).padStart(2, '0'),
+    day: String(date.getDate()).padStart(2, '0'),
+  }
+}
+const todayStr = () => {
+  const date = localDateParts()
+  return `${date.year}-${date.month}-${date.day}`
+}
+const thisMonthStr = () => {
+  const date = localDateParts()
+  return `${date.year}-${date.month}`
+}
+
+interface BillFormState {
+  name: string
+  category: string
+  default_amount: string
+}
+const emptyBillForm: BillFormState = { name: '', category: '', default_amount: '' }
+
+function MonthlyBillsTab({ categoryList }: { categoryList: string[] }) {
+  const queryClient = useQueryClient()
+  const [month, setMonth] = useState(thisMonthStr())
+  const [modalOpen, setModalOpen] = useState(false)
+  const [editingBill, setEditingBill] = useState<FinanceRecurringBill | null>(null)
+  const [form, setForm] = useState<BillFormState>(emptyBillForm)
+  const [payingBill, setPayingBill] = useState<FinanceRecurringBill | null>(null)
+  const [payAmount, setPayAmount] = useState('')
+  const [payDate, setPayDate] = useState(todayStr())
+  const [formError, setFormError] = useState<string | null>(null)
+
+  const bills = useQuery({
+    queryKey: ['financeRecurringBills', month],
+    queryFn: () => api.recurringBills(month),
+  })
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['financeRecurringBills'] })
+
+  const create = useMutation({ mutationFn: api.createRecurringBill, onSuccess: invalidate })
+  const addDefaults = useMutation({ mutationFn: api.addDefaultRecurringBills, onSuccess: invalidate })
+  const update = useMutation({
+    mutationFn: ({ id, body }: { id: number; body: Record<string, unknown> }) =>
+      api.updateRecurringBill(id, body),
+    onSuccess: invalidate,
+  })
+  const remove = useMutation({ mutationFn: api.deleteRecurringBill, onSuccess: invalidate })
+  const pay = useMutation({
+    mutationFn: ({ id, body }: { id: number; body: { month: string; amount: number; paid_at?: string } }) =>
+      api.payRecurringBill(id, body),
+    onSuccess: () => {
+      invalidate()
+      queryClient.invalidateQueries({ queryKey: ['financeMonthlyAll'] })
+    },
+  })
+  const unpay = useMutation({
+    mutationFn: ({ id, month }: { id: number; month: string }) => api.unpayRecurringBill(id, month),
+    onSuccess: () => {
+      invalidate()
+      queryClient.invalidateQueries({ queryKey: ['financeMonthlyAll'] })
+    },
+  })
+
+  function openCreate() {
+    setEditingBill(null)
+    setForm(emptyBillForm)
+    setFormError(null)
+    setModalOpen(true)
+  }
+
+  function openEdit(bill: FinanceRecurringBill) {
+    setEditingBill(bill)
+    setForm({ name: bill.name, category: bill.category ?? '', default_amount: String(bill.default_amount) })
+    setFormError(null)
+    setModalOpen(true)
+  }
+
+  function submit() {
+    const defaultAmount = Number(form.default_amount)
+    if (!form.name.trim() || !Number.isFinite(defaultAmount) || defaultAmount <= 0) {
+      setFormError('Fill in a name and a usual amount greater than 0.')
+      return
+    }
+    setFormError(null)
+    const body = {
+      name: form.name.trim(),
+      category: form.category || null,
+      default_amount: defaultAmount,
+    }
+    if (editingBill) {
+      update.mutate({ id: editingBill.id, body }, { onSuccess: () => setModalOpen(false) })
+    } else {
+      create.mutate(body, { onSuccess: () => setModalOpen(false) })
+    }
+  }
+
+  function openPay(bill: FinanceRecurringBill) {
+    setPayingBill(bill)
+    setPayAmount(String(bill.amount_this_month ?? bill.default_amount))
+    setPayDate(todayStr())
+  }
+
+  function submitPay() {
+    if (!payingBill) return
+    pay.mutate(
+      { id: payingBill.id, body: { month, amount: Number(payAmount), paid_at: payDate } },
+      { onSuccess: () => setPayingBill(null) },
+    )
+  }
+
+  const rows = bills.data ?? []
+  const totalExpected = rows.reduce((sum, b) => sum + b.default_amount, 0)
+  const totalPaid = rows.reduce((sum, b) => sum + (b.amount_this_month ?? 0), 0)
+  const pendingCount = rows.filter((b) => !b.paid_this_month).length
+  const monthLabel = new Date(`${month}-01T00:00:00`).toLocaleDateString('en-IN', {
+    month: 'long',
+    year: 'numeric',
+  })
+  const isCurrentMonth = month === thisMonthStr()
+
+  return (
+    <>
+      <div className="page-head">
+        <div>
+          <h2 style={{ margin: 0 }}>Monthly bills</h2>
+          <div className="muted" style={{ fontSize: '0.85rem', marginTop: '0.2rem' }}>
+            Showing {monthLabel}
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <input type="month" value={month} onChange={(e) => e.target.value && setMonth(e.target.value)} />
+          {!isCurrentMonth && <button onClick={() => setMonth(thisMonthStr())}>This month</button>}
+          <button onClick={() => addDefaults.mutate()} disabled={addDefaults.isPending}>
+            Add common bills
+          </button>
+          <button className="primary" onClick={openCreate}>
+            Add bill
+          </button>
+        </div>
+      </div>
+
+      {!!rows.length && (
+        <div className="grid">
+          <Stat label={`Expected — ${monthLabel}`} value={formatCurrency(totalExpected)} />
+          <Stat label={`Paid — ${monthLabel}`} value={formatCurrency(totalPaid)} tone="pos" />
+          <Stat
+            label="Still pending"
+            value={pendingCount}
+            sub={pendingCount ? 'not marked paid yet' : 'all caught up'}
+            tone={pendingCount ? 'neg' : 'flat'}
+          />
+        </div>
+      )}
+
+      <div className="table-wrap">
+        {bills.isLoading ? (
+          <Loading />
+        ) : !rows.length ? (
+          <Empty label='No monthly bills yet. Click "Add common bills" for a starter list, or add your own.' />
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>Bill</th>
+                <th>Category</th>
+                <th className="num">Usual amount</th>
+                <th>This month</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((bill) => (
+                <tr key={bill.id}>
+                  <td>
+                    <strong>{bill.name}</strong>
+                  </td>
+                  <td className="muted">{bill.category ?? '—'}</td>
+                  <td className="num">{formatCurrency(bill.default_amount)}</td>
+                  <td>
+                    {bill.paid_this_month ? (
+                      <span className="pos">
+                        Paid {formatCurrency(bill.amount_this_month ?? 0)}
+                        {bill.paid_at && <span className="muted"> · {formatDate(bill.paid_at)}</span>}
+                      </span>
+                    ) : (
+                      <span className="muted">Not paid yet</span>
+                    )}
+                  </td>
+                  <td>
+                    {bill.paid_this_month ? (
+                      <button
+                        onClick={() => unpay.mutate({ id: bill.id, month })}
+                        disabled={unpay.isPending}
+                      >
+                        Undo
+                      </button>
+                    ) : (
+                      <button className="primary" onClick={() => openPay(bill)}>
+                        Mark paid
+                      </button>
+                    )}{' '}
+                    <button onClick={() => openEdit(bill)}>Edit</button>{' '}
+                    <button
+                      onClick={() => {
+                        if (confirm(`Delete bill "${bill.name}"? Past payments stay in Transactions.`)) {
+                          remove.mutate(bill.id)
+                        }
+                      }}
+                    >
+                      Delete
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {modalOpen && (
+        <Modal onClose={() => setModalOpen(false)}>
+          <h2>{editingBill ? 'Edit bill' : 'Add monthly bill'}</h2>
+          {(create.error || update.error) && <ErrorBox error={create.error || update.error} />}
+          {formError && <div className="banner banner-warn">{formError}</div>}
+          <div className="grid" style={{ marginBottom: '0.8rem' }}>
+            <label>
+              <div className="stat-label">Name</div>
+              <input
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                placeholder="Rent, Netflix, Gym…"
+                required
+              />
+            </label>
+            <label>
+              <div className="stat-label">Category (optional)</div>
+              <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
+                <option value="">No category</option>
+                {categoryList.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <div className="stat-label">Usual amount (₹)</div>
+              <input
+                type="number"
+                min="0"
+                value={form.default_amount}
+                onChange={(e) => setForm({ ...form, default_amount: e.target.value })}
+                required
+              />
+            </label>
+          </div>
+          <button className="primary" onClick={submit} disabled={create.isPending || update.isPending}>
+            {editingBill ? 'Save changes' : 'Add bill'}
+          </button>
+        </Modal>
+      )}
+
+      {payingBill && (
+        <Modal onClose={() => setPayingBill(null)}>
+          <h2>Mark "{payingBill.name}" paid</h2>
+          {pay.error && <ErrorBox error={pay.error} />}
+          <div className="grid" style={{ marginBottom: '0.8rem' }}>
+            <label>
+              <div className="stat-label">Amount (₹)</div>
+              <input
+                type="number"
+                min="0"
+                value={payAmount}
+                onChange={(e) => setPayAmount(e.target.value)}
+                required
+              />
+            </label>
+            <label>
+              <div className="stat-label">Date paid</div>
+              <input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} required />
+            </label>
+          </div>
+          <button className="primary" onClick={submitPay} disabled={pay.isPending}>
+            Confirm paid
+          </button>
+        </Modal>
+      )}
+    </>
+  )
+}
+
+// ---------------------------------------------------------------- daily --
+
+interface DailyFormState {
+  category: string
+  amount: string
+  spent_at: string
+  note: string
+}
+const emptyDailyForm: DailyFormState = { category: '', amount: '', spent_at: todayStr(), note: '' }
+
+function DailyExpensesTab() {
+  const queryClient = useQueryClient()
+  const [form, setForm] = useState<DailyFormState>(emptyDailyForm)
+  const [newCategory, setNewCategory] = useState('')
+
+  const categories = useQuery({ queryKey: ['financeDailyCategories'], queryFn: api.dailyCategories })
+  // The daily log is just the manual_daily slice of the same transactions
+  // every other tab reads — no separate ledger to keep in sync.
+  const transactions = useQuery({
+    queryKey: ['financeTransactions', 'daily-all'],
+    queryFn: () => api.financeTransactions({}),
+  })
+
+  const addCategory = useMutation({
+    mutationFn: api.createDailyCategory,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['financeDailyCategories'] }),
+  })
+  const removeCategory = useMutation({
+    mutationFn: api.deleteDailyCategory,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['financeDailyCategories'] }),
+  })
+  const addExpense = useMutation({
+    mutationFn: api.createDailyExpense,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['financeTransactions'] })
+      queryClient.invalidateQueries({ queryKey: ['financeMonthlyAll'] })
+      setForm({ ...emptyDailyForm, category: form.category })
+    },
+  })
+
+  const dailyRows = (transactions.data ?? [])
+    .filter((t) => t.source === 'manual_daily')
+    .sort((a, b) => new Date(b.txn_date).getTime() - new Date(a.txn_date).getTime())
+
+  // One group per calendar day instead of a flat list repeating the same
+  // date down every row — dailyRows is already newest-first, so a Map keeps
+  // that order for free (each date's group is created the first time that
+  // date is seen).
+  const dailyGroups = useMemo(() => {
+    const groups = new Map<string, typeof dailyRows>()
+    for (const t of dailyRows) {
+      const key = t.txn_date.slice(0, 10)
+      const list = groups.get(key) ?? []
+      list.push(t)
+      groups.set(key, list)
+    }
+    return [...groups.entries()].map(([date, rows]) => ({
+      date,
+      rows,
+      total: rows.reduce((sum, r) => sum + r.amount, 0),
+    }))
+  }, [dailyRows])
+
+  const today = todayStr()
+  const month = thisMonthStr()
+  const todayTotal = dailyRows.filter((t) => t.txn_date.slice(0, 10) === today).reduce((s, t) => s + t.amount, 0)
+  const monthTotal = dailyRows.filter((t) => t.month === month).reduce((s, t) => s + t.amount, 0)
+
+  function submitExpense() {
+    if (!form.category || !form.amount) return
+    addExpense.mutate({
+      category: form.category,
+      amount: Number(form.amount),
+      spent_at: form.spent_at,
+      note: form.note || undefined,
+    })
+  }
+
+  const categoryRows = categories.data ?? []
+
+  return (
+    <>
+      <div className="page-head">
+        <h2 style={{ margin: 0 }}>Daily expenses</h2>
+      </div>
+
+      <div className="grid">
+        <Stat label="Today" value={formatCurrency(todayTotal)} />
+        <Stat label="This month" value={formatCurrency(monthTotal)} />
+      </div>
+
+      <div className="card" style={{ marginBottom: '1.5rem' }}>
+        <div className="stat-label" style={{ marginBottom: '0.5rem' }}>
+          Categories you track
+        </div>
+        <div className="row" style={{ flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.8rem' }}>
+          {!categoryRows.length && <span className="muted">None yet — add one below.</span>}
+          {categoryRows.map((c) => (
+            <span key={c.id} className="chip">
+              {c.name}
+              <button
+                onClick={() => {
+                  if (confirm(`Remove category "${c.name}"? Past entries keep their category.`)) {
+                    removeCategory.mutate(c.id)
+                  }
+                }}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+        <div className="row" style={{ gap: '0.5rem' }}>
+          <input
+            placeholder="Add category (Food, Transport…)"
+            value={newCategory}
+            onChange={(e) => setNewCategory(e.target.value)}
+            style={{ maxWidth: '16rem' }}
+          />
+          <button
+            onClick={() => {
+              if (newCategory.trim()) {
+                addCategory.mutate(newCategory.trim(), { onSuccess: () => setNewCategory('') })
+              }
+            }}
+            disabled={addCategory.isPending}
+          >
+            Add
+          </button>
+        </div>
+      </div>
+
+      <div className="card" style={{ marginBottom: '1.5rem' }}>
+        <div className="stat-label" style={{ marginBottom: '0.5rem' }}>
+          Log an expense
+        </div>
+        <div className="grid">
+          <label>
+            <div className="stat-label">Category</div>
+            <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
+              <option value="">Select…</option>
+              {categoryRows.map((c) => (
+                <option key={c.id} value={c.name}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <div className="stat-label">Amount (₹)</div>
+            <input
+              type="number"
+              min="0"
+              value={form.amount}
+              onChange={(e) => setForm({ ...form, amount: e.target.value })}
+            />
+          </label>
+          <label>
+            <div className="stat-label">Date</div>
+            <input
+              type="date"
+              value={form.spent_at}
+              onChange={(e) => setForm({ ...form, spent_at: e.target.value })}
+            />
+          </label>
+          <label>
+            <div className="stat-label">Note (optional)</div>
+            <input value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />
+          </label>
+        </div>
+        <button
+          className="primary"
+          style={{ marginTop: '0.8rem' }}
+          onClick={submitExpense}
+          disabled={addExpense.isPending || !form.category || !form.amount}
+        >
+          Add expense
+        </button>
+      </div>
+
+      <div className="table-wrap">
+        {transactions.isLoading ? (
+          <Loading />
+        ) : !dailyRows.length ? (
+          <Empty label="No daily expenses logged yet." />
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>Category</th>
+                <th>Note</th>
+                <th className="num">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {dailyGroups.slice(0, 30).map((group) => (
+                <Fragment key={group.date}>
+                  <tr className="table-group-row">
+                    <td colSpan={2}>
+                      <strong className="group-label">{formatDate(group.date)}</strong>
+                      {group.date === today && <span className="muted"> · today</span>}
+                    </td>
+                    <td className="num">
+                      <strong>{formatCurrency(group.total)}</strong>
+                    </td>
+                  </tr>
+                  {group.rows.map((t) => (
+                    <tr key={t.id}>
+                      <td>{t.category}</td>
+                      <td className="muted">{t.description}</td>
+                      <td className="num">{formatCurrency(t.amount)}</td>
+                    </tr>
+                  ))}
+                </Fragment>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
     </>
   )
 }

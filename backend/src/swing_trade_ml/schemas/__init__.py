@@ -48,6 +48,7 @@ class SystemStatus(BaseModel):
     open_positions: int
     latest_candle_date: date | None
     last_scan_at: datetime | None
+    last_scan_result: dict[str, Any] | None
     status_level: str
     status_message: str
 
@@ -328,7 +329,23 @@ class TradeOut(BaseModel):
     net_pnl: float
     return_pct: float
     exit_reason: str | None
+    exit_reason_label: str | None
     is_win: bool
+    # From the linked Position — what this trade was actually being judged
+    # against, so "did it hit the target, get stopped, or exit on the
+    # model's own judgment short of either" is answerable without asking.
+    stop_loss: float | None = None
+    take_profit: float | None = None
+    entry_confidence: float | None = None
+    last_confidence: float | None = None
+    # How the stock moved after we sold it, so a SIGNAL_EXIT or STOP_LOSS_HIT
+    # can be judged in hindsight — did it keep falling (exit vindicated) or
+    # rally afterward (profit left on the table)? Null until enough trading
+    # days have actually passed since the exit.
+    price_5d_after_exit: float | None = None
+    return_5d_after_exit: float | None = None
+    price_15d_after_exit: float | None = None
+    return_15d_after_exit: float | None = None
 
 
 class ClosePositionRequest(BaseModel):
@@ -626,6 +643,62 @@ class FinanceNetWorth(BaseModel):
     investments_total: float
     liabilities: float
     net_worth: float
+
+
+class FinanceRecurringBillCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=128)
+    category: str | None = Field(None, min_length=1, max_length=64)
+    default_amount: float = Field(..., gt=0)
+
+
+class FinanceRecurringBillUpdate(BaseModel):
+    name: str | None = Field(None, min_length=1, max_length=128)
+    # None here is ambiguous between "leave category unchanged" and "clear
+    # it" — the endpoint only ever sets this from a PATCH body that names the
+    # key (model_dump(exclude_unset=True)), so an omitted key truly leaves it
+    # alone, and an explicit null clears it. See update_recurring_bill.
+    category: str | None = Field(None, max_length=64)
+    default_amount: float | None = Field(None, gt=0)
+    is_active: bool | None = None
+
+
+class FinanceRecurringBillOut(BaseModel):
+    model_config = ORM
+    id: int
+    name: str
+    category: str | None
+    default_amount: float
+    is_active: bool
+    # This month's status, resolved server-side against the `month` query
+    # param (defaults to the current month) — the page never has to compute
+    # "is this paid yet" itself from a separate payments list.
+    paid_this_month: bool
+    amount_this_month: float | None
+    paid_at: datetime | None
+
+
+class FinanceBillPaymentIn(BaseModel):
+    month: str = Field(..., min_length=7, max_length=7)
+    amount: float = Field(..., gt=0)
+    paid_at: date | None = None
+
+
+class FinanceDailyCategoryIn(BaseModel):
+    name: str = Field(..., min_length=1, max_length=64)
+
+
+class FinanceDailyCategoryOut(BaseModel):
+    model_config = ORM
+    id: int
+    name: str
+    is_active: bool
+
+
+class FinanceDailyExpenseIn(BaseModel):
+    category: str = Field(..., min_length=1, max_length=64)
+    amount: float = Field(..., gt=0)
+    spent_at: date | None = None
+    note: str | None = Field(None, max_length=255)
 
 
 class FinanceCustomRuleIn(BaseModel):

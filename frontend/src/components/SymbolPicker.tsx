@@ -67,7 +67,7 @@ export default function SymbolPicker({ value, onChange, placeholder }: SymbolPic
               event.preventDefault()
               if (query.trim()) add(query)
             } else if (event.key === 'Backspace' && !query && value.length) {
-              remove(value[value.length - 1])
+              remove(value[value.length - 1]!)
             } else if (event.key === 'Escape') {
               setOpen(false)
             }

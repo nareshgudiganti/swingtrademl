@@ -6,11 +6,13 @@ from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Query
 from sqlalchemy import select
+from sqlalchemy.orm import aliased
 
 from swing_trade_ml.api.deps import DbSession
 from swing_trade_ml.brokers import get_broker
+from swing_trade_ml.core.enums import PositionStatus
 from swing_trade_ml.db.models.market import Instrument
-from swing_trade_ml.db.models.trading import Signal
+from swing_trade_ml.db.models.trading import Position, Signal, Strategy
 from swing_trade_ml.schemas import SignalOut
 
 router = APIRouter(prefix="/signals", tags=["signals"])
@@ -108,4 +110,58 @@ def latest_actionable(
             "generated_at": signal.generated_at,
         }
         for signal, symbol, name in rows
+    ]
+
+
+@router.get("/buy-list", response_model=list[dict])
+def buy_list(db: DbSession) -> list[dict]:
+    """Every symbol that is a fresh, still-current BUY right now — nothing else.
+
+    Answers "the Signals page shows a BUY row for this stock, but is that
+    still true today or from three days ago?" by construction: it's deduped
+    to each instrument's single most recent signal (any strategy), then kept
+    only if that latest signal is BUY. A stock that reconfirms BUY every day
+    for a week stays on the list the whole week; the moment a later scan
+    reads HOLD or weaker, it silently drops off next call — no manual
+    dismissal needed for that case, since a stale row is structurally
+    impossible here. Already-held symbols are excluded — this list is only
+    for fresh entries, not stocks already bought (that's the Portfolio page).
+    """
+    latest_signal = (
+        select(Signal)
+        .where(Signal.mode == get_broker().mode)
+        .distinct(Signal.strategy_id, Signal.instrument_id)
+        .order_by(Signal.strategy_id, Signal.instrument_id, Signal.generated_at.desc())
+    ).subquery()
+    LatestSignal = aliased(Signal, latest_signal)
+
+    held_instrument_ids = select(Position.instrument_id).where(
+        Position.mode == get_broker().mode, Position.status == PositionStatus.OPEN
+    )
+
+    stmt = (
+        select(LatestSignal, Instrument.tradingsymbol, Instrument.name, Strategy.name)
+        .join(Instrument, Instrument.id == LatestSignal.instrument_id)
+        .join(Strategy, Strategy.id == LatestSignal.strategy_id)
+        .where(
+            LatestSignal.signal_type == "BUY",
+            LatestSignal.instrument_id.not_in(held_instrument_ids),
+        )
+        .order_by(LatestSignal.confidence.desc().nullslast())
+    )
+    rows = db.execute(stmt).all()
+
+    return [
+        {
+            "symbol": symbol,
+            "name": name,
+            "strategy_name": strategy_name,
+            "price": sig.price,
+            "confidence": sig.confidence,
+            "stop_loss": sig.stop_loss,
+            "take_profit": sig.take_profit,
+            "reason": sig.reason,
+            "generated_at": sig.generated_at,
+        }
+        for sig, symbol, name, strategy_name in rows
     ]

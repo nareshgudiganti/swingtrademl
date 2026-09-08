@@ -92,13 +92,19 @@ def health() -> HealthResponse:
 
 
 @router.get("/ready", response_model=ReadinessResponse)
-def ready() -> ReadinessResponse:
+def ready(db: DbSession) -> ReadinessResponse:
     """Readiness — the database must be reachable to serve traffic.
 
     A missing Kite session is not a readiness failure: the dashboard, history
     and paper portfolio all work without one.
     """
     db_ok = check_connection()
+    if db_ok:
+        # This process never runs the worker's periodic session-check job,
+        # so its cached is_authenticated flag can sit on a stale "true" for
+        # hours after the token actually expired — refresh it every call
+        # instead of trusting whatever it last happened to see.
+        kite_broker.load_session(db)
     return ReadinessResponse(
         ready=db_ok,
         database=db_ok,
@@ -110,6 +116,10 @@ def ready() -> ReadinessResponse:
 
 
 def _build_status(db: DbSession) -> SystemStatus:
+    # Same staleness fix as ready() above — this process's kite_broker is
+    # never touched by the worker's periodic check, so verify against the
+    # database on every call rather than trusting an old in-memory flag.
+    kite_broker.load_session(db)
     active_model = get_active_model(db)
 
     latest_candle_ts = db.execute(
@@ -152,6 +162,7 @@ def _build_status(db: DbSession) -> SystemStatus:
         ),
         latest_candle_date=latest_candle_date,
         last_scan_at=last_scan_at,
+        last_scan_result=heartbeat.read_last_scan(),
         status_level=status_level,
         status_message=status_message,
     )
@@ -168,6 +179,7 @@ def refresh_data(db: DbSession) -> SystemStatus:
     fires the same ingest + predict jobs the 15:40 IST cron runs, on demand,
     instead of making the user wait for that time or ask someone to check.
     """
+    kite_broker.load_session(db)  # this process's flag can be stale — see _build_status
     if not kite_broker.is_authenticated:
         raise HTTPException(
             http_status.HTTP_400_BAD_REQUEST,

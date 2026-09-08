@@ -4,6 +4,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { api } from '../api/client'
 import type { LatestSignal } from '../api/types'
 import { Empty, ErrorBox, Loading } from '../components/Loading'
+import PricePerformance from '../components/PricePerformance'
 import { formatCurrency, formatDateTime, formatPercent } from '../lib/format'
 
 type SortKey = 'generated_at' | 'symbol' | 'signal' | 'price' | 'quantity' | 'confidence' | 'stop_loss' | 'take_profit'
@@ -34,7 +35,14 @@ function compare(a: LatestSignal, b: LatestSignal, key: SortKey): number {
   return 0
 }
 
-export default function Signals() {
+const SIGNAL_EXPLAIN: Record<string, string> = {
+  BUY: 'The model currently rates this a buy.',
+  SELL: 'The model currently rates this a sell.',
+  EXIT: 'This closed a position — stop-loss, target, or a confidence exit.',
+  HOLD: 'No fresh action — confidence stayed in the middle ground.',
+}
+
+export default function Search() {
   // `search` is the raw typed text (drives the suggestions dropdown);
   // `selectedSymbol` is only set once an exact instrument is picked — the
   // signal-history lookup is an exact match server-side, so typing "HDFC"
@@ -65,6 +73,13 @@ export default function Signals() {
     // position on each character typed.
     placeholderData: keepPreviousData,
   })
+
+  const candles = useQuery({
+    queryKey: ['dailyCandles', selectedSymbol],
+    queryFn: () => api.candles(selectedSymbol, 90),
+    enabled: !!selectedSymbol,
+  })
+
   const [sortKey, setSortKey] = useState<SortKey>('generated_at')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
 
@@ -86,6 +101,15 @@ export default function Signals() {
     return data
   }, [signals.data, sortKey, sortDir])
 
+  // Independent of the table's own sort state — this is always "what did the
+  // model say most recently", not whatever column the user last clicked.
+  const latestVerdict = useMemo(() => {
+    if (!selectedSymbol || !signals.data?.length) return null
+    return [...signals.data].sort(
+      (a, b) => new Date(b.generated_at).getTime() - new Date(a.generated_at).getTime(),
+    )[0]
+  }, [selectedSymbol, signals.data])
+
   function toggleSort(col: (typeof COLUMNS)[number]) {
     if (sortKey === col.key) {
       setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
@@ -98,9 +122,9 @@ export default function Signals() {
   return (
     <>
       <div className="page-head">
-        <h1>Signals</h1>
+        <h1>Search</h1>
         <span className="row" style={{ gap: '0.5rem' }}>
-          <span style={{ position: 'relative', display: 'inline-block', minWidth: '240px' }}>
+          <span style={{ position: 'relative', display: 'inline-block', minWidth: '280px' }}>
             <input
               type="text"
               value={search}
@@ -122,7 +146,7 @@ export default function Signals() {
                   setDropdownOpen(false)
                 }
               }}
-              placeholder="Search a symbol or company name…"
+              placeholder="Search a stock by symbol or company name…"
               style={{ width: '100%' }}
             />
             {dropdownOpen && debouncedQuery.length >= 1 && !selectedSymbol && (
@@ -154,30 +178,95 @@ export default function Signals() {
         </span>
       </div>
 
-      {selectedSymbol ? (
+      {!selectedSymbol && (
         <div className="banner banner-info">
-          Showing every score for <strong>{selectedSymbol}</strong> — newest first, click a
-          column to sort. Includes HOLD days, not just BUY/EXIT, so you can see how confidence
-          has moved over time.{' '}
-          <a
-            href="#"
-            onClick={(e) => {
-              e.preventDefault()
-              clearSearch()
-            }}
-            style={{ color: 'inherit', textDecoration: 'underline' }}
-          >
-            Clear search
-          </a>
-        </div>
-      ) : (
-        <div className="banner banner-info">
-          {rows.length} most recent actionable signals across all strategies. Rejected signals are
-          shown too — a signal the risk engine blocked is as much a part of the record as one it
-          took, the rejection reason explains why.
+          Type a stock's symbol or name above to see today's verdict, its price chart, and how the
+          model has scored it over time. Without a search, this shows the {rows.length} most recent
+          signals across every strategy.
         </div>
       )}
 
+      {selectedSymbol && (
+        <>
+          <div className="card" style={{ marginBottom: '1.5rem' }}>
+            {signals.isLoading ? (
+              <Loading />
+            ) : !latestVerdict ? (
+              <div className="empty">
+                No signals found for {selectedSymbol} — it may not be part of an active strategy's
+                universe yet.
+              </div>
+            ) : (
+              <div className="detail-head">
+                <div>
+                  <h2 className="detail-symbol" style={{ marginTop: 0 }}>{selectedSymbol}</h2>
+                  <div className="detail-sub">
+                    As of {formatDateTime(latestVerdict.generated_at)} ·{' '}
+                    {SIGNAL_EXPLAIN[latestVerdict.signal] ?? ''}
+                  </div>
+                  <div className="detail-stat-row" style={{ marginTop: '0.75rem' }}>
+                    <div className="detail-stat">
+                      <div className="tech-label">Price</div>
+                      <div className="detail-stat-value">{formatCurrency(latestVerdict.price)}</div>
+                    </div>
+                    {latestVerdict.confidence != null && (
+                      <div className="detail-stat">
+                        <div className="tech-label">Confidence</div>
+                        <div className="detail-stat-value">{formatPercent(latestVerdict.confidence, 1)}</div>
+                      </div>
+                    )}
+                    {latestVerdict.stop_loss != null && (
+                      <div className="detail-stat">
+                        <div className="tech-label">Stop-loss</div>
+                        <div className="detail-stat-value neg">{formatCurrency(latestVerdict.stop_loss)}</div>
+                      </div>
+                    )}
+                    {latestVerdict.take_profit != null && (
+                      <div className="detail-stat">
+                        <div className="tech-label">Target</div>
+                        <div className="detail-stat-value pos">{formatCurrency(latestVerdict.take_profit)}</div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <span className={`badge badge-lg badge-${latestVerdict.signal.toLowerCase()}`}>
+                  {latestVerdict.signal}
+                </span>
+              </div>
+            )}
+          </div>
+
+          <div className="card" style={{ marginBottom: '1.5rem' }}>
+            {candles.isLoading ? (
+              <Loading />
+            ) : candles.error ? (
+              <ErrorBox error={candles.error} />
+            ) : (
+              <PricePerformance symbol={selectedSymbol} candles={candles.data ?? []} />
+            )}
+          </div>
+
+          <div className="row" style={{ marginBottom: '0.75rem' }}>
+            <a
+              href="#"
+              onClick={(e) => {
+                e.preventDefault()
+                clearSearch()
+              }}
+              style={{ color: 'inherit', textDecoration: 'underline' }}
+            >
+              Clear search
+            </a>
+          </div>
+        </>
+      )}
+
+      <h2>{selectedSymbol ? `Every score for ${selectedSymbol}` : 'Recent signals across all strategies'}</h2>
+      <span className="muted" style={{ display: 'block', marginBottom: '0.5rem' }}>
+        {selectedSymbol
+          ? 'Includes HOLD days, not just BUY/EXIT, so you can see how confidence has moved over time.'
+          : 'Rejected signals are shown too — a signal the risk engine blocked is as much a part of the record as one it took.'}
+      </span>
       <div className="table-wrap">
         {signals.isLoading ? (
           <Loading />
@@ -187,7 +276,7 @@ export default function Signals() {
           <Empty
             label={
               selectedSymbol
-                ? `No signals found for ${selectedSymbol} — it may not be part of an active strategy's universe.`
+                ? `No signals found for ${selectedSymbol}.`
                 : 'No signals yet. Activate a strategy, then run a scan.'
             }
           />

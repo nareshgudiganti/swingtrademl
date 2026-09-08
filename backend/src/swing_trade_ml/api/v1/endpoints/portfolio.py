@@ -265,21 +265,111 @@ def close(position_id: int, payload: ClosePositionRequest, db: DbSession) -> Mes
     )
 
 
+EXIT_REASON_LABELS = {
+    ExitReason.TARGET_HIT: "Target reached",
+    ExitReason.STOP_LOSS_HIT: "Stop-loss hit",
+    ExitReason.SIGNAL_EXIT: "Model changed its mind",
+    ExitReason.MANUAL: "Closed manually",
+    ExitReason.RISK_LIMIT: "Risk limit",
+    ExitReason.TIME_STOP: "60-day time limit",
+}
+
+
+# Checkpoints for "was this exit actually right?" — a handful of trading days
+# (not calendar days, since candles only exist for trading days) after we sold.
+# 5 ≈ "next few days", 15 ≈ "next few weeks", matching how the user framed it.
+POST_EXIT_CHECKPOINTS = {"5d": 5, "15d": 15}
+
+
+def _post_exit_moves(db: DbSession, trades: list[Trade]) -> dict[int, dict[str, float | None]]:
+    """For each closed trade, how the stock moved after we sold it.
+
+    Lets you tell a validated exit (price kept falling) from a premature one
+    (price kept rising after we sold — profit left on the table), the same
+    question raised earlier about ITC/DIVISLAB but now answerable for every
+    trade without asking me to check.
+    """
+    if not trades:
+        return {}
+    instrument_ids = {t.instrument_id for t in trades}
+    earliest_exit = min(t.exit_at for t in trades)
+
+    rows = db.execute(
+        select(Candle.instrument_id, Candle.ts, Candle.close)
+        .where(
+            Candle.interval == "day",
+            Candle.instrument_id.in_(instrument_ids),
+            Candle.ts > earliest_exit,
+        )
+        .order_by(Candle.instrument_id, Candle.ts)
+    ).all()
+    candles_by_instrument: dict[int, list[tuple[datetime, float]]] = {}
+    for instrument_id, ts, close in rows:
+        candles_by_instrument.setdefault(instrument_id, []).append((ts, close))
+
+    moves: dict[int, dict[str, float | None]] = {}
+    for trade in trades:
+        future = [c for c in candles_by_instrument.get(trade.instrument_id, []) if c[0] > trade.exit_at]
+        entry: dict[str, float | None] = {}
+        for label, n in POST_EXIT_CHECKPOINTS.items():
+            if len(future) >= n and trade.exit_price:
+                price = future[n - 1][1]
+                entry[f"price_{label}_after_exit"] = price
+                entry[f"return_{label}_after_exit"] = (price - trade.exit_price) / trade.exit_price
+            else:
+                entry[f"price_{label}_after_exit"] = None
+                entry[f"return_{label}_after_exit"] = None
+        moves[trade.id] = entry
+    return moves
+
+
 @router.get("/trades", response_model=list[TradeOut])
 def list_trades(
     db: DbSession,
     wins_only: bool | None = None,
     limit: int = Query(100, le=1000),
-) -> list[Trade]:
+) -> list[dict[str, Any]]:
     stmt = (
-        select(Trade)
+        select(Trade, Position)
+        .outerjoin(Position, Position.id == Trade.position_id)
         .where(Trade.mode == get_broker().mode)
         .order_by(Trade.exit_at.desc())
         .limit(limit)
     )
     if wins_only is not None:
         stmt = stmt.where(Trade.is_win.is_(wins_only))
-    return list(db.execute(stmt).scalars().all())
+
+    pairs = db.execute(stmt).all()
+    post_exit = _post_exit_moves(db, [trade for trade, _ in pairs])
+
+    result = []
+    for trade, position in pairs:
+        result.append(
+            {
+                "id": trade.id,
+                "symbol": trade.symbol,
+                "mode": trade.mode,
+                "quantity": trade.quantity,
+                "entry_price": trade.entry_price,
+                "exit_price": trade.exit_price,
+                "entry_at": trade.entry_at,
+                "exit_at": trade.exit_at,
+                "holding_days": trade.holding_days,
+                "gross_pnl": trade.gross_pnl,
+                "charges": trade.charges,
+                "net_pnl": trade.net_pnl,
+                "return_pct": trade.return_pct,
+                "exit_reason": trade.exit_reason,
+                "exit_reason_label": EXIT_REASON_LABELS.get(trade.exit_reason, trade.exit_reason),
+                "is_win": trade.is_win,
+                "stop_loss": position.stop_loss if position else None,
+                "take_profit": position.take_profit if position else None,
+                "entry_confidence": position.entry_confidence if position else None,
+                "last_confidence": position.last_confidence if position else None,
+                **post_exit.get(trade.id, {}),
+            }
+        )
+    return result
 
 
 @router.get("/equity-curve", response_model=list[EquityPoint])

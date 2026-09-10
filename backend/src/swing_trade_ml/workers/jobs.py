@@ -10,7 +10,7 @@ close" means anything.
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, select
@@ -56,33 +56,75 @@ def _report_error(context: str, exc: Exception) -> None:
     )
 
 
-# Set the first time a trading day's refresh_quotes tick finds no valid Kite
-# session, and cleared once a session is loaded again — so the warning below
-# fires exactly once per missed day instead of once per poll interval.
-_no_session_alert_date: date | None = None
+# When the last "no Kite session" nag was sent, cleared once a session is
+# loaded again (job_check_kite_login). A cooldown rather than a once-per-day
+# latch: this login is a manual daily chore on this account (see
+# KiteBroker.auto_login for why it cannot be automated), and a single message
+# that arrives while the phone is face-down is a message that never lands.
+_no_session_alert_at: datetime | None = None
+
+#: How long to wait before repeating the nag. Short enough to still catch the
+#: 09:15 open if the 06:15 one was missed, long enough not to read as spam.
+_NO_SESSION_ALERT_COOLDOWN = timedelta(minutes=30)
 
 
 def _alert_missing_session(db) -> None:
-    global _no_session_alert_date
-    today = datetime.now(IST).date()
-    if _no_session_alert_date == today:
+    """Nag that there is no Kite session. Deliberately NOT gated on holding
+    open positions: without a session the scanner cannot price anything, so a
+    flat account cannot take a new signal either — and "flat" is exactly when
+    a missed login goes unnoticed until an entry silently fails.
+    """
+    global _no_session_alert_at
+    now = datetime.now(IST)
+    if _no_session_alert_at and now - _no_session_alert_at < _NO_SESSION_ALERT_COOLDOWN:
         return
 
     open_count = db.execute(
         select(func.count(Position.id)).where(Position.status == PositionStatus.OPEN)
     ).scalar_one()
-    if open_count == 0:
-        return
 
-    _no_session_alert_date = today
-    log.warning("kite.session.missing_during_market_hours", open_positions=open_count)
+    _no_session_alert_at = now
+    log.warning("kite.session.missing", open_positions=open_count)
+
+    from swing_trade_ml.brokers.kite import kite_broker
+
+    if open_count:
+        risk = (
+            "prices are not being refreshed, which means stop-loss/target checks are "
+            f"NOT running on your {open_count} open position(s) today, and new orders "
+            "will fail."
+        )
+    else:
+        risk = (
+            "no prices are being refreshed, so today's scan cannot run and no new "
+            "trade can be entered until you log in."
+        )
+
     notifier.send_sync(
-        "🛑 <b>No active Kite session</b> — prices are not being refreshed, which means "
-        f"stop-loss/target checks are NOT running on your {open_count} open position(s) "
-        "today. New orders will also fail. Log in at /api/v1/auth/kite/login as soon as "
-        "possible.",
+        f"🛑 <b>No active Kite session</b> — {risk} Tap to log in (this stays valid "
+        f"until you use it):\n{kite_broker.login_url()}",
         "error",
     )
+
+
+def job_nag_missing_session() -> None:
+    """Chase the daily Kite login from before the open until the close.
+
+    job_refresh_quotes also calls _alert_missing_session, but only while the
+    market is open (09:15-15:30) — so the earliest it could ever warn was
+    after the open, and only if a position was already held. Both gaps meant a
+    missed login could go a whole day unreported. This runs on its own
+    schedule from 06:15 IST so the reminder lands before the open, while there
+    is still time to act on it.
+    """
+    try:
+        from swing_trade_ml.brokers.kite import kite_broker
+
+        with session_scope() as db:
+            if not kite_broker.load_session(db):
+                _alert_missing_session(db)
+    except Exception as exc:  # noqa: BLE001
+        _report_error("nag_missing_session", exc)
 
 
 def job_kite_auto_login() -> None:
@@ -127,8 +169,8 @@ def job_check_kite_login() -> None:
             prev_session_id = kite_broker.loaded_session_id
             session_ok = kite_broker.load_session(db)
             if session_ok and kite_broker.loaded_session_id != prev_session_id:
-                global _no_session_alert_date
-                _no_session_alert_date = None
+                global _no_session_alert_at
+                _no_session_alert_at = None
                 notifier.send_sync("🔑 Kite login successful — session is active.", "system")
     except Exception as exc:  # noqa: BLE001
         _report_error("check_kite_login", exc)
@@ -208,7 +250,15 @@ def job_daily_ingest() -> None:
             index_bars = ingestion.backfill_index(db, interval="day")
             log.info("job.ingest.index_done", bars=index_bars)
 
-            # load_index_candles() caches the index's full history in memory
+            context_results = ingestion.backfill_context_indices(db, interval="day")
+            log.info(
+                "job.ingest.context_indices_done",
+                symbols=len(context_results),
+                bars=sum(context_results.values()),
+            )
+
+            # load_index_candles() (and the sector/VIX/breadth loaders beside
+            # it) cache their full history in memory
             # for the life of the process (see market_context.py) — cheap for
             # the many per-symbol lookups a scan does, but it means the fresh
             # bar just ingested above stays invisible to predict_watchlist/

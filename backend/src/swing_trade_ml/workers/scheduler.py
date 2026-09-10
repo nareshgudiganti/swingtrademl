@@ -66,6 +66,18 @@ def start_scheduler() -> None:
         replace_existing=True,
     )
 
+    # Chase the login until it actually happens. Runs from 06:15 — five
+    # minutes after kite_auto_login has had its go, so this only speaks up
+    # once automation has already failed — through to the close, half-hourly.
+    # The job itself no-ops while a session is loaded, and _alert_missing_
+    # session's own cooldown stops a repeat firing turning into spam.
+    scheduler.add_job(
+        jobs.job_nag_missing_session,
+        CronTrigger(day_of_week=WEEKDAYS, hour="6-15", minute="15,45", timezone=IST),
+        id="nag_missing_session",
+        replace_existing=True,
+    )
+
     # --- intraday, market hours only (the jobs self-check the session) -------
     scheduler.add_job(
         jobs.job_refresh_quotes,

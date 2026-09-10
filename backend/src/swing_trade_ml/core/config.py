@@ -97,7 +97,15 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------ zerodha --
     KITE_API_KEY: str = ""
     KITE_API_SECRET: str = ""
-    KITE_REDIRECT_URL: str = "http://localhost:8000/api/v1/auth/kite/callback"
+    # There is deliberately no KITE_REDIRECT_URL here. Where Zerodha sends the
+    # browser after login is registered on the Kite app itself
+    # (developers.kite.trade > your app > Redirect URL) and nothing this app
+    # sends can override it — kiteconnect's login_url() carries only the API
+    # key. A setting did exist here and was read by nothing, which cost a day
+    # of debugging: the app was still registered against the localhost default
+    # while prod ran at swingtrademl.com, so every login dropped its token on
+    # a dead laptop URL and /kite/session just reported no session, with no
+    # error anywhere. If logins "do nothing", check the console, not the env.
 
     # Optional: credentials for the unattended daily login (see
     # brokers/kite.py's auto_login). Kite access tokens expire ~06:00 IST

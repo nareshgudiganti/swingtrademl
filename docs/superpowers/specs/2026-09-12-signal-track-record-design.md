@@ -2,6 +2,9 @@
 
 Status: approved by user, ready for implementation planning
 Date: 2026-09-12
+Amended: 2026-09-12 — renamed to "Scan Results" and moved to its own top-level
+tab (see §9a) after a separate request for a unified scan-results view turned
+out to be this same feature; building both would have duplicated the backend.
 
 ## 1. Problem
 
@@ -134,24 +137,46 @@ model called" and "what it actually made after real charges."
 No pagination needed at current signal volumes (~20-30 watchlist names,
 handful of signals/day); add if this becomes a problem.
 
-## 9. Frontend
+## 9a. Frontend — superseded, see below
 
-Added as a new section on `Reports.tsx` (the existing performance-history
-page), not a new route — keeps signal accuracy next to portfolio
-performance rather than fragmenting reporting surfaces.
+(Original v1 plan below is superseded by the amendment at the top of this
+document — kept for history, not for implementation.)
+
+~~Added as a new section on `Reports.tsx`~~
+
+## 9. Frontend (amended)
+
+Its own top-level nav tab, **"Scan Results"** (route `/scans`), not a
+subsection of Reports — this is now also the answer to the separate ask for
+a single place to browse every scan the bot has ever produced, so it earns
+first-class nav placement (icon: reuse the `LayersIcon` pattern already in
+`components/icons.tsx`, following the sidebar-fix work landing alongside
+this). The existing `Search.tsx` page and its nav entry are removed — manual
+lookup is no longer a separate flow; the popup detail below covers it.
 
 Table columns, plain-English per [[feedback_jargon_free_ui]]:
 
 | Column | Content |
 |---|---|
 | Stock | Symbol / name |
+| Cap tier | Large / Mid / Small — reuse `_cap_tier()` from `signals.py`'s existing `/top-picks` |
 | Called On | Date + "N days ago" |
 | Entry / Stop / Target | ₹ values |
+| Current price | Live price, same source `Position.current_price` mark-to-market already uses |
 | Status | Chip: 🟢 Hit Target · 🔴 Hit Stop · ⚪ Open · ⚫ Expired, no hit |
 | Result | outcome_pct, or trade's real return_pct when executed, whichever is more relevant to show first |
 
-No drill-through/detail-on-tap needed for v1 — this table is already at the
-plain-English altitude the rest of the app aims for.
+Clicking a row opens a popup (reuse the existing `Modal` component, same
+pattern as `Finance.tsx`'s statement/loan modals) with full detail: the
+signal's `reason` text, confidence, all recorded features, and — when
+executed — the linked trade's real charges and net P&L.
+
+## 9b. API (amended)
+
+`GET /signals/track-record` (§8) additionally returns `cap_tier` (via the
+existing `_cap_tier()` helper) and `current_price` (same live-price lookup
+`portfolio.mark_to_market` already performs) per row, so the frontend needs
+no second round-trip to assemble the table.
 
 ## 10. Testing
 

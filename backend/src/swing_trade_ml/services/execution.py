@@ -53,6 +53,7 @@ def record_signal(
         suggested_quantity=quantity,
         stop_loss=decision.stop_loss,
         take_profit=decision.take_profit,
+        horizon_days=decision.horizon_days,
         reason=decision.reason,
         features=decision.features,
         generated_at=datetime.now(UTC),

@@ -50,3 +50,19 @@ def test_signal_has_outcome_columns(db_session):
     assert signal.outcome is None
     assert signal.outcome_pct is None
     assert signal.outcome_at is None
+
+
+def test_signal_decision_carries_horizon_days():
+    """SignalDecision must be able to carry a horizon so strategies can set
+    it — this is a shape test; per-strategy value tests are separate."""
+    from swing_trade_ml.core.enums import SignalType
+    from swing_trade_ml.strategies.base import SignalDecision
+
+    decision = SignalDecision(
+        signal=SignalType.BUY,
+        price=100.0,
+        stop_loss=90.0,
+        take_profit=120.0,
+        horizon_days=10,
+    )
+    assert decision.horizon_days == 10

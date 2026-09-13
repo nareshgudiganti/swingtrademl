@@ -189,5 +189,6 @@ class MLSwingStrategy(BaseStrategy):
             ),
             stop_loss=round(stop_loss, 2),
             take_profit=round(take_profit, 2),
+            horizon_days=model.prediction_horizon_days,
             features=features,
         )

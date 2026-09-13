@@ -185,3 +185,24 @@ def test_still_open_signal_is_not_scored(db_session):
     assert count == 0
     db_session.refresh(sig)
     assert sig.outcome is None
+
+
+def test_track_record_endpoint_returns_scored_and_open_signals(client, db_session):
+    inst = _instrument(db_session, "TRKTEST")
+    strat = _strategy(db_session)
+    gen_at = datetime(2026, 1, 1, tzinfo=UTC)
+    scored = _signal(db_session, strat.id, inst.id, gen_at, price=100.0, stop_loss=90.0, take_profit=110.0)
+    scored.outcome = "TARGET_HIT"
+    scored.outcome_pct = 0.10
+    scored.outcome_at = datetime(2026, 1, 2, tzinfo=UTC)
+    db_session.commit()
+
+    resp = client.get("/api/v1/signals/track-record", headers={"X-API-Key": "test-api-key"})
+
+    assert resp.status_code == 200
+    rows = resp.json()
+    matching = [r for r in rows if r["symbol"] == "TRKTEST"]
+    assert len(matching) == 1
+    assert matching[0]["outcome"] == "TARGET_HIT"
+    assert matching[0]["cap_tier"] == "large"
+    assert "current_price" in matching[0]

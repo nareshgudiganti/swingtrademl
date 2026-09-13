@@ -11,11 +11,24 @@ from sqlalchemy.orm import aliased
 from swing_trade_ml.api.deps import DbSession
 from swing_trade_ml.brokers import get_broker
 from swing_trade_ml.core.enums import PositionStatus
-from swing_trade_ml.db.models.market import Instrument
-from swing_trade_ml.db.models.trading import Position, Signal, Strategy
+from swing_trade_ml.db.models.market import Candle, Instrument
+from swing_trade_ml.db.models.trading import Position, Signal, Strategy, Trade
 from swing_trade_ml.schemas import SignalOut
 
 router = APIRouter(prefix="/signals", tags=["signals"])
+
+
+def _cap_tier(model_name: str | None) -> str:
+    """Map an ml_swing strategy's model_name param to a cap tier — mirrors
+    frontend/src/lib/tiers.ts's TIERS convention. Strategies with no model
+    (e.g. sma_crossover) or the default large-cap model both fall back to
+    "large".
+    """
+    if model_name == "swing_classifier_midcap":
+        return "midcap"
+    if model_name == "swing_classifier_smallcap":
+        return "smallcap"
+    return "large"
 
 
 @router.get("", response_model=list[SignalOut])
@@ -165,3 +178,66 @@ def buy_list(db: DbSession) -> list[dict]:
         }
         for sig, symbol, name, strategy_name in rows
     ]
+
+
+@router.get("/track-record", response_model=list[dict])
+def track_record(db: DbSession) -> list[dict]:
+    """Every signal with a stop/target set, scored or still open — the
+    honest ledger behind the Scan Results tab. Unlike /buy-list (a
+    same-day shortlist), this returns full history: wins, losses, and
+    expirations together, never filtered down to only the flattering ones.
+    See docs/superpowers/specs/2026-09-12-signal-track-record-design.md.
+    """
+    rows = db.execute(
+        select(Signal, Instrument.tradingsymbol, Instrument.name, Strategy)
+        .join(Instrument, Instrument.id == Signal.instrument_id)
+        .join(Strategy, Strategy.id == Signal.strategy_id)
+        .where(Signal.stop_loss.isnot(None), Signal.take_profit.isnot(None))
+        .order_by(Signal.generated_at.desc())
+    ).all()
+
+    out: list[dict] = []
+    for sig, symbol, name, strategy in rows:
+        trade_row = None
+        if sig.was_executed:
+            trade_row = db.execute(
+                select(Trade).where(Trade.instrument_id == sig.instrument_id, Trade.entry_at >= sig.generated_at)
+                .order_by(Trade.entry_at.asc())
+                .limit(1)
+            ).scalar_one_or_none()
+
+        current_price = None
+        latest_candle = db.execute(
+            select(Candle.close)
+            .where(Candle.instrument_id == sig.instrument_id, Candle.interval == "day")
+            .order_by(Candle.ts.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+        if latest_candle is not None:
+            current_price = float(latest_candle)
+
+        age_days = (datetime.now(UTC) - sig.generated_at).days
+
+        out.append({
+            "signal_id": sig.id,
+            "symbol": symbol,
+            "name": name,
+            "cap_tier": _cap_tier(strategy.params.get("model_name") if strategy.params else None),
+            "strategy_name": strategy.name,
+            "mode": sig.mode,
+            "generated_at": sig.generated_at,
+            "age_days": age_days,
+            "price": sig.price,
+            "stop_loss": sig.stop_loss,
+            "take_profit": sig.take_profit,
+            "current_price": current_price,
+            "confidence": sig.confidence,
+            "outcome": sig.outcome,
+            "outcome_pct": sig.outcome_pct,
+            "outcome_at": sig.outcome_at,
+            "was_executed": sig.was_executed,
+            "reason": sig.reason,
+            "trade_net_pnl": trade_row.net_pnl if trade_row else None,
+            "trade_return_pct": trade_row.return_pct if trade_row else None,
+        })
+    return out

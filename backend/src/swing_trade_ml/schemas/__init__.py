@@ -722,3 +722,53 @@ class FinanceRuleUpsertResult(BaseModel):
 
 class FinanceRecategorizeResult(BaseModel):
     recategorized_count: int
+
+
+# --------------------------------------------------------------- mutual funds --
+
+
+class MutualFundSearchResult(BaseModel):
+    scheme_id: int
+    scheme_code: str
+    name: str
+    amc_name: str | None
+    category: str | None
+    is_tracked: bool
+
+
+class MutualFundHoldingCreate(BaseModel):
+    scheme_id: int
+    units: float = Field(..., gt=0)
+    purchase_nav: float = Field(..., gt=0)
+    purchase_date: date
+    notes: str | None = None
+
+
+class MutualFundHoldingUpdate(BaseModel):
+    units: float | None = Field(None, gt=0)
+    purchase_nav: float | None = Field(None, gt=0)
+    purchase_date: date | None = None
+    notes: str | None = None
+
+
+class MutualFundHoldingOut(BaseModel):
+    id: int
+    scheme_id: int
+    scheme_name: str
+    category: str | None
+    units: float
+    purchase_nav: float
+    purchase_date: date
+    latest_nav: float | None
+    current_value: float | None
+    cost_basis: float
+    absolute_return: float | None
+    absolute_return_pct: float | None
+    annualized_return_pct: float | None
+    volatility: float | None
+    max_drawdown: float | None
+
+
+class MutualFundNavPoint(BaseModel):
+    date: date
+    nav: float

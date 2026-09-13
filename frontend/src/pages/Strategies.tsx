@@ -7,6 +7,16 @@ import SymbolPicker from '../components/SymbolPicker'
 import TierBadge from '../components/TierBadge'
 import { formatDate } from '../lib/format'
 import { tierFor } from '../lib/tiers'
+import { riskLabelFor, type RiskLabel } from '../lib/strategyRisk'
+
+// Same color language as badge-buy/badge-sell/badge-hold elsewhere — green
+// reads safe, amber reads balanced, red reads risky — rather than inventing
+// a fourth palette just for this pill.
+const RISK_BADGE_CLASS: Record<RiskLabel, string> = {
+  Conservative: 'badge-buy',
+  Moderate: 'badge-hold',
+  Aggressive: 'badge-sell',
+}
 
 // Auto vs advisory is a different axis from live vs paper (the Mode column
 // right next to it) — how a signal gets acted on, not whether it's real
@@ -188,15 +198,25 @@ export default function Strategies() {
                 const tier = tierFor(s.name)
                 const modelName = typeof s.params.model_name === 'string' ? s.params.model_name : null
                 const openCount = openCountByStrategy.get(s.id) ?? 0
+                // stop_loss_pct lives on the Strategy row itself, not inside
+                // params — merge it in so the heuristic sees every signal it
+                // needs from one object. See lib/strategyRisk.ts.
+                const risk = riskLabelFor({ ...s.params, stop_loss_pct: s.stop_loss_pct ?? s.params.stop_loss_pct })
                 return (
                   <tr key={s.id}>
                     <td>
-                      <strong>{s.name}</strong>
+                      <div className="row" style={{ gap: '0.4rem', flexWrap: 'wrap' }}>
+                        <strong>{s.name}</strong>
+                        <span className={`badge ${RISK_BADGE_CLASS[risk.label]}`}>{risk.label}</span>
+                      </div>
                       {s.description && (
                         <div className="muted" style={{ fontSize: '0.75rem' }}>
                           {s.description}
                         </div>
                       )}
+                      <div className="muted" style={{ fontSize: '0.75rem', marginTop: '0.15rem' }}>
+                        {risk.blurb}
+                      </div>
                     </td>
                     <td>{tier ? <TierBadge tier={tier} /> : <span className="muted">{s.strategy_type}</span>}</td>
                     <td className="mono" title={modelName ?? undefined}>

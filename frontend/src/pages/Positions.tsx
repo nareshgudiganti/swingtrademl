@@ -77,6 +77,9 @@ export default function Positions() {
   const positions = useQuery({ queryKey: ['positions'], queryFn: api.positions })
   const trades = useQuery({ queryKey: ['trades', 50], queryFn: () => api.trades(50) })
   const buyList = useQuery({ queryKey: ['buyList'], queryFn: api.buyList })
+  // Whole-life net worth (no month/category/direction filter) — a quick
+  // "how am I doing overall" strip, separate from the trading P&L below it.
+  const netWorth = useQuery({ queryKey: ['financeNetWorth'], queryFn: () => api.financeNetWorth() })
   const buySymbols = useMemo(() => new Set((buyList.data ?? []).map((r) => r.symbol)), [buyList.data])
   const recentlySold = useMemo(
     () => (trades.data ?? []).filter((t) => daysSince(t.exit_at) <= DAYS_TO_WATCH),
@@ -142,6 +145,28 @@ export default function Positions() {
       <div className="page-head">
         <h1>Portfolio</h1>
       </div>
+
+      {netWorth.data && (
+        <div className="grid" style={{ marginBottom: '1.5rem' }}>
+          <Stat
+            label="Net worth"
+            value={formatCurrency(netWorth.data.net_worth)}
+            tone={pnlClass(netWorth.data.net_worth) as 'pos' | 'neg' | 'flat'}
+          />
+          <Stat
+            label="Cash surplus"
+            value={formatCurrency(netWorth.data.cash_surplus)}
+            sub="income − expenses, all-time"
+            tone={pnlClass(netWorth.data.cash_surplus) as 'pos' | 'neg' | 'flat'}
+          />
+          <Stat label="Investments" value={formatCurrency(netWorth.data.investments_total)} />
+          <Stat
+            label="Loan liabilities"
+            value={formatCurrency(netWorth.data.liabilities)}
+            tone={netWorth.data.liabilities > 0 ? 'neg' : 'flat'}
+          />
+        </div>
+      )}
 
       {close.error && <ErrorBox error={close.error} />}
 

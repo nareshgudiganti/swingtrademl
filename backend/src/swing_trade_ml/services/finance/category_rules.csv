@@ -1,0 +1,166 @@
+keyword,category,priority
+income,Income,50
+salary,Income,50
+credited,Income,50
+restaurant,Food / Restaurants,50
+food,Food / Restaurants,50
+cafe,Food / Restaurants,50
+coffee,Food / Restaurants,50
+dining,Food / Restaurants,50
+hotel,Food / Restaurants,50
+eatery,Food / Restaurants,50
+vegetable,Vegetables,50
+veggies,Vegetables,50
+sabzi,Vegetables,50
+fruit,Fruits,50
+banana,Fruits,50
+apple,Fruits,50
+mango,Fruits,50
+dryfruit,Dryfruits,50
+dry fruit,Dryfruits,50
+almond,Dryfruits,50
+cashew,Dryfruits,50
+pista,Dryfruits,50
+chicken,Non Veg,50
+mutton,Non Veg,50
+fish,Non Veg,50
+meat,Non Veg,50
+egg,Non Veg,50
+swiggy,Food / Restaurants,50
+zomato,Food / Restaurants,50
+zepto,Groceries,50
+blinkit,Groceries,50
+instamart,Groceries,50
+smart,Groceries,50
+polimeras,Groceries,50
+polimera,Groceries,50
+pure o natural,Groceries,50
+pure natural,Groceries,50
+pure and natural,Groceries,50
+amazon,Ecommerce,50
+flipkart,Ecommerce,50
+myntra,Ecommerce,50
+ajio,Ecommerce,50
+meesho,Ecommerce,50
+trends,Shopping,50
+mangalya,Shopping,50
+south india shopping,Shopping,50
+bisleri,Bisleri Water,50
+water can,Bisleri Water,50
+mineral water,Bisleri Water,50
+gas refill,Gas Refill Booking,50
+lpg,Gas Refill Booking,50
+indane,Gas Refill Booking,50
+bharat gas,Gas Refill Booking,50
+hp gas,Gas Refill Booking,50
+milk,Milk Bill,50
+dairy,Milk Bill,50
+amul,Milk Bill,50
+heritage milk,Milk Bill,50
+milkman,Milk Bill,50
+maintenance,House Maintenance Bill,50
+apartment,House Maintenance Bill,50
+society,House Maintenance Bill,50
+plumber,House Maintenance Bill,50
+electrician,House Maintenance Bill,50
+repair,House Maintenance Bill,50
+internet,Internet / Power Bill / RO Bill,50
+broadband,Internet / Power Bill / RO Bill,50
+wifi,Internet / Power Bill / RO Bill,50
+electricity,Internet / Power Bill / RO Bill,50
+power bill,Internet / Power Bill / RO Bill,50
+bescom,Internet / Power Bill / RO Bill,50
+tsspdcl,Internet / Power Bill / RO Bill,50
+ro service,Internet / Power Bill / RO Bill,50
+ro bill,Internet / Power Bill / RO Bill,50
+airtel,Internet / Power Bill / RO Bill,50
+jio,Internet / Power Bill / RO Bill,50
+vi,Internet / Power Bill / RO Bill,50
+bsnl,Internet / Power Bill / RO Bill,50
+petrol,Car Fuel / Maintenance,50
+diesel,Car Fuel / Maintenance,50
+fuel,Car Fuel / Maintenance,50
+hpcl,Car Fuel / Maintenance,50
+iocl,Car Fuel / Maintenance,50
+bharat petroleum,Car Fuel / Maintenance,50
+shell,Car Fuel / Maintenance,50
+car service,Car Fuel / Maintenance,50
+car wash,Car Fuel / Maintenance,50
+tyre,Car Fuel / Maintenance,50
+apollo,Hospitals,50
+pharmacy,Hospitals,50
+medplus,Hospitals,50
+hospital,Hospitals,50
+clinic,Hospitals,50
+doctor,Hospitals,50
+medicine,Hospitals,50
+book,Books,50
+bookstore,Books,50
+crossword,Books,50
+kindle,Books,50
+donation,Donations,50
+charity,Donations,50
+temple,Donations,50
+ngo,Donations,50
+misc,Miscellaneous,50
+miscellaneous,Miscellaneous,50
+other,Miscellaneous,50
+credit card,Credit Card Bill,50
+card bill,Credit Card Bill,50
+cc bill,Credit Card Bill,50
+cred,Credit Card Bill,50
+interest,Interest Paid,50
+interest paid,Interest Paid,50
+roi,Interest Paid,50
+emi,EMIs,50
+loan emi,EMIs,50
+sip,SIPs,50
+systematic investment,SIPs,50
+school,Kids School Fees,50
+school fee,Kids School Fees,50
+fees,Kids School Fees,50
+tuition,Kids School Fees,50
+daycare,Kids School Fees,50
+rent,Rent,50
+debt,Debts,50
+borrowed,Debts,50
+personal loan,Loans,50
+home loan,Loans,50
+car loan,Loans,50
+insurance,Insurance,50
+lic,Insurance,50
+hdfc life,Insurance,50
+sbi life,Insurance,50
+loan,Loans,50
+netflix,Subscriptions,50
+prime,Subscriptions,50
+hotstar,Subscriptions,50
+spotify,Subscriptions,50
+youtube,Subscriptions,50
+irctc,Travel,50
+makemytrip,Travel,50
+cleartrip,Travel,50
+goibibo,Travel,50
+indigo,Travel,50
+air india,Travel,50
+uber,Travel,50
+ola,Travel,50
+rapido,Travel,50
+mutual fund,Investments,50
+zerodha,Investments,50
+groww,Investments,50
+angel one,Investments,50
+cashback,Rewards / Cashback,50
+reward,Rewards / Cashback,50
+refund,Refund,50
+google pay,Payments / UPI,50
+gpay,Payments / UPI,50
+phonepe,Payments / UPI,50
+phone pe,Payments / UPI,50
+paytm,Payments / UPI,50
+upi,Payments / UPI,50
+sweep,Internal Transfer,95
+od sweep,Internal Transfer,95
+sweep in,Internal Transfer,95
+sweep out,Internal Transfer,95
+rev sweep,Internal Transfer,95

@@ -31,6 +31,11 @@ data/
 !data/.gitkeep
 *.parquet
 *.csv
+# ...except this one: it's source (keyword -> category rules the finance
+# categorizer reads), not downloaded financial data — the *.csv rule above
+# was catching it too, which is why it was never committed and every fresh
+# clone/deploy silently lost transaction categorization until this fix.
+!backend/src/swing_trade_ml/services/finance/category_rules.csv
 *.joblib
 *.pkl
 *.h5

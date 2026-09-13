@@ -18,6 +18,12 @@ services:
   frontend:
     build:
       target: production
+      args:
+        # Must be a build ARG, not a .env.production file — see the comment
+        # in frontend/Dockerfile's build stage for why: .dockerignore
+        # excludes .env* from the build context entirely, which silently
+        # broke this in every build until this was made a real build arg.
+        VITE_API_BASE_URL: https://swingtrademl.com/api/v1
     container_name: stml-frontend
     restart: unless-stopped
     ports:

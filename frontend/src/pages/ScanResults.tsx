@@ -22,6 +22,13 @@ function resultPctFor(row: TrackRecordSignal): number | null {
   return row.was_executed && row.trade_return_pct != null ? row.trade_return_pct : row.outcome_pct
 }
 
+/** "Long-term" vs "Swing" is derived client-side from the strategy name
+ * rather than a new backend field — see
+ * docs/superpowers/plans/2026-09-12-long-term-stock-picks.md Task 5. */
+function horizonTagFor(row: TrackRecordSignal): 'Swing' | 'Long-term' {
+  return row.strategy_name.toLowerCase().includes('long_term') ? 'Long-term' : 'Swing'
+}
+
 export default function ScanResults() {
   const [selected, setSelected] = useState<TrackRecordSignal | null>(null)
   const scanResults = useQuery({ queryKey: ['scanResults'], queryFn: api.scanResults })
@@ -47,6 +54,7 @@ export default function ScanResults() {
               <tr>
                 <th>Stock</th>
                 <th>Cap tier</th>
+                <th>Horizon</th>
                 <th>Called on</th>
                 <th>Entry</th>
                 <th>Stop</th>
@@ -60,10 +68,16 @@ export default function ScanResults() {
               {rows.map((row) => {
                 const status = statusFor(row)
                 const resultPct = resultPctFor(row)
+                const horizonTag = horizonTagFor(row)
                 return (
                   <tr key={row.signal_id} onClick={() => setSelected(row)} style={{ cursor: 'pointer' }}>
                     <td>{row.symbol}</td>
                     <td>{row.cap_tier}</td>
+                    <td>
+                      <span className={`badge ${horizonTag === 'Long-term' ? 'badge-paper' : 'badge-hold'}`}>
+                        {horizonTag}
+                      </span>
+                    </td>
                     <td>
                       {formatDate(row.generated_at)} <span className="muted">({row.age_days}d ago)</span>
                     </td>

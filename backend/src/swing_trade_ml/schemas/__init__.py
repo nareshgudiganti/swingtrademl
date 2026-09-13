@@ -642,6 +642,7 @@ class FinanceNetWorth(BaseModel):
     cash_surplus: float
     investments_total: float
     liabilities: float
+    mutual_funds_value: float = 0.0
     net_worth: float
 
 

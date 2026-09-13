@@ -62,3 +62,20 @@ def test_calculation_totals_are_scoped_by_direction_filter(db_session):
 
     assert totals["total_debits"] == 3750.0
     assert totals["total_credits"] == 0.0
+
+
+def test_net_worth_includes_mutual_fund_value(client, db_session):
+    from datetime import date
+    from swing_trade_ml.db.models.mutual_funds import MutualFund, MutualFundHolding, MutualFundNav
+
+    fund = MutualFund(scheme_code="100033", name="Test Fund", is_tracked=True)
+    db_session.add(fund)
+    db_session.flush()
+    db_session.add(MutualFundNav(scheme_id=fund.id, date=date(2026, 1, 1), nav=44.0))
+    db_session.add(MutualFundHolding(scheme_id=fund.id, units=100.0, purchase_nav=40.0, purchase_date=date(2025, 6, 1)))
+    db_session.commit()
+
+    resp = client.get("/api/v1/finance/net-worth", headers={"X-API-Key": "test-api-key"})
+
+    assert resp.status_code == 200
+    assert resp.json()["mutual_funds_value"] == 4400.0

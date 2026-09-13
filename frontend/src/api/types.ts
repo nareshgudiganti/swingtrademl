@@ -146,6 +146,33 @@ export interface BuyListRow {
   generated_at: string
 }
 
+// Note: named TrackRecordSignal, not ScanResult, because ScanResult is
+// already taken (below) by the /strategies/scan-all response shape — this
+// is the per-signal row behind the "Scan Results" tab (see
+// docs/superpowers/specs/2026-09-12-signal-track-record-design.md).
+export interface TrackRecordSignal {
+  signal_id: number
+  symbol: string
+  name: string | null
+  cap_tier: 'large' | 'midcap' | 'smallcap'
+  strategy_name: string
+  mode: 'paper' | 'real'
+  generated_at: string
+  age_days: number
+  price: number
+  stop_loss: number
+  take_profit: number
+  current_price: number | null
+  confidence: number | null
+  outcome: 'TARGET_HIT' | 'STOP_LOSS_HIT' | 'EXPIRED_NO_HIT' | null
+  outcome_pct: number | null
+  outcome_at: string | null
+  was_executed: boolean
+  reason: string | null
+  trade_net_pnl: number | null
+  trade_return_pct: number | null
+}
+
 /** Stored market candle used for short-term price-performance summaries. */
 export interface Candle {
   ts: string

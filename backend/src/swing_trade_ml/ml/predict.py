@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.db.models.market import Candle, Instrument
 from swing_trade_ml.db.models.ml import MLModel, Prediction
+from swing_trade_ml.db.models.trading import Signal
 from swing_trade_ml.ml.dataset import load_candles
 from swing_trade_ml.ml.features import build_features
 from swing_trade_ml.ml.market_context import load_index_candles
@@ -226,6 +227,85 @@ def evaluate_pending_predictions(db: Session, interval: str = "day") -> int:
         db.commit()
         log.info("predict.evaluated", count=evaluated)
     return evaluated
+
+
+def evaluate_pending_signals(db: Session, interval: str = "day", now: datetime | None = None) -> int:
+    """Score every not-yet-scored Signal that has a stop/target against real
+    intraday price action — target hit, stop hit, or expired with no hit by
+    its own horizon. See docs/superpowers/specs/2026-09-12-signal-track-record-design.md
+    §6. Unlike evaluate_pending_predictions, this checks candle high/low, not
+    close — a stop or target order triggers intraday, and close-only scoring
+    would misrepresent what a real order does.
+    """
+    now = now or datetime.now(UTC)
+    scored = 0
+
+    pending = list(
+        db.execute(
+            select(Signal).where(
+                Signal.outcome.is_(None),
+                Signal.stop_loss.isnot(None),
+                Signal.take_profit.isnot(None),
+                Signal.horizon_days.isnot(None),
+            )
+        ).scalars().all()
+    )
+
+    for sig in pending:
+        horizon_end = sig.generated_at + timedelta(days=sig.horizon_days)
+
+        candles = list(
+            db.execute(
+                select(Candle)
+                .where(
+                    Candle.instrument_id == sig.instrument_id,
+                    Candle.interval == interval,
+                    Candle.ts > sig.generated_at,
+                    Candle.ts <= min(now, horizon_end),
+                )
+                .order_by(Candle.ts.asc())
+            ).scalars().all()
+        )
+
+        hit = False
+        for candle in candles:
+            stop_touched = candle.low <= sig.stop_loss
+            target_touched = candle.high >= sig.take_profit
+            if stop_touched:
+                sig.outcome = "STOP_LOSS_HIT"
+                sig.outcome_pct = (sig.stop_loss - sig.price) / sig.price
+                sig.outcome_at = candle.ts
+                hit = True
+                break
+            if target_touched:
+                sig.outcome = "TARGET_HIT"
+                sig.outcome_pct = (sig.take_profit - sig.price) / sig.price
+                sig.outcome_at = candle.ts
+                hit = True
+                break
+
+        if hit:
+            scored += 1
+            continue
+
+        if now < horizon_end + timedelta(days=2):
+            continue  # horizon hasn't elapsed yet — stays open
+
+        actual_return = forward_return_at_horizon(
+            db, sig.instrument_id, sig.generated_at, sig.price, sig.horizon_days, interval, now,
+        )
+        if actual_return is None:
+            continue  # no candle data past the horizon yet — stays open
+
+        sig.outcome = "EXPIRED_NO_HIT"
+        sig.outcome_pct = actual_return
+        sig.outcome_at = horizon_end
+        scored += 1
+
+    if scored:
+        db.commit()
+        log.info("predict.signals_evaluated", count=scored)
+    return scored
 
 
 def forward_return_at_horizon(

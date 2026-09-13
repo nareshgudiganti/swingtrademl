@@ -38,6 +38,7 @@ import type {
   StrategyType,
   SystemStatus,
   Trade,
+  TrackRecordSignal,
 } from './types'
 
 export const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000/api/v1'
@@ -206,6 +207,7 @@ export const api = {
   signalHistory: (symbol: string) =>
     get<LatestSignal[]>(`/signals/latest?symbol=${encodeURIComponent(symbol)}`),
   buyList: () => get<BuyListRow[]>('/signals/buy-list'),
+  scanResults: () => get<TrackRecordSignal[]>('/signals/track-record'),
 
   // --------------------------------------------------------- strategies --
   strategies: () => get<Strategy[]>('/strategies'),

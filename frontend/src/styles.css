@@ -57,9 +57,18 @@ a {
 }
 
 .brand {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
   font-weight: 700;
   font-size: 1.05rem;
   letter-spacing: -0.01em;
+}
+
+.brand-mark {
+  flex-shrink: 0;
+  font-size: 1.3rem;
+  line-height: 1;
 }
 
 .brand small {
@@ -76,10 +85,17 @@ a {
 }
 
 .nav a {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
   padding: 0.55rem 0.75rem;
   border-radius: var(--radius);
   color: var(--text-dim);
   transition: background 0.15s, color 0.15s, transform 0.1s;
+}
+
+.nav a svg {
+  flex-shrink: 0;
 }
 
 .nav a:active {
@@ -94,6 +110,33 @@ a {
 .nav a.active {
   background: var(--accent);
   color: #fff;
+}
+
+/* Sidebar's bottom Mode/Kite/Model/user block — a compact strip of wrapping
+   badges plus one small username row, instead of four stacked label/value
+   rows, so it reads at a glance without eating a quarter of the sidebar's
+   height. */
+.status-strip {
+  margin-top: auto;
+  font-size: 0.78rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.status-strip-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.status-strip-user {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding-top: 0.4rem;
+  border-top: 1px solid var(--border);
 }
 
 .content {
@@ -1075,6 +1118,54 @@ tr.sig-detail-row td {
   color: var(--text-dim);
   font-weight: 700;
   margin: 0 0 0.6rem;
+}
+
+/* ---------------------------------------------- mid-width: icon-only rail -- */
+/* Between the full 220px sidebar and the 800px full-collapse (below), there's
+   a range where a labelled 220px sidebar eats too much of the content area
+   but the screen is still wide enough for a real two-column layout (not the
+   horizontal-scrolling strip the sub-800px breakpoint switches to). Shrink to
+   a 64px icon-only rail instead — same nav, same order, just no label text;
+   `title` on each link covers the hover-for-name case a mouse user has here
+   that a touch user at 800px doesn't. Scoped with min-width so it never
+   overlaps the 800px breakpoint below (that one wins outright once the strip
+   layout takes over). */
+@media (max-width: 1100px) and (min-width: 801px) {
+  .layout {
+    grid-template-columns: 64px 1fr;
+  }
+  .sidebar {
+    padding: calc(1.25rem + env(safe-area-inset-top)) 0.5rem 1rem;
+  }
+  .brand {
+    justify-content: center;
+  }
+  .brand-label {
+    display: none;
+  }
+  .nav a {
+    justify-content: center;
+    padding: 0.6rem;
+  }
+  .nav-label {
+    display: none;
+  }
+  .status-strip-badges {
+    flex-direction: column;
+    align-items: center;
+  }
+  .status-strip-badges .badge {
+    width: 100%;
+    text-align: center;
+  }
+  .status-strip-user {
+    flex-direction: column;
+    align-items: center;
+    gap: 0.35rem;
+  }
+  .status-strip-user span {
+    display: none;
+  }
 }
 
 @media (max-width: 800px) {

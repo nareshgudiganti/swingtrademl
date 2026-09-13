@@ -136,6 +136,12 @@ def start_scheduler() -> None:
         id="evaluate_predictions",
         replace_existing=True,
     )
+    scheduler.add_job(
+        jobs.job_evaluate_signals,
+        CronTrigger(day_of_week=WEEKDAYS, hour=16, minute=17, timezone=IST),
+        id="evaluate_signals",
+        replace_existing=True,
+    )
 
     # --- weekly -------------------------------------------------------------
     # Sunday: the instrument dump is stable and nothing is trading.

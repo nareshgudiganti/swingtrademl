@@ -30,6 +30,7 @@ class SignalDecision:
     reason: str = ""
     stop_loss: float | None = None
     take_profit: float | None = None
+    horizon_days: int | None = None
     features: dict[str, Any] = field(default_factory=dict)
 
 

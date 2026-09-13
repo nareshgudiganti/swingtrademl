@@ -8,35 +8,35 @@ import Dashboard from './pages/Dashboard'
 import Finance from './pages/Finance'
 import Positions from './pages/Positions'
 import Reports from './pages/Reports'
-import Search from './pages/Search'
+import ScanResults from './pages/ScanResults'
 import Strategies from './pages/Strategies'
 import Models from './pages/Models'
 import Settings from './pages/Settings'
-import { BarChartIcon, BriefcaseIcon, HomeIcon, SearchIcon } from './components/icons'
+import { BarChartIcon, BriefcaseIcon, GearIcon, HomeIcon, LayersIcon, WalletIcon } from './components/icons'
 
 // Strategies and ML Models are still routed (linked from Settings' Advanced
 // section) but deliberately left out of the top-level nav — they're
 // admin/config screens, not something a day-to-day user needs to see
 // alongside Dashboard/Portfolio/Reports.
 const NAV = [
-  { to: '/dashboard', label: 'Dashboard' },
-  { to: '/portfolio', label: 'Portfolio' },
-  { to: '/reports', label: 'Reports' },
-  { to: '/search', label: 'Search' },
-  { to: '/finance', label: 'Finance' },
-  { to: '/settings', label: 'Settings' },
+  { to: '/dashboard', label: 'Dashboard', Icon: HomeIcon },
+  { to: '/portfolio', label: 'Portfolio', Icon: BriefcaseIcon },
+  { to: '/reports', label: 'Reports', Icon: BarChartIcon },
+  { to: '/scans', label: 'Scan Results', Icon: LayersIcon },
+  { to: '/finance', label: 'Finance', Icon: WalletIcon },
+  { to: '/settings', label: 'Settings', Icon: GearIcon },
 ]
 
 // The 4 destinations worth a one-tap reach on a phone — a real bottom tab
 // bar, shown only under the same 800px breakpoint the sidebar already
 // collapses at. This sits alongside that collapsed horizontal strip rather
-// than replacing it: the strip stays the full 6-item list (Finance/Settings
-// included), the tab bar is just the handful used every day.
+// than replacing it: the strip stays the full 6-item list (Settings and
+// Scan Results included), the tab bar is just the handful used every day.
 const TAB_BAR = [
   { to: '/dashboard', label: 'Dashboard', Icon: HomeIcon },
   { to: '/portfolio', label: 'Portfolio', Icon: BriefcaseIcon },
   { to: '/reports', label: 'Reports', Icon: BarChartIcon },
-  { to: '/search', label: 'Search', Icon: SearchIcon },
+  { to: '/finance', label: 'Finance', Icon: WalletIcon },
 ]
 
 // Real money is at stake once live_trading_enabled flips true — this must be
@@ -116,9 +116,12 @@ export default function App() {
   return (
     <div className="layout">
       <aside className="sidebar">
-        <div className="brand">
-          Swing Trade ML
-          <small>{status?.environment ?? '—'}</small>
+        <div className="brand" title="Swing Trade ML">
+          <span className="brand-mark">📈</span>
+          <span className="brand-label">
+            Swing Trade ML
+            <small>{status?.environment ?? '—'}</small>
+          </span>
         </div>
 
         <nav className="nav">
@@ -126,33 +129,34 @@ export default function App() {
             <NavLink
               key={item.to}
               to={item.to}
+              title={item.label}
               className={({ isActive }) => (isActive ? 'active' : '')}
             >
-              {item.label}
+              <item.Icon />
+              <span className="nav-label">{item.label}</span>
             </NavLink>
           ))}
         </nav>
 
-        <div style={{ marginTop: 'auto', fontSize: '0.78rem' }}>
-          <div className="row" style={{ marginBottom: '0.4rem' }}>
-            <span className="muted">Mode</span>
+        <div className="status-strip">
+          <div className="status-strip-badges">
             <span
               className={`badge ${status?.live_trading_enabled ? 'badge-live' : 'badge-paper'}`}
+              title="Mode"
             >
               {status?.live_trading_enabled ? 'LIVE' : 'PAPER'}
             </span>
-          </div>
-          <div className="row" style={{ marginBottom: '0.4rem' }}>
-            <span className="muted">Kite</span>
-            <span className={`badge ${status?.broker_authenticated ? 'badge-on' : 'badge-off'}`}>
-              {status?.broker_authenticated ? 'connected' : 'no session'}
+            <span
+              className={`badge ${status?.broker_authenticated ? 'badge-on' : 'badge-off'}`}
+              title="Kite"
+            >
+              {status?.broker_authenticated ? 'Kite connected' : 'Kite: no session'}
+            </span>
+            <span className="badge badge-off" title="Active model">
+              {status?.active_model ?? 'no model'}
             </span>
           </div>
-          <div className="row" style={{ marginBottom: '0.6rem' }}>
-            <span className="muted">Model</span>
-            <span className="muted">{status?.active_model ?? 'none'}</span>
-          </div>
-          <div className="row" style={{ justifyContent: 'space-between' }}>
+          <div className="status-strip-user">
             <span className="muted" title={me?.email ?? undefined}>
               {me?.username ?? '…'}
             </span>
@@ -213,7 +217,7 @@ export default function App() {
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/portfolio" element={<Positions />} />
             <Route path="/reports" element={<Reports />} />
-            <Route path="/search" element={<Search />} />
+            <Route path="/scans" element={<ScanResults />} />
             <Route path="/strategies" element={<Strategies />} />
             <Route path="/models" element={<Models />} />
             <Route path="/finance" element={<Finance />} />

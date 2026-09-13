@@ -37,6 +37,10 @@ class SMACrossoverStrategy(BaseStrategy):
         "max_rsi": 70.0,
         "use_trend_filter": True,
         "volume_confirm": True,
+        # No ML model to read a trained horizon from — 15 trading days is
+        # this strategy's own SMA-crossover-appropriate hold window, roughly
+        # matching the swing model's own horizon range.
+        "horizon_days": 15,
     }
 
     def min_bars_required(self) -> int:
@@ -132,6 +136,7 @@ class SMACrossoverStrategy(BaseStrategy):
                 ),
                 stop_loss=round(price * (1 - stop_pct), 2),
                 take_profit=round(price * (1 + target_pct), 2),
+                horizon_days=int(self.params["horizon_days"]),
                 features=features,
             )
 

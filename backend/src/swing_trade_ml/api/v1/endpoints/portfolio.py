@@ -359,12 +359,35 @@ def import_real_holdings(db: DbSession, strategy_id: int | None = None) -> list[
                 Instrument.exchange == h["exchange"], Instrument.tradingsymbol == h["tradingsymbol"]
             )
         ).scalar_one_or_none()
+
+        # A holding bought on BSE has exchange="BSE", but sync_instruments only
+        # ingests NSE, so the exact match finds nothing and the holding was
+        # silently skipped. It is the same company: fall back to the NSE
+        # listing, which is also the only one with candle history, a sector
+        # mapping and a trained model behind it. The two venues' prices track
+        # within a few basis points, which is well inside the ATR the stop is
+        # derived from.
+        exchange_note = None
+        if instrument is None:
+            instrument = db.execute(
+                select(Instrument).where(
+                    Instrument.exchange == "NSE",
+                    Instrument.tradingsymbol == h["tradingsymbol"],
+                    Instrument.is_active.is_(True),
+                )
+            ).scalar_one_or_none()
+            if instrument is not None:
+                exchange_note = f"held on {h['exchange']}, tracked against NSE prices"
+
         if instrument is None:
             results.append(
                 {
                     "symbol": h["tradingsymbol"],
                     "status": "skipped",
-                    "reason": "not in this app's instrument universe yet",
+                    "reason": (
+                        f"no instrument row for {h['tradingsymbol']} on "
+                        f"{h['exchange']} or NSE — run sync-instruments"
+                    ),
                 }
             )
             continue
@@ -399,6 +422,7 @@ def import_real_holdings(db: DbSession, strategy_id: int | None = None) -> list[
                 "stop_loss": stop_loss,
                 "take_profit": take_profit,
                 "levels_basis": basis,
+                **({"note": exchange_note} if exchange_note else {}),
             }
         )
 

@@ -1,23 +1,46 @@
 // Thin fetch wrapper around the FastAPI backend.
 
 import type {
+  Candle,
   CurrentUser,
   DetailedPosition,
   EquityPoint,
+  FinanceCalculationSummary,
+  FinanceCategorySummary,
+  FinanceCustomRule,
+  FinanceFilters,
+  FinanceIngestedFile,
+  FinanceIngestResult,
+  FinanceLoan,
+  FinanceMerchantSummary,
+  FinanceMonthlyCategorySummary,
+  FinanceMonthlySummary,
+  FinanceNetWorth,
+  FinanceRecategorizeResult,
+  FinanceRuleUpsertResult,
+  FinanceTransaction,
+  BuyListRow,
+  FinanceDailyCategory,
+  FinanceRecurringBill,
   Instrument,
+  KiteLoginResponse,
   LatestSignal,
+  HorizonAccuracy,
+  MarketRegime,
   MLModel,
   MessageResponse,
   PortfolioSummary,
+  Prediction,
   PredictionRun,
   ScanResult,
   Strategy,
+  StrategySignal,
   StrategyType,
   SystemStatus,
   Trade,
 } from './types'
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000/api/v1'
+export const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000/api/v1'
 
 // The dashboard authenticates as a real user: POST /auth/login or /auth/signup
 // returns a JWT, which is what every subsequent request carries as a bearer
@@ -99,6 +122,46 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>
 }
 
+/** Same as request<T>() but for multipart bodies (file uploads) — must NOT
+ * set Content-Type itself, so the browser attaches the multipart boundary. */
+async function requestForm<T>(path: string, form: FormData): Promise<T> {
+  const token = getToken()
+  const response = await fetch(`${BASE_URL}${path}`, {
+    method: 'POST',
+    body: form,
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  })
+
+  if (!response.ok) {
+    if (response.status === 401 && token) {
+      clearToken()
+    }
+    let detail = response.statusText
+    try {
+      const body = await response.json()
+      detail = typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail)
+    } catch {
+      /* keep statusText */
+    }
+    throw new ApiError(detail, response.status)
+  }
+
+  return response.json() as Promise<T>
+}
+
+/** Builds a `?a=1&b=2` suffix from a params object, dropping empty/undefined
+ * values — shared by every filterable finance endpoint. Takes `object` rather
+ * than `Record<string, ...>` so callers can pass a plain interface (e.g.
+ * `FinanceFilters`) without hitting Record's index-signature requirement. */
+function qs(params: object): string {
+  const entries = Object.entries(params as Record<string, string | number | undefined>).filter(
+    ([, v]) => v !== undefined && v !== '',
+  ) as [string, string | number][]
+  if (!entries.length) return ''
+  const search = new URLSearchParams(entries.map(([k, v]) => [k, String(v)]))
+  return `?${search.toString()}`
+}
+
 const get = <T>(path: string) => request<T>(path)
 const post = <T>(path: string, body?: unknown) =>
   request<T>(path, { method: 'POST', body: body ? JSON.stringify(body) : undefined })
@@ -117,6 +180,7 @@ export function googleLoginUrl(): string {
 export const api = {
   // ------------------------------------------------------------- system --
   status: () => get<SystemStatus>('/status'),
+  refreshData: () => post<SystemStatus>('/refresh-data'),
   health: () => get<{ status: string; version: string }>('/health'),
 
   // -------------------------------------------------------------- auth --
@@ -125,6 +189,7 @@ export const api = {
   signup: (username: string, password: string, email?: string) =>
     post<{ access_token: string }>('/auth/signup', { username, password, email }),
   me: () => get<CurrentUser>('/auth/me'),
+  kiteLogin: () => get<KiteLoginResponse>('/auth/kite/login'),
 
   // ---------------------------------------------------------- portfolio --
   summary: (mode?: string) =>
@@ -138,6 +203,9 @@ export const api = {
 
   // ------------------------------------------------------------ signals --
   latestSignals: (limit = 20) => get<LatestSignal[]>(`/signals/latest?limit=${limit}`),
+  signalHistory: (symbol: string) =>
+    get<LatestSignal[]>(`/signals/latest?symbol=${encodeURIComponent(symbol)}`),
+  buyList: () => get<BuyListRow[]>('/signals/buy-list'),
 
   // --------------------------------------------------------- strategies --
   strategies: () => get<Strategy[]>('/strategies'),
@@ -149,18 +217,30 @@ export const api = {
   activateStrategy: (id: number) => post<Strategy>(`/strategies/${id}/activate`),
   deactivateStrategy: (id: number) => post<Strategy>(`/strategies/${id}/deactivate`),
   scanAll: () => post<ScanResult>('/strategies/scan-all'),
+  // Every signal type (including HOLD), symbol-resolved, newest first. A
+  // strategy's most recent scan always sorts to the top `limit` rows, since
+  // each scan writes a fresh batch strictly after the previous one.
+  strategySignals: (id: number, limit = 100) =>
+    get<StrategySignal[]>(`/strategies/${id}/signals?limit=${limit}`),
 
   // ---------------------------------------------------------------- ml --
   models: () => get<MLModel[]>('/ml/models'),
   activateModel: (id: number) => post<MLModel>(`/ml/models/${id}/activate`),
   train: (body: Record<string, unknown>) => post<MessageResponse>('/ml/train', body),
-  predictionAccuracy: () =>
+  predictionAccuracy: (modelId?: number) =>
     get<{ evaluated_predictions: number; correct: number; accuracy: number }>(
-      '/ml/predictions/accuracy',
+      modelId ? `/ml/predictions/accuracy?model_id=${modelId}` : '/ml/predictions/accuracy',
     ),
   // Scores the whole watchlist now, ranked by probability — the "what should
   // I focus on" view. persist=true also feeds the accuracy metric above.
   predict: (persist = true) => post<PredictionRun[]>(`/ml/predict?persist=${persist}`),
+  // The history behind the accuracy stat: every prediction the bot has ever
+  // made, symbol-resolved, with the outcome once its horizon has elapsed.
+  predictions: (limit = 100) => get<Prediction[]>(`/ml/predictions?limit=${limit}`),
+  // "What if we judged this model on X days instead?" — read-only re-score
+  // of every prediction on record against an arbitrary horizon.
+  predictionAccuracyAtHorizon: (horizonDays: number) =>
+    get<HorizonAccuracy>(`/ml/predictions/accuracy/horizon?horizon_days=${horizonDays}`),
 
   // -------------------------------------------------------- instruments --
   watchlist: () => get<Instrument[]>('/instruments/watchlist'),
@@ -170,14 +250,90 @@ export const api = {
     get<Instrument[]>(`/instruments?search=${encodeURIComponent(search)}&limit=${limit}`),
 
   // -------------------------------------------------------- market data --
+  candles: (symbol: string, limit = 11) =>
+    get<Candle[]>(`/market-data/candles/${encodeURIComponent(symbol)}?interval=day&limit=${limit}`),
   backfill: (body: Record<string, unknown>) => post<MessageResponse>('/market-data/backfill', body),
   coverage: () =>
     get<{ symbol: string; candles: number; from: string | null; to: string | null }[]>(
       '/market-data/coverage',
     ),
+  marketRegime: () => get<MarketRegime>('/market-data/regime'),
 
   // ------------------------------------------------------ notifications --
   telegramStatus: () =>
     get<{ ok: boolean; bot: string | null; error: string | null }>('/notifications/telegram/status'),
   telegramTest: () => post<MessageResponse>('/notifications/telegram/test'),
+
+  // ------------------------------------------------------------ finance --
+  uploadFinanceStatement: (file: File, password?: string) => {
+    const form = new FormData()
+    form.append('file', file)
+    if (password) form.append('password', password)
+    return requestForm<FinanceIngestResult>('/finance/statements', form)
+  },
+  financeTransactions: (params: FinanceFilters & { search?: string } = {}) =>
+    get<FinanceTransaction[]>(`/finance/transactions${qs(params)}`),
+  recategorizeFinanceTransaction: (id: number, category: string) =>
+    patch<FinanceTransaction>(`/finance/transactions/${id}`, { category }),
+  financeCategories: () => get<string[]>('/finance/categories'),
+  // Always spans every month by design — see the backend endpoint's own
+  // docstring. Still respects category/direction.
+  financeMonthlySummary: (filters: Omit<FinanceFilters, 'month'> = {}) =>
+    get<FinanceMonthlySummary[]>(`/finance/summary/monthly${qs(filters)}`),
+  financeCategorySummary: (filters: Omit<FinanceFilters, 'category'> = {}) =>
+    get<FinanceCategorySummary[]>(`/finance/summary/categories${qs(filters)}`),
+  financeMonthlyCategorySummary: () =>
+    get<FinanceMonthlyCategorySummary[]>('/finance/summary/monthly-categories'),
+  financeMerchants: (filters: FinanceFilters = {}, topN = 20) =>
+    get<FinanceMerchantSummary[]>(`/finance/merchants${qs({ ...filters, top_n: topN })}`),
+  financeInsights: (filters: FinanceFilters = {}) => get<string[]>(`/finance/insights${qs(filters)}`),
+  financeCalculation: (filters: FinanceFilters = {}) =>
+    get<FinanceCalculationSummary>(`/finance/calculation${qs(filters)}`),
+  financeNetWorth: (filters: FinanceFilters = {}) => get<FinanceNetWorth>(`/finance/net-worth${qs(filters)}`),
+  financeStatements: () => get<FinanceIngestedFile[]>('/finance/statements'),
+  financeDeletedStatements: () => get<FinanceIngestedFile[]>('/finance/statements?deleted=true'),
+  // Soft delete — reversible via restoreFinanceStatement, so no confirmation
+  // dialog is needed at the call site.
+  deleteFinanceStatement: (id: number) => del<MessageResponse>(`/finance/statements/${id}`),
+  restoreFinanceStatement: (id: number) => post<FinanceIngestedFile>(`/finance/statements/${id}/restore`),
+  permanentlyDeleteFinanceStatement: (id: number, filename: string) =>
+    del<MessageResponse>(`/finance/statements/${id}/permanent?confirm_filename=${encodeURIComponent(filename)}`),
+
+  // -------------------------------------------------------- finance loans --
+  financeLoans: () => get<FinanceLoan[]>('/finance/loans'),
+  createFinanceLoan: (body: Record<string, unknown>) => post<FinanceLoan>('/finance/loans', body),
+  updateFinanceLoan: (id: number, body: Record<string, unknown>) =>
+    patch<FinanceLoan>(`/finance/loans/${id}`, body),
+  deleteFinanceLoan: (id: number) => del<MessageResponse>(`/finance/loans/${id}`),
+
+  // ------------------------------------------------------- recurring bills --
+  recurringBills: (month?: string) =>
+    get<FinanceRecurringBill[]>(`/finance/recurring-bills${month ? `?month=${month}` : ''}`),
+  createRecurringBill: (body: Record<string, unknown>) =>
+    post<FinanceRecurringBill>('/finance/recurring-bills', body),
+  addDefaultRecurringBills: () =>
+    post<FinanceRecurringBill[]>('/finance/recurring-bills/defaults', {}),
+  updateRecurringBill: (id: number, body: Record<string, unknown>) =>
+    patch<FinanceRecurringBill>(`/finance/recurring-bills/${id}`, body),
+  deleteRecurringBill: (id: number) => del<MessageResponse>(`/finance/recurring-bills/${id}`),
+  payRecurringBill: (id: number, body: { month: string; amount: number; paid_at?: string }) =>
+    post<FinanceRecurringBill>(`/finance/recurring-bills/${id}/pay`, body),
+  unpayRecurringBill: (id: number, month: string) =>
+    del<MessageResponse>(`/finance/recurring-bills/${id}/pay/${month}`),
+
+  // ----------------------------------------------------------- daily spend --
+  dailyCategories: () => get<FinanceDailyCategory[]>('/finance/daily-categories'),
+  createDailyCategory: (name: string) =>
+    post<FinanceDailyCategory>('/finance/daily-categories', { name }),
+  deleteDailyCategory: (id: number) => del<MessageResponse>(`/finance/daily-categories/${id}`),
+  createDailyExpense: (body: { category: string; amount: number; spent_at?: string; note?: string }) =>
+    post<FinanceTransaction>('/finance/daily-expenses', body),
+
+  // -------------------------------------------------------- finance rules --
+  financeRules: () => get<FinanceCustomRule[]>('/finance/rules'),
+  upsertFinanceRule: (keyword: string, category: string, priority = 90) =>
+    put<FinanceRuleUpsertResult>('/finance/rules', { keyword, category, priority }),
+  deleteFinanceRule: (keyword: string) =>
+    del<MessageResponse>(`/finance/rules/${encodeURIComponent(keyword)}`),
+  recategorizeFinanceRules: () => post<FinanceRecategorizeResult>('/finance/rules/recategorize'),
 }

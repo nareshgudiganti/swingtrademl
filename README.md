@@ -291,7 +291,14 @@ swingtrade train --algorithm lightgbm --activate
 swingtrade scan                       # run active strategies now
 swingtrade create-user --username admin --password secret
 
-# Tests
+# Tests — the integration tests (test_ml_predict_endpoint.py, test_engine.py)
+# need a database of their own, created once against the same local Postgres
+# docker-compose already runs (never the real swing_trade_ml database):
+#   docker exec stml-postgres psql -U swingtrade -d postgres -c \
+#     "CREATE DATABASE swing_trade_ml_test;"
+#   docker exec stml-postgres psql -U swingtrade -d swing_trade_ml_test -c \
+#     "CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE; CREATE EXTENSION IF NOT EXISTS pg_trgm;"
+# Tables are (re)created automatically on the first test run after that.
 cd backend && pytest -v
 
 # Migrations (only when you change a model — startup applies them automatically)

@@ -146,6 +146,77 @@ def set_watchlist(db: Session, symbols: list[str], exchange: str = "NSE") -> lis
     return sorted(found)
 
 
+def ensure_benchmark_index(db: Session, exchange: str = "NSE") -> Instrument:
+    """Get (or create) the Instrument row for settings.BENCHMARK_INDEX_SYMBOL.
+
+    Deliberately bypasses sync_instruments()/equity_only: Kite's own dump
+    reports the index with instrument_type="EQ" (confirmed live — same value
+    every real equity carries), so that filter can't distinguish it. Matched
+    by exact tradingsymbol instead, which is unambiguous.
+
+    Never watchlisted — is_watchlisted drives every automatic backfill/scan/
+    training instrument loop in this codebase, and this index is a feature
+    input, not a trading candidate.
+    """
+    symbol = settings.BENCHMARK_INDEX_SYMBOL
+    existing = db.execute(
+        select(Instrument).where(
+            Instrument.tradingsymbol == symbol, Instrument.exchange == exchange
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        # A prior plain sync-instruments run may already have this row —
+        # Kite's own instrument_type for an index is an unhelpful "EQ" (same
+        # as every real equity), so a row created that way needs correcting
+        # rather than trusted as-is. Also guard against a stale accidental
+        # watchlisting the same way.
+        changed = False
+        if existing.instrument_type != "INDEX":
+            existing.instrument_type = "INDEX"
+            changed = True
+        if existing.is_watchlisted:
+            existing.is_watchlisted = False
+            changed = True
+        if changed:
+            db.commit()
+            db.refresh(existing)
+        return existing
+
+    raw = kite_broker.get_instruments(exchange)
+    match = next((item for item in raw if item.get("tradingsymbol") == symbol), None)
+    if match is None:
+        raise ValueError(f"'{symbol}' not found in Kite's {exchange} instrument dump")
+
+    instrument = Instrument(
+        instrument_token=match["instrument_token"],
+        exchange_token=match.get("exchange_token"),
+        tradingsymbol=symbol,
+        name=match.get("name"),
+        exchange=match.get("exchange", exchange),
+        segment=match.get("segment"),
+        # Distinct from Kite's own (unhelpful) "EQ" value, so any future
+        # instrument_type != "INDEX" guard doesn't depend on Kite's quirk.
+        instrument_type="INDEX",
+        lot_size=match.get("lot_size") or 1,
+        tick_size=match.get("tick_size") or 0.05,
+        is_watchlisted=False,
+        is_active=True,
+    )
+    db.add(instrument)
+    db.commit()
+    db.refresh(instrument)
+    log.info("ingestion.benchmark_index.created", symbol=symbol, token=instrument.instrument_token)
+    return instrument
+
+
+def backfill_index(db: Session, interval: str = "day", days: int | None = None) -> int:
+    """Top up the benchmark index's own candle history — same mechanics as a
+    regular instrument (backfill_instrument doesn't check is_watchlisted),
+    just reached by a dedicated call since this index is never watchlisted."""
+    instrument = ensure_benchmark_index(db)
+    return backfill_instrument(db, instrument, interval, days, incremental=True)
+
+
 def _upsert_candles(db: Session, instrument_id: int, interval: str, bars: list[dict]) -> int:
     """Insert bars, updating any that already exist.
 
@@ -263,6 +334,36 @@ def backfill_watchlist(
         log.warning("ingestion.backfill.no_watchlist")
         return {}
 
+    return _backfill_many(db, instruments, interval, days, incremental)
+
+
+def backfill_symbols(
+    db: Session, symbols: list[str], interval: str = "day",
+    days: int | None = None, incremental: bool = True,
+) -> dict[str, int]:
+    """Backfill an explicit symbol list, independent of the watchlist flag —
+    the daily top-up for a strategy that deliberately keeps its own
+    instruments unwatchlisted (see strategies/ml_swing.py's model_name param
+    and the mid-cap strategy, which stays out of every is_watchlisted=True
+    path — predict_watchlist/Recommendations, refresh_quotes, coverage — on
+    purpose, so it's never scored with the wrong model)."""
+    wanted = [s.strip().upper() for s in symbols if s.strip()]
+    instruments = list(
+        db.execute(select(Instrument).where(Instrument.tradingsymbol.in_(wanted)))
+        .scalars()
+        .all()
+    )
+    if not instruments:
+        log.warning("ingestion.backfill.no_symbols_matched", symbols=wanted)
+        return {}
+
+    return _backfill_many(db, instruments, interval, days, incremental)
+
+
+def _backfill_many(
+    db: Session, instruments: list[Instrument], interval: str,
+    days: int | None, incremental: bool,
+) -> dict[str, int]:
     results: dict[str, int] = {}
     for inst in instruments:
         try:

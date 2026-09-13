@@ -7,6 +7,7 @@ from sqlalchemy import Integer, cast, func, select
 
 from swing_trade_ml.api.deps import DbSession
 from swing_trade_ml.core.logging import get_logger
+from swing_trade_ml.db.models.market import Instrument
 from swing_trade_ml.db.models.ml import MLModel, Prediction
 from swing_trade_ml.db.session import session_scope
 from swing_trade_ml.ml import predict as predict_service
@@ -103,11 +104,21 @@ def activate(model_id: int, db: DbSession) -> MLModel:
 @router.post("/predict", response_model=list[PredictionRunOut])
 def run_predictions(
     db: DbSession,
-    model_name: str | None = None,
+    model_name: str | None = "swing_classifier",
     interval: str = "day",
     persist: bool = True,
 ) -> list[PredictionRunOut]:
-    """Score the whole watchlist now, ranked by probability."""
+    """Score the whole watchlist now, ranked by probability.
+
+    Defaulting to "swing_classifier" here, not just in predict_watchlist()'s
+    own signature, matters: a query param omitted by the caller arrives here
+    as a literal None, which is then passed through explicitly — Python does
+    not fall back to the callee's default in that case. Leaving this at None
+    is exactly the Aug 12 incident recurring: a mid/small-cap promotion
+    becomes "most recently activated" system-wide and silently shadows the
+    large-cap watchlist's own model. Pass model_name=None explicitly in the
+    request if that global-latest lookup is ever genuinely wanted.
+    """
     results = predict_service.predict_watchlist(db, model_name, interval, persist)
     if not results:
         raise HTTPException(
@@ -133,13 +144,37 @@ def list_predictions(
     model_id: int | None = None,
     evaluated_only: bool = False,
     limit: int = Query(100, le=1000),
-) -> list[Prediction]:
-    stmt = select(Prediction).order_by(Prediction.ts.desc()).limit(limit)
+) -> list[dict]:
+    """Symbol-resolved so the dashboard can show "what we predicted and what
+    actually happened" without a second lookup per row."""
+    stmt = (
+        select(Prediction, Instrument.tradingsymbol)
+        .join(Instrument, Instrument.id == Prediction.instrument_id)
+        .order_by(Prediction.ts.desc())
+        .limit(limit)
+    )
     if model_id:
         stmt = stmt.where(Prediction.model_id == model_id)
     if evaluated_only:
         stmt = stmt.where(Prediction.evaluated_at.isnot(None))
-    return list(db.execute(stmt).scalars().all())
+
+    rows = db.execute(stmt).all()
+    return [
+        {
+            "id": pred.id,
+            "model_id": pred.model_id,
+            "instrument_id": pred.instrument_id,
+            "symbol": symbol,
+            "ts": pred.ts,
+            "predicted_class": pred.predicted_class,
+            "probability": pred.probability,
+            "price_at_prediction": pred.price_at_prediction,
+            "actual_return": pred.actual_return,
+            "was_correct": pred.was_correct,
+            "evaluated_at": pred.evaluated_at,
+        }
+        for pred, symbol in rows
+    ]
 
 
 @router.get("/predictions/accuracy", response_model=dict)
@@ -170,6 +205,36 @@ def prediction_accuracy(db: DbSession, model_id: int | None = None) -> dict:
         "accuracy": (correct / total) if total else 0.0,
         "avg_probability": float(avg_prob) if avg_prob is not None else 0.0,
         "avg_actual_return": float(avg_return) if avg_return is not None else 0.0,
+    }
+
+
+@router.get("/predictions/accuracy/horizon", response_model=dict)
+def prediction_accuracy_at_horizon(
+    db: DbSession,
+    horizon_days: int = Query(..., ge=1, le=60),
+    target_return: float | None = None,
+    model_id: int | None = None,
+) -> dict:
+    """"What if we judged this model on X days instead of the horizon it was
+    trained for?" — entirely read-only, re-scores every prediction against
+    an arbitrary horizon without touching the stored (permanent) evaluation.
+
+    Answers "is the app guessing properly" for any X you want to test, using
+    the same predictions already on record rather than requiring a retrain.
+    """
+    try:
+        result = predict_service.accuracy_at_horizon(db, horizon_days, target_return, model_id)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+    return {
+        "horizon_days": result.horizon_days,
+        "target_return": result.target_return,
+        "total_predictions": result.total_predictions,
+        "evaluable": result.evaluable,
+        "correct": result.correct,
+        "accuracy": result.accuracy,
+        "avg_actual_return": result.avg_actual_return,
     }
 
 

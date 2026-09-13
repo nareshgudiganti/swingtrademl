@@ -191,7 +191,12 @@ class TelegramNotifier:
         )
         return await self.send(text, NotificationEvent.FILL)
 
-    async def notify_daily_summary(self, stats: dict[str, Any], mode: str = "paper") -> bool:
+    async def notify_daily_summary(
+        self,
+        stats: dict[str, Any],
+        mode: str = "paper",
+        post_exit_watch: list[dict[str, Any]] | None = None,
+    ) -> bool:
         badge = "📝 PAPER" if mode == "paper" else "💰 LIVE"
         day_pnl = stats.get("day_pnl", 0.0)
         icon = "📈" if day_pnl >= 0 else "📉"
@@ -224,6 +229,18 @@ class TelegramNotifier:
                 lines.append(
                     f"  {arrow} {_esc(pos['symbol'])}: {pos['pnl_pct']:+.2%} "
                     f"(₹{pos['pnl']:,.0f})"
+                )
+
+        if post_exit_watch:
+            lines += ["", "<b>Since we sold</b>"]
+            for row in post_exit_watch[:8]:
+                arrow = "▲" if row["change_pct"] >= 0 else "▼"
+                # From our perspective, not the stock's: a rise since we sold
+                # is money left on the table, so it's flagged not celebrated.
+                flag = "⚠️" if row["change_pct"] >= 0.03 else ""
+                lines.append(
+                    f"  {arrow} {_esc(row['symbol'])}: {row['change_pct']:+.2%} since exit "
+                    f"({row['days_since_exit']}d ago) {flag}"
                 )
 
         return await self.send("\n".join(lines), NotificationEvent.DAILY_SUMMARY)

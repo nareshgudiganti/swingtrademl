@@ -37,6 +37,12 @@ export default function AuthScreen() {
         <p className="muted" style={{ marginTop: 0 }}>
           {mode === 'login' ? 'Sign in to your account.' : 'Create an account to get started.'}
         </p>
+        <p className="muted" style={{ fontSize: '0.85rem', lineHeight: 1.5 }}>
+          An ML-driven swing-trading bot for NSE stocks — it scans a watchlist daily and
+          surfaces buy/hold/exit calls with a confidence score. This is a single shared
+          account: everyone who signs in sees the same positions and portfolio, currently
+          running in paper (simulated) mode.
+        </p>
 
         {error && (
           <div className="banner banner-warn" style={{ marginBottom: '0.8rem' }}>

@@ -44,6 +44,7 @@ class KiteBroker(Broker):
     def __init__(self) -> None:
         self._kite = KiteConnect(api_key=settings.KITE_API_KEY)
         self._token_loaded = False
+        self._loaded_session_id: int | None = None
 
     # ------------------------------------------------------------- session --
 
@@ -54,6 +55,14 @@ class KiteBroker(Broker):
     @property
     def is_authenticated(self) -> bool:
         return self._token_loaded
+
+    @property
+    def loaded_session_id(self) -> int | None:
+        """Which BrokerSession row is currently live in this process — lets a
+        caller (job_refresh_quotes) detect "just picked up a new login" vs.
+        "still the same session as last tick" without reaching into internals.
+        """
+        return self._loaded_session_id
 
     def login_url(self) -> str:
         return self._kite.login_url()
@@ -89,8 +98,82 @@ class KiteBroker(Broker):
         log.info("kite.login.success", user_id=data.get("user_id"))
         return session
 
+    def auto_login(self, db: Session) -> BrokerSession:
+        """Unattended login using Zerodha credentials + TOTP, for the daily
+        06:10 IST scheduled job — the manual `/kite/login` flow this mirrors
+        exists because access tokens expire every day, and this exists so a
+        human doesn't have to remember to repeat it every trading morning.
+
+        Zerodha's Connect (OAuth-style) flow has no official
+        password-in/token-out API — it's designed to run in a browser. This
+        drives the same web endpoints their login page itself calls
+        (undocumented, but this is the standard pattern used for Kite
+        automation): POST credentials, POST the TOTP code, then walk the
+        Connect authorize redirect by hand to pull `request_token` out of the
+        Location header — never letting `requests` actually follow the final
+        hop, since that URL is our own public callback and would attempt a
+        second, redundant `generate_session` call against an already-used
+        request_token (Zerodha request_tokens are single-use).
+        """
+        if not (settings.KITE_USER_ID and settings.KITE_PASSWORD and settings.KITE_TOTP_SECRET):
+            raise RuntimeError(
+                "Kite auto-login is not configured — set KITE_USER_ID, KITE_PASSWORD, "
+                "and KITE_TOTP_SECRET to enable it."
+            )
+
+        import pyotp
+        import requests
+
+        http = requests.Session()
+
+        login_resp = http.post(
+            "https://kite.zerodha.com/api/login",
+            data={"user_id": settings.KITE_USER_ID, "password": settings.KITE_PASSWORD},
+            timeout=15,
+        )
+        login_resp.raise_for_status()
+        request_id = login_resp.json()["data"]["request_id"]
+
+        totp_code = pyotp.TOTP(settings.KITE_TOTP_SECRET).now()
+        twofa_resp = http.post(
+            "https://kite.zerodha.com/api/twofa",
+            data={
+                "user_id": settings.KITE_USER_ID,
+                "request_id": request_id,
+                "twofa_value": totp_code,
+                "twofa_type": "totp",
+            },
+            timeout=15,
+        )
+        twofa_resp.raise_for_status()
+
+        request_token = self._walk_authorize_redirect(http)
+        return self.complete_login(request_token, db)
+
+    def _walk_authorize_redirect(self, http, max_hops: int = 5) -> str:
+        from urllib.parse import parse_qs, urlparse
+
+        response = http.get(self.login_url(), allow_redirects=False, timeout=15)
+        for _ in range(max_hops):
+            location = response.headers.get("Location")
+            if not location:
+                break
+            token = parse_qs(urlparse(location).query).get("request_token")
+            if token:
+                return token[0]
+            response = http.get(location, allow_redirects=False, timeout=15)
+        raise KiteAuthError(
+            "Kite auto-login: no request_token found in the authorize redirect chain "
+            "— Zerodha may be asking for a fresh app authorization or CAPTCHA."
+        )
+
     def load_session(self, db: Session) -> bool:
-        """Restore the newest active token at startup.
+        """Restore the newest active token — called at startup, and cheaply
+        re-checked on every refresh_quotes tick (job_refresh_quotes) so a
+        login completed on another process (the api container, which serves
+        the OAuth callback) reaches this one within a minute instead of
+        requiring a manual restart to notice it. Skips the redundant
+        set_access_token call when the same session is already loaded.
 
         Returns False if there is none or it has expired — the caller reports
         that as a degraded-but-running state rather than failing the boot,
@@ -104,18 +187,27 @@ class KiteBroker(Broker):
         )
         session = db.execute(stmt).scalar_one_or_none()
         if not session:
-            log.warning("kite.session.none")
+            if self._token_loaded:
+                log.warning("kite.session.none")
+            self._token_loaded = False
+            self._loaded_session_id = None
             return False
 
         if session.expires_at and session.expires_at < datetime.now(UTC):
             log.warning("kite.session.expired", expired_at=str(session.expires_at))
             session.is_active = False
             db.commit()
+            self._token_loaded = False
+            self._loaded_session_id = None
             return False
+
+        if self._token_loaded and self._loaded_session_id == session.id:
+            return True
 
         self._kite.set_access_token(session.access_token)
         self._token_loaded = True
-        log.info("kite.session.restored", user_id=session.kite_user_id)
+        self._loaded_session_id = session.id
+        log.info("kite.session.restored", user_id=session.kite_user_id, session_id=session.id)
         return True
 
     def _require_auth(self) -> None:

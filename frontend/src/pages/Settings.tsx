@@ -1,9 +1,27 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 
 import { api, clearToken } from '../api/client'
 import { ErrorBox, Loading } from '../components/Loading'
 import SymbolPicker from '../components/SymbolPicker'
+import { ClockIcon, PlugIcon, SendIcon, WarningIcon } from '../components/icons'
+
+// Job IDs are stable (see workers/scheduler.py); their exact cron time isn't
+// duplicated here on purpose — that's read live from `trigger`/`next_run`
+// below, so this table can never silently drift out of sync with a schedule
+// change. This is just the "what does this job do" a raw id doesn't convey.
+const JOB_DESCRIPTIONS: Record<string, string> = {
+  refresh_quotes: 'Pulls live prices during market hours and marks positions to market',
+  check_exits: 'Enforces stop-loss/target on open positions — the safety net',
+  reconcile_orders: 'Checks pending live orders against their real broker status',
+  daily_ingest: "Pulls the day's final candle after the close",
+  predict_watchlist: 'Scores the large-cap watchlist for the Recommendations page',
+  signal_scan: 'The main daily scan — generates BUY/HOLD/EXIT signals for every strategy',
+  daily_summary: 'Posts the end-of-day portfolio summary',
+  evaluate_predictions: "Scores yesterday's predictions once their horizon has elapsed",
+  sync_instruments: "Refreshes Kite's instrument list (weekly — nothing trades on Sunday)",
+}
 
 export default function Settings() {
   const queryClient = useQueryClient()
@@ -45,47 +63,111 @@ export default function Settings() {
         <h1>Settings</h1>
       </div>
 
+      {!me.data?.is_superuser && (
+        <div className="card" style={{ marginBottom: '1.5rem' }}>
+          <p className="muted" style={{ margin: 0 }}>
+            You're viewing the shared account — the operational details (scheduler, broker
+            session, watchlist, data ingestion) are managed by the account owner and aren't
+            shown here.
+          </p>
+        </div>
+      )}
+
+      {me.data?.is_superuser && (
+        <>
       <h2>System</h2>
       <div className="grid">
-        <div className="card">
-          <div className="stat-label">Trading mode</div>
-          <div className="stat-value">
-            <span className={`badge ${s?.live_trading_enabled ? 'badge-live' : 'badge-paper'}`}>
-              {s?.live_trading_enabled ? 'LIVE' : 'PAPER'}
-            </span>
+        <div className="card card-with-icon">
+          <div>
+            <div className="stat-label">Trading mode</div>
+            <div className="stat-value">
+              <span className={`badge ${s?.live_trading_enabled ? 'badge-live' : 'badge-paper'}`}>
+                {s?.live_trading_enabled ? 'LIVE' : 'PAPER'}
+              </span>
+            </div>
+            <div className="stat-sub">
+              Change this in <code>.env</code> and restart. Live requires both{' '}
+              <code>TRADING_MODE=live</code> and <code>ALLOW_LIVE_TRADING=true</code>.
+            </div>
           </div>
-          <div className="stat-sub">
-            Change this in <code>.env</code> and restart. Live requires both{' '}
-            <code>TRADING_MODE=live</code> and <code>ALLOW_LIVE_TRADING=true</code>.
-          </div>
-        </div>
-        <div className="card">
-          <div className="stat-label">Zerodha session</div>
-          <div className="stat-value">
-            <span className={`badge ${s?.broker_authenticated ? 'badge-on' : 'badge-off'}`}>
-              {s?.broker_authenticated ? 'connected' : 'not connected'}
-            </span>
-          </div>
-          <div className="stat-sub">
-            <a
-              href="http://localhost:8000/api/v1/auth/kite/login"
-              target="_blank"
-              rel="noreferrer"
-              style={{ textDecoration: 'underline' }}
-            >
-              Log in to Kite
-            </a>{' '}
-            — required every trading morning.
+          <div className={`icon-chip ${s?.live_trading_enabled ? 'chip-warn' : 'chip-accent'}`}>
+            <WarningIcon />
           </div>
         </div>
-        <div className="card">
-          <div className="stat-label">Scheduler</div>
-          <div className="stat-value">
-            <span className={`badge ${s?.scheduler_running ? 'badge-on' : 'badge-off'}`}>
-              {s?.scheduler_running ? 'running' : 'stopped'}
-            </span>
+        <div className="card card-with-icon">
+          <div>
+            <div className="stat-label">Zerodha session</div>
+            <div className="stat-value">
+              <span className={`badge ${s?.broker_authenticated ? 'badge-on' : 'badge-off'}`}>
+                {s?.broker_authenticated ? 'connected' : 'not connected'}
+              </span>
+            </div>
+            <div className="stat-sub">
+              {!s?.broker_authenticated && s && s.open_positions > 0 ? (
+                <strong>
+                  Stop-loss/target checks are NOT running on your {s.open_positions} open position
+                  {s.open_positions === 1 ? '' : 's'}.{' '}
+                </strong>
+              ) : null}
+              <a
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault()
+                  api.kiteLogin().then((r) => window.open(r.login_url, '_blank'))
+                }}
+                style={{ textDecoration: 'underline' }}
+              >
+                Log in to Kite
+              </a>{' '}
+              — required every trading morning, tokens expire ~06:00 IST.
+            </div>
           </div>
-          <div className="stat-sub">{s?.scheduled_jobs.length ?? 0} jobs registered</div>
+          <div className={`icon-chip ${s?.broker_authenticated ? 'chip-accent' : 'chip-warn'}`}>
+            <PlugIcon />
+          </div>
+        </div>
+        <div className="card card-with-icon">
+          <div>
+            <div className="stat-label">Scheduler</div>
+            <div className="stat-value">
+              <span className={`badge ${s?.scheduler_running ? 'badge-on' : 'badge-off'}`}>
+                {s?.scheduler_running ? 'running' : 'stopped'}
+              </span>
+            </div>
+            <div className="stat-sub">{s?.scheduled_jobs.length ?? 0} jobs registered</div>
+          </div>
+          <div className="icon-chip chip-accent">
+            <ClockIcon />
+          </div>
+        </div>
+        <div className="card card-with-icon">
+          <div>
+            <div className="stat-label">Last scan</div>
+            <div className="stat-value">
+              {s?.last_scan_result ? (
+                <span className={`badge ${s.last_scan_result.errors > 0 ? 'badge-warn' : 'badge-on'}`}>
+                  {s.last_scan_result.buys} buy{s.last_scan_result.buys === 1 ? '' : 's'} found
+                </span>
+              ) : (
+                <span className="badge badge-off">no data yet</span>
+              )}
+            </div>
+            <div className="stat-sub">
+              {s?.last_scan_result ? (
+                <>
+                  {new Date(s.last_scan_result.ts).toLocaleString('en-IN')} —{' '}
+                  {s.last_scan_result.instruments_evaluated} symbols checked across{' '}
+                  {s.last_scan_result.strategies_run} strateg{s.last_scan_result.strategies_run === 1 ? 'y' : 'ies'}
+                  {s.last_scan_result.errors > 0 ? `, ${s.last_scan_result.errors} error(s)` : ''}.
+                </>
+              ) : (
+                'Fills in after the next 15:45 IST scan.'
+              )}
+            </div>
+          </div>
+          <div className={`icon-chip ${s?.last_scan_result?.errors ? 'chip-warn' : 'chip-accent'}`}>
+            <ClockIcon />
+          </div>
         </div>
       </div>
 
@@ -95,6 +177,7 @@ export default function Settings() {
             <thead>
               <tr>
                 <th>Job</th>
+                <th>What it does</th>
                 <th>Trigger</th>
                 <th>Next run</th>
               </tr>
@@ -102,7 +185,8 @@ export default function Settings() {
             <tbody>
               {s.scheduled_jobs.map((j) => (
                 <tr key={j.id}>
-                  <td>{j.id}</td>
+                  <td className="mono">{j.id}</td>
+                  <td>{JOB_DESCRIPTIONS[j.id] ?? <span className="muted">—</span>}</td>
                   <td className="muted">{j.trigger}</td>
                   <td className="muted">
                     {j.next_run ? new Date(j.next_run).toLocaleString('en-IN') : '—'}
@@ -177,19 +261,48 @@ export default function Settings() {
       </div>
 
       <h2>Telegram</h2>
-      <div className="card" style={{ marginBottom: '1.5rem' }}>
-        <div className="row">
-          <span className={`badge ${telegram.data?.ok ? 'badge-on' : 'badge-off'}`}>
-            {telegram.data?.ok ? `@${telegram.data.bot}` : 'not configured'}
-          </span>
-          <button onClick={() => testTelegram.mutate()} disabled={testTelegram.isPending}>
-            Send test message
-          </button>
+      <div className="card card-with-icon" style={{ marginBottom: '1.5rem' }}>
+        <div style={{ width: '100%' }}>
+          <div className="row" style={{ justifyContent: 'space-between' }}>
+            <span className={`badge ${telegram.data?.ok ? 'badge-on' : 'badge-off'}`}>
+              {telegram.data?.ok ? `@${telegram.data.bot}` : 'not configured'}
+            </span>
+            <button onClick={() => testTelegram.mutate()} disabled={testTelegram.isPending}>
+              Send test message
+            </button>
+          </div>
+          <div className="stat-sub" style={{ marginTop: '0.5rem' }}>
+            {telegram.data?.ok
+              ? 'EXIT signals and confidence-decay alerts push here — without it, they only ever show up if you open the dashboard.'
+              : telegram.data?.error ?? 'Without this, EXIT signals and alerts are silent unless you check the dashboard yourself.'}
+          </div>
+          {testTelegram.data && <p className="muted" style={{ marginBottom: 0 }}>{testTelegram.data.message}</p>}
+          {testTelegram.error && <ErrorBox error={testTelegram.error} />}
         </div>
-        {telegram.data?.error && <p className="muted">{telegram.data.error}</p>}
-        {testTelegram.data && <p className="muted">{testTelegram.data.message}</p>}
-        {testTelegram.error && <ErrorBox error={testTelegram.error} />}
+        <div className={`icon-chip ${telegram.data?.ok ? 'chip-accent' : 'chip-warn'}`}>
+          <SendIcon />
+        </div>
       </div>
+
+      <h2>Advanced</h2>
+      <div className="grid" style={{ marginBottom: '1.5rem' }}>
+        <Link to="/strategies" className="card card-with-icon" style={{ textDecoration: 'none', color: 'inherit' }}>
+          <div>
+            <div className="stat-label">Strategies</div>
+            <div className="stat-sub">
+              Configure how signals get generated and whether they auto-execute or are advisory only.
+            </div>
+          </div>
+        </Link>
+        <Link to="/models" className="card card-with-icon" style={{ textDecoration: 'none', color: 'inherit' }}>
+          <div>
+            <div className="stat-label">ML Models</div>
+            <div className="stat-sub">Train, evaluate, and activate the models behind every signal.</div>
+          </div>
+        </Link>
+      </div>
+        </>
+      )}
 
       <h2>Account</h2>
       <div className="card">

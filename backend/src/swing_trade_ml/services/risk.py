@@ -9,12 +9,13 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from swing_trade_ml.core.config import settings
-from swing_trade_ml.core.enums import PositionStatus
+from swing_trade_ml.core.enums import ExitReason, PositionStatus
 from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.db.models.trading import PortfolioSnapshot, Position, Strategy
 
@@ -28,6 +29,19 @@ class RiskDecision:
     reason: str = ""
 
 
+def rank_buy_candidates(candidates: list[tuple[int, float]]) -> list[tuple[int, float]]:
+    """BUY candidates from one scan — (instrument_id, confidence) pairs —
+    ordered strongest-first.
+
+    When more stocks clear the confidence bar than there are free position
+    slots, this decides who gets them: the strategy's best ideas, not
+    whichever instrument happened to be evaluated first. A stable sort keeps
+    ties in their original (evaluation) order rather than reshuffling them
+    arbitrarily on every scan.
+    """
+    return sorted(candidates, key=lambda c: c[1], reverse=True)
+
+
 def open_position_count(db: Session, mode: str, strategy_id: int | None = None) -> int:
     stmt = select(func.count(Position.id)).where(
         Position.mode == mode, Position.status == PositionStatus.OPEN
@@ -37,17 +51,58 @@ def open_position_count(db: Session, mode: str, strategy_id: int | None = None) 
     return int(db.execute(stmt).scalar_one() or 0)
 
 
-def has_open_position(db: Session, mode: str, instrument_id: int) -> bool:
-    return (
-        db.execute(
-            select(Position.id).where(
-                Position.mode == mode,
-                Position.instrument_id == instrument_id,
-                Position.status == PositionStatus.OPEN,
-            )
-        ).first()
-        is not None
+def has_open_position(
+    db: Session, mode: str, instrument_id: int, strategy_id: int | None = None
+) -> bool:
+    """Scoped per-strategy when strategy_id is given: each strategy manages
+    its own book independently, so two different strategies holding the same
+    symbol at once is not a duplicate entry — that is what running the
+    ml_swing and sma_crossover strategies side by side as a comparison
+    depends on."""
+    stmt = select(Position.id).where(
+        Position.mode == mode,
+        Position.instrument_id == instrument_id,
+        Position.status == PositionStatus.OPEN,
     )
+    if strategy_id is not None:
+        stmt = stmt.where(Position.strategy_id == strategy_id)
+    return db.execute(stmt).first() is not None
+
+
+def stopped_out_recently(
+    db: Session, mode: str, instrument_id: int, strategy_id: int | None, cooldown_days: int
+) -> bool:
+    """True if this instrument stopped this same strategy out within the
+    cooldown window — the guard against re-buying a name the moment
+    confidence clears the bar again, right after it just cost money."""
+    if cooldown_days <= 0:
+        return False
+    cutoff = datetime.now(UTC) - timedelta(days=cooldown_days)
+    stmt = select(Position.id).where(
+        Position.mode == mode,
+        Position.instrument_id == instrument_id,
+        Position.status == PositionStatus.CLOSED,
+        Position.exit_reason == ExitReason.STOP_LOSS_HIT,
+        Position.exit_at >= cutoff,
+    )
+    if strategy_id is not None:
+        stmt = stmt.where(Position.strategy_id == strategy_id)
+    return db.execute(stmt).first() is not None
+
+
+def open_exposure_value(db: Session, mode: str, strategy_id: int | None, instrument_id: int) -> float:
+    """Rupees already committed to this instrument across all open tranches
+    for this strategy — the pyramiding case, where more than one Position row
+    can be open for the same instrument at once."""
+    total = db.execute(
+        select(func.coalesce(func.sum(Position.entry_price * Position.quantity), 0.0)).where(
+            Position.mode == mode,
+            Position.instrument_id == instrument_id,
+            Position.strategy_id == strategy_id,
+            Position.status == PositionStatus.OPEN,
+        )
+    ).scalar_one()
+    return float(total)
 
 
 def current_drawdown(db: Session, mode: str) -> float:
@@ -69,53 +124,82 @@ def calculate_quantity(
     portfolio_value: float,
     available_cash: float,
     strategy: Strategy | None = None,
+    existing_exposure: float = 0.0,
 ) -> tuple[int, str]:
-    """Size the position off the distance to the stop, not off a fixed rupee amount.
+    """Size the position — by default off the distance to the stop, not off a
+    fixed rupee amount.
 
     Risking a constant fraction of equity per trade means a wide stop
     automatically gets a smaller position and a tight stop a larger one, so
     every trade carries the same downside. That is the single highest-leverage
     risk control in the system.
 
-    Two ceilings then apply: the max share of portfolio in one name, and the
-    cash actually on hand.
+    settings.POSITION_SIZING_MODE == "fixed_amount" overrides this with a flat
+    rupee target instead (settings.FIXED_POSITION_AMOUNT_INR) — for a
+    deliberately small, capital-light live rollout where per-trade fixed costs
+    (Zerodha's DP charge on every sell, this app's own per-order cost model)
+    would otherwise dominate a tiny, precisely-risk-sized position. Both modes
+    still pass through the same two ceilings below.
+
+    A strategy can override the global mode via `params["position_sizing_mode"]`
+    — added after the small-cap backtest showed every position running near
+    the maximum allowed stop distance (small-caps are volatile enough that
+    2x ATR routinely exceeds the 10% ceiling) while still being sized at the
+    same flat amount as a tight-stop large-cap trade. Risk-based sizing on
+    that tier shrinks the position for a stock that needs a wide stop instead
+    of betting the same rupees on it as a calmer one.
+
+    `existing_exposure` is rupees already committed to this instrument by an
+    earlier tranche (pyramiding) — the concentration cap applies to *total*
+    exposure across tranches, not each one separately.
     """
     if price <= 0:
         return 0, "Invalid price"
 
-    risk_capital = portfolio_value * settings.RISK_PER_TRADE_PCT
+    sizing_mode = (
+        (strategy.params.get("position_sizing_mode") if strategy else None)
+        or settings.POSITION_SIZING_MODE
+    )
 
-    if stop_loss and stop_loss > 0 and stop_loss < price:
-        risk_per_share = price - stop_loss
+    if sizing_mode == "fixed_amount":
+        qty_by_target = settings.FIXED_POSITION_AMOUNT_INR / price
+        target_label = "fixed amount"
     else:
-        # No stop supplied — assume the default stop distance so sizing stays
-        # bounded rather than falling back to "as much as cash allows".
-        risk_per_share = price * settings.DEFAULT_STOP_LOSS_PCT
+        risk_capital = portfolio_value * settings.RISK_PER_TRADE_PCT
 
-    if risk_per_share <= 0:
-        return 0, "Non-positive risk per share"
+        if stop_loss and stop_loss > 0 and stop_loss < price:
+            risk_per_share = price - stop_loss
+        else:
+            # No stop supplied — assume the default stop distance so sizing
+            # stays bounded rather than falling back to "as much as cash allows".
+            risk_per_share = price * settings.DEFAULT_STOP_LOSS_PCT
 
-    qty_by_risk = risk_capital / risk_per_share
+        if risk_per_share <= 0:
+            return 0, "Non-positive risk per share"
+
+        qty_by_target = risk_capital / risk_per_share
+        target_label = "risk-per-trade"
 
     max_position_pct = (
         strategy.capital_allocation
         if strategy and strategy.capital_allocation
         else settings.MAX_POSITION_PCT
     )
-    qty_by_concentration = (portfolio_value * max_position_pct) / price
+    remaining_concentration_room = max(0.0, (portfolio_value * max_position_pct) - existing_exposure)
+    qty_by_concentration = remaining_concentration_room / price
     qty_by_cash = available_cash / price
 
     # floor, never round: rounding up would breach whichever limit was binding.
-    quantity = math.floor(min(qty_by_risk, qty_by_concentration, qty_by_cash))
+    quantity = math.floor(min(qty_by_target, qty_by_concentration, qty_by_cash))
 
     if quantity < 1:
         return 0, (
-            f"Computed size below 1 share (risk-based {qty_by_risk:.2f}, "
+            f"Computed size below 1 share ({target_label} {qty_by_target:.2f}, "
             f"concentration {qty_by_concentration:.2f}, cash {qty_by_cash:.2f})"
         )
 
     binding = min(
-        ("risk-per-trade", qty_by_risk),
+        (target_label, qty_by_target),
         ("concentration cap", qty_by_concentration),
         ("available cash", qty_by_cash),
         key=lambda kv: kv[1],
@@ -132,11 +216,30 @@ def check_entry(
     portfolio_value: float,
     available_cash: float,
     strategy: Strategy | None = None,
+    existing_exposure: float = 0.0,
 ) -> RiskDecision:
     """Gate an entry. Checks run cheapest-first so an obvious rejection does not
-    pay for a portfolio-wide query."""
-    if has_open_position(db, mode, instrument_id):
+    pay for a portfolio-wide query.
+
+    `existing_exposure` > 0 signals that the caller has already vetted this as
+    a pyramiding add (strategy.allow_pyramiding and the open position is
+    currently profitable — see services/execution.py process_decision) and
+    computed the rupees already committed via open_exposure_value(); the
+    has_open_position block below only applies to the normal, non-pyramiding
+    case.
+    """
+    strategy_id = strategy.id if strategy else None
+    if existing_exposure <= 0 and has_open_position(db, mode, instrument_id, strategy_id):
         return RiskDecision(False, 0, "Position already open in this instrument")
+
+    cooldown_days = int(
+        (strategy.params.get("stop_loss_cooldown_days") if strategy else None)
+        or settings.STOP_LOSS_COOLDOWN_DAYS
+    )
+    if stopped_out_recently(db, mode, instrument_id, strategy_id, cooldown_days):
+        return RiskDecision(
+            False, 0, f"Stopped out within the last {cooldown_days} days — cooling down"
+        )
 
     max_positions = (
         strategy.max_positions if strategy and strategy.max_positions else settings.MAX_OPEN_POSITIONS
@@ -156,7 +259,9 @@ def check_entry(
             f"{settings.MAX_PORTFOLIO_DRAWDOWN_PCT:.0%} — new entries halted",
         )
 
-    quantity, note = calculate_quantity(price, stop_loss, portfolio_value, available_cash, strategy)
+    quantity, note = calculate_quantity(
+        price, stop_loss, portfolio_value, available_cash, strategy, existing_exposure
+    )
     if quantity < 1:
         return RiskDecision(False, 0, note)
 

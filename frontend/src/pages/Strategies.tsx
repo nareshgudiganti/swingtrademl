@@ -1,10 +1,34 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api } from '../api/client'
 import { Empty, ErrorBox, Loading } from '../components/Loading'
 import SymbolPicker from '../components/SymbolPicker'
+import TierBadge from '../components/TierBadge'
 import { formatDate } from '../lib/format'
+import { tierFor } from '../lib/tiers'
+
+// Auto vs advisory is a different axis from live vs paper (the Mode column
+// right next to it) — how a signal gets acted on, not whether it's real
+// money — so it gets its own icon rather than reusing badge-live/badge-paper
+// and reading as if it were a second, contradictory mode indicator.
+function ExecutionIcon({ auto }: { auto: boolean }) {
+  return auto ? (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+      <path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z" fill="currentColor" />
+    </svg>
+  ) : (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+      <path
+        d="M9 11V6a2 2 0 0 1 4 0v5M13 6a2 2 0 0 1 4 0v6M17 8a2 2 0 0 1 4 0v6c0 3.3-2.7 6-6 6h-2a6 6 0 0 1-5-2.7L4 12"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
 
 export default function Strategies() {
   const queryClient = useQueryClient()
@@ -13,6 +37,16 @@ export default function Strategies() {
 
   const strategies = useQuery({ queryKey: ['strategies'], queryFn: api.strategies })
   const types = useQuery({ queryKey: ['strategyTypes'], queryFn: api.strategyTypes })
+  const positions = useQuery({ queryKey: ['positions'], queryFn: api.positions })
+
+  const openCountByStrategy = useMemo(() => {
+    const counts = new Map<number, number>()
+    for (const p of positions.data ?? []) {
+      if (p.strategy_id == null) continue
+      counts.set(p.strategy_id, (counts.get(p.strategy_id) ?? 0) + 1)
+    }
+    return counts
+  }, [positions.data])
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['strategies'] })
 
@@ -138,60 +172,86 @@ export default function Strategies() {
             <thead>
               <tr>
                 <th>Name</th>
-                <th>Type</th>
+                <th>Tier</th>
+                <th>Model</th>
+                <th>Universe</th>
+                <th>Execution</th>
                 <th>Mode</th>
-                <th>Symbols</th>
                 <th>Status</th>
+                <th className="num">Open</th>
                 <th>Created</th>
                 <th />
               </tr>
             </thead>
             <tbody>
-              {rows.map((s) => (
-                <tr key={s.id}>
-                  <td>
-                    <strong>{s.name}</strong>
-                    {s.description && (
-                      <div className="muted" style={{ fontSize: '0.75rem' }}>
-                        {s.description}
-                      </div>
-                    )}
-                  </td>
-                  <td className="muted">{s.strategy_type}</td>
-                  <td>
-                    <span className={`badge ${s.mode === 'live' ? 'badge-live' : 'badge-paper'}`}>
-                      {s.mode}
-                    </span>
-                  </td>
-                  <td className="muted">
-                    {s.symbols.length ? s.symbols.join(', ') : 'watchlist'}
-                  </td>
-                  <td>
-                    <span className={`badge ${s.is_active ? 'badge-on' : 'badge-off'}`}>
-                      {s.is_active ? 'active' : 'inactive'}
-                    </span>
-                  </td>
-                  <td className="muted">{formatDate(s.created_at)}</td>
-                  <td>
-                    <div className="row">
-                      <button
-                        onClick={() => toggle.mutate({ id: s.id, active: s.is_active })}
-                        disabled={toggle.isPending}
-                      >
-                        {s.is_active ? 'Deactivate' : 'Activate'}
-                      </button>
-                      {!s.is_active && (
-                        <button
-                          className="danger"
-                          onClick={() => confirm(`Delete "${s.name}"?`) && remove.mutate(s.id)}
-                        >
-                          Delete
-                        </button>
+              {rows.map((s) => {
+                const tier = tierFor(s.name)
+                const modelName = typeof s.params.model_name === 'string' ? s.params.model_name : null
+                const openCount = openCountByStrategy.get(s.id) ?? 0
+                return (
+                  <tr key={s.id}>
+                    <td>
+                      <strong>{s.name}</strong>
+                      {s.description && (
+                        <div className="muted" style={{ fontSize: '0.75rem' }}>
+                          {s.description}
+                        </div>
                       )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td>{tier ? <TierBadge tier={tier} /> : <span className="muted">{s.strategy_type}</span>}</td>
+                    <td className="mono" title={modelName ?? undefined}>
+                      {modelName ?? <span className="muted">—</span>}
+                    </td>
+                    <td className="muted" title={s.symbols.length ? s.symbols.join(', ') : undefined}>
+                      {s.symbols.length ? `${s.symbols.length} symbols` : 'full watchlist'}
+                    </td>
+                    <td>
+                      <span
+                        className="row"
+                        style={{ gap: '0.35rem', color: 'var(--text-dim)', fontSize: '0.85rem' }}
+                        title={
+                          s.execution_mode === 'auto'
+                            ? 'Places real orders automatically on a signal'
+                            : 'Only recommends — you record the fill yourself'
+                        }
+                      >
+                        <ExecutionIcon auto={s.execution_mode === 'auto'} />
+                        {s.execution_mode}
+                      </span>
+                    </td>
+                    <td>
+                      <span className={`badge ${s.mode === 'live' ? 'badge-live' : 'badge-paper'}`}>
+                        {s.mode}
+                      </span>
+                    </td>
+                    <td>
+                      <span className={`badge ${s.is_active ? 'badge-on' : 'badge-off'}`}>
+                        {s.is_active ? 'active' : 'inactive'}
+                      </span>
+                    </td>
+                    <td className="num mono">{openCount}</td>
+                    <td className="muted">{formatDate(s.created_at)}</td>
+                    <td>
+                      <div className="row">
+                        <button
+                          onClick={() => toggle.mutate({ id: s.id, active: s.is_active })}
+                          disabled={toggle.isPending}
+                        >
+                          {s.is_active ? 'Deactivate' : 'Activate'}
+                        </button>
+                        {!s.is_active && (
+                          <button
+                            className="danger"
+                            onClick={() => confirm(`Delete "${s.name}"?`) && remove.mutate(s.id)}
+                          >
+                            Delete
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         )}

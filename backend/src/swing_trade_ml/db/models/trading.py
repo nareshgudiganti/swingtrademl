@@ -58,6 +58,16 @@ class Strategy(Base, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     mode: Mapped[str] = mapped_column(String(8), default=TradingMode.PAPER, index=True)
 
+    # "auto" places real (paper/live) orders as today; "advisory" only ever
+    # notifies with a recommendation — see services/execution.py. Never
+    # auto-executed regardless of mode once set to advisory.
+    execution_mode: Mapped[str] = mapped_column(String(16), default="auto", index=True)
+
+    # Opt-in: add another tranche to an already-open, currently-profitable
+    # position instead of rejecting the entry outright. See services/risk.py
+    # open_exposure_value().
+    allow_pyramiding: Mapped[bool] = mapped_column(Boolean, default=False)
+
     # Empty means "every watchlisted instrument"
     symbols: Mapped[list[str]] = mapped_column(JSON, default=list)
 
@@ -66,6 +76,10 @@ class Strategy(Base, TimestampMixin):
     capital_allocation: Mapped[float | None] = mapped_column(Float)
     stop_loss_pct: Mapped[float | None] = mapped_column(Float)
     take_profit_pct: Mapped[float | None] = mapped_column(Float)
+    # Caps how many NEW entries a scan acts on, ranked by confidence, even
+    # when more position slots are free — null means uncapped (only
+    # max_positions governs). See services/risk.rank_buy_candidates().
+    max_daily_buys: Mapped[int | None] = mapped_column(Integer)
 
     signals: Mapped[list[Signal]] = relationship(back_populates="strategy")
     positions: Mapped[list[Position]] = relationship(back_populates="strategy")
@@ -106,6 +120,11 @@ class Signal(Base, TimestampMixin):
 
     was_executed: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     rejection_reason: Mapped[str | None] = mapped_column(Text)
+
+    # True when this was a recommendation only (strategy.execution_mode ==
+    # "advisory") — distinct from a rejection: nothing blocked it, it just
+    # wasn't auto-acted on. was_executed stays False either way.
+    advisory_only: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
 
     generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
 
@@ -200,16 +219,40 @@ class Position(Base, TimestampMixin):
     exit_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     exit_reason: Mapped[str | None] = mapped_column(String(24))  # ExitReason
 
+    # The ACTIVE stop — checked by check_exits(), and ratcheted upward as
+    # highest_price advances (see services/execution.py's trail_stop()).
     stop_loss: Mapped[float | None] = mapped_column(Float)
     take_profit: Mapped[float | None] = mapped_column(Float)
     # Highest close seen since entry — the anchor for a trailing stop
     highest_price: Mapped[float | None] = mapped_column(Float)
+    # The ATR-based distance the strategy set at entry, frozen. The trail
+    # needs this as a fixed reference: once stop_loss itself starts moving,
+    # "how far below the high should this trail" can't be recovered from it
+    # alone.
+    initial_stop_loss: Mapped[float | None] = mapped_column(Float)
+
+    # The model's confidence at entry, and the most recent value seen since —
+    # neither the stop-loss nor the target reacts to the thesis itself
+    # weakening, only to price. See services/execution.py's confidence-decay
+    # check: an early warning when confidence falls meaningfully below entry
+    # without yet reaching the strategy's hard exit_confidence.
+    entry_confidence: Mapped[float | None] = mapped_column(Float)
+    last_confidence: Mapped[float | None] = mapped_column(Float)
+    # Set the first time a decay alert fires, cleared again if confidence
+    # recovers — so a fresh decline can alert again rather than staying
+    # permanently silenced by one earlier warning.
+    confidence_alert_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     # Refreshed by the mark-to-market job while the position is open
     current_price: Mapped[float | None] = mapped_column(Float)
     unrealized_pnl: Mapped[float] = mapped_column(Float, default=0.0)
     realized_pnl: Mapped[float | None] = mapped_column(Float)
     total_charges: Mapped[float] = mapped_column(Float, default=0.0)
+
+    # Set the first time check_exits() alerts on a triggered stop/target for
+    # an advisory-mode position, so the 60s job sends exactly one alert
+    # instead of re-notifying every minute until the user confirms the exit.
+    advisory_alert_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     notes: Mapped[str | None] = mapped_column(Text)
 

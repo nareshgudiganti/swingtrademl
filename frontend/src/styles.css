@@ -40,12 +40,17 @@ a {
   display: grid;
   grid-template-columns: 220px 1fr;
   min-height: 100vh;
+  /* On the iPhone home-screen shell there's no browser chrome to absorb the
+     notch/home-indicator, so the layout has to (viewport-fit=cover in
+     index.html is what makes these env() vars non-zero in the first place). */
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
 }
 
 .sidebar {
   background: var(--surface);
   border-right: 1px solid var(--border);
-  padding: 1.25rem 1rem;
+  padding: calc(1.25rem + env(safe-area-inset-top)) 1rem 1.25rem;
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
@@ -74,7 +79,11 @@ a {
   padding: 0.55rem 0.75rem;
   border-radius: var(--radius);
   color: var(--text-dim);
-  transition: background 0.15s, color 0.15s;
+  transition: background 0.15s, color 0.15s, transform 0.1s;
+}
+
+.nav a:active {
+  transform: scale(0.97);
 }
 
 .nav a:hover {
@@ -88,8 +97,33 @@ a {
 }
 
 .content {
-  padding: 1.5rem 2rem 3rem;
+  padding: 1.5rem 2rem calc(3rem + env(safe-area-inset-bottom));
   overflow-x: auto;
+}
+
+/* A quiet page-change cue — replayed on every route change because App.tsx
+   keys this wrapper on the current path, forcing a remount. Off entirely
+   under prefers-reduced-motion rather than just shortened, per that media
+   query's actual contract. */
+.page-transition {
+  /* No fill-mode (defaults to `none`) on purpose: `both`/`forwards` would
+     keep the keyframe's `transform: translateY(0)` applied to this wrapper
+     forever after the 0.22s animation finishes. Any non-`none` transform on
+     an ancestor turns `position: fixed` descendants (the Modal backdrop)
+     into being positioned relative to THAT ancestor instead of the actual
+     viewport — which is what was sending every popup to the wrong place. */
+  animation: page-in 0.22s ease;
+}
+
+@keyframes page-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-transition {
+    animation: none;
+  }
 }
 
 .page-head {
@@ -168,7 +202,12 @@ h2 {
 /* -------------------------------------------------------------- table -- */
 
 .table-wrap {
-  overflow-x: auto;
+  /* Bounded on both axes so long/wide tables scroll inside this box rather
+     than the whole page — that's what makes "sticky" below have something
+     to stick to. Without a max-height, the header has nowhere to pin: the
+     box just grows and the header scrolls away with the page. */
+  overflow: auto;
+  max-height: 72vh;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
@@ -189,6 +228,11 @@ th {
   color: var(--text-dim);
   border-bottom: 1px solid var(--border);
   white-space: nowrap;
+  /* Pinned while scrolling down a tall table. */
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  z-index: 2;
 }
 
 td {
@@ -197,12 +241,71 @@ td {
   white-space: nowrap;
 }
 
+/* First column (row identity — time, symbol, name) stays put while
+   scrolling right through a wide table, so you never lose track of which
+   row you're reading. Opt in per-table via `.sticky-col` on the first
+   <th>/<td>, since not every table's first column is the right thing to
+   pin. */
+th.sticky-col,
+td.sticky-col {
+  position: sticky;
+  left: 0;
+  background: var(--surface);
+  z-index: 1;
+}
+
+th.sticky-col {
+  z-index: 3;
+}
+
+tbody tr:hover td.sticky-col {
+  background: var(--surface-2);
+}
+
 tbody tr:last-child td {
   border-bottom: none;
 }
 
 tbody tr:hover {
   background: var(--surface-2);
+}
+
+th.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+th.sortable:hover {
+  color: var(--text);
+}
+
+.sort-arrow {
+  font-size: 0.65em;
+  color: var(--accent);
+}
+
+/* A date/section divider row inside an otherwise plain table — e.g. the
+   Daily expenses log grouped by day, so a repeated Date column isn't needed
+   on every single row. Tinted with the accent color (not just a grey shade)
+   so each day's boundary is unmistakable while scrolling a long log. */
+.table-group-row td {
+  background: rgba(79, 140, 255, 0.1);
+  border-bottom: 1px solid rgba(79, 140, 255, 0.3);
+  border-top: 2px solid var(--accent);
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+}
+
+.table-group-row:first-child td {
+  border-top: none;
+}
+
+.table-group-row:hover {
+  background: rgba(79, 140, 255, 0.1);
+}
+
+.table-group-row .group-label {
+  color: var(--accent);
 }
 
 .num {
@@ -246,6 +349,11 @@ tbody tr:hover {
   color: var(--text-dim);
 }
 
+.badge-watch {
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--warn);
+}
+
 .badge-on {
   background: rgba(34, 197, 94, 0.15);
   color: var(--pos);
@@ -254,6 +362,16 @@ tbody tr:hover {
 .badge-off {
   background: rgba(139, 155, 180, 0.15);
   color: var(--text-dim);
+}
+
+.badge-recommend {
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--warn);
+}
+
+.badge-warn {
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--warn);
 }
 
 /* ----------------------------------------------------------- controls -- */
@@ -266,16 +384,27 @@ button {
   background: var(--surface-2);
   color: var(--text);
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
 }
 
 button:hover:not(:disabled) {
   background: var(--border);
 }
 
+button:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
 button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  button:active:not(:disabled),
+  .nav a:active {
+    transform: none;
+  }
 }
 
 button.primary {
@@ -292,6 +421,57 @@ button.danger {
   background: transparent;
   border-color: var(--neg);
   color: var(--neg);
+}
+
+button.symbol-button {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  font-weight: 700;
+}
+
+button.symbol-button:hover:not(:disabled) {
+  background: transparent;
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.performance-controls {
+  display: flex;
+  align-items: end;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.performance-controls label {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.performance-controls select {
+  min-width: 150px;
+}
+
+.performance-controls .performance-range {
+  flex: 1;
+}
+
+.performance-controls input[type='range'] {
+  width: 100%;
+}
+
+.performance-chart {
+  min-height: 260px;
+  margin-top: 0.5rem;
+}
+
+@media (max-width: 560px) {
+  .performance-controls {
+    align-items: stretch;
+    flex-direction: column;
+  }
 }
 
 input,
@@ -427,22 +607,47 @@ select:focus {
   font-size: 0.88rem;
 }
 
-.banner-live {
-  background: rgba(239, 68, 68, 0.1);
-  border-color: var(--neg);
-  color: #fca5a5;
-}
-
 .banner-warn {
   background: rgba(245, 158, 11, 0.1);
   border-color: var(--warn);
   color: #fcd34d;
 }
 
+.banner-ok {
+  background: rgba(34, 197, 94, 0.1);
+  border-color: var(--pos);
+  color: #86efac;
+}
+
 .banner-info {
   background: rgba(79, 140, 255, 0.1);
   border-color: var(--accent);
   color: #93c5fd;
+}
+
+.pwa-toast {
+  position: fixed;
+  left: 1rem;
+  right: 1rem;
+  bottom: calc(1rem + env(safe-area-inset-bottom));
+  max-width: 26rem;
+  margin: 0 auto 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  z-index: 1000;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.pwa-toast-dismiss {
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.85rem;
+  padding: 0 0.2rem;
+  flex-shrink: 0;
 }
 
 .muted {
@@ -462,9 +667,425 @@ select:focus {
   white-space: nowrap;
 }
 
+/* Badge + its one-line reason, stacked — the reason truncates with an
+   ellipsis (full text on hover via title) instead of overflowing into
+   neighbouring table cells, which is what a raw <div> with only a max-width
+   did before: nowrap from the table's own `td` rule let it spill sideways
+   rather than wrap or clip. */
+.action-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.3rem;
+}
+
+.action-cell .reason {
+  font-size: 0.78rem;
+  max-width: 22ch;
+}
+
+.mono {
+  font-family: ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------- suggestions -- */
+
+tr.sig-row {
+  cursor: pointer;
+}
+
+tr.sig-row .sym {
+  font-weight: 600;
+}
+
+.held-tag {
+  margin-left: 0.4rem;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+  background: var(--surface-2);
+  border-radius: 4px;
+  padding: 0.05rem 0.35rem;
+}
+
+.sig-row .caret {
+  color: var(--text-dim);
+  text-align: right;
+  width: 1rem;
+}
+
+tr.sig-detail-row td {
+  padding: 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.sig-detail {
+  padding: 0.7rem 0.9rem 0.85rem;
+  font-size: 0.82rem;
+  /* td/th default to nowrap (see the table rules above) so compact rows never
+     wrap awkwardly — but that inherits into this expanded block too, which is
+     what forced the whole card to scroll sideways and clipped the reason text
+     mid-sentence. This is the one line that actually fixes it. */
+  white-space: normal;
+}
+
+.sig-detail-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.15rem 0;
+}
+
+.sig-detail-reason {
+  margin: 0.4rem 0 0;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+/* Technical readout — the actual feature values behind the call, not just
+   the headline confidence number. */
+.tech-grid {
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px dashed var(--border);
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.35rem 0.8rem;
+}
+
+.tech-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+}
+
+.tech-label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+}
+
+.tech-value {
+  font-family: ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.82rem;
+}
+
+/* ---- stat-card icon chips (Suggestions page summary row) ---- */
+
+.card-with-icon {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.icon-chip {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.chip-warn {
+  background: rgba(245, 158, 11, 0.12);
+  color: var(--warn);
+}
+
+.chip-accent {
+  background: rgba(79, 140, 255, 0.12);
+  color: var(--accent);
+}
+
+.chip-neutral {
+  background: var(--surface-2);
+  color: var(--text-dim);
+}
+
+/* ---- honest accuracy ring: real % once evaluated predictions exist, a
+   muted dashed "tracking" state otherwise — never a fabricated number ---- */
+
+.ring-wrap {
+  position: relative;
+  width: 52px;
+  height: 52px;
+  flex-shrink: 0;
+}
+
+.ring-wrap svg {
+  transform: rotate(-90deg);
+}
+
+.ring-track {
+  stroke: var(--border);
+}
+
+.ring-note {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.58rem;
+  color: var(--text-dim);
+  text-align: center;
+  line-height: 1.1;
+  font-weight: 700;
+}
+
+/* ---- confidence proximity bar: how close a HOLD is to the buy bar, so a
+   page full of HOLD calls is scannable without opening every row ---- */
+
+.conf-cell {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.45rem;
+}
+
+.conf-bar {
+  width: 36px;
+  height: 5px;
+  border-radius: 99px;
+  background: var(--border);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.conf-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 99px;
+}
+
+.conf-far > span {
+  background: var(--text-dim);
+}
+
+.conf-near > span {
+  background: var(--warn);
+}
+
+.conf-at > span {
+  background: var(--pos);
+}
+
+/* ------------------------------------------------ suggestions: master-detail -- */
+/* Replaces the old 3-column tier-card grid: clicking a stock there expanded
+   an inline table row squeezed into 1/3 of the page width, which is exactly
+   why the technical grid always looked cramped. This gives the detail pane
+   the full remaining width instead. */
+
+.tier-tabs {
+  display: flex;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.tier-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.tier-tab {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.55rem 0.9rem;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  color: var(--text-dim);
+  font-weight: 600;
+  font-size: 0.88rem;
+  margin-bottom: -1px;
+  flex-shrink: 0;
+  white-space: nowrap;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.tier-tab:hover:not(.active) {
+  color: var(--text);
+  background: none;
+}
+
+/* Each tab sets --tier-color inline (see Suggestions.tsx) so the three tiers
+   read as distinct at a glance — a visual "which column is this" identity,
+   kept out of the blue/violet/teal-vs-green/red/amber overlap so it never
+   competes with the BUY/HOLD/SELL badge colors for meaning. */
+.tier-tab.active {
+  color: var(--text);
+  border-bottom-color: var(--tier-color, var(--accent));
+}
+
+.tier-tab-icon {
+  display: flex;
+  color: var(--tier-color, var(--accent));
+  opacity: 0.55;
+}
+
+.tier-tab.active .tier-tab-icon {
+  opacity: 1;
+}
+
+.tier-tab-count {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-dim);
+  background: var(--surface-2);
+  border-radius: 99px;
+  padding: 0.05rem 0.45rem;
+}
+
+.tier-tab.active .tier-tab-count {
+  color: var(--tier-color, var(--accent));
+}
+
+/* ------------------------------------------------------------- modal -- */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(4, 8, 18, 0.6);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  z-index: 50;
+  animation: modal-fade 0.15s ease both;
+}
+
+@keyframes modal-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.modal-card {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.4rem 1.5rem;
+  max-width: 640px;
+  width: 100%;
+  max-height: 85vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+}
+
+.modal-close {
+  position: absolute;
+  top: 0.9rem;
+  right: 0.9rem;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  line-height: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .modal-backdrop {
+    animation: none;
+  }
+}
+
+/* A stock's full detail, rendered inside the modal above — no card chrome
+   of its own since .modal-card already supplies the surface/border/padding. */
+.detail-panel {
+  min-width: 0;
+}
+
+.detail-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 1.1rem;
+  padding-bottom: 1rem;
+  /* Reserves room for .modal-close (28px, inset 0.9rem from the card edge)
+     sitting on top of this row — without it, a longer badge label ("STRONG
+     BUY", "Bullish") gets pushed under the close button instead of stopping
+     short of it. */
+  padding-right: 2.25rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.detail-symbol {
+  font-size: 1.5rem;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.detail-sub {
+  color: var(--text-dim);
+  font-size: 0.82rem;
+  margin-top: 0.2rem;
+}
+
+.badge-lg {
+  font-size: 0.85rem;
+  padding: 0.3rem 0.8rem;
+}
+
+.detail-stat-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 1rem;
+  margin-bottom: 0.9rem;
+}
+
+.detail-stat-value {
+  font-family: ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin-top: 0.15rem;
+}
+
+.detail-reason {
+  color: var(--text-dim);
+  line-height: 1.6;
+  margin: 0.4rem 0 1.2rem;
+  padding: 0.7rem 0.9rem;
+  background: var(--surface-2);
+  border-radius: 8px;
+  font-size: 0.88rem;
+}
+
+.section-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+  font-weight: 700;
+  margin: 0 0 0.6rem;
+}
+
 @media (max-width: 800px) {
   .layout {
-    grid-template-columns: 1fr;
+    /* minmax(0, 1fr), not bare 1fr: a bare fr track's default min-width is
+       auto (its content's min-content size), and .nav below is a nowrap flex
+       row whose min-content is the sum of all 11 links — without the 0 floor
+       here, that alone stretches this single column (and everything sharing
+       it, sidebar and content both) to fit nav instead of letting nav's own
+       overflow-x scroll it internally. */
+    grid-template-columns: minmax(0, 1fr);
   }
   .sidebar {
     border-right: none;
@@ -472,9 +1093,271 @@ select:focus {
   }
   .nav {
     flex-direction: row;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    margin: 0 -1rem;
+    padding: 0 1rem;
+  }
+  .nav::-webkit-scrollbar {
+    display: none;
+  }
+  .nav a {
+    flex-shrink: 0;
   }
   .content {
     padding: 1rem;
+  }
+}
+
+/* --------------------------------------------- today: plain-language cards -- */
+/* The "Today" page's plain-language redesign — solid action pills instead of
+   tiny tinted badges, and a strength bar instead of a raw confidence
+   percentage. Kept separate from the generic .card/.badge system above so
+   this page can read very differently (bigger type, fewer numbers) without
+   affecting the dense data tables the rest of the app still uses. No account
+   money summary lives here — that's the Portfolio page's job; Today only
+   answers "what do I do". */
+
+/* ------------------------------------------------ today: attention banner -- */
+
+.attention-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  border-radius: 16px;
+  padding: 1.1rem 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.attention-banner.alert {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+}
+
+.attention-banner.clear {
+  background: rgba(34, 197, 94, 0.12);
+  border: 1px solid rgba(34, 197, 94, 0.35);
+}
+
+.attention-icon {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.attention-banner.alert .attention-icon {
+  background: rgba(239, 68, 68, 0.18);
+  color: var(--neg);
+}
+
+.attention-banner.clear .attention-icon {
+  background: rgba(34, 197, 94, 0.18);
+  color: var(--pos);
+}
+
+.attention-headline {
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.attention-sub {
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  margin-top: 0.15rem;
+}
+
+/* ----------------------------------------------------- today: action cards -- */
+
+.action-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.action-card:last-child {
+  margin-bottom: 0;
+}
+
+.action-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.action-card-left {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.action-card-symbol {
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.action-card-reason {
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  margin-top: 0.55rem;
+  line-height: 1.45;
+}
+
+.pill-action {
+  flex-shrink: 0;
+  font-size: 0.72rem;
+  font-weight: 750;
+  letter-spacing: 0.03em;
+  padding: 0.3rem 0.7rem;
+  border-radius: 8px;
+}
+
+.pill-action.buy {
+  background: var(--pos);
+  color: #06210f;
+}
+
+.pill-action.sell {
+  background: var(--neg);
+  color: #fff;
+}
+
+.pill-action.watch {
+  background: rgba(245, 158, 11, 0.18);
+  color: var(--warn);
+}
+
+.pill-action.neutral {
+  background: var(--surface-2);
+  color: var(--text-dim);
+}
+
+.strength-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 0.6rem;
+}
+
+.strength-label {
+  font-size: 0.78rem;
+  font-weight: 650;
+  color: var(--pos);
+}
+
+.strength-bar {
+  display: flex;
+  gap: 3px;
+}
+
+.strength-seg {
+  width: 15px;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--border);
+}
+
+.strength-seg.filled {
+  background: var(--pos);
+}
+
+/* ----------------------------------------------------- today: exit list -- */
+
+.exit-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.7rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.exit-row:last-child {
+  border-bottom: none;
+}
+
+.exit-row .exit-icon {
+  flex-shrink: 0;
+}
+
+.exit-row .exit-icon.pos {
+  color: var(--pos);
+}
+
+.exit-row .exit-icon.neg {
+  color: var(--neg);
+}
+
+.exit-text {
+  flex: 1;
+  font-size: 0.86rem;
+  min-width: 0;
+}
+
+.advanced-link-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.85rem 1rem;
+  background: var(--surface-2);
+  border-radius: 12px;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+/* --------------------------------------------------- mobile bottom tabs -- */
+/* A real bottom tab bar for the mobile/Capacitor build — better reach and a
+   more familiar pattern than the horizontal-scrolling strip the sidebar nav
+   collapses to. Sits alongside that strip rather than replacing it: the
+   strip stays as the full 6-item list (useful once in a while, e.g. Settings
+   or Finance), the tab bar surfaces the handful of destinations worth a
+   one-tap reach on every screen. */
+
+.tab-bar {
+  display: none;
+}
+
+@media (max-width: 800px) {
+  .tab-bar {
+    display: flex;
+    justify-content: space-around;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    padding: 0.5rem 0.4rem calc(0.5rem + env(safe-area-inset-bottom));
+    z-index: 10;
+  }
+
+  .tab-bar-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.2rem;
+    min-width: 44px;
+    padding: 0.25rem;
+    color: var(--text-dim);
+    font-size: 0.65rem;
+  }
+
+  .tab-bar-item.active {
+    color: var(--accent);
+    font-weight: 650;
+  }
+
+  /* Room for the fixed tab bar so the last section of a page isn't hidden
+     behind it. */
+  .content {
+    padding-bottom: calc(4.5rem + env(safe-area-inset-bottom));
   }
 }

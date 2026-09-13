@@ -299,6 +299,74 @@ def performance_stats(db: Session, mode: str | None = None) -> dict[str, Any]:
     return stats
 
 
+def recent_post_exit_watch(db: Session, mode: str, lookback_days: int = 21) -> list[dict[str, Any]]:
+    """Trades closed recently, with how far the stock has moved since we sold.
+
+    Feeds the daily Telegram digest so "did we exit too early or was it the
+    right call" can be watched every day without opening the app — pushed
+    instead of only pulled from the Trades page's post-exit columns. A row
+    stays in the digest either while it's fresh (first week after the sell,
+    so a same-day exit like GVT&D shows up immediately) or once it's moved
+    enough to be worth flagging (5%+ either way); quiet, unremarkable older
+    exits age out rather than cluttering every day's message.
+    """
+    cutoff = datetime.now(UTC) - timedelta(days=lookback_days)
+    trades = list(
+        db.execute(
+            select(Trade)
+            .where(Trade.mode == mode, Trade.exit_at >= cutoff)
+            .order_by(Trade.exit_at.desc())
+        )
+        .scalars()
+        .all()
+    )
+    if not trades:
+        return []
+
+    instrument_ids = {t.instrument_id for t in trades}
+    live_prices = {
+        q.instrument_id: q.last_price
+        for q in db.execute(
+            select(Quote).where(Quote.instrument_id.in_(instrument_ids))
+        ).scalars()
+    }
+
+    from swing_trade_ml.db.models.market import Candle
+
+    rows: list[dict[str, Any]] = []
+    now = datetime.now(UTC)
+    for t in trades:
+        price = live_prices.get(t.instrument_id)
+        if price is None:
+            price = db.execute(
+                select(Candle.close)
+                .where(Candle.interval == "day", Candle.instrument_id == t.instrument_id)
+                .order_by(Candle.ts.desc())
+                .limit(1)
+            ).scalar_one_or_none()
+        if price is None or not t.exit_price:
+            continue
+
+        change_pct = (price - t.exit_price) / t.exit_price
+        days_since_exit = (now - t.exit_at).days
+        if days_since_exit > 7 and abs(change_pct) < 0.05:
+            continue
+
+        rows.append(
+            {
+                "symbol": t.symbol,
+                "exit_price": t.exit_price,
+                "exit_reason": t.exit_reason,
+                "current_price": price,
+                "change_pct": change_pct,
+                "days_since_exit": days_since_exit,
+            }
+        )
+
+    rows.sort(key=lambda r: abs(r["change_pct"]), reverse=True)
+    return rows
+
+
 def equity_curve(db: Session, mode: str | None = None, days: int = 180) -> list[dict[str, Any]]:
     mode = mode or get_broker().mode
     since = datetime.now(UTC) - timedelta(days=days)

@@ -15,6 +15,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from swing_trade_ml.core.logging import get_logger
@@ -22,6 +23,7 @@ from swing_trade_ml.db.models.market import Candle, Instrument
 from swing_trade_ml.db.models.ml import MLModel, Prediction
 from swing_trade_ml.ml.dataset import load_candles
 from swing_trade_ml.ml.features import build_features
+from swing_trade_ml.ml.market_context import load_index_candles
 from swing_trade_ml.ml.registry import get_active_model, load_artifact
 
 log = get_logger(__name__)
@@ -70,7 +72,8 @@ def predict_instrument(
     bundle = _get_bundle(model)
     feature_names: list[str] = bundle["feature_names"]
 
-    featured = build_features(df)
+    index_df = load_index_candles(db, interval)
+    featured = build_features(df, index_df)
     row = featured.iloc[[-1]]
     x = row[feature_names]
     if x.isna().to_numpy().any():
@@ -103,9 +106,17 @@ def predict_instrument(
 
 
 def predict_watchlist(
-    db: Session, model_name: str | None = None, interval: str = "day", persist: bool = True
+    db: Session, model_name: str | None = "swing_classifier", interval: str = "day", persist: bool = True
 ) -> list[PredictionResult]:
-    """Score every watchlisted instrument with the active model."""
+    """Score every watchlisted instrument with the active model.
+
+    Defaults to "swing_classifier" rather than None, because the watchlist IS
+    the large-cap universe by definition — falling through to "whichever
+    model was most recently activated across every strategy" silently let a
+    mid-cap or small-cap promotion shadow this for over a week (see Aug 12
+    incident). Pass model_name=None explicitly if that global-latest lookup
+    is ever genuinely wanted.
+    """
     model = get_active_model(db, model_name)
     if model is None:
         log.warning("predict.no_active_model")
@@ -144,33 +155,36 @@ def predict_watchlist(
 
 def _upsert_prediction(db: Session, model: MLModel, result: PredictionResult) -> None:
     """Idempotent per (model, instrument, bar) so re-running a scan the same day
-    updates rather than duplicating."""
-    existing = db.execute(
-        select(Prediction).where(
-            Prediction.model_id == model.id,
-            Prediction.instrument_id == result.instrument_id,
-            Prediction.ts == result.ts,
-        )
-    ).scalar_one_or_none()
+    updates rather than duplicating.
 
-    if existing:
-        existing.probability = result.probability
-        existing.predicted_class = result.predicted_class
-        existing.price_at_prediction = result.price
-        existing.features = result.features
-        return
-
-    db.add(
-        Prediction(
-            model_id=model.id,
-            instrument_id=result.instrument_id,
-            ts=result.ts,
-            predicted_class=result.predicted_class,
-            probability=result.probability,
-            price_at_prediction=result.price,
-            features=result.features,
-        )
+    A real database-level upsert, not a Python check-then-insert — the
+    latter raced two concurrent callers (e.g. the scheduled scan and a
+    manual "Refresh now" click landing close together): both would see "no
+    existing row" before either committed, both would try to INSERT, and
+    whichever committed second crashed the whole batch on the unique
+    constraint instead of just updating. ON CONFLICT is atomic at the
+    database level, so this can't happen regardless of what else is
+    writing predictions at the same time.
+    """
+    stmt = pg_insert(Prediction).values(
+        model_id=model.id,
+        instrument_id=result.instrument_id,
+        ts=result.ts,
+        predicted_class=result.predicted_class,
+        probability=result.probability,
+        price_at_prediction=result.price,
+        features=result.features,
     )
+    stmt = stmt.on_conflict_do_update(
+        index_elements=[Prediction.model_id, Prediction.instrument_id, Prediction.ts],
+        set_={
+            "predicted_class": stmt.excluded.predicted_class,
+            "probability": stmt.excluded.probability,
+            "price_at_prediction": stmt.excluded.price_at_prediction,
+            "features": stmt.excluded.features,
+        },
+    )
+    db.execute(stmt)
 
 
 def evaluate_pending_predictions(db: Session, interval: str = "day") -> int:
@@ -196,28 +210,13 @@ def evaluate_pending_predictions(db: Session, interval: str = "day") -> int:
         if model is None:
             continue
 
-        horizon_end = pred.ts + timedelta(days=model.prediction_horizon_days)
-        # Calendar days overshoot trading days; a small buffer avoids evaluating
-        # before the market has actually produced the bars.
-        if now < horizon_end + timedelta(days=2):
+        actual_return = forward_return_at_horizon(
+            db, pred.instrument_id, pred.ts, pred.price_at_prediction,
+            model.prediction_horizon_days, interval, now,
+        )
+        if actual_return is None:
             continue
 
-        future = db.execute(
-            select(Candle.close)
-            .where(
-                Candle.instrument_id == pred.instrument_id,
-                Candle.interval == interval,
-                Candle.ts > pred.ts,
-                Candle.ts <= horizon_end + timedelta(days=4),
-            )
-            .order_by(Candle.ts.desc())
-            .limit(1)
-        ).scalar_one_or_none()
-
-        if future is None:
-            continue
-
-        actual_return = float(future) / pred.price_at_prediction - 1
         pred.actual_return = actual_return
         pred.was_correct = (actual_return >= model.target_return_pct) == bool(pred.predicted_class)
         pred.evaluated_at = now
@@ -227,3 +226,102 @@ def evaluate_pending_predictions(db: Session, interval: str = "day") -> int:
         db.commit()
         log.info("predict.evaluated", count=evaluated)
     return evaluated
+
+
+def forward_return_at_horizon(
+    db: Session,
+    instrument_id: int,
+    ts: datetime,
+    price_at_ts: float,
+    horizon_days: int,
+    interval: str = "day",
+    now: datetime | None = None,
+) -> float | None:
+    """Actual return from ts to ts+horizon_days, or None if that much time
+    (plus a trading-day buffer) hasn't elapsed yet, or no candle exists near
+    the horizon end. Calendar days overshoot trading days, so the nearest bar
+    within a 4-day window past the horizon is used rather than an exact date
+    match. Shared by evaluate_pending_predictions (which locks a prediction's
+    outcome in at the model's own trained horizon, once) and
+    accuracy_at_horizon (which asks "what if" at an arbitrary horizon,
+    read-only, as many times as asked).
+    """
+    now = now or datetime.now(UTC)
+    horizon_end = ts + timedelta(days=horizon_days)
+    if now < horizon_end + timedelta(days=2):
+        return None
+
+    future = db.execute(
+        select(Candle.close)
+        .where(
+            Candle.instrument_id == instrument_id,
+            Candle.interval == interval,
+            Candle.ts > ts,
+            Candle.ts <= horizon_end + timedelta(days=4),
+        )
+        .order_by(Candle.ts.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+    if future is None:
+        return None
+    return float(future) / price_at_ts - 1
+
+
+@dataclass(slots=True)
+class HorizonAccuracy:
+    horizon_days: int
+    target_return: float
+    total_predictions: int
+    evaluable: int
+    correct: int
+    accuracy: float
+    avg_actual_return: float
+
+
+def accuracy_at_horizon(
+    db: Session,
+    horizon_days: int,
+    target_return: float | None = None,
+    model_id: int | None = None,
+    interval: str = "day",
+) -> HorizonAccuracy:
+    """Re-score every prediction a model has made against an arbitrary
+    horizon, entirely read-only — nothing is written to the predictions
+    table. This answers "would this model have looked accurate if we'd
+    judged it on X days instead of the horizon it was trained for", using
+    the same forward-return lookup evaluate_pending_predictions uses to lock
+    in the real (permanent) outcome at the model's own horizon.
+    """
+    model = db.get(MLModel, model_id) if model_id else get_active_model(db)
+    if model is None:
+        raise ValueError("No model to evaluate")
+    target_return = model.target_return_pct if target_return is None else target_return
+
+    predictions = list(
+        db.execute(select(Prediction).where(Prediction.model_id == model.id)).scalars().all()
+    )
+    now = datetime.now(UTC)
+
+    evaluable = 0
+    correct = 0
+    returns: list[float] = []
+    for pred in predictions:
+        actual_return = forward_return_at_horizon(
+            db, pred.instrument_id, pred.ts, pred.price_at_prediction, horizon_days, interval, now
+        )
+        if actual_return is None:
+            continue
+        evaluable += 1
+        returns.append(actual_return)
+        if (actual_return >= target_return) == bool(pred.predicted_class):
+            correct += 1
+
+    return HorizonAccuracy(
+        horizon_days=horizon_days,
+        target_return=target_return,
+        total_predictions=len(predictions),
+        evaluable=evaluable,
+        correct=correct,
+        accuracy=(correct / evaluable) if evaluable else 0.0,
+        avg_actual_return=(sum(returns) / len(returns)) if returns else 0.0,
+    )

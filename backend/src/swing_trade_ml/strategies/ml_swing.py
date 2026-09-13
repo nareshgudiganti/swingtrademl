@@ -21,6 +21,7 @@ from swing_trade_ml.core.enums import SignalType
 from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.db.models.market import Instrument
 from swing_trade_ml.ml.features import atr, build_features
+from swing_trade_ml.ml.market_context import load_index_candles
 from swing_trade_ml.ml.predict import _get_bundle
 from swing_trade_ml.ml.registry import get_active_model
 from swing_trade_ml.strategies.base import BaseStrategy, SignalDecision, register_strategy
@@ -50,6 +51,13 @@ class MLSwingStrategy(BaseStrategy):
         "min_avg_volume": 100_000,
         # Reject anything moving more than 6% a day annualised into ~95% vol
         "max_volatility": 0.06,
+        # NIFTY itself in a downtrend: require extra conviction, since a bear
+        # market drags most stocks down regardless of their own setup
+        "bear_market_confidence_boost": 0.10,
+        # A stock down this much in 5 days is a falling knife, not a dip —
+        # the model can't tell "oversold bounce" from "still falling" from
+        # price action alone
+        "falling_knife_return_5d_pct": -0.08,
     }
 
     def min_bars_required(self) -> int:
@@ -67,7 +75,12 @@ class MLSwingStrategy(BaseStrategy):
             return None
 
         d = df.sort_values("ts").reset_index(drop=True)
-        featured = build_features(d)
+        # Bounded to this instrument's own most recent visible bar — the same
+        # look-ahead guarantee `d` already carries (live: only up-to-now
+        # candles; backtest: the caller's pre-sliced window), reused rather
+        # than threading a new parameter through evaluate()/BaseStrategy.
+        index_df = load_index_candles(db, interval="day", upto=d["ts"].max())
+        featured = build_features(d, index_df)
         row = featured.iloc[[-1]]
 
         bundle = _get_bundle(model)
@@ -90,13 +103,24 @@ class MLSwingStrategy(BaseStrategy):
         daily_vol = float(d["close"].pct_change().rolling(20).std().iloc[-1])
 
         threshold = self.params.get("min_confidence") or settings.ML_MIN_CONFIDENCE
+        # NIFTY's own SMA50/200 cross, from build_features' index context —
+        # negative means the broad market itself is in a downtrend.
+        nifty_regime = float(row["nifty_trend_regime"].iloc[0])
+        bear_market = nifty_regime < 0
+        effective_threshold = threshold + (
+            float(self.params["bear_market_confidence_boost"]) if bear_market else 0.0
+        )
+        recent_5d_return = float(d["close"].pct_change(5).iloc[-1])
+
         features = {
             "probability": round(probability, 4),
             "atr_14": round(atr_value, 2),
             "avg_volume_20": int(avg_volume),
             "daily_volatility_20": round(daily_vol, 4),
             "model": f"{model.name}:{model.version}",
-            "threshold": threshold,
+            "threshold": round(effective_threshold, 4),
+            "bear_market": bear_market,
+            "return_5d": round(recent_5d_return, 4),
         }
 
         if probability <= float(self.params["exit_confidence"]):
@@ -111,12 +135,15 @@ class MLSwingStrategy(BaseStrategy):
                 features=features,
             )
 
-        if probability < threshold:
+        if probability < effective_threshold:
+            reason = f"Confidence {probability:.1%} below {effective_threshold:.0%} threshold"
+            if bear_market:
+                reason += " (raised — NIFTY itself is in a downtrend)"
             return SignalDecision(
                 signal=SignalType.HOLD,
                 price=price,
                 confidence=round(probability, 3),
-                reason=f"Confidence {probability:.1%} below {threshold:.0%} threshold",
+                reason=reason,
                 features=features,
             )
 
@@ -130,6 +157,10 @@ class MLSwingStrategy(BaseStrategy):
             blockers.append(f"daily volatility {daily_vol:.1%} too high")
         if atr_value <= 0:
             blockers.append("ATR unavailable")
+        if recent_5d_return <= float(self.params["falling_knife_return_5d_pct"]):
+            blockers.append(
+                f"fell {recent_5d_return:.1%} in 5 days — treating as a falling knife, not a dip"
+            )
 
         if blockers:
             return SignalDecision(

@@ -41,12 +41,14 @@ from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.db.models.market import Instrument
 from swing_trade_ml.db.models.trading import Strategy as StrategyModel
 from swing_trade_ml.ml.dataset import load_candles
-from swing_trade_ml.services.risk import calculate_quantity
+from swing_trade_ml.services.costs import apply_slippage as _apply_slippage
+from swing_trade_ml.services.costs import compute_charges as _charges
+from swing_trade_ml.services.risk import calculate_quantity, rank_buy_candidates
 from swing_trade_ml.strategies import get_strategy
+from swing_trade_ml.strategies.base import SignalDecision
 
 log = get_logger(__name__)
 
-BPS = 10_000.0
 TRADING_DAYS_PER_YEAR = 252
 
 
@@ -87,17 +89,6 @@ class BacktestResult:
     stats: dict[str, Any] = field(default_factory=dict)
 
 
-def _apply_slippage(price: float, side: str) -> float:
-    """Mirrors PaperBroker._apply_slippage (brokers/paper.py) — keep in sync."""
-    delta = price * (settings.PAPER_SLIPPAGE_BPS / BPS)
-    return price + delta if side == "BUY" else price - delta
-
-
-def _charges(turnover: float) -> tuple[float, float]:
-    """Mirrors PaperBroker._charges (brokers/paper.py) — keep in sync."""
-    return settings.PAPER_BROKERAGE_PER_ORDER, turnover * (settings.PAPER_TAX_BPS / BPS)
-
-
 def _last_close(df: pd.DataFrame, day: date) -> float:
     mask = df["ts"].dt.date <= day
     if not mask.any():
@@ -118,7 +109,7 @@ def _close_position(
     """
     fill_price = _apply_slippage(exit_price, "SELL")
     turnover = fill_price * pos.quantity
-    brokerage, taxes = _charges(turnover)
+    brokerage, taxes = _charges(turnover, "SELL")
     total_charges = pos.charges_so_far + brokerage + taxes
     gross_pnl = (fill_price - pos.entry_price) * pos.quantity
     net_pnl = gross_pnl - total_charges
@@ -297,7 +288,8 @@ def run_backtest(
                 cash += _close_position(pos, exit_price, trades, reason, day)
                 del open_positions[inst_id]
 
-        # ---- signal-driven exits and entries ----
+        # ---- signal-driven exits, and BUY candidates for this day ----
+        buy_candidates: list[tuple[Instrument, SignalDecision]] = []
         for inst in instruments:
             df = history.get(inst.id)
             if df is None:
@@ -313,6 +305,30 @@ def run_backtest(
             existing = open_positions.get(inst.id)
 
             if decision.signal == SignalType.BUY and existing is None:
+                # Not opened yet — several instruments can clear the bar on
+                # the same day, and whichever is evaluated first should not
+                # automatically win a scarce slot. Collected and ranked
+                # below, same as the live scan loop (services/engine.py).
+                buy_candidates.append((inst, decision))
+
+            elif decision.signal in (SignalType.EXIT, SignalType.SELL) and existing is not None:
+                cash += _close_position(existing, decision.price, trades, "SIGNAL_EXIT", day)
+                del open_positions[inst.id]
+
+        # ---- rank today's BUY candidates by confidence, strongest first ----
+        if buy_candidates:
+            by_id = {inst.id: (inst, decision) for inst, decision in buy_candidates}
+            ranked_ids = rank_buy_candidates(
+                [(inst.id, decision.confidence or 0.0) for inst, decision in buy_candidates]
+            )
+            cap = (
+                min(strategy_row.max_daily_buys, len(ranked_ids))
+                if strategy_row.max_daily_buys is not None
+                else len(ranked_ids)
+            )
+            for inst_id, _confidence in ranked_ids[:cap]:
+                inst, decision = by_id[inst_id]
+
                 holdings_value = sum(
                     p.quantity * _last_close(history[i], day) for i, p in open_positions.items()
                 )
@@ -333,7 +349,7 @@ def run_backtest(
 
                 fill_price = _apply_slippage(decision.price, "BUY")
                 turnover = fill_price * qty
-                brokerage, taxes = _charges(turnover)
+                brokerage, taxes = _charges(turnover, "BUY")
                 cost = turnover + brokerage + taxes
                 if cost > cash:
                     continue
@@ -349,10 +365,6 @@ def run_backtest(
                     take_profit=decision.take_profit,
                     charges_so_far=brokerage + taxes,
                 )
-
-            elif decision.signal in (SignalType.EXIT, SignalType.SELL) and existing is not None:
-                cash += _close_position(existing, decision.price, trades, "SIGNAL_EXIT", day)
-                del open_positions[inst.id]
 
         holdings_value = sum(
             p.quantity * _last_close(history[i], day) for i, p in open_positions.items()

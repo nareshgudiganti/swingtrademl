@@ -13,8 +13,16 @@ This is what runs for the first six months. Design rules it follows:
   sizing gets tested rather than assumed.
 
 Virtual cash is not stored in its own table: it is derived from the starting
-capital and the realised cash flows of every paper order. That keeps a single
-source of truth and makes the balance reproducible from the order log alone.
+capital, every closed trade's net P&L, and the capital currently locked in
+open positions — read from Position/Trade rows, not the Order log. A manually
+recorded entry or exit (services/execution.py's manual_open_position /
+manual_close_position, used when a position was taken or closed outside this
+app's own order path) never creates an Order row, so an Order-log-only
+derivation silently drops every such trade's cash effect — which is exactly
+what happened here: 7 manually-closed positions worth ~₹695,000 combined were
+invisible to cash for as long as it was derived that way. Position/Trade rows
+exist unconditionally for every position regardless of how it was entered or
+exited, so they're the correct source of truth.
 """
 
 from __future__ import annotations
@@ -43,11 +51,10 @@ from swing_trade_ml.core.enums import (
 )
 from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.db.models.market import Candle, Instrument, Quote
-from swing_trade_ml.db.models.trading import Order, Position
+from swing_trade_ml.db.models.trading import Order, Position, Trade
+from swing_trade_ml.services.costs import apply_slippage, compute_charges
 
 log = get_logger(__name__)
-
-BPS = 10_000.0
 
 
 class PaperBroker(Broker):
@@ -96,49 +103,42 @@ class PaperBroker(Broker):
         return float(candle.close) if candle else None
 
     def _apply_slippage(self, price: float, side: TransactionType) -> float:
-        """Move the fill against us — buys pay up, sells receive less."""
-        delta = price * (settings.PAPER_SLIPPAGE_BPS / BPS)
-        return price + delta if side == TransactionType.BUY else price - delta
+        return apply_slippage(price, side)
 
-    def _charges(self, turnover: float) -> tuple[float, float]:
-        """(brokerage, taxes) for one executed order.
-
-        Approximates Zerodha's equity-delivery cost stack — STT, exchange
-        transaction charges, SEBI fees, stamp duty and GST — with a single
-        basis-point figure on turnover. Exact to the rupee it is not; the point
-        is that paper P&L is never reported gross.
-        """
-        brokerage = settings.PAPER_BROKERAGE_PER_ORDER
-        taxes = turnover * (settings.PAPER_TAX_BPS / BPS)
-        return brokerage, taxes
+    def _charges(self, turnover: float, side: TransactionType) -> tuple[float, float]:
+        return compute_charges(turnover, side)
 
     # ------------------------------------------------------------ balance --
 
     def get_available_cash(self, db: Session) -> float:
-        """Starting capital, less net cash consumed by every filled paper order.
+        """Starting capital, plus every closed trade's net P&L, minus capital
+        currently locked in open positions.
 
-        Buys consume cash and charges; sells return it. Derived on read so the
-        balance can never drift out of sync with the order log.
+        Derived from Position/Trade rows (see the module docstring for why —
+        the Order table alone silently drops manually-recorded trades). For a
+        closed position, entry cost and exit proceeds net out to exactly
+        `Trade.net_pnl` (gross_pnl minus total charges); for an open one,
+        `Position.total_charges` is the entry-side charge only (exit hasn't
+        happened yet), so the capital still tied up is entry value + that.
         """
-        rows = db.execute(
-            select(
-                Order.transaction_type,
-                func.sum(Order.average_price * Order.filled_quantity),
-                func.sum(Order.brokerage + Order.taxes),
-            )
-            .where(
-                Order.mode == TradingMode.PAPER,
-                Order.status == OrderStatus.COMPLETE,
-            )
-            .group_by(Order.transaction_type)
-        ).all()
-
-        cash = settings.PAPER_STARTING_CAPITAL
-        for side, gross, charges in rows:
-            gross = float(gross or 0.0)
-            charges = float(charges or 0.0)
-            cash += -gross - charges if side == TransactionType.BUY else gross - charges
-        return cash
+        realized = float(
+            db.execute(
+                select(func.coalesce(func.sum(Trade.net_pnl), 0.0))
+                .where(Trade.mode == TradingMode.PAPER)
+            ).scalar_one()
+        )
+        locked_in_open = float(
+            db.execute(
+                select(
+                    func.coalesce(
+                        func.sum(Position.entry_price * Position.quantity + Position.total_charges),
+                        0.0,
+                    )
+                )
+                .where(Position.mode == TradingMode.PAPER, Position.status == PositionStatus.OPEN)
+            ).scalar_one()
+        )
+        return settings.PAPER_STARTING_CAPITAL + realized - locked_in_open
 
     # ------------------------------------------------------------- orders --
 
@@ -172,7 +172,7 @@ class PaperBroker(Broker):
             fill_price = self._apply_slippage(ref_price, request.transaction_type)
 
         turnover = fill_price * request.quantity
-        brokerage, taxes = self._charges(turnover)
+        brokerage, taxes = self._charges(turnover, request.transaction_type)
 
         if request.transaction_type == TransactionType.BUY:
             required = turnover + brokerage + taxes

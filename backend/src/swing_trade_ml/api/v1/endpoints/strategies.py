@@ -9,6 +9,7 @@ from sqlalchemy import select
 
 from swing_trade_ml.api.deps import DbSession
 from swing_trade_ml.brokers import get_broker
+from swing_trade_ml.db.models.market import Instrument
 from swing_trade_ml.db.models.trading import Signal, Strategy
 from swing_trade_ml.schemas import (
     MessageResponse,
@@ -152,14 +153,36 @@ def scan_all(db: DbSession, interval: str = "day") -> ScanResponse:
 @router.get("/{strategy_id}/signals", response_model=list[SignalOut])
 def strategy_signals(
     strategy_id: int, db: DbSession, limit: int = Query(100, le=500)
-) -> list[Signal]:
-    return list(
-        db.execute(
-            select(Signal)
-            .where(Signal.strategy_id == strategy_id)
-            .order_by(Signal.generated_at.desc())
-            .limit(limit)
-        )
-        .scalars()
-        .all()
-    )
+) -> list[dict]:
+    """Symbol-resolved so a caller (e.g. the Suggestions page, which groups
+    by cap-tier strategy) never needs a second round-trip to name a row."""
+    rows = db.execute(
+        select(Signal, Instrument.tradingsymbol, Instrument.name)
+        .join(Instrument, Instrument.id == Signal.instrument_id)
+        .where(Signal.strategy_id == strategy_id)
+        .order_by(Signal.generated_at.desc())
+        .limit(limit)
+    ).all()
+    return [
+        {
+            "id": signal.id,
+            "strategy_id": signal.strategy_id,
+            "instrument_id": signal.instrument_id,
+            "tradingsymbol": tradingsymbol,
+            "name": name,
+            "signal_type": signal.signal_type,
+            "mode": signal.mode,
+            "price": signal.price,
+            "confidence": signal.confidence,
+            "suggested_quantity": signal.suggested_quantity,
+            "stop_loss": signal.stop_loss,
+            "take_profit": signal.take_profit,
+            "reason": signal.reason,
+            "features": signal.features,
+            "was_executed": signal.was_executed,
+            "rejection_reason": signal.rejection_reason,
+            "advisory_only": signal.advisory_only,
+            "generated_at": signal.generated_at,
+        }
+        for signal, tradingsymbol, name in rows
+    ]

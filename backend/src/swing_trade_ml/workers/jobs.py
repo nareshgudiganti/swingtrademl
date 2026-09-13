@@ -10,13 +10,43 @@ close" means anything.
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+
+from sqlalchemy import func, select
+
 from swing_trade_ml.core.config import settings
+from swing_trade_ml.core.enums import PositionStatus
 from swing_trade_ml.core.logging import get_logger
+from swing_trade_ml.db.models.market import Instrument
+from swing_trade_ml.db.models.trading import Position, Strategy
 from swing_trade_ml.db.session import session_scope
 from swing_trade_ml.notifications import notifier
 from swing_trade_ml.services import engine, ingestion, portfolio
+from swing_trade_ml.workers import heartbeat
 
 log = get_logger(__name__)
+
+IST = ZoneInfo("Asia/Kolkata")
+
+
+def job_heartbeat() -> None:
+    """Proves the worker's scheduler is actually ticking, independent of
+    market hours or trading days — see workers/heartbeat.py for why /status
+    needs this instead of just checking the local scheduler.running flag.
+
+    Also snapshots the real job list for the same reason — the API process's
+    own scheduler.get_jobs() is always empty (see scheduler.list_jobs), so it
+    reads this snapshot back instead.
+    """
+    heartbeat.touch()
+
+    # Not `from swing_trade_ml.workers import scheduler` — workers/__init__.py
+    # already re-exports the BackgroundScheduler *instance* under that same
+    # name, which shadows the scheduler submodule and has no .list_jobs().
+    from swing_trade_ml.workers import list_jobs
+
+    heartbeat.write_jobs(list_jobs())
 
 
 def _report_error(context: str, exc: Exception) -> None:
@@ -26,12 +56,138 @@ def _report_error(context: str, exc: Exception) -> None:
     )
 
 
+# When the last "no Kite session" nag was sent, cleared once a session is
+# loaded again (job_check_kite_login). A cooldown rather than a once-per-day
+# latch: this login is a manual daily chore on this account (see
+# KiteBroker.auto_login for why it cannot be automated), and a single message
+# that arrives while the phone is face-down is a message that never lands.
+_no_session_alert_at: datetime | None = None
+
+#: How long to wait before repeating the nag. Short enough to still catch the
+#: 09:15 open if the 06:15 one was missed, long enough not to read as spam.
+_NO_SESSION_ALERT_COOLDOWN = timedelta(minutes=30)
+
+
+def _alert_missing_session(db) -> None:
+    """Nag that there is no Kite session. Deliberately NOT gated on holding
+    open positions: without a session the scanner cannot price anything, so a
+    flat account cannot take a new signal either — and "flat" is exactly when
+    a missed login goes unnoticed until an entry silently fails.
+    """
+    global _no_session_alert_at
+    now = datetime.now(IST)
+    if _no_session_alert_at and now - _no_session_alert_at < _NO_SESSION_ALERT_COOLDOWN:
+        return
+
+    open_count = db.execute(
+        select(func.count(Position.id)).where(Position.status == PositionStatus.OPEN)
+    ).scalar_one()
+
+    _no_session_alert_at = now
+    log.warning("kite.session.missing", open_positions=open_count)
+
+    from swing_trade_ml.brokers.kite import kite_broker
+
+    if open_count:
+        risk = (
+            "prices are not being refreshed, which means stop-loss/target checks are "
+            f"NOT running on your {open_count} open position(s) today, and new orders "
+            "will fail."
+        )
+    else:
+        risk = (
+            "no prices are being refreshed, so today's scan cannot run and no new "
+            "trade can be entered until you log in."
+        )
+
+    notifier.send_sync(
+        f"🛑 <b>No active Kite session</b> — {risk} Tap to log in (this stays valid "
+        f"until you use it):\n{kite_broker.login_url()}",
+        "error",
+    )
+
+
+def job_nag_missing_session() -> None:
+    """Chase the daily Kite login from before the open until the close.
+
+    job_refresh_quotes also calls _alert_missing_session, but only while the
+    market is open (09:15-15:30) — so the earliest it could ever warn was
+    after the open, and only if a position was already held. Both gaps meant a
+    missed login could go a whole day unreported. This runs on its own
+    schedule from 06:15 IST so the reminder lands before the open, while there
+    is still time to act on it.
+    """
+    try:
+        from swing_trade_ml.brokers.kite import kite_broker
+
+        with session_scope() as db:
+            if not kite_broker.load_session(db):
+                _alert_missing_session(db)
+    except Exception as exc:  # noqa: BLE001
+        _report_error("nag_missing_session", exc)
+
+
+def job_kite_auto_login() -> None:
+    """Unattended daily login, timed for ~10 minutes after Zerodha expires
+    the previous day's token (~06:00 IST) and well before market open
+    (09:15) — see KiteBroker.auto_login. Skips itself quietly if the
+    credentials aren't configured, so this is opt-in by setting
+    KITE_USER_ID/KITE_PASSWORD/KITE_TOTP_SECRET rather than required.
+
+    A failure here still leaves the manual "Log in to Kite" button as a
+    fallback for the day — that's why this reports through the normal
+    _report_error path instead of anything more alarming.
+    """
+    from swing_trade_ml.brokers.kite import kite_broker
+
+    if not (settings.KITE_USER_ID and settings.KITE_PASSWORD and settings.KITE_TOTP_SECRET):
+        return
+
+    try:
+        with session_scope() as db:
+            kite_broker.auto_login(db)
+    except Exception as exc:  # noqa: BLE001
+        _report_error("kite_auto_login", exc)
+
+
+def job_check_kite_login() -> None:
+    """Always-on, any hour — confirms a completed Kite login over Telegram
+    immediately, rather than only noticing it during market hours.
+
+    This used to live inside job_refresh_quotes, which only runs 09:15-15:30
+    — so logging in early (the actually-recommended time, to catch the whole
+    session's price/stop-loss monitoring) never got a confirmation, only a
+    login done mid-session did. That gap was the direct cause of a user
+    completing a real login and having no way to tell it had worked short of
+    asking. Session detection is cheap (see KiteBroker.load_session), so
+    checking every minute all day costs nothing.
+    """
+    try:
+        from swing_trade_ml.brokers.kite import kite_broker
+
+        with session_scope() as db:
+            prev_session_id = kite_broker.loaded_session_id
+            session_ok = kite_broker.load_session(db)
+            if session_ok and kite_broker.loaded_session_id != prev_session_id:
+                global _no_session_alert_at
+                _no_session_alert_at = None
+                notifier.send_sync("🔑 Kite login successful — session is active.", "system")
+    except Exception as exc:  # noqa: BLE001
+        _report_error("check_kite_login", exc)
+
+
 def job_refresh_quotes() -> None:
     """Poll live prices during market hours and mark positions to market."""
     if not ingestion.is_market_open():
         return
     try:
+        from swing_trade_ml.brokers.kite import kite_broker
+
         with session_scope() as db:
+            session_ok = kite_broker.load_session(db)
+            if not session_ok:
+                _alert_missing_session(db)
+
             count = ingestion.refresh_quotes(db)
             if count:
                 portfolio.mark_to_market(db)
@@ -54,12 +210,88 @@ def job_check_exits() -> None:
         _report_error("check_exits", exc)
 
 
+def job_reconcile_orders() -> None:
+    """Catch up any order still PENDING against its real broker status.
+
+    Every live order starts PENDING — Kite's placement API confirms
+    acceptance, not a fill — and nothing else finishes creating the
+    Position/Trade it's blocking on until this checks back (see
+    execution.reconcile_pending_orders for the full story). A no-op in paper
+    mode. Runs on the same market-hours cadence as refresh_quotes/check_exits
+    so a live fill is reflected within about a minute, not left pending
+    indefinitely.
+    """
+    if not ingestion.is_market_open():
+        return
+    try:
+        from swing_trade_ml.services.execution import reconcile_pending_orders
+
+        with session_scope() as db:
+            counts = reconcile_pending_orders(db)
+            if counts["filled"] or counts["failed"]:
+                log.info("job.reconcile.done", **counts)
+    except Exception as exc:  # noqa: BLE001
+        _report_error("reconcile_orders", exc)
+
+
 def job_daily_ingest() -> None:
-    """Top up daily candles after the close, before the scan runs."""
+    """Top up daily candles after the close, before the scan runs.
+
+    Also tops up the benchmark index used for relative-strength/regime ML
+    features — it needs to be current before predict_watchlist/signal_scan
+    fire right after this job — and any strategy running its own,
+    deliberately unwatchlisted symbol list (e.g. ml_swing_midcap,
+    ml_swing_smallcap), which backfill_watchlist() above never touches.
+    """
     try:
         with session_scope() as db:
             results = ingestion.backfill_watchlist(db, interval="day", incremental=True)
             log.info("job.ingest.done", symbols=len(results), bars=sum(results.values()))
+            index_bars = ingestion.backfill_index(db, interval="day")
+            log.info("job.ingest.index_done", bars=index_bars)
+
+            context_results = ingestion.backfill_context_indices(db, interval="day")
+            log.info(
+                "job.ingest.context_indices_done",
+                symbols=len(context_results),
+                bars=sum(context_results.values()),
+            )
+
+            # load_index_candles() (and the sector/VIX/breadth loaders beside
+            # it) cache their full history in memory
+            # for the life of the process (see market_context.py) — cheap for
+            # the many per-symbol lookups a scan does, but it means the fresh
+            # bar just ingested above stays invisible to predict_watchlist/
+            # signal_scan/the regime endpoint until something clears it. That
+            # "something" never existed before this line — clear_cache() was
+            # defined but never called anywhere in the codebase.
+            from swing_trade_ml.ml.market_context import clear_cache as clear_index_cache
+
+            clear_index_cache()
+
+            # Every strategy's own symbol list, minus whatever the watchlist
+            # backfill above already covered — pooled and de-duplicated so two
+            # strategies sharing a symbol don't cost a second Kite call for
+            # the same bar. Generic over how many such strategies exist,
+            # rather than naming each one here.
+            watchlisted = {
+                symbol
+                for (symbol,) in db.execute(
+                    select(Instrument.tradingsymbol).where(Instrument.is_watchlisted.is_(True))
+                )
+            }
+            extra_symbols: set[str] = set()
+            for (symbols,) in db.execute(select(Strategy.symbols)):
+                extra_symbols.update(s.upper() for s in (symbols or []))
+            extra_symbols -= watchlisted
+
+            if extra_symbols:
+                extra_results = ingestion.backfill_symbols(db, sorted(extra_symbols), interval="day")
+                log.info(
+                    "job.ingest.extra_done",
+                    symbols=len(extra_results),
+                    bars=sum(extra_results.values()),
+                )
     except Exception as exc:  # noqa: BLE001
         _report_error("daily_ingest", exc)
 
@@ -80,6 +312,18 @@ def job_signal_scan() -> None:
                 signals=result.signals_generated,
                 executed=result.executed,
             )
+            heartbeat.write_last_scan(
+                {
+                    "ts": datetime.now(IST).isoformat(),
+                    "strategies_run": result.strategies_run,
+                    "instruments_evaluated": result.instruments_evaluated,
+                    "signals_generated": result.signals_generated,
+                    "buys": result.buys,
+                    "exits": result.exits,
+                    "executed": result.executed,
+                    "errors": len(result.errors),
+                }
+            )
             if result.errors:
                 notifier.send_sync(
                     f"⚠️ Scan finished with {len(result.errors)} error(s):\n"
@@ -90,6 +334,32 @@ def job_signal_scan() -> None:
         _report_error("signal_scan", exc)
 
 
+def job_predict_watchlist() -> None:
+    """Persist a prediction for every watchlisted symbol against today's close.
+
+    This is what turns "prediction accuracy" from a number you get only by
+    remembering to click Refresh on the Recommendations page into an actual
+    history: every scored symbol lands in `predictions`, and
+    evaluate_pending_predictions() later backfills whether each one panned
+    out. Runs after daily_ingest so it sees the same completed bar the signal
+    scan does.
+
+    Pinned to "swing_classifier" explicitly — the watchlist is the large-cap
+    universe, so it must always be scored by the large-cap model, not
+    whichever model name was activated most recently across every strategy
+    (mid-cap, small-cap, ...). Passing None here silently shadowed the
+    large-cap model with mid-cap's from Aug 12 until this was caught.
+    """
+    try:
+        from swing_trade_ml.ml.predict import predict_watchlist
+
+        with session_scope() as db:
+            results = predict_watchlist(db, model_name="swing_classifier", interval="day", persist=True)
+            log.info("job.predict.done", scored=len(results))
+    except Exception as exc:  # noqa: BLE001
+        _report_error("predict_watchlist", exc)
+
+
 def job_daily_summary() -> None:
     """Snapshot the equity curve and push the end-of-day Telegram digest."""
     try:
@@ -97,10 +367,11 @@ def job_daily_summary() -> None:
             portfolio.mark_to_market(db)
             portfolio.take_snapshot(db)
             stats = portfolio.performance_stats(db)
+            post_exit_watch = portfolio.recent_post_exit_watch(db, stats["mode"])
 
         import asyncio
 
-        asyncio.run(notifier.notify_daily_summary(stats, stats["mode"]))
+        asyncio.run(notifier.notify_daily_summary(stats, stats["mode"], post_exit_watch))
     except Exception as exc:  # noqa: BLE001
         _report_error("daily_summary", exc)
 

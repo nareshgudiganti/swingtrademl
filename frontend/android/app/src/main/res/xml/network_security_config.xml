@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Cleartext (plain http://) is blocked by default since Android 9. The
+     production/deployed backend is HTTPS, so this exception is scoped to
+     the LAN IP used for local dev-server testing only. -->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">192.168.0.104</domain>
+    </domain-config>
+</network-security-config>

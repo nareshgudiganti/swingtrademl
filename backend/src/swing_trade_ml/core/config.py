@@ -86,15 +86,45 @@ class Settings(BaseSettings):
     PAPER_SLIPPAGE_BPS: float = 5.0
     PAPER_BROKERAGE_PER_ORDER: float = 20.0
     PAPER_TAX_BPS: float = 12.0
+    # Zerodha's DP (Depository Participant) charge: a flat per-scrip fee on
+    # every DELIVERY SELL, charged by the depository (CDSL/NSDL) + Zerodha,
+    # regardless of quantity or value. Never on buys, never on intraday (MIS)
+    # — only CNC sells, which is exactly what every exit in this app is. This
+    # was previously missing from the paper cost model entirely, silently
+    # understating real charges on every single trade.
+    PAPER_DP_CHARGE_PER_SELL: float = 20.0
 
     # ------------------------------------------------------------ zerodha --
     KITE_API_KEY: str = ""
     KITE_API_SECRET: str = ""
-    KITE_REDIRECT_URL: str = "http://localhost:8000/api/v1/auth/kite/callback"
+    # There is deliberately no KITE_REDIRECT_URL here. Where Zerodha sends the
+    # browser after login is registered on the Kite app itself
+    # (developers.kite.trade > your app > Redirect URL) and nothing this app
+    # sends can override it — kiteconnect's login_url() carries only the API
+    # key. A setting did exist here and was read by nothing, which cost a day
+    # of debugging: the app was still registered against the localhost default
+    # while prod ran at swingtrademl.com, so every login dropped its token on
+    # a dead laptop URL and /kite/session just reported no session, with no
+    # error anywhere. If logins "do nothing", check the console, not the env.
+
+    # Optional: credentials for the unattended daily login (see
+    # brokers/kite.py's auto_login). Kite access tokens expire ~06:00 IST
+    # every day regardless of trading mode, so without this someone has to
+    # remember to click "Log in to Kite" every single trading morning. Blank
+    # KITE_TOTP_SECRET disables the feature — the scheduled job just skips
+    # itself and the manual login flow keeps working as the fallback.
+    KITE_USER_ID: str = ""
+    KITE_PASSWORD: str = ""
+    KITE_TOTP_SECRET: str = ""
 
     # -------------------------------------------------------- market data --
     DEFAULT_WATCHLIST: str = "RELIANCE,TCS,INFY,HDFCBANK,ICICIBANK"
     HISTORICAL_BACKFILL_DAYS: int = 1825
+    # Market-context benchmark for relative-strength/regime features. Kite's
+    # own tradingsymbol for the index — confirmed live against the instrument
+    # dump (segment="INDICES", instrument_type is unhelpfully "EQ" like every
+    # equity, so this is matched by exact tradingsymbol, not type/segment).
+    BENCHMARK_INDEX_SYMBOL: str = "NIFTY 50"
     LIVE_CANDLE_INTERVAL: str = "15minute"
     LIVE_POLL_SECONDS: int = 60
     MARKET_OPEN_TIME: str = "09:15"
@@ -109,9 +139,32 @@ class Settings(BaseSettings):
     MAX_POSITION_PCT: float = 0.10
     MAX_OPEN_POSITIONS: int = 10
     RISK_PER_TRADE_PCT: float = 0.01
+    # "risk_based" (default) sizes off distance-to-stop — see
+    # calculate_quantity(). "fixed_amount" instead targets a flat rupee spend
+    # per position regardless of stop distance, for a deliberately small,
+    # capital-light live rollout: at 1 real share per trade, Zerodha's flat
+    # per-scrip DP charge on every sell (~₹18-24) plus this app's own
+    # per-order cost model dominates a small stock's entire position value,
+    # so results would measure fee drag, not the strategy. A small fixed
+    # amount (₹5,000-10,000+) keeps costs a sane fraction of position size.
+    POSITION_SIZING_MODE: Literal["risk_based", "fixed_amount"] = "risk_based"
+    FIXED_POSITION_AMOUNT_INR: float = 10_000.0
     DEFAULT_STOP_LOSS_PCT: float = 0.05
     DEFAULT_TAKE_PROFIT_PCT: float = 0.15
     MAX_PORTFOLIO_DRAWDOWN_PCT: float = 0.20
+    # Blocks re-entering a symbol for this many days after it stopped this
+    # same strategy out — added after the small-cap backtest showed the same
+    # name (LATENTVIEW) getting stopped out three separate times in a few
+    # months, re-bought each time the moment confidence cleared the bar
+    # again with no memory of just having lost money on it.
+    STOP_LOSS_COOLDOWN_DAYS: int = 5
+    # A held position's model confidence has to fall this many percentage
+    # points below what it was at entry, AND into the "weakening" zone
+    # (below the midpoint of ML_MIN_CONFIDENCE and the strategy's own
+    # exit_confidence), before a decay alert fires. Two conditions, not one:
+    # a single day's normal probability jitter (e.g. 66% -> 63%) must never
+    # trigger this — only a real decline into genuinely weaker territory.
+    CONFIDENCE_DECAY_ALERT_PCT: float = 0.15
 
     # ----------------------------------------------------------------- ml --
     MODEL_ARTIFACT_DIR: str = "./data/models"
@@ -120,6 +173,11 @@ class Settings(BaseSettings):
     ML_TRAIN_TEST_SPLIT: float = 0.2
     ML_MIN_CONFIDENCE: float = 0.60
     ML_RANDOM_SEED: int = 42
+
+    # ------------------------------------------------------------- finance --
+    # Guard against an oversized statement upload — FastAPI does not cap
+    # UploadFile size on its own.
+    FINANCE_MAX_UPLOAD_MB: int = 20
 
     # ----------------------------------------------------------- telegram --
     TELEGRAM_ENABLED: bool = False

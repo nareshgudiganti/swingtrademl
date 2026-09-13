@@ -34,8 +34,18 @@ FEATURE_COLUMNS: list[str] = [
     "return_1d", "return_5d", "return_10d", "return_20d",
     "high_20_dist", "low_20_dist", "high_52w_dist",
     "gap_pct", "body_pct", "upper_wick_pct", "lower_wick_pct",
+    "days_since_52w_high", "days_since_52w_low", "streak",
     # regime
-    "adx_14", "trend_strength",
+    "adx_14", "trend_strength", "volatility_percentile_rank",
+    # volume (continued)
+    "cmf_20",
+    # market context — this stock vs. the benchmark index (see market_context.py)
+    # nifty_above_200sma deliberately dropped: 0.638 correlated with
+    # nifty_trend_regime on the pooled dataset (both a crude "is the market
+    # bullish" flag), and with only ~4 years of index history the model sees
+    # too few real regime transitions to justify two near-duplicate copies.
+    "relative_strength_5d", "relative_strength_20d", "nifty_volatility_20",
+    "nifty_trend_regime",
 ]
 
 
@@ -116,10 +126,73 @@ def on_balance_volume(close: pd.Series, volume: pd.Series) -> pd.Series:
     return (np.sign(close.diff()).fillna(0) * volume).cumsum()
 
 
-def build_features(df: pd.DataFrame) -> pd.DataFrame:
+def chaikin_money_flow(
+    high: pd.Series, low: pd.Series, close: pd.Series, volume: pd.Series, period: int = 20
+) -> pd.Series:
+    """Volume-weighted measure of where each bar closed within its own range —
+    a different volume/price construction from OBV and MFI (location-within-bar
+    rather than direction-of-close), so it can disagree with them usefully."""
+    money_flow_multiplier = ((close - low) - (high - close)) / (high - low).replace(0, np.nan)
+    money_flow_volume = money_flow_multiplier * volume
+    return money_flow_volume.rolling(period).sum() / volume.rolling(period).sum().replace(0, np.nan)
+
+
+def _days_since_extreme(values: pd.Series, window: int, kind: str) -> pd.Series:
+    """Bars since the rolling window's max (kind="max") or min (kind="min") was
+    last set — recency of an extreme, which a pure distance measure (like
+    high_52w_dist) cannot express: a stock 1% off its high made yesterday and
+    one 1% off a high made eight months ago look identical to a distance-only
+    feature but mean very different things.
+
+    Vectorised via a strided window view + argmax/argmin rather than a pandas
+    .rolling().apply() — this runs inside services/backtest.py's day-by-day
+    loop, which recomputes the full feature set on a growing window every
+    simulated day, so a slow per-row Python callback here would compound.
+    """
+    arr = values.to_numpy(dtype="float64")
+    n = len(arr)
+    out = np.full(n, np.nan)
+    if n < window:
+        return pd.Series(out, index=values.index)
+
+    windows = np.lib.stride_tricks.sliding_window_view(arr, window)
+    idx = np.nanargmax(windows, axis=1) if kind == "max" else np.nanargmin(windows, axis=1)
+    out[window - 1 :] = (window - 1) - idx
+    return pd.Series(out, index=values.index)
+
+
+def _index_context_frame(index_df: pd.DataFrame) -> pd.DataFrame:
+    """The benchmark index's own return/regime series, computed once and
+    merged onto a stock's frame by ts. Kept separate from build_features'
+    main body so it's easy to see this is the only place a second
+    instrument's data enters the pipeline."""
+    idx = index_df.sort_values("ts").reset_index(drop=True)
+    close = idx["close"]
+
+    ctx = pd.DataFrame({"ts": idx["ts"]})
+    ctx["_nifty_return_5d"] = close.pct_change(5)
+    ctx["_nifty_return_20d"] = close.pct_change(20)
+    ctx["nifty_volatility_20"] = close.pct_change().rolling(20).std() * np.sqrt(252)
+
+    sma50 = close.rolling(50).mean()
+    sma200 = close.rolling(200).mean()
+    ctx["nifty_trend_regime"] = np.sign((sma50 / sma200 - 1).fillna(0))
+    return ctx
+
+
+def build_features(df: pd.DataFrame, index_df: pd.DataFrame) -> pd.DataFrame:
     """Attach every column in FEATURE_COLUMNS to an OHLCV frame.
 
     Expects columns: ts, open, high, low, close, volume — ascending by ts.
+
+    `index_df` is the benchmark index's own OHLCV history (same shape),
+    required — not optional — because a forgotten call site here fails
+    loudly (a TypeError at the call, before any model ever sees a row) rather
+    than silently: the alternative (an optional parameter defaulting to
+    missing columns) was rejected specifically because ml_swing.py's
+    evaluate() logs nothing on NaN features, so a forgotten wire-up there
+    would have silently zeroed out signal generation forever with no trace
+    in the logs. Fetch it via ml.market_context.load_index_candles().
 
     Level-invariant by design: raw prices and moving averages are never fed to
     the model directly, only ratios and percentages. A model trained on the
@@ -181,6 +254,7 @@ def build_features(df: pd.DataFrame) -> pd.DataFrame:
     # Slope as a fraction of its own level — scale-free across instruments
     out["obv_slope"] = obv.diff(10) / obv.rolling(20).mean().abs().replace(0, np.nan)
     out["mfi_14"] = money_flow_index(high, low, close, volume, 14)
+    out["cmf_20"] = chaikin_money_flow(high, low, close, volume, 20)
 
     # --- price structure -----------------------------------------------------
     out["return_1d"] = close.pct_change(1)
@@ -200,9 +274,35 @@ def build_features(df: pd.DataFrame) -> pd.DataFrame:
     out["upper_wick_pct"] = (high - body_top) / candle_range
     out["lower_wick_pct"] = (body_bottom - low) / candle_range
 
+    out["days_since_52w_high"] = _days_since_extreme(high, 252, "max")
+    out["days_since_52w_low"] = _days_since_extreme(low, 252, "min")
+
+    # Signed run length: +N is N consecutive up days, -N is N consecutive down
+    # days — directional persistence, distinct from the magnitude-based
+    # return_Nd/roc_N features above.
+    day_sign = np.sign(close.diff()).fillna(0)
+    run_id = (day_sign != day_sign.shift()).cumsum()
+    out["streak"] = day_sign.groupby(run_id).cumcount().add(1) * day_sign
+
     # --- regime --------------------------------------------------------------
     out["adx_14"] = adx(high, low, close, 14)
     out["trend_strength"] = out["adx_14"] * np.sign(out["sma_10_50_cross"].fillna(0))
+    # Is today's realised vol high or low relative to its own trailing year —
+    # regime-relative rather than absolute, unlike volatility_20/atr_14_pct/
+    # bb_width, which are all absolute-level measures.
+    out["volatility_percentile_rank"] = out["volatility_20"].rolling(252).rank(pct=True)
+
+    # --- market context: this stock vs. the benchmark index ------------------
+    # merge_asof (backward) rather than a plain merge on ts: robust to the
+    # stock and index not sharing an identical trading-day calendar (a
+    # listing gap, a missing bar), and — because "backward" only ever matches
+    # an index row at or before the stock's own row — this cannot pull in a
+    # future index value even if the two calendars were ever misaligned.
+    index_ctx = _index_context_frame(index_df)
+    out = pd.merge_asof(out, index_ctx, on="ts", direction="backward")
+    out["relative_strength_5d"] = out["return_5d"] - out["_nifty_return_5d"]
+    out["relative_strength_20d"] = out["return_20d"] - out["_nifty_return_20d"]
+    out = out.drop(columns=["_nifty_return_5d", "_nifty_return_20d"])
 
     # Infinities arise from the .replace(0, nan) guards above meeting a zero
     # numerator; treat them as missing rather than letting them reach the model.
@@ -226,13 +326,13 @@ def build_label(
     return out.iloc[:-horizon_days] if horizon_days > 0 else out
 
 
-def latest_feature_row(df: pd.DataFrame) -> pd.DataFrame | None:
+def latest_feature_row(df: pd.DataFrame, index_df: pd.DataFrame) -> pd.DataFrame | None:
     """The most recent fully-formed feature vector, ready for prediction.
 
     Returns None when indicators have not warmed up (a fresh instrument with
     under ~200 bars leaves the long moving averages undefined). Predicting on a
     partially-NaN vector is worse than not predicting at all.
     """
-    featured = build_features(df)
+    featured = build_features(df, index_df)
     row = featured.iloc[[-1]][FEATURE_COLUMNS]
     return None if row.isna().to_numpy().any() else row

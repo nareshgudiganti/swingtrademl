@@ -126,6 +126,15 @@ class Signal(Base, TimestampMixin):
     # wasn't auto-acted on. was_executed stays False either way.
     advisory_only: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
 
+    # Outcome scoring — see ml/predict.py::evaluate_pending_signals. Only
+    # signals with both stop_loss and take_profit set are ever scored;
+    # horizon_days is copied from the model/strategy at generation time so
+    # scoring stays correct even after the active model later changes.
+    horizon_days: Mapped[int | None] = mapped_column(Integer)
+    outcome: Mapped[str | None] = mapped_column(String(24), index=True)
+    outcome_pct: Mapped[float | None] = mapped_column(Float)
+    outcome_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
     generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
 
     strategy: Mapped[Strategy] = relationship(back_populates="signals")

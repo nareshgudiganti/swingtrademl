@@ -426,6 +426,31 @@ def import_real_holdings(db: DbSession, strategy_id: int | None = None) -> list[
             }
         )
 
+    # Put every tracked symbol on the strategy's own universe.
+    #
+    # Without this the import looks like it worked and then does nothing: an
+    # empty `symbols` means "scan the watchlist", and a stock bought by hand
+    # is generally not watchlisted. The strategy would evaluate none of them,
+    # so entry_confidence/last_confidence stay NULL, the model's read never
+    # updates, and no EXIT signal or confidence-decay alert can ever fire —
+    # the whole reason for tracking a real holding here.
+    tracked_symbols = sorted(
+        {
+            i.tradingsymbol
+            for i in db.execute(
+                select(Instrument)
+                .join(Position, Position.instrument_id == Instrument.id)
+                .where(
+                    Position.strategy_id == strategy.id,
+                    Position.status == PositionStatus.OPEN,
+                )
+            ).scalars()
+        }
+    )
+    if tracked_symbols != sorted(strategy.symbols or []):
+        strategy.symbols = tracked_symbols  # new list object, so the JSON column is dirtied
+        db.flush()
+
     return results
 
 

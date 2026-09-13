@@ -7,7 +7,7 @@ import Stat from '../components/Stat'
 import { ErrorBox, Loading } from '../components/Loading'
 import StockDetailModal, { type StockDetail } from '../components/StockDetailModal'
 import { PositionsTable } from './Positions'
-import { formatCurrency, formatPercent, pnlClass } from '../lib/format'
+import { formatCurrency, formatSignedPercent } from '../lib/format'
 
 /**
  * My Holdings — the real money book.
@@ -66,12 +66,19 @@ export default function Holdings() {
     return { invested, current, pnl, pct: invested > 0 ? pnl / invested : 0, needsAction }
   }, [rows])
 
-  // Holdings Zerodha reports that this app isn't tracking yet — the reason
-  // to press Import, made visible instead of left for the user to work out
-  // by comparing two tables.
-  const untracked = useMemo(() => {
+  const attention = useMemo(
+    () => rows.filter((p) => p.action_code === 'exit' || p.action_code === 'alert'),
+    [rows],
+  )
+
+  // How many Zerodha holdings aren't tracked yet. Surfaced as a count on the
+  // Import button rather than a second table: it's the only thing that list
+  // was really telling you, and a number on the button you'd press anyway
+  // says it without costing a section.
+  const untrackedCount = useMemo(() => {
     const trackedSymbols = new Set(rows.map((p) => p.symbol))
     return (holdings.data ?? []).filter((h) => h.quantity > 0 && !trackedSymbols.has(h.symbol))
+      .length
   }, [holdings.data, rows])
 
   /** Record a sale you already made in Zerodha. Never places an order — it
@@ -94,47 +101,61 @@ export default function Holdings() {
   return (
     <div>
       <div className="page-head">
-        <h1>My Holdings</h1>
+        <div>
+          <h1 style={{ marginBottom: '0.15rem' }}>My Holdings</h1>
+          <div className="muted" style={{ fontSize: '0.82rem' }}>
+            Your real Zerodha shares, read by the model each day. Nothing here places or cancels
+            an order.
+          </div>
+        </div>
         <button onClick={() => importHoldings.mutate()} disabled={importHoldings.isPending}>
-          {importHoldings.isPending ? 'Importing…' : 'Import from Zerodha'}
+          {importHoldings.isPending
+            ? 'Importing…'
+            : untrackedCount > 0
+              ? `Import ${untrackedCount} new from Zerodha`
+              : 'Import from Zerodha'}
         </button>
       </div>
-
-      <p className="muted">
-        Real shares you bought yourself, tracked with the model's daily read. Nothing here places
-        or cancels an order — every buy and sell stays yours. The Portfolio tab is the bot's paper
-        testing, kept separate on purpose.
-      </p>
 
       {importHoldings.isError && <ErrorBox error={importHoldings.error} />}
 
       {importHoldings.isSuccess && importHoldings.data && (
         <div className="banner banner-ok">
-          Imported {importHoldings.data.filter((r) => r.status === 'imported').length} ·
-          already tracked {importHoldings.data.filter((r) => r.status === 'already_tracked').length} ·
+          Imported {importHoldings.data.filter((r) => r.status === 'imported').length} · already
+          tracked {importHoldings.data.filter((r) => r.status === 'already_tracked').length} ·
           skipped {importHoldings.data.filter((r) => r.status === 'skipped').length}
         </div>
       )}
 
       {rows.length > 0 && (
         <div className="grid">
-          <Stat label="Invested" value={formatCurrency(totals.invested)} />
+          <Stat label="Invested" value={formatCurrency(totals.invested)} sub={`${rows.length} stocks`} />
           <Stat label="Current value" value={formatCurrency(totals.current)} />
           <Stat
             label="Overall P&L"
             value={formatCurrency(totals.pnl)}
             tone={totals.pnl > 0 ? 'pos' : totals.pnl < 0 ? 'neg' : 'flat'}
-            sub={formatPercent(totals.pct)}
+            sub={formatSignedPercent(totals.pct)}
           />
           <Stat
             label="Needs attention"
             value={String(totals.needsAction)}
-            sub={totals.needsAction > 0 ? 'exit or alert' : 'nothing urgent'}
+            tone={totals.needsAction > 0 ? 'neg' : 'flat'}
+            sub={totals.needsAction > 0 ? 'exit or alert signalled' : 'nothing urgent'}
           />
         </div>
       )}
 
-      <h2>Tracked</h2>
+      {/* The rows the model wants you to look at, lifted out of the table so
+          they are not something you have to scan a column to find. */}
+      {attention.length > 0 && (
+        <div className="banner banner-warn">
+          <strong>{attention.map((p) => p.symbol).join(', ')}</strong>
+          {attention.length === 1 ? ' has ' : ' have '}
+          an exit or alert signal — open the stock for the full read.
+        </div>
+      )}
+
       {tracked.isLoading ? (
         <Loading />
       ) : tracked.isError ? (
@@ -148,43 +169,6 @@ export default function Holdings() {
           sellLabel="Record sale"
           emptyLabel="Nothing tracked yet — press Import from Zerodha above."
         />
-      )}
-
-      {/* Only rendered when there is actually something to act on. When every
-          holding is tracked this section is pure noise, and an "everything is
-          fine" panel earns no permanent space on the page. It reappears by
-          itself the next time you buy something in Zerodha. */}
-      {untracked.length > 0 && (
-        <>
-          <h2>In Zerodha, not tracked yet</h2>
-          <p className="muted">
-            Bought outside this app. Press Import above to start tracking them.
-          </p>
-          <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Stock</th>
-                <th className="num">Qty</th>
-                <th className="num">Avg cost</th>
-                <th className="num">LTP</th>
-                <th className="num">P&L</th>
-              </tr>
-            </thead>
-            <tbody>
-              {untracked.map((h) => (
-                <tr key={`${h.exchange}:${h.symbol}`}>
-                  <td className="sticky-col">{h.symbol}</td>
-                  <td className="num">{h.quantity}</td>
-                  <td className="num">{formatCurrency(h.average_price)}</td>
-                  <td className="num">{formatCurrency(h.last_price)}</td>
-                  <td className={`num ${pnlClass(h.pnl)}`}>{formatCurrency(h.pnl)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          </div>
-        </>
       )}
 
       {detail && <StockDetailModal detail={detail} onClose={() => setDetail(null)} />}

@@ -82,3 +82,43 @@ def test_long_term_strategy_returns_none_below_min_bars():
     inst = Instrument(instrument_token=1, tradingsymbol="TEST")
 
     assert strategy.evaluate(short_df, inst, db=None) is None
+
+
+def test_long_term_signal_is_scored_by_the_same_evaluate_pending_signals(db_session):
+    """A long_term_value BUY signal is not a special case — it's scored by
+    exactly the same function as a swing signal, just with a much longer
+    horizon_days. This is the whole point of reusing Signal/Scan Results
+    rather than building a parallel scoring path (spec §6)."""
+    from datetime import UTC, datetime
+
+    from swing_trade_ml.core.enums import SignalType
+    from swing_trade_ml.db.models.market import Candle, Instrument
+    from swing_trade_ml.db.models.trading import Signal, Strategy
+    from swing_trade_ml.ml.predict import evaluate_pending_signals
+
+    inst = Instrument(instrument_token=999, tradingsymbol="LTTEST", is_watchlisted=True)
+    db_session.add(inst)
+    db_session.flush()
+    strat = Strategy(name="lt_test", strategy_type="long_term_value", mode="paper")
+    db_session.add(strat)
+    db_session.flush()
+
+    gen_at = datetime(2026, 1, 1, tzinfo=UTC)
+    sig = Signal(
+        strategy_id=strat.id, instrument_id=inst.id, signal_type=SignalType.BUY, mode="paper",
+        price=100.0, stop_loss=80.0, take_profit=130.0, horizon_days=250,
+        advisory_only=True, generated_at=gen_at,
+    )
+    db_session.add(sig)
+    # Target hit well inside the 250-day horizon.
+    db_session.add(Candle(
+        instrument_id=inst.id, interval="day", ts=datetime(2026, 6, 1, tzinfo=UTC),
+        open=128, high=132, low=127, close=131, volume=100_000,
+    ))
+    db_session.commit()
+
+    count = evaluate_pending_signals(db_session, now=datetime(2026, 9, 1, tzinfo=UTC))
+
+    assert count == 1
+    db_session.refresh(sig)
+    assert sig.outcome == "TARGET_HIT"

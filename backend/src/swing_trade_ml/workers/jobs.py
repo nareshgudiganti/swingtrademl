@@ -398,6 +398,17 @@ def job_evaluate_signals() -> None:
         _report_error("evaluate_signals", exc)
 
 
+def job_sync_mutual_fund_navs() -> None:
+    """Daily AMFI NAV pull for every tracked mutual fund scheme."""
+    try:
+        from swing_trade_ml.services.finance import mutual_funds
+
+        with session_scope() as db:
+            mutual_funds.sync_nav_snapshot(db)
+    except Exception as exc:  # noqa: BLE001
+        _report_error("sync_mutual_fund_navs", exc)
+
+
 def job_sync_instruments() -> None:
     """Weekly refresh of the instrument master.
 

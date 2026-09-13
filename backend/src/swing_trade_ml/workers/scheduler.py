@@ -142,6 +142,12 @@ def start_scheduler() -> None:
         id="evaluate_signals",
         replace_existing=True,
     )
+    scheduler.add_job(
+        jobs.job_sync_mutual_fund_navs,
+        CronTrigger(day_of_week=WEEKDAYS, hour=21, minute=30, timezone=IST),
+        id="sync_mutual_fund_navs",
+        replace_existing=True,
+    )
 
     # --- weekly -------------------------------------------------------------
     # Sunday: the instrument dump is stable and nothing is trading.

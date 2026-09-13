@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api/client'
 import type { DetailedPosition } from '../api/types'
 import Stat from '../components/Stat'
-import { Empty, ErrorBox, Loading } from '../components/Loading'
+import { ErrorBox, Loading } from '../components/Loading'
 import StockDetailModal, { type StockDetail } from '../components/StockDetailModal'
 import { PositionsTable } from './Positions'
 import { formatCurrency, formatPercent, pnlClass } from '../lib/format'
@@ -150,15 +150,17 @@ export default function Holdings() {
         />
       )}
 
-      <h2>In Zerodha, not tracked yet</h2>
-      {holdings.isLoading ? (
-        <Loading />
-      ) : holdings.isError ? (
-        <ErrorBox error={holdings.error} />
-      ) : untracked.length === 0 ? (
-        <Empty label="Everything in your Zerodha account is being tracked." />
-      ) : (
-        <div className="table-wrap">
+      {/* Only rendered when there is actually something to act on. When every
+          holding is tracked this section is pure noise, and an "everything is
+          fine" panel earns no permanent space on the page. It reappears by
+          itself the next time you buy something in Zerodha. */}
+      {untracked.length > 0 && (
+        <>
+          <h2>In Zerodha, not tracked yet</h2>
+          <p className="muted">
+            Bought outside this app. Press Import above to start tracking them.
+          </p>
+          <div className="table-wrap">
           <table>
             <thead>
               <tr>
@@ -181,7 +183,8 @@ export default function Holdings() {
               ))}
             </tbody>
           </table>
-        </div>
+          </div>
+        </>
       )}
 
       {detail && <StockDetailModal detail={detail} onClose={() => setDetail(null)} />}

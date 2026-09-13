@@ -1017,9 +1017,15 @@ tr.sig-detail-row td {
   background: rgba(4, 8, 18, 0.6);
   backdrop-filter: blur(2px);
   display: flex;
-  align-items: center;
+  /* flex-start, not center: a centred card taller than the viewport gets its
+     top clipped off-screen with no way to scroll back up to it. Starting at
+     the top means the card always begins where you can see it, and the
+     backdrop itself scrolls if the card is very tall. */
+  align-items: flex-start;
   justify-content: center;
   padding: 1.5rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   z-index: 50;
   animation: modal-fade 0.15s ease both;
 }
@@ -1037,7 +1043,8 @@ tr.sig-detail-row td {
   padding: 1.4rem 1.5rem;
   max-width: 640px;
   width: 100%;
-  max-height: 85vh;
+  margin: auto;
+  max-height: calc(100vh - 3rem);
   overflow-y: auto;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
 }

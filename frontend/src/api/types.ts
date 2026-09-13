@@ -454,6 +454,33 @@ export interface FinanceMerchantSummary {
   transaction_count: number
 }
 
+export interface MutualFundSearchResult {
+  scheme_id: number
+  scheme_code: string
+  name: string
+  amc_name: string | null
+  category: string | null
+  is_tracked: boolean
+}
+
+export interface MutualFundHolding {
+  id: number
+  scheme_id: number
+  scheme_name: string
+  category: string | null
+  units: number
+  purchase_nav: number
+  purchase_date: string
+  latest_nav: number | null
+  current_value: number | null
+  cost_basis: number
+  absolute_return: number | null
+  absolute_return_pct: number | null
+  annualized_return_pct: number | null
+  volatility: number | null
+  max_drawdown: number | null
+}
+
 export interface FinanceLoan {
   id: number
   account_number: string | null
@@ -503,6 +530,7 @@ export interface FinanceNetWorth {
   cash_surplus: number
   investments_total: number
   liabilities: number
+  mutual_funds_value: number
   net_worth: number
 }
 

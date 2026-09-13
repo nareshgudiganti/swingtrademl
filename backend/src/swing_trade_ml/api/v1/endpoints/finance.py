@@ -265,13 +265,29 @@ def net_worth(
     liabilities = loans_service.total_outstanding(loans)
     cash_surplus = income_total - expense_total
 
+    from swing_trade_ml.db.models.mutual_funds import MutualFundHolding, MutualFundNav
+    from swing_trade_ml.services.finance import mutual_funds as mf_service
+
+    mf_holdings = db.execute(select(MutualFundHolding)).scalars().all()
+    mutual_funds_value = 0.0
+    for holding in mf_holdings:
+        latest = db.execute(
+            select(MutualFundNav)
+            .where(MutualFundNav.scheme_id == holding.scheme_id)
+            .order_by(MutualFundNav.date.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+        if latest:
+            mutual_funds_value += mf_service.holding_value(holding, latest.nav)["current_value"]
+
     return FinanceNetWorth(
         income_total=income_total,
         expense_total=expense_total,
         cash_surplus=cash_surplus,
         investments_total=investments_total,
         liabilities=liabilities,
-        net_worth=cash_surplus + investments_total - liabilities,
+        mutual_funds_value=mutual_funds_value,
+        net_worth=cash_surplus + investments_total + mutual_funds_value - liabilities,
     )
 
 

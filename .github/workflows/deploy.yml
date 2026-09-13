@@ -33,8 +33,13 @@ jobs:
             ls -t /root/backups/pgdumpall_*.sql | tail -n +15 | xargs -r rm --
 
             echo "== pulling latest main =="
+            # /root/app was originally cloned with --single-branch develop —
+            # widen it once so `origin/main` (and any future branch) tracks
+            # normally instead of every git command here needing a FETCH_HEAD
+            # workaround. Idempotent: harmless to repeat every deploy.
+            git remote set-branches origin '*'
             git fetch origin main
-            git reset --hard origin/main
+            git reset --hard FETCH_HEAD
 
             echo "== building new images =="
             docker compose -f docker-compose.yml -f docker-compose.prod.yml build api worker frontend

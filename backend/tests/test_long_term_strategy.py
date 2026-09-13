@@ -51,3 +51,34 @@ def test_train_model_accepts_long_term_value_arguments(monkeypatch):
 
     assert captured["name"] == "long_term_value"
     assert captured["horizon_days"] == 250
+
+
+def test_long_term_strategy_is_registered():
+    from swing_trade_ml.strategies import STRATEGY_REGISTRY
+
+    assert "long_term_value" in STRATEGY_REGISTRY
+
+
+def test_long_term_strategy_signal_is_advisory_only_by_default():
+    from swing_trade_ml.db.models.trading import Strategy as StrategyModel
+    from swing_trade_ml.strategies.long_term_value import LongTermValueStrategy
+
+    config = StrategyModel(name="lt-test", strategy_type="long_term_value", params={})
+    strategy = LongTermValueStrategy(config)
+
+    assert strategy.default_params.get("advisory_only", True) is True
+
+
+def test_long_term_strategy_returns_none_below_min_bars():
+    import pandas as pd
+
+    from swing_trade_ml.db.models.market import Instrument
+    from swing_trade_ml.db.models.trading import Strategy as StrategyModel
+    from swing_trade_ml.strategies.long_term_value import LongTermValueStrategy
+
+    config = StrategyModel(name="lt-test", strategy_type="long_term_value", params={})
+    strategy = LongTermValueStrategy(config)
+    short_df = pd.DataFrame({"ts": pd.date_range("2026-01-01", periods=5), "close": [100] * 5})
+    inst = Instrument(instrument_token=1, tradingsymbol="TEST")
+
+    assert strategy.evaluate(short_df, inst, db=None) is None

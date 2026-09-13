@@ -14,6 +14,22 @@ standard as every other signal in the app.
 
 from __future__ import annotations
 
+from typing import Any, ClassVar
+
+import pandas as pd
+from sqlalchemy.orm import Session
+
+from swing_trade_ml.core.enums import SignalType
+from swing_trade_ml.core.logging import get_logger
+from swing_trade_ml.db.models.market import Instrument
+from swing_trade_ml.ml.features import build_features
+from swing_trade_ml.ml.market_context import load_index_candles
+from swing_trade_ml.ml.predict import _get_bundle
+from swing_trade_ml.ml.registry import get_active_model
+from swing_trade_ml.strategies.base import BaseStrategy, SignalDecision, register_strategy
+
+log = get_logger(__name__)
+
 # 250 trading days (~1 year) — long enough to be a genuinely different
 # horizon from the swing model's ~5-20 days, short enough that the model
 # still trains on a meaningful number of non-overlapping examples given the
@@ -25,3 +41,135 @@ LONG_TERM_HORIZON_DAYS = 250
 # not the same one scaled by time. 30% is the starting point; revisit once
 # backtested (spec §10 open items).
 LONG_TERM_TARGET_RETURN_PCT = 0.30
+
+
+@register_strategy
+class LongTermValueStrategy(BaseStrategy):
+    strategy_type: ClassVar[str] = "long_term_value"
+    display_name: ClassVar[str] = "Long-Term Value"
+    description: ClassVar[str] = (
+        "Buys when the long-horizon classifier's probability of a large multi-month "
+        "move exceeds the confidence threshold. Advisory only — no auto-execution. "
+        "Tracked against real outcomes the same as every other signal in this app; "
+        "no target return multiple is ever promised."
+    )
+    default_params: ClassVar[dict[str, Any]] = {
+        "model_name": "long_term_value",
+        "min_confidence": 0.65,
+        # Wider than the swing model's ATR-based stop — a multi-month hold
+        # should not be shaken out by ordinary weekly noise. Percentage-of-
+        # price, matching sma_crossover.py's simpler convention, not ATR
+        # (which is tuned for short-term noise the long horizon doesn't
+        # care about).
+        "stop_loss_pct": 0.20,
+        "take_profit_pct": LONG_TERM_TARGET_RETURN_PCT,
+        "horizon_days": LONG_TERM_HORIZON_DAYS,
+        "min_avg_volume": 100_000,
+        # Advisory only by default (spec §3/§6) — the manual-approval trial
+        # phase this whole app is still in applies doubly to a multi-month
+        # commitment of capital.
+        #
+        # NOTE: as of this writing, engine.py's actual advisory-routing
+        # mechanism (services/execution.py's process_decision) gates on
+        # Strategy.execution_mode ("auto"/"advisory", a DB row field set
+        # when the Strategy row is created), not on a strategy class's
+        # default_params — this key documents the intended default and is
+        # asserted by tests, but the DB row for this strategy must also be
+        # created with execution_mode="advisory" to actually enforce it at
+        # runtime. See Task 3 Step 5 for the full investigation.
+        "advisory_only": True,
+    }
+
+    def min_bars_required(self) -> int:
+        return 260
+
+    def evaluate(
+        self, df: pd.DataFrame, instrument: Instrument, db: Session
+    ) -> SignalDecision | None:
+        if len(df) < self.min_bars_required():
+            return None
+
+        model = get_active_model(db, self.params.get("model_name"))
+        if model is None:
+            log.warning("long_term_value.no_active_model", strategy=self.config.name)
+            return None
+
+        d = df.sort_values("ts").reset_index(drop=True)
+        # Bounded to this instrument's own most recent visible bar — same
+        # look-ahead guarantee ml_swing.py's evaluate() relies on (live: only
+        # up-to-now candles; backtest: the caller's pre-sliced window).
+        #
+        # NOTE (deviation from the original plan sample code): the plan's
+        # Task 3 sample also merged sector/VIX/market-breadth context via
+        # load_sector_candles/load_vix_candles/load_market_breadth and a new
+        # ml/sector_map.py module. None of those exist in this codebase —
+        # only load_index_candles and the two-argument build_features(df,
+        # index_df) do (confirmed by grep before writing this). This mirrors
+        # ml_swing.py's actual (not aspirational) feature-building call
+        # exactly, so the two ML strategies stay on the same real pipeline.
+        index_df = load_index_candles(db, interval="day", upto=d["ts"].max())
+        featured = build_features(d, index_df)
+        row = featured.iloc[[-1]]
+
+        bundle = _get_bundle(model)
+        feature_names: list[str] = bundle["feature_names"]
+        x = row[feature_names]
+        if x.isna().to_numpy().any():
+            return None
+
+        x_scaled = bundle["scaler"].transform(x.to_numpy(dtype="float64"))
+        estimator = bundle["estimator"]
+        probability = (
+            float(estimator.predict_proba(x_scaled)[0, 1])
+            if hasattr(estimator, "predict_proba")
+            else float(estimator.predict(x_scaled)[0])
+        )
+
+        price = float(d["close"].iloc[-1])
+        avg_volume = float(d["volume"].rolling(20).mean().iloc[-1])
+
+        threshold = float(self.params["min_confidence"])
+        if probability < threshold:
+            return SignalDecision(
+                signal=SignalType.HOLD,
+                price=price,
+                confidence=round(probability, 3),
+                reason=f"Confidence {probability:.1%} below {threshold:.0%} threshold",
+                features={
+                    "probability": round(probability, 4),
+                    "model": f"{model.name}:{model.version}",
+                },
+            )
+
+        if avg_volume < float(self.params["min_avg_volume"]):
+            return SignalDecision(
+                signal=SignalType.HOLD,
+                price=price,
+                confidence=round(probability, 3),
+                reason=(
+                    f"Model confident ({probability:.1%}) but 20-day volume "
+                    f"{avg_volume:,.0f} too thin"
+                ),
+                features={"probability": round(probability, 4)},
+            )
+
+        stop_loss = round(price * (1 - float(self.params["stop_loss_pct"])), 2)
+        take_profit = round(price * (1 + float(self.params["take_profit_pct"])), 2)
+
+        return SignalDecision(
+            signal=SignalType.BUY,
+            price=price,
+            confidence=round(probability, 3),
+            reason=(
+                f"{model.name}:{model.version} predicts {probability:.1%} confidence of a "
+                f"sustained move over the next {self.params['horizon_days']} trading days "
+                f"(long-term, advisory)"
+            ),
+            stop_loss=stop_loss,
+            take_profit=take_profit,
+            horizon_days=int(self.params["horizon_days"]),
+            features={
+                "probability": round(probability, 4),
+                "model": f"{model.name}:{model.version}",
+            },
+        )

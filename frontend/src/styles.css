@@ -140,7 +140,7 @@ a {
 }
 
 .content {
-  padding: 1.5rem 2rem calc(3rem + env(safe-area-inset-bottom));
+  padding: 1rem 2rem calc(3rem + env(safe-area-inset-bottom));
   overflow-x: auto;
 }
 
@@ -311,6 +311,13 @@ tbody tr:last-child td {
 
 tbody tr:hover {
   background: var(--surface-2);
+}
+
+/* A row that opens something on click (e.g. a daily-expense entry, to edit
+   or delete it) — the cursor is the only thing distinguishing it from a
+   plain display row, since the existing hover tint already applies to both. */
+.clickable-row {
+  cursor: pointer;
 }
 
 th.sortable {
@@ -642,12 +649,20 @@ select:focus {
 
 /* -------------------------------------------------------------- misc -- */
 
+/* Kept deliberately compact: this sits above every page's real content, so
+   any height it takes is height the dashboard loses above the fold. One line
+   on a normal viewport, wrapping only when the status message is long. */
 .banner {
-  padding: 0.7rem 1rem;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  padding: 0.4rem 0.75rem;
   border-radius: var(--radius);
-  margin-bottom: 1.25rem;
+  margin-bottom: 0.75rem;
   border: 1px solid;
-  font-size: 0.88rem;
+  font-size: 0.82rem;
+  line-height: 1.35;
 }
 
 .banner-warn {

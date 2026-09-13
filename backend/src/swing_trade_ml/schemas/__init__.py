@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 ORM = ConfigDict(from_attributes=True)
 
@@ -60,11 +60,29 @@ class LoginRequest(BaseModel):
     username: str
     password: str
 
+    # A stray leading/trailing space (easy to introduce via autofill or a
+    # fat-fingered spacebar tap) must not silently produce a different
+    # username at login than what was actually typed at signup — that's an
+    # "incorrect password" error with no way to tell it's really a whitespace
+    # mismatch. Signup strips too (below), so this only matters for accounts
+    # created before this fix.
+    @field_validator("username")
+    @classmethod
+    def _strip_username(cls, v: str) -> str:
+        return v.strip()
+
 
 class SignupRequest(BaseModel):
     username: str = Field(..., min_length=3, max_length=64)
     password: str = Field(..., min_length=8)
     email: str | None = None
+
+    # mode="before" so a padded string like "  ab  " is stripped to "ab"
+    # ahead of the min_length=3 check above, not after it.
+    @field_validator("username", mode="before")
+    @classmethod
+    def _strip_username(cls, v: str) -> str:
+        return v.strip() if isinstance(v, str) else v
 
 
 class TokenResponse(BaseModel):
@@ -170,6 +188,10 @@ class StrategyCreate(BaseModel):
     # see services/execution.py.
     execution_mode: str = Field("auto", pattern="^(auto|advisory)$")
     allow_pyramiding: bool = False
+    # Only honoured for execution_mode="advisory" — see create_strategy().
+    # An "auto" strategy always inherits the broker's current mode instead,
+    # so it can never start live-trading just because the broker flips.
+    mode: str | None = Field(None, pattern="^(paper|live)$")
 
 
 class StrategyUpdate(BaseModel):
@@ -532,7 +554,13 @@ class FinanceTransactionOut(BaseModel):
 
 
 class FinanceTransactionUpdate(BaseModel):
-    category: str = Field(..., min_length=1, max_length=64)
+    # All optional and independently applied — a plain category recategorize
+    # (the original use of this endpoint) still works by sending only that
+    # field; the daily-expense edit popup sends whichever of these changed.
+    category: str | None = Field(None, min_length=1, max_length=64)
+    amount: float | None = Field(None, gt=0)
+    description: str | None = Field(None, min_length=1, max_length=500)
+    txn_date: date | None = None
 
 
 class FinanceIngestResult(BaseModel):

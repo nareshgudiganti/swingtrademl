@@ -59,11 +59,18 @@ def create_strategy(payload: StrategyCreate, db: DbSession) -> Strategy:
     if db.execute(select(Strategy).where(Strategy.name == payload.name)).scalar_one_or_none():
         raise HTTPException(status.HTTP_409_CONFLICT, f"Strategy '{payload.name}' already exists")
 
+    fields = payload.model_dump(exclude={"mode"})
+    # An advisory strategy never places a broker order, so letting it declare
+    # its own mode (e.g. "live" to track real trades made manually) carries
+    # none of the risk that motivates pinning "auto" strategies to the
+    # broker's current mode below.
+    resolved_mode = payload.mode if (payload.mode and payload.execution_mode == "advisory") else get_broker().mode
+
     strategy = Strategy(
-        **payload.model_dump(),
+        **fields,
         # Bound to the current mode at creation, so a strategy made during the
         # paper phase does not start trading the moment live mode is enabled.
-        mode=get_broker().mode,
+        mode=resolved_mode,
         is_active=False,
     )
     db.add(strategy)

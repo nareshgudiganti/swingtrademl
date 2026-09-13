@@ -84,6 +84,22 @@ export interface PortfolioSummary {
   top_movers: { symbol: string; pnl: number; pnl_pct: number }[]
 }
 
+// Real Zerodha equity holdings — a direct pass-through from Kite, not
+// anything the bot tracks or predicts. Distinct from DetailedPosition,
+// which is the bot's own paper-mode trades and knows nothing about
+// anything bought manually in the real account.
+export interface Holding {
+  symbol: string
+  exchange: string
+  quantity: number
+  average_price: number
+  last_price: number
+  close_price: number | null
+  pnl: number
+  day_change: number | null
+  day_change_percentage: number | null
+}
+
 export interface DetailedPosition {
   id: number
   symbol: string

@@ -8,12 +8,12 @@ from datetime import UTC, datetime
 from urllib.parse import urlencode
 
 import httpx
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from swing_trade_ml.api.deps import CurrentUser, DbSession
+from swing_trade_ml.api.deps import CurrentUser, DbSession, require_auth
 from swing_trade_ml.brokers.kite import kite_broker
 from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.logging import get_logger
@@ -138,6 +138,36 @@ def kite_callback(request_token: str, db: DbSession) -> HTMLResponse:
             ok=True,
         )
     )
+
+
+@router.post("/kite/auto-login", dependencies=[Depends(require_auth)])
+def kite_auto_login(db: DbSession, check_only: bool = False) -> dict[str, object]:
+    """Trigger the unattended login on demand, rather than waiting for 06:10.
+
+    Guarded explicitly because this router is mounted without the global auth
+    dependency (the Kite and Google callbacks must be reachable by a browser
+    that cannot send headers). An open endpoint here would let anyone spend
+    authentication attempts against the operator's Zerodha account.
+
+    `check_only=true` stops before submitting a TOTP code — it reports which
+    2FA types Zerodha will actually accept, which is the usual reason a
+    correctly-configured auto-login still fails.
+    """
+    if check_only:
+        return kite_broker.login_diagnostics()
+
+    try:
+        session = kite_broker.auto_login(db)
+    except Exception as exc:  # noqa: BLE001
+        log.error("auth.kite.auto_login_failed", error=str(exc))
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+    return {
+        "ok": True,
+        "kite_user_id": session.kite_user_id,
+        "user_name": session.user_name,
+        "expires_at": session.expires_at.isoformat() if session.expires_at else None,
+    }
 
 
 @router.get("/kite/session", response_model=KiteSessionResponse)

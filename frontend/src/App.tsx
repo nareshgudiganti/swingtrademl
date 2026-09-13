@@ -11,20 +11,26 @@ import Reports from './pages/Reports'
 import ScanResults from './pages/ScanResults'
 import Strategies from './pages/Strategies'
 import Models from './pages/Models'
+import Holdings from './pages/Holdings'
 import Settings from './pages/Settings'
-import { BarChartIcon, BriefcaseIcon, GearIcon, HomeIcon, LayersIcon, WalletIcon } from './components/icons'
+import { BarChartIcon, BriefcaseIcon, HomeIcon, LayersIcon, WalletIcon } from './components/icons'
 
-// Strategies and ML Models are still routed (linked from Settings' Advanced
-// section) but deliberately left out of the top-level nav — they're
-// admin/config screens, not something a day-to-day user needs to see
-// alongside Dashboard/Portfolio/Reports.
+// Settings, Strategies and ML Models are still routed but deliberately left
+// out of the top-level nav — they're admin/config screens, not something a
+// day-to-day user needs alongside Dashboard/Portfolio/Reports. The user and
+// Log out already live in the sidebar status strip below, so Settings earned
+// no place in the nav once auto-login removed the daily Kite login chore.
+//
+// They remain reachable by URL: /settings (watchlist editor, sync + backfill,
+// scheduler status), /strategies and /models. Nothing was deleted — if any of
+// those need to come back, add them here.
 const NAV = [
   { to: '/dashboard', label: 'Dashboard', Icon: HomeIcon },
+  { to: '/holdings', label: 'My Holdings', Icon: WalletIcon },
   { to: '/portfolio', label: 'Portfolio', Icon: BriefcaseIcon },
   { to: '/reports', label: 'Reports', Icon: BarChartIcon },
   { to: '/scans', label: 'Scan Results', Icon: LayersIcon },
   { to: '/finance', label: 'Finance', Icon: WalletIcon },
-  { to: '/settings', label: 'Settings', Icon: GearIcon },
 ]
 
 // The 4 destinations worth a one-tap reach on a phone — a real bottom tab
@@ -215,6 +221,7 @@ export default function App() {
           <Routes>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/holdings" element={<Holdings />} />
             <Route path="/portfolio" element={<Positions />} />
             <Route path="/reports" element={<Reports />} />
             <Route path="/scans" element={<ScanResults />} />

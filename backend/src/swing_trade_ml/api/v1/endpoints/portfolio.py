@@ -11,6 +11,7 @@ from sqlalchemy import func, select
 
 from swing_trade_ml.api.deps import DbSession
 from swing_trade_ml.brokers import get_broker
+from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.enums import ExitReason, PositionStatus, SignalType
 from swing_trade_ml.db.models.market import Candle, Instrument
 from swing_trade_ml.db.models.trading import Position, Signal, Strategy, Trade
@@ -52,10 +53,13 @@ def list_positions(
     db: DbSession,
     open_only: bool = True,
     limit: int = Query(100, le=1000),
+    mode: str | None = None,
 ) -> list[Position]:
+    """Pass `mode=live` to see real (advisory) positions instead of the
+    broker's current default — e.g. paper-simulated ones."""
     stmt = (
         select(Position)
-        .where(Position.mode == get_broker().mode)
+        .where(Position.mode == (mode or get_broker().mode))
         .order_by(Position.entry_at.desc())
         .limit(limit)
     )
@@ -65,12 +69,19 @@ def list_positions(
 
 
 @router.get("/positions/detailed", response_model=list[dict])
-def detailed_positions(db: DbSession) -> list[dict[str, Any]]:
-    """Open positions with symbols and computed P&L, ready to render."""
+def detailed_positions(db: DbSession, mode: str | None = None) -> list[dict[str, Any]]:
+    """Open positions with symbols and computed P&L, ready to render.
+
+    Pass `mode=live` for the "Real Trading" view — real trades recorded via
+    the manual-entry flow, tracked with the same confidence/stop-loss/action
+    fields as paper positions but kept in a separate book (see
+    services/execution.py's manual_open_position and engine.run_all_active).
+    """
+    effective_mode = mode or get_broker().mode
     rows = db.execute(
         select(Position, Instrument.tradingsymbol, Instrument.name)
         .join(Instrument, Instrument.id == Position.instrument_id)
-        .where(Position.mode == get_broker().mode, Position.status == PositionStatus.OPEN)
+        .where(Position.mode == effective_mode, Position.status == PositionStatus.OPEN)
         .order_by(Position.entry_at.desc())
     ).all()
 
@@ -92,7 +103,7 @@ def detailed_positions(db: DbSession) -> list[dict[str, Any]]:
         strategy_ids = {position.strategy_id for position, _, _ in rows}
         for inst_id, strat_id, generated_at in db.execute(
             select(Signal.instrument_id, Signal.strategy_id, Signal.generated_at).where(
-                Signal.mode == get_broker().mode,
+                Signal.mode == effective_mode,
                 Signal.instrument_id.in_(instrument_ids),
                 Signal.strategy_id.in_(strategy_ids),
                 Signal.signal_type.in_([SignalType.EXIT, SignalType.SELL]),
@@ -185,6 +196,213 @@ def detailed_positions(db: DbSession) -> list[dict[str, Any]]:
             }
         )
     return result
+
+
+@router.get("/holdings", response_model=list[dict])
+def holdings(db: DbSession) -> list[dict[str, Any]]:
+    """Real Zerodha equity holdings — actual shares sitting in the connected
+    account, as opposed to the Position rows below (which track the bot's
+    own paper-mode trades and know nothing about anything bought manually).
+    Pure pass-through to Kite; nothing here is generated or predicted.
+    """
+    from swing_trade_ml.brokers.kite import kite_broker
+
+    kite_broker.load_session(db)
+    if not kite_broker.is_authenticated:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "No active Kite session — log in to see real holdings.",
+        )
+
+    return [
+        {
+            "symbol": h["tradingsymbol"],
+            "exchange": h["exchange"],
+            "quantity": h["quantity"],
+            "average_price": h["average_price"],
+            "last_price": h["last_price"],
+            "close_price": h.get("close_price"),
+            "pnl": h["pnl"],
+            "day_change": h.get("day_change"),
+            "day_change_percentage": h.get("day_change_percentage"),
+        }
+        for h in kite_broker.get_holdings(db)
+        if h["quantity"] != 0
+    ]
+
+
+REAL_TRADING_STRATEGY_NAME = "real_trading"
+
+
+def _get_or_create_real_trading_strategy(db: DbSession) -> Strategy:
+    """The advisory, live-mode strategy that real Zerodha holdings are tracked
+    under.
+
+    Created on demand because requiring the user to hand-build it first meant
+    import-holdings failed with a bare 404 on a fresh install, and the
+    frontend already hard-codes this name (lib/tiers.ts, Positions.tsx).
+
+    Advisory is not a detail: it is what guarantees this strategy can never
+    place or close a broker order. It observes real positions and reports on
+    them; every actual trade stays the operator's own.
+    """
+    strategy = db.execute(
+        select(Strategy).where(Strategy.name == REAL_TRADING_STRATEGY_NAME)
+    ).scalar_one_or_none()
+    if strategy is not None:
+        return strategy
+
+    strategy = Strategy(
+        name=REAL_TRADING_STRATEGY_NAME,
+        strategy_type="ml_swing",
+        description="Real Zerodha holdings, tracked with ML confidence. Advisory only.",
+        params={},
+        is_active=True,
+        mode="live",
+        execution_mode="advisory",
+    )
+    db.add(strategy)
+    db.flush()
+    return strategy
+
+
+def _derive_stop_target(
+    db: DbSession, instrument: Instrument, price: float
+) -> tuple[float | None, float | None, str]:
+    """Stop and target for a holding bought outside this app.
+
+    Anchored to *today's* price, not the original purchase price, and this is
+    the whole point: a stock bought at 100 and now trading at 150 has a stop
+    derived from 100 sitting far below the market, protecting nothing. Today's
+    price protects the gain that actually exists.
+
+    Uses the same 2x/4x ATR multiples and the same clamp as ml_swing, so an
+    imported holding and a bot-entered position are judged on one convention.
+    """
+    from swing_trade_ml.ml.dataset import load_candles
+    from swing_trade_ml.ml.features import atr
+
+    if price <= 0:
+        return None, None, "no price"
+
+    fallback_stop = round(price * (1 - settings.DEFAULT_STOP_LOSS_PCT), 2)
+    fallback_target = round(price * (1 + settings.DEFAULT_TAKE_PROFIT_PCT), 2)
+
+    df = load_candles(db, instrument.id, "day", limit=60)
+    if df is None or len(df) < 20:
+        return fallback_stop, fallback_target, "fixed pct (not enough candles for ATR)"
+
+    try:
+        atr_value = float(atr(df["high"], df["low"], df["close"], 14).iloc[-1])
+    except Exception:  # noqa: BLE001
+        return fallback_stop, fallback_target, "fixed pct (ATR failed)"
+
+    if not atr_value or atr_value <= 0:
+        return fallback_stop, fallback_target, "fixed pct (ATR unavailable)"
+
+    stop = price - 2.0 * atr_value
+    target = price + 4.0 * atr_value
+    # Same clamp ml_swing applies: never risk more per trade than the risk
+    # model allows, so tighten rather than skip.
+    stop = max(stop, price * (1 - settings.DEFAULT_STOP_LOSS_PCT * 2))
+    return round(stop, 2), round(target, 2), "2x/4x ATR from current price"
+
+
+@router.post("/positions/import-holdings", response_model=list[dict])
+def import_real_holdings(db: DbSession, strategy_id: int | None = None) -> list[dict[str, Any]]:
+    """Pull real Zerodha holdings and record each one as a tracked position
+    under the given (advisory, live-mode) strategy — see
+    services/execution.py's manual_open_position — so it starts getting the
+    same daily confidence/stop-loss tracking paper positions already get,
+    instead of sitting as a dumb price/quantity row.
+
+    Safe to call repeatedly: holdings already tracked under this strategy
+    (an OPEN position on the same instrument) are skipped, not duplicated.
+    """
+    from swing_trade_ml.brokers.kite import kite_broker
+
+    if strategy_id is None:
+        strategy = _get_or_create_real_trading_strategy(db)
+    else:
+        strategy = db.get(Strategy, strategy_id)
+    if strategy is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Strategy not found")
+    if strategy.execution_mode != "advisory":
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Only an advisory strategy can import real holdings — "
+            "an auto strategy would treat them as its own trades to manage.",
+        )
+
+    kite_broker.load_session(db)
+    if not kite_broker.is_authenticated:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "No active Kite session — log in to see real holdings.",
+        )
+
+    already_tracked = {
+        p.instrument_id
+        for p in db.execute(
+            select(Position).where(
+                Position.strategy_id == strategy.id, Position.status == PositionStatus.OPEN
+            )
+        ).scalars()
+    }
+
+    results: list[dict[str, Any]] = []
+    for h in kite_broker.get_holdings(db):
+        if h["quantity"] == 0:
+            continue
+        instrument = db.execute(
+            select(Instrument).where(
+                Instrument.exchange == h["exchange"], Instrument.tradingsymbol == h["tradingsymbol"]
+            )
+        ).scalar_one_or_none()
+        if instrument is None:
+            results.append(
+                {
+                    "symbol": h["tradingsymbol"],
+                    "status": "skipped",
+                    "reason": "not in this app's instrument universe yet",
+                }
+            )
+            continue
+        if instrument.id in already_tracked:
+            results.append({"symbol": h["tradingsymbol"], "status": "already_tracked"})
+            continue
+
+        # Anchor risk levels to what the stock trades at now, not to what it
+        # was bought at — see _derive_stop_target. Without these the position
+        # has no stop, no target, trail_stop no-ops, and the only exit it can
+        # ever reach is the 60-day time stop.
+        current_price = float(h.get("last_price") or 0) or float(h["average_price"])
+        stop_loss, take_profit, basis = _derive_stop_target(db, instrument, current_price)
+
+        manual_open_position(
+            db,
+            strategy,
+            instrument,
+            h["quantity"],
+            h["average_price"],
+            stop_loss=stop_loss,
+            take_profit=take_profit,
+        )
+        already_tracked.add(instrument.id)
+        results.append(
+            {
+                "symbol": h["tradingsymbol"],
+                "status": "imported",
+                "quantity": h["quantity"],
+                "entry_price": h["average_price"],
+                "current_price": current_price,
+                "stop_loss": stop_loss,
+                "take_profit": take_profit,
+                "levels_basis": basis,
+            }
+        )
+
+    return results
 
 
 @router.post("/positions/manual", response_model=PositionOut, status_code=status.HTTP_201_CREATED)

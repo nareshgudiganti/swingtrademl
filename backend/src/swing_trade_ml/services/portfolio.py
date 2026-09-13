@@ -26,8 +26,14 @@ def portfolio_value_and_cash(db: Session, mode: str) -> tuple[float, float]:
 
     In paper mode both come from the simulated ledger; in live mode cash comes
     from the broker's real margin and holdings are valued at last price.
+
+    Live-mode cash always reads real Kite margins directly — not through
+    get_broker(), which only returns the Kite broker once the app's own
+    TRADING_MODE is switched to live. A live-mode *advisory* strategy (real
+    trades made manually, tracked for confidence/exposure only — never
+    auto-executed) still needs its real cash figure while the app itself is
+    still in the paper phase, so this can't wait on that global toggle.
     """
-    broker = get_broker()
     open_positions = list(
         db.execute(
             select(Position).where(Position.mode == mode, Position.status == PositionStatus.OPEN)
@@ -42,8 +48,11 @@ def portfolio_value_and_cash(db: Session, mode: str) -> tuple[float, float]:
     if mode == TradingMode.PAPER:
         cash = paper_broker.get_available_cash(db)
     else:
+        from swing_trade_ml.brokers.kite import kite_broker
+
         try:
-            cash = broker.get_margins(db).available_cash
+            kite_broker.load_session(db)
+            cash = kite_broker.get_margins(db).available_cash
         except Exception as exc:  # noqa: BLE001
             log.error("portfolio.margins_failed", error=str(exc))
             cash = 0.0

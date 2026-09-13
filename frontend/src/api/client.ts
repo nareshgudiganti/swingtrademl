@@ -22,6 +22,7 @@ import type {
   BuyListRow,
   FinanceDailyCategory,
   FinanceRecurringBill,
+  Holding,
   Instrument,
   KiteLoginResponse,
   LatestSignal,
@@ -198,8 +199,40 @@ export const api = {
   summary: (mode?: string) =>
     get<PortfolioSummary>(`/portfolio/summary${mode ? `?mode=${mode}` : ''}`),
   positions: () => get<DetailedPosition[]>('/portfolio/positions/detailed'),
+  // Real trades made manually in Zerodha, tracked with the same
+  // confidence/stop-loss fields as paper positions (see the "real_trading"
+  // advisory strategy) — a separate book from the paper positions above.
+  realPositions: () => get<DetailedPosition[]>('/portfolio/positions/detailed?mode=live'),
+  // strategyId is optional: the backend creates or reuses the advisory
+  // `real_trading` strategy when it's omitted, so a fresh install doesn't
+  // need one hand-built first.
+  importRealHoldings: (strategyId?: number) =>
+    post<
+      {
+        symbol: string
+        status: string
+        reason?: string
+        quantity?: number
+        entry_price?: number
+        current_price?: number
+        stop_loss?: number | null
+        take_profit?: number | null
+        levels_basis?: string
+      }[]
+    >(
+      strategyId == null
+        ? '/portfolio/positions/import-holdings'
+        : `/portfolio/positions/import-holdings?strategy_id=${strategyId}`,
+    ),
+  holdings: () => get<Holding[]>('/portfolio/holdings'),
   closePosition: (id: number, reason = 'MANUAL') =>
     post<MessageResponse>(`/portfolio/positions/${id}/close`, { reason }),
+  // Real positions have no broker order to auto-close against — this
+  // records the sale you already made yourself in Zerodha, at the price you
+  // actually got, rather than closePosition() above (which would place a
+  // real/paper order through whichever broker the app is currently in).
+  manualClosePosition: (id: number, exitPrice: number) =>
+    post<Trade>(`/portfolio/positions/${id}/manual-close`, { exit_price: exitPrice }),
   trades: (limit = 100) => get<Trade[]>(`/portfolio/trades?limit=${limit}`),
   equityCurve: (days = 180) => get<EquityPoint[]>(`/portfolio/equity-curve?days=${days}`),
   snapshot: () => post<MessageResponse>('/portfolio/snapshot'),
@@ -279,6 +312,11 @@ export const api = {
     get<FinanceTransaction[]>(`/finance/transactions${qs(params)}`),
   recategorizeFinanceTransaction: (id: number, category: string) =>
     patch<FinanceTransaction>(`/finance/transactions/${id}`, { category }),
+  updateFinanceTransaction: (
+    id: number,
+    changes: Partial<{ category: string; amount: number; description: string; txn_date: string }>,
+  ) => patch<FinanceTransaction>(`/finance/transactions/${id}`, changes),
+  deleteFinanceTransaction: (id: number) => del<MessageResponse>(`/finance/transactions/${id}`),
   financeCategories: () => get<string[]>('/finance/categories'),
   // Always spans every month by design — see the backend endpoint's own
   // docstring. Still respects category/direction.

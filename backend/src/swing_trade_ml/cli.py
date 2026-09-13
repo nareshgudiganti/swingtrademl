@@ -3,6 +3,7 @@
 swingtrade init-db
 swingtrade create-user --username admin --password secret
 swingtrade sync-instruments
+swingtrade sync-context-indices
 swingtrade backfill --days 1825
 swingtrade train --algorithm lightgbm --activate
 swingtrade scan
@@ -60,6 +61,34 @@ def cmd_create_user(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_kite_login(args: argparse.Namespace) -> int:
+    """Run the unattended Kite login now, instead of waiting for the 06:10 cron.
+
+    The scheduled job reports failures only over Telegram and only once a day,
+    which makes a configuration mistake a 24-hour debugging loop. This runs the
+    same code path on demand and prints the real error.
+    """
+    from swing_trade_ml.brokers.kite import kite_broker
+    from swing_trade_ml.db.session import session_scope
+
+    if args.check:
+        diag = kite_broker.login_diagnostics()
+        ok = diag.pop("ok", False)
+        reason = diag.pop("reason", "")
+        for key, value in diag.items():
+            print(f"   {key:24} {value}")
+        print()
+        print(f"{'✅' if ok else '❌'} {reason}")
+        return 0 if ok else 1
+
+    with session_scope() as db:
+        session = kite_broker.auto_login(db)
+
+    print(f"✅ Auto-login succeeded — authenticated as {session.user_name or session.kite_user_id}")
+    print(f"   Token valid until roughly {session.expires_at:%Y-%m-%d %H:%M} UTC")
+    return 0
+
+
 def cmd_sync_instruments(args: argparse.Namespace) -> int:
     from swing_trade_ml.brokers.kite import kite_broker
     from swing_trade_ml.core.config import settings
@@ -95,6 +124,24 @@ def cmd_sync_index(args: argparse.Namespace) -> int:
             return 1
 
     print(f"✅ Ingested {count:,} candles for {settings.BENCHMARK_INDEX_SYMBOL}")
+    return 0
+
+
+def cmd_sync_context_indices(args: argparse.Namespace) -> int:
+    from swing_trade_ml.brokers.kite import kite_broker
+    from swing_trade_ml.db.session import session_scope
+    from swing_trade_ml.services import ingestion
+
+    with session_scope() as db:
+        if not kite_broker.load_session(db):
+            print("❌ No active Kite session. Log in at /api/v1/auth/kite/login first.")
+            return 1
+        results = ingestion.backfill_context_indices(db, interval=args.interval, days=args.days)
+
+    total = sum(results.values())
+    print(f"✅ Ingested {total:,} candles across {len(results)} sector indices + INDIA VIX")
+    for symbol, count in sorted(results.items()):
+        print(f"   {symbol:<20} {count:>7,}")
     return 0
 
 
@@ -266,11 +313,32 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_sync_instruments)
 
     p = sub.add_parser(
+        "kite-login",
+        help="Run the unattended Kite login now (same path as the 06:10 job)",
+    )
+    p.add_argument(
+        "--check",
+        action="store_true",
+        help="Diagnose only: verify config and ask Zerodha which 2FA types this "
+        "account accepts, without submitting a TOTP code or completing a login",
+    )
+    p.set_defaults(func=cmd_kite_login)
+
+    p = sub.add_parser(
         "sync-index", help="Ingest the benchmark index (settings.BENCHMARK_INDEX_SYMBOL)"
     )
     p.add_argument("--interval", default="day")
     p.add_argument("--days", type=int, default=None)
     p.set_defaults(func=cmd_sync_index)
+
+    p = sub.add_parser(
+        "sync-context-indices",
+        help="Ingest every sector index + INDIA VIX the feature pipeline needs "
+        "(ml.sector_map.CONTEXT_INDEX_SYMBOLS)",
+    )
+    p.add_argument("--interval", default="day")
+    p.add_argument("--days", type=int, default=None)
+    p.set_defaults(func=cmd_sync_context_indices)
 
     p = sub.add_parser("backfill", help="Download historical candles")
     p.add_argument("--interval", default="day")

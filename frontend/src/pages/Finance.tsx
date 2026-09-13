@@ -10,6 +10,7 @@ import type {
   FinanceIngestedFile,
   FinanceLoan,
   FinanceRecurringBill,
+  FinanceTransaction,
   MutualFundHolding,
 } from '../api/types'
 import { calculateEmi } from '../lib/loans'
@@ -1301,6 +1302,9 @@ function DailyExpensesTab() {
   const queryClient = useQueryClient()
   const [form, setForm] = useState<DailyFormState>(emptyDailyForm)
   const [newCategory, setNewCategory] = useState('')
+  const [editingTxn, setEditingTxn] = useState<FinanceTransaction | null>(null)
+  const [editForm, setEditForm] = useState<DailyFormState>(emptyDailyForm)
+  const [editError, setEditError] = useState<string | null>(null)
 
   const categories = useQuery({ queryKey: ['financeDailyCategories'], queryFn: api.dailyCategories })
   // The daily log is just the manual_daily slice of the same transactions
@@ -1326,6 +1330,53 @@ function DailyExpensesTab() {
       setForm({ ...emptyDailyForm, category: form.category })
     },
   })
+  const updateExpense = useMutation({
+    mutationFn: ({ id, changes }: { id: number; changes: Record<string, unknown> }) =>
+      api.updateFinanceTransaction(id, changes),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['financeTransactions'] })
+      queryClient.invalidateQueries({ queryKey: ['financeMonthlyAll'] })
+      setEditingTxn(null)
+    },
+  })
+  const deleteExpense = useMutation({
+    mutationFn: api.deleteFinanceTransaction,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['financeTransactions'] })
+      queryClient.invalidateQueries({ queryKey: ['financeMonthlyAll'] })
+      setEditingTxn(null)
+    },
+  })
+
+  function openEditExpense(t: FinanceTransaction) {
+    setEditingTxn(t)
+    setEditForm({
+      category: t.category,
+      amount: String(t.amount),
+      spent_at: t.txn_date.slice(0, 10),
+      note: t.description,
+    })
+    setEditError(null)
+  }
+
+  function submitEditExpense() {
+    if (!editingTxn) return
+    const amount = Number(editForm.amount)
+    if (!editForm.category || !Number.isFinite(amount) || amount <= 0) {
+      setEditError('Category and a positive amount are required.')
+      return
+    }
+    setEditError(null)
+    updateExpense.mutate({
+      id: editingTxn.id,
+      changes: {
+        category: editForm.category,
+        amount,
+        txn_date: editForm.spent_at,
+        description: editForm.note || editForm.category,
+      },
+    })
+  }
 
   const dailyRows = (transactions.data ?? [])
     .filter((t) => t.source === 'manual_daily')
@@ -1494,7 +1545,7 @@ function DailyExpensesTab() {
                     </td>
                   </tr>
                   {group.rows.map((t) => (
-                    <tr key={t.id}>
+                    <tr key={t.id} className="clickable-row" onClick={() => openEditExpense(t)}>
                       <td>{t.category}</td>
                       <td className="muted">{t.description}</td>
                       <td className="num">{formatCurrency(t.amount)}</td>
@@ -1506,6 +1557,70 @@ function DailyExpensesTab() {
           </table>
         )}
       </div>
+
+      {editingTxn && (
+        <Modal onClose={() => setEditingTxn(null)}>
+          <h2>Edit expense</h2>
+          {(updateExpense.error || deleteExpense.error) && (
+            <ErrorBox error={updateExpense.error || deleteExpense.error} />
+          )}
+          {editError && <div className="banner banner-warn">{editError}</div>}
+          <div className="grid" style={{ marginBottom: '0.8rem' }}>
+            <label>
+              <div className="stat-label">Category</div>
+              <select
+                value={editForm.category}
+                onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}
+              >
+                <option value="">Select…</option>
+                {categoryRows.map((c) => (
+                  <option key={c.id} value={c.name}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <div className="stat-label">Amount (₹)</div>
+              <input
+                type="number"
+                min="0"
+                value={editForm.amount}
+                onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })}
+              />
+            </label>
+            <label>
+              <div className="stat-label">Date</div>
+              <input
+                type="date"
+                value={editForm.spent_at}
+                onChange={(e) => setEditForm({ ...editForm, spent_at: e.target.value })}
+              />
+            </label>
+            <label>
+              <div className="stat-label">Note (optional)</div>
+              <input value={editForm.note} onChange={(e) => setEditForm({ ...editForm, note: e.target.value })} />
+            </label>
+          </div>
+          <div className="row" style={{ gap: '0.5rem' }}>
+            <button className="primary" onClick={submitEditExpense} disabled={updateExpense.isPending}>
+              Save
+            </button>
+            <button
+              className="danger"
+              disabled={deleteExpense.isPending}
+              onClick={() => {
+                if (confirm(`Delete this ${formatCurrency(editingTxn.amount)} expense?`)) {
+                  deleteExpense.mutate(editingTxn.id)
+                }
+              }}
+            >
+              Delete
+            </button>
+            <button onClick={() => setEditingTxn(null)}>Cancel</button>
+          </div>
+        </Modal>
+      )}
     </>
   )
 }

@@ -5,7 +5,13 @@ import { api } from '../api/client'
 import { Empty, ErrorBox, Loading } from '../components/Loading'
 import Modal from '../components/Modal'
 import Stat from '../components/Stat'
-import type { FinanceFilters, FinanceIngestedFile, FinanceLoan, FinanceRecurringBill } from '../api/types'
+import type {
+  FinanceFilters,
+  FinanceIngestedFile,
+  FinanceLoan,
+  FinanceRecurringBill,
+  MutualFundHolding,
+} from '../api/types'
 import { calculateEmi } from '../lib/loans'
 import { formatCurrency, formatDate } from '../lib/format'
 
@@ -15,6 +21,7 @@ const TABS = [
   { key: 'calculation', label: 'Calculation' },
   { key: 'analysis', label: 'Analysis' },
   { key: 'loans', label: 'Loans' },
+  { key: 'mutual-funds', label: 'Mutual Funds' },
   { key: 'monthly', label: 'Monthly' },
   { key: 'daily', label: 'Daily' },
 ] as const
@@ -57,6 +64,7 @@ export default function Finance() {
       {tab === 'calculation' && <CalculationTab filters={filters} />}
       {tab === 'analysis' && <AnalysisTab filters={filters} />}
       {tab === 'loans' && <LoansTab />}
+      {tab === 'mutual-funds' && <MutualFundsTab />}
       {tab === 'monthly' && <MonthlyBillsTab categoryList={categoryList.data ?? []} />}
       {tab === 'daily' && <DailyExpensesTab />}
     </>
@@ -790,6 +798,194 @@ function LoansTab() {
           <button className="primary" onClick={submit} disabled={create.isPending || update.isPending}>
             {editingLoan ? 'Save changes' : 'Add loan'}
           </button>
+        </Modal>
+      )}
+    </>
+  )
+}
+
+// --------------------------------------------------------- mutual funds --
+
+function MutualFundsTab() {
+  const queryClient = useQueryClient()
+  const [modalOpen, setModalOpen] = useState(false)
+  const [search, setSearch] = useState('')
+  const [selectedScheme, setSelectedScheme] = useState<{ id: number; name: string } | null>(null)
+  const [units, setUnits] = useState('')
+  const [purchaseNav, setPurchaseNav] = useState('')
+  const [purchaseDate, setPurchaseDate] = useState('')
+
+  const holdings = useQuery({ queryKey: ['mutualFundHoldings'], queryFn: api.mutualFundHoldings })
+  const searchResults = useQuery({
+    queryKey: ['mutualFundSearch', search],
+    queryFn: () => api.mutualFundSearch(search),
+    enabled: search.length >= 2,
+  })
+
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['mutualFundHoldings'] })
+
+  function closeModal() {
+    setModalOpen(false)
+    setSearch('')
+    setSelectedScheme(null)
+    setUnits('')
+    setPurchaseNav('')
+    setPurchaseDate('')
+  }
+
+  const createHolding = useMutation({
+    mutationFn: api.createMutualFundHolding,
+    onSuccess: () => {
+      invalidate()
+      closeModal()
+    },
+  })
+
+  const deleteHolding = useMutation({
+    mutationFn: api.deleteMutualFundHolding,
+    onSuccess: invalidate,
+  })
+
+  const rows: MutualFundHolding[] = holdings.data ?? []
+  const totalCurrentValue = rows.reduce((sum, r) => sum + (r.current_value ?? 0), 0)
+  const totalCostBasis = rows.reduce((sum, r) => sum + r.cost_basis, 0)
+  const totalReturn = totalCurrentValue - totalCostBasis
+
+  return (
+    <>
+      <div className="page-head">
+        <h2 style={{ margin: 0 }}>Mutual Funds</h2>
+        <button className="primary" onClick={() => setModalOpen(true)}>
+          Add holding
+        </button>
+      </div>
+
+      {!!rows.length && (
+        <div className="grid">
+          <Stat label="Current value" value={formatCurrency(totalCurrentValue)} />
+          <Stat label="Invested" value={formatCurrency(totalCostBasis)} />
+          <Stat
+            label="Return"
+            value={formatCurrency(totalReturn)}
+            tone={totalReturn >= 0 ? 'pos' : 'neg'}
+          />
+        </div>
+      )}
+
+      <div className="table-wrap">
+        {holdings.isLoading ? (
+          <Loading />
+        ) : !rows.length ? (
+          <Empty label="No mutual fund holdings yet. Add one to track its value and returns." />
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>Scheme</th>
+                <th>Category</th>
+                <th className="num">Units</th>
+                <th className="num">Current value</th>
+                <th className="num">Return</th>
+                <th className="num">Annualized</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.id}>
+                  <td>
+                    <strong>{r.scheme_name}</strong>
+                  </td>
+                  <td className="muted">{r.category ?? '—'}</td>
+                  <td className="num">{r.units}</td>
+                  <td className="num">{r.current_value != null ? formatCurrency(r.current_value) : '—'}</td>
+                  <td className={`num ${(r.absolute_return ?? 0) >= 0 ? 'pos' : 'neg'}`}>
+                    {r.absolute_return_pct != null ? `${(r.absolute_return_pct * 100).toFixed(1)}%` : '—'}
+                  </td>
+                  <td className="num">
+                    {r.annualized_return_pct != null ? `${(r.annualized_return_pct * 100).toFixed(1)}%` : '—'}
+                  </td>
+                  <td>
+                    <button
+                      onClick={() => {
+                        if (confirm(`Remove holding "${r.scheme_name}"?`)) deleteHolding.mutate(r.id)
+                      }}
+                    >
+                      Remove
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {modalOpen && (
+        <Modal onClose={closeModal}>
+          <h2>Add mutual fund holding</h2>
+          {!selectedScheme && (
+            <>
+              <label>
+                <div className="stat-label">Search fund by name</div>
+                <input
+                  autoFocus
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="e.g. Bluechip, Nifty Index"
+                />
+              </label>
+              {searchResults.data?.map((r) => (
+                <div
+                  key={r.scheme_id}
+                  style={{ cursor: 'pointer', padding: '0.4rem 0', borderBottom: '1px solid var(--border)' }}
+                  onClick={() => setSelectedScheme({ id: r.scheme_id, name: r.name })}
+                >
+                  {r.name}
+                </div>
+              ))}
+            </>
+          )}
+          {selectedScheme && (
+            <div className="grid" style={{ marginBottom: '0.8rem' }}>
+              <p>
+                Selected: <strong>{selectedScheme.name}</strong>{' '}
+                <button onClick={() => setSelectedScheme(null)}>Change</button>
+              </p>
+              <label>
+                <div className="stat-label">Units</div>
+                <input type="number" min="0" step="0.001" value={units} onChange={(e) => setUnits(e.target.value)} />
+              </label>
+              <label>
+                <div className="stat-label">Purchase NAV (₹)</div>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={purchaseNav}
+                  onChange={(e) => setPurchaseNav(e.target.value)}
+                />
+              </label>
+              <label>
+                <div className="stat-label">Purchase date</div>
+                <input type="date" value={purchaseDate} onChange={(e) => setPurchaseDate(e.target.value)} />
+              </label>
+              <button
+                className="primary"
+                disabled={!units || !purchaseNav || !purchaseDate || createHolding.isPending}
+                onClick={() =>
+                  createHolding.mutate({
+                    scheme_id: selectedScheme.id,
+                    units: Number(units),
+                    purchase_nav: Number(purchaseNav),
+                    purchase_date: purchaseDate,
+                  })
+                }
+              >
+                Add
+              </button>
+            </div>
+          )}
         </Modal>
       )}
     </>

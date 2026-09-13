@@ -29,6 +29,8 @@ import type {
   MarketRegime,
   MLModel,
   MessageResponse,
+  MutualFundHolding,
+  MutualFundSearchResult,
   PortfolioSummary,
   Prediction,
   PredictionRun,
@@ -307,6 +309,18 @@ export const api = {
   updateFinanceLoan: (id: number, body: Record<string, unknown>) =>
     patch<FinanceLoan>(`/finance/loans/${id}`, body),
   deleteFinanceLoan: (id: number) => del<MessageResponse>(`/finance/loans/${id}`),
+
+  // -------------------------------------------------------- mutual funds --
+  mutualFundSearch: (q: string) => get<MutualFundSearchResult[]>(`/mutual-funds/search?q=${encodeURIComponent(q)}`),
+  mutualFundHoldings: () => get<MutualFundHolding[]>('/mutual-funds/holdings'),
+  createMutualFundHolding: (payload: {
+    scheme_id: number
+    units: number
+    purchase_nav: number
+    purchase_date: string
+    notes?: string
+  }) => post<MutualFundHolding>('/mutual-funds/holdings', payload),
+  deleteMutualFundHolding: (id: number) => del<MessageResponse>(`/mutual-funds/holdings/${id}`),
 
   // ------------------------------------------------------- recurring bills --
   recurringBills: (month?: string) =>

@@ -1,0 +1,26 @@
+# Production override — combine with docker-compose.yml:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# The base file's frontend service builds Vite's *dev server* (hot reload,
+# unminified, HMR websocket exposed) — correct for local development, wrong
+# for a real deployment. This override rebuilds it against the Dockerfile's
+# `production` target instead: a static Vite build served by its own internal
+# nginx, with no source maps or dev tooling exposed. Nothing else changes —
+# postgres/redis/api/worker are identical to local, since those were already
+# correct in production.
+#
+# The host's own nginx (see /etc/nginx/sites-available) reverse-proxies
+# swingtrademl.com's "/" to this container's published port, same as it
+# already does for "/api/" to the api container.
+
+services:
+  frontend:
+    build:
+      target: production
+    container_name: stml-frontend
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:80"
+    depends_on:
+      - api

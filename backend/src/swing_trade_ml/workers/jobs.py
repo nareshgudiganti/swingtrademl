@@ -387,6 +387,17 @@ def job_evaluate_predictions() -> None:
         _report_error("evaluate_predictions", exc)
 
 
+def job_evaluate_signals() -> None:
+    """Backfill outcomes on signals whose stop/target/horizon has resolved."""
+    try:
+        from swing_trade_ml.ml.predict import evaluate_pending_signals
+
+        with session_scope() as db:
+            evaluate_pending_signals(db)
+    except Exception as exc:  # noqa: BLE001
+        _report_error("evaluate_signals", exc)
+
+
 def job_sync_instruments() -> None:
     """Weekly refresh of the instrument master.
 

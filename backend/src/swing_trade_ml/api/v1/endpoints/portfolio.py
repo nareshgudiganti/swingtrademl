@@ -15,6 +15,7 @@ from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.enums import ExitReason, PositionStatus, SignalType
 from swing_trade_ml.db.models.market import Candle, Instrument
 from swing_trade_ml.db.models.trading import Position, Signal, Strategy, Trade
+from swing_trade_ml.strategies.tier import cap_tier
 
 IST = ZoneInfo("Asia/Kolkata")
 from swing_trade_ml.ml.registry import get_active_model
@@ -188,6 +189,12 @@ def detailed_positions(db: DbSession, mode: str | None = None) -> list[dict[str,
                 "entry_at": position.entry_at,
                 "holding_days": position.holding_days,
                 "strategy_id": position.strategy_id,
+                "strategy_name": position.strategy.name if position.strategy else None,
+                "cap_tier": (
+                    cap_tier(position.strategy.params.get("model_name") if position.strategy.params else None)
+                    if position.strategy
+                    else None
+                ),
                 "entry_confidence": position.entry_confidence,
                 "last_confidence": position.last_confidence,
                 "horizon_days": horizon_days,

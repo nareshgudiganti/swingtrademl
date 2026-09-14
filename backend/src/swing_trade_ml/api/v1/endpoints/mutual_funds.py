@@ -5,19 +5,25 @@ docs/superpowers/specs/2026-09-12-mutual-funds-tracking-design.md §8.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Query, status
+import io
+
+import casparser
+from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, status
 from sqlalchemy import select
 
 from swing_trade_ml.api.deps import DbSession
+from swing_trade_ml.core.config import settings
 from swing_trade_ml.db.models.mutual_funds import MutualFund, MutualFundHolding, MutualFundNav
 from swing_trade_ml.schemas import (
     MessageResponse,
+    MutualFundCasImportResult,
     MutualFundHoldingCreate,
     MutualFundHoldingOut,
     MutualFundHoldingUpdate,
     MutualFundNavPoint,
     MutualFundSearchResult,
 )
+from swing_trade_ml.services.finance import cas_import as cas_import_service
 from swing_trade_ml.services.finance import mutual_funds as mf_service
 
 router = APIRouter(prefix="/mutual-funds", tags=["mutual-funds"])
@@ -65,6 +71,8 @@ def _holding_out(db: DbSession, holding: MutualFundHolding) -> MutualFundHolding
         annualized_return_pct=value["annualized_return_pct"] if value else None,
         volatility=risk["volatility"] if risk else None,
         max_drawdown=risk["max_drawdown"] if risk else None,
+        source=holding.source,
+        folio_number=holding.folio_number,
     )
 
 
@@ -101,6 +109,49 @@ def create_holding(payload: MutualFundHoldingCreate, db: DbSession) -> MutualFun
 def list_holdings(db: DbSession) -> list[MutualFundHoldingOut]:
     holdings = db.execute(select(MutualFundHolding)).scalars().all()
     return [_holding_out(db, h) for h in holdings]
+
+
+@router.post("/import-cas", response_model=MutualFundCasImportResult)
+async def import_cas(
+    db: DbSession,
+    file: UploadFile = File(...),
+    password: str | None = Form(None),
+) -> MutualFundCasImportResult:
+    """Import holdings from a CAMS/KFintech/MF Central Consolidated Account
+    Statement PDF — covers every mutual fund a PAN holds, on any platform
+    (Paytm Money, Groww, direct, etc.), since there's no broker API for this.
+    Every CAS-sourced lot is rebuilt from scratch on each import; manually
+    added holdings are untouched. Requires a *Detailed* statement (not
+    Summary) since only the detailed one carries transaction-level history."""
+    content = await file.read()
+    max_bytes = settings.FINANCE_MAX_UPLOAD_MB * 1024 * 1024
+    if len(content) > max_bytes:
+        raise HTTPException(
+            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            f"File exceeds the {settings.FINANCE_MAX_UPLOAD_MB}MB limit",
+        )
+
+    try:
+        cas_data = casparser.read_cas_pdf(io.BytesIO(content), password or "", output="pydantic")
+    except Exception as exc:  # noqa: BLE001 - casparser raises assorted parse/password errors
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, f"Could not read the CAS statement: {exc}"
+        ) from exc
+
+    if not cas_data.folios:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "No mutual fund folios found in this statement. Make sure you requested a "
+            "Detailed (not Summary) CAS from camsonline.com or mfcentral.com.",
+        )
+
+    result = cas_import_service.import_cas_data(db, cas_data)
+    return MutualFundCasImportResult(
+        folios_processed=result.folios_processed,
+        schemes_matched=result.schemes_matched,
+        lots_created=result.lots_created,
+        unmatched_schemes=result.unmatched_schemes,
+    )
 
 
 @router.patch("/holdings/{holding_id}", response_model=MutualFundHoldingOut)

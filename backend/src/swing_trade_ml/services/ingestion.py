@@ -11,15 +11,17 @@ import time
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from swing_trade_ml.brokers.kite import kite_broker
 from swing_trade_ml.core.config import settings
+from swing_trade_ml.core.enums import PositionStatus
 from swing_trade_ml.core.holidays import is_trading_holiday
 from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.db.models.market import Candle, Instrument, Quote
+from swing_trade_ml.db.models.trading import Position
 
 log = get_logger(__name__)
 
@@ -412,17 +414,37 @@ def _backfill_many(
 
 
 def refresh_quotes(db: Session) -> int:
-    """Poll live quotes for the watchlist into the `quotes` table.
+    """Poll live quotes for the watchlist *and every open position* into the
+    `quotes` table.
 
     One row per instrument, updated in place — this is the "what is it worth
     right now" source for mark-to-market and the dashboard.
+
+    Open positions are included deliberately. Polling only the watchlist meant
+    a position in a symbol that isn't watchlisted — every holding imported
+    from a real Zerodha account, for instance — had no quote row at all, so
+    mark_to_market had nothing to write and `current_price` sat frozen at the
+    entry price forever. The position read as flat no matter what the market
+    did, and day P&L and the equity snapshot were computed off that stale
+    number. Anything this app tracks, it should be able to price.
     """
     if not kite_broker.is_authenticated:
         log.debug("ingestion.quotes.no_session")
         return 0
 
     instruments = list(
-        db.execute(select(Instrument).where(Instrument.is_watchlisted.is_(True)))
+        db.execute(
+            select(Instrument).where(
+                or_(
+                    Instrument.is_watchlisted.is_(True),
+                    Instrument.id.in_(
+                        select(Position.instrument_id).where(
+                            Position.status == PositionStatus.OPEN
+                        )
+                    ),
+                )
+            )
+        )
         .scalars()
         .all()
     )

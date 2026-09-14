@@ -796,8 +796,17 @@ class MutualFundHoldingOut(BaseModel):
     annualized_return_pct: float | None
     volatility: float | None
     max_drawdown: float | None
+    source: str
+    folio_number: str | None
 
 
 class MutualFundNavPoint(BaseModel):
     date: date
     nav: float
+
+
+class MutualFundCasImportResult(BaseModel):
+    folios_processed: int
+    schemes_matched: int
+    lots_created: int
+    unmatched_schemes: list[str]

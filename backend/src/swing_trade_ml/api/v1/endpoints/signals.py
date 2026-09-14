@@ -14,21 +14,9 @@ from swing_trade_ml.core.enums import PositionStatus
 from swing_trade_ml.db.models.market import Candle, Instrument
 from swing_trade_ml.db.models.trading import Position, Signal, Strategy, Trade
 from swing_trade_ml.schemas import SignalOut
+from swing_trade_ml.strategies.tier import cap_tier
 
 router = APIRouter(prefix="/signals", tags=["signals"])
-
-
-def _cap_tier(model_name: str | None) -> str:
-    """Map an ml_swing strategy's model_name param to a cap tier — mirrors
-    frontend/src/lib/tiers.ts's TIERS convention. Strategies with no model
-    (e.g. sma_crossover) or the default large-cap model both fall back to
-    "large".
-    """
-    if model_name == "swing_classifier_midcap":
-        return "midcap"
-    if model_name == "swing_classifier_smallcap":
-        return "smallcap"
-    return "large"
 
 
 @router.get("", response_model=list[SignalOut])
@@ -126,20 +114,6 @@ def latest_actionable(
     ]
 
 
-def _cap_tier(model_name: str | None) -> str:
-    """Cap-tier label from an ml_swing strategy's model_name — see
-    ml.sector_map's neighbouring cap-tier convention
-    (swing_classifier[_midcap|_smallcap]). Anything else (a non-ML strategy
-    like sma_crossover, or no model_name at all) is treated as "large" —
-    the safest assumption when tier genuinely isn't known."""
-    name = model_name or ""
-    if name.endswith("_smallcap"):
-        return "smallcap"
-    if name.endswith("_midcap"):
-        return "midcap"
-    return "large"
-
-
 @router.get("/top-picks", response_model=list[dict])
 def top_picks(
     db: DbSession,
@@ -204,7 +178,7 @@ def top_picks(
 
     candidates: list[dict] = []
     for sig, symbol, name, strategy in rows:
-        tier = _cap_tier(strategy.params.get("model_name") if strategy.params else None)
+        tier = cap_tier(strategy.params.get("model_name") if strategy.params else None)
         if tier == "smallcap" and not include_smallcap:
             continue
         # A share priced above the whole budget can never be bought regardless
@@ -367,7 +341,7 @@ def track_record(db: DbSession) -> list[dict]:
             "signal_id": sig.id,
             "symbol": symbol,
             "name": name,
-            "cap_tier": _cap_tier(strategy.params.get("model_name") if strategy.params else None),
+            "cap_tier": cap_tier(strategy.params.get("model_name") if strategy.params else None),
             "strategy_name": strategy.name,
             "mode": sig.mode,
             "generated_at": sig.generated_at,

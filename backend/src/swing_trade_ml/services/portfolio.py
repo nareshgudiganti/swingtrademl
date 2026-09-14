@@ -322,6 +322,36 @@ def performance_stats(db: Session, mode: str | None = None) -> dict[str, Any]:
     return stats
 
 
+def strategy_performance_stats(
+    db: Session, strategy_id: int, since: datetime | None = None
+) -> dict[str, Any]:
+    """Win rate / profit factor / net P&L for one strategy's closed trades —
+    the per-strategy counterpart to performance_stats() above, which is
+    scoped by broker mode instead. Powers the Strategies tab's win-rate cards
+    and the by-strategy Reports breakdown. `since` restricts to trades closed
+    on/after that timestamp; omit for all-time.
+    """
+    stmt = select(Trade).where(Trade.strategy_id == strategy_id)
+    if since is not None:
+        stmt = stmt.where(Trade.exit_at >= since)
+    trades = list(db.execute(stmt).scalars().all())
+
+    if not trades:
+        return {"trades": 0, "win_rate": 0.0, "profit_factor": 0.0, "net_pnl": 0.0}
+
+    wins = [t for t in trades if t.is_win]
+    losses = [t for t in trades if not t.is_win]
+    gross_profit = sum(t.net_pnl for t in wins)
+    gross_loss = abs(sum(t.net_pnl for t in losses))
+
+    return {
+        "trades": len(trades),
+        "win_rate": len(wins) / len(trades),
+        "profit_factor": (gross_profit / gross_loss) if gross_loss else float("inf"),
+        "net_pnl": sum(t.net_pnl for t in trades),
+    }
+
+
 def recent_post_exit_watch(db: Session, mode: str, lookback_days: int = 21) -> list[dict[str, Any]]:
     """Trades closed recently, with how far the stock has moved since we sold.
 

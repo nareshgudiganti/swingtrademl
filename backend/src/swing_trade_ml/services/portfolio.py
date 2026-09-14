@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import numpy as np
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from swing_trade_ml.brokers import get_broker, paper_broker
@@ -14,7 +14,7 @@ from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.enums import PositionStatus, TradingMode
 from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.db.models.market import Instrument, Quote
-from swing_trade_ml.db.models.trading import PortfolioSnapshot, Position, Trade
+from swing_trade_ml.db.models.trading import PortfolioSnapshot, Position, Strategy, Trade
 
 log = get_logger(__name__)
 
@@ -65,12 +65,26 @@ def mark_to_market(db: Session, mode: str | None = None) -> int:
 
     Reads the cached `quotes` table rather than calling the broker: this runs
     frequently, and one bulk read beats N network calls.
+
+    Positions belonging to an advisory strategy are marked regardless of the
+    mode filter, matching what execution.check_exits already does. Without it
+    a live-mode advisory book — real Zerodha holdings tracked here — is
+    invisible while the broker sits in paper, so current_price never moves off
+    the entry price and every one of those positions reads as exactly flat no
+    matter what the market does. An explicit `mode` argument still narrows to
+    that mode alone, for callers that genuinely mean one book.
     """
-    mode = mode or get_broker().mode
-    positions = list(
-        db.execute(
-            select(Position).where(Position.mode == mode, Position.status == PositionStatus.OPEN)
+    broker_mode = mode or get_broker().mode
+    scope = Position.mode == broker_mode
+    if mode is None:
+        scope = or_(
+            scope,
+            Position.strategy_id.in_(
+                select(Strategy.id).where(Strategy.execution_mode == "advisory")
+            ),
         )
+    positions = list(
+        db.execute(select(Position).where(scope, Position.status == PositionStatus.OPEN))
         .scalars()
         .all()
     )

@@ -11,15 +11,17 @@ import time
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from swing_trade_ml.brokers.kite import kite_broker
 from swing_trade_ml.core.config import settings
+from swing_trade_ml.core.enums import PositionStatus
 from swing_trade_ml.core.holidays import is_trading_holiday
 from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.db.models.market import Candle, Instrument, Quote
+from swing_trade_ml.db.models.trading import Position
 
 log = get_logger(__name__)
 
@@ -146,19 +148,19 @@ def set_watchlist(db: Session, symbols: list[str], exchange: str = "NSE") -> lis
     return sorted(found)
 
 
-def ensure_benchmark_index(db: Session, exchange: str = "NSE") -> Instrument:
-    """Get (or create) the Instrument row for settings.BENCHMARK_INDEX_SYMBOL.
+def ensure_context_index(db: Session, symbol: str, exchange: str = "NSE") -> Instrument:
+    """Get (or create) the Instrument row for a feature-input index symbol —
+    the primary benchmark, a sector index (ml.sector_map), or INDIA VIX.
 
     Deliberately bypasses sync_instruments()/equity_only: Kite's own dump
-    reports the index with instrument_type="EQ" (confirmed live — same value
-    every real equity carries), so that filter can't distinguish it. Matched
-    by exact tradingsymbol instead, which is unambiguous.
+    reports every index with instrument_type="EQ" (confirmed live — same
+    value every real equity carries), so that filter can't distinguish it.
+    Matched by exact tradingsymbol instead, which is unambiguous.
 
     Never watchlisted — is_watchlisted drives every automatic backfill/scan/
-    training instrument loop in this codebase, and this index is a feature
-    input, not a trading candidate.
+    training instrument loop in this codebase, and every one of these is a
+    feature input, not a trading candidate.
     """
-    symbol = settings.BENCHMARK_INDEX_SYMBOL
     existing = db.execute(
         select(Instrument).where(
             Instrument.tradingsymbol == symbol, Instrument.exchange == exchange
@@ -205,16 +207,51 @@ def ensure_benchmark_index(db: Session, exchange: str = "NSE") -> Instrument:
     db.add(instrument)
     db.commit()
     db.refresh(instrument)
-    log.info("ingestion.benchmark_index.created", symbol=symbol, token=instrument.instrument_token)
+    log.info("ingestion.context_index.created", symbol=symbol, token=instrument.instrument_token)
     return instrument
 
 
-def backfill_index(db: Session, interval: str = "day", days: int | None = None) -> int:
-    """Top up the benchmark index's own candle history — same mechanics as a
-    regular instrument (backfill_instrument doesn't check is_watchlisted),
-    just reached by a dedicated call since this index is never watchlisted."""
-    instrument = ensure_benchmark_index(db)
+def ensure_benchmark_index(db: Session, exchange: str = "NSE") -> Instrument:
+    """Get (or create) the Instrument row for settings.BENCHMARK_INDEX_SYMBOL."""
+    return ensure_context_index(db, settings.BENCHMARK_INDEX_SYMBOL, exchange)
+
+
+def backfill_context_index(
+    db: Session, symbol: str, interval: str = "day", days: int | None = None
+) -> int:
+    """Top up one feature-input index's own candle history — same mechanics
+    as a regular instrument (backfill_instrument doesn't check
+    is_watchlisted), just reached by a dedicated call since these are never
+    watchlisted."""
+    instrument = ensure_context_index(db, symbol)
     return backfill_instrument(db, instrument, interval, days, incremental=True)
+
+
+def backfill_index(db: Session, interval: str = "day", days: int | None = None) -> int:
+    """Top up the primary benchmark's own candle history."""
+    return backfill_context_index(db, settings.BENCHMARK_INDEX_SYMBOL, interval, days)
+
+
+def backfill_context_indices(
+    db: Session, interval: str = "day", days: int | None = None
+) -> dict[str, int]:
+    """Top up every sector index + INDIA VIX the feature pipeline needs,
+    beyond the primary benchmark (see ml.sector_map.CONTEXT_INDEX_SYMBOLS).
+    One bad symbol doesn't abort the rest, same pattern as _backfill_many."""
+    from swing_trade_ml.ml.sector_map import CONTEXT_INDEX_SYMBOLS
+
+    results: dict[str, int] = {}
+    for symbol in CONTEXT_INDEX_SYMBOLS:
+        try:
+            results[symbol] = backfill_context_index(db, symbol, interval, days)
+        except Exception as exc:  # noqa: BLE001
+            log.error("ingestion.context_index.failed", symbol=symbol, error=str(exc))
+            results[symbol] = 0
+
+    log.info(
+        "ingestion.context_indices.done", symbols=len(results), bars=sum(results.values())
+    )
+    return results
 
 
 def _upsert_candles(db: Session, instrument_id: int, interval: str, bars: list[dict]) -> int:
@@ -377,17 +414,37 @@ def _backfill_many(
 
 
 def refresh_quotes(db: Session) -> int:
-    """Poll live quotes for the watchlist into the `quotes` table.
+    """Poll live quotes for the watchlist *and every open position* into the
+    `quotes` table.
 
     One row per instrument, updated in place — this is the "what is it worth
     right now" source for mark-to-market and the dashboard.
+
+    Open positions are included deliberately. Polling only the watchlist meant
+    a position in a symbol that isn't watchlisted — every holding imported
+    from a real Zerodha account, for instance — had no quote row at all, so
+    mark_to_market had nothing to write and `current_price` sat frozen at the
+    entry price forever. The position read as flat no matter what the market
+    did, and day P&L and the equity snapshot were computed off that stale
+    number. Anything this app tracks, it should be able to price.
     """
     if not kite_broker.is_authenticated:
         log.debug("ingestion.quotes.no_session")
         return 0
 
     instruments = list(
-        db.execute(select(Instrument).where(Instrument.is_watchlisted.is_(True)))
+        db.execute(
+            select(Instrument).where(
+                or_(
+                    Instrument.is_watchlisted.is_(True),
+                    Instrument.id.in_(
+                        select(Position.instrument_id).where(
+                            Position.status == PositionStatus.OPEN
+                        )
+                    ),
+                )
+            )
+        )
         .scalars()
         .all()
     )

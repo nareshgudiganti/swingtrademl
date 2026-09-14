@@ -228,7 +228,6 @@ def manual_open_position(
     Charges default to the same paper cost-model estimate everything else
     uses (services/costs.py) when the caller doesn't supply their own.
     """
-    broker = get_broker()
     now = datetime.now(UTC)
 
     if brokerage is None or taxes is None:
@@ -236,8 +235,13 @@ def manual_open_position(
         brokerage = default_brokerage if brokerage is None else brokerage
         taxes = default_taxes if taxes is None else taxes
 
+    # The strategy's own mode, not broker.mode — recording a real Zerodha
+    # buy against a live-mode advisory strategy must tag it "live" even
+    # while the broker itself is still in the paper phase, so it's tracked
+    # (and shown) separately from paper-simulated positions rather than
+    # silently collapsing into whichever mode the broker happens to be in.
     position = _finalize_open_position(
-        db, strategy, instrument, broker.mode, quantity, entry_price, brokerage, taxes,
+        db, strategy, instrument, strategy.mode, quantity, entry_price, brokerage, taxes,
         stop_loss, take_profit, now,
         signal.confidence if signal is not None else None,
     )
@@ -251,10 +255,10 @@ def manual_open_position(
         symbol=instrument.tradingsymbol,
         qty=quantity,
         price=entry_price,
-        mode=broker.mode,
+        mode=strategy.mode,
     )
 
-    notifier.send_sync(_manual_entry_message(instrument, position, broker.mode), "fill")
+    notifier.send_sync(_manual_entry_message(instrument, position, strategy.mode), "fill")
     return position
 
 
@@ -610,7 +614,13 @@ def process_decision(
     on regardless of what they'd say.
     """
     broker = get_broker()
-    mode = broker.mode
+    # The strategy's own mode, not necessarily broker.mode: an advisory
+    # strategy tracking real trades is scanned regardless of the broker's
+    # current paper/live mode (see engine.run_all_active), and every bit of
+    # its bookkeeping below — existing positions, exposure, signals — must
+    # stay scoped to that strategy's own mode rather than whatever the
+    # broker happens to be running right now.
+    mode = strategy.mode
 
     if decision.signal == SignalType.BUY and ranked_out_reason:
         signal = record_signal(db, strategy, instrument, decision, mode)
@@ -644,8 +654,24 @@ def process_decision(
     # literally HOLD. (Previously scoped to the HOLD branch only, which is
     # exactly why a position the model was newly bullish enough on to BUY
     # again showed a stale "no reading yet" instead of that fresh number.)
+    # SignalDecision.confidence is conviction *in the decision*, and on an EXIT
+    # ml_swing sets it to `1 - probability` — conviction in getting out. Stored
+    # raw, that inverts the meaning of last_confidence exactly where it matters
+    # most: a stock the model rates 25% shows as 0.75, the highest number on
+    # the page, while the badge says Exit. It also silently disabled the decay
+    # alert, since confidence_decay_status compares this value against the weak
+    # zone and an inverted 0.75 never looks weak.
+    #
+    # Positions want the model's read on *the stock*, so undo the inversion.
+    bullish_confidence = decision.confidence
+    if (
+        decision.signal in (SignalType.EXIT, SignalType.SELL)
+        and bullish_confidence is not None
+    ):
+        bullish_confidence = round(1.0 - bullish_confidence, 3)
+
     for position in existing_positions:
-        _check_confidence_decay(db, position, strategy, instrument, decision.confidence, mode)
+        _check_confidence_decay(db, position, strategy, instrument, bullish_confidence, mode)
 
     if decision.signal == SignalType.HOLD:
         return record_signal(db, strategy, instrument, decision, mode)
@@ -760,12 +786,25 @@ def check_exits(db: Session) -> list[Trade]:
     Runs on the intraday schedule so a stop is honoured during the session
     rather than at the next daily scan — for a 5% stop that difference is
     material.
+
+    Scoped to positions in the broker's current mode, plus every open
+    advisory-strategy position regardless of mode — an advisory position
+    never reaches close_position() below (it always hits the early
+    "advisory" continue and just alerts), so including a live-mode one here
+    while the broker is still in paper mode is safe and is exactly what
+    keeps a manually-recorded real trade's price/trailing-stop/exit alerts
+    updating on the same intraday schedule as everything else.
     """
     broker = get_broker()
     mode = broker.mode
     positions = list(
         db.execute(
-            select(Position).where(Position.mode == mode, Position.status == PositionStatus.OPEN)
+            select(Position)
+            .join(Strategy, Strategy.id == Position.strategy_id, isouter=True)
+            .where(
+                Position.status == PositionStatus.OPEN,
+                (Position.mode == mode) | (Strategy.execution_mode == "advisory"),
+            )
         )
         .scalars()
         .all()

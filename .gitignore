@@ -49,3 +49,6 @@ Thumbs.db
 # --- Logs ---
 logs/
 *.log
+
+# --- Superpowers subagent-driven-development scratch workspace ---
+.superpowers/

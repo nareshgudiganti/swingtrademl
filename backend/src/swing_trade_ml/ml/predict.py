@@ -24,8 +24,14 @@ from swing_trade_ml.db.models.ml import MLModel, Prediction
 from swing_trade_ml.db.models.trading import Signal
 from swing_trade_ml.ml.dataset import load_candles
 from swing_trade_ml.ml.features import build_features
-from swing_trade_ml.ml.market_context import load_index_candles
+from swing_trade_ml.ml.market_context import (
+    load_index_candles,
+    load_market_breadth,
+    load_sector_candles,
+    load_vix_candles,
+)
 from swing_trade_ml.ml.registry import get_active_model, load_artifact
+from swing_trade_ml.ml.sector_map import get_sector_index
 
 log = get_logger(__name__)
 
@@ -74,7 +80,10 @@ def predict_instrument(
     feature_names: list[str] = bundle["feature_names"]
 
     index_df = load_index_candles(db, interval)
-    featured = build_features(df, index_df)
+    sector_df = load_sector_candles(db, get_sector_index(instrument.tradingsymbol), interval)
+    vix_df = load_vix_candles(db, interval)
+    breadth_df = load_market_breadth(db, interval)
+    featured = build_features(df, index_df, sector_df, vix_df, breadth_df)
     row = featured.iloc[[-1]]
     x = row[feature_names]
     if x.isna().to_numpy().any():

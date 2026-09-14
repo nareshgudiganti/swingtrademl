@@ -84,6 +84,22 @@ export interface PortfolioSummary {
   top_movers: { symbol: string; pnl: number; pnl_pct: number }[]
 }
 
+// Real Zerodha equity holdings — a direct pass-through from Kite, not
+// anything the bot tracks or predicts. Distinct from DetailedPosition,
+// which is the bot's own paper-mode trades and knows nothing about
+// anything bought manually in the real account.
+export interface Holding {
+  symbol: string
+  exchange: string
+  quantity: number
+  average_price: number
+  last_price: number
+  close_price: number | null
+  pnl: number
+  day_change: number | null
+  day_change_percentage: number | null
+}
+
 export interface DetailedPosition {
   id: number
   symbol: string
@@ -104,6 +120,8 @@ export interface DetailedPosition {
   entry_at: string
   holding_days: number
   strategy_id: number | null
+  strategy_name: string | null
+  cap_tier: string | null
   entry_confidence: number | null
   last_confidence: number | null
   horizon_days: number | null
@@ -237,6 +255,8 @@ export interface Trade {
   take_profit: number | null
   entry_confidence: number | null
   last_confidence: number | null
+  strategy_name: string | null
+  cap_tier: string | null
   // How the stock moved after we sold it — null until enough trading days
   // have passed since exit_at for that checkpoint to exist yet.
   price_5d_after_exit: number | null
@@ -279,6 +299,35 @@ export interface StrategyType {
   display_name: string
   description: string
   default_params: Record<string, unknown>
+}
+
+export interface StrategyPerformanceWindow {
+  trades: number
+  win_rate: number
+  profit_factor: number
+  net_pnl: number
+}
+
+export interface StrategyPerformance {
+  id: number
+  name: string
+  strategy_type: string
+  execution_mode: 'auto' | 'advisory'
+  cap_tier: 'large' | 'midcap' | 'smallcap'
+  is_active: boolean
+  universe_size: number
+  open_positions: number
+  windows: {
+    last_30d: StrategyPerformanceWindow
+    last_90d: StrategyPerformanceWindow
+    all_time: StrategyPerformanceWindow
+  }
+}
+
+export interface StrategyPerformanceResponse {
+  strategies: StrategyPerformance[]
+  recommended_strategy_id: number | null
+  recommendation_reason: string
 }
 
 export interface MLModel {

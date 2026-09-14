@@ -7,6 +7,7 @@ import Stat from '../components/Stat'
 import { Empty, ErrorBox, Loading } from '../components/Loading'
 import StockDetailModal, { type StockDetail } from '../components/StockDetailModal'
 import { formatCurrency, formatDate, formatPercent, formatSignedPercent, pnlClass } from '../lib/format'
+import { strategyLabel } from '../lib/tiers'
 
 const DAYS_TO_WATCH = 14
 
@@ -72,9 +73,202 @@ const ACTION_TONE: Record<DetailedPosition['action_code'], StockDetail['tone']> 
   bullish: 'buy',
 }
 
+/** The rich positions table (confidence, stop/target, model's read) shared
+ * by the paper book and the Real Trading book — same columns, same sort
+ * behaviour, only the row data and the sell action differ. */
+export function PositionsTable({
+  rows,
+  onSelectDetail,
+  onSell,
+  sellBusy,
+  sellLabel,
+  emptyLabel,
+}: {
+  rows: DetailedPosition[]
+  onSelectDetail: (detail: StockDetail) => void
+  onSell: (p: DetailedPosition) => void
+  sellBusy: boolean
+  sellLabel: string
+  emptyLabel: string
+}) {
+  const [sortKey, setSortKey] = useState<SortKey | null>(null)
+  const [sortDir, setSortDir] = useState<SortDir>('desc')
+
+  const sorted = useMemo(() => {
+    if (!sortKey) return rows
+    const data = [...rows]
+    data.sort((a, b) => {
+      const av = a[sortKey]
+      const bv = b[sortKey]
+      if (av == null && bv == null) return 0
+      if (av == null) return 1
+      if (bv == null) return -1
+      return (av - bv) * (sortDir === 'asc' ? 1 : -1)
+    })
+    return data
+  }, [rows, sortKey, sortDir])
+
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setSortKey(key)
+      setSortDir('desc')
+    }
+  }
+
+  if (!rows.length) return <Empty label={emptyLabel} />
+
+  return (
+    <table>
+      <thead>
+        <tr>
+          <th className="sticky-col">Stock</th>
+          <th title="Which strategy opened this position.">Strategy</th>
+          <th className="num">Qty</th>
+          <th className="num">Avg cost</th>
+          <th className="num">CMP</th>
+          <th className="num">% chg</th>
+          <th className="num">Value at cost</th>
+          <th className="num">Value at CMP</th>
+          <th
+            className="num sortable"
+            onClick={() => toggleSort('day_pnl')}
+            aria-sort={sortKey === 'day_pnl' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+          >
+            Day&apos;s P&amp;L
+            <span className="sort-arrow">{sortKey === 'day_pnl' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</span>
+          </th>
+          <th
+            className="num sortable"
+            onClick={() => toggleSort('unrealized_pnl')}
+            aria-sort={sortKey === 'unrealized_pnl' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+          >
+            Overall P&amp;L
+            <span className="sort-arrow">
+              {sortKey === 'unrealized_pnl' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}
+            </span>
+          </th>
+          <th
+            className="num sortable"
+            onClick={() => toggleSort('unrealized_pnl_pct')}
+            aria-sort={sortKey === 'unrealized_pnl_pct' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+          >
+            P&amp;L %
+            <span className="sort-arrow">
+              {sortKey === 'unrealized_pnl_pct' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}
+            </span>
+          </th>
+          <th title="The strategy's current read on this position, from today's scan.">Model says</th>
+          <th className="num" title="Auto-sell price if this drops too far — the built-in loss limit.">
+            Stop
+          </th>
+          <th className="num" title="The price this position is aiming for before taking profit.">
+            Target
+          </th>
+          <th
+            className="num"
+            title="How sure the model is about this call, 0-100%. Higher isn't a guarantee — it's a relative ranking against other candidates."
+          >
+            Confidence
+          </th>
+          <th />
+        </tr>
+      </thead>
+      <tbody>
+        {sorted.map((p) => {
+          const chg = dayChangePct(p)
+          return (
+            <tr key={p.id}>
+              <td className="sticky-col">
+                <button
+                  className="symbol-button"
+                  onClick={() =>
+                    onSelectDetail({
+                      symbol: p.symbol,
+                      tone: ACTION_TONE[p.action_code],
+                      actionLabel: ACTION_LABEL_TEXT[p.action_code],
+                      price: p.current_price,
+                      entryPrice: p.entry_price,
+                      stopLoss: p.stop_loss,
+                      takeProfit: p.take_profit,
+                      confidence: p.last_confidence ?? p.entry_confidence,
+                      note: p.action_label,
+                    })
+                  }
+                >
+                  {p.symbol}
+                </button>
+                <div className="muted" style={{ fontSize: '0.75rem' }}>
+                  Since {formatDate(p.entry_at)}
+                </div>
+              </td>
+              <td>
+                {p.strategy_name ? (
+                  <span className="muted" style={{ fontSize: '0.8rem' }} title={p.strategy_name}>
+                    {strategyLabel(p.strategy_name)}
+                  </span>
+                ) : (
+                  <span className="muted">—</span>
+                )}
+              </td>
+              <td className="num">{p.quantity}</td>
+              <td className="num">{formatCurrency(p.entry_price)}</td>
+              <td className="num">{formatCurrency(p.current_price)}</td>
+              <td className={`num ${chg == null ? 'muted' : pnlClass(chg)}`}>
+                {chg == null ? '—' : formatSignedPercent(chg)}
+              </td>
+              <td className="num">{formatCurrency(p.invested)}</td>
+              <td className="num">{formatCurrency(p.current_value)}</td>
+              <td className={`num ${p.day_pnl == null ? 'muted' : pnlClass(p.day_pnl)}`}>
+                {p.day_pnl == null ? '—' : formatCurrency(p.day_pnl)}
+              </td>
+              <td className={`num ${pnlClass(p.unrealized_pnl)}`}>{formatCurrency(p.unrealized_pnl)}</td>
+              <td className={`num ${pnlClass(p.unrealized_pnl)}`}>{formatSignedPercent(p.unrealized_pnl_pct)}</td>
+              <td>
+                <span className={`badge ${ACTION_BADGE[p.action_code]}`} title={p.action_label}>
+                  {ACTION_LABEL_TEXT[p.action_code]}
+                </span>
+              </td>
+              <td className="num muted">{p.stop_loss ? formatCurrency(p.stop_loss) : '—'}</td>
+              <td className="num muted">{p.take_profit ? formatCurrency(p.take_profit) : '—'}</td>
+              <td className="num">
+                {p.entry_confidence == null ? (
+                  <span className="muted">—</span>
+                ) : (
+                  <span
+                    className={
+                      p.last_confidence != null && p.last_confidence < p.entry_confidence - 0.1 ? 'neg' : undefined
+                    }
+                    title="Entry confidence → most recently seen confidence"
+                  >
+                    {formatPercent(p.entry_confidence, 0)}
+                    {p.last_confidence != null && ` → ${formatPercent(p.last_confidence, 0)}`}
+                  </span>
+                )}
+              </td>
+              <td>
+                <button className="danger" disabled={sellBusy} onClick={() => onSell(p)}>
+                  {sellLabel}
+                </button>
+              </td>
+            </tr>
+          )
+        })}
+      </tbody>
+    </table>
+  )
+}
+
 export default function Positions() {
   const queryClient = useQueryClient()
   const positions = useQuery({ queryKey: ['positions'], queryFn: api.positions })
+  // Real Zerodha holdings — whatever you've actually bought yourself in the
+  // real account. Independent of the bot's own paper Position rows below,
+  // which know nothing about a manual purchase. A failure here (most
+  // commonly "not logged into Kite") is shown inline rather than blocking
+  // the rest of the page, since the bot's own tracking still works either way.
+  const holdings = useQuery({ queryKey: ['holdings'], queryFn: api.holdings, retry: false })
   const trades = useQuery({ queryKey: ['trades', 50], queryFn: () => api.trades(50) })
   const buyList = useQuery({ queryKey: ['buyList'], queryFn: api.buyList })
   // Whole-life net worth (no month/category/direction filter) — a quick
@@ -97,35 +291,37 @@ export default function Positions() {
     },
   })
 
-  const [sortKey, setSortKey] = useState<SortKey | null>(null)
-  const [sortDir, setSortDir] = useState<SortDir>('desc')
+  // Real Trading — trades made manually in Zerodha (bot-recommended or your
+  // own picks), tracked with the same daily confidence/stop-loss the paper
+  // book gets, but a fully separate book (see the "real_trading" advisory
+  // strategy created for this). strategies is how we find that strategy's
+  // id without hardcoding it — it's created once, on first use, below.
+  const strategies = useQuery({ queryKey: ['strategies'], queryFn: api.strategies })
+  const realStrategy = strategies.data?.find((s) => s.name === 'real_trading')
+  const realPositions = useQuery({
+    queryKey: ['realPositions'],
+    queryFn: api.realPositions,
+    enabled: !!realStrategy,
+  })
+
+  const importHoldings = useMutation({
+    mutationFn: () => api.importRealHoldings(realStrategy!.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['realPositions'] })
+    },
+  })
+
+  const manualClose = useMutation({
+    mutationFn: ({ id, exitPrice }: { id: number; exitPrice: number }) =>
+      api.manualClosePosition(id, exitPrice),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['realPositions'] })
+    },
+  })
+
   const [selectedDetail, setSelectedDetail] = useState<StockDetail | null>(null)
 
   const unsorted = positions.data ?? []
-  // Missing day_pnl (no previous close yet) sorts last regardless of
-  // direction — it isn't "zero", it's just not comparable yet.
-  const rows = useMemo(() => {
-    if (!sortKey) return unsorted
-    const data = [...unsorted]
-    data.sort((a, b) => {
-      const av = a[sortKey]
-      const bv = b[sortKey]
-      if (av == null && bv == null) return 0
-      if (av == null) return 1
-      if (bv == null) return -1
-      return (av - bv) * (sortDir === 'asc' ? 1 : -1)
-    })
-    return data
-  }, [unsorted, sortKey, sortDir])
-
-  function toggleSort(key: SortKey) {
-    if (sortKey === key) {
-      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
-    } else {
-      setSortKey(key)
-      setSortDir('desc')
-    }
-  }
 
   if (positions.isLoading) return <Loading />
   if (positions.error) return <ErrorBox error={positions.error} />
@@ -168,9 +364,107 @@ export default function Positions() {
         </div>
       )}
 
+      <h2>Your Zerodha holdings</h2>
+      <p className="muted" style={{ marginTop: 0, fontSize: '0.85rem' }}>
+        Real shares in your actual account — anything you bought yourself, separate from the
+        bot's own paper-mode tracking below.
+      </p>
+      <div className="table-wrap" style={{ marginBottom: '1.5rem' }}>
+        {holdings.isLoading ? (
+          <Loading />
+        ) : holdings.error ? (
+          <div className="empty">
+            Couldn't load real holdings — {(holdings.error as Error)?.message ?? 'log in to Kite to see this'}.
+          </div>
+        ) : !holdings.data?.length ? (
+          <Empty label="No holdings in the connected Zerodha account yet." />
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>Symbol</th>
+                <th className="num">Qty</th>
+                <th className="num">Avg cost</th>
+                <th className="num">LTP</th>
+                <th className="num">Value</th>
+                <th className="num">P&amp;L</th>
+                <th className="num">Day chg</th>
+              </tr>
+            </thead>
+            <tbody>
+              {holdings.data.map((h) => (
+                <tr key={h.symbol}>
+                  <td>
+                    <strong>{h.symbol}</strong>
+                  </td>
+                  <td className="num">{h.quantity}</td>
+                  <td className="num">{formatCurrency(h.average_price)}</td>
+                  <td className="num">{formatCurrency(h.last_price)}</td>
+                  <td className="num">{formatCurrency(h.last_price * h.quantity)}</td>
+                  <td className={`num ${pnlClass(h.pnl)}`}>{formatCurrency(h.pnl)}</td>
+                  <td className={`num ${h.day_change_percentage != null ? pnlClass(h.day_change_percentage) : ''}`}>
+                    {h.day_change_percentage != null ? formatSignedPercent(h.day_change_percentage / 100) : '—'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <h2>Real Trading</h2>
+      <p className="muted" style={{ marginTop: 0, fontSize: '0.85rem' }}>
+        Stocks you've actually bought in Zerodha — tracked with the same daily confidence and
+        stop-loss reading as the paper book below, but a separate, real-money book. The bot never
+        auto-trades these; it only tracks and alerts.
+      </p>
+      <div style={{ marginBottom: '0.75rem' }}>
+        <button
+          disabled={!realStrategy || importHoldings.isPending}
+          onClick={() => importHoldings.mutate()}
+          title={!realStrategy ? 'Loading…' : 'Pull anything new from your Zerodha holdings'}
+        >
+          {importHoldings.isPending ? 'Importing…' : 'Import from Zerodha'}
+        </button>
+        {importHoldings.data && (
+          <span className="muted" style={{ marginLeft: '0.75rem', fontSize: '0.85rem' }}>
+            {importHoldings.data.filter((r) => r.status === 'imported').length} imported,{' '}
+            {importHoldings.data.filter((r) => r.status === 'already_tracked').length} already tracked,{' '}
+            {importHoldings.data.filter((r) => r.status === 'skipped').length} skipped
+          </span>
+        )}
+      </div>
+      {importHoldings.error && <ErrorBox error={importHoldings.error} />}
+      {manualClose.error && <ErrorBox error={manualClose.error} />}
+      <div className="table-wrap" style={{ marginBottom: '1.5rem' }}>
+        {realPositions.isLoading ? (
+          <Loading />
+        ) : realPositions.error ? (
+          <div className="empty">
+            Couldn't load real positions — {(realPositions.error as Error)?.message}.
+          </div>
+        ) : (
+          <PositionsTable
+            rows={realPositions.data ?? []}
+            onSelectDetail={setSelectedDetail}
+            onSell={(p) => {
+              const input = prompt(`Sold ${p.quantity} × ${p.symbol} — at what price?`, String(p.current_price))
+              if (input === null) return
+              const exitPrice = Number(input)
+              if (!exitPrice || exitPrice <= 0) return
+              manualClose.mutate({ id: p.id, exitPrice })
+            }}
+            sellBusy={manualClose.isPending}
+            sellLabel="Record sale"
+            emptyLabel="No real positions tracked yet — click Import from Zerodha above, or buy something and it'll pick it up next import."
+          />
+        )}
+      </div>
+
+      <h2>Bot's paper positions</h2>
       {close.error && <ErrorBox error={close.error} />}
 
-      {rows.length > 0 && (
+      {unsorted.length > 0 && (
         <div className="grid">
           <Stat label="Amount invested" value={formatCurrency(invested)} />
           <Stat label="Current value" value={formatCurrency(currentValue)} />
@@ -206,170 +500,18 @@ export default function Positions() {
       )}
 
       <div className="table-wrap">
-        {!rows.length ? (
-          <Empty label="No open positions." />
-        ) : (
-          <table>
-            <thead>
-              <tr>
-                <th className="sticky-col">Stock</th>
-                <th className="num">Qty</th>
-                <th className="num">Avg cost</th>
-                <th className="num">CMP</th>
-                <th className="num">% chg</th>
-                <th className="num">Value at cost</th>
-                <th className="num">Value at CMP</th>
-                <th
-                  className="num sortable"
-                  onClick={() => toggleSort('day_pnl')}
-                  aria-sort={sortKey === 'day_pnl' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
-                >
-                  Day&apos;s P&amp;L
-                  <span className="sort-arrow">
-                    {sortKey === 'day_pnl' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}
-                  </span>
-                </th>
-                <th
-                  className="num sortable"
-                  onClick={() => toggleSort('unrealized_pnl')}
-                  aria-sort={
-                    sortKey === 'unrealized_pnl' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
-                  }
-                >
-                  Overall P&amp;L
-                  <span className="sort-arrow">
-                    {sortKey === 'unrealized_pnl' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}
-                  </span>
-                </th>
-                <th
-                  className="num sortable"
-                  onClick={() => toggleSort('unrealized_pnl_pct')}
-                  aria-sort={
-                    sortKey === 'unrealized_pnl_pct'
-                      ? sortDir === 'asc'
-                        ? 'ascending'
-                        : 'descending'
-                      : 'none'
-                  }
-                >
-                  P&amp;L %
-                  <span className="sort-arrow">
-                    {sortKey === 'unrealized_pnl_pct' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}
-                  </span>
-                </th>
-                <th title="The strategy's current read on this position, from today's scan.">
-                  Model says
-                </th>
-                <th className="num" title="Auto-sell price if this drops too far — the built-in loss limit.">
-                  Stop
-                </th>
-                <th className="num" title="The price this position is aiming for before taking profit.">
-                  Target
-                </th>
-                <th
-                  className="num"
-                  title="How sure the model is about this call, 0-100%. Higher isn't a guarantee — it's a relative ranking against other candidates."
-                >
-                  Confidence
-                </th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((p) => {
-                const chg = dayChangePct(p)
-                return (
-                <tr key={p.id}>
-                  <td className="sticky-col">
-                    <button
-                      className="symbol-button"
-                      onClick={() =>
-                        setSelectedDetail({
-                          symbol: p.symbol,
-                          tone: ACTION_TONE[p.action_code],
-                          actionLabel: ACTION_LABEL_TEXT[p.action_code],
-                          price: p.current_price,
-                          entryPrice: p.entry_price,
-                          stopLoss: p.stop_loss,
-                          takeProfit: p.take_profit,
-                          confidence: p.last_confidence ?? p.entry_confidence,
-                          note: p.action_label,
-                        })
-                      }
-                    >
-                      {p.symbol}
-                    </button>
-                    <div className="muted" style={{ fontSize: '0.75rem' }}>
-                      Since {formatDate(p.entry_at)}
-                    </div>
-                  </td>
-                  <td className="num">{p.quantity}</td>
-                  <td className="num">{formatCurrency(p.entry_price)}</td>
-                  <td className="num">{formatCurrency(p.current_price)}</td>
-                  <td className={`num ${chg == null ? 'muted' : pnlClass(chg)}`}>
-                    {chg == null ? '—' : formatSignedPercent(chg)}
-                  </td>
-                  <td className="num">{formatCurrency(p.invested)}</td>
-                  <td className="num">{formatCurrency(p.current_value)}</td>
-                  <td className={`num ${p.day_pnl == null ? 'muted' : pnlClass(p.day_pnl)}`}>
-                    {p.day_pnl == null ? '—' : formatCurrency(p.day_pnl)}
-                  </td>
-                  <td className={`num ${pnlClass(p.unrealized_pnl)}`}>
-                    {formatCurrency(p.unrealized_pnl)}
-                  </td>
-                  <td className={`num ${pnlClass(p.unrealized_pnl)}`}>
-                    {formatSignedPercent(p.unrealized_pnl_pct)}
-                  </td>
-                  <td>
-                    {/* Full reason is one click away (the symbol button
-                        opens the detail popup) — a second wrapped line here
-                        was just making every row taller for no new info. */}
-                    <span className={`badge ${ACTION_BADGE[p.action_code]}`} title={p.action_label}>
-                      {ACTION_LABEL_TEXT[p.action_code]}
-                    </span>
-                  </td>
-                  <td className="num muted">
-                    {p.stop_loss ? formatCurrency(p.stop_loss) : '—'}
-                  </td>
-                  <td className="num muted">
-                    {p.take_profit ? formatCurrency(p.take_profit) : '—'}
-                  </td>
-                  <td className="num">
-                    {p.entry_confidence == null ? (
-                      <span className="muted">—</span>
-                    ) : (
-                      <span
-                        className={
-                          p.last_confidence != null && p.last_confidence < p.entry_confidence - 0.1
-                            ? 'neg'
-                            : undefined
-                        }
-                        title="Entry confidence → most recently seen confidence"
-                      >
-                        {formatPercent(p.entry_confidence, 0)}
-                        {p.last_confidence != null && ` → ${formatPercent(p.last_confidence, 0)}`}
-                      </span>
-                    )}
-                  </td>
-                  <td>
-                    <button
-                      className="danger"
-                      disabled={close.isPending}
-                      onClick={() => {
-                        if (confirm(`Close ${p.quantity} × ${p.symbol} at market?`)) {
-                          close.mutate(p.id)
-                        }
-                      }}
-                    >
-                      Sell
-                    </button>
-                  </td>
-                </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        )}
+        <PositionsTable
+          rows={unsorted}
+          onSelectDetail={setSelectedDetail}
+          onSell={(p) => {
+            if (confirm(`Close ${p.quantity} × ${p.symbol} at market?`)) {
+              close.mutate(p.id)
+            }
+          }}
+          sellBusy={close.isPending}
+          sellLabel="Sell"
+          emptyLabel="No open positions."
+        />
       </div>
 
       <h2>Recently sold — still watching</h2>

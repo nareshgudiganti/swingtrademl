@@ -21,9 +21,15 @@ from swing_trade_ml.core.enums import SignalType
 from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.db.models.market import Instrument
 from swing_trade_ml.ml.features import atr, build_features
-from swing_trade_ml.ml.market_context import load_index_candles
+from swing_trade_ml.ml.market_context import (
+    load_index_candles,
+    load_market_breadth,
+    load_sector_candles,
+    load_vix_candles,
+)
 from swing_trade_ml.ml.predict import _get_bundle
 from swing_trade_ml.ml.registry import get_active_model
+from swing_trade_ml.ml.sector_map import get_sector_index
 from swing_trade_ml.strategies.base import BaseStrategy, SignalDecision, register_strategy
 
 log = get_logger(__name__)
@@ -79,8 +85,14 @@ class MLSwingStrategy(BaseStrategy):
         # look-ahead guarantee `d` already carries (live: only up-to-now
         # candles; backtest: the caller's pre-sliced window), reused rather
         # than threading a new parameter through evaluate()/BaseStrategy.
-        index_df = load_index_candles(db, interval="day", upto=d["ts"].max())
-        featured = build_features(d, index_df)
+        as_of = d["ts"].max()
+        index_df = load_index_candles(db, interval="day", upto=as_of)
+        sector_df = load_sector_candles(
+            db, get_sector_index(instrument.tradingsymbol), interval="day", upto=as_of
+        )
+        vix_df = load_vix_candles(db, interval="day", upto=as_of)
+        breadth_df = load_market_breadth(db, interval="day", upto=as_of)
+        featured = build_features(d, index_df, sector_df, vix_df, breadth_df)
         row = featured.iloc[[-1]]
 
         bundle = _get_bundle(model)

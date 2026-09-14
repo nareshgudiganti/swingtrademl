@@ -14,21 +14,9 @@ from swing_trade_ml.core.enums import PositionStatus
 from swing_trade_ml.db.models.market import Candle, Instrument
 from swing_trade_ml.db.models.trading import Position, Signal, Strategy, Trade
 from swing_trade_ml.schemas import SignalOut
+from swing_trade_ml.strategies.tier import cap_tier
 
 router = APIRouter(prefix="/signals", tags=["signals"])
-
-
-def _cap_tier(model_name: str | None) -> str:
-    """Map an ml_swing strategy's model_name param to a cap tier — mirrors
-    frontend/src/lib/tiers.ts's TIERS convention. Strategies with no model
-    (e.g. sma_crossover) or the default large-cap model both fall back to
-    "large".
-    """
-    if model_name == "swing_classifier_midcap":
-        return "midcap"
-    if model_name == "swing_classifier_smallcap":
-        return "smallcap"
-    return "large"
 
 
 @router.get("", response_model=list[SignalOut])
@@ -124,6 +112,137 @@ def latest_actionable(
         }
         for signal, symbol, name in rows
     ]
+
+
+@router.get("/top-picks", response_model=list[dict])
+def top_picks(
+    db: DbSession,
+    budget: float = Query(25_000.0, gt=0, description="Total real-money rupees to allocate"),
+    max_picks: int = Query(5, ge=1, le=20),
+    min_confidence: float = Query(0.70, ge=0.5, le=0.99),
+    include_smallcap: bool = Query(
+        False, description="Small-caps are excluded by default: harder to exit cleanly with real money"
+    ),
+) -> list[dict]:
+    """A short, risk-ranked shortlist for manually buying a few of today's
+    paper signals with real money — not a new model, just a stricter filter
+    plus a suggested rupee split over `buy_list`'s same fresh-BUY signals.
+
+    Ranking, in order:
+    1. Cap-tier: small-caps excluded by default (`include_smallcap=true` to
+       include them) — the largest real risk with real money is not being
+       able to exit cleanly, which small-caps carry more of regardless of
+       model confidence.
+    2. Confidence: only signals at/above `min_confidence`, which defaults
+       well above the bot's own bare minimum (ML_MIN_CONFIDENCE=0.60) —
+       "the model will paper-trade this" and "confident enough to risk real
+       money on" are deliberately different bars.
+    3. Composite score = confidence, minus a 10-point penalty if the
+       signal's own `bear_market` flag is set (see ml_swing.py — it already
+       required extra confidence to fire at all, so a signal that only
+       barely cleared that raised bar is weaker than its raw confidence
+       number suggests), minus the stop-loss distance as a fraction of price
+       (capped at 15 points) — a signal with a tighter stop is safer at the
+       same confidence, because it risks less if wrong.
+
+    Sizing: `budget` is split across the picks in inverse proportion to each
+    one's stop distance (tighter stop -> larger rupee allocation), not split
+    evenly — this keeps the rupee amount actually at risk roughly equal
+    across picks, which an equal-rupee split would not.
+
+    This does not execute anything — it only ranks and suggests. Nothing
+    here places an order; that stays a manual decision in Kite.
+    """
+    latest_signal = (
+        select(Signal)
+        .where(Signal.mode == "paper")
+        .distinct(Signal.strategy_id, Signal.instrument_id)
+        .order_by(Signal.strategy_id, Signal.instrument_id, Signal.generated_at.desc())
+    ).subquery()
+    LatestSignal = aliased(Signal, latest_signal)  # noqa: N806 — matches buy_list's own convention below
+
+    held_instrument_ids = select(Position.instrument_id).where(
+        Position.mode == "paper", Position.status == PositionStatus.OPEN
+    )
+
+    rows = db.execute(
+        select(LatestSignal, Instrument.tradingsymbol, Instrument.name, Strategy)
+        .join(Instrument, Instrument.id == LatestSignal.instrument_id)
+        .join(Strategy, Strategy.id == LatestSignal.strategy_id)
+        .where(
+            LatestSignal.signal_type == "BUY",
+            LatestSignal.confidence >= min_confidence,
+            LatestSignal.instrument_id.not_in(held_instrument_ids),
+        )
+    ).all()
+
+    candidates: list[dict] = []
+    for sig, symbol, name, strategy in rows:
+        tier = cap_tier(strategy.params.get("model_name") if strategy.params else None)
+        if tier == "smallcap" and not include_smallcap:
+            continue
+        # A share priced above the whole budget can never be bought regardless
+        # of how the split works out — exclude it outright rather than let it
+        # win a slot and then round down to a useless "buy 0 shares".
+        if sig.price and sig.price > budget:
+            continue
+
+        stop_pct = (
+            max((sig.price - sig.stop_loss) / sig.price, 0.0)
+            if sig.stop_loss and sig.price
+            else 0.10  # no stop on record — treat as an average-risk guess, not zero risk
+        )
+        bear_market = bool((sig.features or {}).get("bear_market"))
+        score = float(sig.confidence or 0.0) - (0.10 if bear_market else 0.0) - min(stop_pct, 0.15)
+
+        candidates.append(
+            {
+                "symbol": symbol,
+                "name": name,
+                "cap_tier": tier,
+                "strategy_name": strategy.name,
+                "price": sig.price,
+                "confidence": sig.confidence,
+                "stop_loss": sig.stop_loss,
+                "take_profit": sig.take_profit,
+                "stop_distance_pct": round(stop_pct, 4),
+                "bear_market": bear_market,
+                "score": round(score, 4),
+                "reason": sig.reason,
+                "generated_at": sig.generated_at,
+                "_weight": 1.0 / max(stop_pct, 0.01),
+            }
+        )
+
+    candidates.sort(key=lambda c: c["score"], reverse=True)
+
+    # Selecting the top max_picks by score and splitting the budget can still
+    # leave a low-priority, expensive pick rounding down to 0 shares once
+    # split among several others — worthless as a recommendation. Rather than
+    # show that, drop it and backfill from the next-best remaining candidate,
+    # recomputing the split each time, until every surviving pick is
+    # actually buyable or candidates run out.
+    picks = candidates[:max_picks]
+    backfill_pool = candidates[max_picks:]
+
+    while picks:
+        total_weight = sum(p["_weight"] for p in picks) or 1.0
+        for p in picks:
+            p["suggested_allocation_inr"] = round(budget * p["_weight"] / total_weight, 2)
+            p["suggested_quantity"] = int(p["suggested_allocation_inr"] // p["price"]) if p["price"] else 0
+
+        unbuyable = [p for p in picks if p["suggested_quantity"] < 1]
+        if not unbuyable:
+            break
+        for p in unbuyable:
+            picks.remove(p)
+            if backfill_pool:
+                picks.append(backfill_pool.pop(0))
+
+    for p in picks:
+        del p["_weight"]
+
+    return picks
 
 
 @router.get("/buy-list", response_model=list[dict])
@@ -222,7 +341,7 @@ def track_record(db: DbSession) -> list[dict]:
             "signal_id": sig.id,
             "symbol": symbol,
             "name": name,
-            "cap_tier": _cap_tier(strategy.params.get("model_name") if strategy.params else None),
+            "cap_tier": cap_tier(strategy.params.get("model_name") if strategy.params else None),
             "strategy_name": strategy.name,
             "mode": sig.mode,
             "generated_at": sig.generated_at,

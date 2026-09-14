@@ -11,20 +11,27 @@ import Reports from './pages/Reports'
 import ScanResults from './pages/ScanResults'
 import Strategies from './pages/Strategies'
 import Models from './pages/Models'
+import Holdings from './pages/Holdings'
 import Settings from './pages/Settings'
-import { BarChartIcon, BriefcaseIcon, GearIcon, HomeIcon, LayersIcon, WalletIcon } from './components/icons'
+import { BarChartIcon, BriefcaseIcon, HomeIcon, LayersIcon, ScaleIcon, WalletIcon } from './components/icons'
 
-// Strategies and ML Models are still routed (linked from Settings' Advanced
-// section) but deliberately left out of the top-level nav — they're
-// admin/config screens, not something a day-to-day user needs to see
-// alongside Dashboard/Portfolio/Reports.
+// Settings and ML Models are still routed but deliberately left out of the
+// top-level nav — they're admin/config screens, not something a day-to-day
+// user needs alongside Dashboard/Strategies/Portfolio/Reports. The user and
+// Log out already live in the sidebar status strip below, so Settings earned
+// no place in the nav once auto-login removed the daily Kite login chore.
+//
+// They remain reachable by URL: /settings (watchlist editor, sync + backfill,
+// scheduler status) and /models. Nothing was deleted — if either needs to
+// come back, add it here.
 const NAV = [
   { to: '/dashboard', label: 'Dashboard', Icon: HomeIcon },
+  { to: '/strategies', label: 'Strategies', Icon: ScaleIcon },
+  { to: '/holdings', label: 'My Holdings', Icon: WalletIcon },
   { to: '/portfolio', label: 'Portfolio', Icon: BriefcaseIcon },
   { to: '/reports', label: 'Reports', Icon: BarChartIcon },
   { to: '/scans', label: 'Scan Results', Icon: LayersIcon },
   { to: '/finance', label: 'Finance', Icon: WalletIcon },
-  { to: '/settings', label: 'Settings', Icon: GearIcon },
 ]
 
 // The 4 destinations worth a one-tap reach on a phone — a real bottom tab
@@ -173,7 +180,12 @@ export default function App() {
       </aside>
 
       <main className="content">
-        {status && status.status_level === 'warning' && (
+        {/* Dashboard only. This is a system-health notice, not something that
+            changes what any other page means, and repeating it on every tab
+            cost the top of every screen — the Holdings table in particular
+            started below the fold because of it. The Dashboard is where you
+            go to ask "is everything working", so it lives there. */}
+        {status && status.status_level === 'warning' && location.pathname === '/dashboard' && (
           <div className="banner banner-warn">
             ⚠️ {status.status_message}
             {!status.broker_authenticated ? (
@@ -215,6 +227,7 @@ export default function App() {
           <Routes>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/holdings" element={<Holdings />} />
             <Route path="/portfolio" element={<Positions />} />
             <Route path="/reports" element={<Reports />} />
             <Route path="/scans" element={<ScanResults />} />

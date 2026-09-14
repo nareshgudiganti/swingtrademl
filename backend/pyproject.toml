@@ -49,6 +49,9 @@ dependencies = [
     "pdfplumber>=0.11.4",
     "python-dateutil>=2.9.0",
 
+    # --- Mutual fund CAS (Consolidated Account Statement) import ---
+    "casparser>=1.4.1",
+
     # --- Observability ---
     "structlog>=24.4.0",
 ]

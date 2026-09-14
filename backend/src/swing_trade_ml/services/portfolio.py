@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import numpy as np
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from swing_trade_ml.brokers import get_broker, paper_broker
@@ -14,7 +14,7 @@ from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.enums import PositionStatus, TradingMode
 from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.db.models.market import Instrument, Quote
-from swing_trade_ml.db.models.trading import PortfolioSnapshot, Position, Trade
+from swing_trade_ml.db.models.trading import PortfolioSnapshot, Position, Strategy, Trade
 
 log = get_logger(__name__)
 
@@ -26,8 +26,14 @@ def portfolio_value_and_cash(db: Session, mode: str) -> tuple[float, float]:
 
     In paper mode both come from the simulated ledger; in live mode cash comes
     from the broker's real margin and holdings are valued at last price.
+
+    Live-mode cash always reads real Kite margins directly — not through
+    get_broker(), which only returns the Kite broker once the app's own
+    TRADING_MODE is switched to live. A live-mode *advisory* strategy (real
+    trades made manually, tracked for confidence/exposure only — never
+    auto-executed) still needs its real cash figure while the app itself is
+    still in the paper phase, so this can't wait on that global toggle.
     """
-    broker = get_broker()
     open_positions = list(
         db.execute(
             select(Position).where(Position.mode == mode, Position.status == PositionStatus.OPEN)
@@ -42,8 +48,11 @@ def portfolio_value_and_cash(db: Session, mode: str) -> tuple[float, float]:
     if mode == TradingMode.PAPER:
         cash = paper_broker.get_available_cash(db)
     else:
+        from swing_trade_ml.brokers.kite import kite_broker
+
         try:
-            cash = broker.get_margins(db).available_cash
+            kite_broker.load_session(db)
+            cash = kite_broker.get_margins(db).available_cash
         except Exception as exc:  # noqa: BLE001
             log.error("portfolio.margins_failed", error=str(exc))
             cash = 0.0
@@ -56,12 +65,26 @@ def mark_to_market(db: Session, mode: str | None = None) -> int:
 
     Reads the cached `quotes` table rather than calling the broker: this runs
     frequently, and one bulk read beats N network calls.
+
+    Positions belonging to an advisory strategy are marked regardless of the
+    mode filter, matching what execution.check_exits already does. Without it
+    a live-mode advisory book — real Zerodha holdings tracked here — is
+    invisible while the broker sits in paper, so current_price never moves off
+    the entry price and every one of those positions reads as exactly flat no
+    matter what the market does. An explicit `mode` argument still narrows to
+    that mode alone, for callers that genuinely mean one book.
     """
-    mode = mode or get_broker().mode
-    positions = list(
-        db.execute(
-            select(Position).where(Position.mode == mode, Position.status == PositionStatus.OPEN)
+    broker_mode = mode or get_broker().mode
+    scope = Position.mode == broker_mode
+    if mode is None:
+        scope = or_(
+            scope,
+            Position.strategy_id.in_(
+                select(Strategy.id).where(Strategy.execution_mode == "advisory")
+            ),
         )
+    positions = list(
+        db.execute(select(Position).where(scope, Position.status == PositionStatus.OPEN))
         .scalars()
         .all()
     )
@@ -297,6 +320,36 @@ def performance_stats(db: Session, mode: str | None = None) -> dict[str, Any]:
     )
 
     return stats
+
+
+def strategy_performance_stats(
+    db: Session, strategy_id: int, since: datetime | None = None
+) -> dict[str, Any]:
+    """Win rate / profit factor / net P&L for one strategy's closed trades —
+    the per-strategy counterpart to performance_stats() above, which is
+    scoped by broker mode instead. Powers the Strategies tab's win-rate cards
+    and the by-strategy Reports breakdown. `since` restricts to trades closed
+    on/after that timestamp; omit for all-time.
+    """
+    stmt = select(Trade).where(Trade.strategy_id == strategy_id)
+    if since is not None:
+        stmt = stmt.where(Trade.exit_at >= since)
+    trades = list(db.execute(stmt).scalars().all())
+
+    if not trades:
+        return {"trades": 0, "win_rate": 0.0, "profit_factor": 0.0, "net_pnl": 0.0}
+
+    wins = [t for t in trades if t.is_win]
+    losses = [t for t in trades if not t.is_win]
+    gross_profit = sum(t.net_pnl for t in wins)
+    gross_loss = abs(sum(t.net_pnl for t in losses))
+
+    return {
+        "trades": len(trades),
+        "win_rate": len(wins) / len(trades),
+        "profit_factor": (gross_profit / gross_loss) if gross_loss else float("inf"),
+        "net_pnl": sum(t.net_pnl for t in trades),
+    }
 
 
 def recent_post_exit_watch(db: Session, mode: str, lookback_days: int = 21) -> list[dict[str, Any]]:

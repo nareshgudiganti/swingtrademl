@@ -201,6 +201,11 @@ export default function Dashboard() {
     queryFn: api.strategies,
     enabled: showAdvanced || tab === 'buy',
   })
+  const strategyPerformance = useQuery({
+    queryKey: ['strategyPerformance'],
+    queryFn: api.strategyPerformance,
+    enabled: tab === 'buy',
+  })
   const mainStrategy = strategies.data?.find((s) => s.name === 'ml_swing_main')
   const mainSignals = useQuery({
     queryKey: ['strategySignals', mainStrategy?.id],
@@ -555,6 +560,55 @@ export default function Dashboard() {
             )
           })}
         </div>
+          )}
+
+          {/* How each cap size has actually been doing, right above the
+              diagnostic block — the buy list says what to buy today, this says
+              which tier's calls have been working lately, which is the context
+              you want before acting on any of them. */}
+          {strategyPerformance.data && (
+            <div
+              className="grid"
+              style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', marginBottom: '1rem' }}
+            >
+              {TIERS.map((tier) => {
+                const perf = strategyPerformance.data!.strategies.find((s) => s.name === tier.match)
+                const isRecommended =
+                  perf != null && strategyPerformance.data!.recommended_strategy_id === perf.id
+                const w = perf?.windows.last_90d
+                return (
+                  <div className="card" key={tier.match} style={{ position: 'relative' }}>
+                    {isRecommended && (
+                      <div
+                        className="badge badge-buy"
+                        style={{ position: 'absolute', top: '0.6rem', right: '0.6rem', fontSize: '0.7rem' }}
+                        title={strategyPerformance.data!.recommendation_reason}
+                      >
+                        Recommended
+                      </div>
+                    )}
+                    <div className="row" style={{ gap: '0.35rem', marginBottom: '0.3rem' }}>
+                      <span style={{ color: tier.color, display: 'flex' }}>
+                        <tier.Icon />
+                      </span>
+                      <span className="stat-label" style={{ margin: 0 }}>
+                        {tier.label}
+                      </span>
+                    </div>
+                    {!w || w.trades === 0 ? (
+                      <div className="muted" style={{ fontSize: '0.82rem' }}>
+                        No closed trades yet
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: '0.82rem' }}>
+                        Won <strong>{formatPercent(w.win_rate, 0)}</strong> of {w.trades} in the last
+                        90 days
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
           )}
 
           {/* Deliberately below the real buy list, and collapsed by default —

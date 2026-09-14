@@ -46,6 +46,22 @@ FEATURE_COLUMNS: list[str] = [
     # too few real regime transitions to justify two near-duplicate copies.
     "relative_strength_5d", "relative_strength_20d", "nifty_volatility_20",
     "nifty_trend_regime",
+    # sector context — this stock vs. its own sector index (ml/sector_map.py).
+    # Same construction as the benchmark ones above, against a narrower peer
+    # group: a stock can outperform a falling market while still lagging its
+    # own sector, which the benchmark-only comparison can't see.
+    "sector_relative_strength_5d", "sector_relative_strength_20d",
+    "sector_trend_regime",
+    # macro — INDIA VIX, India's own implied-volatility index. Regime-relative
+    # (a percentile rank, like volatility_percentile_rank), not the raw level,
+    # so it means the same thing whether VIX has structurally drifted up or
+    # down over the training window.
+    "vix_change_5d", "vix_percentile_rank",
+    # market breadth — cross-sectional, computed once across the whole
+    # watchlist (see market_context.load_market_breadth), not from this
+    # stock's own price at all. Already a 0-1 fraction, so no further
+    # normalisation is needed to keep it level-invariant.
+    "breadth_pct_above_sma50", "breadth_advance_pct",
 ]
 
 
@@ -161,38 +177,65 @@ def _days_since_extreme(values: pd.Series, window: int, kind: str) -> pd.Series:
     return pd.Series(out, index=values.index)
 
 
-def _index_context_frame(index_df: pd.DataFrame) -> pd.DataFrame:
-    """The benchmark index's own return/regime series, computed once and
+def _index_context_frame(index_df: pd.DataFrame, prefix: str = "nifty") -> pd.DataFrame:
+    """An index-like instrument's own return/regime series, computed once and
     merged onto a stock's frame by ts. Kept separate from build_features'
     main body so it's easy to see this is the only place a second
-    instrument's data enters the pipeline."""
+    instrument's data enters the pipeline.
+
+    `prefix` parametrises which peer group this is: the primary benchmark
+    ("nifty", the default — column names stay exactly what they were before
+    sector context existed) or a stock's own sector index ("sector"). Same
+    formulas either way; only the column names and the merge target's return
+    horizon differ per caller.
+    """
     idx = index_df.sort_values("ts").reset_index(drop=True)
     close = idx["close"]
 
     ctx = pd.DataFrame({"ts": idx["ts"]})
-    ctx["_nifty_return_5d"] = close.pct_change(5)
-    ctx["_nifty_return_20d"] = close.pct_change(20)
-    ctx["nifty_volatility_20"] = close.pct_change().rolling(20).std() * np.sqrt(252)
+    ctx[f"_{prefix}_return_5d"] = close.pct_change(5)
+    ctx[f"_{prefix}_return_20d"] = close.pct_change(20)
+    ctx[f"{prefix}_volatility_20"] = close.pct_change().rolling(20).std() * np.sqrt(252)
 
     sma50 = close.rolling(50).mean()
     sma200 = close.rolling(200).mean()
-    ctx["nifty_trend_regime"] = np.sign((sma50 / sma200 - 1).fillna(0))
+    ctx[f"{prefix}_trend_regime"] = np.sign((sma50 / sma200 - 1).fillna(0))
     return ctx
 
 
-def build_features(df: pd.DataFrame, index_df: pd.DataFrame) -> pd.DataFrame:
+def _vix_context_frame(vix_df: pd.DataFrame) -> pd.DataFrame:
+    """INDIA VIX's own regime-relative series, merged onto a stock's frame by
+    ts the same way the index/sector context is."""
+    vix = vix_df.sort_values("ts").reset_index(drop=True)
+    close = vix["close"]
+
+    ctx = pd.DataFrame({"ts": vix["ts"]})
+    ctx["vix_change_5d"] = close.pct_change(5)
+    ctx["vix_percentile_rank"] = close.rolling(252).rank(pct=True)
+    return ctx
+
+
+def build_features(
+    df: pd.DataFrame,
+    index_df: pd.DataFrame,
+    sector_df: pd.DataFrame,
+    vix_df: pd.DataFrame,
+    breadth_df: pd.DataFrame,
+) -> pd.DataFrame:
     """Attach every column in FEATURE_COLUMNS to an OHLCV frame.
 
     Expects columns: ts, open, high, low, close, volume — ascending by ts.
 
-    `index_df` is the benchmark index's own OHLCV history (same shape),
-    required — not optional — because a forgotten call site here fails
-    loudly (a TypeError at the call, before any model ever sees a row) rather
-    than silently: the alternative (an optional parameter defaulting to
-    missing columns) was rejected specifically because ml_swing.py's
-    evaluate() logs nothing on NaN features, so a forgotten wire-up there
-    would have silently zeroed out signal generation forever with no trace
-    in the logs. Fetch it via ml.market_context.load_index_candles().
+    `index_df`, `sector_df`, `vix_df`, `breadth_df` are all required — not
+    optional — because a forgotten call site here fails loudly (a TypeError
+    at the call, before any model ever sees a row) rather than silently: the
+    alternative (an optional parameter defaulting to missing columns) was
+    rejected specifically because ml_swing.py's evaluate() logs nothing on
+    NaN features, so a forgotten wire-up there would have silently zeroed out
+    signal generation forever with no trace in the logs. Fetch them via
+    ml.market_context's load_index_candles() / load_sector_candles()
+    (sector chosen per-symbol via ml.sector_map.get_sector_index()) /
+    load_vix_candles() / load_market_breadth().
 
     Level-invariant by design: raw prices and moving averages are never fed to
     the model directly, only ratios and percentages. A model trained on the
@@ -298,11 +341,26 @@ def build_features(df: pd.DataFrame, index_df: pd.DataFrame) -> pd.DataFrame:
     # listing gap, a missing bar), and — because "backward" only ever matches
     # an index row at or before the stock's own row — this cannot pull in a
     # future index value even if the two calendars were ever misaligned.
-    index_ctx = _index_context_frame(index_df)
+    index_ctx = _index_context_frame(index_df, prefix="nifty")
     out = pd.merge_asof(out, index_ctx, on="ts", direction="backward")
     out["relative_strength_5d"] = out["return_5d"] - out["_nifty_return_5d"]
     out["relative_strength_20d"] = out["return_20d"] - out["_nifty_return_20d"]
     out = out.drop(columns=["_nifty_return_5d", "_nifty_return_20d"])
+
+    # --- sector context: this stock vs. its own sector index -----------------
+    sector_ctx = _index_context_frame(sector_df, prefix="sector")
+    out = pd.merge_asof(out, sector_ctx, on="ts", direction="backward")
+    out["sector_relative_strength_5d"] = out["return_5d"] - out["_sector_return_5d"]
+    out["sector_relative_strength_20d"] = out["return_20d"] - out["_sector_return_20d"]
+    out = out.drop(columns=["_sector_return_5d", "_sector_return_20d"])
+
+    # --- macro: INDIA VIX ------------------------------------------------------
+    vix_ctx = _vix_context_frame(vix_df)
+    out = pd.merge_asof(out, vix_ctx, on="ts", direction="backward")
+
+    # --- market breadth: cross-sectional across the watchlist ----------------
+    out = pd.merge_asof(out, breadth_df[["ts", "breadth_pct_above_sma50", "breadth_advance_pct"]],
+                         on="ts", direction="backward")
 
     # Infinities arise from the .replace(0, nan) guards above meeting a zero
     # numerator; treat them as missing rather than letting them reach the model.
@@ -326,13 +384,19 @@ def build_label(
     return out.iloc[:-horizon_days] if horizon_days > 0 else out
 
 
-def latest_feature_row(df: pd.DataFrame, index_df: pd.DataFrame) -> pd.DataFrame | None:
+def latest_feature_row(
+    df: pd.DataFrame,
+    index_df: pd.DataFrame,
+    sector_df: pd.DataFrame,
+    vix_df: pd.DataFrame,
+    breadth_df: pd.DataFrame,
+) -> pd.DataFrame | None:
     """The most recent fully-formed feature vector, ready for prediction.
 
     Returns None when indicators have not warmed up (a fresh instrument with
     under ~200 bars leaves the long moving averages undefined). Predicting on a
     partially-NaN vector is worse than not predicting at all.
     """
-    featured = build_features(df, index_df)
+    featured = build_features(df, index_df, sector_df, vix_df, breadth_df)
     row = featured.iloc[[-1]][FEATURE_COLUMNS]
     return None if row.isna().to_numpy().any() else row

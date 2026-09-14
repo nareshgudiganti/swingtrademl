@@ -33,7 +33,7 @@ class ScanResult:
     errors: list[str] = field(default_factory=list)
 
 
-def _eligible_instruments(db: Session, strategy: Strategy) -> list[Instrument]:
+def eligible_instruments(db: Session, strategy: Strategy) -> list[Instrument]:
     """The strategy's own symbol list, or the whole watchlist when it is empty."""
     stmt = select(Instrument).where(Instrument.is_active.is_(True))
     if strategy.symbols:
@@ -81,7 +81,7 @@ def _rank_out_reasons(
 def run_strategy(db: Session, strategy: Strategy, interval: str = "day") -> ScanResult:
     result = ScanResult(strategies_run=1)
     impl = get_strategy(strategy)
-    instruments = _eligible_instruments(db, strategy)
+    instruments = eligible_instruments(db, strategy)
 
     log.info(
         "engine.strategy.start",
@@ -146,16 +146,25 @@ def run_strategy(db: Session, strategy: Strategy, interval: str = "day") -> Scan
 
 
 def run_all_active(db: Session, interval: str = "day") -> ScanResult:
-    """Scan with every strategy whose mode matches the current broker.
+    """Scan with every strategy whose mode matches the current broker, plus
+    every advisory strategy regardless of mode.
 
-    Filtering on mode means a strategy configured for live trading stays dormant
-    during the paper phase instead of quietly producing paper signals under a
-    live label.
+    Filtering on mode means an "auto" strategy configured for live trading
+    stays dormant during the paper phase instead of quietly producing paper
+    signals under a live label. "advisory" strategies are exempt from that
+    gate: process_decision() never lets them place a broker order — they only
+    ever notify — so a live-mode advisory strategy (e.g. tracking real trades
+    made manually in Zerodha) must still be scanned daily for fresh
+    confidence/signals even while the broker itself is still in the paper
+    phase.
     """
     mode = get_broker().mode
     strategies = list(
         db.execute(
-            select(Strategy).where(Strategy.is_active.is_(True), Strategy.mode == mode)
+            select(Strategy).where(
+                Strategy.is_active.is_(True),
+                (Strategy.mode == mode) | (Strategy.execution_mode == "advisory"),
+            )
         )
         .scalars()
         .all()

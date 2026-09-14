@@ -1,12 +1,12 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Bar, BarChart, CartesianGrid, Cell, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 
 import { api } from '../api/client'
 import type { Trade } from '../api/types'
 import Stat from '../components/Stat'
 import { Empty, ErrorBox, Loading } from '../components/Loading'
-import { formatCompact, formatCurrency, formatDate, formatPercent, formatSignedPercent, pnlClass } from '../lib/format'
+import { formatCurrency, formatDate, formatPercent, formatSignedPercent, pnlClass } from '../lib/format'
+import { strategyLabel } from '../lib/tiers'
 
 type Period = 'month' | 'quarter' | 'year'
 
@@ -60,6 +60,28 @@ function groupTrades(rows: Trade[], period: Period): PeriodRow[] {
   return [...byPeriod.values()].sort((a, b) => b.key.localeCompare(a.key))
 }
 
+interface StrategyRow {
+  key: string
+  trades: number
+  wins: number
+  net: number
+}
+
+// Which strategy is actually making money — the one thing the period table
+// can't answer, since a month mixes every strategy's trades together.
+function groupByStrategy(rows: Trade[]): StrategyRow[] {
+  const byStrategy = new Map<string, StrategyRow>()
+  for (const t of rows) {
+    const key = t.strategy_name ?? 'Unknown'
+    const row = byStrategy.get(key) ?? { key, trades: 0, wins: 0, net: 0 }
+    row.trades += 1
+    row.wins += t.is_win ? 1 : 0
+    row.net += t.net_pnl
+    byStrategy.set(key, row)
+  }
+  return [...byStrategy.values()].sort((a, b) => b.net - a.net)
+}
+
 const PERIODS: { key: Period; label: string }[] = [
   { key: 'month', label: 'Monthly' },
   { key: 'quarter', label: 'Quarterly' },
@@ -74,7 +96,7 @@ export default function Reports() {
   const trades = useQuery({ queryKey: ['trades', 1000], queryFn: () => api.trades(1000) })
 
   const rows = useMemo(() => groupTrades(trades.data ?? [], period), [trades.data, period])
-  const chartData = useMemo(() => [...rows].reverse(), [rows])
+  const byStrategyRows = useMemo(() => groupByStrategy(trades.data ?? []), [trades.data])
 
   if (trades.isLoading) return <Loading />
   if (trades.error) return <ErrorBox error={trades.error} />
@@ -162,33 +184,6 @@ export default function Reports() {
             )}
           </div>
 
-          <div className="card" style={{ height: 300, marginBottom: '1.5rem' }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData} margin={{ top: 8, right: 8, bottom: 0, left: 8 }}>
-                <CartesianGrid stroke="#263352" strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="label" stroke="#8b9bb4" fontSize={11} tickMargin={8} />
-                <YAxis
-                  stroke="#8b9bb4"
-                  fontSize={11}
-                  width={70}
-                  tickFormatter={(v: number) => formatCompact(v)}
-                />
-                <Tooltip
-                  contentStyle={{ background: '#131c31', border: '1px solid #263352', borderRadius: 10 }}
-                  formatter={(v: number, name: string) => [formatCurrency(v), name]}
-                />
-                <Legend wrapperStyle={{ fontSize: 12 }} formatter={(value) => value} />
-                <Bar dataKey="gross" name="Gross P&L" fill="var(--accent)" radius={[4, 4, 0, 0]} fillOpacity={0.45} />
-                <Bar dataKey="charges" name="Broker charges" fill="var(--warn)" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="net" name="Net P&L" radius={[4, 4, 0, 0]}>
-                  {chartData.map((row) => (
-                    <Cell key={row.key} fill={row.net >= 0 ? 'var(--pos)' : 'var(--neg)'} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-
           <div className="table-wrap">
             <table>
               <thead>
@@ -216,6 +211,36 @@ export default function Reports() {
                 ))}
               </tbody>
             </table>
+          </div>
+
+          <h2>By strategy</h2>
+          <div className="table-wrap" style={{ marginBottom: '1.5rem' }}>
+            {!byStrategyRows.length ? (
+              <Empty label="No closed trades yet." />
+            ) : (
+              <table>
+                <thead>
+                  <tr>
+                    <th className="sticky-col">Strategy</th>
+                    <th className="num">Trades</th>
+                    <th className="num">Win rate</th>
+                    <th className="num">Net P&amp;L</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {byStrategyRows.map((r) => (
+                    <tr key={r.key}>
+                      <td className="sticky-col">
+                        <strong title={r.key}>{strategyLabel(r.key)}</strong>
+                      </td>
+                      <td className="num">{r.trades}</td>
+                      <td className="num">{formatPercent(r.wins / r.trades, 0)}</td>
+                      <td className={`num ${pnlClass(r.net)}`}>{formatCurrency(r.net)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
 
           <h2>Every trade</h2>

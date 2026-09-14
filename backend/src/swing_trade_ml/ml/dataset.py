@@ -9,7 +9,13 @@ from sqlalchemy.orm import Session
 from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.db.models.market import Candle, Instrument
 from swing_trade_ml.ml.features import FEATURE_COLUMNS, build_features, build_label
-from swing_trade_ml.ml.market_context import load_index_candles
+from swing_trade_ml.ml.market_context import (
+    load_index_candles,
+    load_market_breadth,
+    load_sector_candles,
+    load_vix_candles,
+)
+from swing_trade_ml.ml.sector_map import get_sector_index
 
 log = get_logger(__name__)
 
@@ -71,10 +77,14 @@ def build_training_dataset(
         log.warning("dataset.no_instruments")
         return pd.DataFrame()
 
-    # Loaded once, outside the loop — the same benchmark history joins onto
-    # every symbol, and this is real historical training data (not a
-    # simulated "as of" date), so no upto bound is needed here.
+    # Loaded once, outside the loop — the same benchmark/VIX/breadth history
+    # joins onto every symbol, and this is real historical training data (not
+    # a simulated "as of" date), so no upto bound is needed here. Sector
+    # history is also cached per sector after its first fetch, so pooling
+    # many symbols from the same sector costs one load, not one per symbol.
     index_df = load_index_candles(db, interval)
+    vix_df = load_vix_candles(db, interval)
+    breadth_df = load_market_breadth(db, interval)
 
     frames: list[pd.DataFrame] = []
     for inst in instruments:
@@ -85,7 +95,8 @@ def build_training_dataset(
             log.debug("dataset.skip_short", symbol=inst.tradingsymbol, rows=len(raw))
             continue
 
-        featured = build_features(raw, index_df)
+        sector_df = load_sector_candles(db, get_sector_index(inst.tradingsymbol), interval)
+        featured = build_features(raw, index_df, sector_df, vix_df, breadth_df)
         labelled = build_label(featured, horizon_days, target_return)
         labelled = labelled.dropna(subset=[*FEATURE_COLUMNS, "target"])
         if labelled.empty:

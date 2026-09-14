@@ -135,17 +135,41 @@ def list_transactions(
 
 
 @router.patch("/transactions/{transaction_id}", response_model=FinanceTransactionOut)
-def recategorize_transaction(
+def update_transaction(
     transaction_id: int, payload: FinanceTransactionUpdate, db: DbSession
 ) -> FinanceTransaction:
+    """Edit a transaction — originally just category recategorization, now
+    also amount/description/date for the daily-expense edit popup, since
+    those are hand-typed entries a user should be able to correct freely
+    (unlike a bank-statement import, where the raw figures are the record
+    of truth and only the category assignment is really "yours" to change).
+    """
     txn = db.get(FinanceTransaction, transaction_id)
     if txn is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Transaction not found")
-    txn.category = payload.category
-    txn.is_manual_override = True
+    if payload.category is not None:
+        txn.category = payload.category
+        txn.is_manual_override = True
+    if payload.amount is not None:
+        txn.amount = payload.amount
+    if payload.description is not None:
+        txn.description = payload.description
+    if payload.txn_date is not None:
+        txn.txn_date = datetime.combine(payload.txn_date, txn.txn_date.time(), tzinfo=txn.txn_date.tzinfo)
+        txn.month = payload.txn_date.strftime("%Y-%m")
     db.commit()
     db.refresh(txn)
     return txn
+
+
+@router.delete("/transactions/{transaction_id}", response_model=MessageResponse)
+def delete_transaction(transaction_id: int, db: DbSession) -> MessageResponse:
+    txn = db.get(FinanceTransaction, transaction_id)
+    if txn is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Transaction not found")
+    txn.deleted_at = datetime.now(UTC)
+    db.commit()
+    return MessageResponse(message="Transaction deleted", detail=f"{txn.description[:60]} removed")
 
 
 @router.get("/categories", response_model=list[str])

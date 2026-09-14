@@ -132,7 +132,24 @@ class KiteBroker(Broker):
             timeout=15,
         )
         login_resp.raise_for_status()
-        request_id = login_resp.json()["data"]["request_id"]
+        login_data = login_resp.json()["data"]
+        request_id = login_data["request_id"]
+
+        # Zerodha reports which 2FA types this login attempt will actually
+        # accept — "External TOTP enabled" in profile settings does not
+        # guarantee "totp" is one of them (observed: an account with it
+        # enabled still offered only ["app_code", "sms"]). Failing here with
+        # a clear message beats a bare 400 from the next call.
+        available_types = login_data.get("twofa_types", [])
+        if "totp" not in available_types:
+            raise KiteAuthError(
+                "Kite auto-login: this account's login step does not currently accept "
+                f"a TOTP code (available: {available_types}). 'External TOTP' showing "
+                "enabled in your Kite profile settings is not the same as it being the "
+                "account's active login method — check Zerodha's security settings for "
+                "an option to make External TOTP the primary 2FA method, or auto-login "
+                "cannot proceed and the manual login flow must be used instead."
+            )
 
         totp_code = pyotp.TOTP(settings.KITE_TOTP_SECRET).now()
         twofa_resp = http.post(
@@ -149,6 +166,103 @@ class KiteBroker(Broker):
 
         request_token = self._walk_authorize_redirect(http)
         return self.complete_login(request_token, db)
+
+    def login_diagnostics(self) -> dict[str, object]:
+        """Probe auto-login's first step and report why it would fail, without
+        completing a login or submitting a TOTP code.
+
+        This exists because the only other way to find out whether auto-login
+        works was to wait for the 06:10 cron and read the Telegram error — a
+        24-hour feedback loop for a config typo. `twofa_types` in particular is
+        only knowable by asking Zerodha, and it is the single most common
+        reason auto-login fails on an otherwise correct setup.
+
+        It does POST the user id and password (one real authentication attempt)
+        but stops before `/api/twofa`, so a wrong TOTP secret cannot contribute
+        to a lockout here. Never returns or logs the secret itself.
+        """
+        result: dict[str, object] = {
+            "user_id_set": bool(settings.KITE_USER_ID),
+            "password_set": bool(settings.KITE_PASSWORD),
+            "totp_secret_set": bool(settings.KITE_TOTP_SECRET),
+            "api_key_set": bool(settings.KITE_API_KEY),
+            "api_secret_set": bool(settings.KITE_API_SECRET),
+        }
+
+        if not (settings.KITE_USER_ID and settings.KITE_PASSWORD and settings.KITE_TOTP_SECRET):
+            result["ok"] = False
+            result["reason"] = (
+                "Auto-login is not configured. Set KITE_USER_ID, KITE_PASSWORD and "
+                "KITE_TOTP_SECRET. Note job_kite_auto_login returns silently when these "
+                "are unset, so an unconfigured environment produces no error at all."
+            )
+            return result
+
+        # Validate the secret locally first — a malformed secret is worth
+        # catching before spending an authentication attempt on it.
+        try:
+            import pyotp
+
+            code = pyotp.TOTP(settings.KITE_TOTP_SECRET).now()
+            result["totp_generates"] = True
+            result["totp_code_length"] = len(code)
+        except ImportError:
+            result["ok"] = False
+            result["reason"] = "pyotp is not installed in this environment."
+            return result
+        except Exception as exc:  # noqa: BLE001
+            result["ok"] = False
+            result["totp_generates"] = False
+            result["reason"] = f"KITE_TOTP_SECRET is not a valid base32 TOTP secret: {exc}"
+            return result
+
+        import requests
+
+        try:
+            resp = requests.post(
+                "https://kite.zerodha.com/api/login",
+                data={
+                    "user_id": settings.KITE_USER_ID,
+                    "password": settings.KITE_PASSWORD,
+                },
+                timeout=15,
+            )
+        except Exception as exc:  # noqa: BLE001
+            result["ok"] = False
+            result["reason"] = f"Could not reach kite.zerodha.com: {exc}"
+            return result
+
+        result["login_http_status"] = resp.status_code
+        if resp.status_code != 200:
+            result["ok"] = False
+            result["reason"] = (
+                f"Zerodha rejected the user id / password step (HTTP {resp.status_code}). "
+                "Check KITE_USER_ID and KITE_PASSWORD."
+            )
+            return result
+
+        data = resp.json().get("data", {})
+        twofa_types = data.get("twofa_types", [])
+        result["twofa_types"] = twofa_types
+        result["totp_available"] = "totp" in twofa_types
+        result["request_id_received"] = bool(data.get("request_id"))
+
+        if "totp" not in twofa_types:
+            result["ok"] = False
+            result["reason"] = (
+                f"Credentials accepted, but this account's login step offers {twofa_types} "
+                "and not 'totp'. 'External TOTP' enabled in Kite profile settings is not "
+                "the same as it being the account's active login method — auto-login "
+                "cannot proceed until TOTP is the primary 2FA method."
+            )
+            return result
+
+        result["ok"] = True
+        result["reason"] = (
+            "Credentials accepted and TOTP is an available 2FA method. Auto-login should "
+            "work — run without --check to complete a real login."
+        )
+        return result
 
     def _walk_authorize_redirect(self, http, max_hops: int = 5) -> str:
         from urllib.parse import parse_qs, urlparse

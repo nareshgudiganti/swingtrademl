@@ -78,5 +78,11 @@ class MutualFundHolding(Base, TimestampMixin):
     purchase_nav: Mapped[float] = mapped_column(Float)
     purchase_date: Mapped[date] = mapped_column(Date)
     notes: Mapped[str | None] = mapped_column(Text)
+    # "manual" (typed in via the Add holding form) or "cas" (rebuilt whole
+    # from a Consolidated Account Statement import — see
+    # services/finance/cas_import.py). CAS-sourced lots are replaced
+    # wholesale on every re-import; manual ones are left alone.
+    source: Mapped[str] = mapped_column(String(16), default="manual")
+    folio_number: Mapped[str | None] = mapped_column(String(32))
 
     scheme: Mapped[MutualFund] = relationship(back_populates="holdings")

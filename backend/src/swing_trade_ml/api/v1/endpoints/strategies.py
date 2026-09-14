@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from swing_trade_ml.api.deps import DbSession
 from swing_trade_ml.brokers import get_broker
+from swing_trade_ml.core.enums import PositionStatus
 from swing_trade_ml.db.models.market import Instrument
-from swing_trade_ml.db.models.trading import Signal, Strategy
+from swing_trade_ml.db.models.trading import Position, Signal, Strategy
 from swing_trade_ml.schemas import (
     MessageResponse,
     ScanResponse,
@@ -21,9 +24,23 @@ from swing_trade_ml.schemas import (
     StrategyUpdate,
 )
 from swing_trade_ml.services import engine
+from swing_trade_ml.services import portfolio as portfolio_service
 from swing_trade_ml.strategies import STRATEGY_REGISTRY
+from swing_trade_ml.strategies.tier import cap_tier
 
 router = APIRouter(prefix="/strategies", tags=["strategies"])
+
+# A strategy needs this many all-time closed trades before it's eligible to
+# be recommended — fewer than this and win rate is noise, not signal.
+MIN_TRADES_FOR_RECOMMENDATION = 10
+# The 90-day window is only trusted for ranking once it has this many trades
+# of its own; below that, all-time win rate is the fairer comparison.
+MIN_TRADES_FOR_90D_WINDOW = 3
+# Only ml_swing strategies running in "auto" mode compete for the
+# recommendation — advisory strategies like real_trading track personal
+# holdings, not a switchable trading approach.
+RECOMMENDABLE_STRATEGY_TYPE = "ml_swing"
+RECOMMENDABLE_EXECUTION_MODE = "auto"
 
 
 @router.get("/types", response_model=list[StrategyTypeInfo])
@@ -38,6 +55,91 @@ def list_strategy_types() -> list[StrategyTypeInfo]:
         )
         for cls in STRATEGY_REGISTRY.values()
     ]
+
+
+@router.get("/performance", response_model=dict)
+def strategy_performance(db: DbSession) -> dict[str, Any]:
+    """Per-strategy win rate over three windows, plus a deterministic
+    recommendation — the data behind the Strategies tab's cards. See
+    docs/superpowers/specs/2026-09-14-strategies-tab-design.md §5b.
+    """
+    strategies = list(db.execute(select(Strategy).order_by(Strategy.name)).scalars().all())
+    now = datetime.now(UTC)
+    since_30d = now - timedelta(days=30)
+    since_90d = now - timedelta(days=90)
+
+    rows: list[dict[str, Any]] = []
+    for strategy in strategies:
+        model_name = strategy.params.get("model_name") if strategy.params else None
+        open_positions = db.execute(
+            select(func.count(Position.id)).where(
+                Position.strategy_id == strategy.id, Position.status == PositionStatus.OPEN
+            )
+        ).scalar_one()
+        rows.append(
+            {
+                "id": strategy.id,
+                "name": strategy.name,
+                "strategy_type": strategy.strategy_type,
+                "execution_mode": strategy.execution_mode,
+                "cap_tier": cap_tier(model_name),
+                "is_active": strategy.is_active,
+                "universe_size": len(engine.eligible_instruments(db, strategy)),
+                "open_positions": open_positions,
+                "windows": {
+                    "last_30d": portfolio_service.strategy_performance_stats(db, strategy.id, since=since_30d),
+                    "last_90d": portfolio_service.strategy_performance_stats(db, strategy.id, since=since_90d),
+                    "all_time": portfolio_service.strategy_performance_stats(db, strategy.id),
+                },
+            }
+        )
+
+    def _rank_key(row: dict[str, Any]) -> tuple[float, float, float]:
+        w90 = row["windows"]["last_90d"]
+        primary = w90 if w90["trades"] >= MIN_TRADES_FOR_90D_WINDOW else row["windows"]["all_time"]
+        return (primary["win_rate"], primary["profit_factor"], primary["net_pnl"])
+
+    eligible = [
+        row
+        for row in rows
+        if row["is_active"]
+        and row["strategy_type"] == RECOMMENDABLE_STRATEGY_TYPE
+        and row["execution_mode"] == RECOMMENDABLE_EXECUTION_MODE
+        and row["windows"]["all_time"]["trades"] >= MIN_TRADES_FOR_RECOMMENDATION
+    ]
+
+    recommended_id: int | None = None
+    if eligible:
+        best = max(eligible, key=_rank_key)
+        recommended_id = best["id"]
+        w90 = best["windows"]["last_90d"]
+        used_90d = w90["trades"] >= MIN_TRADES_FOR_90D_WINDOW
+        primary = w90 if used_90d else best["windows"]["all_time"]
+        window_label = "the last 90 days" if used_90d else "all time"
+        reason = (
+            f"{best['name']}: best win rate ({primary['win_rate']:.0%}) over {window_label} "
+            f"among strategies with at least {MIN_TRADES_FOR_RECOMMENDATION} closed trades."
+        )
+    else:
+        candidates = [
+            row
+            for row in rows
+            if row["is_active"]
+            and row["strategy_type"] == RECOMMENDABLE_STRATEGY_TYPE
+            and row["execution_mode"] == RECOMMENDABLE_EXECUTION_MODE
+        ]
+        closest = max(candidates, key=lambda r: r["windows"]["all_time"]["trades"], default=None)
+        if closest is not None and closest["windows"]["all_time"]["trades"] > 0:
+            have = closest["windows"]["all_time"]["trades"]
+            need = MIN_TRADES_FOR_RECOMMENDATION - have
+            reason = (
+                f"{closest['name']} is closest with {have} closed trade{'s' if have != 1 else ''} — "
+                f"{need} more needed before a recommendation."
+            )
+        else:
+            reason = "Not enough closed trades yet to recommend a strategy."
+
+    return {"strategies": rows, "recommended_strategy_id": recommended_id, "recommendation_reason": reason}
 
 
 @router.get("", response_model=list[StrategyOut])
@@ -59,11 +161,18 @@ def create_strategy(payload: StrategyCreate, db: DbSession) -> Strategy:
     if db.execute(select(Strategy).where(Strategy.name == payload.name)).scalar_one_or_none():
         raise HTTPException(status.HTTP_409_CONFLICT, f"Strategy '{payload.name}' already exists")
 
+    fields = payload.model_dump(exclude={"mode"})
+    # An advisory strategy never places a broker order, so letting it declare
+    # its own mode (e.g. "live" to track real trades made manually) carries
+    # none of the risk that motivates pinning "auto" strategies to the
+    # broker's current mode below.
+    resolved_mode = payload.mode if (payload.mode and payload.execution_mode == "advisory") else get_broker().mode
+
     strategy = Strategy(
-        **payload.model_dump(),
+        **fields,
         # Bound to the current mode at creation, so a strategy made during the
         # paper phase does not start trading the moment live mode is enabled.
-        mode=get_broker().mode,
+        mode=resolved_mode,
         is_active=False,
     )
     db.add(strategy)

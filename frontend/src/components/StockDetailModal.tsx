@@ -4,7 +4,7 @@ import { api } from '../api/client'
 import { ErrorBox, Loading } from './Loading'
 import Modal from './Modal'
 import PricePerformance from './PricePerformance'
-import { formatCurrency, formatDateTime, formatPercent } from '../lib/format'
+import { formatCurrency, formatDateTime, formatPercent, formatSignedPercent, pnlClass } from '../lib/format'
 
 export interface StockDetail {
   symbol: string
@@ -61,6 +61,19 @@ export default function StockDetailModal({ detail, onClose }: { detail: StockDet
               <div className="detail-stat-value">{formatCurrency(detail.entryPrice)}</div>
             </div>
           )}
+          {detail.entryPrice != null && detail.entryPrice > 0 && (
+            <div className="detail-stat">
+              <div className="tech-label">Change</div>
+              <div
+                className={`detail-stat-value ${pnlClass(detail.price - detail.entryPrice)}`}
+              >
+                {formatSignedPercent((detail.price - detail.entryPrice) / detail.entryPrice)}
+              </div>
+              <div className="tech-label">
+                {formatCurrency(detail.price - detail.entryPrice)} / share
+              </div>
+            </div>
+          )}
           {detail.confidence != null && (
             <div className="detail-stat">
               <div className="tech-label">Confidence</div>
@@ -76,12 +89,25 @@ export default function StockDetailModal({ detail, onClose }: { detail: StockDet
               <div className="detail-stat-value neg">
                 {detail.stopLoss != null ? formatCurrency(detail.stopLoss) : '—'}
               </div>
+              {/* How far price has to fall before the stop fires — the number
+                  that actually tells you how much room is left, which a bare
+                  rupee level does not. */}
+              {detail.stopLoss != null && detail.price > 0 && (
+                <div className="tech-label">
+                  {formatPercent((detail.price - detail.stopLoss) / detail.price)} away
+                </div>
+              )}
             </div>
             <div className="detail-stat">
               <div className="tech-label">Target</div>
               <div className="detail-stat-value pos">
                 {detail.takeProfit != null ? formatCurrency(detail.takeProfit) : '—'}
               </div>
+              {detail.takeProfit != null && detail.price > 0 && (
+                <div className="tech-label">
+                  {formatPercent((detail.takeProfit - detail.price) / detail.price)} away
+                </div>
+              )}
             </div>
           </div>
         )}

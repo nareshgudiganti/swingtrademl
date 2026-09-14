@@ -88,3 +88,143 @@ def test_list_holdings_includes_computed_returns(client, db_session):
     assert len(rows) == 1
     assert rows[0]["latest_nav"] == 44.0
     assert rows[0]["current_value"] == 4400.0
+    assert rows[0]["source"] == "manual"
+    assert rows[0]["folio_number"] is None
+
+
+# --------------------------------------------------------------- CAS import --
+
+
+def _fake_cas_data(scheme_amfi="100033", scheme_name="Test Fund - Direct Growth"):
+    from casparser.types import (
+        CASData,
+        CASFileType,
+        FileType,
+        Folio,
+        InvestorInfo,
+        Scheme,
+        SchemeValuation,
+        StatementPeriod,
+        TransactionType,
+    )
+
+    scheme = Scheme(
+        scheme=scheme_name,
+        rta_code="RT1",
+        rta="CAMS",
+        isin="INF000X01ABC",
+        amfi=scheme_amfi,
+        open=0,
+        close=100,
+        close_calculated=0,
+        valuation=SchemeValuation(date=date(2026, 3, 1), nav=13.0, cost=1000, value=1300),
+        transactions=[
+            {
+                "date": date(2026, 1, 1),
+                "description": "Purchase",
+                "type": TransactionType.PURCHASE,
+                "units": 100.0,
+                "nav": 10.0,
+            }
+        ],
+    )
+    return CASData(
+        statement_period=StatementPeriod(from_="2026-01-01", to="2026-03-01"),
+        folios=[Folio(folio="F1", amc="Test AMC", schemes=[scheme])],
+        investor_info=InvestorInfo(name="Test User", email="t@example.com", address="-", mobile="-"),
+        cas_type=CASFileType.DETAILED,
+        file_type=FileType.CAMS,
+    )
+
+
+def test_import_cas_creates_holdings_for_matched_scheme(client, db_session, monkeypatch):
+    fund = _fund(db_session, scheme_code="100033", tracked=False)
+    db_session.commit()
+
+    monkeypatch.setattr(
+        "swing_trade_ml.api.v1.endpoints.mutual_funds.casparser.read_cas_pdf",
+        lambda *args, **kwargs: _fake_cas_data(scheme_amfi="100033"),
+    )
+
+    resp = client.post(
+        "/api/v1/mutual-funds/import-cas",
+        files={"file": ("cas.pdf", b"%PDF-fake", "application/pdf")},
+        data={"password": "secret"},
+        headers=HEADERS,
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["schemes_matched"] == 1
+    assert body["lots_created"] == 1
+    assert body["unmatched_schemes"] == []
+
+    holdings_resp = client.get("/api/v1/mutual-funds/holdings", headers=HEADERS)
+    rows = holdings_resp.json()
+    assert len(rows) == 1
+    assert rows[0]["scheme_id"] == fund.id
+    assert rows[0]["source"] == "cas"
+    assert rows[0]["folio_number"] == "F1"
+
+
+def test_import_cas_reports_unmatched_scheme_without_failing(client, db_session, monkeypatch):
+    monkeypatch.setattr(
+        "swing_trade_ml.api.v1.endpoints.mutual_funds.casparser.read_cas_pdf",
+        lambda *args, **kwargs: _fake_cas_data(scheme_amfi="999999", scheme_name="Unknown Fund"),
+    )
+
+    resp = client.post(
+        "/api/v1/mutual-funds/import-cas",
+        files={"file": ("cas.pdf", b"%PDF-fake", "application/pdf")},
+        data={"password": "secret"},
+        headers=HEADERS,
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["schemes_matched"] == 0
+    assert body["unmatched_schemes"] == ["Unknown Fund"]
+
+
+def test_import_cas_rejects_a_statement_with_no_folios(client, db_session, monkeypatch):
+    from casparser.types import CASData, CASFileType, FileType, InvestorInfo, StatementPeriod
+
+    empty = CASData(
+        statement_period=StatementPeriod(from_="2026-01-01", to="2026-03-01"),
+        folios=[],
+        investor_info=InvestorInfo(name="Test User", email="t@example.com", address="-", mobile="-"),
+        cas_type=CASFileType.DETAILED,
+        file_type=FileType.CAMS,
+    )
+    monkeypatch.setattr(
+        "swing_trade_ml.api.v1.endpoints.mutual_funds.casparser.read_cas_pdf",
+        lambda *args, **kwargs: empty,
+    )
+
+    resp = client.post(
+        "/api/v1/mutual-funds/import-cas",
+        files={"file": ("cas.pdf", b"%PDF-fake", "application/pdf")},
+        data={"password": "secret"},
+        headers=HEADERS,
+    )
+
+    assert resp.status_code == 422
+
+
+def test_import_cas_reports_a_wrong_password_as_a_client_error(client, db_session, monkeypatch):
+    def _raise(*args, **kwargs):
+        raise ValueError("file has not been decrypted")
+
+    monkeypatch.setattr(
+        "swing_trade_ml.api.v1.endpoints.mutual_funds.casparser.read_cas_pdf",
+        _raise,
+    )
+
+    resp = client.post(
+        "/api/v1/mutual-funds/import-cas",
+        files={"file": ("cas.pdf", b"%PDF-fake", "application/pdf")},
+        data={"password": "wrong"},
+        headers=HEADERS,
+    )
+
+    assert resp.status_code == 422

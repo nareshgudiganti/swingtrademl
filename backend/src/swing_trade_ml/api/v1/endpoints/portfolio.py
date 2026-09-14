@@ -11,9 +11,11 @@ from sqlalchemy import func, select
 
 from swing_trade_ml.api.deps import DbSession
 from swing_trade_ml.brokers import get_broker
+from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.enums import ExitReason, PositionStatus, SignalType
 from swing_trade_ml.db.models.market import Candle, Instrument
 from swing_trade_ml.db.models.trading import Position, Signal, Strategy, Trade
+from swing_trade_ml.strategies.tier import cap_tier
 
 IST = ZoneInfo("Asia/Kolkata")
 from swing_trade_ml.ml.registry import get_active_model
@@ -52,10 +54,13 @@ def list_positions(
     db: DbSession,
     open_only: bool = True,
     limit: int = Query(100, le=1000),
+    mode: str | None = None,
 ) -> list[Position]:
+    """Pass `mode=live` to see real (advisory) positions instead of the
+    broker's current default — e.g. paper-simulated ones."""
     stmt = (
         select(Position)
-        .where(Position.mode == get_broker().mode)
+        .where(Position.mode == (mode or get_broker().mode))
         .order_by(Position.entry_at.desc())
         .limit(limit)
     )
@@ -65,12 +70,19 @@ def list_positions(
 
 
 @router.get("/positions/detailed", response_model=list[dict])
-def detailed_positions(db: DbSession) -> list[dict[str, Any]]:
-    """Open positions with symbols and computed P&L, ready to render."""
+def detailed_positions(db: DbSession, mode: str | None = None) -> list[dict[str, Any]]:
+    """Open positions with symbols and computed P&L, ready to render.
+
+    Pass `mode=live` for the "Real Trading" view — real trades recorded via
+    the manual-entry flow, tracked with the same confidence/stop-loss/action
+    fields as paper positions but kept in a separate book (see
+    services/execution.py's manual_open_position and engine.run_all_active).
+    """
+    effective_mode = mode or get_broker().mode
     rows = db.execute(
         select(Position, Instrument.tradingsymbol, Instrument.name)
         .join(Instrument, Instrument.id == Position.instrument_id)
-        .where(Position.mode == get_broker().mode, Position.status == PositionStatus.OPEN)
+        .where(Position.mode == effective_mode, Position.status == PositionStatus.OPEN)
         .order_by(Position.entry_at.desc())
     ).all()
 
@@ -92,7 +104,7 @@ def detailed_positions(db: DbSession) -> list[dict[str, Any]]:
         strategy_ids = {position.strategy_id for position, _, _ in rows}
         for inst_id, strat_id, generated_at in db.execute(
             select(Signal.instrument_id, Signal.strategy_id, Signal.generated_at).where(
-                Signal.mode == get_broker().mode,
+                Signal.mode == effective_mode,
                 Signal.instrument_id.in_(instrument_ids),
                 Signal.strategy_id.in_(strategy_ids),
                 Signal.signal_type.in_([SignalType.EXIT, SignalType.SELL]),
@@ -177,6 +189,12 @@ def detailed_positions(db: DbSession) -> list[dict[str, Any]]:
                 "entry_at": position.entry_at,
                 "holding_days": position.holding_days,
                 "strategy_id": position.strategy_id,
+                "strategy_name": position.strategy.name if position.strategy else None,
+                "cap_tier": (
+                    cap_tier(position.strategy.params.get("model_name") if position.strategy.params else None)
+                    if position.strategy
+                    else None
+                ),
                 "entry_confidence": position.entry_confidence,
                 "last_confidence": position.last_confidence,
                 "horizon_days": horizon_days,
@@ -185,6 +203,262 @@ def detailed_positions(db: DbSession) -> list[dict[str, Any]]:
             }
         )
     return result
+
+
+@router.get("/holdings", response_model=list[dict])
+def holdings(db: DbSession) -> list[dict[str, Any]]:
+    """Real Zerodha equity holdings — actual shares sitting in the connected
+    account, as opposed to the Position rows below (which track the bot's
+    own paper-mode trades and know nothing about anything bought manually).
+    Pure pass-through to Kite; nothing here is generated or predicted.
+    """
+    from swing_trade_ml.brokers.kite import kite_broker
+
+    kite_broker.load_session(db)
+    if not kite_broker.is_authenticated:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "No active Kite session — log in to see real holdings.",
+        )
+
+    return [
+        {
+            "symbol": h["tradingsymbol"],
+            "exchange": h["exchange"],
+            "quantity": h["quantity"],
+            "average_price": h["average_price"],
+            "last_price": h["last_price"],
+            "close_price": h.get("close_price"),
+            "pnl": h["pnl"],
+            "day_change": h.get("day_change"),
+            "day_change_percentage": h.get("day_change_percentage"),
+        }
+        for h in kite_broker.get_holdings(db)
+        if h["quantity"] != 0
+    ]
+
+
+REAL_TRADING_STRATEGY_NAME = "real_trading"
+
+
+def _get_or_create_real_trading_strategy(db: DbSession) -> Strategy:
+    """The advisory, live-mode strategy that real Zerodha holdings are tracked
+    under.
+
+    Created on demand because requiring the user to hand-build it first meant
+    import-holdings failed with a bare 404 on a fresh install, and the
+    frontend already hard-codes this name (lib/tiers.ts, Positions.tsx).
+
+    Advisory is not a detail: it is what guarantees this strategy can never
+    place or close a broker order. It observes real positions and reports on
+    them; every actual trade stays the operator's own.
+    """
+    strategy = db.execute(
+        select(Strategy).where(Strategy.name == REAL_TRADING_STRATEGY_NAME)
+    ).scalar_one_or_none()
+    if strategy is not None:
+        return strategy
+
+    strategy = Strategy(
+        name=REAL_TRADING_STRATEGY_NAME,
+        strategy_type="ml_swing",
+        description="Real Zerodha holdings, tracked with ML confidence. Advisory only.",
+        params={},
+        is_active=True,
+        mode="live",
+        execution_mode="advisory",
+    )
+    db.add(strategy)
+    db.flush()
+    return strategy
+
+
+def _derive_stop_target(
+    db: DbSession, instrument: Instrument, price: float
+) -> tuple[float | None, float | None, str]:
+    """Stop and target for a holding bought outside this app.
+
+    Anchored to *today's* price, not the original purchase price, and this is
+    the whole point: a stock bought at 100 and now trading at 150 has a stop
+    derived from 100 sitting far below the market, protecting nothing. Today's
+    price protects the gain that actually exists.
+
+    Uses the same 2x/4x ATR multiples and the same clamp as ml_swing, so an
+    imported holding and a bot-entered position are judged on one convention.
+    """
+    from swing_trade_ml.ml.dataset import load_candles
+    from swing_trade_ml.ml.features import atr
+
+    if price <= 0:
+        return None, None, "no price"
+
+    fallback_stop = round(price * (1 - settings.DEFAULT_STOP_LOSS_PCT), 2)
+    fallback_target = round(price * (1 + settings.DEFAULT_TAKE_PROFIT_PCT), 2)
+
+    df = load_candles(db, instrument.id, "day", limit=60)
+    if df is None or len(df) < 20:
+        return fallback_stop, fallback_target, "fixed pct (not enough candles for ATR)"
+
+    try:
+        atr_value = float(atr(df["high"], df["low"], df["close"], 14).iloc[-1])
+    except Exception:  # noqa: BLE001
+        return fallback_stop, fallback_target, "fixed pct (ATR failed)"
+
+    if not atr_value or atr_value <= 0:
+        return fallback_stop, fallback_target, "fixed pct (ATR unavailable)"
+
+    stop = price - 2.0 * atr_value
+    target = price + 4.0 * atr_value
+    # Same clamp ml_swing applies: never risk more per trade than the risk
+    # model allows, so tighten rather than skip.
+    stop = max(stop, price * (1 - settings.DEFAULT_STOP_LOSS_PCT * 2))
+    return round(stop, 2), round(target, 2), "2x/4x ATR from current price"
+
+
+@router.post("/positions/import-holdings", response_model=list[dict])
+def import_real_holdings(db: DbSession, strategy_id: int | None = None) -> list[dict[str, Any]]:
+    """Pull real Zerodha holdings and record each one as a tracked position
+    under the given (advisory, live-mode) strategy — see
+    services/execution.py's manual_open_position — so it starts getting the
+    same daily confidence/stop-loss tracking paper positions already get,
+    instead of sitting as a dumb price/quantity row.
+
+    Safe to call repeatedly: holdings already tracked under this strategy
+    (an OPEN position on the same instrument) are skipped, not duplicated.
+    """
+    from swing_trade_ml.brokers.kite import kite_broker
+
+    if strategy_id is None:
+        strategy = _get_or_create_real_trading_strategy(db)
+    else:
+        strategy = db.get(Strategy, strategy_id)
+    if strategy is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Strategy not found")
+    if strategy.execution_mode != "advisory":
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Only an advisory strategy can import real holdings — "
+            "an auto strategy would treat them as its own trades to manage.",
+        )
+
+    kite_broker.load_session(db)
+    if not kite_broker.is_authenticated:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "No active Kite session — log in to see real holdings.",
+        )
+
+    already_tracked = {
+        p.instrument_id
+        for p in db.execute(
+            select(Position).where(
+                Position.strategy_id == strategy.id, Position.status == PositionStatus.OPEN
+            )
+        ).scalars()
+    }
+
+    results: list[dict[str, Any]] = []
+    for h in kite_broker.get_holdings(db):
+        if h["quantity"] == 0:
+            continue
+        instrument = db.execute(
+            select(Instrument).where(
+                Instrument.exchange == h["exchange"], Instrument.tradingsymbol == h["tradingsymbol"]
+            )
+        ).scalar_one_or_none()
+
+        # A holding bought on BSE has exchange="BSE", but sync_instruments only
+        # ingests NSE, so the exact match finds nothing and the holding was
+        # silently skipped. It is the same company: fall back to the NSE
+        # listing, which is also the only one with candle history, a sector
+        # mapping and a trained model behind it. The two venues' prices track
+        # within a few basis points, which is well inside the ATR the stop is
+        # derived from.
+        exchange_note = None
+        if instrument is None:
+            instrument = db.execute(
+                select(Instrument).where(
+                    Instrument.exchange == "NSE",
+                    Instrument.tradingsymbol == h["tradingsymbol"],
+                    Instrument.is_active.is_(True),
+                )
+            ).scalar_one_or_none()
+            if instrument is not None:
+                exchange_note = f"held on {h['exchange']}, tracked against NSE prices"
+
+        if instrument is None:
+            results.append(
+                {
+                    "symbol": h["tradingsymbol"],
+                    "status": "skipped",
+                    "reason": (
+                        f"no instrument row for {h['tradingsymbol']} on "
+                        f"{h['exchange']} or NSE — run sync-instruments"
+                    ),
+                }
+            )
+            continue
+        if instrument.id in already_tracked:
+            results.append({"symbol": h["tradingsymbol"], "status": "already_tracked"})
+            continue
+
+        # Anchor risk levels to what the stock trades at now, not to what it
+        # was bought at — see _derive_stop_target. Without these the position
+        # has no stop, no target, trail_stop no-ops, and the only exit it can
+        # ever reach is the 60-day time stop.
+        current_price = float(h.get("last_price") or 0) or float(h["average_price"])
+        stop_loss, take_profit, basis = _derive_stop_target(db, instrument, current_price)
+
+        manual_open_position(
+            db,
+            strategy,
+            instrument,
+            h["quantity"],
+            h["average_price"],
+            stop_loss=stop_loss,
+            take_profit=take_profit,
+        )
+        already_tracked.add(instrument.id)
+        results.append(
+            {
+                "symbol": h["tradingsymbol"],
+                "status": "imported",
+                "quantity": h["quantity"],
+                "entry_price": h["average_price"],
+                "current_price": current_price,
+                "stop_loss": stop_loss,
+                "take_profit": take_profit,
+                "levels_basis": basis,
+                **({"note": exchange_note} if exchange_note else {}),
+            }
+        )
+
+    # Put every tracked symbol on the strategy's own universe.
+    #
+    # Without this the import looks like it worked and then does nothing: an
+    # empty `symbols` means "scan the watchlist", and a stock bought by hand
+    # is generally not watchlisted. The strategy would evaluate none of them,
+    # so entry_confidence/last_confidence stay NULL, the model's read never
+    # updates, and no EXIT signal or confidence-decay alert can ever fire —
+    # the whole reason for tracking a real holding here.
+    tracked_symbols = sorted(
+        {
+            i.tradingsymbol
+            for i in db.execute(
+                select(Instrument)
+                .join(Position, Position.instrument_id == Instrument.id)
+                .where(
+                    Position.strategy_id == strategy.id,
+                    Position.status == PositionStatus.OPEN,
+                )
+            ).scalars()
+        }
+    )
+    if tracked_symbols != sorted(strategy.symbols or []):
+        strategy.symbols = tracked_symbols  # new list object, so the JSON column is dirtied
+        db.flush()
+
+    return results
 
 
 @router.post("/positions/manual", response_model=PositionOut, status_code=status.HTTP_201_CREATED)
@@ -330,8 +604,9 @@ def list_trades(
     limit: int = Query(100, le=1000),
 ) -> list[dict[str, Any]]:
     stmt = (
-        select(Trade, Position)
+        select(Trade, Position, Strategy)
         .outerjoin(Position, Position.id == Trade.position_id)
+        .outerjoin(Strategy, Strategy.id == Trade.strategy_id)
         .where(Trade.mode == get_broker().mode)
         .order_by(Trade.exit_at.desc())
         .limit(limit)
@@ -339,11 +614,11 @@ def list_trades(
     if wins_only is not None:
         stmt = stmt.where(Trade.is_win.is_(wins_only))
 
-    pairs = db.execute(stmt).all()
-    post_exit = _post_exit_moves(db, [trade for trade, _ in pairs])
+    triples = db.execute(stmt).all()
+    post_exit = _post_exit_moves(db, [trade for trade, _, _ in triples])
 
     result = []
-    for trade, position in pairs:
+    for trade, position, strategy in triples:
         result.append(
             {
                 "id": trade.id,
@@ -366,6 +641,12 @@ def list_trades(
                 "take_profit": position.take_profit if position else None,
                 "entry_confidence": position.entry_confidence if position else None,
                 "last_confidence": position.last_confidence if position else None,
+                "strategy_name": strategy.name if strategy else None,
+                "cap_tier": (
+                    cap_tier(strategy.params.get("model_name") if strategy.params else None)
+                    if strategy
+                    else None
+                ),
                 **post_exit.get(trade.id, {}),
             }
         )

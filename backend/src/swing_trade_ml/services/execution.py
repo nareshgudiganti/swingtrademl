@@ -654,8 +654,24 @@ def process_decision(
     # literally HOLD. (Previously scoped to the HOLD branch only, which is
     # exactly why a position the model was newly bullish enough on to BUY
     # again showed a stale "no reading yet" instead of that fresh number.)
+    # SignalDecision.confidence is conviction *in the decision*, and on an EXIT
+    # ml_swing sets it to `1 - probability` — conviction in getting out. Stored
+    # raw, that inverts the meaning of last_confidence exactly where it matters
+    # most: a stock the model rates 25% shows as 0.75, the highest number on
+    # the page, while the badge says Exit. It also silently disabled the decay
+    # alert, since confidence_decay_status compares this value against the weak
+    # zone and an inverted 0.75 never looks weak.
+    #
+    # Positions want the model's read on *the stock*, so undo the inversion.
+    bullish_confidence = decision.confidence
+    if (
+        decision.signal in (SignalType.EXIT, SignalType.SELL)
+        and bullish_confidence is not None
+    ):
+        bullish_confidence = round(1.0 - bullish_confidence, 3)
+
     for position in existing_positions:
-        _check_confidence_decay(db, position, strategy, instrument, decision.confidence, mode)
+        _check_confidence_decay(db, position, strategy, instrument, bullish_confidence, mode)
 
     if decision.signal == SignalType.HOLD:
         return record_signal(db, strategy, instrument, decision, mode)

@@ -37,6 +37,7 @@ import type {
   PredictionRun,
   ScanResult,
   Strategy,
+  StrategyPerformanceResponse,
   StrategySignal,
   StrategyType,
   SystemStatus,
@@ -254,6 +255,7 @@ export const api = {
   activateStrategy: (id: number) => post<Strategy>(`/strategies/${id}/activate`),
   deactivateStrategy: (id: number) => post<Strategy>(`/strategies/${id}/deactivate`),
   scanAll: () => post<ScanResult>('/strategies/scan-all'),
+  strategyPerformance: () => get<StrategyPerformanceResponse>('/strategies/performance'),
   // Every signal type (including HOLD), symbol-resolved, newest first. A
   // strategy's most recent scan always sorts to the top `limit` rows, since
   // each scan writes a fresh batch strictly after the previous one.

@@ -604,8 +604,9 @@ def list_trades(
     limit: int = Query(100, le=1000),
 ) -> list[dict[str, Any]]:
     stmt = (
-        select(Trade, Position)
+        select(Trade, Position, Strategy)
         .outerjoin(Position, Position.id == Trade.position_id)
+        .outerjoin(Strategy, Strategy.id == Trade.strategy_id)
         .where(Trade.mode == get_broker().mode)
         .order_by(Trade.exit_at.desc())
         .limit(limit)
@@ -613,11 +614,11 @@ def list_trades(
     if wins_only is not None:
         stmt = stmt.where(Trade.is_win.is_(wins_only))
 
-    pairs = db.execute(stmt).all()
-    post_exit = _post_exit_moves(db, [trade for trade, _ in pairs])
+    triples = db.execute(stmt).all()
+    post_exit = _post_exit_moves(db, [trade for trade, _, _ in triples])
 
     result = []
-    for trade, position in pairs:
+    for trade, position, strategy in triples:
         result.append(
             {
                 "id": trade.id,
@@ -640,6 +641,12 @@ def list_trades(
                 "take_profit": position.take_profit if position else None,
                 "entry_confidence": position.entry_confidence if position else None,
                 "last_confidence": position.last_confidence if position else None,
+                "strategy_name": strategy.name if strategy else None,
+                "cap_tier": (
+                    cap_tier(strategy.params.get("model_name") if strategy.params else None)
+                    if strategy
+                    else None
+                ),
                 **post_exit.get(trade.id, {}),
             }
         )

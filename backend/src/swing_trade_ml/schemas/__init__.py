@@ -360,6 +360,10 @@ class TradeOut(BaseModel):
     take_profit: float | None = None
     entry_confidence: float | None = None
     last_confidence: float | None = None
+    # Which strategy made this trade, and its cap tier — see
+    # strategies/tier.py. Null only if the strategy was later deleted.
+    strategy_name: str | None = None
+    cap_tier: str | None = None
     # How the stock moved after we sold it, so a SIGNAL_EXIT or STOP_LOSS_HIT
     # can be judged in hindsight — did it keep falling (exit vindicated) or
     # rally afterward (profit left on the table)? Null until enough trading

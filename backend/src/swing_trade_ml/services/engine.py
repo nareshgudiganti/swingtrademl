@@ -33,7 +33,7 @@ class ScanResult:
     errors: list[str] = field(default_factory=list)
 
 
-def _eligible_instruments(db: Session, strategy: Strategy) -> list[Instrument]:
+def eligible_instruments(db: Session, strategy: Strategy) -> list[Instrument]:
     """The strategy's own symbol list, or the whole watchlist when it is empty."""
     stmt = select(Instrument).where(Instrument.is_active.is_(True))
     if strategy.symbols:
@@ -81,7 +81,7 @@ def _rank_out_reasons(
 def run_strategy(db: Session, strategy: Strategy, interval: str = "day") -> ScanResult:
     result = ScanResult(strategies_run=1)
     impl = get_strategy(strategy)
-    instruments = _eligible_instruments(db, strategy)
+    instruments = eligible_instruments(db, strategy)
 
     log.info(
         "engine.strategy.start",

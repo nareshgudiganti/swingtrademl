@@ -1624,7 +1624,7 @@ EOF
 **Interfaces:**
 - Consumes: `DetailedPosition.strategy_name`/`cap_tier` (Task 7). No signature change to `PositionsTable`'s props — used by both `Positions.tsx` and `Holdings.tsx` already.
 
-- [ ] **Step 1: Add the column header**
+- [x] **Step 1: Add the column header**
 
 In `frontend/src/pages/Positions.tsx`, in `PositionsTable`'s `<thead>` (currently lines 124-174), add a new `<th>` right after the `Stock` column (after line 125's `<th className="sticky-col">Stock</th>`):
 
@@ -1633,7 +1633,7 @@ In `frontend/src/pages/Positions.tsx`, in `PositionsTable`'s `<thead>` (currentl
           <th>Strategy</th>
 ```
 
-- [ ] **Step 2: Add the cell**
+- [x] **Step 2: Add the cell**
 
 In the `<tbody>` row rendering (the `sorted.map((p) => ...)` block), add a new `<td>` right after the closing `</td>` of the sticky Stock cell (after line 203's `</td>`, before `<td className="num">{p.quantity}</td>`):
 
@@ -1649,16 +1649,16 @@ In the `<tbody>` row rendering (the `sorted.map((p) => ...)` block), add a new `
               </td>
 ```
 
-- [ ] **Step 3: Typecheck**
+- [x] **Step 3: Typecheck**
 
 Run: `cd frontend && npm run typecheck`
 Expected: PASS
 
-- [ ] **Step 4: Manual verification**
+- [x] **Step 4: Manual verification**
 
 With the dev server running, open `/portfolio` and `/holdings`. Confirm every position row now shows a "Strategy" column with the strategy name (e.g. `real_trading` on Holdings rows, `ml_swing_main`/`_midcap`/`_smallcap` on paper positions).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/pages/Positions.tsx
@@ -1683,7 +1683,7 @@ EOF
 **Interfaces:**
 - Consumes: `api.strategyPerformance()` (Task 7), `TIERS`/`tierFor` (already imported).
 
-- [ ] **Step 1: Add the import and query**
+- [x] **Step 1: Add the import and query**
 
 In `frontend/src/pages/Dashboard.tsx`, add to the existing `api` usage — no new import line needed since `api` is already imported; add the query next to the existing `strategies` query (after line 203's closing `})`):
 
@@ -1695,7 +1695,7 @@ In `frontend/src/pages/Dashboard.tsx`, add to the existing `api` usage — no ne
   })
 ```
 
-- [ ] **Step 2: Render a compact performance strip**
+- [x] **Step 2: Render a compact performance strip**
 
 Insert a new block right before the existing `<details>` "Why isn't more showing up here?" section (before line 566's `<details ...>`), inside the same `tab === 'buy'` branch:
 
@@ -1739,16 +1739,16 @@ Insert a new block right before the existing `<details>` "Why isn't more showing
 
 `formatPercent` is already imported in `Dashboard.tsx` (part of the existing `formatCurrency, formatDateTime, ...` import block) — confirm and reuse rather than re-importing.
 
-- [ ] **Step 3: Typecheck**
+- [x] **Step 3: Typecheck**
 
 Run: `cd frontend && npm run typecheck`
 Expected: PASS
 
-- [ ] **Step 4: Manual verification**
+- [x] **Step 4: Manual verification**
 
 With the dev server running, open `/dashboard`, switch to the "Worth buying" tab. Confirm a three-card strip (Large/Mid/Small Cap) appears above the "Why isn't more showing up here?" details section, each showing 90-day win rate or "No closed trades yet", with a "Recommended" ribbon on the best-performing eligible one once real data exists.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/pages/Dashboard.tsx
@@ -1773,7 +1773,7 @@ EOF
 **Interfaces:**
 - Consumes: `Trade.strategy_name`/`cap_tier` (Task 7).
 
-- [ ] **Step 1: Remove the Recharts import and chart block**
+- [x] **Step 1: Remove the Recharts import and chart block**
 
 In `frontend/src/pages/Reports.tsx`, delete the import line (line 3):
 
@@ -1789,7 +1789,7 @@ Delete the `chartData` memo (line 77):
 
 Delete the entire chart block (lines 165-190, the `<div className="card" style={{ height: 300, ... }}>...</div>` containing `<ResponsiveContainer>`).
 
-- [ ] **Step 2: Add a by-strategy grouping function and table**
+- [x] **Step 2: Add a by-strategy grouping function and table**
 
 Add next to `groupTrades` (after its closing brace, before `const PERIODS = ...`):
 
@@ -1823,7 +1823,7 @@ Add the computed rows next to `const rows = useMemo(...)` (after line 76):
   const byStrategyRows = useMemo(() => groupByStrategy(trades.data ?? []), [trades.data])
 ```
 
-- [ ] **Step 3: Render the by-strategy table**
+- [x] **Step 3: Render the by-strategy table**
 
 Insert a new section right after the period summary table (`</div>` closing the `table-wrap` that ends around the former line 219) and before `<h2>Every trade</h2>`:
 
@@ -1860,7 +1860,7 @@ Insert a new section right after the period summary table (`</div>` closing the 
           </div>
 ```
 
-- [ ] **Step 4: Remove the now-unused `formatCompact` import if nothing else in the file uses it**
+- [x] **Step 4: Remove the now-unused `formatCompact` import if nothing else in the file uses it**
 
 Check the rest of `Reports.tsx` for any remaining use of `formatCompact` (it was only used by the deleted chart's Y-axis tick formatter). If unused, remove it from the import on line 9:
 
@@ -1868,16 +1868,16 @@ Check the rest of `Reports.tsx` for any remaining use of `formatCompact` (it was
 import { formatCurrency, formatDate, formatPercent, formatSignedPercent, pnlClass } from '../lib/format'
 ```
 
-- [ ] **Step 5: Typecheck and lint**
+- [x] **Step 5: Typecheck and lint**
 
 Run: `cd frontend && npm run typecheck && npm run lint`
 Expected: PASS
 
-- [ ] **Step 6: Manual verification**
+- [x] **Step 6: Manual verification**
 
 With the dev server running, open `/reports`. Confirm: no chart renders, the stat tiles and period table still work, a new "By strategy" table appears between the period table and "Every trade" showing each strategy's trade count/win rate/net P&L.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add frontend/src/pages/Reports.tsx

@@ -1279,7 +1279,7 @@ function StrategyCard({
         </p>
       )}
       <div style={{ fontSize: '0.85rem', marginBottom: '0.6rem' }}>
-        Watching <strong>{performance?.universe_size ?? strategy.symbols.length || '—'}</strong> stocks
+        Watching <strong>{(performance?.universe_size ?? strategy.symbols.length) || '—'}</strong> stocks
         {performance ? `, ${performance.open_positions} held right now` : ''}.
       </div>
       <div style={{ fontSize: '0.85rem', marginBottom: '0.6rem' }}>

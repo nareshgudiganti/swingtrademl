@@ -13,19 +13,20 @@ import Strategies from './pages/Strategies'
 import Models from './pages/Models'
 import Holdings from './pages/Holdings'
 import Settings from './pages/Settings'
-import { BarChartIcon, BriefcaseIcon, HomeIcon, LayersIcon, WalletIcon } from './components/icons'
+import { BarChartIcon, BriefcaseIcon, HomeIcon, LayersIcon, ScaleIcon, WalletIcon } from './components/icons'
 
-// Settings, Strategies and ML Models are still routed but deliberately left
-// out of the top-level nav — they're admin/config screens, not something a
-// day-to-day user needs alongside Dashboard/Portfolio/Reports. The user and
+// Settings and ML Models are still routed but deliberately left out of the
+// top-level nav — they're admin/config screens, not something a day-to-day
+// user needs alongside Dashboard/Strategies/Portfolio/Reports. The user and
 // Log out already live in the sidebar status strip below, so Settings earned
 // no place in the nav once auto-login removed the daily Kite login chore.
 //
 // They remain reachable by URL: /settings (watchlist editor, sync + backfill,
-// scheduler status), /strategies and /models. Nothing was deleted — if any of
-// those need to come back, add them here.
+// scheduler status) and /models. Nothing was deleted — if either needs to
+// come back, add it here.
 const NAV = [
   { to: '/dashboard', label: 'Dashboard', Icon: HomeIcon },
+  { to: '/strategies', label: 'Strategies', Icon: ScaleIcon },
   { to: '/holdings', label: 'My Holdings', Icon: WalletIcon },
   { to: '/portfolio', label: 'Portfolio', Icon: BriefcaseIcon },
   { to: '/reports', label: 'Reports', Icon: BarChartIcon },

@@ -180,7 +180,12 @@ export default function App() {
       </aside>
 
       <main className="content">
-        {status && status.status_level === 'warning' && (
+        {/* Dashboard only. This is a system-health notice, not something that
+            changes what any other page means, and repeating it on every tab
+            cost the top of every screen — the Holdings table in particular
+            started below the fold because of it. The Dashboard is where you
+            go to ask "is everything working", so it lives there. */}
+        {status && status.status_level === 'warning' && location.pathname === '/dashboard' && (
           <div className="banner banner-warn">
             ⚠️ {status.status_message}
             {!status.broker_authenticated ? (

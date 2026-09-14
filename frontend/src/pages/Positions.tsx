@@ -7,6 +7,7 @@ import Stat from '../components/Stat'
 import { Empty, ErrorBox, Loading } from '../components/Loading'
 import StockDetailModal, { type StockDetail } from '../components/StockDetailModal'
 import { formatCurrency, formatDate, formatPercent, formatSignedPercent, pnlClass } from '../lib/format'
+import { strategyLabel } from '../lib/tiers'
 
 const DAYS_TO_WATCH = 14
 
@@ -123,6 +124,7 @@ export function PositionsTable({
       <thead>
         <tr>
           <th className="sticky-col">Stock</th>
+          <th title="Which strategy opened this position.">Strategy</th>
           <th className="num">Qty</th>
           <th className="num">Avg cost</th>
           <th className="num">CMP</th>
@@ -200,6 +202,15 @@ export function PositionsTable({
                 <div className="muted" style={{ fontSize: '0.75rem' }}>
                   Since {formatDate(p.entry_at)}
                 </div>
+              </td>
+              <td>
+                {p.strategy_name ? (
+                  <span className="muted" style={{ fontSize: '0.8rem' }} title={p.strategy_name}>
+                    {strategyLabel(p.strategy_name)}
+                  </span>
+                ) : (
+                  <span className="muted">—</span>
+                )}
               </td>
               <td className="num">{p.quantity}</td>
               <td className="num">{formatCurrency(p.entry_price)}</td>

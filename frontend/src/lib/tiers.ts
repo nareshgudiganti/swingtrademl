@@ -36,3 +36,17 @@ export type Tier = (typeof TIERS)[number]
 export function tierFor(strategyName: string): Tier | null {
   return TIERS.find((t) => t.match === strategyName) ?? null
 }
+
+// Strategies that aren't cap tiers still show up in tables (Holdings rows are
+// all `real_trading`, Reports groups by whatever ran). Raw internal names are
+// jargon, so give the known ones a plain-English label and fall back to the
+// raw name for anything user-created.
+const OTHER_STRATEGY_LABELS: Record<string, string> = {
+  real_trading: 'Your own holdings',
+  sma_crossover: 'Moving-average crossover',
+  long_term_value: 'Long-term value',
+}
+
+export function strategyLabel(strategyName: string): string {
+  return tierFor(strategyName)?.label ?? OTHER_STRATEGY_LABELS[strategyName] ?? strategyName
+}

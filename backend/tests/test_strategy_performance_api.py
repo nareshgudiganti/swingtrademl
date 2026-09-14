@@ -136,4 +136,51 @@ def test_inactive_strategy_is_never_recommended(client, db_session):
     resp = client.get("/api/v1/strategies/performance", headers=HEADERS)
 
     assert resp.status_code == 200
-    assert resp.json()["recommended_strategy_id"] is None
+    body = resp.json()
+    assert body["recommended_strategy_id"] is None
+    # The inactive strategy has 15 closed trades (well past the 10-trade
+    # threshold), but being inactive must disqualify it from the "closest
+    # candidate" fallback too — otherwise the reason text would claim a
+    # nonsensical negative number of trades still needed. With no other
+    # ml_swing/auto strategy in play, there's no candidate at all, so the
+    # reason must fall through to the generic message and must not mention
+    # this strategy by name.
+    assert body["recommendation_reason"] == "Not enough closed trades yet to recommend a strategy."
+    assert strat.name not in body["recommendation_reason"]
+
+
+def test_90d_window_falls_back_to_all_time_below_trade_threshold(client, db_session):
+    """Global constraint: the 90-day window is only trusted for ranking once
+    it has >= 3 trades of its own; a strategy whose trades are all older than
+    90 days must still be ranked on its all-time win rate, not treated as a
+    0.0 win rate from an empty 90-day window."""
+    old_strong = _strategy(db_session, name="ml_swing_midcap", model_name="swing_classifier_midcap")
+    recent_weak = _strategy(db_session, name="ml_swing_smallcap", model_name="swing_classifier_smallcap")
+    inst = _instrument(db_session)
+    now = datetime.now(UTC)
+    long_ago = now - timedelta(days=100)  # outside the 90-day window entirely
+
+    # old_strong: 9/10 wins (90%), but every trade closed >90 days ago, so
+    # last_90d.trades == 0 and ranking must fall back to all_time.
+    for _ in range(9):
+        _trade(db_session, strategy_id=old_strong.id, instrument_id=inst.id, is_win=True, net_pnl=100.0, exit_at=long_ago)
+    _trade(db_session, strategy_id=old_strong.id, instrument_id=inst.id, is_win=False, net_pnl=-50.0, exit_at=long_ago)
+
+    # recent_weak: 5/10 wins (50%), all closed recently, so last_90d has
+    # plenty (>=3) of trades and is used directly.
+    for _ in range(5):
+        _trade(db_session, strategy_id=recent_weak.id, instrument_id=inst.id, is_win=True, net_pnl=100.0, exit_at=now)
+    for _ in range(5):
+        _trade(db_session, strategy_id=recent_weak.id, instrument_id=inst.id, is_win=False, net_pnl=-100.0, exit_at=now)
+    db_session.commit()
+
+    resp = client.get("/api/v1/strategies/performance", headers=HEADERS)
+
+    assert resp.status_code == 200
+    body = resp.json()
+    old_strong_row = next(s for s in body["strategies"] if s["id"] == old_strong.id)
+    assert old_strong_row["windows"]["last_90d"]["trades"] == 0
+    assert old_strong_row["windows"]["all_time"]["win_rate"] == 0.9
+    # If the fallback weren't implemented, old_strong would rank at
+    # win_rate 0.0 (empty 90d window) and lose to recent_weak's 50%.
+    assert body["recommended_strategy_id"] == old_strong.id

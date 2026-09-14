@@ -124,7 +124,8 @@ def strategy_performance(db: DbSession) -> dict[str, Any]:
         candidates = [
             row
             for row in rows
-            if row["strategy_type"] == RECOMMENDABLE_STRATEGY_TYPE
+            if row["is_active"]
+            and row["strategy_type"] == RECOMMENDABLE_STRATEGY_TYPE
             and row["execution_mode"] == RECOMMENDABLE_EXECUTION_MODE
         ]
         closest = max(candidates, key=lambda r: r["windows"]["all_time"]["trades"], default=None)

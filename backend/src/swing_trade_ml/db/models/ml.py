@@ -59,9 +59,18 @@ class MLModel(Base, TimestampMixin):
     n_samples: Mapped[int | None] = mapped_column(Integer)
 
     # Label definition — a model trained on a different horizon is a different
-    # model, and comparing their metrics without this recorded is meaningless
-    prediction_horizon_days: Mapped[int] = mapped_column(Integer, default=5)
-    target_return_pct: Mapped[float] = mapped_column(Float, default=0.02)
+    # model, and comparing their metrics without this recorded is meaningless.
+    prediction_horizon_days: Mapped[int] = mapped_column(Integer, default=15)
+    target_return_pct: Mapped[float] = mapped_column(Float, default=0.08)
+
+    # `label_kind` is what stops two incompatible questions being averaged
+    # together. "endpoint" models asked only whether the close was higher at
+    # the horizon; "barrier" models ask whether the target was reached BEFORE
+    # the stop. Scoring a barrier model with the endpoint rule would silently
+    # mark losing trades correct, so the evaluator branches on this.
+    label_kind: Mapped[str] = mapped_column(String(16), default="barrier", index=True)
+    # Null on endpoint models, which have no lower barrier.
+    stop_return_pct: Mapped[float | None] = mapped_column(Float)
 
     # Held-out metrics. Precision matters most here: a false BUY costs money,
     # a missed BUY only costs opportunity.
@@ -110,6 +119,11 @@ class Prediction(Base):
     price_at_prediction: Mapped[float] = mapped_column(Float)
 
     features: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+
+    # Which question this row was scored against. Rows written before the
+    # barrier label existed stay "endpoint" forever; the calibration report
+    # filters on it rather than mixing two eras into one average.
+    label_kind: Mapped[str] = mapped_column(String(16), default="barrier", index=True)
 
     # Backfilled after the prediction horizon passes
     actual_return: Mapped[float | None] = mapped_column(Float)

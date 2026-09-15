@@ -54,8 +54,9 @@ def build_training_dataset(
     db: Session,
     symbols: list[str] | None = None,
     interval: str = "day",
-    horizon_days: int = 5,
-    target_return: float = 0.02,
+    horizon_days: int = 15,
+    target_return: float = 0.08,
+    stop_return: float = 0.04,
     min_rows: int = 300,
 ) -> pd.DataFrame:
     """Pool features and labels across instruments into one training frame.
@@ -97,7 +98,7 @@ def build_training_dataset(
 
         sector_df = load_sector_candles(db, get_sector_index(inst.tradingsymbol), interval)
         featured = build_features(raw, index_df, sector_df, vix_df, breadth_df)
-        labelled = build_label(featured, horizon_days, target_return)
+        labelled = build_label(featured, horizon_days, target_return, stop_return)
         labelled = labelled.dropna(subset=[*FEATURE_COLUMNS, "target"])
         if labelled.empty:
             continue

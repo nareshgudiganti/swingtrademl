@@ -178,6 +178,7 @@ def cmd_train(args: argparse.Namespace) -> int:
                 interval=args.interval,
                 horizon_days=args.horizon_days,
                 target_return=args.target_return,
+                stop_return=args.stop_return,
                 auto_activate=args.activate,
             )
         except ValueError as exc:
@@ -364,8 +365,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--target-return",
         type=float,
         default=None,
-        help="Forward return threshold for a positive label, e.g. 0.02 for 2%% "
+        help="Upper barrier — the gain that counts as a win, e.g. 0.08 for 8%% "
         "(default: settings.ML_TARGET_RETURN_PCT)",
+    )
+    p.add_argument(
+        "--stop-return",
+        type=float,
+        default=None,
+        help="Lower barrier — the fall that counts as a loss if touched FIRST, "
+        "e.g. 0.04 for 4%% (default: settings.ML_STOP_RETURN_PCT)",
     )
     p.add_argument("--activate", action="store_true", help="Promote to ACTIVE after training")
     p.set_defaults(func=cmd_train)

@@ -35,6 +35,28 @@ from swing_trade_ml.strategies.base import BaseStrategy, SignalDecision, registe
 log = get_logger(__name__)
 
 
+def _model_reason(model: Any, probability: float) -> str:
+    """Describe, in one sentence, the question this model was trained on.
+
+    Branches on `label_kind` because the two say materially different things.
+    A barrier model's probability is the chance of reaching the target
+    *without first being stopped out*, which is the number a reader should
+    act on; an endpoint model's is merely the chance of being higher at the
+    horizon, having possibly fallen a long way in between. Printing the
+    barrier model's answer in the endpoint's words would overstate it.
+    """
+    stem = f"{model.name}:{model.version} predicts {probability:.1%} chance of "
+    if model.label_kind == "barrier" and model.stop_return_pct is not None:
+        return (
+            stem + f"+{model.target_return_pct:.1%} before -{model.stop_return_pct:.1%}, "
+            f"within {model.prediction_horizon_days} trading days"
+        )
+    return (
+        stem + f"+{model.target_return_pct:.1%} within "
+        f"{model.prediction_horizon_days} days"
+    )
+
+
 @register_strategy
 class MLSwingStrategy(BaseStrategy):
     strategy_type: ClassVar[str] = "ml_swing"
@@ -195,10 +217,7 @@ class MLSwingStrategy(BaseStrategy):
             signal=SignalType.BUY,
             price=price,
             confidence=round(probability, 3),
-            reason=(
-                f"{model.name}:{model.version} predicts {probability:.1%} chance of "
-                f"+{model.target_return_pct:.1%} within {model.prediction_horizon_days} days"
-            ),
+            reason=_model_reason(model, probability),
             stop_loss=round(stop_loss, 2),
             take_profit=round(take_profit, 2),
             horizon_days=model.prediction_horizon_days,

@@ -184,6 +184,7 @@ def _upsert_prediction(db: Session, model: MLModel, result: PredictionResult) ->
         probability=result.probability,
         price_at_prediction=result.price,
         features=result.features,
+        label_kind=model.label_kind,
     )
     stmt = stmt.on_conflict_do_update(
         index_elements=[Prediction.model_id, Prediction.instrument_id, Prediction.ts],
@@ -192,9 +193,77 @@ def _upsert_prediction(db: Session, model: MLModel, result: PredictionResult) ->
             "probability": stmt.excluded.probability,
             "price_at_prediction": stmt.excluded.price_at_prediction,
             "features": stmt.excluded.features,
+            "label_kind": stmt.excluded.label_kind,
         },
     )
     db.execute(stmt)
+
+
+def barrier_outcome_at_horizon(
+    db: Session,
+    instrument_id: int,
+    ts: datetime,
+    entry_price: float,
+    horizon_days: int,
+    target_return: float,
+    stop_return: float,
+    interval: str = "day",
+    now: datetime | None = None,
+) -> tuple[bool, float] | None:
+    """Resolve a barrier prediction from the bars that followed it.
+
+    Returns `(reached_target, realised_return)`, or None while the outcome is
+    still unknowable.
+
+    Two things distinguish this from `forward_return_at_horizon`:
+
+    * It reads **high and low**, not just the close, because the question is
+      which side was touched first — the whole point of a barrier label.
+    * It counts **trading bars**, not calendar days. `build_label` measures
+      its horizon in bars, so the evaluator must too, or a model would be
+      scored against a different window than it was trained on. (Note
+      `evaluate_pending_signals` still measures in calendar days; the two
+      are genuinely different windows and should not be conflated.)
+
+    The same-bar tie goes to the stop, matching `build_label` and
+    `evaluate_pending_signals`: a daily bar cannot say which side was hit
+    first, so the pessimistic reading wins.
+    """
+    if entry_price <= 0:
+        return None
+
+    upper = entry_price * (1.0 + target_return)
+    lower = entry_price * (1.0 - stop_return)
+
+    candles = list(
+        db.execute(
+            select(Candle)
+            .where(
+                Candle.instrument_id == instrument_id,
+                Candle.interval == interval,
+                Candle.ts > ts,
+            )
+            .order_by(Candle.ts.asc())
+            .limit(horizon_days)
+        ).scalars().all()
+    )
+
+    for candle in candles:
+        if candle.low <= lower:
+            return False, (lower - entry_price) / entry_price
+        if candle.high >= upper:
+            return True, (upper - entry_price) / entry_price
+
+    if len(candles) < horizon_days:
+        # The window has not filled yet. Guard against waiting forever on a
+        # delisted or gappy instrument: once well past the calendar
+        # equivalent, settle with what actually traded rather than leaving
+        # the row pending for good.
+        moment = now or datetime.now(UTC)
+        if not candles or moment < ts + timedelta(days=horizon_days * 2 + 10):
+            return None
+
+    return False, (candles[-1].close - entry_price) / entry_price
 
 
 def evaluate_pending_predictions(db: Session, interval: str = "day") -> int:
@@ -220,15 +289,32 @@ def evaluate_pending_predictions(db: Session, interval: str = "day") -> int:
         if model is None:
             continue
 
-        actual_return = forward_return_at_horizon(
-            db, pred.instrument_id, pred.ts, pred.price_at_prediction,
-            model.prediction_horizon_days, interval, now,
-        )
-        if actual_return is None:
-            continue
+        # Branch on the ROW's recorded question, not the model's current one.
+        # The row is the authoritative record of what was asked at the time;
+        # scoring a barrier prediction with the endpoint rule would mark a
+        # trade correct that had already been stopped out.
+        if pred.label_kind == "barrier" and model.stop_return_pct is not None:
+            resolved = barrier_outcome_at_horizon(
+                db, pred.instrument_id, pred.ts, pred.price_at_prediction,
+                model.prediction_horizon_days, model.target_return_pct,
+                model.stop_return_pct, interval, now,
+            )
+            if resolved is None:
+                continue
+            reached_target, actual_return = resolved
+            pred.was_correct = reached_target == bool(pred.predicted_class)
+        else:
+            actual_return = forward_return_at_horizon(
+                db, pred.instrument_id, pred.ts, pred.price_at_prediction,
+                model.prediction_horizon_days, interval, now,
+            )
+            if actual_return is None:
+                continue
+            pred.was_correct = (
+                actual_return >= model.target_return_pct
+            ) == bool(pred.predicted_class)
 
         pred.actual_return = actual_return
-        pred.was_correct = (actual_return >= model.target_return_pct) == bool(pred.predicted_class)
         pred.evaluated_at = now
         evaluated += 1
 

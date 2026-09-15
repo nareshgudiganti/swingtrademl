@@ -26,8 +26,11 @@ def _synthetic_ohlcv(seed: int, n: int = 400) -> pd.DataFrame:
         {
             "ts": pd.date_range("2024-01-01", periods=n, freq="D", tz="UTC"),
             "open": close * (1 + rng.normal(0, 0.003, n)),
-            "high": close * (1 + np.abs(rng.normal(0.005, 0.004, n))),
-            "low": close * (1 - np.abs(rng.normal(0.005, 0.004, n))),
+            # Wide enough that an 8%/4% barrier can genuinely be touched
+            # intrabar. At the old +/-0.5% these tests could not tell a
+            # working barrier label from a broken one.
+            "high": close * (1 + np.abs(rng.normal(0.02, 0.012, n))),
+            "low": close * (1 - np.abs(rng.normal(0.02, 0.012, n))),
             "close": close,
             "volume": rng.integers(100_000, 1_000_000, n).astype(float),
         }
@@ -121,24 +124,106 @@ def test_rsi_is_bounded(ohlcv):
     assert values.between(0, 100).all()
 
 
-def test_label_is_forward_looking_and_drops_unknown_tail(
-    ohlcv, index_ohlcv, sector_ohlcv, vix_ohlcv, breadth_df
-):
-    horizon = 5
-    labelled = build_label(
-        build_features(ohlcv, index_ohlcv, sector_ohlcv, vix_ohlcv, breadth_df),
-        horizon_days=horizon, target_return=0.02,
+def _barrier_frame(bars: list[tuple[float, float, float]]) -> pd.DataFrame:
+    """A hand-built OHLC frame: one (close, high, low) per bar.
+
+    Deterministic by construction — the barrier rules below are about which
+    side is touched first, and that cannot be asserted against random data.
+    """
+    return pd.DataFrame(
+        {
+            "ts": pd.date_range("2024-01-01", periods=len(bars), freq="D", tz="UTC"),
+            "open": [b[0] for b in bars],
+            "high": [b[1] for b in bars],
+            "low": [b[2] for b in bars],
+            "close": [b[0] for b in bars],
+            "volume": [100_000.0] * len(bars),
+        }
     )
 
-    # The final `horizon` rows have no known outcome and must be removed.
-    assert len(labelled) == len(ohlcv) - horizon
-    assert set(labelled["target"].unique()) <= {0, 1}
 
-    # Spot-check the label against the raw prices it is derived from.
+# Every case starts at close 100, so the barriers sit at 108 and 96.
+FLAT = (100.0, 100.5, 99.5)
+
+
+def test_label_is_a_win_when_the_target_is_touched_first():
+    labelled = build_label(
+        _barrier_frame([FLAT, (100.0, 109.0, 99.0), (100.0, 100.0, 90.0), FLAT]),
+        horizon_days=3, target_return=0.08, stop_return=0.04,
+    )
+    assert labelled["target"].iloc[0] == 1
+
+
+def test_label_is_a_loss_when_the_stop_is_touched_first():
+    """The failure the old close-only label could not see: price falls through
+    the stop, then recovers past the target inside the same window."""
+    labelled = build_label(
+        _barrier_frame([FLAT, (100.0, 100.0, 95.0), (100.0, 109.0, 100.0), FLAT]),
+        horizon_days=3, target_return=0.08, stop_return=0.04,
+    )
+    assert labelled["target"].iloc[0] == 0
+
+
+def test_a_same_bar_touch_of_both_barriers_scores_as_a_stop():
+    """A daily bar cannot say which side was hit first, so the pessimistic
+    reading wins — matching evaluate_pending_signals."""
+    labelled = build_label(
+        _barrier_frame([FLAT, (100.0, 109.0, 95.0), FLAT, FLAT]),
+        horizon_days=3, target_return=0.08, stop_return=0.04,
+    )
+    assert labelled["target"].iloc[0] == 0
+
+
+def test_a_touch_after_the_horizon_does_not_count():
+    labelled = build_label(
+        _barrier_frame([FLAT, FLAT, FLAT, FLAT, (100.0, 120.0, 99.0)]),
+        horizon_days=3, target_return=0.08, stop_return=0.04,
+    )
+    assert labelled["target"].iloc[0] == 0
+
+
+def test_label_drops_the_unresolved_tail(
+    ohlcv, index_ohlcv, sector_ohlcv, vix_ohlcv, breadth_df
+):
+    horizon = 15
+    labelled = build_label(
+        build_features(ohlcv, index_ohlcv, sector_ohlcv, vix_ohlcv, breadth_df),
+        horizon_days=horizon, target_return=0.08, stop_return=0.04,
+    )
+
+    # The final `horizon` rows have no knowable outcome and must be removed —
+    # including any that resolved early, since keeping only those would bias
+    # the tail toward fast movers.
+    assert len(labelled) == len(ohlcv) - horizon
+    assert set(labelled["target"].unique()) == {0, 1}, "fixture must produce both classes"
+
+
+def test_forward_return_is_not_the_target(
+    ohlcv, index_ohlcv, sector_ohlcv, vix_ohlcv, breadth_df
+):
+    """`forward_return` is carried for diagnostics and is close-to-close at the
+    horizon. It is NOT what `target` measures, and the two must be free to
+    disagree — that disagreement is the entire reason for the barrier label."""
+    horizon = 15
+    labelled = build_label(
+        build_features(ohlcv, index_ohlcv, sector_ohlcv, vix_ohlcv, breadth_df),
+        horizon_days=horizon, target_return=0.08, stop_return=0.04,
+    )
+
     row = labelled.iloc[100]
-    expected_return = ohlcv["close"].iloc[105] / ohlcv["close"].iloc[100] - 1
-    assert row["forward_return"] == pytest.approx(expected_return, rel=1e-9)
-    assert row["target"] == int(expected_return >= 0.02)
+    expected = ohlcv["close"].iloc[115] / ohlcv["close"].iloc[100] - 1
+    assert row["forward_return"] == pytest.approx(expected, rel=1e-9)
+
+    naive = (labelled["forward_return"] >= 0.08).astype(int)
+    assert (naive != labelled["target"]).any(), (
+        "a barrier label that always agrees with the close-only label is not "
+        "applying the lower barrier"
+    )
+
+
+def test_zero_horizon_is_rejected():
+    with pytest.raises(ValueError):
+        build_label(_barrier_frame([FLAT, FLAT]), horizon_days=0)
 
 
 def test_latest_feature_row_returns_none_when_not_warmed_up(

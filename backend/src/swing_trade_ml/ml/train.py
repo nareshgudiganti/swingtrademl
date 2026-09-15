@@ -110,6 +110,7 @@ def train_model(
     interval: str = "day",
     horizon_days: int | None = None,
     target_return: float | None = None,
+    stop_return: float | None = None,
     test_size: float | None = None,
     hyperparameters: dict[str, Any] | None = None,
     auto_activate: bool = False,
@@ -122,13 +123,18 @@ def train_model(
     """
     horizon_days = horizon_days or settings.ML_PREDICTION_HORIZON_DAYS
     target_return = target_return if target_return is not None else settings.ML_TARGET_RETURN_PCT
+    stop_return = stop_return if stop_return is not None else settings.ML_STOP_RETURN_PCT
     test_size = test_size if test_size is not None else settings.ML_TRAIN_TEST_SPLIT
 
-    log.info("train.start", name=name, algorithm=algorithm, horizon=horizon_days)
+    log.info(
+        "train.start",
+        name=name, algorithm=algorithm,
+        horizon=horizon_days, target=target_return, stop=stop_return,
+    )
 
     dataset = build_training_dataset(
         db, symbols=symbols, interval=interval,
-        horizon_days=horizon_days, target_return=target_return,
+        horizon_days=horizon_days, target_return=target_return, stop_return=stop_return,
     )
     if dataset.empty:
         raise ValueError(
@@ -201,6 +207,8 @@ def train_model(
             "algorithm": algorithm,
             "horizon_days": horizon_days,
             "target_return": target_return,
+            "stop_return": stop_return,
+            "label_kind": "barrier",
         },
     )
 
@@ -218,6 +226,8 @@ def train_model(
         n_samples=len(dataset),
         prediction_horizon_days=horizon_days,
         target_return_pct=target_return,
+        stop_return_pct=stop_return,
+        label_kind="barrier",
         accuracy=metrics["accuracy"],
         precision=metrics["precision"],
         recall=metrics["recall"],

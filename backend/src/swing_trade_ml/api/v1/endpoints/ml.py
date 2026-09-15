@@ -73,6 +73,7 @@ def train(payload: TrainRequest, background: BackgroundTasks) -> MessageResponse
                     interval=payload.interval,
                     horizon_days=payload.horizon_days,
                     target_return=payload.target_return,
+                    stop_return=payload.stop_return,
                     test_size=payload.test_size,
                     hyperparameters=payload.hyperparameters,
                     auto_activate=payload.auto_activate,

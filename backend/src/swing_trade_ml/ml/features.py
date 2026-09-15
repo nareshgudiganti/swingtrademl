@@ -368,20 +368,81 @@ def build_features(
 
 
 def build_label(
-    df: pd.DataFrame, horizon_days: int = 5, target_return: float = 0.02
+    df: pd.DataFrame,
+    horizon_days: int = 15,
+    target_return: float = 0.08,
+    stop_return: float = 0.04,
 ) -> pd.DataFrame:
-    """Add the supervised target: did price rise by `target_return` within
-    `horizon_days`?
+    """Add the supervised target: did price reach +`target_return` **before**
+    falling -`stop_return`, within `horizon_days` trading bars?
+
+    This is a *barrier* label, and the "before" is the whole point. The
+    previous version asked only whether the close was higher at bar
+    t+horizon, which meant a stock that fell 8% and then recovered to +2%
+    scored as a win — a trade the risk engine would have stopped out of days
+    earlier. The model was being rewarded for trades the system would never
+    have held.
+
+    Three conventions, each chosen deliberately:
+
+    * **The horizon is trading bars, not calendar days.** Rows here are
+      trading sessions, so a shift of N rows is N trading days by
+      construction. Note that `evaluate_pending_signals` measures its horizon
+      in calendar days; the two are not the same number of sessions and
+      should not be read as interchangeable.
+    * **A same-bar touch of both barriers scores as a stop.** Daily bars
+      cannot tell us which side was hit first, so the pessimistic reading
+      wins. This matches the convention already fixed in
+      `evaluate_pending_signals`.
+    * **The final `horizon_days` rows are dropped**, even where a barrier was
+      touched early enough to resolve. Keeping those would bias the tail of
+      every series toward fast movers, because only the quick outcomes are
+      knowable there.
 
     Uses a shifted *forward* window — the only place future data is allowed,
-    because that is what a label is. The final `horizon_days` rows have an
-    unknown outcome and are dropped rather than filled.
+    because that is what a label is.
     """
+    if horizon_days <= 0:
+        raise ValueError(f"horizon_days must be positive, got {horizon_days}")
+
     out = df.copy()
+    n = len(out)
+
+    close = out["close"].to_numpy(dtype="float64")
+    high = out["high"].to_numpy(dtype="float64")
+    low = out["low"].to_numpy(dtype="float64")
+
+    upper = close * (1.0 + target_return)
+    lower = close * (1.0 - stop_return)
+
+    # Bar offset at which each barrier is first touched. The sentinel is one
+    # past the horizon, so "never touched" loses every comparison below.
+    never = horizon_days + 1
+    hit_target = np.full(n, never, dtype="int32")
+    hit_stop = np.full(n, never, dtype="int32")
+
+    for offset in range(1, horizon_days + 1):
+        # Rows too close to the end have no bar at this offset; NaN compares
+        # false against everything, so they are simply never touched.
+        future_high = np.full(n, np.nan)
+        future_low = np.full(n, np.nan)
+        future_high[: n - offset] = high[offset:]
+        future_low[: n - offset] = low[offset:]
+
+        hit_target[(future_high >= upper) & (hit_target == never)] = offset
+        hit_stop[(future_low <= lower) & (hit_stop == never)] = offset
+
+    # Strictly before: an equal offset is the same-bar tie, which goes to the
+    # stop, and two sentinels mean the window expired without touching either.
+    out["target"] = (hit_target < hit_stop).astype(int)
+
+    # Carried for diagnostics and for the dataset projection. It is the plain
+    # close-to-close return at the horizon and is NOT what `target` measures —
+    # the two disagree whenever a barrier was touched mid-window.
     out["future_close"] = out["close"].shift(-horizon_days)
     out["forward_return"] = out["future_close"] / out["close"] - 1
-    out["target"] = (out["forward_return"] >= target_return).astype(int)
-    return out.iloc[:-horizon_days] if horizon_days > 0 else out
+
+    return out.iloc[:-horizon_days]
 
 
 def latest_feature_row(

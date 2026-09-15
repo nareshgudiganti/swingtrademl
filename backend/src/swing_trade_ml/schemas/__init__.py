@@ -423,6 +423,7 @@ class TrainRequest(BaseModel):
     interval: str = "day"
     horizon_days: int | None = None
     target_return: float | None = None
+    stop_return: float | None = None
     test_size: float | None = None
     hyperparameters: dict[str, Any] | None = None
     auto_activate: bool = False
@@ -438,6 +439,8 @@ class MLModelOut(BaseModel):
     n_samples: int | None
     prediction_horizon_days: int
     target_return_pct: float
+    stop_return_pct: float | None
+    label_kind: str
     accuracy: float | None
     precision: float | None
     recall: float | None

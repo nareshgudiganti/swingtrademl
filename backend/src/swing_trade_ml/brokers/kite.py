@@ -328,6 +328,45 @@ class KiteBroker(Broker):
         if not self._token_loaded:
             raise KiteAuthError("No active Kite session — complete the login flow at /api/v1/auth/kite/login")
 
+    @staticmethod
+    def _is_token_rejected(exc: Exception) -> bool:
+        """True when Zerodha rejected the token itself, rather than the request.
+
+        Matched on the message because kiteconnect raises TokenException for
+        several unrelated conditions and a plain KiteException in others; the
+        wording of this one is stable and unambiguous.
+        """
+        return "incorrect `api_key` or `access_token`" in str(exc).lower()
+
+    def reauth_and_retry(self, db: Session, call, *args, **kwargs):
+        """Run a Kite call; on a rejected token, log in again and retry once.
+
+        Zerodha invalidates an existing Kite Connect access_token when the same
+        account signs in to kite.zerodha.com — so simply opening the Kite app
+        to check a price kills this app's token mid-session. Observed twice:
+        tokens minted by the 06:10 job were dead by early afternoon while a
+        freshly minted one worked immediately.
+
+        Waiting for the next 06:10 would leave the rest of the trading day
+        blind: no quote refresh, no stop-loss checks, no ingestion. Since
+        auto-login is unattended, the honest fix is to just get a new token and
+        carry on. Retried exactly once — a second failure is a real problem and
+        must surface rather than loop.
+        """
+        try:
+            return call(*args, **kwargs)
+        except Exception as exc:  # noqa: BLE001
+            if not self._is_token_rejected(exc):
+                raise
+            if not (
+                settings.KITE_USER_ID and settings.KITE_PASSWORD and settings.KITE_TOTP_SECRET
+            ):
+                log.warning("kite.token_rejected.no_autologin")
+                raise
+            log.warning("kite.token_rejected.reauthenticating")
+            self.auto_login(db)
+            return call(*args, **kwargs)
+
     # --------------------------------------------------------------- orders --
 
     def place_order(self, request: OrderRequest, db: Session) -> OrderResult:
@@ -416,7 +455,7 @@ class KiteBroker(Broker):
 
     def get_holdings(self, db: Session) -> list[dict]:
         self._require_auth()
-        return self._kite.holdings()
+        return self.reauth_and_retry(db, self._kite.holdings)
 
     def get_margins(self, db: Session) -> BrokerMargins:
         self._require_auth()
@@ -438,7 +477,7 @@ class KiteBroker(Broker):
         self._require_auth()
         if not symbols:
             return {}
-        data = self._kite.ltp(symbols)
+        data = self.reauth_and_retry(db, self._kite.ltp, symbols)
         return {k: v["last_price"] for k, v in data.items()}
 
     @retry(
@@ -451,7 +490,7 @@ class KiteBroker(Broker):
         self._require_auth()
         if not symbols:
             return {}
-        return self._kite.quote(symbols)
+        return self.reauth_and_retry(db, self._kite.quote, symbols)
 
     @retry(
         stop=stop_after_attempt(3),
@@ -468,7 +507,9 @@ class KiteBroker(Broker):
         db: Session,
     ) -> list[dict]:
         self._require_auth()
-        return self._kite.historical_data(
+        return self.reauth_and_retry(
+            db,
+            self._kite.historical_data,
             instrument_token=instrument_token,
             from_date=from_date,
             to_date=to_date,

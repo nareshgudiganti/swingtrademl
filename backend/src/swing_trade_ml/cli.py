@@ -180,6 +180,7 @@ def cmd_train(args: argparse.Namespace) -> int:
                 target_return=args.target_return,
                 stop_return=args.stop_return,
                 auto_activate=args.activate,
+                walk_forward_folds=args.walk_forward_folds,
             )
         except ValueError as exc:
             print(f"❌ {exc}")
@@ -374,6 +375,13 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Lower barrier — the fall that counts as a loss if touched FIRST, "
         "e.g. 0.04 for 4%% (default: settings.ML_STOP_RETURN_PCT)",
+    )
+    p.add_argument(
+        "--walk-forward-folds",
+        type=int,
+        default=0,
+        help="Also score on this many successive earlier windows and store them "
+        "in the model's metrics (default: 0, off)",
     )
     p.add_argument("--activate", action="store_true", help="Promote to ACTIVE after training")
     p.set_defaults(func=cmd_train)

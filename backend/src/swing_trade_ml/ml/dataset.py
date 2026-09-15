@@ -123,15 +123,52 @@ def build_training_dataset(
     return dataset
 
 
-def chronological_split(dataset: pd.DataFrame, test_size: float = 0.2) -> tuple[pd.DataFrame, pd.DataFrame]:
+def chronological_split(
+    dataset: pd.DataFrame, test_size: float = 0.2, embargo_days: int = 0
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Split by time, never randomly.
 
     A random split lets the model train on next Tuesday and test on last
     Monday. With overlapping forward-return labels the leakage is severe, and
     the resulting accuracy is fiction. Splitting on a date reproduces the only
     situation that matters: predicting a future the model has never seen.
+
+    The cut lands on a date boundary, not a row count. The pooled frame holds
+    one row per symbol per bar, so a positional cut can put half of one day's
+    symbols in train and the other half in test — the model then trains on the
+    very market day it is scored on.
+
+    `embargo_days` drops the last N distinct bar dates before the test start
+    from training. A label looks `horizon_days` bars forward, so without the
+    gap the final training rows are labelled by prices inside the test window,
+    and the test score quietly rewards having seen them. Pass the label
+    horizon.
     """
     if dataset.empty:
         return dataset, dataset
-    cutoff = int(len(dataset) * (1 - test_size))
-    return dataset.iloc[:cutoff].copy(), dataset.iloc[cutoff:].copy()
+    ordered = dataset.sort_values("ts", kind="stable")
+    cutoff = int(len(ordered) * (1 - test_size))
+    if cutoff >= len(ordered):
+        return ordered.copy(), ordered.iloc[0:0].copy()
+
+    # The row-count cutoff only chooses WHICH date to cut on; every row of
+    # that date then goes to test.
+    test_start = ordered["ts"].iloc[cutoff]
+    train_df = ordered[ordered["ts"] < test_start]
+    test_df = ordered[ordered["ts"] >= test_start]
+    return apply_embargo(train_df, embargo_days).copy(), test_df.copy()
+
+
+def apply_embargo(train_df: pd.DataFrame, embargo_days: int) -> pd.DataFrame:
+    """Drop the last `embargo_days` distinct dates of an already-cut train frame.
+
+    Counted in distinct dates present in the data, not calendar days — a label
+    horizon is measured in trading bars, and weekends and holidays have none.
+    """
+    if embargo_days <= 0 or train_df.empty:
+        return train_df
+    dates = train_df["ts"].drop_duplicates().sort_values()
+    if embargo_days >= len(dates):
+        return train_df.iloc[0:0]
+    first_embargoed = dates.iloc[-embargo_days]
+    return train_df[train_df["ts"] < first_embargoed]

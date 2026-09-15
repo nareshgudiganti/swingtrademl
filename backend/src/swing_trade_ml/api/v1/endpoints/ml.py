@@ -77,6 +77,7 @@ def train(payload: TrainRequest, background: BackgroundTasks) -> MessageResponse
                     test_size=payload.test_size,
                     hyperparameters=payload.hyperparameters,
                     auto_activate=payload.auto_activate,
+                    walk_forward_folds=payload.walk_forward_folds or 0,
                 )
         except Exception as exc:  # noqa: BLE001 — surface via logs/Telegram, don't crash the worker
             log.error("ml.train.failed", error=str(exc))

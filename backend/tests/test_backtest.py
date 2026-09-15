@@ -37,11 +37,62 @@ def test_sell_slippage_moves_price_down():
     assert filled == price * (1 - settings.PAPER_SLIPPAGE_BPS / BPS)
 
 
-def test_charges_match_configured_brokerage_and_tax_bps():
+def test_delivery_brokerage_is_zero():
+    """Zerodha charges nothing to place an equity-delivery order. Modelling a
+    flat 20 here overstated every simulated round trip."""
+    brokerage, _ = _charges(50_000.0, "BUY")
+    assert brokerage == 0.0
+
+
+def test_buy_and_sell_are_priced_differently():
+    """Stamp duty falls on the buy leg only, so one blended rate cannot be
+    right for both."""
     turnover = 50_000.0
-    brokerage, taxes = _charges(turnover)
-    assert brokerage == settings.PAPER_BROKERAGE_PER_ORDER
-    assert taxes == turnover * (settings.PAPER_TAX_BPS / BPS)
+    _, buy_taxes = _charges(turnover, "BUY")
+    _, sell_taxes = _charges(turnover, "SELL")
+
+    assert buy_taxes == turnover * (settings.PAPER_TAX_BPS_BUY / BPS)
+    assert sell_taxes == (
+        turnover * (settings.PAPER_TAX_BPS_SELL / BPS) + settings.PAPER_DP_CHARGE_PER_SELL
+    )
+
+
+def test_depository_fee_is_flat_not_proportional():
+    """The whole reason small positions are uneconomic: the same rupee fee is
+    0.8% of a 2,000 sale and 0.008% of a 200,000 one. Its share of the
+    position scales inversely with size — exactly 100x across a 100x range."""
+    import pytest
+
+    _, small = _charges(2_000.0, "SELL")
+    _, large = _charges(200_000.0, "SELL")
+
+    small_flat_share = settings.PAPER_DP_CHARGE_PER_SELL / 2_000.0
+    large_flat_share = settings.PAPER_DP_CHARGE_PER_SELL / 200_000.0
+    assert small_flat_share == pytest.approx(100 * large_flat_share)
+
+    # And it is genuinely present on both, not silently dropped on one.
+    assert small > settings.PAPER_DP_CHARGE_PER_SELL
+    assert large > settings.PAPER_DP_CHARGE_PER_SELL
+
+
+def test_a_five_thousand_round_trip_costs_about_27_rupees():
+    """The headline number this change exists to correct. The old model,
+    charging 20 brokerage on each leg, made this roughly 78."""
+    _, buy_taxes = _charges(5_000.0, "BUY")
+    buy_brokerage, _ = _charges(5_000.0, "BUY")
+    sell_brokerage, sell_taxes = _charges(5_400.0, "SELL")
+
+    round_trip = buy_brokerage + buy_taxes + sell_brokerage + sell_taxes
+    assert 25.0 < round_trip < 30.0
+
+
+def test_unknown_side_raises_rather_than_guessing():
+    """A mispriced fill found months later in a backtest is far more
+    expensive than a loud failure here."""
+    import pytest
+
+    with pytest.raises(ValueError):
+        _charges(1_000.0, "SHORT")
 
 
 def test_close_position_records_a_losing_trade_and_returns_net_cash():

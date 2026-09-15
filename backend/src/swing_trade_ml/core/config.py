@@ -84,15 +84,29 @@ class Settings(BaseSettings):
 
     PAPER_STARTING_CAPITAL: float = 1_000_000.0
     PAPER_SLIPPAGE_BPS: float = 5.0
-    PAPER_BROKERAGE_PER_ORDER: float = 20.0
-    PAPER_TAX_BPS: float = 12.0
+    # Zerodha charges ZERO brokerage on equity delivery (CNC), which is the
+    # only product this app trades — the widely-quoted flat 20 is the
+    # intraday/F&O rate. Modelling it here overstated the cost of every
+    # simulated round trip, most severely at small position sizes.
+    PAPER_BROKERAGE_PER_ORDER: float = 0.0
+    # Statutory charges are NOT symmetric between legs: stamp duty is levied
+    # on the buy only. One blended rate therefore overstates the sell and
+    # understates the buy.
+    #   Buy : STT 10 + exchange 0.297 + SEBI 0.01 + stamp 1.5 + GST 0.055
+    #   Sell: STT 10 + exchange 0.297 + SEBI 0.01             + GST 0.055
+    PAPER_TAX_BPS_BUY: float = 11.9
+    PAPER_TAX_BPS_SELL: float = 10.4
     # Zerodha's DP (Depository Participant) charge: a flat per-scrip fee on
     # every DELIVERY SELL, charged by the depository (CDSL/NSDL) + Zerodha,
     # regardless of quantity or value. Never on buys, never on intraday (MIS)
     # — only CNC sells, which is exactly what every exit in this app is. This
     # was previously missing from the paper cost model entirely, silently
     # understating real charges on every single trade.
-    PAPER_DP_CHARGE_PER_SELL: float = 20.0
+    # 13.50 + 18% GST. Flat, so it is 0.80% of a 2,000 position and 0.008%
+    # of a 200,000 one — the single reason a small account must hold few
+    # large positions rather than many small ones, and why scaling out of a
+    # small position costs a second full fee.
+    PAPER_DP_CHARGE_PER_SELL: float = 15.93
 
     # ------------------------------------------------------------ zerodha --
     KITE_API_KEY: str = ""
@@ -168,8 +182,13 @@ class Settings(BaseSettings):
 
     # ----------------------------------------------------------------- ml --
     MODEL_ARTIFACT_DIR: str = "./data/models"
-    ML_PREDICTION_HORIZON_DAYS: int = 5
-    ML_TARGET_RETURN_PCT: float = 0.02
+    # The trade the system actually takes: +8% before -4%, within 15 trading
+    # days. These three move together — changing one without the others
+    # recreates the mismatch this replaced, where the model scored a 5-day
+    # question while the exit policy ran a 15%/60-day one.
+    ML_PREDICTION_HORIZON_DAYS: int = 15
+    ML_TARGET_RETURN_PCT: float = 0.08
+    ML_STOP_RETURN_PCT: float = 0.04
     ML_TRAIN_TEST_SPLIT: float = 0.2
     ML_MIN_CONFIDENCE: float = 0.60
     ML_RANDOM_SEED: int = 42

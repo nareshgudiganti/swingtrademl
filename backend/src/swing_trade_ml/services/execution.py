@@ -934,7 +934,26 @@ def _finish_reconciled_order(db: Session, order: Order, result: OrderResult) -> 
         return
 
     filled_qty = result.filled_quantity or order.quantity
-    brokerage, taxes = compute_charges(fill_price * filled_qty, order.transaction_type)
+
+    # Only estimate what the broker did not tell us. Previously this
+    # overwrote whatever the broker reported with the *paper* model's guess,
+    # so a real fill's real charges were discarded in favour of an
+    # approximation — and nothing said so.
+    if result.brokerage or result.taxes:
+        brokerage, taxes = result.brokerage, result.taxes
+    else:
+        brokerage, taxes = compute_charges(fill_price * filled_qty, order.transaction_type)
+        if settings.is_live_trading:
+            # Kite's order API does not return the charge breakdown, so a live
+            # fill genuinely has to be estimated. Say so, rather than letting
+            # an estimate masquerade as a settled figure in the P&L.
+            log.info(
+                "execution.reconcile.charges_estimated",
+                order_id=order.id,
+                brokerage=brokerage,
+                taxes=taxes,
+            )
+
     order.brokerage = brokerage
     order.taxes = taxes
     result.brokerage = brokerage

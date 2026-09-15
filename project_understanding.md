@@ -382,10 +382,15 @@ is recorded as a `Signal` with a `rejection_reason` — never silently dropped.
 - **Prices are real, only fills are simulated** — the paper broker consumes
   the same live Kite quotes the live broker would; it never invents prices.
 - **Costs are charged on every fill:** slippage (`PAPER_SLIPPAGE_BPS`,
-  default 5bps against you), brokerage (`PAPER_BROKERAGE_PER_ORDER`, ₹20),
-  and an approximated tax/statutory-charge stack
-  (`PAPER_TAX_BPS`, 12bps of turnover). A cost-free simulation reliably
-  overstates returns.
+  default 5bps against you), brokerage (`PAPER_BROKERAGE_PER_ORDER`, **₹0** —
+  Zerodha charges nothing on equity delivery; the widely-quoted flat ₹20 is
+  the intraday/F&O rate), the statutory stack priced per leg because stamp
+  duty falls on the buy only (`PAPER_TAX_BPS_BUY` 11.9bps,
+  `PAPER_TAX_BPS_SELL` 10.4bps), and the flat depository fee on every sell
+  (`PAPER_DP_CHARGE_PER_SELL`, ₹15.93). That last one is flat, so it is 0.8%
+  of a ₹2,000 position and 0.008% of a ₹2,00,000 one — which is why a small
+  account must hold few large positions rather than many small ones. A
+  cost-free simulation reliably overstates returns.
 - **Fills are pessimistic by construction** — buys fill above the reference
   price, sells below, never in your favour.
 - **Cash is finite.** Virtual capital starts at `PAPER_STARTING_CAPITAL`

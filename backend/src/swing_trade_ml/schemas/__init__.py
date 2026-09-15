@@ -858,3 +858,41 @@ class CalibrationReport(BaseModel):
     excluded_below_min: int
     brier_score: float | None
     buckets: list[CalibrationBucket]
+
+
+# ------------------------------------------------------------------- safety --
+
+
+class SystemStateOut(BaseModel):
+    model_config = ORM
+
+    new_entries_enabled: bool
+    exits_enabled: bool
+    halt_reason: str | None = None
+    halted_at: datetime | None = None
+    halted_by: str | None = None
+
+
+class HaltRequest(BaseModel):
+    reason: str = Field(..., min_length=1, max_length=500)
+    # Who pressed it, for the record. Defaults rather than being required:
+    # an emergency halt must never fail validation over a missing label.
+    by: str = "dashboard"
+
+
+class ResumeRequest(BaseModel):
+    by: str = "dashboard"
+
+
+class RiskEventOut(BaseModel):
+    model_config = ORM
+
+    id: int
+    ts: datetime
+    mode: str
+    strategy_id: int | None
+    instrument_id: int | None
+    symbol: str | None
+    rule: str
+    reason: str
+    amount_inr: float | None

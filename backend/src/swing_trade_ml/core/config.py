@@ -150,6 +150,10 @@ class Settings(BaseSettings):
     ENABLE_SCHEDULER: bool = True
 
     # --------------------------------------------------------------- risk --
+    # MAX_POSITION_PCT and MAX_OPEN_POSITIONS are no longer read by the entry
+    # path, the scan or the backtest: both now scale with account size (see
+    # services/limits.py). Kept so an existing .env that sets them still
+    # loads; changing them has no effect.
     MAX_POSITION_PCT: float = 0.10
     MAX_OPEN_POSITIONS: int = 10
     RISK_PER_TRADE_PCT: float = 0.01
@@ -165,7 +169,9 @@ class Settings(BaseSettings):
     FIXED_POSITION_AMOUNT_INR: float = 10_000.0
     DEFAULT_STOP_LOSS_PCT: float = 0.05
     DEFAULT_TAKE_PROFIT_PCT: float = 0.15
-    MAX_PORTFOLIO_DRAWDOWN_PCT: float = 0.20
+    # Owner decision (Sept 2026): halt new entries at 15% below peak
+    # (−₹1,50,000 at ₹10 lakh). Never force-sells.
+    MAX_PORTFOLIO_DRAWDOWN_PCT: float = 0.15
     # Blocks re-entering a symbol for this many days after it stopped this
     # same strategy out — added after the small-cap backtest showed the same
     # name (LATENTVIEW) getting stopped out three separate times in a few

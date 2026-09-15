@@ -22,6 +22,11 @@ Known approximations, worth remembering when reading results:
 * An entry signal fills at that day's close plus slippage, mirroring the live
   system's post-close scan (15:45 IST) filling near-immediately at the
   live quote.
+* Position count, single-stock cap, risk per trade and the drawdown brake
+  follow the same account-size ladder as live (services/limits.py). The
+  portfolio-level ceilings the live gate adds on top — sector, liquidity,
+  small-company budget, market-conditions and cash reserve — are not
+  replayed, so a backtest can hold more of one sector than live would.
 """
 
 from __future__ import annotations
@@ -43,6 +48,7 @@ from swing_trade_ml.db.models.trading import Strategy as StrategyModel
 from swing_trade_ml.ml.dataset import load_candles
 from swing_trade_ml.services.costs import apply_slippage as _apply_slippage
 from swing_trade_ml.services.costs import compute_charges as _charges
+from swing_trade_ml.services.limits import limits_for
 from swing_trade_ml.services.risk import calculate_quantity, rank_buy_candidates
 from swing_trade_ml.strategies import get_strategy
 from swing_trade_ml.strategies.base import SignalDecision
@@ -333,12 +339,17 @@ def run_backtest(
                     p.quantity * _last_close(history[i], day) for i, p in open_positions.items()
                 )
                 portfolio_value = cash + holdings_value
-                max_positions = strategy_row.max_positions or settings.MAX_OPEN_POSITIONS
+                # Same account-size resolver as the live gate (risk.check_entry),
+                # so a backtest at ₹1 lakh replays ₹1 lakh limits. The
+                # portfolio-level ceilings check_entry also applies (sector,
+                # liquidity, market conditions, cash reserve) are not replayed
+                # here — see the module docstring's known approximations.
+                limits = limits_for(portfolio_value, strategy_row)
                 drawdown = (peak - portfolio_value) / peak if peak else 0.0
 
-                if len(open_positions) >= max_positions:
+                if len(open_positions) >= limits.max_positions:
                     continue
-                if drawdown >= settings.MAX_PORTFOLIO_DRAWDOWN_PCT:
+                if drawdown >= limits.max_drawdown_pct:
                     continue
 
                 qty, _note = calculate_quantity(

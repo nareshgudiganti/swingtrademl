@@ -28,7 +28,7 @@ from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.db.models.market import Instrument
 from swing_trade_ml.db.models.trading import Order, Position, Signal, Strategy, Trade
 from swing_trade_ml.notifications import notifier
-from swing_trade_ml.services import risk
+from swing_trade_ml.services import risk, system_state
 from swing_trade_ml.services.costs import compute_charges
 from swing_trade_ml.services.portfolio import portfolio_value_and_cash
 
@@ -732,10 +732,26 @@ def process_decision(
 
     if not verdict.allowed:
         signal.rejection_reason = verdict.reason
+        # ---- risk events (portfolio risk layer) ----
+        # Every check_entry rejection is also logged as a RiskEvent, committed
+        # with the signal so the two cannot disagree. check_entry itself stays
+        # write-free. (The two pre-filters above — ranked out, position already
+        # open — are routine scan outcomes, not risk limits, and are not logged.)
+        system_state.record_risk_event(
+            db,
+            mode=mode,
+            rule=verdict.rule or "OTHER",
+            reason=verdict.reason,
+            strategy_id=strategy.id,
+            instrument_id=instrument.id,
+            symbol=instrument.tradingsymbol,
+            amount_inr=verdict.amount_inr,
+        )
         db.commit()
         log.info(
             "execution.entry.blocked",
             symbol=instrument.tradingsymbol,
+            rule=verdict.rule,
             reason=verdict.reason,
         )
         return signal
@@ -794,7 +810,22 @@ def check_exits(db: Session) -> list[Trade]:
     while the broker is still in paper mode is safe and is exactly what
     keeps a manually-recorded real trade's price/trailing-stop/exit alerts
     updating on the same intraday schedule as everything else.
+
+    Exits run even while new entries are halted (the kill switch) — halting
+    must never trap capital in positions heading for their stops. They stop
+    only if `system_state.exits_enabled` has been switched off, which is a
+    separate, deliberate act: with exits off, no stop-loss, target or time
+    stop fires, and a falling position can lose far more than its stop was
+    set to allow. A loud warning is logged on every run while it is off.
     """
+    if not system_state.get_state(db).exits_enabled:
+        log.warning(
+            "execution.check_exits.DISABLED",
+            message="Exits are switched OFF — no stop-loss, target or time stop is being "
+            "enforced. Open positions are unprotected until exits are re-enabled.",
+        )
+        return []
+
     broker = get_broker()
     mode = broker.mode
     positions = list(

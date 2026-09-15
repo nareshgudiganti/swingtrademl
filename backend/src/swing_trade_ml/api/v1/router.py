@@ -16,6 +16,7 @@ from swing_trade_ml.api.v1.endpoints import (
     notifications,
     orders,
     portfolio,
+    risk,
     safety,
     signals,
     strategies,
@@ -48,3 +49,4 @@ api_router.include_router(backtest.router, dependencies=protected)
 api_router.include_router(finance.router, dependencies=protected)
 api_router.include_router(mutual_funds.router, dependencies=protected)
 api_router.include_router(safety.router, dependencies=protected)
+api_router.include_router(risk.router, dependencies=protected)

@@ -900,3 +900,43 @@ class RiskEventOut(BaseModel):
     rule: str
     reason: str
     amount_inr: float | None
+
+
+# --------------------------------------------------------------- risk/limits --
+
+
+class SectorExposureOut(BaseModel):
+    sector: str
+    value_inr: float
+    pct_of_portfolio: float
+
+
+class CurrentLimitsOut(BaseModel):
+    """The account-size ladder resolved for right now, plus where the money
+    already sits — everything api/v1/endpoints/risk.py's /risk/limits needs
+    to answer in one call."""
+
+    portfolio_value: float
+    cash: float
+    rung_value: float
+    max_positions: int
+    open_positions: int
+    max_position_pct: float
+    min_position_inr: float
+    sector_rule: str
+    sector_cap_pct: float | None
+    max_adv_pct: float | None
+    scale_out_enabled: bool
+    max_share_price_inr: float | None
+    allowed_cap_tiers: list[str]
+    small_cap_budget_pct: float | None
+    cash_floor_inr: float
+    risk_per_trade_pct: float
+    max_drawdown_pct: float
+    regime: str
+    plain_regime: str
+    deployable_fraction: float
+    deployable_ceiling_inr: float
+    invested_inr: float
+    room_inr: float
+    sectors: list[SectorExposureOut]

@@ -818,3 +818,43 @@ class MutualFundCasImportResult(BaseModel):
     schemes_matched: int
     lots_created: int
     unmatched_schemes: list[str]
+
+
+# ---------------------------------------------------------------- calibration --
+
+
+class CalibrationBucket(BaseModel):
+    """One confidence band. Returns are fractions (0.08 = +8%)."""
+
+    model_config = ORM
+
+    lower: float
+    upper: float
+    n: int
+    wins: int
+    observed_rate: float | None
+    mean_confidence: float | None
+    # observed_rate - mean_confidence: negative means the model is over-confident
+    calibration_gap: float | None
+    mean_outcome_pct: float | None
+    worst_outcome_pct: float | None
+    # False under 30 samples — too few for the hit rate to be acted on
+    meaningful: bool
+
+
+class CalibrationReport(BaseModel):
+    """Whether shown confidence matches realised hit rate. Filters that do not
+    apply to the chosen source come back null."""
+
+    model_config = ORM
+
+    source: str
+    mode: str | None
+    strategy_id: int | None
+    since: datetime | None
+    model_id: int | None
+    label_kind: str | None
+    total_scored: int
+    excluded_below_min: int
+    brier_score: float | None
+    buckets: list[CalibrationBucket]

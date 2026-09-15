@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from swing_trade_ml.brokers import OrderRequest, OrderResult, get_broker
@@ -30,6 +30,7 @@ from swing_trade_ml.db.models.trading import Order, Position, Signal, Strategy, 
 from swing_trade_ml.notifications import notifier
 from swing_trade_ml.services import risk, system_state
 from swing_trade_ml.services.costs import compute_charges
+from swing_trade_ml.services.exit_policy import exit_policy_for, scale_out_quantity
 from swing_trade_ml.services.portfolio import portfolio_value_and_cash
 
 log = get_logger(__name__)
@@ -87,6 +88,7 @@ def _finalize_open_position(
         mode=mode,
         status=PositionStatus.OPEN,
         quantity=quantity,
+        initial_quantity=quantity,
         entry_price=fill_price,
         entry_at=entry_at,
         stop_loss=stop_loss,
@@ -273,28 +275,61 @@ def _finalize_close_position(
     closed_at: datetime,
     note: str | None = None,
 ) -> Trade:
-    """Shared by the broker-filled path and the manual (self-reported) path —
+    """Sell every share still held and close the position.
+
+    Shared by the broker-filled path and the manual (self-reported) path —
     both end up computing the same P&L off a fill_price/brokerage/taxes,
-    just sourced differently."""
+    just sourced differently.
+
+    For a position that never scaled out this is exactly the original
+    arithmetic. For one that did, `position.total_charges` already holds only
+    the entry charges belonging to the shares still held (the sold slice took
+    its share — see _finalize_partial_close), so this Trade row is charged
+    the right amount without any extra apportioning here.
+    """
+    sold_quantity = position.quantity
     exit_charges = exit_brokerage + exit_taxes
+    # This exit's charges: the remaining entry-side charges plus the exit's own.
     total_charges = position.total_charges + exit_charges
 
-    gross_pnl = (fill_price - position.entry_price) * position.quantity
+    gross_pnl = (fill_price - position.entry_price) * sold_quantity
     net_pnl = gross_pnl - total_charges
     # Return is measured against capital deployed, so charges are correctly
     # reflected as a drag on the actual investment.
-    invested = position.entry_price * position.quantity
+    invested = position.entry_price * sold_quantity
     return_pct = net_pnl / invested if invested else 0.0
     holding_days = max(0, (closed_at - position.entry_at).days)
+
+    had_partial_exit = (
+        position.initial_quantity is not None and position.quantity < position.initial_quantity
+    )
+    earlier_realized = 0.0
+    earlier_charges = 0.0
+    if had_partial_exit:
+        # The closed row reports the whole position — both exits — so the
+        # Positions page and anything else reading a closed row sees the same
+        # totals the Trade rows add up to.
+        earlier_realized = position.realized_pnl or 0.0
+        earlier_charges = float(
+            db.execute(
+                select(func.coalesce(func.sum(Trade.charges), 0.0)).where(
+                    Trade.position_id == position.id
+                )
+            ).scalar_one()
+        )
 
     position.status = PositionStatus.CLOSED
     position.exit_price = fill_price
     position.exit_at = closed_at
     position.exit_reason = reason
-    position.realized_pnl = net_pnl
+    position.realized_pnl = earlier_realized + net_pnl
     position.unrealized_pnl = 0.0
     position.current_price = fill_price
-    position.total_charges = total_charges
+    position.total_charges = earlier_charges + total_charges
+    if had_partial_exit:
+        # Nothing is held any more; a closed row's quantity means the size of
+        # the position, as it always has.
+        position.quantity = position.initial_quantity
     if note:
         position.notes = note
 
@@ -304,7 +339,7 @@ def _finalize_close_position(
         instrument_id=instrument.id,
         mode=position.mode,
         symbol=instrument.tradingsymbol,
-        quantity=position.quantity,
+        quantity=sold_quantity,
         entry_price=position.entry_price,
         exit_price=fill_price,
         entry_at=position.entry_at,
@@ -323,19 +358,116 @@ def _finalize_close_position(
     return trade
 
 
+def _finalize_partial_close(
+    db: Session,
+    position: Position,
+    instrument: Instrument,
+    quantity: int,
+    fill_price: float,
+    exit_brokerage: float,
+    exit_taxes: float,
+    reason: ExitReason,
+    closed_at: datetime,
+    note: str | None = None,
+) -> Trade:
+    """Sell `quantity` of the shares held, write that slice's Trade, and keep
+    the position OPEN with the rest.
+
+    Charge apportionment is the part that silently corrupts P&L if it is
+    wrong. The entry order's charges were paid once, for every share. The
+    sold slice takes its pro-rata share of them (quantity / held) plus all of
+    this exit's own charges; the remainder of the entry charges stays on the
+    position for the shares still held. Charging the slice the FULL entry
+    charges — what reusing _finalize_close_position would do — counts them
+    twice once the rest is sold, and drifts paper cash by the same amount,
+    because get_available_cash() treats `total_charges` on an open position
+    as capital still locked in it.
+
+    A SCALE_OUT also raises the stop to at least the entry price: the profit
+    on the sold half is banked, and the half still held should no longer be
+    able to become a loss. The trailing stop keeps ratcheting from there.
+    """
+    held = position.quantity
+    if not 0 < quantity < held:
+        raise ValueError(f"Partial exit of {quantity} from a position holding {held}")
+
+    entry_charge_share = position.total_charges * quantity / held
+    charges = entry_charge_share + exit_brokerage + exit_taxes
+
+    gross_pnl = (fill_price - position.entry_price) * quantity
+    net_pnl = gross_pnl - charges
+    invested = position.entry_price * quantity
+    return_pct = net_pnl / invested if invested else 0.0
+    holding_days = max(0, (closed_at - position.entry_at).days)
+
+    if position.initial_quantity is None:
+        # A row from before partial exits existed that the backfill missed —
+        # freeze its size now, before the first reduction loses it.
+        position.initial_quantity = held
+    position.quantity = held - quantity
+    position.total_charges = position.total_charges - entry_charge_share
+    position.realized_pnl = (position.realized_pnl or 0.0) + net_pnl
+    mark = position.current_price or fill_price
+    position.unrealized_pnl = (mark - position.entry_price) * position.quantity
+
+    if reason == ExitReason.SCALE_OUT:
+        position.scaled_out_at = closed_at
+        if position.stop_loss is None or position.stop_loss < position.entry_price:
+            position.stop_loss = position.entry_price
+    if note:
+        position.notes = note
+
+    trade = Trade(
+        position_id=position.id,
+        strategy_id=position.strategy_id,
+        instrument_id=instrument.id,
+        mode=position.mode,
+        symbol=instrument.tradingsymbol,
+        quantity=quantity,
+        entry_price=position.entry_price,
+        exit_price=fill_price,
+        entry_at=position.entry_at,
+        exit_at=closed_at,
+        holding_days=holding_days,
+        gross_pnl=gross_pnl,
+        charges=charges,
+        net_pnl=net_pnl,
+        return_pct=return_pct,
+        exit_reason=reason,
+        is_win=net_pnl > 0,
+    )
+    db.add(trade)
+    db.commit()
+    db.refresh(trade)
+    return trade
+
+
 def close_position(
     db: Session,
     position: Position,
     exit_price: float | None,
     reason: ExitReason,
     note: str | None = None,
+    quantity: int | None = None,
 ) -> Trade | None:
-    """Exit a position and write the immutable Trade record."""
+    """Exit a position (all of it, or `quantity` shares) and write the
+    immutable Trade record for what was sold.
+
+    `quantity` defaults to every share held, which is exactly the behaviour
+    that existed before partial exits. A smaller quantity writes one Trade for
+    that slice and leaves the position OPEN holding the rest; a quantity at or
+    above what is held is simply a full close.
+    """
     broker = get_broker()
     instrument = db.get(Instrument, position.instrument_id)
     if instrument is None:
         log.error("execution.exit.instrument_missing", position_id=position.id)
         return None
+
+    held = position.quantity
+    sell_quantity = held if quantity is None else min(int(quantity), held)
+    if sell_quantity <= 0:
+        raise ValueError(f"Cannot sell {quantity} shares of position {position.id}")
 
     now = datetime.now(UTC)
 
@@ -347,7 +479,7 @@ def close_position(
         transaction_type=TransactionType.SELL,
         order_type=OrderType.MARKET,
         product=ProductType.CNC,
-        quantity=position.quantity,
+        quantity=sell_quantity,
         status=OrderStatus.PENDING,
         placed_at=now,
     )
@@ -358,7 +490,7 @@ def close_position(
         tradingsymbol=instrument.tradingsymbol,
         exchange=instrument.exchange,
         transaction_type=TransactionType.SELL,
-        quantity=position.quantity,
+        quantity=sell_quantity,
         order_type=OrderType.MARKET,
         product=ProductType.CNC,
         tag=f"stml-exit-{position.id}",
@@ -386,6 +518,25 @@ def close_position(
 
     order.filled_at = now
     fill_price = result.average_price or exit_price or position.entry_price
+    filled_quantity = result.filled_quantity or sell_quantity
+    if filled_quantity < held:
+        trade = _finalize_partial_close(
+            db, position, instrument, filled_quantity, fill_price,
+            result.brokerage, result.taxes, reason, now, note,
+        )
+        log.info(
+            "execution.partial_exit.filled",
+            symbol=instrument.tradingsymbol,
+            qty=filled_quantity,
+            remaining=position.quantity,
+            pnl=round(trade.net_pnl, 2),
+            reason=reason,
+        )
+        notifier.send_sync(
+            _partial_exit_message(instrument, trade, position, reason, broker.mode), "fill"
+        )
+        return trade
+
     trade = _finalize_close_position(
         db, position, instrument, fill_price, result.brokerage, result.taxes, reason, now, note
     )
@@ -796,6 +947,27 @@ def trail_stop(position: Position) -> None:
         position.stop_loss = trailed
 
 
+def _has_pending_exit_order(db: Session, position: Position) -> bool:
+    """True while a sell for this position is still waiting at the broker.
+
+    Only matters live: a Kite order comes back PENDING and is finished later
+    by reconciliation, and `scaled_out_at` is set only once it fills. Without
+    this check, the 60-second exit job would see the position still
+    un-scaled-out and send a second half-sell every minute until the first
+    one filled. Paper fills synchronously, so this is always False there.
+    """
+    return (
+        db.execute(
+            select(Order.id).where(
+                Order.position_id == position.id,
+                Order.transaction_type == TransactionType.SELL,
+                Order.status.in_([OrderStatus.PENDING, OrderStatus.OPEN]),
+            )
+        ).first()
+        is not None
+    )
+
+
 def check_exits(db: Session) -> list[Trade]:
     """Evaluate stop-loss, target and time-stop conditions on open positions.
 
@@ -817,6 +989,19 @@ def check_exits(db: Session) -> list[Trade]:
     separate, deliberate act: with exits off, no stop-loss, target or time
     stop fires, and a falling position can lose far more than its stop was
     set to allow. A loud warning is logged on every run while it is off.
+
+    Order of checks on each price, first match wins: stop-loss, final
+    target, time stop (all full exits), then the partial scale-out. The
+    scale-out comes last on purpose:
+    * a tick that is at or past the final target sells everything in one
+      order — one depository fee — rather than selling half and then the
+      other half a moment later at the same price;
+    * a position past its time stop is closing anyway, so selling half of it
+      first would only pay an extra fee;
+    * a tick that scales out never also fully exits: after the partial sale
+      the loop moves on, and the next price update judges the remainder.
+    The time stop and the scale-out are per strategy (services/exit_policy.py);
+    a strategy that sets neither keeps the 60-day stop and never scales out.
     """
     if not system_state.get_state(db).exits_enabled:
         log.warning(
@@ -863,20 +1048,38 @@ def check_exits(db: Session) -> list[Trade]:
 
         trail_stop(position)
 
+        policy = exit_policy_for(position.strategy.params if position.strategy is not None else None)
+        is_advisory = position.strategy is not None and position.strategy.execution_mode == "advisory"
+
         reason: ExitReason | None = None
         if position.stop_loss and price <= position.stop_loss:
             reason = ExitReason.STOP_LOSS_HIT
         elif position.take_profit and price >= position.take_profit:
             reason = ExitReason.TARGET_HIT
-        elif (datetime.now(UTC) - position.entry_at).days >= 60:
-            # Capital tied up for 60 days in a swing trade is a failed thesis,
+        elif (datetime.now(UTC) - position.entry_at).days >= policy.time_stop_days:
+            # Capital tied up this long in a swing trade is a failed thesis,
             # regardless of whether it is slightly up or down.
             reason = ExitReason.TIME_STOP
 
         if reason is None:
+            if is_advisory:
+                # Advisory positions are the user's own; only the full-exit
+                # alerts above apply to them.
+                continue
+            sell = scale_out_quantity(
+                policy,
+                entry_price=position.entry_price,
+                price=price,
+                quantity=position.quantity,
+                already_scaled_out=position.scaled_out_at is not None,
+            )
+            if sell and not _has_pending_exit_order(db, position):
+                trade = close_position(db, position, price, ExitReason.SCALE_OUT, quantity=sell)
+                if trade:
+                    closed.append(trade)
             continue
 
-        if position.strategy is not None and position.strategy.execution_mode == "advisory":
+        if is_advisory:
             # Alert once, not every 60s — the position stays open until the
             # user records the exit via manual_close_position().
             if position.advisory_alert_sent_at is None:
@@ -952,8 +1155,9 @@ def reconcile_pending_orders(db: Session) -> dict[str, int]:
 def _finish_reconciled_order(db: Session, order: Order, result: OrderResult) -> None:
     """An order just reached COMPLETE that placement couldn't finish
     synchronously — do the part it deferred: create the Position for an
-    entry, or close it for an exit. Idempotent — safe to call again if a
-    later tick somehow sees the same transition twice."""
+    entry, close it for a full exit, or record the slice sold for a partial
+    (scale-out) exit while leaving it open. Idempotent — safe to call again
+    if a later tick somehow sees the same transition twice."""
     instrument = db.get(Instrument, order.instrument_id)
     if instrument is None:
         log.error("execution.reconcile.instrument_missing", order_id=order.id)
@@ -1023,9 +1227,48 @@ def _finish_reconciled_order(db: Session, order: Order, result: OrderResult) -> 
         if position is None or position.status != PositionStatus.OPEN:
             return  # already closed some other way
 
+        closed_at = order.filled_at or datetime.now(UTC)
+
+        # Idempotency for a SELL cannot be "did this shrink the position",
+        # because the first call already does that shrinking — a retry then
+        # sees filled_qty == the now-smaller position.quantity and falls
+        # through to the full-close branch below, double-booking the trade.
+        # A prior Trade for this exact (position, exit moment, quantity) is
+        # the one signal that survives the position having already mutated.
+        already_recorded = db.execute(
+            select(Trade.id).where(
+                Trade.position_id == position.id,
+                Trade.exit_at == closed_at,
+                Trade.quantity == filled_qty,
+            )
+        ).first()
+        if already_recorded is not None:
+            return
+
+        if filled_qty < position.quantity:
+            # A partial exit order. The only thing that places one is the
+            # first-target scale-out in check_exits, so it is recorded as
+            # that — and the position stays open holding the rest. Treating
+            # it as a full close (as this branch used to for every sell)
+            # would mark shares still held at the broker as sold.
+            trade = _finalize_partial_close(
+                db, position, instrument, filled_qty, fill_price, brokerage, taxes,
+                ExitReason.SCALE_OUT, closed_at,
+            )
+            log.info(
+                "execution.reconcile.partial_exit_filled",
+                symbol=instrument.tradingsymbol, order_id=order.id, price=fill_price,
+                qty=filled_qty, remaining=position.quantity,
+            )
+            notifier.send_sync(
+                _partial_exit_message(instrument, trade, position, ExitReason.SCALE_OUT, order.mode),
+                "fill",
+            )
+            return
+
         trade = _finalize_close_position(
             db, position, instrument, fill_price, brokerage, taxes,
-            ExitReason.MANUAL, order.filled_at or datetime.now(UTC),
+            ExitReason.MANUAL, closed_at,
         )
         log.info(
             "execution.reconcile.exit_filled",
@@ -1105,6 +1348,35 @@ def _exit_message(instrument, trade, reason, mode) -> str:
         f"Held: {trade.holding_days} days\n"
         f"Reason: {reason}"
     )
+
+
+def _partial_exit_message(instrument, trade, position, reason, mode) -> str:
+    """Plain English on purpose — the owner reads these on a phone without a
+    trading background, so "stop-loss" becomes "sell-if-wrong price"."""
+    badge = "📝 PAPER" if mode == "paper" else "💰 <b>LIVE</b>"
+    symbol = instrument.tradingsymbol
+    held_before = trade.quantity + position.quantity
+    portion = "half" if trade.quantity * 2 == held_before else f"{trade.quantity:,} of {held_before:,} shares"
+    gain = trade.exit_price / trade.entry_price - 1 if trade.entry_price else 0.0
+
+    headline = f"Sold {portion} of {symbol} at {gain:+.1%}"
+    stop = position.stop_loss
+    if reason == ExitReason.SCALE_OUT and stop is not None:
+        if abs(stop - position.entry_price) < 0.005:
+            headline += " and moved its sell-if-wrong price up to what you paid"
+        else:
+            headline += f" — its sell-if-wrong price is ₹{stop:,.2f}, already above what you paid"
+    lines = [
+        f"💰 <b>BOOKED PART PROFIT · {symbol}</b>  ({badge})",
+        "",
+        f"{headline}.",
+        "",
+        f"Sold {trade.quantity:,} at ₹{trade.exit_price:,.2f} (bought at ₹{trade.entry_price:,.2f})",
+        f"Profit on those, after charges: <b>₹{trade.net_pnl:,.2f}</b>",
+        f"Still holding {position.quantity:,}"
+        + (f", aiming for ₹{position.take_profit:,.2f}" if position.take_profit else ""),
+    ]
+    return "\n".join(lines)
 
 
 def _manual_entry_message(instrument, position, mode) -> str:

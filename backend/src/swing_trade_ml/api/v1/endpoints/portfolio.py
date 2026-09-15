@@ -545,7 +545,9 @@ EXIT_REASON_LABELS = {
     ExitReason.SIGNAL_EXIT: "Model changed its mind",
     ExitReason.MANUAL: "Closed manually",
     ExitReason.RISK_LIMIT: "Risk limit",
-    ExitReason.TIME_STOP: "60-day time limit",
+    # No longer always 60 days — the time limit is set per strategy now.
+    ExitReason.TIME_STOP: "Held too long (time limit)",
+    ExitReason.SCALE_OUT: "Sold part at first target",
 }
 
 

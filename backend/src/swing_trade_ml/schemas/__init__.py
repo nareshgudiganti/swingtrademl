@@ -319,7 +319,11 @@ class PositionOut(BaseModel):
     instrument_id: int
     mode: str
     status: str
+    # Shares held now; initial_quantity is what was bought. They differ only
+    # on an open position that has sold part at its first target.
     quantity: int
+    initial_quantity: int | None = None
+    scaled_out_at: datetime | None = None
     entry_price: float
     entry_at: datetime
     exit_price: float | None

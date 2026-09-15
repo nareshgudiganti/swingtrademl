@@ -48,6 +48,7 @@ from swing_trade_ml.db.models.trading import Strategy as StrategyModel
 from swing_trade_ml.ml.dataset import load_candles
 from swing_trade_ml.services.costs import apply_slippage as _apply_slippage
 from swing_trade_ml.services.costs import compute_charges as _charges
+from swing_trade_ml.services.exit_policy import ExitPolicy, exit_policy_for, scale_out_quantity
 from swing_trade_ml.services.limits import limits_for
 from swing_trade_ml.services.risk import calculate_quantity, rank_buy_candidates
 from swing_trade_ml.strategies import get_strategy
@@ -83,7 +84,12 @@ class _OpenPosition:
     entry_date: date
     stop_loss: float | None
     take_profit: float | None
+    # Entry charges still attributable to the shares held — a partial exit
+    # moves its pro-rata share onto that slice's trade, exactly as
+    # Position.total_charges does on the live side.
     charges_so_far: float
+    # The in-memory twin of Position.scaled_out_at: scale out once only.
+    scaled_out: bool = False
 
 
 @dataclass(slots=True)
@@ -108,18 +114,31 @@ def _close_position(
     trades: list[BacktestTrade],
     reason: str,
     exit_date: date,
+    quantity: int | None = None,
 ) -> float:
     """Fill the exit at adverse slippage, charge costs, record the trade.
 
-    Returns the net cash proceeds to add back to the ledger.
+    `quantity` defaults to every share held (a full close). A smaller one
+    sells that slice only and leaves `pos` holding the rest, with the same
+    charge apportionment as execution._finalize_partial_close: the slice
+    takes quantity/held of the entry charges plus its own exit charges.
+
+    Returns the net cash proceeds to add back to the ledger. The entry
+    charges were already taken out of cash at entry, so only this exit's own
+    charges come off the proceeds — true for a slice as for a full close.
     """
+    held = pos.quantity
+    sold = held if quantity is None else min(quantity, held)
     fill_price = _apply_slippage(exit_price, "SELL")
-    turnover = fill_price * pos.quantity
+    turnover = fill_price * sold
     brokerage, taxes = _charges(turnover, "SELL")
-    total_charges = pos.charges_so_far + brokerage + taxes
-    gross_pnl = (fill_price - pos.entry_price) * pos.quantity
+    # Exactly charges_so_far on a full close (no multiply-then-divide), so a
+    # strategy that never scales out produces bit-identical numbers to before.
+    entry_charge_share = pos.charges_so_far if sold == held else pos.charges_so_far * sold / held
+    total_charges = entry_charge_share + brokerage + taxes
+    gross_pnl = (fill_price - pos.entry_price) * sold
     net_pnl = gross_pnl - total_charges
-    invested = pos.entry_price * pos.quantity
+    invested = pos.entry_price * sold
 
     trades.append(
         BacktestTrade(
@@ -128,7 +147,7 @@ def _close_position(
             exit_date=exit_date,
             entry_price=round(pos.entry_price, 2),
             exit_price=round(fill_price, 2),
-            quantity=pos.quantity,
+            quantity=sold,
             gross_pnl=round(gross_pnl, 2),
             charges=round(total_charges, 2),
             net_pnl=round(net_pnl, 2),
@@ -137,7 +156,47 @@ def _close_position(
             exit_reason=reason,
         )
     )
+    if sold < held:
+        pos.quantity = held - sold
+        pos.charges_so_far -= entry_charge_share
     return turnover - brokerage - taxes
+
+
+def _maybe_scale_out(
+    pos: _OpenPosition,
+    policy: ExitPolicy,
+    bar_high: float,
+    trades: list[BacktestTrade],
+    day: date,
+) -> float:
+    """The backtest's version of check_exits' scale-out branch. Returns cash
+    proceeds (0.0 when nothing was sold).
+
+    Fills at the first-target level itself, the same daily-bar approximation
+    this module already makes for the final target. Uses the same pure
+    decision (exit_policy.scale_out_quantity) as the live path, including the
+    minimum position size and the "never scale out a 1-share position" rule,
+    and moves the stop up to at least the entry price afterwards.
+    """
+    if not policy.scale_out_enabled or pos.scaled_out:
+        return 0.0
+    level = pos.entry_price * (1 + policy.scale_out_at_pct)
+    if bar_high < level:
+        return 0.0
+    sell = scale_out_quantity(
+        policy,
+        entry_price=pos.entry_price,
+        price=level,
+        quantity=pos.quantity,
+        already_scaled_out=pos.scaled_out,
+    )
+    if not sell:
+        return 0.0
+    proceeds = _close_position(pos, level, trades, "SCALE_OUT", day, quantity=sell)
+    pos.scaled_out = True
+    if pos.stop_loss is None or pos.stop_loss < pos.entry_price:
+        pos.stop_loss = pos.entry_price
+    return proceeds
 
 
 def _compute_stats(
@@ -249,6 +308,7 @@ def run_backtest(
     )
     impl = get_strategy(strategy_row)
     min_bars = impl.min_bars_required()
+    exit_policy = exit_policy_for(strategy_row.params)
 
     history: dict[int, pd.DataFrame] = {}
     for inst in instruments:
@@ -273,8 +333,10 @@ def run_backtest(
     peak = starting_capital
 
     for day in all_dates:
-        # ---- mechanical exits first: stop-loss > target > time-stop, same
-        # priority order as services/execution.check_exits ----
+        # ---- mechanical exits first: stop-loss > target > time-stop >
+        # scale-out, same priority order as services/execution.check_exits.
+        # A bar that scales out never also fully exits; the remainder is
+        # judged from the next bar on. ----
         for inst_id, pos in list(open_positions.items()):
             bar_rows = history[inst_id][history[inst_id]["ts"].dt.date == day]
             if bar_rows.empty:
@@ -287,12 +349,14 @@ def run_backtest(
                 reason, exit_price = "STOP_LOSS_HIT", pos.stop_loss
             elif pos.take_profit and bar["high"] >= pos.take_profit:
                 reason, exit_price = "TARGET_HIT", pos.take_profit
-            elif (day - pos.entry_date).days >= 60:
+            elif (day - pos.entry_date).days >= exit_policy.time_stop_days:
                 reason, exit_price = "TIME_STOP", float(bar["close"])
 
             if reason is not None:
                 cash += _close_position(pos, exit_price, trades, reason, day)
                 del open_positions[inst_id]
+            else:
+                cash += _maybe_scale_out(pos, exit_policy, float(bar["high"]), trades, day)
 
         # ---- signal-driven exits, and BUY candidates for this day ----
         buy_candidates: list[tuple[Instrument, SignalDecision]] = []

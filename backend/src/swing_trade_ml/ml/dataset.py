@@ -123,12 +123,41 @@ def build_training_dataset(
     return dataset
 
 
-def chronological_split(dataset: pd.DataFrame, test_size: float = 0.2) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Split whole timestamps and purge training labels overlapping the test window."""
+def chronological_split(
+    dataset: pd.DataFrame, test_size: float = 0.2, embargo_days: int = 0
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Split by time, never randomly, and purge every training row whose
+    label window reaches into the test period.
+
+    A random split lets the model train on next Tuesday and test on last
+    Monday. With overlapping forward-return labels the leakage is severe, and
+    the resulting accuracy is fiction. Splitting on a date reproduces the only
+    situation that matters: predicting a future the model has never seen.
+
+    The cut lands on a date boundary, not a row count — the pooled frame
+    holds one row per symbol per bar, so a positional cut can put half of one
+    day's symbols in train and the other half in test.
+
+    Purging prefers the exact per-row `label_end_ts` (the barrier label's own
+    forward-window boundary, stamped by build_label) when the dataset carries
+    it — every frame build_training_dataset produces does, and it is exact
+    regardless of horizon_days, unlike counting a fixed number of dates.
+    `embargo_days` (drop the last N distinct trading dates instead) is the
+    fallback for a frame that predates that column — a synthetic one in a
+    test, say — where it should be set to the label horizon.
+
+    The two purges disagree deliberately on what an empty training set after
+    purging means. With `label_end_ts` there is a real answer being purged
+    away, so an empty result means "no usable data" — a hard error. Without
+    it, `embargo_days` is a blunter, caller-supplied instrument that can
+    legitimately be asked for more embargo than the data has; returning an
+    empty frame lets a caller who wants to see that happen see it.
+    """
     if not 0 < test_size < 1:
         raise ValueError("test_size must be strictly between 0 and 1")
-    if dataset.empty or "label_end_ts" not in dataset:
-        raise ValueError("Training data requires rows and label_end_ts; rebuild the dataset")
+    if dataset.empty:
+        return dataset, dataset
+
     ordered = dataset.sort_values("ts", kind="stable")
     timestamps = ordered["ts"].drop_duplicates().sort_values()
     cutoff = int(len(timestamps) * (1 - test_size))
@@ -136,16 +165,39 @@ def chronological_split(dataset: pd.DataFrame, test_size: float = 0.2) -> tuple[
         raise ValueError("Insufficient timestamps for a chronological split; ingest more history")
     test_start = timestamps.iloc[cutoff]
     before = ordered[ordered["ts"] < test_start]
-    train = before[before["label_end_ts"] < test_start].copy()
     test = ordered[ordered["ts"] >= test_start].copy()
-    if train.empty or test.empty:
-        raise ValueError("No usable rows after label-window purging; ingest more history or shorten the horizon")
-    train.attrs["split"] = {
-        "method": "timestamp_purged",
-        "train_start": train["ts"].min().isoformat(),
-        "train_end": train["ts"].max().isoformat(),
-        "test_start": test_start.isoformat(),
-        "test_end": test["ts"].max().isoformat(),
-        "purged_rows": len(before) - len(train),
-    }
-    return train, test
+
+    if "label_end_ts" in ordered.columns:
+        train = before[before["label_end_ts"] < test_start].copy()
+        if train.empty or test.empty:
+            raise ValueError(
+                "No usable rows after label-window purging; ingest more history or shorten the horizon"
+            )
+        train.attrs["split"] = {
+            "method": "timestamp_purged",
+            "train_start": train["ts"].min().isoformat(),
+            "train_end": train["ts"].max().isoformat(),
+            "test_start": test_start.isoformat(),
+            "test_end": test["ts"].max().isoformat(),
+            "purged_rows": len(before) - len(train),
+        }
+        return train, test
+
+    return apply_embargo(before, embargo_days).copy(), test
+
+
+def apply_embargo(train_df: pd.DataFrame, embargo_days: int) -> pd.DataFrame:
+    """Drop the last `embargo_days` distinct dates of an already-cut train frame.
+
+    Counted in distinct dates present in the data, not calendar days — a label
+    horizon is measured in trading bars, and weekends and holidays have none.
+    The fallback purge for a frame with no `label_end_ts` column; see
+    chronological_split.
+    """
+    if embargo_days <= 0 or train_df.empty:
+        return train_df
+    dates = train_df["ts"].drop_duplicates().sort_values()
+    if embargo_days >= len(dates):
+        return train_df.iloc[0:0]
+    first_embargoed = dates.iloc[-embargo_days]
+    return train_df[train_df["ts"] < first_embargoed]

@@ -205,8 +205,9 @@ class Position(Base, TimestampMixin):
     """An open or closed holding.
 
     A swing position is opened by one entry order and closed by an exit order
-    days later, so it holds both sides plus the live mark-to-market fields the
-    dashboard reads.
+    days later — or, for a strategy that books partial profit, by two exits —
+    so it holds both sides plus the live mark-to-market fields the dashboard
+    reads.
     """
 
     __tablename__ = "positions"
@@ -220,7 +221,27 @@ class Position(Base, TimestampMixin):
     mode: Mapped[str] = mapped_column(String(8), default=TradingMode.PAPER, index=True)
     status: Mapped[str] = mapped_column(String(8), default=PositionStatus.OPEN, index=True)
 
+    # Shares CURRENTLY HELD while the position is open. A partial exit
+    # (ExitReason.SCALE_OUT) reduces this in place; once the position is
+    # closed it is restored to initial_quantity, so a closed row means "how
+    # big this position was", exactly as every closed row before partial
+    # exits existed did.
+    #
+    # Deliberately not a separate `quantity_remaining` column: cash
+    # (brokers/paper.py get_available_cash), mark-to-market, holdings value,
+    # pyramiding exposure (services/risk.py open_exposure_value) and the
+    # Positions page all read `quantity` as "what is held right now". Keeping
+    # that meaning leaves every one of them correct without a change, where a
+    # new column would have to be threaded through each — and any reader
+    # missed would silently value shares that were already sold.
     quantity: Mapped[int] = mapped_column(Integer)
+    # Shares bought at entry, frozen. Null only on rows written before partial
+    # exits existed and not yet backfilled (the migration backfills them).
+    initial_quantity: Mapped[int | None] = mapped_column(Integer)
+    # Set once the first-target partial sale has filled. It is the
+    # "scale out once only" marker: check_exits never scales out a position
+    # that already carries it.
+    scaled_out_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     entry_price: Mapped[float] = mapped_column(Float)
     entry_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
 
@@ -255,7 +276,14 @@ class Position(Base, TimestampMixin):
     # Refreshed by the mark-to-market job while the position is open
     current_price: Mapped[float | None] = mapped_column(Float)
     unrealized_pnl: Mapped[float] = mapped_column(Float, default=0.0)
+    # Net P&L banked so far, summed across every exit (a scaled-out position
+    # has two). Null until the first exit.
     realized_pnl: Mapped[float | None] = mapped_column(Float)
+    # While OPEN: the entry-side charges still attributable to the shares
+    # held — a partial exit moves its pro-rata share onto that slice's Trade.
+    # The paper cash ledger depends on exactly this meaning (locked capital =
+    # entry_price * quantity + total_charges). Once CLOSED: every charge the
+    # position ever paid, entry and all exits.
     total_charges: Mapped[float] = mapped_column(Float, default=0.0)
 
     # Set the first time check_exits() alerts on a triggered stop/target for
@@ -286,7 +314,10 @@ class Position(Base, TimestampMixin):
 class Trade(Base, TimestampMixin):
     """A completed round trip — the immutable record used for performance stats.
 
-    Written once when a position closes. Positions get mutated (marked to
+    Written once per EXIT: a position closed in one go writes one row, a
+    scaled-out position writes one for the slice sold at the first target and
+    another at the final close. Each row carries its own share of the entry
+    charges, so summing rows never double-counts them. Positions get mutated (marked to
     market, stops trailed); this table never does, so backtest-style analytics
     read from a stable source.
     """

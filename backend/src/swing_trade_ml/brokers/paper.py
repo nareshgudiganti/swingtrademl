@@ -120,6 +120,12 @@ class PaperBroker(Broker):
         `Trade.net_pnl` (gross_pnl minus total charges); for an open one,
         `Position.total_charges` is the entry-side charge only (exit hasn't
         happened yet), so the capital still tied up is entry value + that.
+
+        Partial exits keep this exact without a special case, because both
+        terms move together: the sold slice's Trade row carries its pro-rata
+        share of the entry charges (so its net_pnl lands in `realized`), while
+        the position's `quantity` and `total_charges` drop to what still
+        belongs to the shares held. See execution._finalize_partial_close.
         """
         realized = float(
             db.execute(

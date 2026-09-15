@@ -143,6 +143,12 @@ def test_scan_exits_first_then_stable_rank_in_strategy_mode(monkeypatch, confirm
         assert calls[0][0] == 1
         return 0 if confirmed_exit else 1
     monkeypatch.setattr(engine.risk, 'open_position_count', count)
+    # _rank_out_reasons now resolves its slot budget through the
+    # account-value ladder (services/limits.py), which needs a portfolio
+    # value — the strategy's own max_positions=2 still wins over the
+    # ladder regardless of the figure supplied, so any value here keeps
+    # this test exercising what it always tested.
+    monkeypatch.setattr(engine, 'portfolio_value_and_cash', lambda db, mode: (1_000_000.0, 1_000_000.0))
     def process(db, strategy, instrument, decision, ranked_out_reason=None):
         calls.append((instrument.id, ranked_out_reason))
         return SimpleNamespace(was_executed=False)

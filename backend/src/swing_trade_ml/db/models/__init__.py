@@ -16,6 +16,7 @@ from swing_trade_ml.db.models.finance import (
 from swing_trade_ml.db.models.market import Candle, Instrument, Quote
 from swing_trade_ml.db.models.ml import MLModel, Prediction
 from swing_trade_ml.db.models.mutual_funds import MutualFund, MutualFundHolding, MutualFundNav
+from swing_trade_ml.db.models.safety import RiskEvent, SystemState
 from swing_trade_ml.db.models.session import BrokerSession, User
 from swing_trade_ml.db.models.trading import (
     Order,
@@ -46,8 +47,10 @@ __all__ = [
     "Position",
     "Prediction",
     "Quote",
+    "RiskEvent",
     "Signal",
     "Strategy",
+    "SystemState",
     "Trade",
     "User",
 ]

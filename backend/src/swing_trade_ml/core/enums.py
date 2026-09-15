@@ -63,6 +63,10 @@ class ExitReason(StrEnum):
     MANUAL = "MANUAL"
     RISK_LIMIT = "RISK_LIMIT"
     TIME_STOP = "TIME_STOP"
+    # A partial exit: part of the position sold at the first profit target,
+    # the rest kept open. Written on that slice's Trade row only — the
+    # Position's own exit_reason is reserved for the final, full close.
+    SCALE_OUT = "SCALE_OUT"
 
 
 class CandleInterval(StrEnum):

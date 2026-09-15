@@ -319,7 +319,11 @@ class PositionOut(BaseModel):
     instrument_id: int
     mode: str
     status: str
+    # Shares held now; initial_quantity is what was bought. They differ only
+    # on an open position that has sold part at its first target.
     quantity: int
+    initial_quantity: int | None = None
+    scaled_out_at: datetime | None = None
     entry_price: float
     entry_at: datetime
     exit_price: float | None
@@ -427,6 +431,7 @@ class TrainRequest(BaseModel):
     test_size: float | None = None
     hyperparameters: dict[str, Any] | None = None
     auto_activate: bool = False
+    walk_forward_folds: int | None = Field(None, ge=0, le=20)
 
 
 class MLModelOut(BaseModel):
@@ -817,3 +822,81 @@ class MutualFundCasImportResult(BaseModel):
     schemes_matched: int
     lots_created: int
     unmatched_schemes: list[str]
+
+
+# ---------------------------------------------------------------- calibration --
+
+
+class CalibrationBucket(BaseModel):
+    """One confidence band. Returns are fractions (0.08 = +8%)."""
+
+    model_config = ORM
+
+    lower: float
+    upper: float
+    n: int
+    wins: int
+    observed_rate: float | None
+    mean_confidence: float | None
+    # observed_rate - mean_confidence: negative means the model is over-confident
+    calibration_gap: float | None
+    mean_outcome_pct: float | None
+    worst_outcome_pct: float | None
+    # False under 30 samples — too few for the hit rate to be acted on
+    meaningful: bool
+
+
+class CalibrationReport(BaseModel):
+    """Whether shown confidence matches realised hit rate. Filters that do not
+    apply to the chosen source come back null."""
+
+    model_config = ORM
+
+    source: str
+    mode: str | None
+    strategy_id: int | None
+    since: datetime | None
+    model_id: int | None
+    label_kind: str | None
+    total_scored: int
+    excluded_below_min: int
+    brier_score: float | None
+    buckets: list[CalibrationBucket]
+
+
+# ------------------------------------------------------------------- safety --
+
+
+class SystemStateOut(BaseModel):
+    model_config = ORM
+
+    new_entries_enabled: bool
+    exits_enabled: bool
+    halt_reason: str | None = None
+    halted_at: datetime | None = None
+    halted_by: str | None = None
+
+
+class HaltRequest(BaseModel):
+    reason: str = Field(..., min_length=1, max_length=500)
+    # Who pressed it, for the record. Defaults rather than being required:
+    # an emergency halt must never fail validation over a missing label.
+    by: str = "dashboard"
+
+
+class ResumeRequest(BaseModel):
+    by: str = "dashboard"
+
+
+class RiskEventOut(BaseModel):
+    model_config = ORM
+
+    id: int
+    ts: datetime
+    mode: str
+    strategy_id: int | None
+    instrument_id: int | None
+    symbol: str | None
+    rule: str
+    reason: str
+    amount_inr: float | None

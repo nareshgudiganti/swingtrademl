@@ -150,6 +150,10 @@ class Settings(BaseSettings):
     ENABLE_SCHEDULER: bool = True
 
     # --------------------------------------------------------------- risk --
+    # MAX_POSITION_PCT and MAX_OPEN_POSITIONS are no longer read by the entry
+    # path, the scan or the backtest: both now scale with account size (see
+    # services/limits.py). Kept so an existing .env that sets them still
+    # loads; changing them has no effect.
     MAX_POSITION_PCT: float = 0.10
     MAX_OPEN_POSITIONS: int = 10
     RISK_PER_TRADE_PCT: float = 0.01
@@ -165,7 +169,9 @@ class Settings(BaseSettings):
     FIXED_POSITION_AMOUNT_INR: float = 10_000.0
     DEFAULT_STOP_LOSS_PCT: float = 0.05
     DEFAULT_TAKE_PROFIT_PCT: float = 0.15
-    MAX_PORTFOLIO_DRAWDOWN_PCT: float = 0.20
+    # Owner decision (Sept 2026): halt new entries at 15% below peak
+    # (−₹1,50,000 at ₹10 lakh). Never force-sells.
+    MAX_PORTFOLIO_DRAWDOWN_PCT: float = 0.15
     # Blocks re-entering a symbol for this many days after it stopped this
     # same strategy out — added after the small-cap backtest showed the same
     # name (LATENTVIEW) getting stopped out three separate times in a few
@@ -179,6 +185,15 @@ class Settings(BaseSettings):
     # a single day's normal probability jitter (e.g. 66% -> 63%) must never
     # trigger this — only a real decline into genuinely weaker territory.
     CONFIDENCE_DECAY_ALERT_PCT: float = 0.15
+    # Partial profit booking (selling part of a position at a first target,
+    # opted into per strategy via Strategy.params["scale_out_at_pct"]) is
+    # skipped for any position worth less than this. The reason is the flat
+    # depository fee (PAPER_DP_CHARGE_PER_SELL): every sell pays it in full
+    # regardless of size, so splitting one exit into two doubles it. On a
+    # small position that second fee eats the profit the early sale was meant
+    # to lock in; around here it falls to roughly 0.1% of the position and
+    # stops mattering.
+    SCALE_OUT_MIN_POSITION_INR: float = 16_000.0
 
     # ----------------------------------------------------------------- ml --
     MODEL_ARTIFACT_DIR: str = "./data/models"

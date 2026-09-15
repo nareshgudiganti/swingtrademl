@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+from typing import Literal
+
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, status
 from sqlalchemy import Integer, cast, func, select
 
@@ -10,10 +13,12 @@ from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.db.models.market import Instrument
 from swing_trade_ml.db.models.ml import MLModel, Prediction
 from swing_trade_ml.db.session import session_scope
+from swing_trade_ml.ml import calibration as calibration_service
 from swing_trade_ml.ml import predict as predict_service
 from swing_trade_ml.ml import train as train_service
 from swing_trade_ml.ml.registry import activate_model, get_active_model
 from swing_trade_ml.schemas import (
+    CalibrationReport,
     MessageResponse,
     MLModelDetail,
     MLModelOut,
@@ -77,6 +82,7 @@ def train(payload: TrainRequest, background: BackgroundTasks) -> MessageResponse
                     test_size=payload.test_size,
                     hyperparameters=payload.hyperparameters,
                     auto_activate=payload.auto_activate,
+                    walk_forward_folds=payload.walk_forward_folds or 0,
                 )
         except Exception as exc:  # noqa: BLE001 — surface via logs/Telegram, don't crash the worker
             log.error("ml.train.failed", error=str(exc))
@@ -244,3 +250,30 @@ def evaluate_predictions(db: DbSession) -> MessageResponse:
     """Backfill outcomes for predictions whose horizon has elapsed."""
     count = predict_service.evaluate_pending_predictions(db)
     return MessageResponse(message=f"Evaluated {count} predictions")
+
+
+@router.get("/calibration", response_model=CalibrationReport)
+def calibration(
+    db: DbSession,
+    source: Literal["signals", "predictions"] = "signals",
+    mode: str | None = "paper",
+    strategy_id: int | None = None,
+    since: datetime | None = None,
+    model_id: int | None = None,
+    label_kind: str = "barrier",
+) -> CalibrationReport:
+    """Does a shown confidence of 0.70 actually hit its target 70% of the time?
+
+    `mode`, `strategy_id` and `since` apply to signals; `model_id` and
+    `label_kind` to predictions. Buckets under 30 samples are flagged not
+    meaningful rather than hidden, so the report is honest from day one.
+    """
+    if source == "signals":
+        report = calibration_service.signal_calibration(
+            db, mode=mode, strategy_id=strategy_id, since=since
+        )
+    else:
+        report = calibration_service.prediction_calibration(
+            db, model_id=model_id, label_kind=label_kind
+        )
+    return CalibrationReport.model_validate(report)

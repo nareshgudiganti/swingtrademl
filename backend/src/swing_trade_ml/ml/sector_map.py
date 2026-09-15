@@ -213,6 +213,47 @@ SECTOR_INDEX_MAP: dict[str, str] = {
 
 _warned_unmapped: set[str] = set()
 
+# Bucket -> the plain name the owner reads in a rejection reason.
+SECTOR_DISPLAY_NAMES: dict[str, str] = {
+    "BANK": "Banking",
+    "FIN_SERVICE": "Financial services",
+    "CAPITAL_MKT": "Capital markets",
+    "IT": "IT",
+    "AUTO": "Auto",
+    "FMCG": "Everyday consumer goods",
+    "CONSR_DURBL": "Consumer durables",
+    "CONSUMPTION": "Consumption",
+    "PHARMA": "Pharma",
+    "HEALTHCARE": "Healthcare",
+    "METAL": "Metals",
+    "ENERGY": "Energy",
+    "REALTY": "Real estate",
+    "CHEMICALS": "Chemicals",
+    "COMMODITIES": "Commodities",
+    "INFRA": "Infrastructure",
+}
+
+
+def get_sector_bucket(tradingsymbol: str) -> str | None:
+    """The sector bucket this symbol belongs to, or None if it is unmapped.
+
+    This — not get_sector_index() — is what portfolio-level sector limits
+    group by, for two reasons that both silently mis-group positions
+    otherwise:
+
+    * get_sector_index() falls back to the benchmark for every unmapped
+      symbol, so grouping by its result would lump every unmapped stock
+      together into one pseudo-sector and block them against each other.
+    * Two buckets share one index (CHEMICALS and COMMODITIES both point at
+      NIFTY COMMODITIES — see _SECTOR_INDEX), so grouping by index would
+      treat a chemicals stock and a commodities stock as the same sector.
+    """
+    return _SYMBOL_SECTOR.get(tradingsymbol.upper())
+
+
+def sector_display_name(bucket: str) -> str:
+    return SECTOR_DISPLAY_NAMES.get(bucket, bucket.replace("_", " ").title())
+
 
 def get_sector_index(tradingsymbol: str) -> str:
     """The sector-index tradingsymbol to use as this symbol's peer group.

@@ -8,7 +8,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from swing_trade_ml.brokers import get_broker
-from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.enums import SignalType
 from swing_trade_ml.core.strategy_policy import is_advisory
 from swing_trade_ml.core.logging import get_logger
@@ -17,6 +16,8 @@ from swing_trade_ml.db.models.trading import Strategy
 from swing_trade_ml.ml.dataset import load_candles
 from swing_trade_ml.services import risk
 from swing_trade_ml.services.execution import process_decision
+from swing_trade_ml.services.limits import limits_for
+from swing_trade_ml.services.portfolio import portfolio_value_and_cash
 from swing_trade_ml.strategies import get_strategy
 from swing_trade_ml.strategies.base import SignalDecision
 
@@ -65,7 +66,11 @@ def _rank_out_reasons(
         return {}
 
     open_count = risk.open_position_count(db, mode)
-    slot_budget = strategy.max_positions or settings.MAX_OPEN_POSITIONS
+    # Same resolver check_entry uses, fed the same portfolio value, so the
+    # number of candidates acted on tracks the account-size ladder rather
+    # than a fixed constant check_entry no longer reads.
+    total_value, _cash = portfolio_value_and_cash(db, mode)
+    slot_budget = limits_for(total_value, strategy).max_positions
     room = max(slot_budget - open_count, 0)
     cap = min(strategy.max_daily_buys, room) if strategy.max_daily_buys is not None else room
 

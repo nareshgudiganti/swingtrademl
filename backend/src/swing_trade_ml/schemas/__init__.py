@@ -427,6 +427,7 @@ class TrainRequest(BaseModel):
     test_size: float | None = None
     hyperparameters: dict[str, Any] | None = None
     auto_activate: bool = False
+    walk_forward_folds: int | None = Field(None, ge=0, le=20)
 
 
 class MLModelOut(BaseModel):

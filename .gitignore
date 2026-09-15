@@ -52,3 +52,6 @@ logs/
 
 # --- Superpowers subagent-driven-development scratch workspace ---
 .superpowers/
+
+# --- Design canvas working files (artboard sources + a ~3MB seeded payload) ---
+.design-src/

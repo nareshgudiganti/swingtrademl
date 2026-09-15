@@ -525,7 +525,10 @@ def close(position_id: int, payload: ClosePositionRequest, db: DbSession) -> Mes
     except ValueError:
         reason = ExitReason.MANUAL
 
-    trade = close_position(db, position, None, reason, payload.note)
+    try:
+        trade = close_position(db, position, None, reason, payload.note)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
     if trade is None:
         raise HTTPException(
             status.HTTP_502_BAD_GATEWAY, "Exit order did not fill — check order history"

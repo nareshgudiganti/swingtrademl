@@ -439,6 +439,7 @@ def build_label(
     # Carried for diagnostics and for the dataset projection. It is the plain
     # close-to-close return at the horizon and is NOT what `target` measures —
     # the two disagree whenever a barrier was touched mid-window.
+    out["label_end_ts"] = out["ts"].shift(-horizon_days)
     out["future_close"] = out["close"].shift(-horizon_days)
     out["forward_return"] = out["future_close"] / out["close"] - 1
 

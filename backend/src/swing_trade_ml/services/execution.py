@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from swing_trade_ml.brokers import OrderRequest, OrderResult, get_broker
 from swing_trade_ml.core.config import settings
+from swing_trade_ml.core.strategy_policy import is_advisory, require_broker_execution
 from swing_trade_ml.core.enums import (
     ExitReason,
     OrderStatus,
@@ -116,6 +117,7 @@ def open_position(
     The Order row is written before submission so a crash mid-flight leaves a
     record to reconcile against rather than an untracked broker order.
     """
+    require_broker_execution(strategy)
     broker = get_broker()
     now = datetime.now(UTC)
 
@@ -331,6 +333,7 @@ def close_position(
     note: str | None = None,
 ) -> Trade | None:
     """Exit a position and write the immutable Trade record."""
+    require_broker_execution(position.strategy)
     broker = get_broker()
     instrument = db.get(Instrument, position.instrument_id)
     if instrument is None:
@@ -682,7 +685,7 @@ def process_decision(
             signal.rejection_reason = "No open position to exit"
             db.commit()
             return signal
-        if strategy.execution_mode == "advisory":
+        if is_advisory(strategy):
             signal.advisory_only = True
             db.commit()
             for position in existing_positions:
@@ -740,7 +743,7 @@ def process_decision(
         )
         return signal
 
-    if strategy.execution_mode == "advisory":
+    if is_advisory(strategy):
         signal.advisory_only = True
         db.commit()
         notifier.send_sync(
@@ -803,7 +806,7 @@ def check_exits(db: Session) -> list[Trade]:
             .join(Strategy, Strategy.id == Position.strategy_id, isouter=True)
             .where(
                 Position.status == PositionStatus.OPEN,
-                (Position.mode == mode) | (Strategy.execution_mode == "advisory"),
+                (Position.mode == mode) | ((Strategy.execution_mode == "advisory") | (Strategy.strategy_type == "long_term_value")),
             )
         )
         .scalars()
@@ -845,7 +848,7 @@ def check_exits(db: Session) -> list[Trade]:
         if reason is None:
             continue
 
-        if position.strategy is not None and position.strategy.execution_mode == "advisory":
+        if is_advisory(position.strategy):
             # Alert once, not every 60s — the position stays open until the
             # user records the exit via manual_close_position().
             if position.advisory_alert_sent_at is None:

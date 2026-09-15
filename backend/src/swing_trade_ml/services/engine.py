@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from swing_trade_ml.brokers import get_broker
 from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.enums import SignalType
+from swing_trade_ml.core.strategy_policy import is_advisory
 from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.db.models.market import Instrument
 from swing_trade_ml.db.models.trading import Strategy
@@ -79,6 +80,8 @@ def _rank_out_reasons(
 
 
 def run_strategy(db: Session, strategy: Strategy, interval: str = "day") -> ScanResult:
+    if not is_advisory(strategy) and strategy.mode != get_broker().mode:
+        raise ValueError("Automatic strategy mode does not match the current broker")
     result = ScanResult(strategies_run=1)
     impl = get_strategy(strategy)
     instruments = eligible_instruments(db, strategy)
@@ -119,21 +122,29 @@ def run_strategy(db: Session, strategy: Strategy, interval: str = "day") -> Scan
             result.errors.append(message)
             db.rollback()
 
-    ranked_out = _rank_out_reasons(db, strategy, get_broker().mode, pending)
+    def process(items, ranked_out=None):
+        for instrument, decision in items:
+            try:
+                reason = (ranked_out or {}).get(instrument.id) if decision.signal == SignalType.BUY else None
+                signal = process_decision(db, strategy, instrument, decision, ranked_out_reason=reason)
+                if signal and signal.was_executed:
+                    result.executed += 1
+            except Exception as exc:  # noqa: BLE001 - isolate each instrument
+                message = f"{strategy.name}/{instrument.tradingsymbol}: {exc}"
+                log.error("engine.instrument.failed", strategy=strategy.name,
+                          symbol=instrument.tradingsymbol, error=str(exc))
+                result.errors.append(message)
+                db.rollback()
 
-    for instrument, decision in pending:
-        try:
-            reason = ranked_out.get(instrument.id) if decision.signal == SignalType.BUY else None
-            signal = process_decision(db, strategy, instrument, decision, ranked_out_reason=reason)
-            if signal and signal.was_executed:
-                result.executed += 1
-
-        except Exception as exc:  # noqa: BLE001 — one symbol must not abort the scan
-            message = f"{strategy.name}/{instrument.tradingsymbol}: {exc}"
-            log.error("engine.instrument.failed", strategy=strategy.name,
-                      symbol=instrument.tradingsymbol, error=str(exc))
-            result.errors.append(message)
-            db.rollback()
+    # Only confirmed exits release capacity; pending orders still have open positions.
+    process([(i, d) for i, d in pending if d.signal in (SignalType.EXIT, SignalType.SELL)])
+    process([(i, d) for i, d in pending if d.signal == SignalType.HOLD])
+    buys = sorted(
+        [(i, d) for i, d in pending if d.signal == SignalType.BUY],
+        key=lambda item: item[1].confidence or 0.0, reverse=True,
+    )
+    ranked_out = _rank_out_reasons(db, strategy, strategy.mode, buys)
+    process(buys, ranked_out)
 
     log.info(
         "engine.strategy.done",
@@ -163,7 +174,8 @@ def run_all_active(db: Session, interval: str = "day") -> ScanResult:
         db.execute(
             select(Strategy).where(
                 Strategy.is_active.is_(True),
-                (Strategy.mode == mode) | (Strategy.execution_mode == "advisory"),
+                (Strategy.mode == mode) | (Strategy.execution_mode == "advisory")
+                | (Strategy.strategy_type == "long_term_value"),
             )
         )
         .scalars()

@@ -23,7 +23,10 @@ from swing_trade_ml.core.enums import SignalType
 from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.db.models.market import Instrument
 from swing_trade_ml.ml.features import build_features
-from swing_trade_ml.ml.market_context import load_index_candles
+from swing_trade_ml.ml.market_context import (
+    load_index_candles, load_sector_candles, load_vix_candles, load_market_breadth,
+)
+from swing_trade_ml.ml.sector_map import get_sector_index
 from swing_trade_ml.ml.predict import _get_bundle
 from swing_trade_ml.ml.registry import get_active_model
 from swing_trade_ml.strategies.base import BaseStrategy, SignalDecision, register_strategy
@@ -69,14 +72,7 @@ class LongTermValueStrategy(BaseStrategy):
         # phase this whole app is still in applies doubly to a multi-month
         # commitment of capital.
         #
-        # NOTE: as of this writing, engine.py's actual advisory-routing
-        # mechanism (services/execution.py's process_decision) gates on
-        # Strategy.execution_mode ("auto"/"advisory", a DB row field set
-        # when the Strategy row is created), not on a strategy class's
-        # default_params — this key documents the intended default and is
-        # asserted by tests, but the DB row for this strategy must also be
-        # created with execution_mode="advisory" to actually enforce it at
-        # runtime. See Task 3 Step 5 for the full investigation.
+        # Enforced by the shared strategy capability policy.
         "advisory_only": True,
     }
 
@@ -95,20 +91,14 @@ class LongTermValueStrategy(BaseStrategy):
             return None
 
         d = df.sort_values("ts").reset_index(drop=True)
-        # Bounded to this instrument's own most recent visible bar — same
-        # look-ahead guarantee ml_swing.py's evaluate() relies on (live: only
-        # up-to-now candles; backtest: the caller's pre-sliced window).
-        #
-        # NOTE (deviation from the original plan sample code): the plan's
-        # Task 3 sample also merged sector/VIX/market-breadth context via
-        # load_sector_candles/load_vix_candles/load_market_breadth and a new
-        # ml/sector_map.py module. None of those exist in this codebase —
-        # only load_index_candles and the two-argument build_features(df,
-        # index_df) do (confirmed by grep before writing this). This mirrors
-        # ml_swing.py's actual (not aspirational) feature-building call
-        # exactly, so the two ML strategies stay on the same real pipeline.
-        index_df = load_index_candles(db, interval="day", upto=d["ts"].max())
-        featured = build_features(d, index_df)
+        as_of = d["ts"].max()
+        index_df = load_index_candles(db, interval="day", upto=as_of)
+        sector_df = load_sector_candles(
+            db, get_sector_index(instrument.tradingsymbol), interval="day", upto=as_of
+        )
+        vix_df = load_vix_candles(db, interval="day", upto=as_of)
+        breadth_df = load_market_breadth(db, interval="day", upto=as_of)
+        featured = build_features(d, index_df, sector_df, vix_df, breadth_df)
         row = featured.iloc[[-1]]
 
         bundle = _get_bundle(model)

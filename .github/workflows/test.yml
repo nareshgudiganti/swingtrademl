@@ -15,6 +15,7 @@ on:
     branches: [develop]
   pull_request:
   workflow_dispatch: {}
+  workflow_call: {}
 
 concurrency:
   group: test-${{ github.ref }}
@@ -94,4 +95,8 @@ jobs:
 
       - name: Typecheck
         working-directory: frontend
-        run: npx tsc --noEmit
+        run: npm run typecheck
+
+      - name: Production build
+        working-directory: frontend
+        run: npm run build

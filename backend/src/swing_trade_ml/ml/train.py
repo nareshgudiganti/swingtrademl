@@ -145,6 +145,8 @@ def train_model(
         log.warning("train.small_dataset", rows=len(dataset))
 
     train_df, test_df = chronological_split(dataset, test_size)
+    if train_df["target"].nunique() < 2:
+        raise ValueError("Training data has only one class after purging; add history or revise the label")
     if test_df.empty:
         raise ValueError("Test split is empty — need more historical data")
 
@@ -169,6 +171,7 @@ def train_model(
     )
 
     metrics = {
+        "split": train_df.attrs["split"],
         "accuracy": float(accuracy_score(y_test, y_pred)),
         # zero_division=0: an over-conservative model can predict no positives
         # at all, and that should score 0 rather than raise.

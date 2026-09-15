@@ -325,13 +325,13 @@ export default function Strategies() {
                           className="row"
                           style={{ gap: '0.35rem', color: 'var(--text-dim)', fontSize: '0.85rem' }}
                           title={
-                            s.execution_mode === 'auto'
+                            s.strategy_type !== 'long_term_value' && s.execution_mode === 'auto'
                               ? 'Places real orders automatically on a signal'
                               : 'Only recommends — you record the fill yourself'
                           }
                         >
-                          <ExecutionIcon auto={s.execution_mode === 'auto'} />
-                          {s.execution_mode}
+                          <ExecutionIcon auto={s.strategy_type !== 'long_term_value' && s.execution_mode === 'auto'} />
+                          {s.strategy_type === 'long_term_value' ? 'advisory' : s.execution_mode}
                         </span>
                       </td>
                       <td>

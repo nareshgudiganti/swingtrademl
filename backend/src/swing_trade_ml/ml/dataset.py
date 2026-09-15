@@ -106,7 +106,7 @@ def build_training_dataset(
         labelled["symbol"] = inst.tradingsymbol
         labelled["instrument_id"] = inst.id
         frames.append(
-            labelled[[*FEATURE_COLUMNS, "target", "forward_return", "symbol", "instrument_id", "ts"]]
+            labelled[[*FEATURE_COLUMNS, "target", "forward_return", "label_end_ts", "symbol", "instrument_id", "ts"]]
         )
 
     if not frames:
@@ -124,14 +124,28 @@ def build_training_dataset(
 
 
 def chronological_split(dataset: pd.DataFrame, test_size: float = 0.2) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Split by time, never randomly.
-
-    A random split lets the model train on next Tuesday and test on last
-    Monday. With overlapping forward-return labels the leakage is severe, and
-    the resulting accuracy is fiction. Splitting on a date reproduces the only
-    situation that matters: predicting a future the model has never seen.
-    """
-    if dataset.empty:
-        return dataset, dataset
-    cutoff = int(len(dataset) * (1 - test_size))
-    return dataset.iloc[:cutoff].copy(), dataset.iloc[cutoff:].copy()
+    """Split whole timestamps and purge training labels overlapping the test window."""
+    if not 0 < test_size < 1:
+        raise ValueError("test_size must be strictly between 0 and 1")
+    if dataset.empty or "label_end_ts" not in dataset:
+        raise ValueError("Training data requires rows and label_end_ts; rebuild the dataset")
+    ordered = dataset.sort_values("ts", kind="stable")
+    timestamps = ordered["ts"].drop_duplicates().sort_values()
+    cutoff = int(len(timestamps) * (1 - test_size))
+    if cutoff < 1 or cutoff >= len(timestamps):
+        raise ValueError("Insufficient timestamps for a chronological split; ingest more history")
+    test_start = timestamps.iloc[cutoff]
+    before = ordered[ordered["ts"] < test_start]
+    train = before[before["label_end_ts"] < test_start].copy()
+    test = ordered[ordered["ts"] >= test_start].copy()
+    if train.empty or test.empty:
+        raise ValueError("No usable rows after label-window purging; ingest more history or shorten the horizon")
+    train.attrs["split"] = {
+        "method": "timestamp_purged",
+        "train_start": train["ts"].min().isoformat(),
+        "train_end": train["ts"].max().isoformat(),
+        "test_start": test_start.isoformat(),
+        "test_end": test["ts"].max().isoformat(),
+        "purged_rows": len(before) - len(train),
+    }
+    return train, test

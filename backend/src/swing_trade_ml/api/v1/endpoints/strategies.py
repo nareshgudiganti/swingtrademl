@@ -12,6 +12,7 @@ from sqlalchemy import func, select
 from swing_trade_ml.api.deps import DbSession
 from swing_trade_ml.brokers import get_broker
 from swing_trade_ml.core.enums import PositionStatus
+from swing_trade_ml.core.strategy_policy import requires_advisory, validate_execution_mode
 from swing_trade_ml.db.models.market import Instrument
 from swing_trade_ml.db.models.trading import Position, Signal, Strategy
 from swing_trade_ml.schemas import (
@@ -161,6 +162,12 @@ def create_strategy(payload: StrategyCreate, db: DbSession) -> Strategy:
     if db.execute(select(Strategy).where(Strategy.name == payload.name)).scalar_one_or_none():
         raise HTTPException(status.HTTP_409_CONFLICT, f"Strategy '{payload.name}' already exists")
 
+    if requires_advisory(payload.strategy_type) and "execution_mode" not in payload.model_fields_set:
+        payload.execution_mode = "advisory"
+    try:
+        validate_execution_mode(payload.strategy_type, payload.execution_mode)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
     fields = payload.model_dump(exclude={"mode"})
     # An advisory strategy never places a broker order, so letting it declare
     # its own mode (e.g. "live" to track real trades made manually) carries
@@ -195,7 +202,12 @@ def update_strategy(strategy_id: int, payload: StrategyUpdate, db: DbSession) ->
     if strategy is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Strategy not found")
 
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    changes = payload.model_dump(exclude_unset=True)
+    try:
+        validate_execution_mode(strategy.strategy_type, changes.get("execution_mode", strategy.execution_mode))
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+    for field, value in changes.items():
         setattr(strategy, field, value)
     db.commit()
     db.refresh(strategy)
@@ -248,7 +260,10 @@ def scan_one(strategy_id: int, db: DbSession, interval: str = "day") -> ScanResp
     strategy = db.get(Strategy, strategy_id)
     if strategy is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Strategy not found")
-    result = engine.run_strategy(db, strategy, interval)
+    try:
+        result = engine.run_strategy(db, strategy, interval)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
     return ScanResponse(**asdict(result))
 
 

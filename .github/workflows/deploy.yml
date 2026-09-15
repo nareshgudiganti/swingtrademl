@@ -1,60 +1,38 @@
 name: Deploy to production
 
-# Only runs when code lands on `main` — merging into `develop` (day-to-day
-# work) never triggers this. Promoting develop -> main is the deliberate
-# "go live" act, matching the same manual-approval caution this app already
-# applies to real trading (see docs/superpowers/research on prod history).
 on:
   push:
     branches: [main]
-  workflow_dispatch: {} # manual "Run workflow" button, for a re-deploy with no new commits
+  workflow_dispatch: {}
+
+concurrency:
+  group: production-deployment
+  cancel-in-progress: false
 
 jobs:
+  validate:
+    uses: ./.github/workflows/test.yml
+
   deploy:
+    needs: validate
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy over SSH
+      - name: Deploy tested commit over SSH
         uses: appleboy/ssh-action@v1.0.3
+        env:
+          RELEASE_SHA: ${{ github.sha }}
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
+          envs: RELEASE_SHA
+          command_timeout: 30m
           script_stop: true
           script: |
-            set -e
+            set -eu
             cd /root/app
-
-            echo "== backing up the database before migrating =="
-            mkdir -p /root/backups
-            STAMP=$(date +%Y%m%d_%H%M%S)
-            docker exec stml-postgres pg_dumpall -U swingtrade > /root/backups/pgdumpall_$STAMP.sql
-            # Keep the last 14 backups only — a daily-deploy cadence at this
-            # size (~30MB each) is a few hundred MB/month otherwise.
-            ls -t /root/backups/pgdumpall_*.sql | tail -n +15 | xargs -r rm --
-
-            echo "== pulling latest main =="
-            # /root/app was originally cloned with --single-branch develop —
-            # widen it once so `origin/main` (and any future branch) tracks
-            # normally instead of every git command here needing a FETCH_HEAD
-            # workaround. Idempotent: harmless to repeat every deploy.
-            git remote set-branches origin '*'
-            git fetch origin main
-            git reset --hard FETCH_HEAD
-
-            echo "== building new images =="
-            docker compose -f docker-compose.yml -f docker-compose.prod.yml build api worker frontend
-
-            echo "== running migrations (one-off container, DB already backed up above) =="
-            docker compose -f docker-compose.yml -f docker-compose.prod.yml run --rm api python -m alembic upgrade head
-
-            echo "== swapping in the new containers =="
-            docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d api worker frontend
-
-            echo "== waiting for health =="
-            sleep 10
-            docker exec stml-api curl -sf http://localhost:8000/api/v1/health
-
-            echo "== pruning old images (keeps disk from filling up over time) =="
-            docker image prune -f
-
-            echo "== deploy complete =="
+            PREVIOUS_SHA=$(git rev-parse HEAD)
+            git fetch origin "$RELEASE_SHA"
+            git checkout --detach "$RELEASE_SHA"
+            bash infra/deploy/release.sh "$RELEASE_SHA" "$PREVIOUS_SHA"

@@ -11,9 +11,18 @@ mkdir -p "$backup_dir"
 printf '%s\n' "$previous_sha" > "$backup_dir/previous-sha"
 
 # Keep exact previous images, even when builds replace Compose's image tags.
+#
+# A prune can delete an image out from under its own running container: the
+# container keeps working, `docker inspect` still reports the ID, but `docker
+# tag` fails with "No such image" — which aborted every deploy from 2026-09-14
+# on, before the build step, leaving production pinned to stale containers.
+# Committing the live container yields an equivalent rollback target, so a
+# vanished image degrades the snapshot's provenance rather than the deploy.
 for service in api worker frontend; do
+  rollback_image="stml-rollback-$service:${release_sha:0:12}"
   image_id=$(docker inspect --format '{{.Image}}' "stml-$service")
-  docker tag "$image_id" "stml-rollback-$service:${release_sha:0:12}"
+  docker tag "$image_id" "$rollback_image" 2>/dev/null \
+    || docker commit "stml-$service" "$rollback_image" >/dev/null
 done
 python3 - "$backup_dir/rollback.json" "${release_sha:0:12}" <<'PY'
 import json, sys

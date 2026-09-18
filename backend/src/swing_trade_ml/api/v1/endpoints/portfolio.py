@@ -205,13 +205,17 @@ def detailed_positions(db: DbSession, mode: str | None = None) -> list[dict[str,
     return result
 
 
-@router.get("/holdings", response_model=list[dict])
-def holdings(db: DbSession) -> list[dict[str, Any]]:
-    """Real Zerodha equity holdings — actual shares sitting in the connected
-    account, as opposed to the Position rows below (which track the bot's
-    own paper-mode trades and know nothing about anything bought manually).
-    Pure pass-through to Kite; nothing here is generated or predicted.
+def _load_kite_holdings(db: DbSession) -> list[dict[str, Any]]:
+    """Authenticate and pull raw Kite holdings, turning a rejected/expired
+    token or any other Kite-side failure into a clean 400 instead of letting
+    a bare KiteException reach the generic handler as an opaque
+    "Internal server error" — which is exactly what happened here: the
+    account's Kite session expired, reauth_and_retry's auto-relogin has no
+    working credentials (TOTP auto-login is unavailable on this account), so
+    the raw kiteconnect exception was reaching the client unexplained.
     """
+    from kiteconnect.exceptions import KiteException
+
     from swing_trade_ml.brokers.kite import kite_broker
 
     kite_broker.load_session(db)
@@ -221,6 +225,23 @@ def holdings(db: DbSession) -> list[dict[str, Any]]:
             "No active Kite session — log in to see real holdings.",
         )
 
+    try:
+        return kite_broker.get_holdings(db)
+    except KiteException as exc:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"Zerodha rejected the request — the Kite session has likely expired. "
+            f"Log in to Kite again and retry. ({exc})",
+        ) from exc
+
+
+@router.get("/holdings", response_model=list[dict])
+def holdings(db: DbSession) -> list[dict[str, Any]]:
+    """Real Zerodha equity holdings — actual shares sitting in the connected
+    account, as opposed to the Position rows below (which track the bot's
+    own paper-mode trades and know nothing about anything bought manually).
+    Pure pass-through to Kite; nothing here is generated or predicted.
+    """
     return [
         {
             "symbol": h["tradingsymbol"],
@@ -233,7 +254,7 @@ def holdings(db: DbSession) -> list[dict[str, Any]]:
             "day_change": h.get("day_change"),
             "day_change_percentage": h.get("day_change_percentage"),
         }
-        for h in kite_broker.get_holdings(db)
+        for h in _load_kite_holdings(db)
         if h["quantity"] != 0
     ]
 
@@ -326,8 +347,6 @@ def import_real_holdings(db: DbSession, strategy_id: int | None = None) -> list[
     Safe to call repeatedly: holdings already tracked under this strategy
     (an OPEN position on the same instrument) are skipped, not duplicated.
     """
-    from swing_trade_ml.brokers.kite import kite_broker
-
     if strategy_id is None:
         strategy = _get_or_create_real_trading_strategy(db)
     else:
@@ -341,12 +360,7 @@ def import_real_holdings(db: DbSession, strategy_id: int | None = None) -> list[
             "an auto strategy would treat them as its own trades to manage.",
         )
 
-    kite_broker.load_session(db)
-    if not kite_broker.is_authenticated:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            "No active Kite session — log in to see real holdings.",
-        )
+    kite_holdings = _load_kite_holdings(db)
 
     already_tracked = {
         p.instrument_id
@@ -358,7 +372,7 @@ def import_real_holdings(db: DbSession, strategy_id: int | None = None) -> list[
     }
 
     results: list[dict[str, Any]] = []
-    for h in kite_broker.get_holdings(db):
+    for h in kite_holdings:
         if h["quantity"] == 0:
             continue
         instrument = db.execute(

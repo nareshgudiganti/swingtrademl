@@ -10,9 +10,11 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
+from sqlalchemy import select
+
 from swing_trade_ml.db.models.market import Candle, Instrument, Quote
 from swing_trade_ml.db.models.safety import RiskEvent, SystemState
-from swing_trade_ml.db.models.trading import Position, Strategy
+from swing_trade_ml.db.models.trading import Order, Position, Signal, Strategy
 from swing_trade_ml.services import deployable, risk, system_state
 
 HEADERS = {"X-API-Key": "test-api-key"}
@@ -32,21 +34,69 @@ def _instrument(db_session, tradingsymbol="RELIANCE") -> Instrument:
 
 def _strategy(db_session, **kwargs) -> Strategy:
     strat = Strategy(name=kwargs.pop("name", "risk_test_strategy"), strategy_type="ml_swing",
-                      mode="paper", **kwargs)
+                      mode=kwargs.pop("mode", "paper"), **kwargs)
     db_session.add(strat)
     db_session.flush()
     return strat
 
 
-def _open_position(db_session, strategy, instrument, quantity, entry_price) -> Position:
+def _open_position(db_session, strategy, instrument, quantity, entry_price, mode="paper") -> Position:
     pos = Position(
-        strategy_id=strategy.id, instrument_id=instrument.id, mode="paper",
+        strategy_id=strategy.id, instrument_id=instrument.id, mode=mode,
         status="OPEN", quantity=quantity, entry_price=entry_price,
         entry_at=datetime.now(UTC), current_price=entry_price,
     )
     db_session.add(pos)
     db_session.flush()
     return pos
+
+
+def _pending_buy_order(db_session, strategy, instrument, quantity, price, mode="live") -> Order:
+    """A live buy between placement and reconciliation.
+
+    Kite accepts the order and returns PENDING, so there is an Order row and
+    no Position behind it until the 60-second reconciliation job sees the
+    fill — exactly the window in which the rest of a scan keeps buying.
+    """
+    signal = Signal(
+        strategy_id=strategy.id, instrument_id=instrument.id, signal_type="BUY", mode=mode,
+        price=price, confidence=0.7, generated_at=datetime.now(UTC),
+    )
+    db_session.add(signal)
+    db_session.flush()
+    order = Order(
+        signal_id=signal.id, strategy_id=strategy.id, instrument_id=instrument.id,
+        broker_order_id=f"LIVE-{instrument.tradingsymbol}", mode=mode,
+        transaction_type="BUY", order_type="MARKET", product="CNC",
+        quantity=quantity, status="PENDING", placed_at=datetime.now(UTC),
+    )
+    db_session.add(order)
+    db_session.flush()
+    return order
+
+
+def _pending_live_broker(monkeypatch):
+    """Swap in a broker that behaves the way Kite really does: placement is
+    accepted, the fill comes later, and no Position row appears meanwhile."""
+    from swing_trade_ml.brokers.base import OrderResult
+    from swing_trade_ml.core.enums import OrderStatus
+    from swing_trade_ml.services import execution
+
+    class _PendingBroker:
+        mode = "live"
+
+        def place_order(self, request, db):
+            return OrderResult(
+                broker_order_id=f"LIVE-{request.tradingsymbol}", status=OrderStatus.PENDING
+            )
+
+    monkeypatch.setattr(execution, "get_broker", lambda: _PendingBroker())
+    monkeypatch.setattr(execution.notifier, "send_sync", lambda *a, **kw: None)
+    # Live-mode cash otherwise goes out to real Kite margins; pin it so this
+    # tests the limits, not the broker session.
+    monkeypatch.setattr(
+        execution, "portfolio_value_and_cash", lambda db, mode: (1_000_000.0, 1_000_000.0)
+    )
 
 
 def _flat_deployable(monkeypatch, fraction=1.0):
@@ -146,6 +196,156 @@ def test_two_unmapped_symbols_are_not_grouped_with_each_other(db_session, monkey
     decision = risk.check_entry(
         db_session, mode="paper", instrument_id=b.id, price=1000.0, stop_loss=950.0,
         portfolio_value=1_000_000.0, available_cash=1_000_000.0, strategy=strat,
+    )
+    assert decision.allowed is True
+
+
+# ------------------------------------------------- in-flight live orders --
+#
+# Everything below is about the window a live order spends PENDING at the
+# broker. Paper fills synchronously, so candidate #2 of a scan sees candidate
+# #1's position; live does not, and without counting in-flight orders every
+# portfolio limit is checked against a book that is one scan out of date.
+
+
+def test_a_third_bank_is_rejected_while_the_first_two_orders_are_still_pending(
+    db_session, monkeypatch
+):
+    """The headline case: one scan, three banking stocks, a live broker.
+
+    Both earlier buys are still PENDING when the third is checked, so on the
+    old code the 25% sector cap sees an empty book three times over and lets
+    the whole account into one sector.
+    """
+    from swing_trade_ml.core.enums import SignalType
+    from swing_trade_ml.services import execution
+    from swing_trade_ml.strategies.base import SignalDecision
+
+    _flat_deployable(monkeypatch)
+    _pending_live_broker(monkeypatch)
+    # 12.5% per stock means two full-size banking positions fill the 25%
+    # sector cap of a ₹10L account exactly — the third has nothing left.
+    strat = _strategy(db_session, name="live_sector_strategy", mode="live",
+                      capital_allocation=0.125)
+    icici = _instrument(db_session, "ICICIBANK")
+    hdfc = _instrument(db_session, "HDFCBANK")
+    axis = _instrument(db_session, "AXISBANK")
+    db_session.commit()
+
+    for instrument in (icici, hdfc):
+        execution.process_decision(
+            db_session, strat, instrument,
+            SignalDecision(signal=SignalType.BUY, price=1000.0, confidence=0.8,
+                           stop_loss=950.0, take_profit=1100.0, reason="test"),
+        )
+
+    orders = db_session.execute(select(Order)).scalars().all()
+    assert [o.status for o in orders] == ["PENDING", "PENDING"]
+    assert sum(o.quantity for o in orders) * 1000.0 == 250_000.0
+    assert db_session.execute(select(Position)).first() is None  # nothing has filled
+
+    decision = risk.check_entry(
+        db_session, mode="live", instrument_id=axis.id, price=1000.0, stop_loss=950.0,
+        portfolio_value=1_000_000.0, available_cash=1_000_000.0, strategy=strat,
+    )
+    assert decision.allowed is False
+    assert decision.rule == "SECTOR_CAP"
+
+
+def test_max_positions_counts_orders_that_have_not_filled_yet(db_session, monkeypatch):
+    """Two slots, one filled and one still in flight — the account is full."""
+    _flat_deployable(monkeypatch)
+    strat = _strategy(db_session, name="live_slots_strategy", mode="live", max_positions=2)
+    held = _instrument(db_session, "ZZZALREADYHELD")
+    in_flight = _instrument(db_session, "ZZZINFLIGHT")
+    wanted = _instrument(db_session, "ZZZWANTED")
+    _open_position(db_session, strat, held, quantity=100, entry_price=1000.0, mode="live")
+    _pending_buy_order(db_session, strat, in_flight, quantity=100, price=1000.0)
+    db_session.commit()
+
+    decision = risk.check_entry(
+        db_session, mode="live", instrument_id=wanted.id, price=1000.0, stop_loss=950.0,
+        portfolio_value=1_000_000.0, available_cash=1_000_000.0, strategy=strat,
+    )
+    assert decision.allowed is False
+    assert decision.rule == "POSITION_LIMIT"
+
+
+def test_available_cash_drops_by_a_buy_order_that_has_not_filled(db_session, monkeypatch):
+    """The cash floor is checked against `available_cash`, so money already
+    committed to an unfilled buy must not still read as spendable."""
+    from swing_trade_ml.brokers.base import BrokerMargins
+    from swing_trade_ml.brokers.kite import kite_broker
+    from swing_trade_ml.services.portfolio import portfolio_value_and_cash
+
+    monkeypatch.setattr(kite_broker, "load_session", lambda db: True)
+    monkeypatch.setattr(
+        kite_broker, "get_margins",
+        lambda db: BrokerMargins(available_cash=500_000.0, used_margin=0.0, total=500_000.0),
+    )
+    strat = _strategy(db_session, name="live_cash_strategy", mode="live")
+    inst = _instrument(db_session, "ZZZCOMMITTED")
+    _pending_buy_order(db_session, strat, inst, quantity=100, price=1000.0)
+    db_session.commit()
+
+    _total, cash = portfolio_value_and_cash(db_session, "live")
+    assert cash == 400_000.0
+
+
+def test_deployable_ceiling_counts_money_committed_to_unfilled_orders(db_session, monkeypatch):
+    monkeypatch.setattr(
+        deployable, "current_deployable",
+        lambda db: deployable.DeployableCapital(regime="weak", fraction=0.30, context_available=True),
+    )
+    strat = _strategy(db_session, name="live_deployable_strategy", mode="live")
+    ordered = _instrument(db_session, "ZZZORDERED")
+    wanted = _instrument(db_session, "ZZZNEXTBUY")
+    # 290,000 of a 1,000,000 book committed but not yet filled — already at
+    # the 30% ceiling for a weak market.
+    _pending_buy_order(db_session, strat, ordered, quantity=2900, price=100.0)
+    db_session.commit()
+
+    decision = risk.check_entry(
+        db_session, mode="live", instrument_id=wanted.id, price=100.0, stop_loss=95.0,
+        portfolio_value=1_000_000.0, available_cash=1_000_000.0, strategy=strat,
+    )
+    assert decision.allowed is False
+    assert decision.rule == "DEPLOYABLE"
+
+
+def test_a_reconciled_order_is_not_counted_on_top_of_its_position(db_session, monkeypatch):
+    """Once reconciliation fills the order and creates the Position, the same
+    money must stop being counted twice."""
+    _flat_deployable(monkeypatch)
+    strat = _strategy(db_session, name="reconciled_strategy", mode="live")
+    icici = _instrument(db_session, "ICICIBANK")
+    position = _open_position(db_session, strat, icici, quantity=100, entry_price=1000.0, mode="live")
+    order = _pending_buy_order(db_session, strat, icici, quantity=100, price=1000.0)
+    order.status = "COMPLETE"
+    order.position_id = position.id
+    db_session.commit()
+
+    holdings = risk.open_holdings(db_session, "live")
+    assert len(holdings) == 1
+    assert sum(h.value for h in holdings) == 100_000.0
+    assert risk.open_position_count(db_session, "live") == 1
+
+
+def test_paper_mode_is_unchanged_by_the_in_flight_rule(db_session, monkeypatch):
+    """A live order must not leak into the paper book, and paper itself never
+    leaves an order in flight — the paper track record has to stay exactly
+    what it was."""
+    _flat_deployable(monkeypatch)
+    strat = _strategy(db_session, name="live_leak_strategy", mode="live")
+    icici = _instrument(db_session, "ICICIBANK")
+    hdfc = _instrument(db_session, "HDFCBANK")
+    _pending_buy_order(db_session, strat, icici, quantity=240, price=1000.0)
+    db_session.commit()
+
+    paper_strat = _strategy(db_session, name="paper_unaffected_strategy")
+    decision = risk.check_entry(
+        db_session, mode="paper", instrument_id=hdfc.id, price=1000.0, stop_loss=950.0,
+        portfolio_value=1_000_000.0, available_cash=1_000_000.0, strategy=paper_strat,
     )
     assert decision.allowed is True
 

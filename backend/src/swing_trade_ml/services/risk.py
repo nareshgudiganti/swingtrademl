@@ -19,10 +19,16 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from swing_trade_ml.core.config import settings
-from swing_trade_ml.core.enums import ExitReason, PositionStatus, TransactionType
+from swing_trade_ml.core.enums import ExitReason, OrderStatus, PositionStatus, TransactionType
 from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.db.models.market import Candle, Instrument
-from swing_trade_ml.db.models.trading import PortfolioSnapshot, Position, Strategy
+from swing_trade_ml.db.models.trading import (
+    Order,
+    PortfolioSnapshot,
+    Position,
+    Signal,
+    Strategy,
+)
 from swing_trade_ml.ml.sector_map import get_sector_bucket, sector_display_name
 from swing_trade_ml.services import deployable, system_state
 from swing_trade_ml.services.costs import apply_slippage, compute_charges
@@ -77,12 +83,16 @@ def rank_buy_candidates(candidates: list[tuple[int, float]]) -> list[tuple[int, 
 
 
 def open_position_count(db: Session, mode: str, strategy_id: int | None = None) -> int:
+    """Slots already spoken for — filled positions plus buys still in flight,
+    so a scan cannot hand out the same slot twice while Kite is still
+    reconciling the first one."""
     stmt = select(func.count(Position.id)).where(
         Position.mode == mode, Position.status == PositionStatus.OPEN
     )
     if strategy_id is not None:
         stmt = stmt.where(Position.strategy_id == strategy_id)
-    return int(db.execute(stmt).scalar_one() or 0)
+    filled = int(db.execute(stmt).scalar_one() or 0)
+    return filled + len(in_flight_buy_holdings(db, mode, strategy_id))
 
 
 def has_open_position(
@@ -165,6 +175,49 @@ class Holding:
     tier: str
 
 
+def in_flight_buy_holdings(
+    db: Session, mode: str, strategy_id: int | None = None
+) -> list[Holding]:
+    """Buys the broker has accepted but not yet filled, valued as if they had.
+
+    Kite answers `place_order` with PENDING and the Position row only appears
+    when the 60-second reconciliation job sees the fill. Since every
+    portfolio-level limit reads the book through `open_holdings`, without
+    these rows a scan checks its second and third candidates against the
+    account as it stood before the first — which is how three banks can each
+    pass the same 25% sector cap in one run.
+
+    Paper never has rows here: the simulated broker fills synchronously, so
+    its Position exists before the next candidate is looked at. That is also
+    why the bug never showed up in the paper track record.
+
+    Orders are valued at the price their signal was raised at, which is the
+    number the entry was sized against; a limit price is the fallback for the
+    rare order with no signal behind it.
+    """
+    rows = db.execute(
+        select(Order, Instrument.tradingsymbol, Strategy.params, Signal.price)
+        .join(Instrument, Instrument.id == Order.instrument_id)
+        .join(Strategy, Strategy.id == Order.strategy_id, isouter=True)
+        .join(Signal, Signal.id == Order.signal_id, isouter=True)
+        .where(
+            Order.mode == mode,
+            Order.transaction_type == TransactionType.BUY,
+            Order.status.in_((OrderStatus.PENDING, OrderStatus.OPEN)),
+            # Reconciliation sets position_id when it creates the Position, so
+            # this is what stops the same money being counted twice.
+            Order.position_id.is_(None),
+            *([Order.strategy_id == strategy_id] if strategy_id is not None else []),
+        )
+    ).all()
+    holdings: list[Holding] = []
+    for order, symbol, params, signal_price in rows:
+        price = signal_price if signal_price is not None else (order.price or 0.0)
+        tier = cap_tier((params or {}).get("model_name")) if params is not None else LARGE
+        holdings.append(Holding(order.instrument_id, symbol, price * order.quantity, tier))
+    return holdings
+
+
 def open_holdings(db: Session, mode: str) -> list[Holding]:
     """Every open position in this mode, across all strategies, valued at the
     latest marked price where one exists and at entry otherwise.
@@ -184,7 +237,7 @@ def open_holdings(db: Session, mode: str) -> list[Holding]:
         price = position.current_price or position.entry_price
         tier = cap_tier((params or {}).get("model_name")) if params is not None else LARGE
         holdings.append(Holding(position.instrument_id, symbol, price * position.quantity, tier))
-    return holdings
+    return holdings + in_flight_buy_holdings(db, mode)
 
 
 def average_daily_traded_value(

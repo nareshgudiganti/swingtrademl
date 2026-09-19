@@ -57,6 +57,14 @@ def portfolio_value_and_cash(db: Session, mode: str) -> tuple[float, float]:
             log.error("portfolio.margins_failed", error=str(exc))
             cash = 0.0
 
+        # Money committed to a buy the broker has accepted but not yet filled
+        # is not spendable, and Kite's margin figure can still show it as
+        # available for a moment. Counting it twice is what let the rest of a
+        # scan keep buying past the cash floor.
+        from swing_trade_ml.services.risk import in_flight_buy_holdings
+
+        cash -= sum(h.value for h in in_flight_buy_holdings(db, mode))
+
     return holdings_value + cash, cash
 
 

@@ -51,6 +51,9 @@ from swing_trade_ml.services.portfolio import mark_to_market, portfolio_value_an
 from swing_trade_ml.services.risk import open_exposure_value
 
 BARRIER_PARAMS = {"scale_out_at_pct": 0.05, "scale_out_fraction": 0.5, "time_stop_days": 30}
+# An explicit opt-out: the one way a strategy row can still refuse partial
+# booking now that it is the default.
+NO_SCALE_OUT_PARAMS = {"scale_out_at_pct": 0}
 
 
 @pytest.fixture(autouse=True)
@@ -127,14 +130,66 @@ def _all_net_pnl(db) -> float:
     return float(db.execute(select(func.coalesce(func.sum(Trade.net_pnl), 0.0))).scalar_one())
 
 
-# ------------------------------------------------------------ regression --
+# -------------------------------------------------------------- defaults --
 
 
-def test_strategy_without_the_params_never_scales_out(db_session):
-    """The running paper bot's strategies carry none of the new params and
-    must behave exactly as before: +6% is below the final target, so nothing
-    is sold at all."""
+def test_a_plain_strategy_row_scales_out_at_the_first_target(db_session):
+    """The change that finally switches partial booking on. Every strategy in
+    the running bot carries no scale-out params at all, so while this had to
+    be opted into row by row it had never executed once — half of a 20-share
+    position is sold here purely from the settings default."""
     position = _open(db_session, params={})
+    closed = _tick(
+        db_session, position, position.entry_price * (1 + settings.ML_FIRST_TARGET_PCT)
+    )
+
+    assert [t.exit_reason for t in closed] == [ExitReason.SCALE_OUT]
+    assert closed[0].quantity == 10
+    assert position.status == PositionStatus.OPEN
+    assert position.quantity == 10
+    assert position.scaled_out_at is not None
+
+
+def test_the_first_target_is_five_percent_above_entry(db_session):
+    """One tick short of +5% sells nothing; the tick that reaches it sells
+    half. Pins the level itself, not merely that something eventually fires.
+
+    Measured from the filled entry price rather than the signalled one: the
+    paper broker charges slippage, so 1000.0 in becomes 1000.5 held, and the
+    trigger moves with it.
+    """
+    assert settings.ML_FIRST_TARGET_PCT == 0.05
+    position = _open(db_session, params={})
+    trigger = position.entry_price * (1 + settings.ML_FIRST_TARGET_PCT)
+
+    assert _tick(db_session, position, trigger - 0.01) == []
+    assert position.quantity == 20
+
+    closed = _tick(db_session, position, trigger)
+    assert [t.exit_reason for t in closed] == [ExitReason.SCALE_OUT]
+    assert position.quantity == 10
+
+
+def test_a_plain_strategy_row_is_closed_by_the_thirty_day_time_stop(db_session):
+    """60 days was four times the model's 15-trading-day horizon: a position
+    held that long is answering a question the model was never asked."""
+    position = _open(db_session, params={})
+    position.entry_at = datetime.now(UTC) - timedelta(days=29)
+    db_session.commit()
+    assert _tick(db_session, position, 1010.0) == []
+
+    position.entry_at = datetime.now(UTC) - timedelta(days=30)
+    db_session.commit()
+    closed = _tick(db_session, position, 1010.0)
+
+    assert len(closed) == 1
+    assert closed[0].exit_reason == ExitReason.TIME_STOP
+    assert closed[0].quantity == 20
+    assert position.status == PositionStatus.CLOSED
+
+
+def test_an_explicit_zero_still_turns_scale_out_off(db_session):
+    position = _open(db_session, params=NO_SCALE_OUT_PARAMS)
     closed = _tick(db_session, position, 1060.0)
 
     assert closed == []
@@ -144,20 +199,7 @@ def test_strategy_without_the_params_never_scales_out(db_session):
     assert position.scaled_out_at is None
 
 
-def test_strategy_without_the_params_keeps_the_60_day_time_stop(db_session):
-    position = _open(db_session, params={})
-    position.entry_at = datetime.now(UTC) - timedelta(days=59)
-    db_session.commit()
-    assert _tick(db_session, position, 1010.0) == []
-
-    position.entry_at = datetime.now(UTC) - timedelta(days=60)
-    db_session.commit()
-    closed = _tick(db_session, position, 1010.0)
-
-    assert len(closed) == 1
-    assert closed[0].exit_reason == ExitReason.TIME_STOP
-    assert closed[0].quantity == 20
-    assert position.status == PositionStatus.CLOSED
+# ------------------------------------------------------------ regression --
 
 
 def test_full_close_arithmetic_is_unchanged(db_session):
@@ -443,10 +485,14 @@ def test_reconciled_partial_exit_keeps_the_position_open(db_session):
 # ---------------------------------------------------------------- policy --
 
 
-def test_exit_policy_defaults_match_the_old_hard_coded_behaviour():
+def test_exit_policy_defaults_are_the_traded_policy():
+    """Absent params mean the policy the model was scored on, not the feature
+    switched off. The old reading is why partial booking never ran: every
+    strategy row in the bot carries no params at all."""
     policy = exit_policy_for({})
-    assert policy.scale_out_enabled is False
-    assert policy.time_stop_days == DEFAULT_TIME_STOP_DAYS == 60
+    assert policy.scale_out_enabled is True
+    assert policy.scale_out_at_pct == settings.ML_FIRST_TARGET_PCT
+    assert policy.time_stop_days == DEFAULT_TIME_STOP_DAYS == 30
     assert exit_policy_for(None) == policy
     assert exit_policy_for({"scale_out_at_pct": None}) == policy
 
@@ -455,7 +501,7 @@ def test_exit_policy_malformed_values_switch_scale_out_off():
     assert exit_policy_for({"scale_out_at_pct": 0.05, "scale_out_fraction": 1.0}).scale_out_enabled is False
     assert exit_policy_for({"scale_out_at_pct": "abc"}).scale_out_enabled is False
     assert exit_policy_for({"scale_out_at_pct": -0.05}).scale_out_enabled is False
-    assert exit_policy_for({"time_stop_days": 0}).time_stop_days == 60
+    assert exit_policy_for({"time_stop_days": 0}).time_stop_days == DEFAULT_TIME_STOP_DAYS
 
 
 def test_scale_out_quantity_rounds_down_and_never_sells_everything():
@@ -512,13 +558,16 @@ def test_backtest_scale_out_writes_two_trades_with_the_same_arithmetic():
     assert proceeds - entry_cost == pytest.approx(sum(t.net_pnl for t in trades), abs=0.05)
 
 
-def test_backtest_without_params_never_scales_out():
+def test_backtest_scales_out_on_the_default_policy():
+    """The backtest reads the same policy object as the live exit check, so a
+    changed default has to move both at once — otherwise a backtest stops
+    describing what the bot would actually have done."""
     pos, _ = _backtest_position()
     trades: list[BacktestTrade] = []
     result = _maybe_scale_out(pos, exit_policy_for({}), bar_high=1079.0, trades=trades, day=date(2024, 1, 5))
-    assert result == 0.0
-    assert trades == []
-    assert pos.quantity == 20
+    assert result > 0.0
+    assert len(trades) == 1
+    assert pos.quantity == 10
 
 
 def test_backtest_scale_out_respects_the_minimum_position_value():

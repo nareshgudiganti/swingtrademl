@@ -64,7 +64,7 @@ class MLSwingStrategy(BaseStrategy):
     description: ClassVar[str] = (
         "Buys when the trained classifier's probability of a target move within the "
         "prediction horizon exceeds the confidence threshold, subject to liquidity "
-        "and volatility filters. ATR-based stops."
+        "and volatility filters. Stop and target are the label's own levels."
     )
     default_params: ClassVar[dict[str, Any]] = {
         "model_name": "swing_classifier",
@@ -72,10 +72,6 @@ class MLSwingStrategy(BaseStrategy):
         "min_confidence": None,
         # Below this the model is actively signalling weakness — exit
         "exit_confidence": 0.35,
-        # Stop at 2x ATR: wide enough to survive normal daily noise, which a
-        # fixed percentage stop is not on volatile mid-caps
-        "atr_stop_multiplier": 2.0,
-        "atr_target_multiplier": 4.0,
         "min_avg_volume": 100_000,
         # Reject anything moving more than 6% a day annualised into ~95% vol
         "max_volatility": 0.06,
@@ -205,13 +201,13 @@ class MLSwingStrategy(BaseStrategy):
                 features=features,
             )
 
-        stop_loss = price - float(self.params["atr_stop_multiplier"]) * atr_value
-        take_profit = price + float(self.params["atr_target_multiplier"]) * atr_value
-
-        # A stop wider than the configured maximum would risk more per trade
-        # than the risk model allows; clamp rather than skip the trade.
-        max_stop = price * (1 - (self.config.stop_loss_pct or settings.DEFAULT_STOP_LOSS_PCT) * 2)
-        stop_loss = max(stop_loss, max_stop)
+        # The levels are the label's, not a volatility distance. The model was
+        # scored on one question — target reached before stop, inside the
+        # horizon — so a position managed to any other pair of levels is a
+        # different trade than the one the confidence number describes. An ATR
+        # stop made that mismatch a fresh one on every instrument.
+        stop_loss = price * (1 - settings.ML_STOP_RETURN_PCT)
+        take_profit = price * (1 + settings.ML_TARGET_RETURN_PCT)
 
         return SignalDecision(
             signal=SignalType.BUY,

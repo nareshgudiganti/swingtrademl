@@ -6,15 +6,20 @@ reason services/costs.py exists: if the two paths each parsed these knobs
 themselves, a backtest and a paper result would quietly stop meaning the same
 thing the first time one of them was edited.
 
-Everything here is opt-in through `Strategy.params` (JSON, so no migration):
+Each knob is overridable per strategy through `Strategy.params` (JSON, so no
+migration), but the defaults are the traded policy:
 
-* ``scale_out_at_pct`` — gain from entry at which part of the position is sold,
-  e.g. ``0.05`` for +5%. Absent or null means scale-out is off, which is how
-  every strategy created before this existed keeps behaving exactly as it did.
+* ``scale_out_at_pct`` — gain from entry at which part of the position is sold.
+  Defaults to ``settings.ML_FIRST_TARGET_PCT``. It was opt-in until every
+  strategy row was found carrying no params at all, which meant partial
+  booking had never once executed; an explicit ``0`` is now the way to refuse
+  it.
 * ``scale_out_fraction`` — share of the held quantity sold at that point.
   Default 0.5 (bank half, let the rest run).
 * ``time_stop_days`` — calendar days after entry at which a still-open position
-  is closed regardless of P&L. Default 60, the value that was hard-coded before.
+  is closed regardless of P&L. Default 30: 60 was four times the model's
+  15-trading-day horizon, so a position held that long had outlived the
+  question the model answered.
 """
 
 from __future__ import annotations
@@ -26,7 +31,7 @@ from typing import Any
 from swing_trade_ml.core.config import settings
 
 DEFAULT_SCALE_OUT_FRACTION = 0.5
-DEFAULT_TIME_STOP_DAYS = 60
+DEFAULT_TIME_STOP_DAYS = 30
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,7 +55,10 @@ def exit_policy_for(params: dict[str, Any] | None) -> ExitPolicy:
     """
     params = params or {}
 
-    scale_out_at_pct: float | None = None
+    # Absent means "the traded policy", not "off" — the opposite of the
+    # original reading, under which every existing strategy row silently
+    # disabled the feature. Refusing it now takes an explicit 0.
+    scale_out_at_pct: float | None = settings.ML_FIRST_TARGET_PCT
     raw_at = params.get("scale_out_at_pct")
     if raw_at is not None:
         try:

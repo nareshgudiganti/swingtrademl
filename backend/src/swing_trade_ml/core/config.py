@@ -204,6 +204,11 @@ class Settings(BaseSettings):
     ML_PREDICTION_HORIZON_DAYS: int = 15
     ML_TARGET_RETURN_PCT: float = 0.08
     ML_STOP_RETURN_PCT: float = 0.04
+    # Where half the position is banked on the way to the target. Deliberately
+    # short of ML_TARGET_RETURN_PCT: the label only promises the target is
+    # reached before the stop, not that it is held, so taking part of the move
+    # off is how that promise is converted into cash.
+    ML_FIRST_TARGET_PCT: float = 0.05
     ML_TRAIN_TEST_SPLIT: float = 0.2
     ML_MIN_CONFIDENCE: float = 0.60
     ML_RANDOM_SEED: int = 42

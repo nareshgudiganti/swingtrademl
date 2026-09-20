@@ -29,7 +29,11 @@ import type {
   HorizonAccuracy,
   MarketRegime,
   MLModel,
+  CalibrationReport,
+  CurrentLimits,
   MessageResponse,
+  RiskEvent,
+  SystemState,
   MutualFundHolding,
   MutualFundSearchResult,
   PortfolioSummary,
@@ -392,4 +396,15 @@ export const api = {
   deleteFinanceRule: (keyword: string) =>
     del<MessageResponse>(`/finance/rules/${encodeURIComponent(keyword)}`),
   recategorizeFinanceRules: () => post<FinanceRecategorizeResult>('/finance/rules/recategorize'),
+
+  // ----------------------------------------------------------- risk layer --
+  riskLimits: () => get<CurrentLimits>('/risk/limits'),
+  safetyState: () => get<SystemState>('/safety/state'),
+  haltEntries: (reason: string) => post<SystemState>('/safety/halt', { reason }),
+  resumeEntries: () => post<SystemState>('/safety/resume', {}),
+  riskEvents: (limit = 50) => get<RiskEvent[]>(`/safety/risk-events?limit=${limit}`),
+
+  // ----------------------------------------------------------- calibration --
+  calibration: (source: 'signals' | 'predictions' = 'signals') =>
+    get<CalibrationReport>(`/ml/calibration?source=${source}`),
 }

@@ -598,3 +598,86 @@ export interface FinanceRuleUpsertResult {
 export interface FinanceRecategorizeResult {
   recategorized_count: number
 }
+
+// ------------------------------------------------------------- risk layer --
+
+export interface SectorExposure {
+  sector: string
+  value_inr: number
+  pct_of_portfolio: number
+}
+
+export interface CurrentLimits {
+  portfolio_value: number
+  cash: number
+  rung_value: number
+  max_positions: number
+  open_positions: number
+  max_position_pct: number
+  min_position_inr: number
+  sector_rule: string
+  sector_cap_pct: number | null
+  max_adv_pct: number | null
+  scale_out_enabled: boolean
+  max_share_price_inr: number | null
+  allowed_cap_tiers: string[]
+  small_cap_budget_pct: number | null
+  cash_floor_inr: number
+  risk_per_trade_pct: number
+  max_drawdown_pct: number
+  regime: string
+  plain_regime: string
+  deployable_fraction: number
+  deployable_ceiling_inr: number
+  invested_inr: number
+  room_inr: number
+  sectors: SectorExposure[]
+}
+
+export interface SystemState {
+  new_entries_enabled: boolean
+  exits_enabled: boolean
+  halt_reason: string | null
+  halted_at: string | null
+  halted_by: string | null
+}
+
+export interface RiskEvent {
+  id: number
+  ts: string
+  mode: string
+  strategy_id: number | null
+  instrument_id: number | null
+  symbol: string | null
+  rule: string
+  reason: string
+  amount_inr: number | null
+}
+
+// ------------------------------------------------------------ calibration --
+
+export interface CalibrationBucket {
+  lower: number
+  upper: number
+  n: number
+  wins: number
+  observed_rate: number | null
+  mean_confidence: number | null
+  calibration_gap: number | null
+  mean_outcome_pct: number | null
+  worst_outcome_pct: number | null
+  meaningful: boolean
+}
+
+export interface CalibrationReport {
+  source: string
+  mode: string | null
+  strategy_id: number | null
+  since: string | null
+  model_id: number | null
+  label_kind: string | null
+  total_scored: number
+  excluded_below_min: number
+  brier_score: number | null
+  buckets: CalibrationBucket[]
+}

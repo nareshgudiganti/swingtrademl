@@ -12,8 +12,20 @@ import ScanResults from './pages/ScanResults'
 import Strategies from './pages/Strategies'
 import Models from './pages/Models'
 import Holdings from './pages/Holdings'
+import Safety from './pages/Safety'
+import Capital from './pages/Capital'
+import ModelLab from './pages/ModelLab'
 import Settings from './pages/Settings'
-import { BarChartIcon, BriefcaseIcon, HomeIcon, LayersIcon, ScaleIcon, WalletIcon } from './components/icons'
+import {
+  AlertTriangleIcon,
+  BarChartIcon,
+  BriefcaseIcon,
+  HomeIcon,
+  LayersIcon,
+  ScaleIcon,
+  SproutIcon,
+  WalletIcon,
+} from './components/icons'
 
 // Settings and ML Models are still routed but deliberately left out of the
 // top-level nav — they're admin/config screens, not something a day-to-day
@@ -29,9 +41,12 @@ const NAV = [
   { to: '/strategies', label: 'Strategies', Icon: ScaleIcon },
   { to: '/holdings', label: 'My Holdings', Icon: WalletIcon },
   { to: '/portfolio', label: 'Portfolio', Icon: BriefcaseIcon },
+  { to: '/capital', label: 'Capital', Icon: SproutIcon },
   { to: '/reports', label: 'Reports', Icon: BarChartIcon },
   { to: '/scans', label: 'Scan Results', Icon: LayersIcon },
   { to: '/finance', label: 'Finance', Icon: WalletIcon },
+  { to: '/model-lab', label: 'Model Lab', Icon: BarChartIcon },
+  { to: '/safety', label: 'Safety', Icon: AlertTriangleIcon },
 ]
 
 // The 4 destinations worth a one-tap reach on a phone — a real bottom tab
@@ -233,6 +248,9 @@ export default function App() {
             <Route path="/scans" element={<ScanResults />} />
             <Route path="/strategies" element={<Strategies />} />
             <Route path="/models" element={<Models />} />
+            <Route path="/model-lab" element={<ModelLab />} />
+            <Route path="/capital" element={<Capital />} />
+            <Route path="/safety" element={<Safety />} />
             <Route path="/finance" element={<Finance />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />

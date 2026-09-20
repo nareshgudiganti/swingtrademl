@@ -1474,3 +1474,41 @@ tr.sig-detail-row td {
     padding-bottom: calc(4.5rem + env(safe-area-inset-bottom));
   }
 }
+
+/* ----------------------------------------------------- risk-layer screens -- */
+
+/* Label/value pairs that sit on one row with the value pushed right — used
+   by the Safety switches and the Capital summary. */
+.between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+/* A quiet aside that explains a number rather than competing with it. */
+.note {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.8rem 1rem;
+  color: var(--text-dim);
+  font-size: 0.86rem;
+}
+
+/* Proportion bar: invested, then the room still allowed, against the rest. */
+.bar-track {
+  height: 14px;
+  border-radius: 99px;
+  background: var(--surface-2);
+  overflow: hidden;
+  display: flex;
+}
+
+.bar-fill-invested { background: var(--accent); }
+.bar-fill-room { background: rgba(79, 140, 255, 0.35); }
+
+/* Amber emphasis for a number that is true but wants attention — e.g. holding
+   more stocks than the current account-size rung allows. */
+.warnc { color: var(--warn); }

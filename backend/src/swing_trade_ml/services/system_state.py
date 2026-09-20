@@ -44,6 +44,10 @@ def is_entries_halted(db: Session) -> bool:
     return not get_state(db).new_entries_enabled
 
 
+def is_exits_disabled(db: Session) -> bool:
+    return not get_state(db).exits_enabled
+
+
 def _get_or_create(db: Session) -> SystemState:
     state = db.get(SystemState, STATE_ID)
     if state is None:
@@ -75,6 +79,43 @@ def resume(db: Session, by: str) -> SystemState:
     state.halted_by = None
     db.commit()
     log.warning("system_state.entries_resumed", by=by)
+    return state
+
+
+def disable_exits(db: Session, reason: str, by: str) -> SystemState:
+    """Stop the exit sweep. The dangerous switch: while this is off no
+    stop-loss, target or time stop fires, so a falling position can lose far
+    more than its stop was set to allow.
+
+    It deliberately leaves `new_entries_enabled` and the halt_* fields alone.
+    Those three columns describe the entries halt and are cleared by
+    `resume()`; writing the exits reason into them would mean resuming
+    entries — an unrelated act — silently erased the record of why every
+    stop-loss in the book is switched off. Until exits get their own
+    reason/at/by columns, the reason lives in this warning line, which is why
+    the API requires one.
+    """
+    state = _get_or_create(db)
+    state.exits_enabled = False
+    db.commit()
+    log.warning(
+        "system_state.exits_disabled",
+        reason=reason,
+        by=by,
+        at=datetime.now(UTC).isoformat(),
+        message="Exits are switched OFF — open positions are no longer watched for "
+        "their stop-loss, target or time stop.",
+    )
+    return state
+
+
+def enable_exits(db: Session, by: str) -> SystemState:
+    """Let the exit sweep run again. Logged at warning level like its
+    counterpart: both directions of this switch are worth finding later."""
+    state = _get_or_create(db)
+    state.exits_enabled = True
+    db.commit()
+    log.warning("system_state.exits_enabled", by=by)
     return state
 
 

@@ -888,6 +888,22 @@ class ResumeRequest(BaseModel):
     by: str = "dashboard"
 
 
+class DisableExitsRequest(BaseModel):
+    # The reason is required here for the same reason it is on a halt, only
+    # more so: with exits off nothing enforces a stop-loss, and the row keeps
+    # no exits-specific reason column — this text is the only record of why,
+    # and it survives only in the log line.
+    reason: str = Field(..., min_length=1, max_length=500)
+    by: str = "dashboard"
+
+
+class EnableExitsRequest(BaseModel):
+    # No reason: re-enabling exits is the safe direction, and putting a
+    # validation step in front of restoring stop-loss enforcement would be
+    # exactly the wrong friction.
+    by: str = "dashboard"
+
+
 class RiskEventOut(BaseModel):
     model_config = ORM
 

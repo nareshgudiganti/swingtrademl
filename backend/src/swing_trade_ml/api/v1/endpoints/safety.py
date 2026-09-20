@@ -12,7 +12,14 @@ from sqlalchemy import select
 
 from swing_trade_ml.api.deps import DbSession
 from swing_trade_ml.db.models.safety import RiskEvent
-from swing_trade_ml.schemas import HaltRequest, ResumeRequest, RiskEventOut, SystemStateOut
+from swing_trade_ml.schemas import (
+    DisableExitsRequest,
+    EnableExitsRequest,
+    HaltRequest,
+    ResumeRequest,
+    RiskEventOut,
+    SystemStateOut,
+)
 from swing_trade_ml.services import system_state
 
 router = APIRouter(prefix="/safety", tags=["safety"])
@@ -33,6 +40,29 @@ def halt(payload: HaltRequest, db: DbSession) -> SystemStateOut:
 @router.post("/resume", response_model=SystemStateOut)
 def resume(payload: ResumeRequest, db: DbSession) -> SystemStateOut:
     return SystemStateOut.model_validate(system_state.resume(db, payload.by))
+
+
+@router.post("/exits/disable", response_model=SystemStateOut)
+def disable_exits(payload: DisableExitsRequest, db: DbSession) -> SystemStateOut:
+    """Stop the exit sweep. This is the dangerous switch: open positions stop
+    being watched, so no stop-loss, target or time stop fires until exits are
+    turned back on — a falling position can lose far more than its stop
+    allowed for. It is therefore the one call here that refuses to run
+    without a reason. No confirmation step: the caller decides how to ask.
+
+    Entries are untouched — the two switches are independent, and neither
+    implies the other.
+    """
+    return SystemStateOut.model_validate(
+        system_state.disable_exits(db, payload.reason, payload.by)
+    )
+
+
+@router.post("/exits/enable", response_model=SystemStateOut)
+def enable_exits(payload: EnableExitsRequest, db: DbSession) -> SystemStateOut:
+    """Put open positions back under their stops. Never gated on a reason —
+    restoring protection must always be the easier of the two directions."""
+    return SystemStateOut.model_validate(system_state.enable_exits(db, payload.by))
 
 
 @router.get("/risk-events", response_model=list[RiskEventOut])

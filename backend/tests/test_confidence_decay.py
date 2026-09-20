@@ -147,3 +147,33 @@ def test_no_confidence_reading_reports_a_plain_hold():
     code, label = _action(entry=None, last=None, holding_days=3, horizon_days=None)
     assert code == "hold"
     assert "day 3" in label
+
+
+# ------------------------------------------------- one home for the number --
+
+
+def test_the_exit_threshold_is_read_from_one_place(monkeypatch):
+    """0.35 was written independently into the strategy that acts on it, the
+    executor that alerts on decay, and the API that tells the user where the
+    exit sits. Any one of them drifting would make the screen and the bot
+    disagree with nothing failing, so all three resolve through here."""
+    from swing_trade_ml.core.config import settings
+    from swing_trade_ml.db.models.trading import Strategy
+    from swing_trade_ml.services.exit_policy import exit_confidence_for
+
+    row = Strategy(name="s", strategy_type="ml_swing", mode="paper", params={})
+
+    assert exit_confidence_for(row) == settings.ML_EXIT_CONFIDENCE
+
+    monkeypatch.setattr(settings, "ML_EXIT_CONFIDENCE", 0.42)
+    assert exit_confidence_for(row) == 0.42
+
+
+def test_a_strategy_row_can_still_override_the_exit_threshold():
+    from swing_trade_ml.db.models.trading import Strategy
+    from swing_trade_ml.services.exit_policy import exit_confidence_for
+
+    row = Strategy(name="s", strategy_type="ml_swing", mode="paper",
+                   params={"exit_confidence": 0.5})
+
+    assert exit_confidence_for(row) == 0.5

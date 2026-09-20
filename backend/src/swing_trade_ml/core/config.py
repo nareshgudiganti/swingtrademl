@@ -209,6 +209,9 @@ class Settings(BaseSettings):
     # reached before the stop, not that it is held, so taking part of the move
     # off is how that promise is converted into cash.
     ML_FIRST_TARGET_PCT: float = 0.05
+    # At or below this the model is actively signalling weakness, so an open
+    # position is exited on the score rather than waiting for a hard level.
+    ML_EXIT_CONFIDENCE: float = 0.35
     ML_TRAIN_TEST_SPLIT: float = 0.2
     ML_MIN_CONFIDENCE: float = 0.60
     ML_RANDOM_SEED: int = 42

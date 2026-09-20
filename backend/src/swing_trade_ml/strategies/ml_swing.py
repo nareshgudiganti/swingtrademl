@@ -30,6 +30,7 @@ from swing_trade_ml.ml.market_context import (
 from swing_trade_ml.ml.predict import _get_bundle
 from swing_trade_ml.ml.registry import get_active_model
 from swing_trade_ml.ml.sector_map import get_sector_index
+from swing_trade_ml.services.exit_policy import exit_confidence_for
 from swing_trade_ml.strategies.base import BaseStrategy, SignalDecision, register_strategy
 
 log = get_logger(__name__)
@@ -70,8 +71,6 @@ class MLSwingStrategy(BaseStrategy):
         "model_name": "swing_classifier",
         # Falls back to settings.ML_MIN_CONFIDENCE when null
         "min_confidence": None,
-        # Below this the model is actively signalling weakness — exit
-        "exit_confidence": 0.35,
         "min_avg_volume": 100_000,
         # Reject anything moving more than 6% a day annualised into ~95% vol
         "max_volatility": 0.06,
@@ -153,14 +152,15 @@ class MLSwingStrategy(BaseStrategy):
             "return_5d": round(recent_5d_return, 4),
         }
 
-        if probability <= float(self.params["exit_confidence"]):
+        exit_at = exit_confidence_for(self.config)
+        if probability <= exit_at:
             return SignalDecision(
                 signal=SignalType.EXIT,
                 price=price,
                 confidence=round(1 - probability, 3),
                 reason=(
                     f"Model confidence fell to {probability:.1%} "
-                    f"(exit below {float(self.params['exit_confidence']):.0%})"
+                    f"(exit below {exit_at:.0%})"
                 ),
                 features=features,
             )

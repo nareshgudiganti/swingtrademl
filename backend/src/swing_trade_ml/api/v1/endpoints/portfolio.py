@@ -29,6 +29,7 @@ from swing_trade_ml.schemas import (
     TradeOut,
 )
 from swing_trade_ml.services import portfolio as portfolio_service
+from swing_trade_ml.services.exit_policy import exit_confidence_for
 from swing_trade_ml.services.execution import (
     close_position,
     manual_close_position,
@@ -158,9 +159,7 @@ def detailed_positions(db: DbSession, mode: str | None = None) -> list[dict[str,
         exit_signal_pending = pending_at is not None and pending_at >= position.entry_at
         # Falls back to ml_swing's own default when the strategy doesn't
         # override it — same lookup _check_confidence_decay() uses.
-        exit_confidence = float(
-            (position.strategy.params.get("exit_confidence", 0.35)) if position.strategy else 0.35
-        )
+        exit_confidence = exit_confidence_for(position.strategy)
         action_code, action_label = position_action(
             position.entry_confidence,
             position.last_confidence,

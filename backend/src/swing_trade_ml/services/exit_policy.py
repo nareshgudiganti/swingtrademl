@@ -45,6 +45,25 @@ class ExitPolicy:
         return self.scale_out_at_pct is not None
 
 
+def exit_confidence_for(strategy: Any | None) -> float:
+    """The probability at or below which the model is signalling weakness.
+
+    One home, because 0.35 was previously written independently into three
+    files: the strategy that acts on it, the executor that alerts on decay,
+    and the API that shows the user where the exit sits. Any one of them
+    drifting would have made the screen and the bot disagree with nothing
+    failing. A malformed override falls back rather than raising — this is
+    read inside the 60-second exit loop.
+    """
+    raw = (getattr(strategy, "params", None) or {}).get("exit_confidence")
+    if raw is None:
+        return settings.ML_EXIT_CONFIDENCE
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return settings.ML_EXIT_CONFIDENCE
+
+
 def exit_policy_for_strategy(strategy: Any | None) -> ExitPolicy:
     """The policy a strategy row actually runs under, class defaults included.
 

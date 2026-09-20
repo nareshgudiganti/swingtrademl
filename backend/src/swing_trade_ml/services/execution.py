@@ -31,7 +31,11 @@ from swing_trade_ml.db.models.trading import Order, Position, Signal, Strategy, 
 from swing_trade_ml.notifications import notifier
 from swing_trade_ml.services import risk, system_state
 from swing_trade_ml.services.costs import compute_charges
-from swing_trade_ml.services.exit_policy import exit_policy_for_strategy, scale_out_quantity
+from swing_trade_ml.services.exit_policy import (
+    exit_confidence_for,
+    exit_policy_for_strategy,
+    scale_out_quantity,
+)
 from swing_trade_ml.services.portfolio import portfolio_value_and_cash
 
 log = get_logger(__name__)
@@ -644,7 +648,7 @@ def _check_confidence_decay(
         return
     position.last_confidence = current_confidence
 
-    exit_confidence = float(strategy.params.get("exit_confidence", 0.35))
+    exit_confidence = exit_confidence_for(strategy)
     status = confidence_decay_status(
         position.entry_confidence,
         current_confidence,

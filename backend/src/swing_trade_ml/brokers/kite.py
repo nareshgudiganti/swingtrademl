@@ -381,7 +381,15 @@ class KiteBroker(Broker):
         self._require_auth()
 
         try:
-            order_id = self._kite.place_order(
+            # Through reauth_and_retry for the same reason quotes and holdings
+            # are: Zerodha kills this token whenever the account opens the Kite
+            # app, mid-session and unannounced. Narrow by construction — it
+            # re-raises anything that is not a rejected token, and a rejected
+            # token is refused before the request is processed, so a retry
+            # cannot duplicate an order already resting at the exchange.
+            order_id = self.reauth_and_retry(
+                db,
+                self._kite.place_order,
                 variety=self._kite.VARIETY_REGULAR,
                 exchange=request.exchange,
                 tradingsymbol=request.tradingsymbol,

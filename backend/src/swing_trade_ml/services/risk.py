@@ -33,6 +33,7 @@ from swing_trade_ml.ml.sector_map import get_sector_bucket, sector_display_name
 from swing_trade_ml.services import deployable, system_state
 from swing_trade_ml.services.costs import apply_slippage, compute_charges
 from swing_trade_ml.services.limits import LARGE, SMALL, Limits, format_inr, limits_for
+from swing_trade_ml.services.portfolio import portfolio_value_and_cash
 from swing_trade_ml.strategies.tier import cap_tier
 
 log = get_logger(__name__)
@@ -149,17 +150,30 @@ def open_exposure_value(db: Session, mode: str, strategy_id: int | None, instrum
     return float(total)
 
 
-def current_drawdown(db: Session, mode: str) -> float:
-    """Drawdown from the running peak, as a positive fraction."""
-    snapshot = db.execute(
-        select(PortfolioSnapshot)
-        .where(PortfolioSnapshot.mode == mode)
-        .order_by(PortfolioSnapshot.ts.desc())
-        .limit(1)
-    ).scalar_one_or_none()
-    if snapshot is None or not snapshot.peak_value:
+def current_drawdown(db: Session, mode: str, current_value: float | None = None) -> float:
+    """Drawdown from the running peak, as a positive fraction.
+
+    The peak legitimately comes from the snapshot history — a high-water mark
+    cannot be known from today alone. The *current* value must not: snapshots
+    are written once a day by the take_snapshot job, so measuring the fall
+    against the snapshot's own total_value reads yesterday's healthy account
+    on exactly the day a drawdown opens up — the one day this brake exists
+    for. Callers holding the live value (check_entry, handed it by
+    portfolio_value_and_cash) pass it in; the rest pay for one valuation.
+
+    `max(0.0, ...)` is what makes a new high read as zero rather than a
+    negative drawdown: above the recorded peak, today IS the peak.
+    """
+    if current_value is None:
+        current_value, _cash = portfolio_value_and_cash(db, mode)
+    # No snapshot yet means a fresh account with no known peak, so there is
+    # nothing to have fallen from — and nothing to divide by.
+    peak = db.execute(
+        select(func.max(PortfolioSnapshot.peak_value)).where(PortfolioSnapshot.mode == mode)
+    ).scalar()
+    if not peak:
         return 0.0
-    return max(0.0, (snapshot.peak_value - snapshot.total_value) / snapshot.peak_value)
+    return max(0.0, (peak - current_value) / peak)
 
 
 # ---------------------------------------------------------------- holdings --
@@ -471,7 +485,9 @@ def check_entry(
             f"of {format_inr(portfolio_value)} is {limits.max_positions}",
         )
 
-    drawdown = current_drawdown(db, mode)
+    # Judged on the value passed in — the book as it stands right now, not the
+    # last daily snapshot (see current_drawdown).
+    drawdown = current_drawdown(db, mode, portfolio_value)
     if drawdown >= limits.max_drawdown_pct:
         # Halts new entries only; existing positions still exit normally, so
         # the circuit breaker cannot trap capital in losing trades.

@@ -14,7 +14,13 @@ from sqlalchemy import select
 
 from swing_trade_ml.db.models.market import Candle, Instrument, Quote
 from swing_trade_ml.db.models.safety import RiskEvent, SystemState
-from swing_trade_ml.db.models.trading import Order, Position, Signal, Strategy
+from swing_trade_ml.db.models.trading import (
+    Order,
+    PortfolioSnapshot,
+    Position,
+    Signal,
+    Strategy,
+)
 from swing_trade_ml.services import deployable, risk, system_state
 
 HEADERS = {"X-API-Key": "test-api-key"}
@@ -491,6 +497,125 @@ def test_cash_check_includes_buy_side_charges(db_session, monkeypatch):
     if decision.allowed:
         cost = risk.buy_cost(price, decision.quantity)
         assert cost <= cash
+
+
+# ------------------------------------------------- drawdown circuit breaker --
+#
+# Snapshots are written once a day by the take_snapshot job, so every test
+# here is about the gap between the last snapshot and the account right now —
+# the day a drawdown opens up is exactly the day the snapshot is stale.
+
+
+def _snapshot(db_session, *, total_value, peak_value, days_ago=0, mode="paper") -> PortfolioSnapshot:
+    snap = PortfolioSnapshot(
+        mode=mode,
+        ts=datetime.now(UTC) - timedelta(days=days_ago),
+        cash=total_value,
+        holdings_value=0.0,
+        total_value=total_value,
+        realized_pnl=0.0,
+        unrealized_pnl=0.0,
+        day_pnl=0.0,
+        open_positions=0,
+        peak_value=peak_value,
+        drawdown_pct=max(0.0, (peak_value - total_value) / peak_value) if peak_value else 0.0,
+    )
+    db_session.add(snap)
+    db_session.flush()
+    return snap
+
+
+def test_drawdown_brake_fires_on_todays_value_not_yesterdays_snapshot(db_session, monkeypatch):
+    """The headline case: the account was fine at last night's snapshot and is
+    20% below its peak now.
+
+    On the old code the brake read the snapshot's own total_value — yesterday's
+    healthy number — and kept buying through the exact fall it exists to stop.
+    """
+    _flat_deployable(monkeypatch)
+    strat = _strategy(db_session, name="drawdown_strategy")
+    inst = _instrument(db_session, "ZZZCRASHDAY")
+    _snapshot(db_session, total_value=1_000_000.0, peak_value=1_000_000.0, days_ago=1)
+    db_session.commit()
+
+    assert risk.current_drawdown(db_session, "paper", 800_000.0) == 0.2
+
+    decision = risk.check_entry(
+        db_session, mode="paper", instrument_id=inst.id, price=100.0, stop_loss=95.0,
+        portfolio_value=800_000.0, available_cash=800_000.0, strategy=strat,
+    )
+    assert decision.allowed is False
+    assert decision.rule == "DRAWDOWN"
+
+
+def test_an_account_above_its_recorded_peak_is_not_in_drawdown(db_session, monkeypatch):
+    """Today IS the peak — drawdown is zero, never negative, and the stale
+    snapshot's own drawdown must not stand in for it."""
+    _flat_deployable(monkeypatch)
+    strat = _strategy(db_session, name="new_high_strategy")
+    inst = _instrument(db_session, "ZZZNEWHIGH")
+    _snapshot(db_session, total_value=800_000.0, peak_value=1_000_000.0, days_ago=1)
+    db_session.commit()
+
+    assert risk.current_drawdown(db_session, "paper", 1_200_000.0) == 0.0
+
+    decision = risk.check_entry(
+        db_session, mode="paper", instrument_id=inst.id, price=100.0, stop_loss=95.0,
+        portfolio_value=1_200_000.0, available_cash=1_200_000.0, strategy=strat,
+    )
+    assert decision.allowed is True
+
+
+def test_an_account_with_no_snapshots_can_still_trade(db_session, monkeypatch):
+    """A fresh account has no recorded peak, so there is no drawdown to
+    measure — it must not divide by zero or refuse the first buy."""
+    _flat_deployable(monkeypatch)
+    strat = _strategy(db_session, name="fresh_account_strategy")
+    inst = _instrument(db_session, "ZZZFIRSTEVERBUY")
+    db_session.commit()
+
+    assert risk.current_drawdown(db_session, "paper", 1_000_000.0) == 0.0
+
+    decision = risk.check_entry(
+        db_session, mode="paper", instrument_id=inst.id, price=100.0, stop_loss=95.0,
+        portfolio_value=1_000_000.0, available_cash=1_000_000.0, strategy=strat,
+    )
+    assert decision.allowed is True
+
+
+def test_a_fall_short_of_the_limit_still_trades(db_session, monkeypatch):
+    """10% below the peak is a bad week, not a circuit breaker — only a fall
+    past the 15% limit pauses buying."""
+    _flat_deployable(monkeypatch)
+    strat = _strategy(db_session, name="shallow_dip_strategy")
+    inst = _instrument(db_session, "ZZZSHALLOWDIP")
+    _snapshot(db_session, total_value=1_000_000.0, peak_value=1_000_000.0, days_ago=1)
+    db_session.commit()
+
+    assert risk.current_drawdown(db_session, "paper", 900_000.0) == 0.1
+
+    decision = risk.check_entry(
+        db_session, mode="paper", instrument_id=inst.id, price=100.0, stop_loss=95.0,
+        portfolio_value=900_000.0, available_cash=900_000.0, strategy=strat,
+    )
+    assert decision.allowed is True
+
+
+def test_the_live_value_is_read_when_the_caller_has_none(db_session, monkeypatch):
+    """Callers without a portfolio value in hand still get a live reading —
+    the open book marked to market plus cash — not the snapshot's."""
+    _flat_deployable(monkeypatch)
+    strat = _strategy(db_session, name="live_read_strategy")
+    inst = _instrument(db_session, "ZZZMARKEDDOWN")
+    _snapshot(db_session, total_value=1_000_000.0, peak_value=1_000_000.0, days_ago=1)
+    position = _open_position(db_session, strat, inst, quantity=1000, entry_price=1000.0)
+    position.current_price = 400.0  # the whole book has halved and then some
+    db_session.commit()
+
+    monkeypatch.setattr(
+        risk, "portfolio_value_and_cash", lambda db, mode: (400_000.0 + 100_000.0, 100_000.0)
+    )
+    assert risk.current_drawdown(db_session, "paper") == 0.5
 
 
 # ------------------------------------------------------------ kill switch --

@@ -349,6 +349,31 @@ export interface MLModel {
   train_end: string | null
   trained_at: string | null
   activated_at: string | null
+  label_kind?: string
+  stop_return_pct?: number | null
+  metrics?: { walk_forward?: WalkForwardFold[] } & Record<string, unknown>
+}
+
+/** One successive train/test window from ml/train.py::walk_forward. The
+ * headline number is precision at the confidence threshold: of the calls the
+ * model was confident enough to act on, how many worked out. */
+export interface WalkForwardFold {
+  fold: number
+  skipped: boolean
+  reason?: string
+  n_train: number
+  n_test: number
+  train_start: string
+  train_end: string
+  test_start: string
+  test_end: string
+  metrics: {
+    roc_auc?: number
+    accuracy?: number
+    threshold?: number
+    precision_at_threshold?: number
+    confident_signal_count?: number
+  }
 }
 
 export interface Instrument {

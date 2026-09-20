@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api } from '../api/client'
 import { Empty, ErrorBox, Loading } from '../components/Loading'
-import { formatCurrency, formatDateTime } from '../lib/format'
+import { formatCurrency, formatDate, formatDateTime } from '../lib/format'
 
 /** The risk layer records a rejection under a machine name. These are the
  * same limits in the words the rest of the app uses for them. */
@@ -27,6 +27,7 @@ export default function Safety() {
 
   const state = useQuery({ queryKey: ['safetyState'], queryFn: api.safetyState })
   const events = useQuery({ queryKey: ['riskEvents'], queryFn: () => api.riskEvents(100) })
+  const status = useQuery({ queryKey: ['systemStatus'], queryFn: api.status })
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ['safetyState'] })
@@ -119,6 +120,68 @@ export default function Safety() {
             </div>
             {(halt.isError || resume.isError) && (
               <ErrorBox error={(halt.error ?? resume.error) as Error} />
+            )}
+          </div>
+
+          <div className="card" style={{ marginBottom: '1.25rem' }}>
+            <h2>Is everything working</h2>
+            <p className="stat-sub" style={{ marginTop: '0.2rem' }}>
+              {/* The switches above say what the bot is allowed to do; this says
+                  whether it is in any position to do it. A halted bot and a
+                  broken one look identical from the switches alone. */}
+              The switches say what the bot is allowed to do. This says whether it can.
+            </p>
+
+            {status.isLoading && <Loading />}
+            {status.data && (
+              <div className="grid" style={{ marginTop: '0.9rem' }}>
+                <div>
+                  <div className="stat-label">Zerodha session</div>
+                  <div className="stat-value" style={{ fontSize: '1.05rem' }}>
+                    <span
+                      className={`badge ${status.data.broker_authenticated ? 'badge-on' : 'badge-warn'}`}
+                    >
+                      {status.data.broker_authenticated ? 'Connected' : 'No session'}
+                    </span>
+                  </div>
+                  {!status.data.broker_authenticated && (
+                    <div className="stat-sub">No prices, no exit checks until you log in.</div>
+                  )}
+                </div>
+                <div>
+                  <div className="stat-label">Scheduled jobs</div>
+                  <div className="stat-value" style={{ fontSize: '1.05rem' }}>
+                    <span
+                      className={`badge ${status.data.scheduler_running ? 'badge-on' : 'badge-warn'}`}
+                    >
+                      {status.data.scheduler_running ? 'Running' : 'Stopped'}
+                    </span>
+                  </div>
+                  <div className="stat-sub">{status.data.scheduled_jobs.length} jobs scheduled</div>
+                </div>
+                <div>
+                  <div className="stat-label">Latest market data</div>
+                  <div className="stat-value" style={{ fontSize: '1.05rem' }}>
+                    {status.data.latest_candle_date
+                      ? formatDate(status.data.latest_candle_date)
+                      : '—'}
+                  </div>
+                  <div className="stat-sub">Prices the bot is deciding on</div>
+                </div>
+                <div>
+                  <div className="stat-label">Last scan</div>
+                  <div className="stat-value" style={{ fontSize: '1.05rem' }}>
+                    {status.data.last_scan_at ? formatDateTime(status.data.last_scan_at) : 'Never'}
+                  </div>
+                  <div className="stat-sub">Runs after the close, 15:45</div>
+                </div>
+              </div>
+            )}
+
+            {status.data && status.data.status_level !== 'ok' && (
+              <div className="note" style={{ marginTop: '1rem' }}>
+                <span className="warnc">{status.data.status_message}</span>
+              </div>
             )}
           </div>
 

@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 
 import { api } from '../api/client'
 import { Empty, ErrorBox, Loading } from '../components/Loading'
-import { formatPercent } from '../lib/format'
+import { formatDate, formatPercent } from '../lib/format'
 
 type Source = 'signals' | 'predictions'
 
@@ -24,8 +24,16 @@ export default function ModelLab() {
     queryKey: ['calibration', source],
     queryFn: () => api.calibration(source),
   })
+  const models = useQuery({ queryKey: ['models'], queryFn: api.models })
   const d = report.data
   const buckets = d?.buckets ?? []
+
+  // Walk-forward lives on the model row, not the calibration report. Show the
+  // active model's folds — an archived one describes a model nothing trades.
+  const active = (models.data ?? []).find(
+    (m) => m.status === 'ACTIVE' && (m.metrics?.walk_forward?.length ?? 0) > 0,
+  )
+  const folds = (active?.metrics?.walk_forward ?? []).filter((f) => !f.skipped)
 
   return (
     <>
@@ -82,6 +90,62 @@ export default function ModelLab() {
               <div className="stat-sub">The question the model was asked</div>
             </div>
           </div>
+
+          {folds.length > 0 && (
+            <div className="card" style={{ marginBottom: '1.25rem' }}>
+              <h2>Tested across {folds.length} separate time periods</h2>
+              <p className="stat-sub" style={{ marginTop: '0.3rem' }}>
+                {/* A single train/test split can be flattered indefinitely by one
+                    lucky window. Successive windows are the check on that. */}
+                One good test window can flatter a model forever. Each row here trains on an
+                earlier stretch of history and is judged on the stretch that followed it, which it
+                never saw. &ldquo;Worth acting on&rdquo; counts only the calls it was confident
+                enough to trade.
+              </p>
+              <div className="table-wrap" style={{ marginTop: '0.8rem' }}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Period tested</th>
+                      <th className="num">Confident calls</th>
+                      <th className="num">Of those, right</th>
+                      <th className="num">Better than chance?</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {folds.map((f) => {
+                      const p = f.metrics.precision_at_threshold
+                      const auc = f.metrics.roc_auc
+                      // 0.5 is a coin flip; anything at or under it means the
+                      // ranking carried no information on that window.
+                      const beatsChance = auc != null && auc > 0.53
+                      return (
+                        <tr key={f.fold}>
+                          <td>
+                            {formatDate(f.test_start)} → {formatDate(f.test_end)}
+                          </td>
+                          <td className="num">{f.metrics.confident_signal_count ?? '—'}</td>
+                          <td className="num">{p != null ? formatPercent(p, 0) : '—'}</td>
+                          <td className="num">
+                            <span className={`badge ${beatsChance ? 'badge-on' : 'badge-warn'}`}>
+                              {auc == null ? '—' : beatsChance ? 'Yes' : 'No better'}
+                            </span>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              {folds.some((f) => (f.metrics.roc_auc ?? 0) <= 0.53) && (
+                <div className="note" style={{ marginTop: '1rem' }}>
+                  <span className="warnc">Read this honestly.</span> On at least one period the
+                  model ranked stocks no better than chance. That is the number the readiness
+                  gates care about, and it is the argument for staying on paper money.
+                </div>
+              )}
+            </div>
+          )}
 
           {buckets.length === 0 && (
             <Empty label="Nothing has been scored yet — calibration needs closed trades to judge." />

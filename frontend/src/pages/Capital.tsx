@@ -17,7 +17,15 @@ function rungLabel(rungValue: number): string {
 
 export default function Capital() {
   const limits = useQuery({ queryKey: ['riskLimits'], queryFn: api.riskLimits })
+  const events = useQuery({ queryKey: ['riskEvents'], queryFn: () => api.riskEvents(100) })
   const d = limits.data
+
+  // Today only: the point of this panel is what the ceilings cost *now*, not
+  // a history. The full log lives on Safety.
+  const today = new Date().toDateString()
+  const blockedToday = (events.data ?? []).filter(
+    (e) => new Date(e.ts).toDateString() === today,
+  )
 
   return (
     <>
@@ -133,6 +141,38 @@ export default function Capital() {
               <em>{rungLabel(d.rung_value)}</em>. Smallest position worth taking:{' '}
               {formatCurrency(d.min_position_inr)}.
             </div>
+          </div>
+
+          <div className="card" style={{ marginBottom: '1.25rem' }}>
+            <h2>Blocked today</h2>
+            <p className="stat-sub" style={{ marginTop: '0.2rem' }}>
+              {/* The limits above are abstract until you see what they cost.
+                  Today's rejections are the same numbers, spent. */}
+              Buys the model wanted that these limits turned away. Not errors — this is what the
+              ceilings above actually did with your money today.
+            </p>
+            {blockedToday.length === 0 ? (
+              <p className="stat-sub" style={{ marginTop: '0.6rem' }}>
+                Nothing was blocked today.
+              </p>
+            ) : (
+              <div style={{ marginTop: '0.8rem' }}>
+                {blockedToday.slice(0, 8).map((e) => (
+                  <div key={e.id} className="between" style={{ padding: '0.55rem 0' }}>
+                    <div>
+                      <strong>{e.symbol ?? 'A buy'}</strong>{' '}
+                      <span className="muted">— {e.reason}</span>
+                    </div>
+                    <span className="badge badge-warn">{e.rule.replace(/_/g, ' ').toLowerCase()}</span>
+                  </div>
+                ))}
+                {blockedToday.length > 8 && (
+                  <div className="stat-sub" style={{ marginTop: '0.5rem' }}>
+                    and {blockedToday.length - 8} more — see Safety for the full log.
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="card">

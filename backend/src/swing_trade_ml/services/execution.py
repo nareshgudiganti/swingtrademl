@@ -8,7 +8,7 @@ attributable to the strategy rather than to the plumbing.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -488,6 +488,9 @@ def close_position(
         product=ProductType.CNC,
         quantity=sell_quantity,
         status=OrderStatus.PENDING,
+        # Stamped before submission: a live sell is finished by reconciliation
+        # minutes later, which otherwise has no way back to this decision.
+        exit_reason=reason,
         placed_at=now,
     )
     db.add(order)
@@ -954,6 +957,15 @@ def trail_stop(position: Position) -> None:
         position.stop_loss = trailed
 
 
+# How long a claim on a position's exit stays valid. Long enough that a live
+# sell has settled or been rejected; short enough that a process killed
+# between claiming and selling leaves the position unprotected for minutes,
+# not until someone notices. Deliberately a module constant rather than a
+# setting: it describes how long *this* code takes to finish placing an order,
+# which is not a knob anyone should be tuning from an env file.
+EXIT_CLAIM_TTL = timedelta(minutes=5)
+
+
 def _has_pending_exit_order(db: Session, position: Position) -> bool:
     """True while a sell for this position is still waiting at the broker.
 
@@ -973,6 +985,58 @@ def _has_pending_exit_order(db: Session, position: Position) -> bool:
         ).first()
         is not None
     )
+
+
+def _claim_exit(db: Session, position: Position) -> bool:
+    """Take the sole right to sell this position, or refuse.
+
+    Two independent things can decide to exit one position — this 60-second
+    loop, and (once broker-held stops exist) the broker itself — and selling
+    the same shares twice means an accidental short, not a tidy no-op. So no
+    sell is sent without first claiming the position here.
+
+    The claim is taken on a freshly re-read, row-locked copy and committed
+    BEFORE the order goes out: claiming afterwards would leave open exactly
+    the window this closes. The re-read also catches a position another path
+    has closed since the loop picked it up, which is why the caller's in-
+    memory copy is not enough. Pending mark-to-market edits are committed
+    first — re-reading would otherwise discard them.
+    """
+    db.commit()
+    db.refresh(position, with_for_update=True)
+
+    if position.status != PositionStatus.OPEN:
+        return False
+
+    claimed_at = position.exit_in_progress_at
+    if claimed_at is not None:
+        # A row written through a path that stored a naive timestamp must not
+        # crash the exit job on the comparison below.
+        if claimed_at.tzinfo is None:
+            claimed_at = claimed_at.replace(tzinfo=UTC)
+        if datetime.now(UTC) - claimed_at < EXIT_CLAIM_TTL:
+            log.info("execution.exit.already_claimed", position_id=position.id)
+            return False
+
+    if _has_pending_exit_order(db, position):
+        return False
+
+    position.exit_in_progress_at = datetime.now(UTC)
+    db.commit()
+    return True
+
+
+def _release_exit(db: Session, position: Position) -> None:
+    """Give the claim back once the sell has settled, filled or not.
+
+    A sell still resting at the broker keeps it: that order will finish
+    through reconciliation, which releases the claim itself, and until then
+    the position genuinely is being sold.
+    """
+    if _has_pending_exit_order(db, position):
+        return
+    position.exit_in_progress_at = None
+    db.commit()
 
 
 def check_exits(db: Session) -> list[Trade]:
@@ -1009,6 +1073,10 @@ def check_exits(db: Session) -> list[Trade]:
       the loop moves on, and the next price update judges the remainder.
     The time stop and the scale-out are per strategy (services/exit_policy.py);
     a strategy that sets neither keeps the 60-day stop and never scales out.
+
+    No sell leaves this function without first claiming the position (see
+    _claim_exit) — this loop is not the only thing that can decide to exit
+    one, and two sells of the same shares is an accidental short.
     """
     if not system_state.get_state(db).exits_enabled:
         log.warning(
@@ -1085,10 +1153,11 @@ def check_exits(db: Session) -> list[Trade]:
                 quantity=position.quantity,
                 already_scaled_out=position.scaled_out_at is not None,
             )
-            if sell and not _has_pending_exit_order(db, position):
+            if sell and _claim_exit(db, position):
                 trade = close_position(db, position, price, ExitReason.SCALE_OUT, quantity=sell)
                 if trade:
                     closed.append(trade)
+                _release_exit(db, position)
             continue
 
         if position_is_advisory:
@@ -1099,9 +1168,13 @@ def check_exits(db: Session) -> list[Trade]:
                 position.advisory_alert_sent_at = datetime.now(UTC)
             continue
 
+        if not _claim_exit(db, position):
+            continue
+
         trade = close_position(db, position, price, reason)
         if trade:
             closed.append(trade)
+        _release_exit(db, position)
 
     db.commit()
     return closed
@@ -1263,9 +1336,12 @@ def _finish_reconciled_order(db: Session, order: Order, result: OrderResult) -> 
             # that — and the position stays open holding the rest. Treating
             # it as a full close (as this branch used to for every sell)
             # would mark shares still held at the broker as sold.
+            # A partial exit that carries no reason of its own can only be the
+            # first-target scale-out: nothing else places one.
+            partial_reason = ExitReason(order.exit_reason) if order.exit_reason else ExitReason.SCALE_OUT
             trade = _finalize_partial_close(
                 db, position, instrument, filled_qty, fill_price, brokerage, taxes,
-                ExitReason.SCALE_OUT, closed_at,
+                partial_reason, closed_at,
             )
             log.info(
                 "execution.reconcile.partial_exit_filled",
@@ -1273,20 +1349,31 @@ def _finish_reconciled_order(db: Session, order: Order, result: OrderResult) -> 
                 qty=filled_qty, remaining=position.quantity,
             )
             notifier.send_sync(
-                _partial_exit_message(instrument, trade, position, ExitReason.SCALE_OUT, order.mode),
+                _partial_exit_message(instrument, trade, position, partial_reason, order.mode),
                 "fill",
             )
+            # Still open, holding the rest — and now sellable again.
+            position.exit_in_progress_at = None
             return
 
+        # The reason the exit was placed for, not a blanket MANUAL. Grading
+        # exit quality is only possible if a stop-loss, a target hit and a
+        # time stop are still distinguishable once they have been through
+        # reconciliation. MANUAL stays the honest answer for a sell that
+        # carries no reason of ours — one the user initiated themselves.
+        exit_reason = ExitReason(order.exit_reason) if order.exit_reason else ExitReason.MANUAL
         trade = _finalize_close_position(
             db, position, instrument, fill_price, brokerage, taxes,
-            ExitReason.MANUAL, closed_at,
+            exit_reason, closed_at,
         )
+        # The position is closed; nothing is left for a second sell to claim.
+        position.exit_in_progress_at = None
         log.info(
             "execution.reconcile.exit_filled",
             symbol=instrument.tradingsymbol, order_id=order.id, price=fill_price,
+            reason=str(exit_reason),
         )
-        notifier.send_sync(_exit_message(instrument, trade, ExitReason.MANUAL, order.mode), "fill")
+        notifier.send_sync(_exit_message(instrument, trade, exit_reason, order.mode), "fill")
 
 
 def _fail_reconciled_order(db: Session, order: Order, result: OrderResult) -> None:
@@ -1298,6 +1385,14 @@ def _fail_reconciled_order(db: Session, order: Order, result: OrderResult) -> No
         signal = db.get(Signal, order.signal_id)
         if signal is not None:
             signal.rejection_reason = result.message or f"Order {result.status}"
+
+    if order.transaction_type == TransactionType.SELL and order.position_id is not None:
+        # The sell that claimed this position is never going to fill, so the
+        # claim has to go with it — otherwise one rejected order silently
+        # disables the position's stop-loss until the claim goes stale.
+        position = db.get(Position, order.position_id)
+        if position is not None:
+            position.exit_in_progress_at = None
 
     log.warning(
         "execution.reconcile.order_failed",

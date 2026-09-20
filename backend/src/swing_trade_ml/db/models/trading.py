@@ -182,6 +182,14 @@ class Order(Base, TimestampMixin):
     status: Mapped[str] = mapped_column(String(16), default=OrderStatus.PENDING, index=True)
     status_message: Mapped[str | None] = mapped_column(Text)
 
+    # Why this exit was placed (ExitReason), stamped at placement on SELL
+    # orders only. A live sell is finished later by reconciliation, which has
+    # no other way back to the decision that placed it — without this every
+    # reconciled exit was recorded as MANUAL, making a stop-loss, a target hit
+    # and a time stop indistinguishable afterwards. Null on entries, and on a
+    # sell the user initiated themselves, which genuinely is manual.
+    exit_reason: Mapped[str | None] = mapped_column(String(24))
+
     # Simulated (paper) or actual (live) costs, so paper P&L stays honest
     brokerage: Mapped[float] = mapped_column(Float, default=0.0)
     taxes: Mapped[float] = mapped_column(Float, default=0.0)
@@ -290,6 +298,37 @@ class Position(Base, TimestampMixin):
     # an advisory-mode position, so the 60s job sends exactly one alert
     # instead of re-notifying every minute until the user confirms the exit.
     advisory_alert_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    # Claimed just before a sell is sent, cleared when it settles — the latch
+    # that makes selling the same shares twice impossible. Two things can
+    # decide to exit one position: our own 60-second loop, and (once broker
+    # stops exist) the broker. Timestamp rather than a boolean so a crash
+    # between claiming and selling expires instead of stranding the position
+    # below its stop forever — see execution.EXIT_CLAIM_TTL.
+    exit_in_progress_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    # The stop the BROKER holds for this position, once that exists (Zerodha
+    # GTT). Today the stop-loss is only a comparison inside a job that runs
+    # once a minute, so a gap while nothing of ours is running is unprotected;
+    # these record the standing instruction that closes it. Written by nothing
+    # yet — they ship with the same migration as the columns above so the
+    # table is altered once rather than twice.
+    broker_stop_id: Mapped[str | None] = mapped_column(String(64), index=True)
+    broker_stop_trigger: Mapped[float | None] = mapped_column(Float)
+    # Kept separately from `quantity`: a partial exit changes what we hold
+    # without the broker's stop knowing, and the difference is exactly the
+    # dangerous case — a stop still covering more shares than are left.
+    broker_stop_qty: Mapped[int | None] = mapped_column(Integer)
+    # NONE | ACTIVE | TRIGGERED | FAILED | CANCELLED — brokers.base's
+    # BrokerStopState, stored as a plain string (importing that here would
+    # close an import cycle through brokers/__init__).
+    broker_stop_state: Mapped[str] = mapped_column(
+        String(16), default="NONE", server_default="NONE", index=True
+    )
+    # Why placing or modifying the stop failed. A stop we believe is protecting
+    # a position but isn't must be visible, not swallowed.
+    broker_stop_error: Mapped[str | None] = mapped_column(Text)
+    broker_stop_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     notes: Mapped[str | None] = mapped_column(Text)
 

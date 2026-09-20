@@ -45,6 +45,13 @@ LONG_TERM_HORIZON_DAYS = 250
 # backtested (spec §10 open items).
 LONG_TERM_TARGET_RETURN_PCT = 0.30
 
+# Calendar days, and past LONG_TERM_HORIZON_DAYS trading days (~365 calendar)
+# on purpose: the time stop is the backstop for a thesis that stopped working,
+# not the exit itself. Declared here rather than left to services/exit_policy,
+# whose defaults are the swing trade's — inheriting those would book half this
+# position at +5% and close it at 30 days, which is a different strategy.
+LONG_TERM_TIME_STOP_DAYS = 420
+
 
 @register_strategy
 class LongTermValueStrategy(BaseStrategy):
@@ -67,6 +74,9 @@ class LongTermValueStrategy(BaseStrategy):
         "stop_loss_pct": 0.20,
         "take_profit_pct": LONG_TERM_TARGET_RETURN_PCT,
         "horizon_days": LONG_TERM_HORIZON_DAYS,
+        # A one-year thesis is not part-booked at the swing trade's +5%.
+        "scale_out_at_pct": 0,
+        "time_stop_days": LONG_TERM_TIME_STOP_DAYS,
         "min_avg_volume": 100_000,
         # Advisory only by default (spec §3/§6) — the manual-approval trial
         # phase this whole app is still in applies doubly to a multi-month

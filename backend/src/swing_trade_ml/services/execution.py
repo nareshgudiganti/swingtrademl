@@ -31,7 +31,7 @@ from swing_trade_ml.db.models.trading import Order, Position, Signal, Strategy, 
 from swing_trade_ml.notifications import notifier
 from swing_trade_ml.services import risk, system_state
 from swing_trade_ml.services.costs import compute_charges
-from swing_trade_ml.services.exit_policy import exit_policy_for, scale_out_quantity
+from swing_trade_ml.services.exit_policy import exit_policy_for_strategy, scale_out_quantity
 from swing_trade_ml.services.portfolio import portfolio_value_and_cash
 
 log = get_logger(__name__)
@@ -1051,7 +1051,7 @@ def check_exits(db: Session) -> list[Trade]:
 
         trail_stop(position)
 
-        policy = exit_policy_for(position.strategy.params if position.strategy is not None else None)
+        policy = exit_policy_for_strategy(position.strategy)
         # is_advisory() (not a raw execution_mode check) so a long-term-value
         # position is always treated as advisory here too, even if its row
         # was ever misconfigured as execution_mode="auto" — otherwise this

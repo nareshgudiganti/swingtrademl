@@ -48,7 +48,11 @@ from swing_trade_ml.db.models.trading import Strategy as StrategyModel
 from swing_trade_ml.ml.dataset import load_candles
 from swing_trade_ml.services.costs import apply_slippage as _apply_slippage
 from swing_trade_ml.services.costs import compute_charges as _charges
-from swing_trade_ml.services.exit_policy import ExitPolicy, exit_policy_for, scale_out_quantity
+from swing_trade_ml.services.exit_policy import (
+    ExitPolicy,
+    exit_policy_for_strategy,
+    scale_out_quantity,
+)
 from swing_trade_ml.services.limits import limits_for
 from swing_trade_ml.services.risk import calculate_quantity, rank_buy_candidates
 from swing_trade_ml.strategies import get_strategy
@@ -308,7 +312,7 @@ def run_backtest(
     )
     impl = get_strategy(strategy_row)
     min_bars = impl.min_bars_required()
-    exit_policy = exit_policy_for(strategy_row.params)
+    exit_policy = exit_policy_for_strategy(strategy_row)
 
     history: dict[int, pd.DataFrame] = {}
     for inst in instruments:

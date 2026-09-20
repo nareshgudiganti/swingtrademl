@@ -45,6 +45,28 @@ class ExitPolicy:
         return self.scale_out_at_pct is not None
 
 
+def exit_policy_for_strategy(strategy: Any | None) -> ExitPolicy:
+    """The policy a strategy row actually runs under, class defaults included.
+
+    `Strategy.params` stores only what was explicitly set on the row, and every
+    row the bot created carries none of these keys — so reading the row alone
+    gives a long-horizon strategy the swing trade's +5% part-booking and its
+    30-day stop, which is a different strategy entirely. BaseStrategy merges
+    class defaults the same way when it evaluates; this is that merge for the
+    exit path, which never builds a strategy object.
+    """
+    if strategy is None:
+        return exit_policy_for(None)
+
+    # Imported here: the strategy package imports the services layer, so a
+    # module-level import would close the cycle.
+    from swing_trade_ml.strategies.base import STRATEGY_REGISTRY
+
+    cls = STRATEGY_REGISTRY.get(strategy.strategy_type)
+    defaults = dict(cls.default_params) if cls is not None else {}
+    return exit_policy_for({**defaults, **(strategy.params or {})})
+
+
 def exit_policy_for(params: dict[str, Any] | None) -> ExitPolicy:
     """Read the exit knobs from a strategy's params, falling back to today's
     behaviour for anything absent or nonsensical.

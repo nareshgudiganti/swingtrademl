@@ -45,6 +45,7 @@ from swing_trade_ml.services.exit_policy import (
     DEFAULT_TIME_STOP_DAYS,
     ExitPolicy,
     exit_policy_for,
+    exit_policy_for_strategy,
     scale_out_quantity,
 )
 from swing_trade_ml.services.portfolio import mark_to_market, portfolio_value_and_cash
@@ -495,6 +496,46 @@ def test_exit_policy_defaults_are_the_traded_policy():
     assert policy.time_stop_days == DEFAULT_TIME_STOP_DAYS == 30
     assert exit_policy_for(None) == policy
     assert exit_policy_for({"scale_out_at_pct": None}) == policy
+
+
+def test_a_long_horizon_strategy_does_not_inherit_the_swing_policy():
+    """A 250-trading-day thesis targeting +30% must not book half at +5% or be
+    closed at 30 days. Making the swing policy the default put every strategy
+    carrying no params on it, and the backtest path is not advisory-gated, so
+    long-term backtests would have quietly run a different strategy."""
+    from swing_trade_ml.strategies.long_term_value import (
+        LONG_TERM_HORIZON_DAYS,
+        LongTermValueStrategy,
+    )
+
+    policy = exit_policy_for(LongTermValueStrategy.default_params)
+
+    assert policy.scale_out_enabled is False
+    assert policy.time_stop_days > LONG_TERM_HORIZON_DAYS
+
+
+def test_a_strategy_row_resolves_its_own_classs_policy():
+    """Strategy.params holds only what was explicitly set on the row, and the
+    rows in the running bot were created carrying none of these keys — so
+    reading the row alone hands a one-year thesis the swing trade's defaults,
+    however carefully the class declares otherwise."""
+    from swing_trade_ml.strategies.long_term_value import LONG_TERM_TIME_STOP_DAYS
+
+    row = Strategy(name="lt", strategy_type="long_term_value", mode="paper", params={})
+
+    policy = exit_policy_for_strategy(row)
+
+    assert policy.scale_out_enabled is False
+    assert policy.time_stop_days == LONG_TERM_TIME_STOP_DAYS
+
+
+def test_a_swing_row_still_gets_the_swing_policy():
+    row = Strategy(name="sw", strategy_type="ml_swing", mode="paper", params={})
+
+    policy = exit_policy_for_strategy(row)
+
+    assert policy.scale_out_at_pct == settings.ML_FIRST_TARGET_PCT
+    assert policy.time_stop_days == DEFAULT_TIME_STOP_DAYS
 
 
 def test_exit_policy_malformed_values_switch_scale_out_off():

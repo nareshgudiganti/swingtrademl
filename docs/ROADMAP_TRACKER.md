@@ -243,7 +243,8 @@ the account owner can do.
 - [ ] **Re-run the feature ablation on the barrier label** with the new families, walk-forward. *Keep only what moves ROC AUC or top-bucket precision by more than noise* (M)
 - Exit test: at least one new family improves walk-forward results, or we stop adding data and say so plainly.
 - **Outcome so far:** delivery % did not (see above). Bulk/block and FII/DII cannot be tested until they have months of history. The rule says stop adding price-model features and put effort into Phase 2.
-- [ ] **New experiment:** volatility-scaled barrier label (target and stop as multiples of the stock's ATR, matching the strategy's ATR-based stops) instead of a fixed +8%/-4%; compare walk-forward and, more importantly, simulated P&L after costs (M)
+- [x] **Volatility-scaled barrier label tested** (2026-09-21): does **not** beat the fixed +8%/-4%; keep it. Side finding: the model's top 5% picks earn +0.22 to +0.28 R per trade after costs in every tier vs about 0 for unfiltered entries. See `docs/superpowers/research/2026-09-21-volatility-label-experiment.md`
+- [ ] **Replay the real system** (fixed 0.60 threshold, next-open entry, all portfolio limits) through the backtester and compare with the SMA benchmark. This is the number that decides readiness (M)
 
 ### Phase 2 — Playbooks and ranking
 - [ ] Playbook candidate generators: base breakout on volume, pullback to a rising average, post-results drift (M each)

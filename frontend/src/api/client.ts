@@ -39,6 +39,7 @@ import type {
   PortfolioSummary,
   Prediction,
   PredictionRun,
+  RealReport,
   ScanResult,
   Strategy,
   StrategyPerformanceResponse,
@@ -306,6 +307,16 @@ export const api = {
   telegramStatus: () =>
     get<{ ok: boolean; bot: string | null; error: string | null }>('/notifications/telegram/status'),
   telegramTest: () => post<MessageResponse>('/notifications/telegram/test'),
+
+  // --------------------------------------------------- real buy/sell report --
+  realReport: (params: { start?: string; end?: string } = {}) =>
+    get<RealReport>(`/real-report${qs(params)}`),
+  syncRealTrades: () => post<MessageResponse>('/real-report/sync'),
+  importTradebook: (file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return requestForm<MessageResponse>('/real-report/import-tradebook', form)
+  },
 
   // ------------------------------------------------------------ finance --
   uploadFinanceStatement: (file: File, password?: string) => {

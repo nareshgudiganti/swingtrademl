@@ -465,6 +465,11 @@ class KiteBroker(Broker):
         self._require_auth()
         return self.reauth_and_retry(db, self._kite.holdings)
 
+    def get_trades(self, db: Session) -> list[dict]:
+        """Today's executed trades only — Kite keeps no trade history."""
+        self._require_auth()
+        return self.reauth_and_retry(db, self._kite.trades)
+
     def get_margins(self, db: Session) -> BrokerMargins:
         self._require_auth()
         m = self._kite.margins()

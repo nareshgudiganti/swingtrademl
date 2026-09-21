@@ -13,6 +13,7 @@ from swing_trade_ml.db.models.finance import (
     FinanceRecurringBillPayment,
     FinanceTransaction,
 )
+from swing_trade_ml.db.models.fills import BrokerFill
 from swing_trade_ml.db.models.market import Candle, Instrument, Quote
 from swing_trade_ml.db.models.ml import MLModel, Prediction
 from swing_trade_ml.db.models.mutual_funds import MutualFund, MutualFundHolding, MutualFundNav
@@ -28,6 +29,7 @@ from swing_trade_ml.db.models.trading import (
 )
 
 __all__ = [
+    "BrokerFill",
     "BrokerSession",
     "Candle",
     "FinanceCustomRule",

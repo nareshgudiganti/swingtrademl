@@ -706,3 +706,70 @@ export interface CalibrationReport {
   brier_score: number | null
   buckets: CalibrationBucket[]
 }
+
+// ---- Real Zerodha buy & sell report --------------------------------------
+export interface RealReportSummary {
+  bought_value: number
+  sold_value: number
+  buy_count: number
+  sell_count: number
+  realized_pnl: number
+  gross_pnl: number
+  charges: number
+  winning_sales: number
+  losing_sales: number
+  average_holding_days: number | null
+  best_stock: { symbol: string; pnl: number } | null
+  worst_stock: { symbol: string; pnl: number } | null
+  open_pnl: number | null
+  open_value: number | null
+  open_invested: number | null
+}
+
+export interface RealReportStock {
+  symbol: string
+  bought_qty: number
+  bought_value: number
+  sold_qty: number
+  sold_value: number
+  realized_pnl: number
+  open_qty: number
+  open_avg_price: number | null
+  last_price: number | null
+  open_pnl: number | null
+}
+
+export interface RealReportSale {
+  symbol: string
+  quantity: number
+  buy_date: string
+  sell_date: string
+  buy_price: number
+  sell_price: number
+  gross_pnl: number
+  charges: number
+  net_pnl: number
+  pnl_pct: number
+  holding_days: number
+}
+
+export interface RealReportFill {
+  id: number
+  symbol: string
+  side: 'BUY' | 'SELL'
+  quantity: number
+  price: number
+  value: number
+  executed_at: string
+  source: 'api' | 'csv'
+}
+
+export interface RealReport {
+  summary: RealReportSummary
+  by_stock: RealReportStock[]
+  closed: RealReportSale[]
+  unmatched_sales: { symbol: string; quantity: number; sell_date: string; sell_price: number }[]
+  fills: RealReportFill[]
+  records: { total_fills: number; first_at: string | null; last_at: string | null }
+  holdings_note: string | null
+}

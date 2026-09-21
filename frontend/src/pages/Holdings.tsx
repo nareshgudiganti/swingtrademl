@@ -7,6 +7,7 @@ import Stat from '../components/Stat'
 import { ErrorBox, Loading } from '../components/Loading'
 import StockDetailModal, { type StockDetail } from '../components/StockDetailModal'
 import { PositionsTable } from './Positions'
+import RealReport from './RealReport'
 import { formatCurrency, formatSignedPercent } from '../lib/format'
 
 /**
@@ -26,6 +27,7 @@ import { formatCurrency, formatSignedPercent } from '../lib/format'
 export default function Holdings() {
   const queryClient = useQueryClient()
   const [detail, setDetail] = useState<StockDetail | null>(null)
+  const [view, setView] = useState<'shares' | 'report'>('shares')
 
   // Raw Zerodha holdings — the broker's own view, independent of whether
   // this app has started tracking them. Failure here is almost always "not
@@ -108,14 +110,30 @@ export default function Holdings() {
             an order.
           </div>
         </div>
-        <button onClick={() => importHoldings.mutate()} disabled={importHoldings.isPending}>
-          {importHoldings.isPending
-            ? 'Importing…'
-            : untrackedCount > 0
-              ? `Import ${untrackedCount} new from Zerodha`
-              : 'Import from Zerodha'}
+        {view === 'shares' && (
+          <button onClick={() => importHoldings.mutate()} disabled={importHoldings.isPending}>
+            {importHoldings.isPending
+              ? 'Importing…'
+              : untrackedCount > 0
+                ? `Import ${untrackedCount} new from Zerodha`
+                : 'Import from Zerodha'}
+          </button>
+        )}
+      </div>
+
+      <div className="row" style={{ gap: '0.4rem', marginBottom: '0.75rem' }}>
+        <button className={view === 'shares' ? 'primary' : ''} onClick={() => setView('shares')}>
+          My shares
+        </button>
+        <button className={view === 'report' ? 'primary' : ''} onClick={() => setView('report')}>
+          Buy &amp; sell report
         </button>
       </div>
+
+      {view === 'report' ? (
+        <RealReport />
+      ) : (
+        <>
 
       {importHoldings.isError && <ErrorBox error={importHoldings.error} />}
 
@@ -169,6 +187,9 @@ export default function Holdings() {
           sellLabel="Record sale"
           emptyLabel="Nothing tracked yet — press Import from Zerodha above."
         />
+      )}
+
+        </>
       )}
 
       {detail && <StockDetailModal detail={detail} onClose={() => setDetail(null)} />}

@@ -234,6 +234,22 @@ def job_reconcile_orders() -> None:
         _report_error("reconcile_orders", exc)
 
 
+def job_capture_fills() -> None:
+    """Save today's real Zerodha trades. Kite forgets them after the day, and
+    the buy/sell report has nothing else to read history from."""
+    try:
+        from swing_trade_ml.brokers.kite import kite_broker
+        from swing_trade_ml.services.fills import capture_todays_fills
+
+        with session_scope() as db:
+            if not kite_broker.load_session(db):
+                return
+            result = capture_todays_fills(db)
+            log.info("job.capture_fills.done", added=result.added, already=result.already_stored)
+    except Exception as exc:  # noqa: BLE001
+        _report_error("capture_fills", exc)
+
+
 def job_daily_ingest() -> None:
     """Top up daily candles after the close, before the scan runs.
 

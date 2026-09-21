@@ -124,6 +124,16 @@ def start_scheduler() -> None:
         id="signal_scan",
         replace_existing=True,
     )
+    # Kite keeps no trade history, so save the day's real trades shortly after
+    # the close, and again in the evening in case the first run met a logged-out
+    # session. Re-running is harmless: trades are de-duplicated by Zerodha's id.
+    for job_id, hour, minute in (("capture_fills", 15, 50), ("capture_fills_evening", 19, 30)):
+        scheduler.add_job(
+            jobs.job_capture_fills,
+            CronTrigger(day_of_week=WEEKDAYS, hour=hour, minute=minute, timezone=IST),
+            id=job_id,
+            replace_existing=True,
+        )
     scheduler.add_job(
         jobs.job_daily_summary,
         CronTrigger(day_of_week=WEEKDAYS, hour=16, minute=0, timezone=IST),

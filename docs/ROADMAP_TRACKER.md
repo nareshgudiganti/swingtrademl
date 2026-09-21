@@ -233,7 +233,7 @@ the account owner can do.
 ### Phase 1 — Add the information edge (the main lever)
 - [x] Daily **snapshot store** for every external feed, dated on fetch (S) — tables `daily_delivery`, `block_deals`, `institutional_flows` (2026-09-21)
 - [x] NSE bhavcopy + **delivery %** loader with automatic ~400-day history backfill (2026-09-21)
-- [ ] Delivery **features**: delivery ratio, delivery on up-days, 5/20-day trend, fed into the model (M)
+- [x] Delivery **features** tested (2026-09-21): **no improvement** — mean AUC change -0.0013, better in 5 of 15 folds. Not wired in. See `docs/superpowers/research/2026-09-21-delivery-ablation.md`
 - [x] **Bulk / block deals** loader (2026-09-21); history starts from now (NSE publishes only the latest day)
 - [ ] Bulk/block **feature**: named accumulation in the last N days (S)
 - [x] **FII / DII** daily flows loader (2026-09-21)
@@ -242,6 +242,8 @@ the account owner can do.
 - [x] **ASM / GSM / T2T filter** (2026-09-21) — NSE's ASM and GSM lists fetched each morning, trade-for-trade read from the series column. On day one 5 of the 304 traded stocks were on a watch list
 - [ ] **Re-run the feature ablation on the barrier label** with the new families, walk-forward. *Keep only what moves ROC AUC or top-bucket precision by more than noise* (M)
 - Exit test: at least one new family improves walk-forward results, or we stop adding data and say so plainly.
+- **Outcome so far:** delivery % did not (see above). Bulk/block and FII/DII cannot be tested until they have months of history. The rule says stop adding price-model features and put effort into Phase 2.
+- [ ] **New experiment:** volatility-scaled barrier label (target and stop as multiples of the stock's ATR, matching the strategy's ATR-based stops) instead of a fixed +8%/-4%; compare walk-forward and, more importantly, simulated P&L after costs (M)
 
 ### Phase 2 — Playbooks and ranking
 - [ ] Playbook candidate generators: base breakout on volume, pullback to a rising average, post-results drift (M each)

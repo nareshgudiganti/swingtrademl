@@ -134,6 +134,21 @@ def start_scheduler() -> None:
             id=job_id,
             replace_existing=True,
         )
+    # NSE's evening files (delivery %, bulk/block deals, FII/DII) appear after
+    # the candles do. The 22:05 run is the alarm — it only speaks if a trading
+    # day is still missing.
+    scheduler.add_job(
+        jobs.job_daily_market_feeds,
+        CronTrigger(day_of_week=WEEKDAYS, hour=19, minute=20, timezone=IST),
+        id="daily_market_feeds",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        jobs.job_daily_market_feeds_final,
+        CronTrigger(day_of_week=WEEKDAYS, hour=22, minute=5, timezone=IST),
+        id="daily_market_feeds_final",
+        replace_existing=True,
+    )
     scheduler.add_job(
         jobs.job_daily_summary,
         CronTrigger(day_of_week=WEEKDAYS, hour=16, minute=0, timezone=IST),

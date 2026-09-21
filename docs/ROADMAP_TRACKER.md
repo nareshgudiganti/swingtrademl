@@ -98,7 +98,7 @@ PDFs' own status tables.
 |---|---|
 | Price, trend, momentum, volatility, volume | DONE (53 features) |
 | Relative strength vs NIFTY and vs sector, INDIA VIX, breadth | DONE — and *did not help* on the old label |
-| Delivery percentage, bulk/block deals, institutional flow | NOT BUILT |
+| Delivery percentage, bulk/block deals, institutional flow | PARTIAL — stored daily since 2026-09-21; not yet model features |
 | Results dates, corporate actions, announcements | NOT BUILT |
 | Fundamentals (growth, margins, leverage) | NOT BUILT — hardest item, see §4 |
 | Futures and options positioning (open interest, PCR) | NOT BUILT |
@@ -221,9 +221,9 @@ Effort: S = a day or two, M = about a week, L = several weeks. "You" = an action
 the account owner can do.
 
 ### Phase 0 — Make live trading *possible* (before any real auto order)
-- [x] **Market protection on MARKET / SL-M orders** (S, done 2026-09-21; test added; needs deploy)
+- [x] **Market protection on MARKET / SL-M orders** (S, done and deployed 2026-09-21)
 - [ ] **You:** register the droplet's static IP (147.182.176.105) on developers.kite.trade → IP Whitelist. All API orders from other IPs are rejected
-- [ ] **You:** activate DDPI on the Zerodha account (₹100 + GST). Without it the bot cannot sell
+- [ ] **You:** activate DDPI on the Zerodha account (₹100 + GST). Without it the bot cannot sell. *2026-09-21: not yet active; waiting for Zerodha's email*
 - [ ] **You:** ask Zerodha support to confirm that a self-use algo under 10 orders/second needs no registration or Algo ID (the public reading says so; get it in writing)
 - [ ] **Decide and build the after-close entry method** (M): AMO orders vs. next-morning limit orders. Confirm Zerodha's AMO window and rules first *(not verified)*. Live blocker R2
 - [ ] Live **stop-loss held at the broker** (GTT) instead of only in our worker (M) — protects you if our server is down
@@ -231,12 +231,15 @@ the account owner can do.
 - [ ] One paper-mode "fire drill" of a full live day with the broker call stubbed (S)
 
 ### Phase 1 — Add the information edge (the main lever)
-- [ ] Daily **snapshot store** for every external feed, dated on fetch (S)
-- [ ] NSE bhavcopy + **delivery %** loader; features: delivery ratio, delivery on up-days, 5/20-day trend (M)
-- [ ] **Bulk / block deals** loader; feature: named accumulation in last N days (S)
-- [ ] **FII / DII** daily flows; feed into regime (S)
+- [x] Daily **snapshot store** for every external feed, dated on fetch (S) — tables `daily_delivery`, `block_deals`, `institutional_flows` (2026-09-21)
+- [x] NSE bhavcopy + **delivery %** loader with automatic ~400-day history backfill (2026-09-21)
+- [ ] Delivery **features**: delivery ratio, delivery on up-days, 5/20-day trend, fed into the model (M)
+- [x] **Bulk / block deals** loader (2026-09-21); history starts from now (NSE publishes only the latest day)
+- [ ] Bulk/block **feature**: named accumulation in the last N days (S)
+- [x] **FII / DII** daily flows loader (2026-09-21)
+- [ ] Feed FII/DII into the regime rule table (S)
 - [ ] **Results calendar + corporate actions**; hard filter: no entry within N days of results; split/bonus adjustment checked (M)
-- [ ] **ASM / GSM / T2T filter** (S)
+- [ ] **ASM / GSM / T2T filter** (S) — trade-for-trade (series BE/BZ) is already stored in `daily_delivery.series`; ASM/GSM lists still to fetch
 - [ ] **Re-run the feature ablation on the barrier label** with the new families, walk-forward. *Keep only what moves ROC AUC or top-bucket precision by more than noise* (M)
 - Exit test: at least one new family improves walk-forward results, or we stop adding data and say so plainly.
 
@@ -330,8 +333,8 @@ done, ≥30 clean daily logins.
 
 1. **Static IP registration and DDPI** — status? (Phase 0; both are a few minutes and gate live trading.)
 2. **Which live entry method** — evening AMO order, or a limit order placed at 9:15 after you approve the evening proposal. Recommended: approve in the evening, order at 9:15 with a limit, cancel if the open is beyond it (the 14 Sep decision).
-3. **Approve Phase 1 data feeds** (NSE bhavcopy/delivery, bulk-block, FII/DII, results and corporate actions, surveillance lists). All free. Recommended: yes.
-4. **Freeze the finance and mutual-fund work** while this roadmap runs?
+3. ~~Approve Phase 1 data feeds~~ — **approved 2026-09-21** (NSE bhavcopy/delivery, bulk-block, FII/DII built; results/corporate actions and surveillance lists next)
+4. ~~Freeze the finance and mutual-fund work~~ — **decided yes, 2026-09-21**. No new finance/mutual-fund features until Phase 1–3 land
 5. **Personal money vs the bot:** should the bot ever manage your own hand-picked holdings, or stay read-only there? (Open since the Real Trading tab.)
 
 ---

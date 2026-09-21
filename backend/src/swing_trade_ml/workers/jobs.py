@@ -250,6 +250,40 @@ def job_capture_fills() -> None:
         _report_error("capture_fills", exc)
 
 
+def job_daily_market_feeds(final: bool = False) -> None:
+    """Save NSE's evening files: delivery %, bulk/block deals, FII/DII.
+
+    NSE publishes them after the close, later than candles, so they have their
+    own slot. The second (`final`) run is the alarm: it only speaks up if the
+    latest trading day is still missing, because a quiet gap is how a feed
+    goes stale without anyone noticing.
+    """
+    try:
+        from swing_trade_ml.services import market_feeds
+
+        with session_scope() as db:
+            run = market_feeds.run_daily_feeds(db)
+            log.info("job.market_feeds.done", added=run.added, errors=run.errors)
+            if not final:
+                history = market_feeds.backfill_history_step(db)
+                log.info("job.market_feeds.history", **history)
+            problems = [f"{name}: {err[:200]}" for name, err in run.errors.items()]
+            if final:
+                expected = market_feeds.latest_expected_delivery_day(datetime.now(IST).date())
+                if expected not in market_feeds.stored_delivery_dates(db, expected):
+                    problems.append(f"no delivery data yet for {expected:%d %b}")
+            if problems and (final or run.errors):
+                notifier.send_sync(
+                    "⚠️ <b>Market data feed problem</b>\n\n" + "\n".join(problems), "error"
+                )
+    except Exception as exc:  # noqa: BLE001
+        _report_error("daily_market_feeds", exc)
+
+
+def job_daily_market_feeds_final() -> None:
+    job_daily_market_feeds(final=True)
+
+
 def job_daily_ingest() -> None:
     """Top up daily candles after the close, before the scan runs.
 

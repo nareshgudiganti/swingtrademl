@@ -2,16 +2,23 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, status
 from sqlalchemy import select
 
 from swing_trade_ml.api.deps import DbSession
 from swing_trade_ml.brokers import get_broker
+from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.db.models.market import Candle, Instrument, Quote
 from swing_trade_ml.db.session import session_scope
 from swing_trade_ml.ml.market_context import current_regime
 from swing_trade_ml.schemas import BackfillRequest, CandleOut, MessageResponse, QuoteOut
-from swing_trade_ml.services import ingestion
+from swing_trade_ml.services import ingestion, market_feeds
+
+IST = ZoneInfo("Asia/Kolkata")
+log = get_logger(__name__)
 
 router = APIRouter(prefix="/market-data", tags=["market-data"])
 
@@ -75,6 +82,34 @@ def get_ltp(
 ) -> dict[str, float]:
     keys = [s.strip().upper() for s in symbols.split(",") if s.strip()]
     return get_broker().get_ltp(keys, db)
+
+
+@router.get("/feeds/status", response_model=dict)
+def feeds_status(db: DbSession) -> dict:
+    """When each NSE information feed last updated, and how much is stored."""
+    return market_feeds.feed_status(db)
+
+
+@router.post("/feeds/refresh", response_model=dict)
+def feeds_refresh(db: DbSession) -> dict:
+    run = market_feeds.run_daily_feeds(db)
+    return {"added": run.added, "errors": run.errors}
+
+
+@router.post("/feeds/backfill", response_model=MessageResponse, status_code=status.HTTP_202_ACCEPTED)
+def feeds_backfill(background: BackgroundTasks, days: int = 365) -> MessageResponse:
+    """Download delivery history, one NSE file per trading day. Runs in the
+    background — a year is a few hundred files and takes minutes."""
+    days = max(1, min(days, 1500))
+
+    def _run() -> None:
+        with session_scope() as db:
+            today = datetime.now(IST).date()
+            result = market_feeds.backfill_bhavcopy(db, today - timedelta(days=days), today)
+            log.info("feeds.backfill.done", **result)
+
+    background.add_task(_run)
+    return MessageResponse(message=f"Downloading {days} days of delivery history in the background")
 
 
 @router.post("/refresh-quotes", response_model=MessageResponse)

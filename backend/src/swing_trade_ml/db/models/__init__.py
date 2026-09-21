@@ -13,6 +13,7 @@ from swing_trade_ml.db.models.finance import (
     FinanceRecurringBillPayment,
     FinanceTransaction,
 )
+from swing_trade_ml.db.models.feeds import BlockDeal, DailyDelivery, InstitutionalFlow
 from swing_trade_ml.db.models.fills import BrokerFill
 from swing_trade_ml.db.models.market import Candle, Instrument, Quote
 from swing_trade_ml.db.models.ml import MLModel, Prediction
@@ -29,9 +30,11 @@ from swing_trade_ml.db.models.trading import (
 )
 
 __all__ = [
+    "BlockDeal",
     "BrokerFill",
     "BrokerSession",
     "Candle",
+    "DailyDelivery",
     "FinanceCustomRule",
     "FinanceDailyCategory",
     "FinanceIngestedFile",
@@ -40,6 +43,7 @@ __all__ = [
     "FinanceRecurringBillPayment",
     "FinanceTransaction",
     "Instrument",
+    "InstitutionalFlow",
     "MLModel",
     "MutualFund",
     "MutualFundHolding",

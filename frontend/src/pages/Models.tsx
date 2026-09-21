@@ -101,13 +101,16 @@ export default function Models() {
       <div className="grid" style={{ marginBottom: '1.5rem' }}>
         {TIERS.map((tier, i) => {
           const active = activeModelByTier[i]
+          const inUse = strategies.data?.find((s) => s.name === tier.match)?.is_active ?? true
           const acc = tierAccuracy[i]?.data
           return (
             <div className="card" key={tier.match}>
               <div className="row" style={{ justifyContent: 'space-between', marginBottom: '0.6rem' }}>
                 <TierBadge tier={tier} />
                 <span className="mono muted" style={{ fontSize: '0.78rem' }}>
-                  {active ? `${active.name}:${active.version}` : 'none active'}
+                  {active
+                    ? `${active.name}:${active.version}${inUse ? '' : ' · trained, not in use'}`
+                    : 'none active'}
                 </span>
               </div>
               {active ? (

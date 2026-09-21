@@ -6,6 +6,8 @@ import time
 from pathlib import Path
 from urllib.request import urlopen
 
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy import text
 
 from swing_trade_ml.core.config import settings
@@ -16,7 +18,7 @@ with urlopen("http://localhost:8000/api/v1/ready", timeout=5) as response:
         raise RuntimeError("API is not ready")
 with engine.connect() as connection:
     revision = connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
-    if revision != "d5b2c8a39e04":
+    if revision != ScriptDirectory.from_config(Config("alembic.ini")).get_current_head():
         raise RuntimeError("Unexpected database revision")
     invalid = connection.execute(text(
         "SELECT count(*) FROM strategies WHERE strategy_type = 'long_term_value' "

@@ -27,7 +27,13 @@ from sqlalchemy.orm import Session
 
 from swing_trade_ml.core.holidays import is_trading_holiday
 from swing_trade_ml.core.logging import get_logger
-from swing_trade_ml.db.models.feeds import BlockDeal, DailyDelivery, InstitutionalFlow
+from swing_trade_ml.db.models.feeds import (
+    BlockDeal,
+    DailyDelivery,
+    InstitutionalFlow,
+    TradingRestriction,
+    UpcomingEvent,
+)
 
 log = get_logger(__name__)
 IST = ZoneInfo("Asia/Kolkata")
@@ -36,6 +42,14 @@ BHAVCOPY_URL = "https://nsearchives.nseindia.com/products/content/sec_bhavdata_f
 BULK_URL = "https://nsearchives.nseindia.com/content/equities/bulk.csv"
 BLOCK_URL = "https://nsearchives.nseindia.com/content/equities/block.csv"
 FII_DII_URL = "https://www.nseindia.com/api/fiidiiTradeReact"
+EVENTS_URL = "https://www.nseindia.com/api/event-calendar?index=equities&from_date={start}&to_date={end}"
+ACTIONS_URL = (
+    "https://www.nseindia.com/api/corporates-corporateActions?index=equities"
+    "&from_date={start}&to_date={end}"
+)
+ASM_URL = "https://www.nseindia.com/api/reportASM"
+GSM_URL = "https://www.nseindia.com/api/reportGSM"
+EVENT_WINDOW_DAYS = 21
 
 # NSE serves a bot-blocking page to clients without a browser-like agent.
 HEADERS = {"User-Agent": "Mozilla/5.0", "Accept": "*/*"}
@@ -206,6 +220,101 @@ def load_fii_dii(db: Session) -> int:
     )
 
 
+# ------------------------------------------- upcoming events, restrictions --
+
+#: Corporate actions that change what a share *is* (and so what its price
+#: means) rather than just paying out — the ones worth staying out of.
+PRICE_RESETTING_ACTIONS = ("split", "bonus", "rights", "demerger", "amalgamation", "consolidation")
+
+
+def parse_events(payload: list[dict]) -> list[dict]:
+    rows: list[dict] = []
+    for item in payload:
+        purpose = str(item.get("purpose", ""))
+        if "result" not in purpose.lower():
+            continue
+        try:
+            when = datetime.strptime(item["date"], "%d-%b-%Y").date()
+        except (KeyError, ValueError):
+            continue
+        rows.append(
+            {"symbol": item["symbol"], "kind": "results", "event_date": when, "detail": purpose[:400]}
+        )
+    return rows
+
+
+def parse_actions(payload: list[dict]) -> list[dict]:
+    rows: list[dict] = []
+    for item in payload:
+        subject = str(item.get("subject", ""))
+        if not any(word in subject.lower() for word in PRICE_RESETTING_ACTIONS):
+            continue
+        try:
+            when = datetime.strptime(item["exDate"], "%d-%b-%Y").date()
+        except (KeyError, ValueError):
+            continue
+        rows.append(
+            {
+                "symbol": item["symbol"],
+                "kind": "corporate_action",
+                "event_date": when,
+                "detail": subject[:400],
+            }
+        )
+    return rows
+
+
+def load_upcoming_events(db: Session, today: date) -> int:
+    import json
+
+    window = {
+        "start": today.strftime("%d-%m-%Y"),
+        "end": (today + timedelta(days=EVENT_WINDOW_DAYS)).strftime("%d-%m-%Y"),
+    }
+    rows: list[dict] = []
+    for url, parser in ((EVENTS_URL, parse_events), (ACTIONS_URL, parse_actions)):
+        content = fetch(url.format(**window))
+        if content:
+            rows += parser(json.loads(content))
+    # A company can appear twice for one date (two purposes); keep one.
+    unique = {(r["symbol"], r["kind"], r["event_date"]): r for r in rows}
+    return _insert_ignoring_duplicates(
+        db, UpcomingEvent, list(unique.values()), ["symbol", "kind", "event_date"]
+    )
+
+
+def parse_restrictions(asm: dict | None, gsm: list[dict] | None, as_of: date) -> list[dict]:
+    rows: dict[tuple[str, str], dict] = {}
+    for section in (asm or {}).values():
+        for item in section.get("data", []):
+            rows[(item["symbol"], "ASM")] = {
+                "symbol": item["symbol"],
+                "kind": "ASM",
+                "stage": str(item.get("asmSurvIndicator") or item.get("survDesc") or "")[:64],
+                "as_of": as_of,
+            }
+    for item in gsm or []:
+        rows[(item["symbol"], "GSM")] = {
+            "symbol": item["symbol"],
+            "kind": "GSM",
+            "stage": str(item.get("gsmStage") or item.get("survDesc") or "")[:64],
+            "as_of": as_of,
+        }
+    return list(rows.values())
+
+
+def load_restrictions(db: Session, today: date) -> int:
+    import json
+
+    asm_raw, gsm_raw = fetch(ASM_URL), fetch(GSM_URL)
+    rows = parse_restrictions(
+        json.loads(asm_raw) if asm_raw else None,
+        json.loads(gsm_raw) if gsm_raw else None,
+        today,
+    )
+    return _insert_ignoring_duplicates(db, TradingRestriction, rows, ["symbol", "kind", "as_of"])
+
+
 # ------------------------------------------------------------------ driver --
 
 
@@ -250,10 +359,16 @@ def run_daily_feeds(db: Session, today: date | None = None) -> FeedRun:
     except Exception as exc:  # noqa: BLE001
         run.errors["delivery"] = str(exc)
 
-    for name, loader in (("deals", load_deals), ("institutional_flows", load_fii_dii)):
+    for name, loader in (
+        ("deals", lambda: load_deals(db)),
+        ("institutional_flows", lambda: load_fii_dii(db)),
+        ("upcoming_events", lambda: load_upcoming_events(db, today)),
+        ("restrictions", lambda: load_restrictions(db, today)),
+    ):
         try:
-            run.added[name] = loader(db)
+            run.added[name] = loader()
         except Exception as exc:  # noqa: BLE001
+            db.rollback()
             run.errors[name] = str(exc)
     return run
 

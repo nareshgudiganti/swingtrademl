@@ -238,8 +238,8 @@ the account owner can do.
 - [ ] Bulk/block **feature**: named accumulation in the last N days (S)
 - [x] **FII / DII** daily flows loader (2026-09-21)
 - [ ] Feed FII/DII into the regime rule table (S)
-- [ ] **Results calendar + corporate actions**; hard filter: no entry within N days of results; split/bonus adjustment checked (M)
-- [ ] **ASM / GSM / T2T filter** (S) — trade-for-trade (series BE/BZ) is already stored in `daily_delivery.series`; ASM/GSM lists still to fetch
+- [x] **Results calendar + corporate actions**; entries refused within 3 days of results and 2 days of a split/bonus/rights (2026-09-21, `services/avoid.py`). Split/bonus *price adjustment* of stored candles still to verify
+- [x] **ASM / GSM / T2T filter** (2026-09-21) — NSE's ASM and GSM lists fetched each morning, trade-for-trade read from the series column. On day one 5 of the 304 traded stocks were on a watch list
 - [ ] **Re-run the feature ablation on the barrier label** with the new families, walk-forward. *Keep only what moves ROC AUC or top-bucket precision by more than noise* (M)
 - Exit test: at least one new family improves walk-forward results, or we stop adding data and say so plainly.
 

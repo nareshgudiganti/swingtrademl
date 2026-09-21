@@ -13,7 +13,13 @@ from swing_trade_ml.db.models.finance import (
     FinanceRecurringBillPayment,
     FinanceTransaction,
 )
-from swing_trade_ml.db.models.feeds import BlockDeal, DailyDelivery, InstitutionalFlow
+from swing_trade_ml.db.models.feeds import (
+    BlockDeal,
+    DailyDelivery,
+    InstitutionalFlow,
+    TradingRestriction,
+    UpcomingEvent,
+)
 from swing_trade_ml.db.models.fills import BrokerFill
 from swing_trade_ml.db.models.market import Candle, Instrument, Quote
 from swing_trade_ml.db.models.ml import MLModel, Prediction
@@ -58,5 +64,7 @@ __all__ = [
     "Strategy",
     "SystemState",
     "Trade",
+    "TradingRestriction",
+    "UpcomingEvent",
     "User",
 ]

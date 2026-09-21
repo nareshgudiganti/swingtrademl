@@ -14,6 +14,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -30,7 +31,7 @@ from swing_trade_ml.db.models.trading import (
     Strategy,
 )
 from swing_trade_ml.ml.sector_map import get_sector_bucket, sector_display_name
-from swing_trade_ml.services import deployable, system_state
+from swing_trade_ml.services import avoid, deployable, system_state
 from swing_trade_ml.services.costs import apply_slippage, compute_charges
 from swing_trade_ml.services.limits import LARGE, SMALL, Limits, format_inr, limits_for
 from swing_trade_ml.services.portfolio import portfolio_value_and_cash
@@ -476,6 +477,14 @@ def check_entry(
         return _reject(
             "COOLDOWN", f"Stopped out within the last {cooldown_days} days — cooling down"
         )
+
+    symbol = db.execute(
+        select(Instrument.tradingsymbol).where(Instrument.id == instrument_id)
+    ).scalar_one_or_none()
+    if symbol:
+        reason = avoid.avoid_reason(db, symbol, datetime.now(ZoneInfo("Asia/Kolkata")).date())
+        if reason:
+            return _reject("AVOID", reason)
 
     open_count = open_position_count(db, mode)
     if open_count >= limits.max_positions:

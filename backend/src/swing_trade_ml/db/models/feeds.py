@@ -70,3 +70,33 @@ class InstitutionalFlow(Base, TimestampMixin):
     buy_value: Mapped[float] = mapped_column(Float)
     sell_value: Mapped[float] = mapped_column(Float)
     net_value: Mapped[float] = mapped_column(Float)
+
+
+class UpcomingEvent(Base, TimestampMixin):
+    """A dated company event that can move a price on its own: a results
+    announcement, or a split / bonus / rights issue. Forward-looking, so it is
+    refreshed every morning rather than accumulated as history."""
+
+    __tablename__ = "upcoming_events"
+    __table_args__ = (UniqueConstraint("symbol", "kind", "event_date", name="uq_upcoming_event"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    symbol: Mapped[str] = mapped_column(String(64), index=True)
+    kind: Mapped[str] = mapped_column(String(24))  # results | corporate_action
+    event_date: Mapped[date] = mapped_column(Date, index=True)
+    detail: Mapped[str] = mapped_column(String(400), default="")
+
+
+class TradingRestriction(Base, TimestampMixin):
+    """A stock on one of NSE's surveillance lists (ASM or GSM) on a given day.
+    Listed stocks can face higher margins or trading limits, so entering them
+    risks a position that is hard to get out of."""
+
+    __tablename__ = "trading_restrictions"
+    __table_args__ = (UniqueConstraint("symbol", "kind", "as_of", name="uq_trading_restriction"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    symbol: Mapped[str] = mapped_column(String(64), index=True)
+    kind: Mapped[str] = mapped_column(String(8))  # ASM | GSM
+    stage: Mapped[str] = mapped_column(String(64), default="")
+    as_of: Mapped[date] = mapped_column(Date, index=True)

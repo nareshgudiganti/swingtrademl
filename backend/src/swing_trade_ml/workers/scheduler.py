@@ -143,6 +143,14 @@ def start_scheduler() -> None:
         id="daily_market_feeds",
         replace_existing=True,
     )
+    # NSE refreshes its surveillance lists and results calendar early in the
+    # morning; the entry filter reads them before the day's orders.
+    scheduler.add_job(
+        jobs.job_daily_market_feeds,
+        CronTrigger(day_of_week=WEEKDAYS, hour=8, minute=30, timezone=IST),
+        id="daily_market_feeds_morning",
+        replace_existing=True,
+    )
     scheduler.add_job(
         jobs.job_daily_market_feeds_final,
         CronTrigger(day_of_week=WEEKDAYS, hour=22, minute=5, timezone=IST),

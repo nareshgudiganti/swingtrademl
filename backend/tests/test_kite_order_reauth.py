@@ -120,3 +120,36 @@ def test_a_rejection_that_is_not_the_token_is_never_retried(live_broker):
     assert logins == []
     assert result.status == OrderStatus.REJECTED
     assert broker._kite.calls == 1
+
+
+class _RecordingKite(_FakeKite):
+    def __init__(self) -> None:
+        super().__init__(fail_times=0)
+        self.kwargs: dict = {}
+
+    def place_order(self, **kwargs):
+        self.kwargs = kwargs
+        return super().place_order(**kwargs)
+
+
+def test_market_orders_carry_market_protection(live_broker):
+    """Zerodha rejects API market orders without it (since 1 Apr 2026)."""
+    broker, _ = live_broker
+    broker._kite = _RecordingKite()
+
+    result = broker.place_order(_request(), db=None)
+
+    assert result.status == OrderStatus.PENDING
+    assert broker._kite.kwargs["market_protection"] == -1.0
+
+
+def test_limit_orders_carry_no_market_protection(live_broker):
+    broker, _ = live_broker
+    broker._kite = _RecordingKite()
+    request = _request()
+    request.order_type = OrderType.LIMIT
+    request.price = 100.0
+
+    broker.place_order(request, db=None)
+
+    assert broker._kite.kwargs["market_protection"] is None

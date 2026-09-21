@@ -111,6 +111,9 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------ zerodha --
     KITE_API_KEY: str = ""
     KITE_API_SECRET: str = ""
+    # Since 1 Apr 2026 Zerodha rejects any API MARKET / SL-M order without a
+    # non-zero market protection: -1 lets Zerodha choose, 1-100 is a percentage.
+    KITE_MARKET_PROTECTION: float = -1.0
     # There is deliberately no KITE_REDIRECT_URL here. Where Zerodha sends the
     # browser after login is registered on the Kite app itself
     # (developers.kite.trade > your app > Redirect URL) and nothing this app

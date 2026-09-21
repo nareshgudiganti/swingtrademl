@@ -23,7 +23,7 @@ from swing_trade_ml.brokers.base import (
     OrderResult,
 )
 from swing_trade_ml.core.config import settings
-from swing_trade_ml.core.enums import OrderStatus, TradingMode
+from swing_trade_ml.core.enums import OrderStatus, OrderType, TradingMode
 from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.db.models.session import BrokerSession
 
@@ -400,6 +400,11 @@ class KiteBroker(Broker):
                 price=request.price,
                 trigger_price=request.trigger_price,
                 tag=request.tag,
+                market_protection=(
+                    settings.KITE_MARKET_PROTECTION
+                    if request.order_type in (OrderType.MARKET, OrderType.SL_M)
+                    else None
+                ),
             )
         except KiteException as exc:
             log.error("kite.order.rejected", symbol=request.tradingsymbol, error=str(exc))

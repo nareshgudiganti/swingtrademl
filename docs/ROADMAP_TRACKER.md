@@ -244,7 +244,8 @@ the account owner can do.
 - Exit test: at least one new family improves walk-forward results, or we stop adding data and say so plainly.
 - **Outcome so far:** delivery % did not (see above). Bulk/block and FII/DII cannot be tested until they have months of history. The rule says stop adding price-model features and put effort into Phase 2.
 - [x] **Volatility-scaled barrier label tested** (2026-09-21): does **not** beat the fixed +8%/-4%; keep it. Side finding: the model's top 5% picks earn +0.22 to +0.28 R per trade after costs in every tier vs about 0 for unfiltered entries. See `docs/superpowers/research/2026-09-21-volatility-label-experiment.md`
-- [ ] **Replay the real system** (fixed 0.60 threshold, next-open entry, all portfolio limits) through the backtester and compare with the SMA benchmark. This is the number that decides readiness (M)
+- [x] **Replay the real system** (2026-09-21): point-in-time models, production strategy and backtester on Rs 10 lakh. **Result: no edge after costs** (mean -0.1% to -0.4% per 8-month window, -1.0% to -1.4% with worse fills; SMA benchmark about 0%; holding NIFTY +6%). Not ready for real capital. See `docs/superpowers/research/2026-09-21-system-replay.md`
+- [ ] **Find what destroys the edge** between the +0.22 R simplified test and the replay: replay with scale-out off, signal-exit off, and higher thresholds, one change at a time (M)
 
 ### Phase 2 — Playbooks and ranking
 - [ ] Playbook candidate generators: base breakout on volume, pullback to a rising average, post-results drift (M each)

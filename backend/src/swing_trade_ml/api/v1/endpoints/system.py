@@ -125,7 +125,9 @@ def _build_status(db: DbSession) -> SystemStatus:
     latest_candle_ts = db.execute(
         select(func.max(Candle.ts)).where(Candle.interval == "day")
     ).scalar_one_or_none()
-    latest_candle_date = latest_candle_ts.date() if latest_candle_ts else None
+    # Daily bars are stamped 00:00 IST, which comes back as 18:30 UTC the day
+    # before — reading .date() in UTC would report every bar one day early.
+    latest_candle_date = latest_candle_ts.astimezone(IST).date() if latest_candle_ts else None
     last_scan_at = db.execute(select(func.max(Signal.generated_at))).scalar_one_or_none()
 
     status_level, status_message = _plain_status(

@@ -234,6 +234,19 @@ def _load_kite_holdings(db: DbSession) -> list[dict[str, Any]]:
         ) from exc
 
 
+def _held_quantity(h: dict[str, Any]) -> int:
+    """Shares actually owned, including ones bought in the last day or two
+    that haven't settled into demat yet.
+
+    Kite's `quantity` field is the *settled* (T+1) quantity only — a stock
+    bought today or yesterday sits entirely in `t1_quantity` and reads as
+    `quantity: 0` until settlement, so filtering on `quantity != 0` silently
+    dropped every recent buy from the holdings list, the import, and every
+    P&L total built from them.
+    """
+    return h["quantity"] + h.get("t1_quantity", 0)
+
+
 @router.get("/holdings", response_model=list[dict])
 def holdings(db: DbSession) -> list[dict[str, Any]]:
     """Real Zerodha equity holdings — actual shares sitting in the connected
@@ -241,21 +254,25 @@ def holdings(db: DbSession) -> list[dict[str, Any]]:
     own paper-mode trades and know nothing about anything bought manually).
     Pure pass-through to Kite; nothing here is generated or predicted.
     """
-    return [
-        {
-            "symbol": h["tradingsymbol"],
-            "exchange": h["exchange"],
-            "quantity": h["quantity"],
-            "average_price": h["average_price"],
-            "last_price": h["last_price"],
-            "close_price": h.get("close_price"),
-            "pnl": h["pnl"],
-            "day_change": h.get("day_change"),
-            "day_change_percentage": h.get("day_change_percentage"),
-        }
-        for h in _load_kite_holdings(db)
-        if h["quantity"] != 0
-    ]
+    result = []
+    for h in _load_kite_holdings(db):
+        qty = _held_quantity(h)
+        if qty == 0:
+            continue
+        result.append(
+            {
+                "symbol": h["tradingsymbol"],
+                "exchange": h["exchange"],
+                "quantity": qty,
+                "average_price": h["average_price"],
+                "last_price": h["last_price"],
+                "close_price": h.get("close_price"),
+                "pnl": (h["last_price"] - h["average_price"]) * qty,
+                "day_change": h.get("day_change"),
+                "day_change_percentage": h.get("day_change_percentage"),
+            }
+        )
+    return result
 
 
 REAL_TRADING_STRATEGY_NAME = "real_trading"
@@ -372,7 +389,8 @@ def import_real_holdings(db: DbSession, strategy_id: int | None = None) -> list[
 
     results: list[dict[str, Any]] = []
     for h in kite_holdings:
-        if h["quantity"] == 0:
+        held_quantity = _held_quantity(h)
+        if held_quantity == 0:
             continue
         instrument = db.execute(
             select(Instrument).where(
@@ -426,7 +444,7 @@ def import_real_holdings(db: DbSession, strategy_id: int | None = None) -> list[
             db,
             strategy,
             instrument,
-            h["quantity"],
+            held_quantity,
             h["average_price"],
             stop_loss=stop_loss,
             take_profit=take_profit,
@@ -436,7 +454,7 @@ def import_real_holdings(db: DbSession, strategy_id: int | None = None) -> list[
             {
                 "symbol": h["tradingsymbol"],
                 "status": "imported",
-                "quantity": h["quantity"],
+                "quantity": held_quantity,
                 "entry_price": h["average_price"],
                 "current_price": current_price,
                 "stop_loss": stop_loss,

@@ -11,7 +11,7 @@ from typing import Any
 from fastapi import APIRouter, File, HTTPException, UploadFile, status
 
 from swing_trade_ml.api.deps import DbSession
-from swing_trade_ml.api.v1.endpoints.portfolio import _load_kite_holdings
+from swing_trade_ml.api.v1.endpoints.portfolio import _held_quantity, _load_kite_holdings
 from swing_trade_ml.schemas import MessageResponse
 from swing_trade_ml.services import fills as fills_service
 from swing_trade_ml.services.real_report import build_report
@@ -34,10 +34,10 @@ def report(db: DbSession, start: date | None = None, end: date | None = None) ->
         holdings = [
             {
                 "symbol": h["tradingsymbol"],
-                "quantity": h["quantity"],
+                "quantity": (qty := _held_quantity(h)),
                 "average_price": h["average_price"],
                 "last_price": h["last_price"],
-                "pnl": h["pnl"],
+                "pnl": (h["last_price"] - h["average_price"]) * qty,
             }
             for h in _load_kite_holdings(db)
         ]

@@ -11,6 +11,7 @@ close" means anything.
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from typing import Any
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, select
@@ -19,6 +20,7 @@ from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.enums import PositionStatus
 from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.db.models.market import Instrument
+from swing_trade_ml.db.models.safety import RiskEvent
 from swing_trade_ml.db.models.trading import Position, Strategy
 from swing_trade_ml.db.session import session_scope
 from swing_trade_ml.notifications import notifier
@@ -346,6 +348,44 @@ def job_daily_ingest() -> None:
         _report_error("daily_ingest", exc)
 
 
+def _blocked_entries(db, since: datetime) -> list[dict[str, Any]]:
+    """Which limits refused this scan's entries, commonest first.
+
+    check_entry already writes a RiskEvent per rejection carrying a
+    plain-English reason, but nothing ever read them back — so a scan that
+    found buys and took none reported `executed: 0` and no more, and the cause
+    stayed invisible until someone went looking in the database. One row per
+    rule, with a representative reason to quote.
+    """
+    rows = db.execute(
+        select(RiskEvent.rule, func.count(RiskEvent.id), func.min(RiskEvent.reason))
+        .where(RiskEvent.ts >= since)
+        .group_by(RiskEvent.rule)
+        .order_by(func.count(RiskEvent.id).desc())
+    ).all()
+    return [{"rule": rule, "count": int(count), "reason": reason} for rule, count, reason in rows]
+
+
+def _blocked_entries_message(blocked: list[dict[str, Any]]) -> str:
+    """The alert for a scan that produced candidates and bought nothing.
+
+    Quotes check_entry's own sentences rather than restating the rules here:
+    they are already written for someone who does not read code, and a second
+    copy would drift from the one the risk layer actually applied.
+    """
+    total = sum(item["count"] for item in blocked)
+    lines = [
+        f"🚫 <b>No buys today</b> — {total} candidate(s) passed the strategy "
+        "but were refused by your safety limits.",
+        "",
+    ]
+    for item in blocked[:3]:
+        lines.append(f"• <b>{item['count']} of them:</b> {item['reason']}")
+    if len(blocked) > 3:
+        lines.append(f"• …and {len(blocked) - 3} other limit(s)")
+    return "\n".join(lines)
+
+
 def job_signal_scan() -> None:
     """The main daily scan.
 
@@ -354,6 +394,7 @@ def job_signal_scan() -> None:
     disappear by 15:30.
     """
     try:
+        started = datetime.now(IST)
         with session_scope() as db:
             result = engine.run_all_active(db, interval="day")
             log.info(
@@ -362,6 +403,7 @@ def job_signal_scan() -> None:
                 signals=result.signals_generated,
                 executed=result.executed,
             )
+            blocked = _blocked_entries(db, started)
             heartbeat.write_last_scan(
                 {
                     "ts": datetime.now(IST).isoformat(),
@@ -372,8 +414,20 @@ def job_signal_scan() -> None:
                     "exits": result.exits,
                     "executed": result.executed,
                     "errors": len(result.errors),
+                    "blocked": blocked,
                 }
             )
+
+            # Gated on a refusal actually being recorded, not on
+            # `buys and not executed`: a full book re-signals BUY on stocks it
+            # already holds every single day, and those are routine scan
+            # outcomes rather than limits biting. Alerting on them would nag
+            # daily and train the alert to be ignored — which is what has to
+            # hold for this to still be read on the day it matters.
+            if blocked and not result.executed:
+                log.warning("job.scan.no_entries", rules=[b["rule"] for b in blocked])
+                notifier.send_sync(_blocked_entries_message(blocked), "error")
+
             if result.errors:
                 notifier.send_sync(
                     f"⚠️ Scan finished with {len(result.errors)} error(s):\n"

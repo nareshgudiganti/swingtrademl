@@ -42,6 +42,7 @@ export interface SystemStatus {
     exits: number
     executed: number
     errors: number
+    blocked?: { rule: string; count: number; reason: string }[] | null
   } | null
   status_level: 'ok' | 'warning'
   status_message: string

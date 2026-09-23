@@ -56,6 +56,8 @@ export default function Settings() {
   if (status.isLoading) return <Loading />
 
   const s = status.data
+  // The limit that refused the most entries in the last scan, if any did.
+  const topBlocked = s?.last_scan_result?.blocked?.[0]
 
   return (
     <>
@@ -145,8 +147,17 @@ export default function Settings() {
             <div className="stat-label">Last scan</div>
             <div className="stat-value">
               {s?.last_scan_result ? (
-                <span className={`badge ${s.last_scan_result.errors > 0 ? 'badge-warn' : 'badge-on'}`}>
+                <span
+                  className={`badge ${
+                    s.last_scan_result.errors > 0 || s.last_scan_result.blocked?.length
+                      ? 'badge-warn'
+                      : 'badge-on'
+                  }`}
+                >
                   {s.last_scan_result.buys} buy{s.last_scan_result.buys === 1 ? '' : 's'} found
+                  {s.last_scan_result.buys > 0 && s.last_scan_result.executed === 0
+                    ? ', none bought'
+                    : ''}
                 </span>
               ) : (
                 <span className="badge badge-off">no data yet</span>
@@ -159,6 +170,14 @@ export default function Settings() {
                   {s.last_scan_result.instruments_evaluated} symbols checked across{' '}
                   {s.last_scan_result.strategies_run} strateg{s.last_scan_result.strategies_run === 1 ? 'y' : 'ies'}
                   {s.last_scan_result.errors > 0 ? `, ${s.last_scan_result.errors} error(s)` : ''}.
+                  {/* Why nothing was bought. The scan reported only a count
+                      before this, so a week of blocked entries looked
+                      identical to a week of quiet markets. */}
+                  {topBlocked ? (
+                    <div className="stat-sub" style={{ marginTop: 6 }}>
+                      {topBlocked.count} blocked: {topBlocked.reason}
+                    </div>
+                  ) : null}
                 </>
               ) : (
                 'Fills in after the next 15:45 IST scan.'

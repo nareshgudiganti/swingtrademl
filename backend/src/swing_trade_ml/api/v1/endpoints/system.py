@@ -5,12 +5,12 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi import status as http_status
 from sqlalchemy import func, select
 
 from swing_trade_ml import __version__
-from swing_trade_ml.api.deps import DbSession
+from swing_trade_ml.api.deps import DbSession, require_auth
 from swing_trade_ml.brokers import get_broker, kite_broker
 from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.enums import PositionStatus
@@ -170,12 +170,17 @@ def _build_status(db: DbSession) -> SystemStatus:
     )
 
 
-@router.get("/status", response_model=SystemStatus)
+@router.get("/status", response_model=SystemStatus, dependencies=[Depends(require_auth)])
 def status(db: DbSession) -> SystemStatus:
+    """Authenticated, unlike /health and /ready above: this reports the
+    portfolio's size, the job schedule and whether the broker is connected —
+    an inventory of the account, not a liveness signal. The dashboard only
+    ever asks for it once logged in (App.tsx gates the query on a token).
+    """
     return _build_status(db)
 
 
-@router.post("/refresh-data", response_model=SystemStatus)
+@router.post("/refresh-data", response_model=SystemStatus, dependencies=[Depends(require_auth)])
 def refresh_data(db: DbSession) -> SystemStatus:
     """The self-service fix for a "market data hasn't updated" warning —
     fires the same ingest + predict jobs the 15:40 IST cron runs, on demand,

@@ -84,6 +84,18 @@ def rank_buy_candidates(candidates: list[tuple[int, float]]) -> list[tuple[int, 
     return sorted(candidates, key=lambda c: c[1], reverse=True)
 
 
+def active_strategy_count(db: Session, mode: str) -> int:
+    """How many strategies are competing for this mode's position slots."""
+    return int(
+        db.execute(
+            select(func.count(Strategy.id)).where(
+                Strategy.is_active.is_(True), Strategy.mode == mode
+            )
+        ).scalar_one()
+        or 0
+    )
+
+
 def open_position_count(db: Session, mode: str, strategy_id: int | None = None) -> int:
     """Slots already spoken for — filled positions plus buys still in flight,
     so a scan cannot hand out the same slot twice while Kite is still
@@ -493,6 +505,22 @@ def check_entry(
             f"You already hold {open_count} positions — the most allowed for an account "
             f"of {format_inr(portfolio_value)} is {limits.max_positions}",
         )
+
+    if strategy is not None:
+        # The slot count above is account-wide but the cap is resolved per
+        # strategy, so without a share of its own whichever strategy scans
+        # first takes every slot and the rest are rejected here holding
+        # nothing. Sharing the same budget keeps the account-level ceiling
+        # intact — this only decides who may claim what is left of it.
+        share = max(1, limits.max_positions // max(active_strategy_count(db, mode), 1))
+        strategy_count = open_position_count(db, mode, strategy.id)
+        if strategy_count >= share:
+            return _reject(
+                "POSITION_LIMIT",
+                f"{strategy.name} already holds {strategy_count} of its {share} positions — "
+                f"the rest of the {limits.max_positions} allowed for an account of "
+                f"{format_inr(portfolio_value)} are left for your other strategies",
+            )
 
     # Judged on the value passed in — the book as it stands right now, not the
     # last daily snapshot (see current_drawdown).

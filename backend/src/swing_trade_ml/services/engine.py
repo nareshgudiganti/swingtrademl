@@ -71,7 +71,11 @@ def _rank_out_reasons(
     # than a fixed constant check_entry no longer reads.
     total_value, _cash = portfolio_value_and_cash(db, mode)
     slot_budget = limits_for(total_value, strategy).max_positions
-    room = max(slot_budget - open_count, 0)
+    # check_entry also holds each strategy to a share of that budget, so the
+    # tighter of the two is what a candidate actually has to fit through.
+    share = max(1, slot_budget // max(risk.active_strategy_count(db, mode), 1))
+    strategy_room = share - risk.open_position_count(db, mode, strategy.id)
+    room = max(min(slot_budget - open_count, strategy_room), 0)
     cap = min(strategy.max_daily_buys, room) if strategy.max_daily_buys is not None else room
 
     ranked = risk.rank_buy_candidates(buy_candidates)

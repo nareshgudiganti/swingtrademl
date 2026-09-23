@@ -791,3 +791,39 @@ def test_risk_events_list_newest_first(client, db_session):
     assert resp.status_code == 200
     rules = [row["rule"] for row in resp.json()]
     assert rules[0] == "CASH_FLOOR"  # last inserted, newest ts
+
+
+def test_one_strategy_cannot_consume_every_account_slot(db_session, monkeypatch):
+    """A strategy is held to its share of the account's slots, so it cannot
+    fill the book and leave the other active strategies with nothing.
+
+    Without this, the slot count is account-wide while the cap is applied per
+    strategy: whichever strategy scans first takes every slot, and the rest
+    are rejected at POSITION_LIMIT holding zero positions.
+    """
+    _flat_deployable(monkeypatch)
+    hog = _strategy(db_session, name="slot_hog", max_positions=4, is_active=True)
+    starved = _strategy(db_session, name="slot_starved", max_positions=4, is_active=True)
+
+    for i in range(2):  # half of the 4 account slots, and both strategies are active
+        _open_position(
+            db_session, hog, _instrument(db_session, f"ZZZHOG{i}"),
+            quantity=10, entry_price=1000.0,
+        )
+    db_session.commit()
+
+    wanted = _instrument(db_session, "ZZZHOGWANTS")
+    decision = risk.check_entry(
+        db_session, mode="paper", instrument_id=wanted.id, price=1000.0, stop_loss=950.0,
+        portfolio_value=1_000_000.0, available_cash=1_000_000.0, strategy=hog,
+    )
+    assert decision.allowed is False
+    assert decision.rule == "POSITION_LIMIT"
+
+    # The slots it was held back from stay available to the other strategy.
+    other = _instrument(db_session, "ZZZSTARVEDWANTS")
+    decision = risk.check_entry(
+        db_session, mode="paper", instrument_id=other.id, price=1000.0, stop_loss=950.0,
+        portfolio_value=1_000_000.0, available_cash=1_000_000.0, strategy=starved,
+    )
+    assert decision.allowed is True

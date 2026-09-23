@@ -138,11 +138,15 @@ def test_scan_exits_first_then_stable_rank_in_strategy_mode(monkeypatch, confirm
     monkeypatch.setattr(engine, 'eligible_instruments', lambda *a: items)
     monkeypatch.setattr(engine, 'load_candles', lambda *a, **kw: pd.DataFrame({'close': [100]}))
     calls = []
-    def count(db, mode):
+    def count(db, mode, strategy_id=None):
         assert mode == 'live'
         assert calls[0][0] == 1
         return 0 if confirmed_exit else 1
     monkeypatch.setattr(engine.risk, 'open_position_count', count)
+    # _rank_out_reasons also asks how many strategies share the slot budget,
+    # so that check_entry's per-strategy share is what candidates are ranked
+    # against. One strategy here, which leaves the budget below untouched.
+    monkeypatch.setattr(engine.risk, 'active_strategy_count', lambda db, mode: 1)
     # _rank_out_reasons now resolves its slot budget through the
     # account-value ladder (services/limits.py), which needs a portfolio
     # value — the strategy's own max_positions=2 still wins over the

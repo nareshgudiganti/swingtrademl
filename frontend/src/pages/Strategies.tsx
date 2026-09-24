@@ -117,7 +117,7 @@ export default function Strategies() {
   const strategies = useQuery({ queryKey: ['strategies'], queryFn: api.strategies })
   const performance = useQuery({ queryKey: ['strategyPerformance'], queryFn: api.strategyPerformance })
   const types = useQuery({ queryKey: ['strategyTypes'], queryFn: api.strategyTypes })
-  const positions = useQuery({ queryKey: ['positions'], queryFn: api.positions })
+  const positions = useQuery({ queryKey: ['positionsAllBooks'], queryFn: api.positionsAllBooks })
 
   const openCountByStrategy = useMemo(() => {
     const counts = new Map<number, number>()
@@ -163,6 +163,7 @@ export default function Strategies() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['signals'] })
       queryClient.invalidateQueries({ queryKey: ['positions'] })
+    queryClient.invalidateQueries({ queryKey: ['positionsAllBooks'] })
       queryClient.invalidateQueries({ queryKey: ['summary'] })
     },
   })

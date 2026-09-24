@@ -202,13 +202,23 @@ export const api = {
   kiteLogin: () => get<KiteLoginResponse>('/auth/kite/login'),
 
   // ---------------------------------------------------------- portfolio --
+  // Everything below asks for `book=bot`: the bot's own book, in whichever
+  // mode the bot is running (paper rows while in paper, real ones once
+  // live). It deliberately excludes the shares bought by hand in Zerodha —
+  // those are the My Holdings book, and they are stored as mode="live"
+  // whatever the bot is doing, so a mode filter alone would merge the two
+  // the day we switch to live.
   summary: (mode?: string) =>
-    get<PortfolioSummary>(`/portfolio/summary${mode ? `?mode=${mode}` : ''}`),
-  positions: () => get<DetailedPosition[]>('/portfolio/positions/detailed'),
-  // Real trades made manually in Zerodha, tracked with the same
-  // confidence/stop-loss fields as paper positions (see the "real_trading"
-  // advisory strategy) — a separate book from the paper positions above.
-  realPositions: () => get<DetailedPosition[]>('/portfolio/positions/detailed?mode=live'),
+    get<PortfolioSummary>(`/portfolio/summary?book=bot${mode ? `&mode=${mode}` : ''}`),
+  positions: () => get<DetailedPosition[]>('/portfolio/positions/detailed?book=bot'),
+  // Both books at once, for the Strategies tab's per-strategy "held right
+  // now" count — `real_trading` is a strategy in that list too, so counting
+  // only the bot's book would report it as holding nothing once we're live.
+  positionsAllBooks: () => get<DetailedPosition[]>('/portfolio/positions/detailed?book=all'),
+  // The My Holdings book — shares bought by hand in Zerodha, tracked under
+  // the advisory "real_trading" strategy with the same confidence/stop-loss
+  // fields, but never traded by the bot.
+  realPositions: () => get<DetailedPosition[]>('/portfolio/positions/detailed?book=real'),
   // strategyId is optional: the backend creates or reuses the advisory
   // `real_trading` strategy when it's omitted, so a fresh install doesn't
   // need one hand-built first.
@@ -239,7 +249,7 @@ export const api = {
   // real/paper order through whichever broker the app is currently in).
   manualClosePosition: (id: number, exitPrice: number) =>
     post<Trade>(`/portfolio/positions/${id}/manual-close`, { exit_price: exitPrice }),
-  trades: (limit = 100) => get<Trade[]>(`/portfolio/trades?limit=${limit}`),
+  trades: (limit = 100) => get<Trade[]>(`/portfolio/trades?limit=${limit}&book=bot`),
   equityCurve: (days = 180) => get<EquityPoint[]>(`/portfolio/equity-curve?days=${days}`),
   snapshot: () => post<MessageResponse>('/portfolio/snapshot'),
 

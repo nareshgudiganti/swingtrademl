@@ -3,21 +3,19 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import func, select
+from sqlalchemy.sql import Select
 
 from swing_trade_ml.api.deps import DbSession
 from swing_trade_ml.brokers import get_broker
 from swing_trade_ml.core.config import settings
-from swing_trade_ml.core.enums import ExitReason, PositionStatus, SignalType
+from swing_trade_ml.core.enums import ExitReason, PositionStatus, SignalType, TradingMode
 from swing_trade_ml.db.models.market import Candle, Instrument
 from swing_trade_ml.db.models.trading import Position, Signal, Strategy, Trade
-from swing_trade_ml.strategies.tier import cap_tier
-
-IST = ZoneInfo("Asia/Kolkata")
 from swing_trade_ml.ml.registry import get_active_model
 from swing_trade_ml.schemas import (
     ClosePositionRequest,
@@ -29,25 +27,53 @@ from swing_trade_ml.schemas import (
     TradeOut,
 )
 from swing_trade_ml.services import portfolio as portfolio_service
-from swing_trade_ml.services.exit_policy import exit_confidence_for
 from swing_trade_ml.services.execution import (
     close_position,
     manual_close_position,
     manual_open_position,
     position_action,
 )
+from swing_trade_ml.services.exit_policy import exit_confidence_for
+from swing_trade_ml.services.portfolio import REAL_TRADING_STRATEGY_NAME
+from swing_trade_ml.strategies.tier import cap_tier
+
+IST = ZoneInfo("Asia/Kolkata")
 
 router = APIRouter(prefix="/portfolio", tags=["portfolio"])
 
+#: Which of the two books a positions/trades query is asking about.
+#: "bot" = everything the bot runs itself, in whichever mode it is in.
+#: "real" = the My Holdings book (the `real_trading` advisory strategy).
+#: "all" = both, the historical behaviour, kept for existing callers.
+BookFilter = Literal["all", "bot", "real"]
+
+
+def _scope_to_book(stmt: Select[Any], strategy_id_col: Any, book: BookFilter) -> Select[Any]:
+    """Narrow a Position/Trade query to one of the two books.
+
+    Rows with no strategy at all belong to the bot's book: only the
+    `real_trading` strategy marks a row as hand-bought.
+    """
+    if book == "all":
+        return stmt
+    if book == "real":
+        return stmt.where(
+            strategy_id_col.in_(
+                select(Strategy.id).where(Strategy.name == REAL_TRADING_STRATEGY_NAME)
+            )
+        )
+    return stmt.where(portfolio_service.exclude_real_trading(strategy_id_col))
+
 
 @router.get("/summary", response_model=dict)
-def summary(db: DbSession, mode: str | None = None) -> dict[str, Any]:
+def summary(db: DbSession, mode: str | None = None, book: BookFilter = "all") -> dict[str, Any]:
     """Headline performance figures — the dashboard's main panel.
 
     Pass `mode=paper` explicitly to review the paper track record after
-    switching to live.
+    switching to live, and `book=bot` to leave the hand-bought My Holdings
+    rows out so the figures describe the bot's own book alone.
     """
-    return portfolio_service.performance_stats(db, mode)
+    return portfolio_service.performance_stats(db, mode, bot_book_only=book == "bot")
 
 
 @router.get("/positions", response_model=list[PositionOut])
@@ -71,21 +97,34 @@ def list_positions(
 
 
 @router.get("/positions/detailed", response_model=list[dict])
-def detailed_positions(db: DbSession, mode: str | None = None) -> list[dict[str, Any]]:
+def detailed_positions(
+    db: DbSession,
+    mode: str | None = None,
+    book: BookFilter = "all",
+) -> list[dict[str, Any]]:
     """Open positions with symbols and computed P&L, ready to render.
 
-    Pass `mode=live` for the "Real Trading" view — real trades recorded via
-    the manual-entry flow, tracked with the same confidence/stop-loss/action
-    fields as paper positions but kept in a separate book (see
+    `book=bot` is the bot's own book in whichever mode it is running —
+    simulated rows while TRADING_MODE is paper, real ones once it is live.
+    `book=real` is the My Holdings book: shares bought by hand in Zerodha
+    and tracked under the advisory `real_trading` strategy (see
     services/execution.py's manual_open_position and engine.run_all_active).
+
+    The two are told apart by strategy rather than by mode, because the
+    My Holdings book is stored as mode="live" whatever the bot is doing —
+    so without this filter it would merge into the bot's own list the day
+    TRADING_MODE flips to live. `mode` is ignored for `book=real`, which is
+    live by construction.
     """
-    effective_mode = mode or get_broker().mode
-    rows = db.execute(
+    effective_mode = TradingMode.LIVE if book == "real" else (mode or get_broker().mode)
+    stmt = (
         select(Position, Instrument.tradingsymbol, Instrument.name)
         .join(Instrument, Instrument.id == Position.instrument_id)
         .where(Position.mode == effective_mode, Position.status == PositionStatus.OPEN)
         .order_by(Position.entry_at.desc())
-    ).all()
+    )
+    stmt = _scope_to_book(stmt, Position.strategy_id, book)
+    rows = db.execute(stmt).all()
 
     # The active model's own horizon — the "X days" a BUY signal was actually
     # judged against. Positions opened under an earlier model version are
@@ -274,8 +313,6 @@ def holdings(db: DbSession) -> list[dict[str, Any]]:
         )
     return result
 
-
-REAL_TRADING_STRATEGY_NAME = "real_trading"
 
 
 def _get_or_create_real_trading_strategy(db: DbSession) -> Strategy:
@@ -638,15 +675,22 @@ def list_trades(
     db: DbSession,
     wins_only: bool | None = None,
     limit: int = Query(100, le=1000),
+    book: BookFilter = "all",
 ) -> list[dict[str, Any]]:
+    """Closed trades in the current mode. `book` splits the bot's own record
+    from the My Holdings one exactly as /positions/detailed does — without
+    it, a live bot's trade list would also contain every sale recorded by
+    hand against a real Zerodha holding."""
+    mode = TradingMode.LIVE if book == "real" else get_broker().mode
     stmt = (
         select(Trade, Position, Strategy)
         .outerjoin(Position, Position.id == Trade.position_id)
         .outerjoin(Strategy, Strategy.id == Trade.strategy_id)
-        .where(Trade.mode == get_broker().mode)
+        .where(Trade.mode == mode)
         .order_by(Trade.exit_at.desc())
         .limit(limit)
     )
+    stmt = _scope_to_book(stmt, Trade.strategy_id, book)
     if wins_only is not None:
         stmt = stmt.where(Trade.is_win.is_(wins_only))
 

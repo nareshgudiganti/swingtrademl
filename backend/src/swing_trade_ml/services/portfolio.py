@@ -20,8 +20,23 @@ log = get_logger(__name__)
 
 TRADING_DAYS_PER_YEAR = 252
 
+# The advisory strategy that hand-bought Zerodha shares are tracked under —
+# the "My Holdings" book. It is always stored as mode="live", so anything
+# that reports on the bot's OWN book has to exclude it by strategy rather
+# than trusting the mode filter, or the two merge the day the bot goes live.
+REAL_TRADING_STRATEGY_NAME = "real_trading"
 
-def portfolio_value_and_cash(db: Session, mode: str) -> tuple[float, float]:
+
+def exclude_real_trading(strategy_id_col: Any) -> Any:
+    """A WHERE clause keeping only the bot's own rows. Rows with no strategy
+    at all are the bot's: only `real_trading` marks a row as hand-bought."""
+    real_ids = select(Strategy.id).where(Strategy.name == REAL_TRADING_STRATEGY_NAME)
+    return or_(strategy_id_col.is_(None), strategy_id_col.not_in(real_ids))
+
+
+def portfolio_value_and_cash(
+    db: Session, mode: str, *, bot_book_only: bool = False
+) -> tuple[float, float]:
     """(total portfolio value, available cash).
 
     In paper mode both come from the simulated ledger; in live mode cash comes
@@ -34,13 +49,10 @@ def portfolio_value_and_cash(db: Session, mode: str) -> tuple[float, float]:
     auto-executed) still needs its real cash figure while the app itself is
     still in the paper phase, so this can't wait on that global toggle.
     """
-    open_positions = list(
-        db.execute(
-            select(Position).where(Position.mode == mode, Position.status == PositionStatus.OPEN)
-        )
-        .scalars()
-        .all()
-    )
+    stmt = select(Position).where(Position.mode == mode, Position.status == PositionStatus.OPEN)
+    if bot_book_only:
+        stmt = stmt.where(exclude_real_trading(Position.strategy_id))
+    open_positions = list(db.execute(stmt).scalars().all())
     holdings_value = sum(
         (p.current_price or p.entry_price) * p.quantity for p in open_positions
     )
@@ -203,25 +215,37 @@ def take_snapshot(db: Session, mode: str | None = None) -> PortfolioSnapshot:
     return snapshot
 
 
-def performance_stats(db: Session, mode: str | None = None) -> dict[str, Any]:
+def performance_stats(
+    db: Session, mode: str | None = None, *, bot_book_only: bool = False
+) -> dict[str, Any]:
     """Aggregate performance over all closed trades plus the equity curve.
 
     This is the report the six-month paper phase is run to produce — the basis
     for deciding whether to go live at all.
+
+    `bot_book_only` drops the hand-bought "My Holdings" rows, so the figures
+    describe what the bot itself did. In paper mode that changes nothing (the
+    My Holdings book is live), but once the bot is live it is the difference
+    between "how is the bot doing" and "how is the account doing".
+
+    One exception: the snapshot-derived stats at the bottom (drawdown, day
+    P&L, Sharpe/Sortino) stay account-wide either way, because a snapshot
+    stores one total per mode and has no column to split the books by. They
+    would need a per-book snapshot row to honour this flag.
     """
     mode = mode or get_broker().mode
 
-    trades = list(
-        db.execute(select(Trade).where(Trade.mode == mode).order_by(Trade.exit_at)).scalars().all()
+    trades_stmt = select(Trade).where(Trade.mode == mode).order_by(Trade.exit_at)
+    positions_stmt = select(Position).where(
+        Position.mode == mode, Position.status == PositionStatus.OPEN
     )
-    total_value, cash = portfolio_value_and_cash(db, mode)
-    open_positions = list(
-        db.execute(
-            select(Position).where(Position.mode == mode, Position.status == PositionStatus.OPEN)
-        )
-        .scalars()
-        .all()
-    )
+    if bot_book_only:
+        trades_stmt = trades_stmt.where(exclude_real_trading(Trade.strategy_id))
+        positions_stmt = positions_stmt.where(exclude_real_trading(Position.strategy_id))
+
+    trades = list(db.execute(trades_stmt).scalars().all())
+    total_value, cash = portfolio_value_and_cash(db, mode, bot_book_only=bot_book_only)
+    open_positions = list(db.execute(positions_stmt).scalars().all())
 
     starting = settings.PAPER_STARTING_CAPITAL if mode == TradingMode.PAPER else total_value
     unrealized = sum(p.unrealized_pnl for p in open_positions)

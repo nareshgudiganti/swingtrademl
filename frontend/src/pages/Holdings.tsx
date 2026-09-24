@@ -8,7 +8,7 @@ import { ErrorBox, Loading } from '../components/Loading'
 import StockDetailModal, { type StockDetail } from '../components/StockDetailModal'
 import { PositionsTable } from './Positions'
 import RealReport from './RealReport'
-import { formatCurrency, formatSignedPercent } from '../lib/format'
+import { formatCurrency, formatSignedPercent, pnlClass } from '../lib/format'
 
 /**
  * My Holdings — the real money book.
@@ -27,7 +27,7 @@ import { formatCurrency, formatSignedPercent } from '../lib/format'
 export default function Holdings() {
   const queryClient = useQueryClient()
   const [detail, setDetail] = useState<StockDetail | null>(null)
-  const [view, setView] = useState<'shares' | 'report'>('shares')
+  const [view, setView] = useState<'shares' | 'zerodha' | 'report'>('shares')
 
   // Raw Zerodha holdings — the broker's own view, independent of whether
   // this app has started tracking them. Failure here is almost always "not
@@ -125,6 +125,9 @@ export default function Holdings() {
         <button className={view === 'shares' ? 'primary' : ''} onClick={() => setView('shares')}>
           My shares
         </button>
+        <button className={view === 'zerodha' ? 'primary' : ''} onClick={() => setView('zerodha')}>
+          Straight from Zerodha
+        </button>
         <button className={view === 'report' ? 'primary' : ''} onClick={() => setView('report')}>
           Buy &amp; sell report
         </button>
@@ -132,6 +135,67 @@ export default function Holdings() {
 
       {view === 'report' ? (
         <RealReport />
+      ) : view === 'zerodha' ? (
+        /* The broker's own numbers, untouched by this app — every share in
+           the account, tracked here or not, priced by Zerodha rather than by
+           our quote cache. This used to sit on the Portfolio tab; Portfolio
+           is now strictly the bot's own book, and everything about the real
+           account belongs on this page. */
+        <>
+          <p className="muted" style={{ fontSize: '0.85rem' }}>
+            Exactly what Zerodha shows for this account right now — including shares this app
+            isn&apos;t tracking. Read-only.
+          </p>
+          <div className="table-wrap">
+            {holdings.isLoading ? (
+              <Loading />
+            ) : holdings.isError ? (
+              <div className="empty">
+                Couldn&apos;t reach Zerodha —{' '}
+                {(holdings.error as Error)?.message ?? 'log in to Kite and try again'}.
+              </div>
+            ) : !holdings.data?.length ? (
+              <div className="empty">No shares in the connected Zerodha account.</div>
+            ) : (
+              <table>
+                <thead>
+                  <tr>
+                    <th>Stock</th>
+                    <th className="num">Qty</th>
+                    <th className="num">Avg cost</th>
+                    <th className="num">Price now</th>
+                    <th className="num">Worth now</th>
+                    <th className="num">Profit/loss</th>
+                    <th className="num">Today</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {holdings.data.map((h) => (
+                    <tr key={`${h.exchange}:${h.symbol}`}>
+                      <td>
+                        <strong>{h.symbol}</strong>
+                      </td>
+                      <td className="num">{h.quantity}</td>
+                      <td className="num">{formatCurrency(h.average_price)}</td>
+                      <td className="num">{formatCurrency(h.last_price)}</td>
+                      <td className="num">{formatCurrency(h.last_price * h.quantity)}</td>
+                      <td className={`num ${pnlClass(h.pnl)}`}>{formatCurrency(h.pnl)}</td>
+                      <td
+                        className={`num ${
+                          h.day_change_percentage != null ? pnlClass(h.day_change_percentage) : 'muted'
+                        }`}
+                      >
+                        {h.day_change_percentage != null
+                          ? formatSignedPercent(h.day_change_percentage / 100)
+                          : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </>
       ) : (
         <>
 

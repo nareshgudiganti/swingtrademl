@@ -260,20 +260,27 @@ export function PositionsTable({
   )
 }
 
+/**
+ * Portfolio — the bot's own book, and nothing else.
+ *
+ * Whichever mode the bot is in is the whole of this page: while TRADING_MODE
+ * is paper these are simulated trades with simulated cash, and the day it
+ * flips to live they are real orders the bot placed itself. Shares bought by
+ * hand in Zerodha are NOT shown here — they live on My Holdings, and the
+ * `book=bot` filter behind every query on this page is what keeps them out
+ * (they are stored as mode="live", so a mode filter alone would let them
+ * leak in as soon as the bot goes live).
+ */
 export default function Positions() {
   const queryClient = useQueryClient()
+  const status = useQuery({ queryKey: ['status'], queryFn: api.status })
   const positions = useQuery({ queryKey: ['positions'], queryFn: api.positions })
-  // Real Zerodha holdings — whatever you've actually bought yourself in the
-  // real account. Independent of the bot's own paper Position rows below,
-  // which know nothing about a manual purchase. A failure here (most
-  // commonly "not logged into Kite") is shown inline rather than blocking
-  // the rest of the page, since the bot's own tracking still works either way.
-  const holdings = useQuery({ queryKey: ['holdings'], queryFn: api.holdings, retry: false })
   const trades = useQuery({ queryKey: ['trades', 50], queryFn: () => api.trades(50) })
   const buyList = useQuery({ queryKey: ['buyList'], queryFn: api.buyList })
-  // Whole-life net worth (no month/category/direction filter) — a quick
-  // "how am I doing overall" strip, separate from the trading P&L below it.
-  const netWorth = useQuery({ queryKey: ['financeNetWorth'], queryFn: () => api.financeNetWorth() })
+  // Cash and the running realised total — the parts of "what is this book
+  // worth" that the open-position rows alone can't tell you. Scoped to the
+  // same book and mode as the table below it.
+  const summary = useQuery({ queryKey: ['summary'], queryFn: () => api.summary() })
   const buySymbols = useMemo(() => new Set((buyList.data ?? []).map((r) => r.symbol)), [buyList.data])
   const recentlySold = useMemo(
     () => (trades.data ?? []).filter((t) => daysSince(t.exit_at) <= DAYS_TO_WATCH),
@@ -288,34 +295,6 @@ export default function Positions() {
       queryClient.invalidateQueries({ queryKey: ['positions'] })
       queryClient.invalidateQueries({ queryKey: ['summary'] })
       queryClient.invalidateQueries({ queryKey: ['trades'] })
-    },
-  })
-
-  // Real Trading — trades made manually in Zerodha (bot-recommended or your
-  // own picks), tracked with the same daily confidence/stop-loss the paper
-  // book gets, but a fully separate book (see the "real_trading" advisory
-  // strategy created for this). strategies is how we find that strategy's
-  // id without hardcoding it — it's created once, on first use, below.
-  const strategies = useQuery({ queryKey: ['strategies'], queryFn: api.strategies })
-  const realStrategy = strategies.data?.find((s) => s.name === 'real_trading')
-  const realPositions = useQuery({
-    queryKey: ['realPositions'],
-    queryFn: api.realPositions,
-    enabled: !!realStrategy,
-  })
-
-  const importHoldings = useMutation({
-    mutationFn: () => api.importRealHoldings(realStrategy!.id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['realPositions'] })
-    },
-  })
-
-  const manualClose = useMutation({
-    mutationFn: ({ id, exitPrice }: { id: number; exitPrice: number }) =>
-      api.manualClosePosition(id, exitPrice),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['realPositions'] })
     },
   })
 
@@ -336,153 +315,83 @@ export default function Positions() {
   const maxGainer = bySizeOfReturn[0]
   const maxLoser = bySizeOfReturn[bySizeOfReturn.length - 1]
 
+  // The mode is the page. Prefer the summary's own answer over the status
+  // endpoint's, because it is the mode the numbers on screen were actually
+  // computed for — they can't disagree that way.
+  const isLive = (summary.data?.mode ?? status.data?.trading_mode) === 'live'
+  const money = summary.data
+
   return (
     <>
       <div className="page-head">
-        <h1>Portfolio</h1>
+        <div>
+          <h1 style={{ marginBottom: '0.15rem' }}>Portfolio</h1>
+          <div className="muted" style={{ fontSize: '0.82rem' }}>
+            {isLive
+              ? 'Real money. The bot is buying and selling in your Zerodha account, and everything below is what it actually owns right now.'
+              : 'Practice money. Nothing below is real — the bot is testing itself with pretend cash, and your Zerodha account is untouched.'}{' '}
+            Shares you bought yourself are under <strong>My Holdings</strong>, not here.
+          </div>
+        </div>
+        <span className={`badge ${isLive ? 'badge-live' : 'badge-paper'}`}>
+          {isLive ? 'LIVE MONEY' : 'PRACTICE MONEY'}
+        </span>
       </div>
 
-      {netWorth.data && (
-        <div className="grid" style={{ marginBottom: '1.5rem' }}>
+      {money && (
+        <div className="grid">
           <Stat
-            label="Net worth"
-            value={formatCurrency(netWorth.data.net_worth)}
-            tone={pnlClass(netWorth.data.net_worth) as 'pos' | 'neg' | 'flat'}
+            label={isLive ? 'Account value' : 'Practice account value'}
+            value={formatCurrency(money.total_value)}
+            sub={`Started with ${formatCurrency(money.starting_capital)}`}
+            tone={pnlClass(money.total_value - money.starting_capital) as 'pos' | 'neg' | 'flat'}
           />
           <Stat
-            label="Cash surplus"
-            value={formatCurrency(netWorth.data.cash_surplus)}
-            sub="income − expenses, all-time"
-            tone={pnlClass(netWorth.data.cash_surplus) as 'pos' | 'neg' | 'flat'}
+            label="Cash left to invest"
+            value={formatCurrency(money.cash)}
+            sub="Free to buy with"
           />
-          <Stat label="Investments" value={formatCurrency(netWorth.data.investments_total)} />
           <Stat
-            label="Loan liabilities"
-            value={formatCurrency(netWorth.data.liabilities)}
-            tone={netWorth.data.liabilities > 0 ? 'neg' : 'flat'}
+            label="Held in stocks"
+            value={formatCurrency(currentValue)}
+            sub={`${unsorted.length} ${unsorted.length === 1 ? 'stock' : 'stocks'} · ${formatCurrency(invested)} put in`}
+          />
+          <Stat
+            label="Profit banked so far"
+            value={formatCurrency(money.realized_pnl)}
+            sub={`${money.total_trades} ${money.total_trades === 1 ? 'sale' : 'sales'} so far`}
+            tone={pnlClass(money.realized_pnl) as 'pos' | 'neg' | 'flat'}
           />
         </div>
       )}
 
-      <h2>Your Zerodha holdings</h2>
+      <h2>Open positions</h2>
       <p className="muted" style={{ marginTop: 0, fontSize: '0.85rem' }}>
-        Real shares in your actual account — anything you bought yourself, separate from the
-        bot's own paper-mode tracking below.
+        What the bot is holding right now, and what it thinks of each one today.
       </p>
-      <div className="table-wrap" style={{ marginBottom: '1.5rem' }}>
-        {holdings.isLoading ? (
-          <Loading />
-        ) : holdings.error ? (
-          <div className="empty">
-            Couldn't load real holdings — {(holdings.error as Error)?.message ?? 'log in to Kite to see this'}.
-          </div>
-        ) : !holdings.data?.length ? (
-          <Empty label="No holdings in the connected Zerodha account yet." />
-        ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>Symbol</th>
-                <th className="num">Qty</th>
-                <th className="num">Avg cost</th>
-                <th className="num">LTP</th>
-                <th className="num">Value</th>
-                <th className="num">P&amp;L</th>
-                <th className="num">Day chg</th>
-              </tr>
-            </thead>
-            <tbody>
-              {holdings.data.map((h) => (
-                <tr key={h.symbol}>
-                  <td>
-                    <strong>{h.symbol}</strong>
-                  </td>
-                  <td className="num">{h.quantity}</td>
-                  <td className="num">{formatCurrency(h.average_price)}</td>
-                  <td className="num">{formatCurrency(h.last_price)}</td>
-                  <td className="num">{formatCurrency(h.last_price * h.quantity)}</td>
-                  <td className={`num ${pnlClass(h.pnl)}`}>{formatCurrency(h.pnl)}</td>
-                  <td className={`num ${h.day_change_percentage != null ? pnlClass(h.day_change_percentage) : ''}`}>
-                    {h.day_change_percentage != null ? formatSignedPercent(h.day_change_percentage / 100) : '—'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      <h2>Real Trading</h2>
-      <p className="muted" style={{ marginTop: 0, fontSize: '0.85rem' }}>
-        Stocks you've actually bought in Zerodha — tracked with the same daily confidence and
-        stop-loss reading as the paper book below, but a separate, real-money book. The bot never
-        auto-trades these; it only tracks and alerts.
-      </p>
-      <div style={{ marginBottom: '0.75rem' }}>
-        <button
-          disabled={!realStrategy || importHoldings.isPending}
-          onClick={() => importHoldings.mutate()}
-          title={!realStrategy ? 'Loading…' : 'Pull anything new from your Zerodha holdings'}
-        >
-          {importHoldings.isPending ? 'Importing…' : 'Import from Zerodha'}
-        </button>
-        {importHoldings.data && (
-          <span className="muted" style={{ marginLeft: '0.75rem', fontSize: '0.85rem' }}>
-            {importHoldings.data.filter((r) => r.status === 'imported').length} imported,{' '}
-            {importHoldings.data.filter((r) => r.status === 'already_tracked').length} already tracked,{' '}
-            {importHoldings.data.filter((r) => r.status === 'skipped').length} skipped
-          </span>
-        )}
-      </div>
-      {importHoldings.error && <ErrorBox error={importHoldings.error} />}
-      {manualClose.error && <ErrorBox error={manualClose.error} />}
-      <div className="table-wrap" style={{ marginBottom: '1.5rem' }}>
-        {realPositions.isLoading ? (
-          <Loading />
-        ) : realPositions.error ? (
-          <div className="empty">
-            Couldn't load real positions — {(realPositions.error as Error)?.message}.
-          </div>
-        ) : (
-          <PositionsTable
-            rows={realPositions.data ?? []}
-            onSelectDetail={setSelectedDetail}
-            onSell={(p) => {
-              const input = prompt(`Sold ${p.quantity} × ${p.symbol} — at what price?`, String(p.current_price))
-              if (input === null) return
-              const exitPrice = Number(input)
-              if (!exitPrice || exitPrice <= 0) return
-              manualClose.mutate({ id: p.id, exitPrice })
-            }}
-            sellBusy={manualClose.isPending}
-            sellLabel="Record sale"
-            emptyLabel="No real positions tracked yet — click Import from Zerodha above, or buy something and it'll pick it up next import."
-          />
-        )}
-      </div>
-
-      <h2>Bot's paper positions</h2>
       {close.error && <ErrorBox error={close.error} />}
 
+      {/* Invested and current value are already in the money strip above, so
+          this row is only what the strip can't say: today's move, what the
+          open stocks are worth versus what they cost, and the two names
+          pulling hardest in either direction. */}
       {unsorted.length > 0 && (
         <div className="grid">
-          <Stat label="Amount invested" value={formatCurrency(invested)} />
-          <Stat label="Current value" value={formatCurrency(currentValue)} />
           <Stat
-            label="Day's gain"
+            label="Today's change"
             value={formatCurrency(dayPnl)}
             sub={todayIst()}
             tone={pnlClass(dayPnl) as 'pos' | 'neg' | 'flat'}
           />
           <Stat
-            label="Absolute return"
-            value={formatSignedPercent(absoluteReturnPct)}
-            sub={formatCurrency(totalPnl)}
+            label="Gain if sold today"
+            value={formatCurrency(totalPnl)}
+            sub={`${formatSignedPercent(absoluteReturnPct)} on ${formatCurrency(invested)} invested`}
             tone={pnlClass(totalPnl) as 'pos' | 'neg' | 'flat'}
           />
           {maxGainer && maxGainer.unrealized_pnl_pct > 0 && (
             <Stat
-              label="Max gainer"
+              label="Doing best"
               value={maxGainer.symbol}
               sub={`${formatCurrency(maxGainer.current_price)}  (${formatSignedPercent(maxGainer.unrealized_pnl_pct)})`}
               tone="pos"
@@ -490,7 +399,7 @@ export default function Positions() {
           )}
           {maxLoser && maxLoser.unrealized_pnl_pct < 0 && (
             <Stat
-              label="Max loser"
+              label="Doing worst"
               value={maxLoser.symbol}
               sub={`${formatCurrency(maxLoser.current_price)}  (${formatSignedPercent(maxLoser.unrealized_pnl_pct)})`}
               tone="neg"

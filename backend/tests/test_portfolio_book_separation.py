@@ -75,7 +75,7 @@ def _books(db_session):
         ]
     )
     db_session.commit()
-    return bot, real
+    return bot, real, bot_inst, mine_inst
 
 
 def _symbols(resp):
@@ -126,12 +126,13 @@ def test_bot_trade_list_excludes_hand_recorded_sales(client, db_session, monkeyp
     # by mode alone. Pretending the bot is live is the only way to exercise
     # the case this filter exists for: both books sharing mode="live".
     monkeypatch.setattr(portfolio_ep, "get_broker", lambda: SimpleNamespace(mode="live"))
-    bot, real = _books(db_session)
+    bot, real, bot_inst, mine_inst = _books(db_session)
     now = datetime.now(UTC)
     db_session.add_all(
         [
             Trade(
                 strategy_id=bot.id,
+                instrument_id=bot_inst.id,
                 symbol="BOTSOLD",
                 mode="live",
                 quantity=10,
@@ -147,6 +148,7 @@ def test_bot_trade_list_excludes_hand_recorded_sales(client, db_session, monkeyp
             ),
             Trade(
                 strategy_id=real.id,
+                instrument_id=mine_inst.id,
                 symbol="ISOLDIT",
                 mode="live",
                 quantity=5,

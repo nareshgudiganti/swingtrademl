@@ -166,7 +166,8 @@ Daily, per configuration:
 3. SCORE       percentile-rank each enabled factor
                across today's universe                 [new, section 5]
 4. COMPOSITE   weighted blend, weights renormalised    [new, section 5.5]
-5. SHORTLIST   top K by composite (default 30)         [new]
+5. SHORTLIST   top K% by composite (default 25%,
+               floor 10 names)                         [new]
 6. ML SCORE    existing classifier, shortlist only     [ml/predict.py, exists]
 7. RANK        ML probability, composite breaks ties   [new]
 8. GATE        risk checks and sizing                  [services/risk.py, exists]
@@ -221,7 +222,8 @@ A configuration is a `Strategy` row with `execution_mode = "advisory"` and
   "selection": {
     "cap_tiers": ["large", "midcap"],
     "factor_weights": {"trend": 70, "low_volatility": 30},
-    "shortlist_k": 30,
+    "shortlist_pct": 25,
+    "shortlist_floor": 10,
     "min_confidence": 0.60,
     "horizon_days": 15,
     "max_per_sector": 2
@@ -353,27 +355,34 @@ today's behaviour" default in section 7.3.
 | R2 | Multiple-comparisons mining | Section 8: sample floor, concurrency cap, baseline always visible |
 | R3 | Survivorship bias from current-only membership | Section 4: dated snapshots, limitation stated on results, backtests before the start date flagged |
 | R4 | NSE changes or blocks the index URLs | Same archive host and `fetch()` wrapper as existing feeds; failure alerts rather than serving stale data |
-| R5 | Narrowing to K=30 starves the scan of candidates | K configurable; the preview endpoint shows the shortlist before committing; the risk gate behind it is unchanged |
+| R5 | Narrowing starves the scan of candidates | Shortlist is a percentage with a floor of 10 names, so it scales with universe size; the preview endpoint shows the shortlist before committing; the risk gate behind it is unchanged |
 | R6 | User reads factor scores as predictions | Scores are ranks within today's universe and are labelled as such. Calibration discipline from [[project_ml_accuracy_roadmap]] applies |
 
 ## 14. Open questions
 
-1. **Universe size — three sources disagree, and K depends on the answer.**
-   Checked against prod on 2026-09-25:
-   - `GET /instruments?is_watchlisted=true` returns the endpoint's full cap of
-     1000 rows (`limit: int = Query(100, le=1000)`), so **at least 1000**
-     instruments carry the flag.
-   - ROADMAP_TRACKER describes ~304 traded stocks.
-   - [[user-stock-selection-criteria]] records an intended watchlist of 20-30.
+1. ~~**Universe size.**~~ **RESOLVED 2026-09-25 against prod.** Every active
+   strategy carries an explicit `symbols` list, so
+   `engine.eligible_instruments` never reaches the watchlist fallback:
+   `ml_swing_main` 52, `sma_crossover_benchmark` 52 (same list),
+   `ml_swing_midcap` 150, `ml_swing_smallcap` 104, `real_trading` 8.
 
-   `engine.eligible_instruments` uses `strategy.symbols` when set and falls
-   back to the watchlist otherwise, so the effective universe may be a
-   per-strategy symbol list rather than the flag. **This must be resolved
-   before choosing K:** at 1000 a top-30 shortlist is a 97% cut and the
-   strongest version of this feature; at 30 it filters nothing and the whole
-   selection layer is pointless. It also bears on whether
-   `is_watchlisted` still means what its docstring in
-   `db/models/market.py:46` claims about candle ingestion.
+   Two consequences, both folded into the design above:
+
+   - **Cap tiering already exists de facto**, hand-maintained inside
+     `strategy.symbols` and shaped like the NSE index lists (52 ≈ NIFTY 50,
+     150 ≈ NIFTY Midcap 150). Those lists are frozen and go stale at every
+     NSE rebalance. Section 4 therefore *replaces* a manual list with a
+     self-refreshing one — a stronger case than the model-name defect alone.
+   - **K must be a fraction, not a constant.** Top-30 is a 5x cut on a
+     150-name universe and barely filters a 52-name one. Section 6 step 5 now
+     uses a percentage with a floor, so the same configuration means the same
+     thing on every tier.
+
+   Still worth settling separately: the watchlist flag covers at least 1000
+   instruments (`limit: int = Query(100, le=1000)` returned its full cap)
+   while `db/models/market.py:46` claims only watchlisted instruments get
+   candles ingested. Not a blocker for this work, since the fallback is
+   unreachable, but the flag no longer means what its docstring says.
 2. Should an experiment inherit the live model, or be pinnable to a model
    version so a factor change is not confounded by a model change?
 3. Is the 15-day horizon per experiment, or fixed to match the trained

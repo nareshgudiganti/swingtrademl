@@ -51,6 +51,15 @@ ASM_URL = "https://www.nseindia.com/api/reportASM"
 GSM_URL = "https://www.nseindia.com/api/reportGSM"
 EVENT_WINDOW_DAYS = 21
 
+#: NSE's index constituent lists — membership IS the cap tier. Only current
+#: membership is published, so load_index_membership() snapshots each fetch
+#: with its date; anything before the first snapshot carries survivorship bias.
+INDEX_LISTS: dict[str, str] = {
+    "large": "https://nsearchives.nseindia.com/content/indices/ind_nifty100list.csv",
+    "midcap": "https://nsearchives.nseindia.com/content/indices/ind_niftymidcap150list.csv",
+    "smallcap": "https://nsearchives.nseindia.com/content/indices/ind_niftysmallcap250list.csv",
+}
+
 # NSE serves a bot-blocking page to clients without a browser-like agent.
 HEADERS = {"User-Agent": "Mozilla/5.0", "Accept": "*/*"}
 TIMEOUT = httpx.Timeout(30.0, connect=10.0)
@@ -446,3 +455,28 @@ def feed_status(db: Session) -> dict[str, dict]:
             "rows": db.execute(select(func.count(InstitutionalFlow.id))).scalar_one(),
         },
     }
+
+
+# -------------------------------------------------------- index membership --
+
+
+def parse_index_list(content: bytes, tier: str) -> list[dict]:
+    """Constituents of one NSE index list, tagged with the tier it came from.
+
+    Raises when the body is not a constituent CSV. NSE blocks bots without
+    notice and serves an HTML page instead; returning an empty list there
+    would look like a successful empty day and wipe every stored tier.
+    """
+    reader = csv.reader(io.StringIO(content.decode("utf-8-sig")))
+    header = [c.strip().upper() for c in next(reader, [])]
+    if "SYMBOL" not in header:
+        raise ValueError(f"{tier}: response is not a constituent CSV (no SYMBOL column)")
+
+    rows: list[dict] = []
+    for line in reader:
+        rec = dict(zip(header, (c.strip() for c in line), strict=False))
+        symbol = (rec.get("SYMBOL") or "").upper()
+        if not symbol:
+            continue
+        rows.append({"symbol": symbol, "tier": tier, "industry": rec.get("INDUSTRY") or ""})
+    return rows

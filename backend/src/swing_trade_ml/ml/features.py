@@ -304,6 +304,13 @@ def build_features(
     out["return_5d"] = close.pct_change(5)
     out["return_10d"] = close.pct_change(10)
     out["return_20d"] = close.pct_change(20)
+    # Long-horizon returns — inputs to the trend factor in services/factors.py,
+    # which needs a momentum window closer to the academic 12-month definition
+    # than return_20d gives. Deliberately NOT added to FEATURE_COLUMNS: the
+    # trained models' input contract is fixed, and widening it silently would
+    # invalidate every stored model.
+    out["return_120d"] = close.pct_change(120)
+    out["return_250d"] = close.pct_change(250)
 
     out["high_20_dist"] = close / high.rolling(20).max() - 1
     out["low_20_dist"] = close / low.rolling(20).min() - 1

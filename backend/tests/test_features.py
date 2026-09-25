@@ -241,3 +241,20 @@ def test_latest_feature_row_returns_none_when_not_warmed_up(
     assert row is not None
     assert list(row.columns) == FEATURE_COLUMNS
     assert len(row) == 1
+
+
+def test_long_horizon_returns_are_built_but_not_model_features(
+    ohlcv, index_ohlcv, sector_ohlcv, vix_ohlcv, breadth_df
+):
+    """return_120d/250d feed the trend factor in services/factors.py. They
+    must NOT enter FEATURE_COLUMNS: the trained models' input contract is
+    fixed, and widening it silently would invalidate every stored model."""
+    assert "return_120d" not in FEATURE_COLUMNS
+    assert "return_250d" not in FEATURE_COLUMNS
+
+    result = build_features(ohlcv, index_ohlcv, sector_ohlcv, vix_ohlcv, breadth_df)
+
+    assert "return_120d" in result.columns
+    assert "return_250d" in result.columns
+    assert result["return_120d"].notna().any()
+    assert result["return_250d"].notna().any()

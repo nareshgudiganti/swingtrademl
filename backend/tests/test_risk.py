@@ -59,14 +59,20 @@ def test_missing_stop_falls_back_to_default_distance():
 def test_fixed_amount_mode_ignores_stop_distance(monkeypatch):
     """A very tight stop would blow up risk-based sizing into an enormous
     position (see test_tight_stop_is_capped_by_concentration_limit) — fixed
-    mode must not care, since it isn't sizing off the stop at all."""
+    mode must not care, since it isn't sizing off the stop at all.
+
+    The flat target is set above this account's minimum position so that the
+    flat amount itself is what binds; a target *below* that floor is raised to
+    it instead, which is its own case (see
+    test_buy_slot_allocation.py::test_fixed_amount_sizing_never_lands_below_the_accounts_minimum).
+    """
     monkeypatch.setattr(settings, "POSITION_SIZING_MODE", "fixed_amount")
-    monkeypatch.setattr(settings, "FIXED_POSITION_AMOUNT_INR", 10_000.0)
+    monkeypatch.setattr(settings, "FIXED_POSITION_AMOUNT_INR", 50_000.0)
 
     quantity, note = calculate_quantity(
         price=100.0, stop_loss=99.5, portfolio_value=1_000_000.0, available_cash=1_000_000.0
     )
-    assert quantity == 100  # 10,000 / 100
+    assert quantity == 500  # 50,000 / 100
     assert "fixed amount" in note
 
 

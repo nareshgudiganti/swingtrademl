@@ -56,6 +56,26 @@ PDFs' own status tables.
 | Hysteresis on exit threshold | NOT BUILT | |
 | Drift monitoring (features, outcomes by bucket) | NOT BUILT | Only per-position confidence-decay alerts |
 | Champion / challenger | NOT BUILT | Registry supports versioning and rollback |
+
+### Measurement integrity (2026-09-28)
+Fixed before anything else, because every other track reports its results through
+these numbers. See `C:\Users\nares\.claude\plans\consolidated-gap-analysis-validated-scroll.md`
+(Track 1) for why each one mattered.
+
+| Item | Status | Evidence / note |
+|---|---|---|
+| Max drawdown recomputed from the equity curve | DONE | Was `max(snapshot.drawdown_pct)` over all history, so one bad row set the headline drawdown permanently. `services/portfolio.py`, `tests/test_performance_metrics_integrity.py` |
+| One-day valuation spikes excluded, and counted | DONE | A snapshot 35%+ below **both** neighbours is a pricing failure, not a drawdown; a sustained fall of the same depth is still reported. `snapshots_excluded` says how many were dropped |
+| Sharpe/Sortino `null` below 20 snapshots, flagged above 4 | DONE | 0.0 read as "measured, and flat". `ratios_reliable` + `ratios_note` carry the reason |
+| Snapshot figures labelled account-wide | DONE | `snapshot_scope` — `book=bot` filters trades but cannot filter a snapshot |
+| Signal evidence on `/strategies/performance` | DONE | Shadow strategies reported 0 trades / 0% forever; `signal_evidence` counts resolved signals, win rate, and `enough_to_judge` at 30. `ml/calibration.py::signal_evidence` |
+| Signal horizon walks trading bars, not calendar days | DONE | 15 bars ≈ 21 calendar days, so signals expired ~6 days early and the bias only ever cut winners short — landing hardest on the shadow evidence the promotion decision rests on. `ml/predict.py`, `tests/test_signal_horizon_is_trading_bars.py` |
+| `MLModel.n_samples` records the fitted rows | DONE | Was the pre-split pool, ~20% too high, and disagreed with `train_start`/`train_end` beside it |
+
+**Consequence for the promotion decision:** resolved-signal counts and win rates
+recorded before 2026-09-28 were measured on a short horizon. The shadow strategies'
+evidence should be re-read after `job_evaluate_signals` has run against the corrected
+window before anything is promoted.
 | Scheduled monthly retrain (challenger only) | NOT BUILT | Retraining is CLI-only |
 
 ### Risk and capital
@@ -264,7 +284,7 @@ the account owner can do.
 - [ ] Drift monitor: feature shift, outcome by confidence bucket, by regime (M)
 - [ ] Monthly scheduled **challenger** training, never auto-promoted (S)
 - [ ] Champion vs challenger report on the same forward stream (M)
-- [ ] Model artifact **backup** off the droplet (the 2026-09-15 recovery lost three) (S)
+- [x] Model artifact **backup** off the droplet (the 2026-09-15 recovery lost three) (S) — `ml/backup.py`, daily 16:30 job, alerts on an artifact whose file has already gone. **Set `MODEL_BACKUP_DIR` to a path that is genuinely off the droplet** or it stays a no-op.
 
 ### Phase 5 — The screens (mockup parity, plain English)
 - [ ] Home: one-sentence daily brief + regime gauge + "3 things need attention" (S)

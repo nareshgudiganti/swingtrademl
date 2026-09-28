@@ -43,6 +43,13 @@ MEANINGFUL_SAMPLE = 30
 TARGET_TOLERANCE = 1e-9
 
 TARGET_HIT = "TARGET_HIT"
+STOP_LOSS_HIT = "STOP_LOSS_HIT"
+
+#: Resolved signals needed before a strategy's signal win rate is a judgement
+#: rather than an anecdote. Same bar as MEANINGFUL_SAMPLE above and the same
+#: number the selection-profile promotion gate uses, deliberately: one
+#: definition of "enough evidence" across the product.
+ENOUGH_TO_JUDGE = 30
 
 
 @dataclass
@@ -156,6 +163,51 @@ def signal_calibration(
     ]
     report = CalibrationReport(source="signals", mode=mode, strategy_id=strategy_id, since=since)
     return _build(report, rows)
+
+
+def signal_evidence(
+    db: Session,
+    *,
+    strategy_id: int,
+    mode: str | None = None,
+    since: datetime | None = None,
+) -> dict[str, float | int | bool]:
+    """How one strategy's scored signals actually turned out.
+
+    The evidence an advisory strategy produces. The barrier shadow strategies
+    place no orders, so they have no Trade rows and every trade-based report
+    shows them as untried - yet their signals are scored against real prices
+    by evaluate_pending_signals exactly like any other. This counts those.
+
+    Only a target hit is a win: a stop is a loss and so is an expiry, matching
+    signal_calibration above, because that is the question the confidence
+    answers. Signals still inside their horizon are reported as `pending` and
+    kept out of the win rate - counting them as non-wins would make every
+    young strategy look bad for the crime of being young.
+    """
+    stmt = select(Signal.outcome).where(Signal.strategy_id == strategy_id)
+    if mode is not None:
+        stmt = stmt.where(Signal.mode == mode)
+    if since is not None:
+        stmt = stmt.where(Signal.generated_at >= since)
+    # Only signals that carry a barrier are ever scorable, so an unscorable
+    # HOLD must not be counted as "pending forever".
+    stmt = stmt.where(Signal.stop_loss.isnot(None), Signal.take_profit.isnot(None))
+
+    outcomes = [row[0] for row in db.execute(stmt).all()]
+    resolved = [o for o in outcomes if o is not None]
+    target_hit = sum(1 for o in resolved if o == TARGET_HIT)
+    stopped = sum(1 for o in resolved if o == STOP_LOSS_HIT)
+
+    return {
+        "resolved": len(resolved),
+        "pending": len(outcomes) - len(resolved),
+        "target_hit": target_hit,
+        "stopped": stopped,
+        "expired": len(resolved) - target_hit - stopped,
+        "win_rate": (target_hit / len(resolved)) if resolved else 0.0,
+        "enough_to_judge": len(resolved) >= ENOUGH_TO_JUDGE,
+    }
 
 
 def prediction_calibration(

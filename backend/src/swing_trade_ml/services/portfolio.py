@@ -20,6 +20,46 @@ log = get_logger(__name__)
 
 TRADING_DAYS_PER_YEAR = 252
 
+#: Snapshot rows needed before an annualised Sharpe/Sortino means anything.
+#: Below this the sqrt(252) scaling turns a few days of noise into a
+#: confident-looking number, which is how a two-week paper run reported a
+#: Sharpe of 2.47.
+MIN_SNAPSHOTS_FOR_RATIOS = 20
+
+#: A snapshot this far below *both* of its neighbours is a valuation failure
+#: - a quote feed returning zero, holdings priced before they settled - not a
+#: drawdown. A real fall does not undo itself the next morning, so a sustained
+#: drop of the same depth is kept and reported.
+SNAPSHOT_ANOMALY_DROP_PCT = 0.35
+
+#: Above this, an annualised ratio describes the sample rather than the
+#: strategy. Still reported, never as a reliable figure.
+IMPLAUSIBLE_RATIO = 4.0
+
+
+def _clean_equity_curve(snapshots: list[PortfolioSnapshot]) -> tuple[np.ndarray, int]:
+    """Snapshot values with one-day valuation spikes dropped.
+
+    Returns the usable curve and how many rows were excluded, so the report
+    can say it rather than quietly reshaping its own history. Only interior
+    points are testable: the first and last row have no pair of neighbours to
+    be an outlier against, and are always kept.
+    """
+    values = [float(s.total_value) for s in snapshots]
+    floor = 1.0 - SNAPSHOT_ANOMALY_DROP_PCT
+    kept = [
+        value
+        for i, value in enumerate(values)
+        if not (
+            0 < i < len(values) - 1
+            and values[i - 1] > 0
+            and values[i + 1] > 0
+            and value <= values[i - 1] * floor
+            and value <= values[i + 1] * floor
+        )
+    ]
+    return np.array(kept, dtype=float), len(values) - len(kept)
+
 # The advisory strategy that hand-bought Zerodha shares are tracked under —
 # the "My Holdings" book. It is always stored as mode="live", so anything
 # that reports on the bot's OWN book has to exclude it by strategy rather
@@ -231,7 +271,9 @@ def performance_stats(
     One exception: the snapshot-derived stats at the bottom (drawdown, day
     P&L, Sharpe/Sortino) stay account-wide either way, because a snapshot
     stores one total per mode and has no column to split the books by. They
-    would need a per-book snapshot row to honour this flag.
+    would need a per-book snapshot row to honour this flag. The response says
+    so in `snapshot_scope`, so a caller cannot show the bot's P&L beside the
+    whole account's drawdown under one heading without knowing it.
     """
     mode = mode or get_broker().mode
 
@@ -304,36 +346,78 @@ def performance_stats(
         .scalars()
         .all()
     )
-    if len(snapshots) > 1:
-        values = np.array([s.total_value for s in snapshots], dtype=float)
+    values, excluded = _clean_equity_curve(snapshots)
+    # Said out loud so a reader can tell "the account never fell" from "we
+    # threw away the day it did".
+    stats["snapshots_excluded"] = excluded
+    # Snapshots store one total per mode, so these cannot honour bot_book_only.
+    stats["snapshot_scope"] = "account"
+
+    if len(values) > 1:
         daily_returns = np.diff(values) / values[:-1]
-        stats["max_drawdown_pct"] = float(max(s.drawdown_pct for s in snapshots))
-        stats["current_drawdown_pct"] = float(snapshots[-1].drawdown_pct)
+        # The running-peak drawdown services/backtest.py computes, so a live
+        # figure and a replay figure are the same measurement. Taken from the
+        # curve rather than PortfolioSnapshot.drawdown_pct: one row written
+        # with a wrong peak_value used to set the headline drawdown forever,
+        # long after the account had recovered.
+        running_peak = np.maximum.accumulate(values)
+        drawdowns = np.divide(
+            running_peak - values, running_peak, out=np.zeros_like(values), where=running_peak != 0
+        )
+        stats["max_drawdown_pct"] = float(drawdowns.max())
+        stats["current_drawdown_pct"] = float(drawdowns[-1])
         stats["day_pnl"] = float(snapshots[-1].day_pnl)
         stats["day_pnl_pct"] = (
             float(snapshots[-1].day_pnl / snapshots[-2].total_value)
-            if snapshots[-2].total_value
+            if len(snapshots) > 1 and snapshots[-2].total_value
             else 0.0
         )
 
-        std = daily_returns.std()
-        # Annualised Sharpe, risk-free rate assumed zero. Over a six-month paper
-        # run this is indicative only — the sample is too short to be a
-        # statistically sound estimate.
-        stats["sharpe_ratio"] = (
-            float(daily_returns.mean() / std * np.sqrt(TRADING_DAYS_PER_YEAR)) if std else 0.0
+        # Annualised, risk-free rate assumed zero - the convention
+        # services/backtest.py uses, so the two are comparable. None rather
+        # than 0.0 below the minimum sample: 0.0 reads as "measured, and
+        # flat", which is the one thing too little data cannot mean.
+        sharpe: float | None = None
+        sortino: float | None = None
+        enough = len(values) >= MIN_SNAPSHOTS_FOR_RATIOS
+        if enough:
+            std = daily_returns.std()
+            if std:
+                sharpe = float(daily_returns.mean() / std * np.sqrt(TRADING_DAYS_PER_YEAR))
+            downside = daily_returns[daily_returns < 0]
+            if len(downside) and downside.std():
+                sortino = float(
+                    daily_returns.mean() / downside.std() * np.sqrt(TRADING_DAYS_PER_YEAR)
+                )
+
+        if not enough:
+            note = (
+                f"{len(values)} daily snapshots so far; {MIN_SNAPSHOTS_FOR_RATIOS} needed "
+                "before an annualised ratio means anything"
+            )
+        elif sharpe is None:
+            note = "Every day in the sample moved identically, so a ratio is undefined"
+        elif abs(sharpe) > IMPLAUSIBLE_RATIO:
+            note = (
+                f"Sharpe of {sharpe:.2f} is a short-sample artefact, not an edge - "
+                "treat it as unmeasured"
+            )
+        else:
+            note = None
+
+        stats["sharpe_ratio"] = sharpe
+        stats["sortino_ratio"] = sortino
+        stats["ratios_reliable"] = bool(
+            enough and sharpe is not None and abs(sharpe) <= IMPLAUSIBLE_RATIO
         )
-        downside = daily_returns[daily_returns < 0]
-        stats["sortino_ratio"] = (
-            float(daily_returns.mean() / downside.std() * np.sqrt(TRADING_DAYS_PER_YEAR))
-            if len(downside) and downside.std()
-            else 0.0
-        )
+        stats["ratios_note"] = note
     else:
         stats |= {
             "max_drawdown_pct": 0.0, "current_drawdown_pct": 0.0,
             "day_pnl": 0.0, "day_pnl_pct": 0.0,
-            "sharpe_ratio": 0.0, "sortino_ratio": 0.0,
+            "sharpe_ratio": None, "sortino_ratio": None,
+            "ratios_reliable": False,
+            "ratios_note": "No equity curve yet - the account has not been snapshotted twice",
         }
 
     stats["top_movers"] = sorted(

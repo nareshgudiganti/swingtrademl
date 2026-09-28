@@ -360,7 +360,12 @@ def train_model(
         training_symbols=sorted(dataset["symbol"].unique().tolist()),
         train_start=pd.Timestamp(train_df["ts"].min()).to_pydatetime(),
         train_end=pd.Timestamp(train_df["ts"].max()).to_pydatetime(),
-        n_samples=len(dataset),
+        # Rows the final model actually fitted on, not the pooled dataset
+        # before the chronological split - the two differ by the test
+        # fraction (20% by default), and train_start/train_end beside it
+        # already describe train_df, so len(dataset) made the row disagree
+        # with itself.
+        n_samples=len(train_df),
         prediction_horizon_days=horizon_days,
         target_return_pct=target_return,
         stop_return_pct=stop_return,

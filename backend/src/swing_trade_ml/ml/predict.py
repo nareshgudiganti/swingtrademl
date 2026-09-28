@@ -331,6 +331,9 @@ def evaluate_pending_signals(db: Session, interval: str = "day", now: datetime |
     §6. Unlike evaluate_pending_predictions, this checks candle high/low, not
     close — a stop or target order triggers intraday, and close-only scoring
     would misrepresent what a real order does.
+
+    The horizon is walked in trading bars, matching ml/features.py::build_label,
+    so the live ledger and the training label measure the same window.
     """
     now = now or datetime.now(UTC)
     scored = 0
@@ -347,23 +350,35 @@ def evaluate_pending_signals(db: Session, interval: str = "day", now: datetime |
     )
 
     for sig in pending:
-        horizon_end = sig.generated_at + timedelta(days=sig.horizon_days)
-
-        candles = list(
+        # The horizon is counted in TRADING BARS, not calendar days, because
+        # that is the unit ml/features.py::build_label walks when it makes the
+        # label the model is trained on. Fifteen bars is about twenty-one
+        # calendar days; scoring on calendar days judged every signal on
+        # roughly two-thirds of its promised window, and the error only ever
+        # cut winners short - a trade still climbing toward its target was
+        # written off as EXPIRED_NO_HIT. That bias fell hardest on the
+        # advisory shadow strategies, whose resolved signals are the whole
+        # evidence base for promoting a model.
+        #
+        # Waiting for `horizon_days` real bars also replaces the old
+        # "horizon_end + 2 days" grace period: a market that has not traded
+        # cannot expire a signal, however many days have passed.
+        bars = list(
             db.execute(
                 select(Candle)
                 .where(
                     Candle.instrument_id == sig.instrument_id,
                     Candle.interval == interval,
                     Candle.ts > sig.generated_at,
-                    Candle.ts <= min(now, horizon_end),
+                    Candle.ts <= now,
                 )
                 .order_by(Candle.ts.asc())
+                .limit(sig.horizon_days)
             ).scalars().all()
         )
 
         hit = False
-        for candle in candles:
+        for candle in bars:
             stop_touched = candle.low <= sig.stop_loss
             target_touched = candle.high >= sig.take_profit
             if stop_touched:
@@ -383,18 +398,16 @@ def evaluate_pending_signals(db: Session, interval: str = "day", now: datetime |
             scored += 1
             continue
 
-        if now < horizon_end + timedelta(days=2):
-            continue  # horizon hasn't elapsed yet — stays open
+        if len(bars) < sig.horizon_days:
+            continue  # the horizon has not traded out yet — stays open
 
-        actual_return = forward_return_at_horizon(
-            db, sig.instrument_id, sig.generated_at, sig.price, sig.horizon_days, interval, now,
-        )
-        if actual_return is None:
-            continue  # no candle data past the horizon yet — stays open
-
+        # Expired at the horizon bar's close, measured on the bar that
+        # actually ended the window rather than on a calendar date that may
+        # have been a weekend or a holiday.
+        final = bars[-1]
         sig.outcome = "EXPIRED_NO_HIT"
-        sig.outcome_pct = actual_return
-        sig.outcome_at = horizon_end
+        sig.outcome_pct = float(final.close) / sig.price - 1
+        sig.outcome_at = final.ts
         scored += 1
 
     if scored:

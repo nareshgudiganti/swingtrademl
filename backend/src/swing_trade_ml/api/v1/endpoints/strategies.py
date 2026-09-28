@@ -24,6 +24,7 @@ from swing_trade_ml.schemas import (
     StrategyTypeInfo,
     StrategyUpdate,
 )
+from swing_trade_ml.ml.calibration import signal_evidence
 from swing_trade_ml.services import engine
 from swing_trade_ml.services import portfolio as portfolio_service
 from swing_trade_ml.strategies import STRATEGY_REGISTRY
@@ -92,6 +93,11 @@ def strategy_performance(db: DbSession) -> dict[str, Any]:
                     "last_90d": portfolio_service.strategy_performance_stats(db, strategy.id, since=since_90d),
                     "all_time": portfolio_service.strategy_performance_stats(db, strategy.id),
                 },
+                # Advisory strategies never place an order, so every window
+                # above is empty for them however long they have run. Their
+                # scored signals are the only evidence they produce, and the
+                # promotion decision rests on it.
+                "signal_evidence": signal_evidence(db, strategy_id=strategy.id, mode=strategy.mode),
             }
         )
 

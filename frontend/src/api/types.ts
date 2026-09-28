@@ -57,6 +57,10 @@ export interface ScheduledJob {
 
 export interface PortfolioSummary {
   mode: TradingMode
+  // The date these figures are measured from (the current paper trial), or
+  // null when they really are all-time. Everything below is scoped to it, so
+  // the UI has to say so rather than implying a lifetime record.
+  measured_since: string | null
   starting_capital: number
   total_value: number
   cash: number

@@ -66,14 +66,25 @@ def _scope_to_book(stmt: Select[Any], strategy_id_col: Any, book: BookFilter) ->
 
 
 @router.get("/summary", response_model=dict)
-def summary(db: DbSession, mode: str | None = None, book: BookFilter = "all") -> dict[str, Any]:
+def summary(
+    db: DbSession,
+    mode: str | None = None,
+    book: BookFilter = "all",
+    all_time: bool = False,
+) -> dict[str, Any]:
     """Headline performance figures — the dashboard's main panel.
 
     Pass `mode=paper` explicitly to review the paper track record after
     switching to live, and `book=bot` to leave the hand-bought My Holdings
     rows out so the figures describe the bot's own book alone.
+
+    Paper figures cover the current trial by default; `all_time=true` returns
+    the full record including trials that predate the running code. The reply
+    names the boundary in `measured_since` either way.
     """
-    return portfolio_service.performance_stats(db, mode, bot_book_only=book == "bot")
+    return portfolio_service.performance_stats(
+        db, mode, bot_book_only=book == "bot", all_time=all_time
+    )
 
 
 @router.get("/positions", response_model=list[PositionOut])
@@ -676,12 +687,18 @@ def list_trades(
     wins_only: bool | None = None,
     limit: int = Query(100, le=1000),
     book: BookFilter = "all",
+    all_time: bool = False,
 ) -> list[dict[str, Any]]:
     """Closed trades in the current mode. `book` splits the bot's own record
     from the My Holdings one exactly as /positions/detailed does — without
     it, a live bot's trade list would also contain every sale recorded by
-    hand against a real Zerodha holding."""
+    hand against a real Zerodha holding.
+
+    Scoped to the current paper trial by default, so the list agrees with the
+    counts /summary reports rather than showing trades those counts exclude.
+    `all_time=true` returns every trade ever closed."""
     mode = TradingMode.LIVE if book == "real" else get_broker().mode
+    since = None if all_time else portfolio_service.trial_start(mode)
     stmt = (
         select(Trade, Position, Strategy)
         .outerjoin(Position, Position.id == Trade.position_id)
@@ -690,6 +707,8 @@ def list_trades(
         .order_by(Trade.exit_at.desc())
         .limit(limit)
     )
+    if since is not None:
+        stmt = stmt.where(Trade.exit_at >= since)
     stmt = _scope_to_book(stmt, Trade.strategy_id, book)
     if wins_only is not None:
         stmt = stmt.where(Trade.is_win.is_(wins_only))
@@ -735,9 +754,14 @@ def list_trades(
 
 @router.get("/equity-curve", response_model=list[EquityPoint])
 def equity_curve(
-    db: DbSession, days: int = Query(180, le=1825), mode: str | None = None
+    db: DbSession,
+    days: int = Query(180, le=1825), mode: str | None = None,
+    all_time: bool = False,
 ) -> list[dict[str, Any]]:
-    return portfolio_service.equity_curve(db, mode, days)
+    """The equity chart, trimmed to the current paper trial by default so it
+    starts where the reported return does. `all_time=true` shows the account's
+    whole history."""
+    return portfolio_service.equity_curve(db, mode, days, all_time=all_time)
 
 
 @router.post("/snapshot", response_model=MessageResponse)

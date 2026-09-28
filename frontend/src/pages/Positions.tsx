@@ -331,6 +331,14 @@ export default function Positions() {
               ? 'Real money. The bot is buying and selling in your Zerodha account, and everything below is what it actually owns right now.'
               : 'Practice money. Nothing below is real — the bot is testing itself with pretend cash, and your Zerodha account is untouched.'}{' '}
             Shares you bought yourself are under <strong>My Holdings</strong>, not here.
+            {money?.measured_since && (
+              <>
+                {' '}
+                These figures cover the test run that started{' '}
+                {formatDate(money.measured_since)} — earlier trades were made by an
+                older version of the bot and would not tell you how it works today.
+              </>
+            )}
           </div>
         </div>
         <span className={`badge ${isLive ? 'badge-live' : 'badge-paper'}`}>
@@ -343,7 +351,11 @@ export default function Positions() {
           <Stat
             label={isLive ? 'Account value' : 'Practice account value'}
             value={formatCurrency(money.total_value)}
-            sub={`Started with ${formatCurrency(money.starting_capital)}`}
+            sub={
+              money.measured_since
+                ? `Started with ${formatCurrency(money.starting_capital)} on ${formatDate(money.measured_since)}`
+                : `Started with ${formatCurrency(money.starting_capital)}`
+            }
             tone={pnlClass(money.total_value - money.starting_capital) as 'pos' | 'neg' | 'flat'}
           />
           <Stat

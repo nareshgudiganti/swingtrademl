@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, time, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import numpy as np
 from sqlalchemy import func, or_, select
@@ -19,6 +20,11 @@ from swing_trade_ml.db.models.trading import PortfolioSnapshot, Position, Strate
 log = get_logger(__name__)
 
 TRADING_DAYS_PER_YEAR = 252
+
+# Trial boundaries are dates on the Indian trading calendar, so "from the 28th"
+# has to mean midnight IST, not midnight UTC — the latter would pull in the
+# final 5.5 hours of the 27th.
+IST = ZoneInfo("Asia/Kolkata")
 
 # The advisory strategy that hand-bought Zerodha shares are tracked under —
 # the "My Holdings" book. It is always stored as mode="live", so anything
@@ -215,8 +221,43 @@ def take_snapshot(db: Session, mode: str | None = None) -> PortfolioSnapshot:
     return snapshot
 
 
+def trial_start(mode: str) -> datetime | None:
+    """When the current clean paper trial opened, or None to measure all-time.
+
+    Paper figures exist to answer one question — is the bot working *now* —
+    and averaging in a run whose sizing, slot allocation and entry rules have
+    since been replaced answers a question nobody asked. Live figures are
+    never windowed: real money has no restarts.
+    """
+    if mode != TradingMode.PAPER or settings.PAPER_TRIAL_START_DATE is None:
+        return None
+    return datetime.combine(settings.PAPER_TRIAL_START_DATE, time.min, tzinfo=IST)
+
+
+def _opening_equity(db: Session, mode: str, since: datetime, fallback: float) -> float:
+    """What the account was worth when the trial opened — the last snapshot
+    before the boundary, so a windowed return measures the trial rather than
+    every rupee made or lost since the account was funded.
+
+    Falls back when the trial predates the equity curve (a fresh database, or
+    a boundary set before the first snapshot), where the account's original
+    funding IS its opening equity.
+    """
+    opening = db.execute(
+        select(PortfolioSnapshot.total_value)
+        .where(PortfolioSnapshot.mode == mode, PortfolioSnapshot.ts < since)
+        .order_by(PortfolioSnapshot.ts.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+    return float(opening) if opening is not None else fallback
+
+
 def performance_stats(
-    db: Session, mode: str | None = None, *, bot_book_only: bool = False
+    db: Session,
+    mode: str | None = None,
+    *,
+    bot_book_only: bool = False,
+    all_time: bool = False,
 ) -> dict[str, Any]:
     """Aggregate performance over all closed trades plus the equity curve.
 
@@ -232,13 +273,22 @@ def performance_stats(
     P&L, Sharpe/Sortino) stay account-wide either way, because a snapshot
     stores one total per mode and has no column to split the books by. They
     would need a per-book snapshot row to honour this flag.
+
+    Paper figures cover the current trial only (see trial_start) — closed
+    trades, drawdown and the risk ratios alike, so every number on the page
+    describes the same period. `all_time=True` restores the full record.
+    Open positions are never windowed: what the account holds right now is
+    the same fact whenever the trial began.
     """
     mode = mode or get_broker().mode
+    since = None if all_time else trial_start(mode)
 
     trades_stmt = select(Trade).where(Trade.mode == mode).order_by(Trade.exit_at)
     positions_stmt = select(Position).where(
         Position.mode == mode, Position.status == PositionStatus.OPEN
     )
+    if since is not None:
+        trades_stmt = trades_stmt.where(Trade.exit_at >= since)
     if bot_book_only:
         trades_stmt = trades_stmt.where(exclude_real_trading(Trade.strategy_id))
         positions_stmt = positions_stmt.where(exclude_real_trading(Position.strategy_id))
@@ -248,11 +298,16 @@ def performance_stats(
     open_positions = list(db.execute(positions_stmt).scalars().all())
 
     starting = settings.PAPER_STARTING_CAPITAL if mode == TradingMode.PAPER else total_value
+    if since is not None:
+        starting = _opening_equity(db, mode, since, starting)
     unrealized = sum(p.unrealized_pnl for p in open_positions)
     realized = sum(t.net_pnl for t in trades)
 
     stats: dict[str, Any] = {
         "mode": mode,
+        # Named so the UI can say WHICH period these figures cover instead of
+        # implying they are all-time. None means they genuinely are.
+        "measured_since": since.date().isoformat() if since else None,
         "starting_capital": starting,
         "total_value": total_value,
         "cash": cash,
@@ -295,15 +350,19 @@ def performance_stats(
             "total_charges": 0.0, "expectancy": 0.0,
         }
 
-    snapshots = list(
-        db.execute(
-            select(PortfolioSnapshot)
-            .where(PortfolioSnapshot.mode == mode)
-            .order_by(PortfolioSnapshot.ts)
-        )
-        .scalars()
-        .all()
+    snapshots_stmt = (
+        select(PortfolioSnapshot)
+        .where(PortfolioSnapshot.mode == mode)
+        .order_by(PortfolioSnapshot.ts)
     )
+    if since is not None:
+        # The trial's own equity curve: a drawdown or Sharpe measured across
+        # the boundary would describe the replaced system, not this one. Early
+        # in a trial this leaves too few points to compute them at all, which
+        # the `len(snapshots) > 1` branch below already reports as zeros —
+        # honest, where a carried-over number would not be.
+        snapshots_stmt = snapshots_stmt.where(PortfolioSnapshot.ts >= since)
+    snapshots = list(db.execute(snapshots_stmt).scalars().all())
     if len(snapshots) > 1:
         values = np.array([s.total_value for s in snapshots], dtype=float)
         daily_returns = np.diff(values) / values[:-1]
@@ -452,9 +511,20 @@ def recent_post_exit_watch(db: Session, mode: str, lookback_days: int = 21) -> l
     return rows
 
 
-def equity_curve(db: Session, mode: str | None = None, days: int = 180) -> list[dict[str, Any]]:
+def equity_curve(
+    db: Session, mode: str | None = None, days: int = 180, *, all_time: bool = False
+) -> list[dict[str, Any]]:
+    """The equity chart's points, newest `days` first.
+
+    Clipped to the current paper trial unless `all_time`, so the chart starts
+    where the reported return starts instead of showing a climb and fall that
+    belong to a replaced system.
+    """
     mode = mode or get_broker().mode
     since = datetime.now(UTC) - timedelta(days=days)
+    boundary = None if all_time else trial_start(mode)
+    if boundary is not None:
+        since = max(since, boundary)
     snapshots = list(
         db.execute(
             select(PortfolioSnapshot)

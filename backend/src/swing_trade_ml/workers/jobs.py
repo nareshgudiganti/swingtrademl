@@ -236,6 +236,38 @@ def job_reconcile_orders() -> None:
         _report_error("reconcile_orders", exc)
 
 
+def job_sync_real_holdings() -> None:
+    """Drop tracked My Holdings rows for shares no longer in the Zerodha
+    account, so the app stops alerting about stock that was sold by hand."""
+    try:
+        from swing_trade_ml.brokers.kite import kite_broker
+        from swing_trade_ml.services.holdings_sync import (
+            close_positions_no_longer_held,
+            held_symbols,
+        )
+        from swing_trade_ml.services.portfolio import REAL_TRADING_STRATEGY_NAME
+
+        with session_scope() as db:
+            if not kite_broker.load_session(db):
+                return
+            strategy = db.execute(
+                select(Strategy).where(Strategy.name == REAL_TRADING_STRATEGY_NAME)
+            ).scalar_one_or_none()
+            if strategy is None:
+                return
+            holdings = kite_broker.get_holdings(db)
+            if not holdings:
+                # A genuinely empty account and a failed call look identical
+                # here, and closing the whole book on the second is not a
+                # mistake worth risking.
+                log.info("job.sync_real_holdings.skipped_empty")
+                return
+            closed = close_positions_no_longer_held(db, strategy, held_symbols(holdings))
+            log.info("job.sync_real_holdings.done", closed=len(closed))
+    except Exception as exc:  # noqa: BLE001
+        _report_error("sync_real_holdings", exc)
+
+
 def job_capture_fills() -> None:
     """Save today's real Zerodha trades. Kite forgets them after the day, and
     the buy/sell report has nothing else to read history from."""

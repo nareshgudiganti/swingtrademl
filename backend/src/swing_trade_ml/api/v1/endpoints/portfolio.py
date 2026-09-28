@@ -34,6 +34,12 @@ from swing_trade_ml.services.execution import (
     position_action,
 )
 from swing_trade_ml.services.exit_policy import exit_confidence_for
+from swing_trade_ml.services.holdings_sync import (
+    close_positions_no_longer_held,
+)
+from swing_trade_ml.services.holdings_sync import (
+    held_symbols as _held_symbols,
+)
 from swing_trade_ml.services.portfolio import REAL_TRADING_STRATEGY_NAME
 from swing_trade_ml.strategies.tier import cap_tier
 
@@ -432,6 +438,13 @@ def import_real_holdings(db: DbSession, strategy_id: int | None = None) -> list[
 
     kite_holdings = _load_kite_holdings(db)
 
+    results: list[dict[str, Any]] = []
+
+    # Close what is no longer owned before adding anything — importing used to
+    # only ever add, so a stock sold by hand stayed OPEN here forever and kept
+    # alerting. See services/holdings_sync.py.
+    results.extend(close_positions_no_longer_held(db, strategy, _held_symbols(kite_holdings)))
+
     already_tracked = {
         p.instrument_id
         for p in db.execute(
@@ -440,8 +453,6 @@ def import_real_holdings(db: DbSession, strategy_id: int | None = None) -> list[
             )
         ).scalars()
     }
-
-    results: list[dict[str, Any]] = []
     for h in kite_holdings:
         held_quantity = _held_quantity(h)
         if held_quantity == 0:

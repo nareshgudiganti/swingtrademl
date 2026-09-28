@@ -29,11 +29,97 @@ function horizonTagFor(row: TrackRecordSignal): 'Swing' | 'Long-term' {
   return row.strategy_name.toLowerCase().includes('long_term') ? 'Long-term' : 'Swing'
 }
 
+/** Cap tier and status sort by a meaningful order — biggest company first,
+ * still-open signals first — rather than alphabetically, which would read as
+ * arbitrary. */
+const CAP_RANK: Record<string, number> = { large: 3, midcap: 2, smallcap: 1 }
+const STATUS_RANK: Record<string, number> = { TARGET_HIT: 3, STOP_LOSS_HIT: 2, EXPIRED_NO_HIT: 1 }
+
+type SortKey =
+  | 'symbol'
+  | 'cap_tier'
+  | 'horizon'
+  | 'generated_at'
+  | 'price'
+  | 'stop_loss'
+  | 'take_profit'
+  | 'current_price'
+  | 'confidence'
+  | 'status'
+  | 'result'
+type SortDir = 'asc' | 'desc'
+
+function sortValue(row: TrackRecordSignal, key: SortKey): string | number | null {
+  switch (key) {
+    case 'cap_tier':
+      return CAP_RANK[row.cap_tier] ?? 0
+    case 'horizon':
+      return horizonTagFor(row)
+    case 'generated_at':
+      return Date.parse(row.generated_at)
+    case 'status':
+      // A signal with no outcome yet is still open; rank those above closed ones.
+      return row.outcome ? (STATUS_RANK[row.outcome] ?? 0) : 4
+    case 'result':
+      return resultPctFor(row)
+    default:
+      return row[key]
+  }
+}
+
+const COLUMNS: { key: SortKey; label: string; title?: string }[] = [
+  { key: 'symbol', label: 'Stock' },
+  { key: 'cap_tier', label: 'Cap tier' },
+  { key: 'horizon', label: 'Horizon' },
+  { key: 'generated_at', label: 'Called on' },
+  { key: 'price', label: 'Entry' },
+  { key: 'stop_loss', label: 'Stop' },
+  { key: 'take_profit', label: 'Target' },
+  { key: 'current_price', label: 'Current' },
+  {
+    key: 'confidence',
+    label: 'Confidence',
+    title:
+      'How sure the model was when it made this call, 0-100%. Higher is not a guarantee — it ranks this call against the others.',
+  },
+  { key: 'status', label: 'Status' },
+  { key: 'result', label: 'Result' },
+]
+
 export default function ScanResults() {
   const [selected, setSelected] = useState<TrackRecordSignal | null>(null)
+  const [sortKey, setSortKey] = useState<SortKey | null>(null)
+  const [sortDir, setSortDir] = useState<SortDir>('desc')
   const scanResults = useQuery({ queryKey: ['scanResults'], queryFn: api.scanResults })
 
   const rows = useMemo(() => scanResults.data ?? [], [scanResults.data])
+
+  const sorted = useMemo(() => {
+    if (!sortKey) return rows
+    const data = [...rows]
+    data.sort((a, b) => {
+      const av = sortValue(a, sortKey)
+      const bv = sortValue(b, sortKey)
+      if (av == null && bv == null) return 0
+      if (av == null) return 1
+      if (bv == null) return -1
+      const flip = sortDir === 'asc' ? 1 : -1
+      if (typeof av === 'string' || typeof bv === 'string') {
+        return String(av).localeCompare(String(bv)) * flip
+      }
+      return (av - bv) * flip
+    })
+    return data
+  }, [rows, sortKey, sortDir])
+
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setSortKey(key)
+      setSortDir('desc')
+    }
+  }
 
   return (
     <>
@@ -52,20 +138,26 @@ export default function ScanResults() {
           <table>
             <thead>
               <tr>
-                <th>Stock</th>
-                <th>Cap tier</th>
-                <th>Horizon</th>
-                <th>Called on</th>
-                <th>Entry</th>
-                <th>Stop</th>
-                <th>Target</th>
-                <th>Current</th>
-                <th>Status</th>
-                <th>Result</th>
+                {COLUMNS.map((col) => (
+                  <th
+                    key={col.key}
+                    className="sortable"
+                    title={col.title ?? `Click to sort by ${col.label.toLowerCase()}.`}
+                    onClick={() => toggleSort(col.key)}
+                    aria-sort={
+                      sortKey === col.key ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
+                    }
+                  >
+                    {col.label}
+                    <span className="sort-arrow">
+                      {sortKey === col.key ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}
+                    </span>
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => {
+              {sorted.map((row) => {
                 const status = statusFor(row)
                 const resultPct = resultPctFor(row)
                 const horizonTag = horizonTagFor(row)
@@ -85,6 +177,7 @@ export default function ScanResults() {
                     <td>{formatCurrency(row.stop_loss)}</td>
                     <td>{formatCurrency(row.take_profit)}</td>
                     <td>{row.current_price != null ? formatCurrency(row.current_price) : '—'}</td>
+                    <td>{row.confidence != null ? `${(row.confidence * 100).toFixed(0)}%` : '—'}</td>
                     <td>
                       {status.icon} {status.label}
                     </td>

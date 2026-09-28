@@ -6,6 +6,7 @@ import type { DetailedPosition } from '../api/types'
 import Stat from '../components/Stat'
 import { ErrorBox, Loading } from '../components/Loading'
 import StockDetailModal, { type StockDetail } from '../components/StockDetailModal'
+import PositionAttentionCard, { detailForPosition } from '../components/PositionAttentionCard'
 import { PositionsTable } from './Positions'
 import RealReport from './RealReport'
 import { formatCurrency, formatSignedPercent, pnlClass } from '../lib/format'
@@ -229,13 +230,24 @@ export default function Holdings() {
       )}
 
       {/* The rows the model wants you to look at, lifted out of the table so
-          they are not something you have to scan a column to find. */}
+          they are not something you have to scan a column to find — one full
+          card each rather than a list of tickers, since naming the stocks
+          without the price, the stop and the money at stake left nine things
+          to open one at a time before any of it could be acted on. */}
       {attention.length > 0 && (
-        <div className="banner banner-warn">
-          <strong>{attention.map((p) => p.symbol).join(', ')}</strong>
-          {attention.length === 1 ? ' has ' : ' have '}
-          an exit or alert signal — open the stock for the full read.
-        </div>
+        <section style={{ marginBottom: '1.25rem' }}>
+          <h2 className="section-title" style={{ marginBottom: '0.6rem' }}>
+            Needs your attention ({attention.length})
+          </h2>
+          {attention.map((p) => (
+            <PositionAttentionCard
+              key={p.id}
+              position={p}
+              book="yours"
+              onOpen={() => setDetail(detailForPosition(p))}
+            />
+          ))}
+        </section>
       )}
 
       {tracked.isLoading ? (

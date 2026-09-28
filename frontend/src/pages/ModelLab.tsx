@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { api } from '../api/client'
 import { Empty, ErrorBox, Loading } from '../components/Loading'
 import { formatDate, formatPercent } from '../lib/format'
+import { modelLabel } from '../lib/tiers'
 
 type Source = 'signals' | 'predictions'
 
@@ -28,12 +29,18 @@ export default function ModelLab() {
   const d = report.data
   const buckets = d?.buckets ?? []
 
-  // Walk-forward lives on the model row, not the calibration report. Show the
-  // active model's folds — an archived one describes a model nothing trades.
-  const active = (models.data ?? []).find(
-    (m) => m.status === 'ACTIVE' && (m.metrics?.walk_forward?.length ?? 0) > 0,
+  // Walk-forward lives on the model row, not the calibration report, and three
+  // models run at once — one per cap tier. Picking whichever the search hit
+  // first showed an unlabelled table the reader could not attribute to
+  // anything, so every live model that has folds gets its own titled card and
+  // the ones that have none are named rather than silently dropped.
+  const activeModels = (models.data ?? []).filter((m) => m.status === 'ACTIVE')
+  const tested = activeModels
+    .map((m) => ({ model: m, folds: (m.metrics?.walk_forward ?? []).filter((f) => !f.skipped) }))
+    .filter((t) => t.folds.length > 0)
+  const untested = activeModels.filter(
+    (m) => (m.metrics?.walk_forward ?? []).filter((f) => !f.skipped).length === 0,
   )
-  const folds = (active?.metrics?.walk_forward ?? []).filter((f) => !f.skipped)
 
   return (
     <>
@@ -82,18 +89,27 @@ export default function ModelLab() {
               </div>
               <div className="stat-sub">Lower is better. 0.25 is a coin flip.</div>
             </div>
+            {/* signal_calibration leaves label_kind unset — a signal is graded
+                against its own barrier, not against a model's label — so this
+                tile read as a bare dash on the tab that actually has data. */}
             <div className="card">
-              <div className="stat-label">Trained on</div>
+              <div className="stat-label">{source === 'signals' ? 'Graded on' : 'Trained on'}</div>
               <div className="stat-value" style={{ fontSize: '1.1rem' }}>
-                {d.label_kind ?? '—'}
+                {source === 'signals' ? 'Target before stop' : (d.label_kind ?? '—')}
               </div>
-              <div className="stat-sub">The question the model was asked</div>
+              <div className="stat-sub">
+                {source === 'signals'
+                  ? 'Running out of time counts as a loss, not a draw'
+                  : 'The question the model was asked'}
+              </div>
             </div>
           </div>
 
-          {folds.length > 0 && (
-            <div className="card" style={{ marginBottom: '1.25rem' }}>
-              <h2>Tested across {folds.length} separate time periods</h2>
+          {tested.map(({ model, folds }) => (
+            <div key={model.id} className="card" style={{ marginBottom: '1.25rem' }}>
+              <h2>
+                {modelLabel(model.name)}: tested across {folds.length} separate time periods
+              </h2>
               <p className="stat-sub" style={{ marginTop: '0.3rem' }}>
                 {/* A single train/test split can be flattered indefinitely by one
                     lucky window. Successive windows are the check on that. */}
@@ -145,10 +161,39 @@ export default function ModelLab() {
                 </div>
               )}
             </div>
+          ))}
+
+          {untested.length > 0 && (
+            <div className="card" style={{ marginBottom: '1.25rem' }}>
+              <h2>Never tested across separate time periods</h2>
+              <p className="stat-sub" style={{ marginTop: '0.3rem' }}>
+                {untested.map((m) => modelLabel(m.name)).join(', ')} —{' '}
+                {untested.length === 1 ? 'this model was' : 'these models were'} checked on a
+                single slice of history and nothing else. That is the weakest evidence a model can
+                have: one lucky stretch can flatter it indefinitely and there is no second window
+                to catch it. Retraining is what fills this in.
+              </p>
+            </div>
           )}
 
-          {buckets.length === 0 && (
+          {buckets.length === 0 && source === 'signals' && (
             <Empty label="Nothing has been scored yet — calibration needs closed trades to judge." />
+          )}
+
+          {/* The predictions report filters on label_kind='barrier' (see
+              ml/calibration.py::prediction_calibration), so while every model on
+              the system is still an endpoint-era one this tab is empty by
+              construction. An unexplained Empty read as a broken page. */}
+          {buckets.length === 0 && source === 'predictions' && (
+            <div className="card">
+              <h2>Nothing to show here yet</h2>
+              <p className="stat-sub" style={{ marginTop: '0.3rem' }}>
+                This tab only counts models trained on the trade the system actually takes — up 8%
+                before down 4%, within 15 trading days. No model has been trained on that question
+                and scored yet, so there is nothing to grade. The Signals tab is the one with data
+                in it.
+              </p>
+            </div>
           )}
 
           {buckets.length > 0 && (
@@ -204,6 +249,15 @@ export default function ModelLab() {
               <div className="note" style={{ marginTop: '1rem' }}>
                 &ldquo;Off by&rdquo; is what it claimed minus what happened. Negative means it
                 promised more than it delivered — the direction that costs money.
+              </div>
+              {/* signal_calibration filters on mode only, so all three cap-tier
+                  models plus the benchmark land in the same buckets. Separating
+                  the record per model is version-tracking work; until then the
+                  page must not imply these rows describe one model. */}
+              <div className="note" style={{ marginTop: '0.6rem' }}>
+                Every paper strategy&rsquo;s calls are counted together here — large cap, mid cap,
+                small cap and the benchmark share these rows. One model with a long record can
+                therefore speak for all of them.
               </div>
             </div>
           )}

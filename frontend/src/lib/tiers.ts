@@ -50,3 +50,10 @@ const OTHER_STRATEGY_LABELS: Record<string, string> = {
 export function strategyLabel(strategyName: string): string {
   return tierFor(strategyName)?.label ?? OTHER_STRATEGY_LABELS[strategyName] ?? strategyName
 }
+
+// Model rows carry the trained artifact's name (`swing_classifier_midcap`),
+// not the strategy's. Model Lab shows several models side by side, so each
+// needs the same plain-English tier name the rest of the app uses.
+export function modelLabel(modelName: string): string {
+  return TIERS.find((t) => t.modelName === modelName)?.label ?? modelName
+}

@@ -814,6 +814,13 @@ tr.sig-detail-row td {
   gap: 0.35rem 0.8rem;
 }
 
+/* The attention card's fact grid. A narrower track than .tech-grid so a phone
+   gets two columns instead of one: at 390px the 140px track missed a second
+   column by about a pixel, which stacked nine fields into a very tall card. */
+.attention-grid {
+  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+}
+
 .tech-field {
   display: flex;
   flex-direction: column;

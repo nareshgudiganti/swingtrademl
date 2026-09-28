@@ -100,3 +100,24 @@ class TradingRestriction(Base, TimestampMixin):
     kind: Mapped[str] = mapped_column(String(8))  # ASM | GSM
     stage: Mapped[str] = mapped_column(String(64), default="")
     as_of: Mapped[date] = mapped_column(Date, index=True)
+
+
+class IndexMembershipSnapshot(Base, TimestampMixin):
+    """Which NSE index each symbol belonged to on the day we fetched it.
+
+    NSE publishes current membership only — there is no historical archive.
+    Dating every fetch is what makes membership point-in-time safe from the
+    day we start recording; anything earlier carries survivorship bias.
+    """
+
+    __tablename__ = "index_membership_snapshots"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    fetched_on: Mapped[date] = mapped_column(Date, index=True)
+    symbol: Mapped[str] = mapped_column(String(64), index=True)
+    tier: Mapped[str] = mapped_column(String(16))
+    industry: Mapped[str] = mapped_column(String(64), default="")
+
+    __table_args__ = (
+        UniqueConstraint("fetched_on", "symbol", name="uq_index_membership_day_symbol"),
+    )

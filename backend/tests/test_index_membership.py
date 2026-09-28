@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+from datetime import date
+
 import pytest
 
+from swing_trade_ml.db.models.feeds import IndexMembershipSnapshot
+from swing_trade_ml.db.models.market import Instrument
 from swing_trade_ml.services.market_feeds import INDEX_LISTS, parse_index_list
 
 SAMPLE = (
@@ -51,3 +55,29 @@ def test_symbol_is_uppercased_and_stripped():
         b"Spaced Ltd.,Power, good ,EQ,INE000A01002\r\n"
     )
     assert parse_index_list(content, "midcap")[0]["symbol"] == "GOOD"
+
+
+def test_instrument_carries_tier_and_sector(db_session):
+    inst = Instrument(
+        instrument_token=99001, tradingsymbol="TIERTEST", exchange="NSE",
+        cap_tier="midcap", sector="Power",
+    )
+    db_session.add(inst)
+    db_session.flush()
+    assert inst.cap_tier == "midcap"
+    assert inst.sector == "Power"
+
+
+def test_snapshot_is_unique_per_day_and_symbol(db_session):
+    from sqlalchemy.exc import IntegrityError
+
+    day = date(2026, 9, 25)
+    db_session.add(
+        IndexMembershipSnapshot(fetched_on=day, symbol="ABB", tier="large", industry="Capital Goods")
+    )
+    db_session.flush()
+    db_session.add(
+        IndexMembershipSnapshot(fetched_on=day, symbol="ABB", tier="midcap", industry="Capital Goods")
+    )
+    with pytest.raises(IntegrityError):
+        db_session.flush()

@@ -48,6 +48,17 @@ class Instrument(Base, TimestampMixin):
     is_watchlisted: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
+    # Real market-cap tier, from NSE index membership (services/market_feeds.py
+    # INDEX_LISTS) — large / midcap / smallcap / unknown. Replaces the old
+    # proxy in strategies/tier.py, which read a suffix off a strategy's model
+    # name and so labelled every stock a strategy touched with that strategy's
+    # tier. None until the first membership load runs.
+    cap_tier: Mapped[str | None] = mapped_column(String(16), index=True)
+    # The stock's own sector, from the same lists' Industry column. Distinct
+    # from ml/sector_map.py, which maps a stock to a sector *index* for
+    # relative-strength features.
+    sector: Mapped[str | None] = mapped_column(String(64))
+
     candles: Mapped[list[Candle]] = relationship(back_populates="instrument")
 
     __table_args__ = (

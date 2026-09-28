@@ -55,3 +55,6 @@ logs/
 
 # --- Design canvas working files (artboard sources + a ~3MB seeded payload) ---
 .design-src/
+
+# Claude Code personal settings (deploy permissions) — never commit to a public repo
+.claude/settings.local.json

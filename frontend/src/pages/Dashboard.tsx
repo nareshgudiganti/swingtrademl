@@ -3,10 +3,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 
 import { api } from '../api/client'
-import type { BuyListRow, DetailedPosition, StrategySignal } from '../api/types'
+import type { BuyListRow, StrategySignal } from '../api/types'
 import { Empty, ErrorBox, Loading } from '../components/Loading'
 import Modal from '../components/Modal'
 import StockDetailModal, { type StockDetail } from '../components/StockDetailModal'
+import PositionAttentionCard, { detailForPosition } from '../components/PositionAttentionCard'
 import { CheckCircleIcon, ChevronRightIcon, CircleXIcon } from '../components/icons'
 import { TIERS, tierFor } from '../lib/tiers'
 import {
@@ -21,20 +22,6 @@ import {
 const EXIT_KIND: Record<string, { Icon: typeof CheckCircleIcon; tone: 'pos' | 'neg'; label: string }> = {
   STOP_LOSS_HIT: { Icon: CircleXIcon, tone: 'neg', label: 'stop-loss triggered' },
   TARGET_HIT: { Icon: CheckCircleIcon, tone: 'pos', label: 'hit its profit target' },
-}
-
-// One short, plain-English line per card — the model's own action_label is
-// often a dense technical sentence ("Losing conviction (45% today) — alert
-// already sent (original 5-day call has passed, day 6)"), which is exactly
-// the kind of jargon this page exists to hide. That full text still shows up
-// in the detail popup on tap; the card face only needs the headline.
-const SHORT_REASON: Record<DetailedPosition['action_code'], string> = {
-  exit: 'The bot wants to sell this one.',
-  alert: 'An alert has already been sent about this one.',
-  weak: 'Losing steam, but not a sell signal yet.',
-  dip: 'Confidence has dipped since you bought it.',
-  hold: 'Steady — no change.',
-  bullish: 'Still bullish.',
 }
 
 // Mirrors the strategy's own thresholds (ml_swing.py default_params) — base
@@ -393,15 +380,31 @@ export default function Dashboard() {
 
       {tab === 'attention' && (
         <>
+          {/* Your own shares first: the bot cannot act on these, so they are
+              the ones that need a decision from you rather than from it. */}
           {realNeedingAction.length > 0 && (
-            <div className="banner banner-warn" style={{ marginBottom: '1rem' }}>
-              <strong>{realNeedingAction.map((p) => p.symbol).join(', ')}</strong>
-              {realNeedingAction.length === 1 ? ' has ' : ' have '}
-              reached their sell level. {realNeedingAction.length === 1 ? 'It is' : 'They are'} yours,
-              bought by hand, so the bot can only tell you — it will not sell{' '}
-              {realNeedingAction.length === 1 ? 'it' : 'them'} for you.{' '}
-              <Link to="/holdings">Open My Holdings</Link>
-            </div>
+            <section style={{ marginBottom: '1.5rem' }}>
+              <h2 className="section-title" style={{ marginBottom: '0.15rem' }}>
+                Your shares — {realNeedingAction.length} need a decision
+              </h2>
+              <p className="muted" style={{ fontSize: '0.82rem', margin: '0 0 0.6rem' }}>
+                Bought by hand in Zerodha, so the bot can only flag them — it will not sell them
+                for you. <Link to="/holdings">Open My Holdings</Link>
+              </p>
+              {realNeedingAction.map((p) => (
+                <PositionAttentionCard
+                  key={`real-${p.id}`}
+                  position={p}
+                  book="yours"
+                  onOpen={() => setSelectedDetail(detailForPosition(p))}
+                />
+              ))}
+            </section>
+          )}
+          {attentionCount > 0 && (
+            <h2 className="section-title" style={{ marginBottom: '0.6rem' }}>
+              Bot's own trades — {attentionCount} to look at
+            </h2>
           )}
           {attentionCount === 0 ? (
             <Empty
@@ -414,74 +417,20 @@ export default function Dashboard() {
           ) : (
           <div style={{ marginBottom: '1.5rem' }}>
             {needsAttention.map((p) => (
-              <button
+              <PositionAttentionCard
                 key={p.id}
-                className="action-card"
-                style={{ width: '100%', textAlign: 'left', display: 'block' }}
-                onClick={() =>
-                  setSelectedDetail({
-                    symbol: p.symbol,
-                    tone: 'sell',
-                    actionLabel: 'SELL',
-                    price: p.current_price,
-                    entryPrice: p.entry_price,
-                    stopLoss: p.stop_loss,
-                    takeProfit: p.take_profit,
-                    confidence: p.last_confidence ?? p.entry_confidence,
-                    note: p.action_label,
-                  })
-                }
-              >
-                <div className="action-card-head">
-                  <div className="action-card-left">
-                    <span className="pill-action sell">SELL</span>
-                    <span className="action-card-symbol">{p.symbol}</span>
-                  </div>
-                  <span className={pnlClass(p.unrealized_pnl)} style={{ fontSize: '0.82rem', fontWeight: 650 }}>
-                    {formatCurrency(p.unrealized_pnl)}
-                  </span>
-                </div>
-                <div className="strength-row">
-                  <span className="muted" style={{ fontSize: '0.82rem' }}>Sell around</span>
-                  <span className="mono" style={{ fontWeight: 650 }}>{formatCurrency(p.current_price)}</span>
-                </div>
-                <div className="action-card-reason">{SHORT_REASON[p.action_code]}</div>
-              </button>
+                position={p}
+                book="bot"
+                onOpen={() => setSelectedDetail(detailForPosition(p))}
+              />
             ))}
             {watchClosely.map((p) => (
-              <button
+              <PositionAttentionCard
                 key={p.id}
-                className="action-card"
-                style={{ width: '100%', textAlign: 'left', display: 'block' }}
-                onClick={() =>
-                  setSelectedDetail({
-                    symbol: p.symbol,
-                    tone: 'watch',
-                    actionLabel: 'WATCH',
-                    price: p.current_price,
-                    entryPrice: p.entry_price,
-                    stopLoss: p.stop_loss,
-                    takeProfit: p.take_profit,
-                    confidence: p.last_confidence ?? p.entry_confidence,
-                    note: p.action_label,
-                  })
-                }
-              >
-                <div className="action-card-head">
-                  <div className="action-card-left">
-                    <span className="pill-action watch">WATCH</span>
-                    <span className="action-card-symbol">{p.symbol}</span>
-                  </div>
-                  <span className={pnlClass(p.unrealized_pnl)} style={{ fontSize: '0.82rem', fontWeight: 650 }}>
-                    {formatCurrency(p.unrealized_pnl)}
-                  </span>
-                </div>
-                <div className="strength-row">
-                  <span className="muted" style={{ fontSize: '0.82rem' }}>Current price</span>
-                  <span className="mono" style={{ fontWeight: 650 }}>{formatCurrency(p.current_price)}</span>
-                </div>
-                <div className="action-card-reason">{SHORT_REASON[p.action_code]}</div>
-              </button>
+                position={p}
+                book="bot"
+                onOpen={() => setSelectedDetail(detailForPosition(p))}
+              />
             ))}
             {nearStopLoss.map((p) => {
               const gap = (p.current_price - p.stop_loss!) / p.current_price

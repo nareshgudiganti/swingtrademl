@@ -33,9 +33,13 @@ import {
 // Log out already live in the sidebar status strip below, so Settings earned
 // no place in the nav once auto-login removed the daily Kite login chore.
 //
+// Finance is hidden the same way as of 2026-09-28 — parked at the user's
+// request until they confirm it should come back, not retired. Its page,
+// route and API surface are all untouched.
+//
 // They remain reachable by URL: /settings (watchlist editor, sync + backfill,
-// scheduler status) and /models. Nothing was deleted — if either needs to
-// come back, add it here.
+// scheduler status), /models and /finance. Nothing was deleted — if any of
+// them needs to come back, add it here.
 const NAV = [
   { to: '/dashboard', label: 'Dashboard', Icon: HomeIcon },
   { to: '/strategies', label: 'Strategies', Icon: ScaleIcon },
@@ -44,7 +48,6 @@ const NAV = [
   { to: '/capital', label: 'Capital', Icon: SproutIcon },
   { to: '/reports', label: 'Reports', Icon: BarChartIcon },
   { to: '/scans', label: 'Scan Results', Icon: LayersIcon },
-  { to: '/finance', label: 'Finance', Icon: WalletIcon },
   { to: '/model-lab', label: 'Model Lab', Icon: BarChartIcon },
   { to: '/safety', label: 'Safety', Icon: AlertTriangleIcon },
 ]
@@ -58,7 +61,6 @@ const TAB_BAR = [
   { to: '/dashboard', label: 'Dashboard', Icon: HomeIcon },
   { to: '/portfolio', label: 'Portfolio', Icon: BriefcaseIcon },
   { to: '/reports', label: 'Reports', Icon: BarChartIcon },
-  { to: '/finance', label: 'Finance', Icon: WalletIcon },
 ]
 
 // Real money is at stake once live_trading_enabled flips true — this must be

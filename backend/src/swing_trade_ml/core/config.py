@@ -200,6 +200,11 @@ class Settings(BaseSettings):
 
     # ----------------------------------------------------------------- ml --
     MODEL_ARTIFACT_DIR: str = "./data/models"
+    # Where a second copy of every trained artifact is kept. Disabled until
+    # set, because only the operator knows which path is actually off-server
+    # - a mounted volume, a synced folder, an object-storage mount. Three
+    # model files were lost once with nothing to restore them from.
+    MODEL_BACKUP_DIR: str | None = None
     # The trade the system actually takes: +8% before -4%, within 15 trading
     # days. These three move together — changing one without the others
     # recreates the mismatch this replaced, where the model scored a 5-day

@@ -23,6 +23,7 @@ from swing_trade_ml.db.models.market import Instrument
 from swing_trade_ml.db.models.safety import RiskEvent
 from swing_trade_ml.db.models.trading import Position, Strategy
 from swing_trade_ml.db.session import session_scope
+from swing_trade_ml.ml.backup import backup_model_artifacts
 from swing_trade_ml.notifications import notifier
 from swing_trade_ml.services import engine, ingestion, portfolio
 from swing_trade_ml.workers import heartbeat
@@ -234,6 +235,42 @@ def job_reconcile_orders() -> None:
                 log.info("job.reconcile.done", **counts)
     except Exception as exc:  # noqa: BLE001
         _report_error("reconcile_orders", exc)
+
+
+def job_sync_real_holdings() -> None:
+    """Drop tracked My Holdings rows for shares no longer in the Zerodha
+    account, so the app stops alerting about stock that was sold by hand.
+
+    Bails out on a logged-out session rather than treating an empty holdings
+    list as "everything was sold" — see services/holdings_sync.py.
+    """
+    try:
+        from swing_trade_ml.brokers.kite import kite_broker
+        from swing_trade_ml.services.holdings_sync import (
+            close_positions_no_longer_held,
+            held_symbols,
+        )
+        from swing_trade_ml.services.portfolio import REAL_TRADING_STRATEGY_NAME
+
+        with session_scope() as db:
+            if not kite_broker.load_session(db):
+                return
+            strategy = db.execute(
+                select(Strategy).where(Strategy.name == REAL_TRADING_STRATEGY_NAME)
+            ).scalar_one_or_none()
+            if strategy is None:
+                return
+            holdings = kite_broker.get_holdings(db)
+            if not holdings:
+                # Nothing came back. A genuinely empty account and a failed
+                # call look identical here, and closing the whole book on the
+                # second is not a mistake worth risking.
+                log.info("job.sync_real_holdings.skipped_empty")
+                return
+            closed = close_positions_no_longer_held(db, strategy, held_symbols(holdings))
+            log.info("job.sync_real_holdings.done", closed=len(closed))
+    except Exception as exc:  # noqa: BLE001
+        _report_error("sync_real_holdings", exc)
 
 
 def job_capture_fills() -> None:
@@ -462,6 +499,30 @@ def job_predict_watchlist() -> None:
             log.info("job.predict.done", scored=len(results))
     except Exception as exc:  # noqa: BLE001
         _report_error("predict_watchlist", exc)
+
+
+def job_backup_models() -> None:
+    """Copy every trained artifact to the configured backup directory.
+
+    A no-op until MODEL_BACKUP_DIR is set. An artifact that has already gone
+    missing is alerted rather than logged quietly: the MLModel row survives
+    the loss of its file, so nothing else in the system would notice until a
+    scan tried to score with it.
+    """
+    try:
+        with session_scope() as db:
+            result = backup_model_artifacts(db)
+    except Exception as exc:  # noqa: BLE001 - a failed backup must not stop the scheduler
+        log.error("jobs.backup_models.failed", error=str(exc))
+        return
+
+    if result.get("missing"):
+        notifier.send_sync(
+            "\u26a0\ufe0f Model artifacts missing\n\n"
+            + "\n".join(f"\u2022 {m}" for m in result["missing"])
+            + "\n\nThese are registered but their files are gone. "
+            "Retrain or restore before promoting anything."
+        )
 
 
 def job_daily_summary() -> None:

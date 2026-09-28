@@ -337,7 +337,23 @@ def _size(
     )
 
     if sizing_mode == "fixed_amount":
-        qty_by_target = settings.FIXED_POSITION_AMOUNT_INR / price
+        # The flat target is raised to the account's own minimum position when
+        # it falls below it. check_entry rejects anything worth less than
+        # limits.min_position_inr, so a lower target could only ever produce
+        # entries that the very next check throws away — which is exactly what
+        # silently stopped all buying between 17 and 27 Sept 2026, when the
+        # account-size ladder's floor grew past a ₹10,000 flat target that had
+        # been set for a much smaller account. Keeping the floor here means
+        # fixed_amount stays a capital-light setting for small accounts and
+        # scales with the ladder instead of deadlocking against it.
+        if limits.min_position_inr > settings.FIXED_POSITION_AMOUNT_INR:
+            # Rounded up, not down: min_position_inr is a floor on the
+            # position's *value*, so flooring a share count taken from exactly
+            # that figure always lands a few rupees short of it and gets
+            # rejected all the same. Every real ceiling below still floors.
+            qty_by_target = math.ceil(limits.min_position_inr / price)
+        else:
+            qty_by_target = settings.FIXED_POSITION_AMOUNT_INR / price
         target_label = "fixed amount"
     else:
         risk_capital = portfolio_value * limits.risk_per_trade_pct

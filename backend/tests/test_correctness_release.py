@@ -153,9 +153,13 @@ def test_scan_exits_first_then_stable_rank_in_strategy_mode(monkeypatch, confirm
     # ladder regardless of the figure supplied, so any value here keeps
     # this test exercising what it always tested.
     monkeypatch.setattr(engine, 'portfolio_value_and_cash', lambda db, mode: (1_000_000.0, 1_000_000.0))
+    # Buy slots are now spent by fills rather than reserved up front, so an
+    # attempt that is actually tried has to report back as filled for the
+    # budget below to bind at all — see
+    # test_buy_slot_allocation.py::test_a_rejected_buy_does_not_consume_a_daily_buy_slot.
     def process(db, strategy, instrument, decision, ranked_out_reason=None):
         calls.append((instrument.id, ranked_out_reason))
-        return SimpleNamespace(was_executed=False)
+        return SimpleNamespace(was_executed=ranked_out_reason is None)
     monkeypatch.setattr(engine, 'process_decision', process)
     assert not engine.run_strategy(Mock(), strategy).errors
     assert [i for i, _ in calls] == [1, 2, 3, 0]

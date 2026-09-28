@@ -45,26 +45,16 @@ def eligible_instruments(db: Session, strategy: Strategy) -> list[Instrument]:
     return list(db.execute(stmt).scalars().all())
 
 
-def _rank_out_reasons(
-    db: Session, strategy: Strategy, mode: str, pending: list[tuple[Instrument, SignalDecision]]
-) -> dict[int, str]:
-    """Which of this scan's BUY candidates lose out to higher-confidence
-    ones from the same scan, and why — see services/risk.rank_buy_candidates().
+def _buy_slot_budget(db: Session, strategy: Strategy, mode: str) -> int:
+    """How many BUYs this strategy may actually *fill* in one scan.
 
     Room is estimated once per scan from the same portfolio-wide open-position
     count `risk.check_entry` itself uses (not scoped to this strategy — that
     matches check_entry's own query, so this cap tracks what check_entry will
     actually allow rather than a stricter or looser estimate of it). The
-    final per-instrument gate remains check_entry; this only decides *order*.
+    final per-instrument gate remains check_entry; this only decides how many
+    of its approvals the scan is willing to take.
     """
-    buy_candidates = [
-        (instrument.id, decision.confidence or 0.0)
-        for instrument, decision in pending
-        if decision.signal == SignalType.BUY
-    ]
-    if not buy_candidates:
-        return {}
-
     open_count = risk.open_position_count(db, mode)
     # Same resolver check_entry uses, fed the same portfolio value, so the
     # number of candidates acted on tracks the account-size ladder rather
@@ -76,16 +66,20 @@ def _rank_out_reasons(
     share = max(1, slot_budget // max(risk.active_strategy_count(db, mode), 1))
     strategy_room = share - risk.open_position_count(db, mode, strategy.id)
     room = max(min(slot_budget - open_count, strategy_room), 0)
-    cap = min(strategy.max_daily_buys, room) if strategy.max_daily_buys is not None else room
+    return min(strategy.max_daily_buys, room) if strategy.max_daily_buys is not None else room
 
-    ranked = risk.rank_buy_candidates(buy_candidates)
-    return {
-        inst_id: (
-            f"Ranked {idx} of {len(ranked)} today's BUY candidates by confidence "
-            f"— only top {cap} acted on"
+
+def _no_slot_left_reason(position: int, total: int, slots: int) -> str:
+    """Why a BUY candidate was never tried, in words the app can show as-is."""
+    if slots == 0:
+        return (
+            f"No room to buy anything today — this was candidate {position} of {total} "
+            "by confidence, but the account is already at its position limit"
         )
-        for idx, (inst_id, _conf) in enumerate(ranked[cap:], start=cap + 1)
-    }
+    return (
+        f"Ranked {position} of {total} today's BUY candidates by confidence — the day's "
+        f"{slots} buy slot{'s' if slots != 1 else ''} were already filled by stronger ones"
+    )
 
 
 def run_strategy(db: Session, strategy: Strategy, interval: str = "day") -> ScanResult:
@@ -131,29 +125,51 @@ def run_strategy(db: Session, strategy: Strategy, interval: str = "day") -> Scan
             result.errors.append(message)
             db.rollback()
 
-    def process(items, ranked_out=None):
+    def attempt(instrument, decision, ranked_out_reason=None) -> bool:
+        """Route one decision through risk to execution. True when it filled."""
+        try:
+            signal = process_decision(
+                db, strategy, instrument, decision, ranked_out_reason=ranked_out_reason
+            )
+            if signal and signal.was_executed:
+                result.executed += 1
+                return True
+        except Exception as exc:  # noqa: BLE001 - isolate each instrument
+            message = f"{strategy.name}/{instrument.tradingsymbol}: {exc}"
+            log.error("engine.instrument.failed", strategy=strategy.name,
+                      symbol=instrument.tradingsymbol, error=str(exc))
+            result.errors.append(message)
+            db.rollback()
+        return False
+
+    def process(items):
         for instrument, decision in items:
-            try:
-                reason = (ranked_out or {}).get(instrument.id) if decision.signal == SignalType.BUY else None
-                signal = process_decision(db, strategy, instrument, decision, ranked_out_reason=reason)
-                if signal and signal.was_executed:
-                    result.executed += 1
-            except Exception as exc:  # noqa: BLE001 - isolate each instrument
-                message = f"{strategy.name}/{instrument.tradingsymbol}: {exc}"
-                log.error("engine.instrument.failed", strategy=strategy.name,
-                          symbol=instrument.tradingsymbol, error=str(exc))
-                result.errors.append(message)
-                db.rollback()
+            attempt(instrument, decision)
 
     # Only confirmed exits release capacity; pending orders still have open positions.
     process([(i, d) for i, d in pending if d.signal in (SignalType.EXIT, SignalType.SELL)])
     process([(i, d) for i, d in pending if d.signal == SignalType.HOLD])
+
+    # Buy slots are spent by fills, never by rejections. Awarding them up front
+    # on confidence alone is what broke buying in Sept 2026: the top-ranked
+    # names were ones check_entry always refuses (cap tier, ASM list, stop-out
+    # cooldown, too small to meet the minimum), they took every slot with them,
+    # and each remaining candidate was discarded unexamined as "ranked out".
+    # So walk the candidates strongest-first and only stop once the slots have
+    # actually been filled.
     buys = sorted(
         [(i, d) for i, d in pending if d.signal == SignalType.BUY],
         key=lambda item: item[1].confidence or 0.0, reverse=True,
     )
-    ranked_out = _rank_out_reasons(db, strategy, strategy.mode, buys)
-    process(buys, ranked_out)
+    if buys:
+        slots = _buy_slot_budget(db, strategy, strategy.mode)
+        filled = 0
+        for position, (instrument, decision) in enumerate(buys, start=1):
+            if filled >= slots:
+                attempt(instrument, decision,
+                        ranked_out_reason=_no_slot_left_reason(position, len(buys), slots))
+            elif attempt(instrument, decision):
+                filled += 1
 
     log.info(
         "engine.strategy.done",

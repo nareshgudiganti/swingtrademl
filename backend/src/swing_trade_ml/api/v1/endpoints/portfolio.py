@@ -218,6 +218,12 @@ def detailed_positions(
             horizon_days=horizon_days,
             exit_confidence=exit_confidence,
             exit_signal_pending=exit_signal_pending,
+            # The stop/target/time-stop alert check_exits already sent to
+            # Telegram. Without this the most urgent rows on the page — an
+            # advisory holding past its stop that the bot may not sell —
+            # rendered as an ordinary confidence read, so "Needs attention"
+            # stayed empty while the alerts kept arriving.
+            exit_alert_sent=position.advisory_alert_sent_at is not None,
         )
 
         result.append(

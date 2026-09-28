@@ -689,6 +689,7 @@ def position_action(
     exit_confidence: float,
     exit_signal_pending: bool = False,
     min_confidence: float | None = None,
+    exit_alert_sent: bool = False,
 ) -> tuple[str, str]:
     """Pure: the single "what should I do" read for one open position —
     what the Positions page shows instead of making the user cross-reference
@@ -702,12 +703,24 @@ def position_action(
     exit floor, or has already crossed it. Day count and any horizon-elapsed
     note are folded in as supporting detail, not the headline.
 
-    Priority, strongest first: a real EXIT signal the strategy hasn't acted
-    on (advisory mode only — an "auto" strategy closes automatically, so a
-    still-open position can never actually have one) outranks an already-
-    sent confidence-decay alert, which outranks the fresh directional read.
+    Priority, strongest first: an exit alert already sent because the position
+    reached its stop, target or time limit — a fact about price, so it beats
+    any view the model currently holds — then a real EXIT signal the strategy
+    hasn't acted on (advisory mode only — an "auto" strategy closes
+    automatically, so a still-open position can never actually have one), then
+    an already-sent confidence-decay alert, then the fresh directional read.
+
+    `exit_alert_sent` exists because a position can be past its stop while the
+    model still reads bullish, and before this was wired in that position came
+    back as "Still bullish — model would buy this fresh right now" even though
+    the app had already messaged the owner telling them to sell it. Only
+    advisory positions can reach that state: an automatic strategy closes at
+    its stop rather than alerting.
     """
     min_confidence = settings.ML_MIN_CONFIDENCE if min_confidence is None else min_confidence
+
+    if exit_alert_sent:
+        return "exit", "Sell alert already sent — it reached its exit level and is still open"
 
     if exit_signal_pending:
         return "exit", "Exit signal — model wants out, not yet closed"

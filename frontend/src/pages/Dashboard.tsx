@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 
 import { api } from '../api/client'
 import type { BuyListRow, DetailedPosition, StrategySignal } from '../api/types'
@@ -28,7 +29,7 @@ const EXIT_KIND: Record<string, { Icon: typeof CheckCircleIcon; tone: 'pos' | 'n
 // the kind of jargon this page exists to hide. That full text still shows up
 // in the detail popup on tap; the card face only needs the headline.
 const SHORT_REASON: Record<DetailedPosition['action_code'], string> = {
-  exit: "The model is no longer backing this position.",
+  exit: 'The bot wants to sell this one.',
   alert: 'An alert has already been sent about this one.',
   weak: 'Losing steam, but not a sell signal yet.',
   dip: 'Confidence has dipped since you bought it.',
@@ -163,6 +164,11 @@ export default function Dashboard() {
   const queryClient = useQueryClient()
   const summary = useQuery({ queryKey: ['summary'], queryFn: () => api.summary() })
   const positions = useQuery({ queryKey: ['positions'], queryFn: api.positions })
+  // The My Holdings book as well as the bot's own. `positions` above is
+  // book=bot, so while the bot holds nothing this page had no sight of the
+  // hand-bought shares at all — and it is those that generate the stop-loss
+  // messages, because the bot may only flag them, never sell them.
+  const realPositions = useQuery({ queryKey: ['realPositions'], queryFn: api.realPositions })
   const buyList = useQuery({ queryKey: ['buyList'], queryFn: api.buyList })
   const regime = useQuery({ queryKey: ['marketRegime'], queryFn: api.marketRegime })
   const status = useQuery({ queryKey: ['status'], queryFn: api.status, refetchInterval: 30_000 })
@@ -279,9 +285,22 @@ export default function Dashboard() {
   const nearStopLoss = openPositions.filter((p) => {
     if (flaggedIds.has(p.id) || p.stop_loss == null || p.current_price <= 0) return false
     const gap = (p.current_price - p.stop_loss) / p.current_price
-    return gap >= 0 && gap <= NEAR_STOP_THRESHOLD
+    // No lower bound: a position that has already fallen THROUGH its stop is
+    // the most urgent case there is, and requiring gap >= 0 silently dropped
+    // exactly those rows — the page went quiet at the worst moment.
+    return gap <= NEAR_STOP_THRESHOLD
   })
   const attentionCount = needsAttention.length + watchClosely.length + nearStopLoss.length
+
+  // Your own shares that have hit their sell level. Counted and shown
+  // separately from the bot's book on purpose — the bot cannot act on these,
+  // so folding them into the numbers above would suggest it had.
+  const realNeedingAction = (realPositions.data ?? []).filter(
+    (p) => p.action_code === 'exit' || p.action_code === 'alert',
+  )
+  // The tab badge counts both books, so it can never read blank while the
+  // banner below is warning about something.
+  const tabAttentionCount = attentionCount + realNeedingAction.length
 
   const buyRows = (buyList.data ?? []).slice(0, 8)
 
@@ -354,7 +373,7 @@ export default function Dashboard() {
           onClick={() => setTab('attention')}
           title="Open positions whose stop, target, or confidence changed enough to be worth a look."
         >
-          Needs attention{attentionCount > 0 ? ` (${attentionCount})` : ''}
+          Needs attention{tabAttentionCount > 0 ? ` (${tabAttentionCount})` : ''}
         </button>
         <button
           className={tab === 'buy' ? 'primary' : ''}
@@ -374,8 +393,24 @@ export default function Dashboard() {
 
       {tab === 'attention' && (
         <>
+          {realNeedingAction.length > 0 && (
+            <div className="banner banner-warn" style={{ marginBottom: '1rem' }}>
+              <strong>{realNeedingAction.map((p) => p.symbol).join(', ')}</strong>
+              {realNeedingAction.length === 1 ? ' has ' : ' have '}
+              reached their sell level. {realNeedingAction.length === 1 ? 'It is' : 'They are'} yours,
+              bought by hand, so the bot can only tell you — it will not sell{' '}
+              {realNeedingAction.length === 1 ? 'it' : 'them'} for you.{' '}
+              <Link to="/holdings">Open My Holdings</Link>
+            </div>
+          )}
           {attentionCount === 0 ? (
-            <Empty label="Nothing needs attention — your open positions look fine." />
+            <Empty
+              label={
+                openPositions.length === 0
+                  ? "The bot holds nothing yet, so it has nothing to flag. Anything above is your own shares."
+                  : 'Nothing needs attention — your open positions look fine.'
+              }
+            />
           ) : (
           <div style={{ marginBottom: '1.5rem' }}>
             {needsAttention.map((p) => (
@@ -450,8 +485,13 @@ export default function Dashboard() {
             ))}
             {nearStopLoss.map((p) => {
               const gap = (p.current_price - p.stop_loss!) / p.current_price
-              const shortReason = `${formatPercent(gap, 1)} above its stop-loss — could auto-sell soon.`
-              const note = `Price is only ${formatPercent(gap, 1)} above its stop-loss (${formatCurrency(p.stop_loss!)}) — it will auto-sell if it drops further. Decide now: sell ahead of it, or hold and let the stop handle it.`
+              const past = gap < 0
+              const shortReason = past
+                ? `Already below its stop-loss — due to be sold.`
+                : `${formatPercent(gap, 1)} above its stop-loss — could auto-sell soon.`
+              const note = past
+                ? `Price has already fallen below its stop-loss (${formatCurrency(p.stop_loss!)}) — this is the level at which it was meant to be sold. The bot sells its own positions automatically; shares you bought yourself it can only flag, so check whether this one still needs selling by hand.`
+                : `Price is only ${formatPercent(gap, 1)} above its stop-loss (${formatCurrency(p.stop_loss!)}) — it will auto-sell if it drops further. Decide now: sell ahead of it, or hold and let the stop handle it.`
               return (
                 <button
                   key={p.id}
@@ -461,7 +501,7 @@ export default function Dashboard() {
                     setSelectedDetail({
                       symbol: p.symbol,
                       tone: 'watch',
-                      actionLabel: 'NEAR STOP',
+                      actionLabel: past ? 'BELOW STOP' : 'NEAR STOP',
                       price: p.current_price,
                       entryPrice: p.entry_price,
                       stopLoss: p.stop_loss,
@@ -473,7 +513,7 @@ export default function Dashboard() {
                 >
                   <div className="action-card-head">
                     <div className="action-card-left">
-                      <span className="pill-action watch">NEAR STOP</span>
+                      <span className="pill-action watch">{past ? 'BELOW STOP' : 'NEAR STOP'}</span>
                       <span className="action-card-symbol">{p.symbol}</span>
                     </div>
                     <span className={pnlClass(p.unrealized_pnl)} style={{ fontSize: '0.82rem', fontWeight: 650 }}>

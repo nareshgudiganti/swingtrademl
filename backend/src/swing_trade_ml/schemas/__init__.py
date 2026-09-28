@@ -9,7 +9,9 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from swing_trade_ml.core.strategy_policy import locked_fields_in
 
 ORM = ConfigDict(from_attributes=True)
 
@@ -42,7 +44,12 @@ class SystemStatus(BaseModel):
     scheduler_running: bool
     scheduled_jobs: list[dict[str, Any]]
     telegram_enabled: bool
+    # Every active model, one per cap tier. `active_model` is the joined
+    # summary kept for existing callers; it used to hold ONE model chosen by
+    # activation order, which is why the header read "smallcap" regardless of
+    # what the large-cap and mid-cap strategies were actually running.
     active_model: str | None
+    active_models: list[str] = []
     watchlist_size: int
     active_strategies: int
     open_positions: int
@@ -171,16 +178,39 @@ class QuoteOut(BaseModel):
 # -------------------------------------------------------------- strategies --
 
 
+def _refuse_locked_risk_fields(data: Any) -> Any:
+    """Reject any attempt to set a risk or exit rule on one strategy.
+
+    Raised before the payload becomes a model, so a rejected request never
+    half-applies the legal fields that travelled with the illegal one.
+    """
+    if isinstance(data, dict):
+        offenders = locked_fields_in(data)
+        if offenders:
+            raise ValueError(
+                f"{', '.join(offenders)}: risk and exit rules are the same for every "
+                "strategy and are set in settings, not per strategy"
+            )
+    return data
+
+
 class StrategyCreate(BaseModel):
+    """Everything a strategy may declare about itself.
+
+    Risk and exit rules are deliberately absent - see
+    core.strategy_policy.LOCKED_RISK_FIELDS. They are global settings, so a
+    strategy cannot carry its own stop, target, position cap or capital
+    share, and a request that tries is refused by name rather than silently
+    dropped.
+    """
+
+    _reject_locked = model_validator(mode="before")(_refuse_locked_risk_fields)
+
     name: str
     strategy_type: str
     description: str | None = None
     params: dict[str, Any] = Field(default_factory=dict)
     symbols: list[str] = Field(default_factory=list)
-    max_positions: int | None = None
-    capital_allocation: float | None = None
-    stop_loss_pct: float | None = None
-    take_profit_pct: float | None = None
     # Caps how many new entries a scan acts on, ranked by confidence, even
     # when more position slots are free. Null = uncapped.
     max_daily_buys: int | None = None
@@ -195,17 +225,20 @@ class StrategyCreate(BaseModel):
 
 
 class StrategyUpdate(BaseModel):
+    """The editable half of a strategy: what it is called, which stocks it
+    looks at, which model scores them, and whether it runs.
+
+    Risk and exit rules are not editable here - see StrategyCreate.
+    """
+
+    _reject_locked = model_validator(mode="before")(_refuse_locked_risk_fields)
+
     description: str | None = None
     params: dict[str, Any] | None = None
     symbols: list[str] | None = None
     is_active: bool | None = None
-    max_positions: int | None = None
-    capital_allocation: float | None = None
-    stop_loss_pct: float | None = None
-    take_profit_pct: float | None = None
     max_daily_buys: int | None = None
     execution_mode: str | None = Field(None, pattern="^(auto|advisory)$")
-    allow_pyramiding: bool | None = None
 
 
 class StrategyOut(BaseModel):
@@ -456,12 +489,17 @@ class MLModelOut(BaseModel):
     train_end: datetime | None
     trained_at: datetime | None
     activated_at: datetime | None
+    # On the list response too, not just the detail: Model Lab reads
+    # metrics["walk_forward"] off every row of GET /ml/models to show whether a
+    # model was ever tested on periods it did not train on. Omitting it here
+    # made that card impossible to render and indistinguishable from a model
+    # that simply has no folds.
+    metrics: dict[str, Any]
 
 
 class MLModelDetail(MLModelOut):
     feature_names: list[str]
     hyperparameters: dict[str, Any]
-    metrics: dict[str, Any]
     feature_importance: dict[str, Any]
 
 

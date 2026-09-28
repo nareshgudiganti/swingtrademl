@@ -28,6 +28,7 @@ export interface SystemStatus {
   scheduled_jobs: ScheduledJob[]
   telegram_enabled: boolean
   active_model: string | null
+  active_models: string[]
   watchlist_size: number
   active_strategies: number
   open_positions: number
@@ -80,8 +81,16 @@ export interface PortfolioSummary {
   current_drawdown_pct: number
   day_pnl: number
   day_pnl_pct: number
-  sharpe_ratio: number
-  sortino_ratio: number
+  // null until the equity curve is long enough for an annualised ratio to
+  // mean anything; ratios_note says why when it is.
+  sharpe_ratio: number | null
+  sortino_ratio: number | null
+  ratios_reliable: boolean
+  ratios_note: string | null
+  // Snapshot-derived figures above (drawdown, day P&L, ratios) are always
+  // account-wide, even when the trade figures are filtered to the bot's book.
+  snapshot_scope: 'account'
+  snapshots_excluded: number
   top_movers: { symbol: string; pnl: number; pnl_pct: number }[]
 }
 

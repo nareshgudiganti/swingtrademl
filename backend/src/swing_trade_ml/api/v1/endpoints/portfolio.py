@@ -16,7 +16,7 @@ from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.enums import ExitReason, PositionStatus, SignalType, TradingMode
 from swing_trade_ml.db.models.market import Candle, Instrument
 from swing_trade_ml.db.models.trading import Position, Signal, Strategy, Trade
-from swing_trade_ml.ml.registry import get_active_model
+from swing_trade_ml.ml.registry import active_models
 from swing_trade_ml.schemas import (
     ClosePositionRequest,
     EquityPoint,
@@ -27,6 +27,10 @@ from swing_trade_ml.schemas import (
     TradeOut,
 )
 from swing_trade_ml.services import portfolio as portfolio_service
+from swing_trade_ml.services.holdings_sync import (
+    close_positions_no_longer_held,
+    held_symbols as _held_symbols,
+)
 from swing_trade_ml.services.execution import (
     close_position,
     manual_close_position,
@@ -130,8 +134,13 @@ def detailed_positions(
     # judged against. Positions opened under an earlier model version are
     # shown against the CURRENT model's horizon as the best available
     # context, not a stored-forever value from whichever version bought it.
-    active_model = get_active_model(db)
-    horizon_days = active_model.prediction_horizon_days if active_model else None
+    # Taken across every active model rather than one of them: the three
+    # cap-tier models normally share a horizon, and when they do that number
+    # is the honest answer for any position. When they disagree there is no
+    # single right answer, so show none rather than the wrong tier's.
+    horizons = {m.prediction_horizon_days for m in active_models(db)}
+    horizons.discard(None)
+    horizon_days = horizons.pop() if len(horizons) == 1 else None
 
     # A still-open position can only have an unactioned EXIT/SELL signal
     # against it under an "advisory" strategy — an "auto" one closes the
@@ -207,6 +216,12 @@ def detailed_positions(
             horizon_days=horizon_days,
             exit_confidence=exit_confidence,
             exit_signal_pending=exit_signal_pending,
+            # The stop/target/time-stop alert check_exits already sent to
+            # Telegram. Without this the most urgent rows on the page — an
+            # advisory holding past its stop that the bot may not sell —
+            # rendered as an ordinary confidence read, so "Needs attention"
+            # stayed empty while the alerts kept arriving.
+            exit_alert_sent=position.advisory_alert_sent_at is not None,
         )
 
         result.append(
@@ -415,16 +430,31 @@ def import_real_holdings(db: DbSession, strategy_id: int | None = None) -> list[
 
     kite_holdings = _load_kite_holdings(db)
 
-    already_tracked = {
-        p.instrument_id
-        for p in db.execute(
+    open_positions = list(
+        db.execute(
             select(Position).where(
                 Position.strategy_id == strategy.id, Position.status == PositionStatus.OPEN
             )
         ).scalars()
-    }
+    )
+    already_tracked = {p.instrument_id for p in open_positions}
 
     results: list[dict[str, Any]] = []
+
+    # Close what is no longer owned before adding anything — see
+    # services/holdings_sync.py for why a sold stock left open keeps alerting.
+    closed = close_positions_no_longer_held(db, strategy, _held_symbols(kite_holdings))
+    for row in closed:
+        results.append(row)
+    if closed:
+        already_tracked = {
+            p.instrument_id
+            for p in db.execute(
+                select(Position).where(
+                    Position.strategy_id == strategy.id, Position.status == PositionStatus.OPEN
+                )
+            ).scalars()
+        }
     for h in kite_holdings:
         held_quantity = _held_quantity(h)
         if held_quantity == 0:

@@ -4,7 +4,7 @@ from swing_trade_ml.ml.predict import (
     predict_instrument,
     predict_watchlist,
 )
-from swing_trade_ml.ml.registry import activate_model, get_active_model
+from swing_trade_ml.ml.registry import activate_model, active_models, get_active_model
 from swing_trade_ml.ml.train import train_model
 
 __all__ = [
@@ -13,6 +13,7 @@ __all__ = [
     "build_features",
     "build_label",
     "evaluate_pending_predictions",
+    "active_models",
     "get_active_model",
     "predict_instrument",
     "predict_watchlist",

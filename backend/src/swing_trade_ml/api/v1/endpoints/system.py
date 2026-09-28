@@ -18,7 +18,7 @@ from swing_trade_ml.core.holidays import is_trading_holiday
 from swing_trade_ml.db.models.market import Candle, Instrument
 from swing_trade_ml.db.models.trading import Position, Signal, Strategy
 from swing_trade_ml.db.session import check_connection
-from swing_trade_ml.ml.registry import get_active_model
+from swing_trade_ml.ml.registry import active_models
 from swing_trade_ml.schemas import HealthResponse, ReadinessResponse, SystemStatus
 from swing_trade_ml.workers import heartbeat
 from swing_trade_ml.workers.scheduler import list_jobs
@@ -120,7 +120,10 @@ def _build_status(db: DbSession) -> SystemStatus:
     # never touched by the worker's periodic check, so verify against the
     # database on every call rather than trusting an old in-memory flag.
     kite_broker.load_session(db)
-    active_model = get_active_model(db)
+    # Every active model, not one picked by activation order: three are
+    # active at once, one per cap tier, and the newest-activated was winning
+    # by milliseconds.
+    models = active_models(db)
 
     latest_candle_ts = db.execute(
         select(func.max(Candle.ts)).where(Candle.interval == "day")
@@ -146,7 +149,8 @@ def _build_status(db: DbSession) -> SystemStatus:
         scheduler_running=heartbeat.is_alive(),
         scheduled_jobs=list_jobs(),
         telegram_enabled=settings.TELEGRAM_ENABLED,
-        active_model=f"{active_model.name}:{active_model.version}" if active_model else None,
+        active_model=", ".join(f"{m.name}:{m.version}" for m in models) or None,
+        active_models=[f"{m.name}:{m.version}" for m in models],
         watchlist_size=int(
             db.execute(
                 select(func.count(Instrument.id)).where(Instrument.is_watchlisted.is_(True))

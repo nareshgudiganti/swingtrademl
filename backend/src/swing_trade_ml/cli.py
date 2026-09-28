@@ -271,7 +271,7 @@ def cmd_status(args: argparse.Namespace) -> int:
     from swing_trade_ml.brokers import get_broker
     from swing_trade_ml.core.config import settings
     from swing_trade_ml.db.session import check_connection, session_scope
-    from swing_trade_ml.ml.registry import get_active_model
+    from swing_trade_ml.ml.registry import active_models
     from swing_trade_ml.services import portfolio
 
     print(f"App              {settings.APP_NAME}")
@@ -286,8 +286,9 @@ def cmd_status(args: argparse.Namespace) -> int:
         return 1
 
     with session_scope() as db:
-        model = get_active_model(db)
-        print(f"Active model     {f'{model.name}:{model.version}' if model else 'none'}")
+        models = active_models(db)
+        listed = ", ".join(f"{m.name}:{m.version}" for m in models) or "none"
+        print(f"Active models    {listed}")
         stats = portfolio.performance_stats(db)
         print()
         print(f"Portfolio value  ₹{stats['total_value']:,.2f}")

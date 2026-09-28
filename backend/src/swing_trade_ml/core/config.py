@@ -8,7 +8,7 @@ change.
 
 from __future__ import annotations
 
-from datetime import time
+from datetime import date, time
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
@@ -83,6 +83,21 @@ class Settings(BaseSettings):
     ALLOW_LIVE_TRADING: bool = False
 
     PAPER_STARTING_CAPITAL: float = 1_000_000.0
+    # The date the current clean paper trial opened. Performance figures are
+    # measured from here, so the headline P&L answers "is the bot working
+    # now" rather than averaging in a system that has since been replaced.
+    #
+    # The 70 trades before 28 Sep 2026 were booked by a scan whose sizing and
+    # slot allocation were both broken (78fe87b) and whose entry rules changed
+    # mid-run. Their -2% is a fact about code that no longer exists, so it
+    # would only mislead. Nothing is deleted — `?since=all` still returns the
+    # whole record.
+    #
+    # Deliberately a code default, not just an env var: production's .env is
+    # not reachable from here, and a trial boundary is a fact about the
+    # project worth reading in the repo. An env var of the same name still
+    # overrides it, and setting it empty disables the windowing entirely.
+    PAPER_TRIAL_START_DATE: date | None = date(2026, 9, 28)
     PAPER_SLIPPAGE_BPS: float = 5.0
     # Zerodha charges ZERO brokerage on equity delivery (CNC), which is the
     # only product this app trades — the widely-quoted flat 20 is the

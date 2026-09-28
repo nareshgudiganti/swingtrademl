@@ -127,6 +127,15 @@ def start_scheduler() -> None:
     # Kite keeps no trade history, so save the day's real trades shortly after
     # the close, and again in the evening in case the first run met a logged-out
     # session. Re-running is harmless: trades are de-duplicated by Zerodha's id.
+    # Drop My Holdings rows for shares sold by hand, before the evening fill
+    # capture. Left unreconciled, a sold stock keeps breaching its stop and
+    # alerting forever (services/holdings_sync.py).
+    scheduler.add_job(
+        jobs.job_sync_real_holdings,
+        CronTrigger(day_of_week=WEEKDAYS, hour=15, minute=48, timezone=IST),
+        id="sync_real_holdings",
+        replace_existing=True,
+    )
     for job_id, hour, minute in (("capture_fills", 15, 50), ("capture_fills_evening", 19, 30)):
         scheduler.add_job(
             jobs.job_capture_fills,

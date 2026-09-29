@@ -15,6 +15,15 @@
 # already does for "/api/" to the api container.
 
 services:
+  worker:
+    environment:
+      # Second copy of every trained model (ml/backup.py, daily at 16:30 IST).
+      # Its own volume, so losing or wiping model_data does not take the
+      # backup with it. Same disk, though - not a substitute for off-server.
+      MODEL_BACKUP_DIR: /app/data/model_backups
+    volumes:
+      - model_backups:/app/data/model_backups
+
   frontend:
     build:
       target: production
@@ -30,3 +39,6 @@ services:
       - "127.0.0.1:8080:80"
     depends_on:
       - api
+
+volumes:
+  model_backups:

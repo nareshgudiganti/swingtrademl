@@ -185,6 +185,14 @@ def start_scheduler() -> None:
         replace_existing=True,
     )
     scheduler.add_job(
+        jobs.job_backup_models,
+        # After evaluation, before the evening feed jobs - by 16:30 any model
+        # trained today is registered, and the run is cheap when nothing changed.
+        CronTrigger(day_of_week=WEEKDAYS, hour=16, minute=30, timezone=IST),
+        id="backup_models",
+        replace_existing=True,
+    )
+    scheduler.add_job(
         jobs.job_sync_mutual_fund_navs,
         CronTrigger(day_of_week=WEEKDAYS, hour=21, minute=30, timezone=IST),
         id="sync_mutual_fund_navs",

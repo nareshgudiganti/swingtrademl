@@ -23,6 +23,7 @@ from swing_trade_ml.db.models.market import Instrument
 from swing_trade_ml.db.models.safety import RiskEvent
 from swing_trade_ml.db.models.trading import Position, Strategy
 from swing_trade_ml.db.session import session_scope
+from swing_trade_ml.ml.backup import backup_model_artifacts
 from swing_trade_ml.notifications import notifier
 from swing_trade_ml.services import engine, ingestion, portfolio
 from swing_trade_ml.workers import heartbeat
@@ -494,6 +495,30 @@ def job_predict_watchlist() -> None:
             log.info("job.predict.done", scored=len(results))
     except Exception as exc:  # noqa: BLE001
         _report_error("predict_watchlist", exc)
+
+
+def job_backup_models() -> None:
+    """Copy every trained artifact to the configured backup directory.
+
+    A no-op until MODEL_BACKUP_DIR is set. An artifact that has already gone
+    missing is alerted rather than logged quietly: the MLModel row survives
+    the loss of its file, so nothing else in the system would notice until a
+    scan tried to score with it.
+    """
+    try:
+        with session_scope() as db:
+            result = backup_model_artifacts(db)
+    except Exception as exc:  # noqa: BLE001 - a failed backup must not stop the scheduler
+        log.error("jobs.backup_models.failed", error=str(exc))
+        return
+
+    if result.get("missing"):
+        notifier.send_sync(
+            "\u26a0\ufe0f Model artifacts missing\n\n"
+            + "\n".join(f"\u2022 {m}" for m in result["missing"])
+            + "\n\nThese are registered but their files are gone. "
+            "Retrain or restore before promoting anything."
+        )
 
 
 def job_daily_summary() -> None:

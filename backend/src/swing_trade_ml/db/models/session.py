@@ -44,6 +44,17 @@ class User(Base, TimestampMixin):
         return f"<User {self.username}>"
 
 
+class PlanSettings(Base, TimestampMixin):
+    """One row, id=1: the owner's master switch for plans. No row, or
+    enabled=false, means plans are off and every signed-in account sees the
+    whole app, as before plans existed."""
+
+    __tablename__ = "plan_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+
+
 class SubscriptionPlan(Base, TimestampMixin):
     """The owner's edits to one plan. A plan with no row here uses its
     defaults from core/plans.py, so a fresh database needs no seeding."""

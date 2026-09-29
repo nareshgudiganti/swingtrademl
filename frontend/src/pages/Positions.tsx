@@ -278,8 +278,8 @@ export function PositionsTable({
 export default function Positions() {
   const queryClient = useQueryClient()
   // Plan users see the bot's book read-only: no Sell, and no account status.
-  const { isOwner, has } = usePlan()
-  const status = useQuery({ queryKey: ['status'], queryFn: api.status, enabled: isOwner })
+  const { seesAll, has } = usePlan()
+  const status = useQuery({ queryKey: ['status'], queryFn: api.status, enabled: seesAll })
   const positions = useQuery({ queryKey: ['positions'], queryFn: api.positions })
   const trades = useQuery({
     queryKey: ['trades', 50],
@@ -435,7 +435,7 @@ export default function Positions() {
           rows={unsorted}
           onSelectDetail={setSelectedDetail}
           onSell={
-            isOwner
+            seesAll
               ? (p) => {
                   if (confirm(`Close ${p.quantity} × ${p.symbol} at market?`)) {
                     close.mutate(p.id)

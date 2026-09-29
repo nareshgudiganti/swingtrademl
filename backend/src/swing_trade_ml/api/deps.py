@@ -89,45 +89,46 @@ async def get_principal(
 
 @dataclass(frozen=True)
 class PlanAccess:
-    """What the caller's plan allows. The owner gets everything, unless they
-    asked to preview a plan (X-Preview-Plan), in which case they get exactly
-    what that plan's users get."""
+    """What the caller may see. `unrestricted` callers see everything: the
+    owner always, and every signed-in account while plans are switched off
+    (the app as it was before plans). The owner can still preview a plan
+    (X-Preview-Plan) and then gets exactly what that plan's users get."""
 
-    is_owner: bool
+    unrestricted: bool
     plan: str | None
     features: frozenset[str] = frozenset()
     limits: dict = field(default_factory=dict)
     previewing: bool = False
 
     def has(self, feature: str) -> bool:
-        return self.is_owner or feature in self.features
+        return self.unrestricted or feature in self.features
 
     @property
     def picks_per_day(self) -> int | None:
-        return None if self.is_owner else (self.limits.get("picks_per_day") or None)
+        return None if self.unrestricted else (self.limits.get("picks_per_day") or None)
 
     @property
     def history_days(self) -> int | None:
-        return None if self.is_owner else (self.limits.get("history_days") or None)
+        return None if self.unrestricted else (self.limits.get("history_days") or None)
 
     @property
     def cap_tiers(self) -> set[str] | None:
-        return None if self.is_owner else set(self.limits.get("allowed_cap_tiers") or [])
+        return None if self.unrestricted else set(self.limits.get("allowed_cap_tiers") or [])
 
 
 def plan_access_for(db: Session, principal: Principal, preview: str | None = None) -> PlanAccess:
-    from swing_trade_ml.services.plans import get_plan
+    from swing_trade_ml.services.plans import get_plan, plans_enabled
 
-    if principal.is_owner and preview not in PLAN_KEYS:
-        return PlanAccess(is_owner=True, plan=None)
-    if principal.is_owner:
+    if principal.is_owner and preview in PLAN_KEYS:
         key, previewing = preview, True
+    elif principal.is_owner or not plans_enabled(db):
+        return PlanAccess(unrestricted=True, plan=None)
     else:
         user_plan = principal.user.plan if principal.user else None
         key, previewing = (user_plan if user_plan in PLAN_KEYS else DEFAULT_PLAN), False
     plan = get_plan(db, key)
     return PlanAccess(
-        is_owner=False,
+        unrestricted=False,
         plan=key,
         features=frozenset(k for k, on in plan["features"].items() if on),
         limits=plan["limits"],
@@ -150,12 +151,13 @@ async def require_auth(request: Request, access: PlanAccessDep) -> None:
     """Gate for every route that can read positions or move money.
 
     Authenticates (see `get_principal`), then applies the caller's plan:
-    the owner passes; anyone else passes only a route that
+    the owner passes, as does everyone while plans are switched off;
+    anyone else passes only a route that
     core/plans.py::ROUTE_RULES opens with a feature their plan includes.
     Everything else — every write, the real account, safety, finance — is
     owner-only by default, so a new endpoint is never accidentally public.
     """
-    if access.is_owner:
+    if access.unrestricted:
         return
 
     route = request.scope.get("route")

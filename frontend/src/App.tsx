@@ -37,7 +37,9 @@ import {
 //    always does). The API refuses the same data to everyone else, so the
 //    menu is a convenience, not the lock.
 //  - `planHome`: the home screen for Free / Plus / Pro users.
-//  - neither: the owner only — the real account, money and switches.
+//  - `manage`: the real owner only, even while previewing (the Plans page).
+//  - none of these: accounts that see the whole app — the owner, or anyone
+//    while plans are switched off (the app as it was before plans).
 type Screen = {
   to: string
   label: string
@@ -45,6 +47,7 @@ type Screen = {
   element: ReactNode
   feature?: string
   planHome?: boolean
+  manage?: boolean
   inNav?: boolean
 }
 
@@ -100,7 +103,7 @@ const SCREENS: Screen[] = [
     inNav: true,
   },
   { to: '/safety', label: 'Safety', Icon: AlertTriangleIcon, element: <Safety />, inNav: true },
-  { to: '/plans', label: 'Plans', Icon: GearIcon, element: <PlansManager />, inNav: true },
+  { to: '/plans', label: 'Plans', Icon: GearIcon, element: <PlansManager />, manage: true, inNav: true },
   { to: '/models', label: 'ML Models', Icon: BarChartIcon, element: <Models /> },
   { to: '/finance', label: 'Finance', Icon: WalletIcon, element: <Finance /> },
   { to: '/settings', label: 'Settings', Icon: GearIcon, element: <Settings /> },
@@ -140,7 +143,7 @@ export default function App() {
   const hasToken = !!getToken()
   const location = useLocation()
   const queryClient = useQueryClient()
-  const { plan, isOwner, has, isLoading: planLoading } = usePlan()
+  const { plan, seesAll, canManage, has, isLoading: planLoading } = usePlan()
 
   // Account status (mode, Kite session, portfolio) is the owner's business;
   // the API refuses it to plan users, so they don't ask.
@@ -148,7 +151,7 @@ export default function App() {
     queryKey: ['status'],
     queryFn: api.status,
     refetchInterval: 30_000,
-    enabled: hasToken && isOwner,
+    enabled: hasToken && seesAll,
   })
   const { data: me } = useQuery({
     queryKey: ['me'],
@@ -201,11 +204,18 @@ export default function App() {
     )
   }
 
-  const canSee = (s: Screen): boolean => isOwner || !!s.planHome || (!!s.feature && has(s.feature))
-  // The owner's home is the Dashboard; /home stays reachable by URL for them.
-  const nav = plan ? SCREENS.filter((s) => s.inNav && canSee(s) && !(isOwner && s.planHome)) : []
+  const canSee = (s: Screen): boolean => {
+    if (s.manage) return canManage
+    return seesAll || !!s.planHome || (!!s.feature && has(s.feature))
+  }
+  // A full-app account's home is the Dashboard; /home stays reachable by URL.
+  // While previewing, the Plans link is hidden so the menu matches the plan
+  // exactly — the preview banner is the way back.
+  const inMenu = (s: Screen): boolean =>
+    !!s.inNav && canSee(s) && !(seesAll && s.planHome) && !(s.manage && plan?.previewing)
+  const nav = plan ? SCREENS.filter(inMenu) : []
   const tabBar = TAB_BAR.map((to) => nav.find((s) => s.to === to)).filter((s): s is Screen => !!s)
-  const homePath = isOwner ? '/dashboard' : '/home'
+  const homePath = seesAll ? '/dashboard' : '/home'
   const planKey = plan?.plan ?? 'free'
 
   return (
@@ -215,7 +225,7 @@ export default function App() {
           <span className="brand-mark">📈</span>
           <span className="brand-label">
             Swing Trade ML
-            <small>{isOwner ? (status?.environment ?? '—') : `${PLAN_LABELS[planKey] ?? planKey} plan`}</small>
+            <small>{seesAll ? (status?.environment ?? '—') : `${PLAN_LABELS[planKey] ?? planKey} plan`}</small>
           </span>
         </div>
 
@@ -234,7 +244,7 @@ export default function App() {
         </nav>
 
         <div className="status-strip">
-          {isOwner && (
+          {seesAll && (
             <div className="status-strip-badges">
               <span
                 className={`badge ${status?.live_trading_enabled ? 'badge-live' : 'badge-paper'}`}

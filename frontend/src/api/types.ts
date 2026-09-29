@@ -18,11 +18,14 @@ export interface CurrentUser {
 
 export type PlanKey = 'free' | 'plus' | 'pro'
 
-/** GET /me/plan: what the signed-in person may see. `plan` is "owner" for
- * the owner, who sees everything unless previewing a plan. */
+/** GET /me/plan: what the signed-in person may see. `unrestricted` means the
+ * whole app: the owner (unless previewing a plan), or anyone while plans are
+ * switched off — `plan` is then "owner" or "all". */
 export interface MyPlan {
-  plan: PlanKey | 'owner'
-  is_owner: boolean
+  plan: PlanKey | 'owner' | 'all'
+  unrestricted: boolean
+  can_manage_plans: boolean
+  plans_enabled: boolean
   previewing: boolean
   features: string[]
   limits: Partial<PlanLimits>

@@ -1,8 +1,10 @@
 """Free / Plus / Pro plans — see core/plans.py.
 
-The owner (superuser or X-API-Key) is never limited. Everyone else reaches
-only the routes a feature in their plan opens, and sees only the base
-model's picks unless the plan includes every model.
+The owner (superuser or X-API-Key) is never limited. With plans switched
+on, everyone else reaches only the routes a feature in their plan opens,
+and sees only the base model's picks unless the plan includes every model.
+With plans switched off (the default), everyone sees everything, as before
+plans existed.
 """
 
 from __future__ import annotations
@@ -15,6 +17,7 @@ from swing_trade_ml.core.security import create_access_token
 from swing_trade_ml.db.models.market import Instrument
 from swing_trade_ml.db.models.session import User
 from swing_trade_ml.db.models.trading import Signal, Strategy
+from swing_trade_ml.services.plans import set_plans_enabled
 
 API_KEY = {"X-API-Key": "test-api-key"}
 
@@ -63,6 +66,11 @@ def _buy(db_session, strategy, symbol, confidence, *, age_days=0) -> Signal:
 
 
 @pytest.fixture()
+def plans_on(db_session):
+    set_plans_enabled(db_session, True)
+
+
+@pytest.fixture()
 def book(db_session):
     """A large-cap base-model strategy with 7 BUYs, a mid-cap one with 2,
     and the owner's hand-bought real_trading book with 1."""
@@ -96,26 +104,26 @@ def book(db_session):
         ("get", "/api/v1/signals/buy-list"),
     ],
 )
-def test_free_user_is_refused_everything_outside_the_plan(client, db_session, method, path):
+def test_free_user_is_refused_everything_outside_the_plan(client, db_session, method, path, plans_on):
     headers = _user(db_session, "free1")
     resp = getattr(client, method)(path, headers=headers)
     assert resp.status_code == 403, resp.text
 
 
-def test_free_user_reaches_their_features(client, db_session, book):
+def test_free_user_reaches_their_features(client, db_session, book, plans_on):
     headers = _user(db_session, "free2")
     assert client.get("/api/v1/signals/picks", headers=headers).status_code == 200
     assert client.get("/api/v1/signals/track-record", headers=headers).status_code == 200
 
 
-def test_plus_cannot_read_the_owners_real_book(client, db_session):
+def test_plus_cannot_read_the_owners_real_book(client, db_session, plans_on):
     headers = _user(db_session, "plus1", plan="plus")
     assert client.get("/api/v1/portfolio/trades?book=bot", headers=headers).status_code == 200
     assert client.get("/api/v1/portfolio/trades?book=real", headers=headers).status_code == 403
     assert client.get("/api/v1/portfolio/trades", headers=headers).status_code == 403
 
 
-def test_owner_and_api_key_see_everything(client, db_session):
+def test_owner_and_api_key_see_everything(client, db_session, plans_on):
     owner = _user(db_session, "boss", owner=True)
     for headers in (owner, API_KEY):
         assert client.get("/api/v1/strategies", headers=headers).status_code == 200
@@ -125,7 +133,7 @@ def test_owner_and_api_key_see_everything(client, db_session):
 # ------------------------------------------------------------------ picks --
 
 
-def test_free_picks_are_five_base_model_large_caps(client, db_session, book):
+def test_free_picks_are_five_base_model_large_caps(client, db_session, book, plans_on):
     rows = client.get("/api/v1/signals/picks", headers=_user(db_session, "free3")).json()
     assert len(rows) == 5
     assert {r["strategy_name"] for r in rows} == {"ml_swing_main"}
@@ -134,7 +142,7 @@ def test_free_picks_are_five_base_model_large_caps(client, db_session, book):
     assert [r["symbol"] for r in rows] == ["LARGE6", "LARGE5", "LARGE4", "LARGE3", "LARGE2"]
 
 
-def test_pro_picks_include_every_model_but_never_the_real_book(client, db_session, book):
+def test_pro_picks_include_every_model_but_never_the_real_book(client, db_session, book, plans_on):
     rows = client.get("/api/v1/signals/picks", headers=_user(db_session, "pro1", plan="pro")).json()
     symbols = {r["symbol"] for r in rows}
     assert {"MID0", "MID1", "LARGE0"} <= symbols
@@ -142,12 +150,12 @@ def test_pro_picks_include_every_model_but_never_the_real_book(client, db_sessio
     assert "OLDPICK" not in symbols
 
 
-def test_owner_picks_are_unlimited(client, db_session, book):
+def test_owner_picks_are_unlimited(client, db_session, book, plans_on):
     rows = client.get("/api/v1/signals/picks", headers=API_KEY).json()
     assert len(rows) == 10  # 7 large + 2 mid + the owner's own real_trading BUY
 
 
-def test_free_track_record_is_base_model_only(client, db_session, book):
+def test_free_track_record_is_base_model_only(client, db_session, book, plans_on):
     rows = client.get("/api/v1/signals/track-record", headers=_user(db_session, "free4")).json()
     assert rows and {r["strategy_name"] for r in rows} == {"ml_swing_main"}
     assert all(r["trade_net_pnl"] is None for r in rows)
@@ -156,7 +164,7 @@ def test_free_track_record_is_base_model_only(client, db_session, book):
 # ---------------------------------------------------------------- preview --
 
 
-def test_owner_can_preview_free(client, db_session, book):
+def test_owner_can_preview_free(client, db_session, book, plans_on):
     owner = _user(db_session, "boss2", owner=True)
     preview = {**owner, "X-Preview-Plan": "free"}
     assert client.get("/api/v1/strategies", headers=preview).status_code == 403
@@ -167,7 +175,7 @@ def test_owner_can_preview_free(client, db_session, book):
     assert client.get("/api/v1/admin/plans", headers=preview).status_code == 200
 
 
-def test_preview_header_is_ignored_for_plan_users(client, db_session):
+def test_preview_header_is_ignored_for_plan_users(client, db_session, plans_on):
     headers = {**_user(db_session, "free5"), "X-Preview-Plan": "pro"}
     me = client.get("/api/v1/me/plan", headers=headers).json()
     assert me["plan"] == "free" and me["previewing"] is False
@@ -176,14 +184,14 @@ def test_preview_header_is_ignored_for_plan_users(client, db_session):
 # ---------------------------------------------------------- plans manager --
 
 
-def test_admin_routes_are_owner_only(client, db_session):
+def test_admin_routes_are_owner_only(client, db_session, plans_on):
     headers = _user(db_session, "pro2", plan="pro")
     assert client.get("/api/v1/admin/plans", headers=headers).status_code == 403
     assert client.get("/api/v1/admin/users", headers=headers).status_code == 403
     assert client.put("/api/v1/admin/users/1/plan", json={"plan": "pro"}, headers=headers).status_code == 403
 
 
-def test_editing_a_plan_changes_access_at_once(client, db_session, book):
+def test_editing_a_plan_changes_access_at_once(client, db_session, book, plans_on):
     free = _user(db_session, "free6")
     assert client.get("/api/v1/ml/models", headers=free).status_code == 403
 
@@ -198,7 +206,7 @@ def test_editing_a_plan_changes_access_at_once(client, db_session, book):
     assert len(client.get("/api/v1/signals/picks", headers=free).json()) == 2
 
 
-def test_unknown_plan_keys_are_refused(client):
+def test_unknown_plan_keys_are_refused(client, plans_on):
     resp = client.put(
         "/api/v1/admin/plans/free",
         json={"features": {"teleport": True}, "limits": {}},
@@ -207,7 +215,7 @@ def test_unknown_plan_keys_are_refused(client):
     assert resp.status_code == 422
 
 
-def test_assigning_a_user_to_a_plan(client, db_session, book):
+def test_assigning_a_user_to_a_plan(client, db_session, book, plans_on):
     headers = _user(db_session, "mover")
     user_id = db_session.query(User).filter_by(username="mover").one().id
     resp = client.put(f"/api/v1/admin/users/{user_id}/plan", json={"plan": "pro"}, headers=API_KEY)
@@ -215,3 +223,37 @@ def test_assigning_a_user_to_a_plan(client, db_session, book):
     assert client.get("/api/v1/me/plan", headers=headers).json()["plan"] == "pro"
     bad = client.put(f"/api/v1/admin/users/{user_id}/plan", json={"plan": "gold"}, headers=API_KEY)
     assert bad.status_code == 422
+
+
+# ------------------------------------------------------------ the switch --
+
+
+def test_plans_are_off_by_default_and_everyone_sees_everything(client, db_session, book):
+    free = _user(db_session, "v1user")
+    assert client.get("/api/v1/strategies", headers=free).status_code == 200
+    assert client.get("/api/v1/status", headers=free).status_code == 200
+    assert len(client.get("/api/v1/signals/picks", headers=free).json()) == 10
+    me = client.get("/api/v1/me/plan", headers=free).json()
+    assert me["unrestricted"] is True and me["plans_enabled"] is False
+    assert me["can_manage_plans"] is False
+
+
+def test_owner_can_preview_while_plans_are_off(client, db_session, book):
+    preview = {**_user(db_session, "boss3", owner=True), "X-Preview-Plan": "free"}
+    assert client.get("/api/v1/strategies", headers=preview).status_code == 403
+    assert len(client.get("/api/v1/signals/picks", headers=preview).json()) == 5
+
+
+def test_owner_flips_the_switch(client, db_session, book):
+    free = _user(db_session, "switchee")
+    assert client.get("/api/v1/admin/switch", headers=API_KEY).json() == {"enabled": False}
+    resp = client.put("/api/v1/admin/switch", json={"enabled": True}, headers=API_KEY)
+    assert resp.json() == {"enabled": True}
+    assert client.get("/api/v1/strategies", headers=free).status_code == 403
+    client.put("/api/v1/admin/switch", json={"enabled": False}, headers=API_KEY)
+    assert client.get("/api/v1/strategies", headers=free).status_code == 200
+
+
+def test_only_the_owner_can_flip_the_switch(client, db_session):
+    headers = _user(db_session, "sneaky")
+    assert client.put("/api/v1/admin/switch", json={"enabled": True}, headers=headers).status_code == 403

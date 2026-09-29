@@ -273,6 +273,48 @@ function Users() {
   )
 }
 
+function MasterSwitch() {
+  const queryClient = useQueryClient()
+  const current = useQuery({ queryKey: ['planSwitch'], queryFn: api.planSwitch })
+  const flip = useMutation({
+    mutationFn: api.setPlanSwitch,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['planSwitch'] })
+      queryClient.invalidateQueries({ queryKey: ['plan'] })
+    },
+  })
+
+  if (current.isLoading) return <Loading />
+  if (current.error) return <ErrorBox error={current.error} />
+  const on = !!current.data?.enabled
+
+  return (
+    <div className={`banner ${on ? 'banner-ok' : 'banner-info'}`} style={{ marginBottom: '1rem' }}>
+      <div className="between">
+        <div>
+          <strong>Plans are {on ? 'ON' : 'OFF'}.</strong>{' '}
+          {on
+            ? 'Everyone except you sees only what their plan includes.'
+            : 'Everyone who signs in sees the whole app, exactly as before plans. Set things up and preview them first; nothing changes for anyone until you turn this on.'}
+        </div>
+        <button
+          className={on ? '' : 'primary'}
+          disabled={flip.isPending}
+          onClick={() => {
+            const message = on
+              ? 'Turn plans off? Everyone who signs in will see the whole app again, as before plans.'
+              : 'Turn plans on? Everyone except you will immediately see only what their plan includes.'
+            if (confirm(message)) flip.mutate(!on)
+          }}
+        >
+          {flip.isPending ? 'Saving…' : on ? 'Turn plans off' : 'Turn plans on'}
+        </button>
+      </div>
+      {flip.isError && <div className="neg">{(flip.error as Error).message}</div>}
+    </div>
+  )
+}
+
 function Preview() {
   const start = (plan: PlanKey) => {
     setPreviewPlan(plan)
@@ -315,6 +357,7 @@ export default function PlansManager() {
           </div>
         </div>
       </div>
+      <MasterSwitch />
       <div className="row" style={{ marginBottom: '1rem' }} role="tablist">
         {TABS.map((t) => (
           <button

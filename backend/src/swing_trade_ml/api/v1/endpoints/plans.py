@@ -3,13 +3,13 @@ Plans Manager (edit plans, assign users). See core/plans.py."""
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy import select
 
-from swing_trade_ml.api.deps import DbSession, PlanAccessDep, require_owner
+from swing_trade_ml.api.deps import DbSession, PlanAccessDep, Principal, get_principal, require_owner
 from swing_trade_ml.core.plans import BASE_MODEL, CAP_TIERS, FEATURES, LIMITS, PLAN_KEYS
 from swing_trade_ml.db.models.session import User
 from swing_trade_ml.services import plans as plan_service
@@ -27,25 +27,54 @@ class UserPlanUpdate(BaseModel):
     plan: str
 
 
+class SwitchUpdate(BaseModel):
+    enabled: bool
+
+
 @router.get("/me/plan", response_model=dict)
-def my_plan(access: PlanAccessDep) -> dict[str, Any]:
+def my_plan(
+    access: PlanAccessDep, principal: Annotated[Principal, Depends(get_principal)], db: DbSession
+) -> dict[str, Any]:
     """What the signed-in person may see. The frontend builds its menu from
-    this; the API enforces the same rules on every call regardless."""
-    if access.is_owner:
+    this; the API enforces the same rules on every call regardless.
+
+    `unrestricted` means the whole app: the owner, or anyone while plans
+    are switched off. `can_manage_plans` is the real owner only, preview or
+    not, so the owner can always reach the Plans Manager to get back out.
+    """
+    common = {
+        "can_manage_plans": principal.is_owner,
+        "plans_enabled": plan_service.plans_enabled(db),
+    }
+    if access.unrestricted:
         return {
-            "plan": "owner",
-            "is_owner": True,
+            **common,
+            "plan": "owner" if principal.is_owner else "all",
+            "unrestricted": True,
             "previewing": False,
             "features": list(FEATURES),
             "limits": {},
         }
     return {
+        **common,
         "plan": access.plan,
-        "is_owner": False,
+        "unrestricted": False,
         "previewing": access.previewing,
         "features": sorted(access.features),
         "limits": access.limits,
     }
+
+
+@admin.get("/switch", response_model=dict)
+def get_switch(db: DbSession) -> dict[str, bool]:
+    return {"enabled": plan_service.plans_enabled(db)}
+
+
+@admin.put("/switch", response_model=dict)
+def set_switch(body: SwitchUpdate, db: DbSession) -> dict[str, bool]:
+    """Turn plans on or off for everyone. Off is the app exactly as it was
+    before plans: every signed-in account sees everything."""
+    return {"enabled": plan_service.set_plans_enabled(db, body.enabled)}
 
 
 @admin.get("/features", response_model=dict)

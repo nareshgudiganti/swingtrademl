@@ -25,7 +25,7 @@ from swing_trade_ml.db.models.market import Candle, Instrument, Quote
 from swing_trade_ml.db.models.ml import MLModel, Prediction
 from swing_trade_ml.db.models.mutual_funds import MutualFund, MutualFundHolding, MutualFundNav
 from swing_trade_ml.db.models.safety import RiskEvent, SystemState
-from swing_trade_ml.db.models.session import BrokerSession, SubscriptionPlan, User
+from swing_trade_ml.db.models.session import BrokerSession, PlanSettings, SubscriptionPlan, User
 from swing_trade_ml.db.models.trading import (
     Order,
     PortfolioSnapshot,
@@ -55,6 +55,7 @@ __all__ = [
     "MutualFundHolding",
     "MutualFundNav",
     "Order",
+    "PlanSettings",
     "PortfolioSnapshot",
     "Position",
     "Prediction",

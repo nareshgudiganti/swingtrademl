@@ -15,13 +15,16 @@ export function usePlan() {
     staleTime: 60_000,
   })
   const plan: MyPlan | undefined = query.data
-  const isOwner = !!plan?.is_owner
+  // The whole app: the owner, or anyone while plans are switched off.
+  const seesAll = !!plan?.unrestricted
   return {
     plan,
     isLoading: query.isLoading,
     error: query.error,
-    isOwner,
-    has: (feature: string) => isOwner || !!plan?.features.includes(feature),
+    seesAll,
+    // The real owner, even while previewing a plan.
+    canManage: !!plan?.can_manage_plans,
+    has: (feature: string) => seesAll || !!plan?.features.includes(feature),
   }
 }
 
@@ -30,4 +33,5 @@ export const PLAN_LABELS: Record<string, string> = {
   plus: 'Plus',
   pro: 'Pro',
   owner: 'Owner',
+  all: 'Everything',
 }

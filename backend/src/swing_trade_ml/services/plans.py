@@ -12,13 +12,33 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy.orm import Session
 
 from swing_trade_ml.core.plans import BASE_MODEL, DEFAULT_PLANS, PLAN_KEYS, clean_plan, default_plan
-from swing_trade_ml.db.models.session import SubscriptionPlan
+from swing_trade_ml.db.models.session import PlanSettings, SubscriptionPlan
 from swing_trade_ml.db.models.trading import Strategy
 from swing_trade_ml.services.portfolio import REAL_TRADING_STRATEGY_NAME
 from swing_trade_ml.strategies.tier import cap_tier
 
 if TYPE_CHECKING:
     from swing_trade_ml.api.deps import PlanAccess
+
+PLAN_SETTINGS_ID = 1
+
+
+def plans_enabled(db: Session) -> bool:
+    """The owner's master switch. Off (the default, and with no row at all)
+    means every signed-in account sees the whole app, exactly as before
+    plans existed."""
+    row = db.get(PlanSettings, PLAN_SETTINGS_ID)
+    return bool(row and row.enabled)
+
+
+def set_plans_enabled(db: Session, enabled: bool) -> bool:
+    row = db.get(PlanSettings, PLAN_SETTINGS_ID)
+    if row is None:
+        row = PlanSettings(id=PLAN_SETTINGS_ID)
+        db.add(row)
+    row.enabled = enabled
+    db.commit()
+    return row.enabled
 
 
 def get_plan(db: Session, key: str) -> dict[str, Any]:
@@ -60,7 +80,7 @@ def strategy_visible(strategy: Strategy | None, access: PlanAccess) -> bool:
     `all_models` that narrows to the base model alone, and the plan's
     company sizes apply on top.
     """
-    if access.is_owner:
+    if access.unrestricted:
         return True
     if strategy is None or strategy.strategy_type != "ml_swing":
         return False

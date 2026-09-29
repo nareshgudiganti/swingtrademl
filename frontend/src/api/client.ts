@@ -240,6 +240,8 @@ export const api = {
 
   // -------------------------------------------------------------- plans --
   myPlan: () => get<MyPlan>('/me/plan'),
+  planSwitch: () => get<{ enabled: boolean }>('/admin/switch'),
+  setPlanSwitch: (enabled: boolean) => put<{ enabled: boolean }>('/admin/switch', { enabled }),
   planCatalogue: () => get<PlanCatalogue>('/admin/features'),
   plans: () => get<PlanConfig[]>('/admin/plans'),
   savePlan: (key: string, body: Pick<PlanConfig, 'features' | 'limits'>) =>

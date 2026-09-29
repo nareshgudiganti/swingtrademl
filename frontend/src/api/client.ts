@@ -3,6 +3,12 @@
 import type {
   Candle,
   CurrentUser,
+  AdminUser,
+  MyPlan,
+  PlanCatalogue,
+  PlanConfig,
+  PlanPick,
+  TopPick,
   DetailedPosition,
   EquityPoint,
   FinanceCalculationSummary,
@@ -70,6 +76,37 @@ export function clearToken(): void {
   localStorage.removeItem(TOKEN_STORAGE)
 }
 
+// The owner can view the app exactly as a Free / Plus / Pro user sees it.
+// The chosen plan rides on every request as X-Preview-Plan; the backend only
+// honours it for the owner. Storage can throw (private mode), so every
+// access is guarded and "no preview" is the safe fallback.
+const PREVIEW_STORAGE = 'stml.previewPlan'
+
+export function getPreviewPlan(): string {
+  try {
+    return localStorage.getItem(PREVIEW_STORAGE) ?? ''
+  } catch {
+    return ''
+  }
+}
+
+export function setPreviewPlan(plan: string | null): void {
+  try {
+    if (plan) localStorage.setItem(PREVIEW_STORAGE, plan)
+    else localStorage.removeItem(PREVIEW_STORAGE)
+  } catch {
+    /* the preview just won't persist */
+  }
+}
+
+function authHeaders(token: string): Record<string, string> {
+  const preview = getPreviewPlan()
+  return {
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(preview ? { 'X-Preview-Plan': preview } : {}),
+  }
+}
+
 /**
  * Google sign-in redirects the whole browser back to this app's own URL with
  * `?token=...` attached (see the backend's /auth/google/callback). Called
@@ -103,7 +140,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
     headers: {
       'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...authHeaders(token),
       ...init?.headers,
     },
   })
@@ -139,7 +176,7 @@ async function requestForm<T>(path: string, form: FormData): Promise<T> {
   const response = await fetch(`${BASE_URL}${path}`, {
     method: 'POST',
     body: form,
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    headers: authHeaders(token),
   })
 
   if (!response.ok) {
@@ -201,6 +238,15 @@ export const api = {
   me: () => get<CurrentUser>('/auth/me'),
   kiteLogin: () => get<KiteLoginResponse>('/auth/kite/login'),
 
+  // -------------------------------------------------------------- plans --
+  myPlan: () => get<MyPlan>('/me/plan'),
+  planCatalogue: () => get<PlanCatalogue>('/admin/features'),
+  plans: () => get<PlanConfig[]>('/admin/plans'),
+  savePlan: (key: string, body: Pick<PlanConfig, 'features' | 'limits'>) =>
+    put<PlanConfig>(`/admin/plans/${key}`, body),
+  users: () => get<AdminUser[]>('/admin/users'),
+  setUserPlan: (userId: number, plan: string) => put<AdminUser>(`/admin/users/${userId}/plan`, { plan }),
+
   // ---------------------------------------------------------- portfolio --
   // Everything below asks for `book=bot`: the bot's own book, in whichever
   // mode the bot is running (paper rows while in paper, real ones once
@@ -258,6 +304,9 @@ export const api = {
   signalHistory: (symbol: string) =>
     get<LatestSignal[]>(`/signals/latest?symbol=${encodeURIComponent(symbol)}`),
   buyList: () => get<BuyListRow[]>('/signals/buy-list'),
+  // Today's picks, already cut to what the signed-in person's plan shows.
+  picks: () => get<PlanPick[]>('/signals/picks'),
+  topPicks: (budget: number) => get<TopPick[]>(`/signals/top-picks?budget=${budget}`),
   scanResults: () => get<TrackRecordSignal[]>('/signals/track-record'),
 
   // --------------------------------------------------------- strategies --

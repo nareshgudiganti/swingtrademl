@@ -7,6 +7,7 @@ import Stat from '../components/Stat'
 import { Empty, ErrorBox, Loading } from '../components/Loading'
 import StockDetailModal, { type StockDetail } from '../components/StockDetailModal'
 import { formatCurrency, formatDate, formatPercent, formatSignedPercent, pnlClass } from '../lib/format'
+import { usePlan } from '../lib/plan'
 import { strategyLabel } from '../lib/tiers'
 
 const DAYS_TO_WATCH = 14
@@ -86,7 +87,8 @@ export function PositionsTable({
 }: {
   rows: DetailedPosition[]
   onSelectDetail: (detail: StockDetail) => void
-  onSell: (p: DetailedPosition) => void
+  /** Omitted for read-only viewers (plan users), who can't close positions. */
+  onSell?: (p: DetailedPosition) => void
   sellBusy: boolean
   sellLabel: string
   emptyLabel: string
@@ -248,9 +250,11 @@ export function PositionsTable({
                 )}
               </td>
               <td>
-                <button className="danger" disabled={sellBusy} onClick={() => onSell(p)}>
-                  {sellLabel}
-                </button>
+                {onSell && (
+                  <button className="danger" disabled={sellBusy} onClick={() => onSell(p)}>
+                    {sellLabel}
+                  </button>
+                )}
               </td>
             </tr>
           )
@@ -273,9 +277,15 @@ export function PositionsTable({
  */
 export default function Positions() {
   const queryClient = useQueryClient()
-  const status = useQuery({ queryKey: ['status'], queryFn: api.status })
+  // Plan users see the bot's book read-only: no Sell, and no account status.
+  const { isOwner, has } = usePlan()
+  const status = useQuery({ queryKey: ['status'], queryFn: api.status, enabled: isOwner })
   const positions = useQuery({ queryKey: ['positions'], queryFn: api.positions })
-  const trades = useQuery({ queryKey: ['trades', 50], queryFn: () => api.trades(50) })
+  const trades = useQuery({
+    queryKey: ['trades', 50],
+    queryFn: () => api.trades(50),
+    enabled: has('bot_performance'),
+  })
   const buyList = useQuery({ queryKey: ['buyList'], queryFn: api.buyList })
   // Cash and the running realised total — the parts of "what is this book
   // worth" that the open-position rows alone can't tell you. Scoped to the
@@ -424,11 +434,15 @@ export default function Positions() {
         <PositionsTable
           rows={unsorted}
           onSelectDetail={setSelectedDetail}
-          onSell={(p) => {
-            if (confirm(`Close ${p.quantity} × ${p.symbol} at market?`)) {
-              close.mutate(p.id)
-            }
-          }}
+          onSell={
+            isOwner
+              ? (p) => {
+                  if (confirm(`Close ${p.quantity} × ${p.symbol} at market?`)) {
+                    close.mutate(p.id)
+                  }
+                }
+              : undefined
+          }
           sellBusy={close.isPending}
           sellLabel="Sell"
           emptyLabel="No open positions."

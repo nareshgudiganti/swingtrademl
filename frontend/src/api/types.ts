@@ -11,6 +11,71 @@ export interface CurrentUser {
   email: string | null
   auth_provider: 'local' | 'google'
   is_superuser: boolean
+  plan: PlanKey
+}
+
+// ------------------------------------------------------------------ plans --
+
+export type PlanKey = 'free' | 'plus' | 'pro'
+
+/** GET /me/plan: what the signed-in person may see. `plan` is "owner" for
+ * the owner, who sees everything unless previewing a plan. */
+export interface MyPlan {
+  plan: PlanKey | 'owner'
+  is_owner: boolean
+  previewing: boolean
+  features: string[]
+  limits: Partial<PlanLimits>
+}
+
+export interface PlanLimits {
+  picks_per_day: number
+  allowed_cap_tiers: string[]
+  history_days: number
+}
+
+export interface PlanConfig {
+  key: PlanKey
+  name: string
+  features: Record<string, boolean>
+  limits: PlanLimits
+}
+
+export interface PlanCatalogue {
+  features: { key: string; label: string; group: string; description: string }[]
+  limits: { key: keyof PlanLimits; label: string; description: string; kind: 'int' | 'tiers' }[]
+  cap_tiers: string[]
+  base_model: string
+}
+
+export interface AdminUser {
+  id: number
+  username: string
+  email: string | null
+  auth_provider: string
+  is_active: boolean
+  is_owner: boolean
+  plan: PlanKey
+  last_login_at: string | null
+}
+
+export interface PlanPick {
+  symbol: string
+  name: string | null
+  cap_tier: string
+  strategy_name: string
+  price: number | null
+  confidence: number | null
+  stop_loss: number | null
+  take_profit: number | null
+  horizon_days: number | null
+  reason: string | null
+  generated_at: string
+}
+
+export interface TopPick extends PlanPick {
+  suggested_allocation_inr: number
+  suggested_quantity: number
 }
 
 export interface KiteLoginResponse {

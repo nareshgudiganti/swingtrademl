@@ -10,7 +10,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.sql import Select
 
-from swing_trade_ml.api.deps import DbSession
+from swing_trade_ml.api.deps import DbSession, PlanAccessDep
 from swing_trade_ml.brokers import get_broker
 from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.enums import ExitReason, PositionStatus, SignalType, TradingMode
@@ -40,6 +40,7 @@ from swing_trade_ml.services.holdings_sync import (
 from swing_trade_ml.services.holdings_sync import (
     held_symbols as _held_symbols,
 )
+from swing_trade_ml.services.plans import history_cutoff, strategy_visible
 from swing_trade_ml.services.portfolio import REAL_TRADING_STRATEGY_NAME
 from swing_trade_ml.strategies.tier import cap_tier
 
@@ -701,6 +702,7 @@ def _post_exit_moves(db: DbSession, trades: list[Trade]) -> dict[int, dict[str, 
 @router.get("/trades", response_model=list[TradeOut])
 def list_trades(
     db: DbSession,
+    access: PlanAccessDep,
     wins_only: bool | None = None,
     limit: int = Query(100, le=1000),
     book: BookFilter = "all",
@@ -726,11 +728,14 @@ def list_trades(
     )
     if since is not None:
         stmt = stmt.where(Trade.exit_at >= since)
+    cutoff = history_cutoff(access)
+    if cutoff is not None:
+        stmt = stmt.where(Trade.exit_at >= cutoff)
     stmt = _scope_to_book(stmt, Trade.strategy_id, book)
     if wins_only is not None:
         stmt = stmt.where(Trade.is_win.is_(wins_only))
 
-    triples = db.execute(stmt).all()
+    triples = [row for row in db.execute(stmt).all() if strategy_visible(row[2], access)]
     post_exit = _post_exit_moves(db, [trade for trade, _, _ in triples])
 
     result = []

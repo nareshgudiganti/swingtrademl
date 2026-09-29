@@ -61,6 +61,24 @@ def cmd_create_user(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_make_owner(args: argparse.Namespace) -> int:
+    """Make an existing login the owner: it sees everything, is never limited
+    by a plan, and can open the Plans Manager."""
+    from sqlalchemy import select
+
+    from swing_trade_ml.db.models.session import User
+    from swing_trade_ml.db.session import session_scope
+
+    with session_scope() as db:
+        user = db.execute(select(User).where(User.username == args.username)).scalar_one_or_none()
+        if user is None:
+            print(f"❌ No user '{args.username}'")
+            return 1
+        user.is_superuser = True
+    print(f"✅ '{args.username}' is now an owner")
+    return 0
+
+
 def cmd_kite_login(args: argparse.Namespace) -> int:
     """Run the unattended Kite login now, instead of waiting for the 06:10 cron.
 
@@ -309,6 +327,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--password", required=True)
     p.add_argument("--email", default=None)
     p.set_defaults(func=cmd_create_user)
+
+    p = sub.add_parser("make-owner", help="Make an existing login the owner (sees everything, manages plans)")
+    p.add_argument("username")
+    p.set_defaults(func=cmd_make_owner)
 
     p = sub.add_parser("sync-instruments", help="Refresh the instrument master from Kite")
     p.add_argument("--exchange", default="NSE")

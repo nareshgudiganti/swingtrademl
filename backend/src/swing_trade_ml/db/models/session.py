@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
-from sqlalchemy import Boolean, DateTime, Integer, String
+from sqlalchemy import JSON, Boolean, DateTime, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from swing_trade_ml.db.base import Base, TimestampMixin
@@ -35,9 +36,26 @@ class User(Base, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_superuser: Mapped[bool] = mapped_column(Boolean, default=False)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # "free" | "plus" | "pro" — see core/plans.py. Ignored for superusers,
+    # who always see everything.
+    plan: Mapped[str] = mapped_column(String(16), default="free", server_default="free")
 
     def __repr__(self) -> str:
         return f"<User {self.username}>"
+
+
+class SubscriptionPlan(Base, TimestampMixin):
+    """The owner's edits to one plan. A plan with no row here uses its
+    defaults from core/plans.py, so a fresh database needs no seeding."""
+
+    __tablename__ = "subscription_plans"
+
+    key: Mapped[str] = mapped_column(String(16), primary_key=True)
+    features: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    limits: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+
+    def __repr__(self) -> str:
+        return f"<SubscriptionPlan {self.key}>"
 
 
 class BrokerSession(Base, TimestampMixin):

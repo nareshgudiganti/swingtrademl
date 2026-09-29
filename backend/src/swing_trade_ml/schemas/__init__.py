@@ -98,6 +98,7 @@ class CurrentUserOut(BaseModel):
     email: str | None
     auth_provider: str
     is_superuser: bool
+    plan: str
 
 
 class KiteLoginResponse(BaseModel):

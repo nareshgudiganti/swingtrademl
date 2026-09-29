@@ -15,6 +15,7 @@ from swing_trade_ml.api.v1.endpoints import (
     mutual_funds,
     notifications,
     orders,
+    plans,
     portfolio,
     real_report,
     risk,
@@ -34,9 +35,14 @@ api_router = APIRouter()
 #    cannot send custom headers.
 api_router.include_router(system.router)
 api_router.include_router(auth.router)
+# /me/plan must answer every signed-in user whatever their plan (it is how
+# the app learns what to show), and /admin/* checks for the owner itself.
+api_router.include_router(plans.router)
+api_router.include_router(plans.admin)
 
 # Everything that can read positions or move money requires either a real
-# dashboard login (JWT) or the shared X-API-Key (for scripts/automation).
+# dashboard login (JWT) or the shared X-API-Key (for scripts/automation),
+# and — for anyone but the owner — a plan that includes that route.
 protected = [Depends(require_auth)]
 api_router.include_router(instruments.router, dependencies=protected)
 api_router.include_router(market_data.router, dependencies=protected)

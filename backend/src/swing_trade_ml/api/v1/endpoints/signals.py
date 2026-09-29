@@ -8,12 +8,13 @@ from fastapi import APIRouter, Query
 from sqlalchemy import select
 from sqlalchemy.orm import aliased
 
-from swing_trade_ml.api.deps import DbSession
+from swing_trade_ml.api.deps import DbSession, PlanAccessDep
 from swing_trade_ml.brokers import get_broker
 from swing_trade_ml.core.enums import PositionStatus
 from swing_trade_ml.db.models.market import Candle, Instrument
 from swing_trade_ml.db.models.trading import Position, Signal, Strategy, Trade
 from swing_trade_ml.schemas import SignalOut
+from swing_trade_ml.services.plans import history_cutoff, strategy_visible
 from swing_trade_ml.strategies.tier import cap_tier
 
 router = APIRouter(prefix="/signals", tags=["signals"])
@@ -114,9 +115,67 @@ def latest_actionable(
     ]
 
 
+# A BUY older than this is not a pick for today. Scans run every weekday,
+# so five calendar days covers a long weekend and a holiday.
+PICK_MAX_AGE = timedelta(days=5)
+
+
+@router.get("/picks", response_model=list[dict])
+def picks(db: DbSession, access: PlanAccessDep) -> list[dict]:
+    """Today's BUY picks as the caller's plan shows them: the base model
+    only unless the plan has every model, the plan's company sizes, and at
+    most the plan's picks per day, highest confidence first.
+
+    One row per stock: when several strategies say BUY, the most confident
+    one is shown. Unlike /buy-list this doesn't hide stocks the bot already
+    holds, because the pick is still today's pick for someone who doesn't.
+    """
+    latest_signal = (
+        select(Signal)
+        .where(Signal.mode == get_broker().mode)
+        .distinct(Signal.strategy_id, Signal.instrument_id)
+        .order_by(Signal.strategy_id, Signal.instrument_id, Signal.generated_at.desc())
+    ).subquery()
+    LatestSignal = aliased(Signal, latest_signal)  # noqa: N806 - matches buy_list's own convention below
+
+    rows = db.execute(
+        select(LatestSignal, Instrument.tradingsymbol, Instrument.name, Strategy)
+        .join(Instrument, Instrument.id == LatestSignal.instrument_id)
+        .join(Strategy, Strategy.id == LatestSignal.strategy_id)
+        .where(
+            LatestSignal.signal_type == "BUY",
+            LatestSignal.generated_at >= datetime.now(UTC) - PICK_MAX_AGE,
+            Strategy.is_active.is_(True),
+        )
+        .order_by(LatestSignal.confidence.desc().nullslast())
+    ).all()
+
+    best: dict[str, dict] = {}
+    for sig, symbol, name, strategy in rows:
+        if symbol in best or not strategy_visible(strategy, access):
+            continue
+        best[symbol] = {
+            "symbol": symbol,
+            "name": name,
+            "cap_tier": cap_tier(strategy.params.get("model_name") if strategy.params else None),
+            "strategy_name": strategy.name,
+            "price": sig.price,
+            "confidence": sig.confidence,
+            "stop_loss": sig.stop_loss,
+            "take_profit": sig.take_profit,
+            "horizon_days": sig.horizon_days,
+            "reason": sig.reason,
+            "generated_at": sig.generated_at,
+        }
+
+    out = list(best.values())
+    return out[: access.picks_per_day] if access.picks_per_day else out
+
+
 @router.get("/top-picks", response_model=list[dict])
 def top_picks(
     db: DbSession,
+    access: PlanAccessDep,
     budget: float = Query(25_000.0, gt=0, description="Total real-money rupees to allocate"),
     max_picks: int = Query(5, ge=1, le=20),
     min_confidence: float = Query(0.70, ge=0.5, le=0.99),
@@ -176,8 +235,13 @@ def top_picks(
         )
     ).all()
 
+    if access.picks_per_day:
+        max_picks = min(max_picks, access.picks_per_day)
+
     candidates: list[dict] = []
     for sig, symbol, name, strategy in rows:
+        if not strategy_visible(strategy, access):
+            continue
         tier = cap_tier(strategy.params.get("model_name") if strategy.params else None)
         if tier == "smallcap" and not include_smallcap:
             continue
@@ -300,25 +364,33 @@ def buy_list(db: DbSession) -> list[dict]:
 
 
 @router.get("/track-record", response_model=list[dict])
-def track_record(db: DbSession) -> list[dict]:
+def track_record(db: DbSession, access: PlanAccessDep) -> list[dict]:
     """Every signal with a stop/target set, scored or still open — the
     honest ledger behind the Scan Results tab. Unlike /buy-list (a
     same-day shortlist), this returns full history: wins, losses, and
     expirations together, never filtered down to only the flattering ones.
     See docs/superpowers/specs/2026-09-12-signal-track-record-design.md.
+
+    Plan users see only the strategies and history their plan covers, and
+    the bot's own profit on each only if the plan includes its trades.
     """
-    rows = db.execute(
+    stmt = (
         select(Signal, Instrument.tradingsymbol, Instrument.name, Strategy)
         .join(Instrument, Instrument.id == Signal.instrument_id)
         .join(Strategy, Strategy.id == Signal.strategy_id)
         .where(Signal.stop_loss.isnot(None), Signal.take_profit.isnot(None))
         .order_by(Signal.generated_at.desc())
-    ).all()
+    )
+    cutoff = history_cutoff(access)
+    if cutoff is not None:
+        stmt = stmt.where(Signal.generated_at >= cutoff)
+    rows = [row for row in db.execute(stmt).all() if strategy_visible(row[3], access)]
+    show_trade = access.has("bot_performance")
 
     out: list[dict] = []
     for sig, symbol, name, strategy in rows:
         trade_row = None
-        if sig.was_executed:
+        if sig.was_executed and show_trade:
             trade_row = db.execute(
                 select(Trade).where(Trade.instrument_id == sig.instrument_id, Trade.entry_at >= sig.generated_at)
                 .order_by(Trade.entry_at.asc())

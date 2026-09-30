@@ -197,3 +197,12 @@ def test_a_missing_model_file_is_tried_once_not_per_stock(db_session, market, mo
     assert reader.model_probability("BRAINABC") is None
     assert reader.model_probability("BRAINXYZ") is None
     assert len(calls) == 1
+
+
+def test_a_daily_bar_stamped_at_ist_midnight_is_that_ist_day(db_session):
+    """Kite stamps daily bars at IST midnight, stored as 18:30 UTC the day before."""
+    inst = _instrument(db_session, "BRAINIST", 991009)
+    _candle(db_session, inst, datetime(2026, 9, 24, 18, 30, tzinfo=UTC), 100.0)
+    db_session.commit()
+    bar_date, _close = DatedReader(db_session, as_of=AS_OF, live=False).last_close("BRAINIST")
+    assert bar_date == "2026-09-25"

@@ -9,6 +9,7 @@ for live runs; a replay gets nothing rather than today's answer.
 from __future__ import annotations
 
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 from sqlalchemy import select
@@ -23,6 +24,10 @@ from swing_trade_ml.db.models.trading import Position
 from swing_trade_ml.services import system_state
 
 log = get_logger(__name__)
+
+# Daily bars are stamped at IST midnight of their trading day (stored as 18:30
+# UTC the day before), so a bar's trading day must be read in IST.
+IST = ZoneInfo("Asia/Kolkata")
 
 # The model the fallback asks when no reasoning module is installed — the same
 # default the ml_swing strategy uses.
@@ -64,7 +69,7 @@ class DatedReader:
         ).first()
         if row is None:
             return None
-        return row.ts.date().isoformat(), float(row.close)
+        return row.ts.astimezone(IST).date().isoformat(), float(row.close)
 
     def index_closes(self) -> pd.Series:
         closes = (

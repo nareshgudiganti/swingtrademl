@@ -12,6 +12,7 @@ from enum import StrEnum
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+import swing_trade_ml.brain.modules  # noqa: F401 — registers installed modules
 from swing_trade_ml.brain import contracts as c
 from swing_trade_ml.brain.context import BrainContext
 from swing_trade_ml.brain.module import REGISTRY, STEPS, STEPS_FOR, Mode, ModuleRegistry, resolve_mode

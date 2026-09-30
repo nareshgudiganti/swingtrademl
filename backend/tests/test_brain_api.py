@@ -52,7 +52,7 @@ def test_modules_lists_the_eight_steps(client):
         "decide",
         "learn",
     ]
-    assert body["modules"] == []  # M00 installs no modules; every step uses its fallback
+    assert [m["id"] for m in body["modules"]] == ["M07"]  # only the risk gate so far
 
 
 def test_unknown_module_cannot_be_switched(client):
@@ -70,7 +70,9 @@ def test_run_then_read_latest(client, stock):
     run_id = r.json()["run_id"]
     latest = client.get("/api/v1/brain/runs/latest?kind=nightly", headers=HEADERS).json()
     assert latest["run_id"] == run_id
-    assert latest["banner"]["mode"] == "NO_NEW_TRADES"
+    # The risk gate ran, so the banner is the market mode: DEFENSIVE, because
+    # the test database has no NIFTY history to judge the trend from.
+    assert latest["banner"]["mode"] == "DEFENSIVE"
     assert latest["counts"] == {"WAIT": 1}
     assert latest["decisions"][0]["symbol"] == "BRAINAPI"
     assert latest["decisions"][0]["reasons"]

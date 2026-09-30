@@ -77,6 +77,12 @@ def _refuse(cand: Candidate, rule: str, reason: str, amount: float | None = None
     return RiskVerdict(symbol=cand.symbol, allowed=False, rule=rule, reason=reason, amount_inr=amount)
 
 
+def _fit(qty: int, binding: str | None, room: float, price: float, rule: str) -> tuple[int, str | None]:
+    """Shrink `qty` to the whole shares that fit in `room`; name the rule if it binds."""
+    fits = max(0, math.floor(room / price))
+    return (fits, rule) if fits < qty else (qty, binding)
+
+
 def allocate(
     candidates: list[Candidate],
     account: Account,
@@ -134,13 +140,6 @@ def allocate(
             continue
 
         qty, binding = result.qty, None
-
-        def shrink(room: float, rule: str) -> None:
-            nonlocal qty, binding
-            fits = max(0, math.floor(room / cand.price))
-            if fits < qty:
-                qty, binding = fits, rule
-
         if cand.bucket is not None:
             if account.sector_rule == "one_per_sector" and cand.bucket in approved_buckets:
                 verdicts.append(
@@ -154,8 +153,8 @@ def allocate(
                 continue
             if account.sector_cap_pct is not None:
                 room = account.sector_cap_pct * account.portfolio_value - sector_used.get(cand.bucket, 0.0)
-                shrink(room, "SECTOR_CAP")
-        shrink(deploy_left, "DEPLOYABLE")
+                qty, binding = _fit(qty, binding, room, cand.price, "SECTOR_CAP")
+        qty, binding = _fit(qty, binding, deploy_left, cand.price, "DEPLOYABLE")
         if policy.mode is MarketMode.DEFENSIVE:
             qty = math.floor(qty * policy.defensive_size_factor)
             binding = binding or "DEFENSIVE_SIZE"
@@ -169,7 +168,8 @@ def allocate(
                     cand,
                     rule,
                     f"After stronger ideas in this run, the {limit} leaves room for only "
-                    f"{format_inr(value)} — below the {format_inr(account.min_position_inr)} minimum position.",
+                    f"{format_inr(value)} — below the "
+                    f"{format_inr(account.min_position_inr)} minimum position.",
                     value,
                 )
             )

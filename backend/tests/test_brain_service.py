@@ -128,7 +128,9 @@ def test_run_brain_stores_the_run_and_one_decision_per_stock(db_session, market)
         db_session, kind="nightly", as_of=AS_OF, symbols=["BRAINABC", "BRAINXYZ"]
     )
     run = db_session.get(BrainRun, run_id)
-    assert run.status == "done" and run.banner_mode == c.MarketMode.NO_NEW_TRADES.value
+    assert (
+        run.status == "done" and run.banner_mode == c.MarketMode.DEFENSIVE.value
+    )  # risk gate ran; no NIFTY data
     rows = db_session.query(BrainDecision).filter_by(run_id=run_id).all()
     assert {r.symbol for r in rows} == {"BRAINABC", "BRAINXYZ"}
     assert all(r.reasons for r in rows)

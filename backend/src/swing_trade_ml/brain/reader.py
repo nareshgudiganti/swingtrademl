@@ -50,6 +50,10 @@ class DatedReader:
             select(Instrument).where(Instrument.tradingsymbol == symbol).order_by(Instrument.id).limit(1)
         ).scalar_one_or_none()
 
+    def instrument_id(self, symbol: str) -> int | None:
+        inst = self._instrument(symbol)
+        return inst.id if inst is not None else None
+
     def last_close(self, symbol: str) -> tuple[str, float] | None:
         row = self.db.execute(
             select(Candle.ts, Candle.close)

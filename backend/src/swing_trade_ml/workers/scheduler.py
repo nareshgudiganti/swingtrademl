@@ -200,11 +200,32 @@ def start_scheduler() -> None:
         replace_existing=True,
     )
 
+    if settings.BRAIN_ENABLED:
+        add_brain_jobs(scheduler)
+
     scheduler.start()
     log.info(
         "scheduler.started",
         jobs=[j.id for j in scheduler.get_jobs()],
         timezone="Asia/Kolkata",
+    )
+
+
+def add_brain_jobs(target: BackgroundScheduler) -> None:
+    """The brain's runs: nightly after version 1's 15:45 scan has the day's
+    data, and a holdings-only check every 15 minutes in market hours. Neither
+    competes with the 60-second exit loop, which never waits for the brain."""
+    target.add_job(
+        jobs.job_brain_nightly,
+        CronTrigger(day_of_week=WEEKDAYS, hour=15, minute=50, timezone=IST),
+        id="brain_nightly",
+        replace_existing=True,
+    )
+    target.add_job(
+        jobs.job_brain_intraday,
+        CronTrigger(day_of_week=WEEKDAYS, hour="9-15", minute="0,15,30,45", timezone=IST),
+        id="brain_intraday",
+        replace_existing=True,
     )
 
 

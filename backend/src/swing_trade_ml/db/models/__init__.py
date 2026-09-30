@@ -4,6 +4,7 @@ Alembic autogenerate and `create_all` both depend on that, so any new model
 module must be re-exported here.
 """
 
+from swing_trade_ml.db.models.brain import BrainDecision, BrainModuleSetting, BrainRun
 from swing_trade_ml.db.models.finance import (
     FinanceCustomRule,
     FinanceDailyCategory,
@@ -37,6 +38,9 @@ from swing_trade_ml.db.models.trading import (
 
 __all__ = [
     "BlockDeal",
+    "BrainDecision",
+    "BrainModuleSetting",
+    "BrainRun",
     "BrokerFill",
     "BrokerSession",
     "Candle",

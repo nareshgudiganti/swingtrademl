@@ -8,6 +8,7 @@ swingtrade backfill --days 1825
 swingtrade train --algorithm lightgbm --activate
 swingtrade scan
 swingtrade status
+swingtrade brain modules | set M02 off | run [--as-of 2026-09-15] | why RELIANCE
 """
 
 from __future__ import annotations
@@ -298,6 +299,67 @@ def cmd_status(args: argparse.Namespace) -> int:
     return 0
 
 
+def _print_run(db, run_id: str) -> None:
+    from swing_trade_ml.brain import service
+    from swing_trade_ml.db.models.brain import BrainRun
+
+    run = db.get(BrainRun, run_id)
+    print(f"Run {run.id}  ({run.kind}, {run.ms} ms, as of {run.as_of:%Y-%m-%d %H:%M})")
+    print(f"Market: {run.banner_mode} — {run.banner_headline}")
+    for d in service.decisions_for(db, run_id):
+        print(f"  {d.symbol:<14} {d.word:<8} {d.reasons[0] if d.reasons else ''}")
+    fallbacks = [e["step"] for e in run.trace if e["module_id"] == "fallback"]
+    if fallbacks:
+        print(f"Steps answered by their fallback: {', '.join(fallbacks)}")
+
+
+def cmd_brain(args: argparse.Namespace) -> int:
+    from datetime import UTC, datetime, time
+
+    from swing_trade_ml.brain import service
+    from swing_trade_ml.db.session import session_scope
+
+    with session_scope() as db:
+        if args.brain_command == "modules":
+            for step in service.step_overview():
+                mods = ", ".join(step["modules"]) or "— (fallback)"
+                print(f"  {step['step']:<10} {mods}")
+            for m in service.module_overview(db):
+                lock = "  (mandatory)" if m["mandatory"] else ""
+                print(f"  {m['id']}  {m['name']:<32} {m['mode']}{lock}")
+            return 0
+        if args.brain_command == "set":
+            try:
+                service.set_mode(db, args.module_id, args.mode, by="cli")
+            except (service.UnknownModuleError, service.ModeRefusedError) as exc:
+                print(f"❌ {exc}", file=sys.stderr)
+                return 1
+            print(f"✅ {args.module_id.upper()} is now {args.mode}")
+            return 0
+        if args.brain_command == "run":
+            as_of = None
+            if args.as_of:
+                # The end of that day in IST, so the day's own close counts.
+                from zoneinfo import ZoneInfo
+
+                day = datetime.fromisoformat(args.as_of).date()
+                as_of = datetime.combine(day, time(23, 59), tzinfo=ZoneInfo("Asia/Kolkata")).astimezone(UTC)
+            symbols = [s.strip().upper() for s in args.symbols.split(",")] if args.symbols else None
+            _, run_id = service.run_brain(db, kind=args.kind, as_of=as_of, symbols=symbols, book=args.book)
+            _print_run(db, run_id)
+            return 0
+        if args.brain_command == "why":
+            _, run_id = service.run_brain(db, kind="why", symbols=[args.symbol], book=args.book)
+            _print_run(db, run_id)
+            from swing_trade_ml.db.models.brain import BrainRun
+
+            print("Trace:")
+            for e in db.get(BrainRun, run_id).trace:
+                print(f"  {e['step']:<10} {e['module_id']:<9} {e['status']:<9} {e['reason']}")
+            return 0
+    return 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="swingtrade", description="Swing Trade ML operations")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -403,6 +465,22 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_backtest)
 
     sub.add_parser("status", help="Show system and portfolio status").set_defaults(func=cmd_status)
+
+    p = sub.add_parser("brain", help="The TradeMind brain: modules, switches, runs, why")
+    brain_sub = p.add_subparsers(dest="brain_command", required=True)
+    brain_sub.add_parser("modules", help="List the eight steps and installed modules")
+    b = brain_sub.add_parser("set", help="Switch a module on, to shadow, or off")
+    b.add_argument("module_id")
+    b.add_argument("mode", choices=["on", "shadow", "off"])
+    b = brain_sub.add_parser("run", help="Run the brain now (or replay a past date)")
+    b.add_argument("--kind", default="nightly", choices=["nightly", "intraday", "why"])
+    b.add_argument("--as-of", default=None, help="YYYY-MM-DD: replay that day (no live-only inputs)")
+    b.add_argument("--symbols", default=None, help="Comma-separated (default: the watchlist)")
+    b.add_argument("--book", default="paper", choices=["paper", "live"])
+    b = brain_sub.add_parser("why", help="Run the brain for one stock and show its full trace")
+    b.add_argument("symbol")
+    b.add_argument("--book", default="paper", choices=["paper", "live"])
+    p.set_defaults(func=cmd_brain)
 
     return parser
 

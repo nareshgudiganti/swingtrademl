@@ -166,6 +166,10 @@ class Settings(BaseSettings):
     SIGNAL_SCAN_CRON_HOUR: int = 15
     SIGNAL_SCAN_CRON_MINUTE: int = 45
     ENABLE_SCHEDULER: bool = True
+    # The TradeMind brain (brain/ package) runs beside version 1 and only
+    # records decisions. Off by default so production is unchanged until the
+    # owner turns it on; set BRAIN_ENABLED=true locally to schedule its runs.
+    BRAIN_ENABLED: bool = False
 
     # --------------------------------------------------------------- risk --
     # MAX_POSITION_PCT and MAX_OPEN_POSITIONS are no longer read by the entry

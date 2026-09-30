@@ -68,7 +68,7 @@ def test_run_then_read_latest(client, stock):
     )
     assert r.status_code == 200
     run_id = r.json()["run_id"]
-    latest = client.get("/api/v1/brain/runs/latest?kind=nightly", headers=HEADERS).json()
+    latest = client.get("/api/v1/brain/runs/latest?kind=nightly&include_replays=true", headers=HEADERS).json()
     assert latest["run_id"] == run_id
     # The test database has no NIFTY history, so the data gateway (M01)
     # reports the market's data as not reliable, which means no new trades.

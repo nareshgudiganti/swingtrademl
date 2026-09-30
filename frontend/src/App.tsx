@@ -16,9 +16,11 @@ import Safety from './pages/Safety'
 import Capital from './pages/Capital'
 import ModelLab from './pages/ModelLab'
 import Settings from './pages/Settings'
+import Brain from './pages/Brain'
 import {
   AlertTriangleIcon,
   BarChartIcon,
+  BrainIcon,
   BriefcaseIcon,
   HomeIcon,
   LayersIcon,
@@ -50,6 +52,7 @@ const NAV = [
   { to: '/scans', label: 'Scan Results', Icon: LayersIcon },
   { to: '/model-lab', label: 'Model Lab', Icon: BarChartIcon },
   { to: '/safety', label: 'Safety', Icon: AlertTriangleIcon },
+  { to: '/brain', label: 'Brain', Icon: BrainIcon },
 ]
 
 // The 4 destinations worth a one-tap reach on a phone — a real bottom tab
@@ -253,6 +256,7 @@ export default function App() {
             <Route path="/model-lab" element={<ModelLab />} />
             <Route path="/capital" element={<Capital />} />
             <Route path="/safety" element={<Safety />} />
+            <Route path="/brain" element={<Brain />} />
             <Route path="/finance" element={<Finance />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />

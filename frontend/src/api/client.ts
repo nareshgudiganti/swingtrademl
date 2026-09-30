@@ -1,6 +1,13 @@
 // Thin fetch wrapper around the FastAPI backend.
 
 import type {
+  BrainDecision,
+  BrainHealth,
+  BrainModules,
+  BrainRun,
+  BrainRunSummary,
+  BrainTraceEvent,
+  BrainWhy,
   Candle,
   CurrentUser,
   DetailedPosition,
@@ -428,4 +435,18 @@ export const api = {
   // ----------------------------------------------------------- calibration --
   calibration: (source: 'signals' | 'predictions' = 'signals') =>
     get<CalibrationReport>(`/ml/calibration?source=${source}`),
+
+  // ---------------------------------------------------------------- brain --
+  brainModules: () => get<BrainModules>('/brain/modules'),
+  setBrainModuleMode: (id: string, mode: 'on' | 'shadow' | 'off') =>
+    put<{ module_id: string; mode: string }>(`/brain/modules/${id}`, { mode }),
+  brainHealth: () => get<BrainHealth>('/brain/health'),
+  brainRuns: (limit = 10) => get<BrainRunSummary[]>(`/brain/runs?limit=${limit}`),
+  brainLatestRun: (kind = 'nightly') => get<BrainRun>(`/brain/runs/latest?kind=${kind}`),
+  brainRunNow: () => post<BrainRun>('/brain/runs', { kind: 'nightly' }),
+  brainRunTrace: (runId: string) =>
+    get<{ run_id: string; trace: BrainTraceEvent[] }>(`/brain/runs/${encodeURIComponent(runId)}/trace`),
+  brainWhy: (symbol: string) => get<BrainWhy>(`/brain/why/${encodeURIComponent(symbol.trim().toUpperCase())}`),
+  brainOverrule: (id: number, word: string, reason: string) =>
+    post<BrainDecision>(`/brain/decisions/${id}/overrule`, { word, reason }),
 }

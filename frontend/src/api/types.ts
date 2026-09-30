@@ -778,3 +778,110 @@ export interface RealReport {
   records: { total_fills: number; first_at: string | null; last_at: string | null }
   holdings_note: string | null
 }
+
+// ---------------------------------------------------------------- brain --
+// The TradeMind brain: it only records decisions; it never places orders.
+
+export type IdeaWord = 'TRADE' | 'WATCH' | 'WAIT' | 'AVOID'
+export type HoldingWord = 'HOLD' | 'MONITOR' | 'REDUCE' | 'EXIT'
+export type MarketMode = 'NORMAL' | 'DEFENSIVE' | 'NO_NEW_TRADES'
+export type ModuleMode = 'on' | 'shadow' | 'off'
+
+export interface BrainDecision {
+  id: number
+  run_id: string
+  symbol: string
+  kind: 'idea' | 'holding'
+  word: IdeaWord | HoldingWord
+  reasons: string[]
+  entry_low: number | null
+  entry_high: number | null
+  target: number | null
+  stop: number | null
+  qty: number
+  horizon_days: number
+  confidence: number | null
+  evidence_text: string | null
+  downgraded_from: string | null
+  downgrade_reason: string | null
+  overruled_word: string | null
+  overrule_reason: string | null
+  overruled_by: string | null
+  overruled_at: string | null
+}
+
+export interface BrainBanner {
+  mode: MarketMode | null
+  headline: string | null
+}
+
+export interface BrainQuality {
+  overall: { score: number; fresh: boolean; issues: string[] } | null
+  stale: string[]
+}
+
+export interface BrainRunSummary {
+  run_id: string
+  kind: 'nightly' | 'intraday' | 'why'
+  as_of: string
+  live: boolean
+  started_at: string
+  ms: number
+  status: 'done' | 'failed'
+  error: string | null
+  banner: BrainBanner
+  counts: Record<string, number>
+}
+
+export interface BrainRun extends BrainRunSummary {
+  book: string
+  modules: Record<string, ModuleMode>
+  quality: BrainQuality
+  decisions: BrainDecision[]
+}
+
+export interface BrainTraceEvent {
+  step: string
+  module_id: string
+  status: 'used' | 'shadow' | 'fallback' | 'skipped' | 'rejected'
+  reason: string
+  ms: number
+  version: string
+}
+
+export interface BrainModuleInfo {
+  id: string
+  name: string
+  step: string
+  kind: string
+  version: string
+  mode: ModuleMode
+  mandatory: boolean
+}
+
+export interface BrainModules {
+  steps: { step: string; modules: string[] }[]
+  modules: BrainModuleInfo[]
+}
+
+export interface BrainWhy {
+  run_id: string
+  banner: BrainBanner
+  decision: BrainDecision | null
+  trace: BrainTraceEvent[]
+}
+
+export interface BrainHealth {
+  last_run: {
+    run_id: string
+    kind: string
+    started_at: string
+    status: string
+    ms: number
+    error: string | null
+  } | null
+  last_nightly_ok: string | null
+  failed_runs_7d: number
+  data: { score: number | null; fresh: boolean | null; issues: string[] }
+  stale_count: number
+}

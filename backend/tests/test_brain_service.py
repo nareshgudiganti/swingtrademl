@@ -140,7 +140,7 @@ def test_run_brain_stores_the_run_and_one_decision_per_stock(db_session, market)
 def test_latest_run_returns_the_newest_of_a_kind(db_session, market):
     service.run_brain(db_session, kind="nightly", as_of=AS_OF, symbols=["BRAINABC"])
     _, second = service.run_brain(db_session, kind="nightly", as_of=AS_OF, symbols=["BRAINXYZ"])
-    assert service.latest_run(db_session, "nightly").id == second
+    assert service.latest_run(db_session, "nightly", include_replays=True).id == second
 
 
 def test_step_overview_lists_all_eight_steps():

@@ -18,6 +18,7 @@ from swing_trade_ml.brain.context import BrainContext
 from swing_trade_ml.brain.module import REGISTRY, STEPS, STEPS_FOR, Mode, ModuleRegistry, resolve_mode
 from swing_trade_ml.brain.reader import DatedReader
 from swing_trade_ml.brain.runner import execute
+from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.db.models.brain import BrainDecision, BrainModuleSetting, BrainRun
 
@@ -160,7 +161,11 @@ def _quality_summary(ctx: BrainContext) -> dict:
             "fresh": overall.fresh,
             "issues": list(overall.issues),
         },
-        "stale": sorted(q.symbol for q in ctx.quality.values() if q.symbol != "*" and not q.fresh),
+        "stale": sorted(
+            q.symbol
+            for q in ctx.quality.values()
+            if q.symbol not in ("*", settings.BENCHMARK_INDEX_SYMBOL) and not q.fresh
+        ),
     }
 
 
@@ -213,9 +218,12 @@ def _store(db: Session, ctx: BrainContext, registry: ModuleRegistry, modes: dict
 # --- reading back ------------------------------------------------------------
 
 
-def latest_run(db: Session, kind: str | None = None) -> BrainRun | None:
-    """Newest finished run (failed runs have no decisions to show)."""
+def latest_run(db: Session, kind: str | None = None, include_replays: bool = False) -> BrainRun | None:
+    """Newest finished run (failed runs have no decisions to show). Replays of
+    past dates are skipped unless asked for: "latest" means today's thinking."""
     stmt = select(BrainRun).where(BrainRun.status == "done")
+    if not include_replays:
+        stmt = stmt.where(BrainRun.live.is_(True))
     if kind:
         stmt = stmt.where(BrainRun.kind == kind)
     return db.execute(stmt.order_by(BrainRun.started_at.desc()).limit(1)).scalar_one_or_none()

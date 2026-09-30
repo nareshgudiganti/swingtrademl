@@ -132,8 +132,8 @@ def test_a_crashing_run_is_kept_as_failed_and_counted(db_session, stock, monkeyp
     assert service.health(db_session)["failed_runs_7d"] >= 1
 
 
-def test_health_reports_the_last_run_and_data_problems(client, stock):
-    _run(client)
+def test_health_reports_the_last_run_and_data_problems(client, stock, db_session):
+    service.run_brain(db_session, kind="nightly", symbols=["CONSOLE1"])  # a live run
     body = client.get("/api/v1/brain/health", headers=HEADERS).json()
     assert body["last_run"]["status"] == "done"
     assert body["data"]["fresh"] is False and body["data"]["issues"]
@@ -143,3 +143,29 @@ def test_decision_rows_keep_overrule_columns(db_session):
     assert {"overruled_word", "overrule_reason", "overruled_by", "overruled_at"} <= set(
         BrainDecision.__table__.columns.keys()
     )
+
+
+def test_latest_skips_replays_unless_asked(client, stock, db_session):
+    _ctx, live_id = service.run_brain(db_session, kind="nightly", symbols=["CONSOLE1"])
+    replay_id = _run(client)["run_id"]  # a replay, started later
+    latest = client.get("/api/v1/brain/runs/latest?kind=nightly", headers=HEADERS).json()
+    assert latest["run_id"] == live_id
+    with_replays = client.get("/api/v1/brain/runs/latest?kind=nightly&include_replays=true", headers=HEADERS)
+    assert with_replays.json()["run_id"] == replay_id
+
+
+def test_the_stale_list_counts_stocks_not_the_nifty_index():
+    from brain_fakes import FakeReader, request
+    from swing_trade_ml.brain import contracts as c
+    from swing_trade_ml.brain.context import BrainContext
+    from swing_trade_ml.core.config import settings
+
+    ctx = BrainContext.start(request(), FakeReader())
+    ctx.quality = {
+        "ABC": c.DataQuality(symbol="ABC", score=0.2, fresh=False),
+        settings.BENCHMARK_INDEX_SYMBOL: c.DataQuality(
+            symbol=settings.BENCHMARK_INDEX_SYMBOL, score=0.2, fresh=False
+        ),
+        "*": c.DataQuality(symbol="*", score=0.2, fresh=False),
+    }
+    assert service._quality_summary(ctx)["stale"] == ["ABC"]

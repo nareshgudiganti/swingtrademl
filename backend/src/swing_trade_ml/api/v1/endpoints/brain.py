@@ -132,8 +132,8 @@ def start_run(payload: RunCreate, db: DbSession) -> dict:
 
 
 @router.get("/runs/latest")
-def latest(db: DbSession, kind: str | None = Query(None)) -> dict:
-    run = service.latest_run(db, kind)
+def latest(db: DbSession, kind: str | None = Query(None), include_replays: bool = Query(False)) -> dict:
+    run = service.latest_run(db, kind, include_replays)
     if run is None:
         raise HTTPException(404, "The brain has not run yet.")
     return _run_out(db, run)

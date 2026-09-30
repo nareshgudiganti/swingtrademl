@@ -16,9 +16,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from swing_trade_ml.brain import contracts as c
+from swing_trade_ml.brain.connectors import FEEDS
 from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.enums import PositionStatus
 from swing_trade_ml.core.logging import get_logger
+from swing_trade_ml.db.models.feeds import UpcomingEvent
 from swing_trade_ml.db.models.market import Candle, Instrument
 from swing_trade_ml.db.models.trading import Position
 from swing_trade_ml.services import system_state
@@ -70,6 +72,50 @@ class DatedReader:
         if row is None:
             return None
         return row.ts.astimezone(IST).date().isoformat(), float(row.close)
+
+    def recent_bars(self, symbol: str, n: int = 260) -> pd.DataFrame:
+        """The last `n` daily bars on or before as_of, ascending, with each
+        bar's trading day (IST) in a `day` column."""
+        rows = self.db.execute(
+            select(Candle.ts, Candle.open, Candle.high, Candle.low, Candle.close, Candle.volume)
+            .join(Instrument, Instrument.id == Candle.instrument_id)
+            .where(Instrument.tradingsymbol == symbol, Candle.interval == "day", Candle.ts <= self.as_of)
+            .order_by(Candle.ts.desc())
+            .limit(n)
+        ).all()
+        frame = pd.DataFrame(
+            [
+                {
+                    "day": r.ts.astimezone(IST).date(),
+                    "open": float(r.open),
+                    "high": float(r.high),
+                    "low": float(r.low),
+                    "close": float(r.close),
+                    "volume": float(r.volume or 0),
+                }
+                for r in reversed(rows)
+            ],
+            columns=["day", "open", "high", "low", "close", "volume"],
+        )
+        return frame
+
+    def action_days(self) -> dict[str, set]:
+        """Ex-dates of splits, bonuses and similar price-resetting actions,
+        by symbol — a big one-day move on such a day is not a data error."""
+        rows = self.db.execute(
+            select(UpcomingEvent.symbol, UpcomingEvent.event_date).where(
+                UpcomingEvent.kind == "corporate_action"
+            )
+        ).all()
+        out: dict[str, set] = {}
+        for symbol, day in rows:
+            out.setdefault(symbol, set()).add(day)
+        return out
+
+    def feed_latest(self) -> dict[str, object]:
+        """Newest day each side feed has, on or before as_of's IST date."""
+        upto = self.as_of.astimezone(IST).date()
+        return {feed.name: feed.latest(self.db, upto) for feed in FEEDS}
 
     def index_closes(self) -> pd.Series:
         closes = (

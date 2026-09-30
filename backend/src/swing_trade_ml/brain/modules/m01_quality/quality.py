@@ -139,7 +139,7 @@ def assess_bars(
 def summarise(
     stocks: list[DataQuality],
     benchmark: DataQuality | None,
-    feeds_behind: dict[str, int],
+    feeds_behind: dict[str, int | None],
 ) -> DataQuality:
     """The market-wide record ("*"): trustworthy only when the benchmark is
     fresh and no more than a fifth of the stocks are stale. Late side feeds
@@ -164,7 +164,9 @@ def summarise(
         fresh = False
 
     for name, behind in sorted(feeds_behind.items()):
-        if behind > 0:
+        if behind is None:
+            issues.append(f"The {name} feed has no data yet.")
+        elif behind > 0:
             issues.append(f"The {name} feed is {_plural(behind, 'trading day')} behind.")
 
     return DataQuality(

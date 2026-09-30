@@ -166,3 +166,8 @@ def test_missing_benchmark_is_not_fresh():
 def test_late_feeds_are_reported_but_do_not_stop_trading_alone():
     overall = summarise([_q("S1")], _q("NIFTY 50"), {"delivery": 3})
     assert overall.fresh and any("delivery" in i and "3 trading days" in i for i in overall.issues)
+
+
+def test_a_feed_with_no_data_says_so():
+    overall = summarise([_q("S1")], _q("NIFTY 50"), {"deals": None})
+    assert overall.fresh and "The deals feed has no data yet." in overall.issues

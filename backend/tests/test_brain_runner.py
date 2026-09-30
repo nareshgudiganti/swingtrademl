@@ -288,3 +288,21 @@ def test_switching_any_module_off_never_makes_a_decision_bolder():
         reduced = execute(request(), reader, reg, modes={cls.manifest.id: Mode.OFF})
         for symbol, decision in reduced.decisions.items():
             assert c.rank(decision.word) <= c.rank(full.decisions[symbol].word), (cls.manifest.id, symbol)
+
+
+def test_market_wide_stale_data_means_no_new_trades():
+    def market_stale(view):
+        return c.Contribution(
+            quality=(
+                c.DataQuality(symbol="ABC", score=1.0, fresh=True),
+                c.DataQuality(symbol="*", score=0.3, fresh=False, issues=("NIFTY data is not fresh",)),
+            )
+        )
+
+    reg = registry(
+        allow_all_risk_gate(), make_module("M01", Step.PERCEIVE, writes=("DataQuality@1",), run=market_stale)
+    )
+    ctx = execute(request(), FakeReader(probabilities={"ABC": 0.9}), reg, modes={})
+    assert ctx.banner.mode is MarketMode.NO_NEW_TRADES
+    assert ctx.decisions["ABC"].word is IdeaWord.WATCH
+    assert "NIFTY" in ctx.decisions["ABC"].downgrade_reason

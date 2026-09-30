@@ -2,7 +2,8 @@
 switched off. It only ever lowers decisions (via `contracts.downgrade`).
 
 C1  no TRADE without an allowed verdict from the mandatory risk gate
-C2  no risk gate, or an owner halt → banner NO NEW TRADES, every TRADE → WATCH
+C2  no risk gate, an owner halt, or market-wide data not fresh → banner
+    NO NEW TRADES, every TRADE → WATCH
 C5  data not checked, or stale → TRADE capped at WATCH
 C11 every stock in the run gets a decision with a reason
 """
@@ -23,6 +24,10 @@ def _no_new_trades_reasons(ctx: BrainContext) -> list[str]:
     if system is not None and system.entries_halted:
         why = f": {system.halt_reason}" if system.halt_reason else ""
         reasons.append(f"Owner paused new buys{why}.")
+    overall = ctx.quality.get("*")
+    if overall is not None and not overall.fresh:
+        detail = overall.issues[0] if overall.issues else f"quality score {overall.score:.2f}"
+        reasons.append(f"Market data is not reliable today: {detail}")
     if not ctx.risk_gate_ran:
         reasons.append(NO_RISK_GATE)
     return reasons

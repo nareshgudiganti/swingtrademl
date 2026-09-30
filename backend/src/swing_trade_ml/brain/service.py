@@ -6,10 +6,10 @@ from __future__ import annotations
 import time
 import uuid
 from dataclasses import asdict
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 import swing_trade_ml.brain.modules  # noqa: F401 — registers installed modules
@@ -25,6 +25,14 @@ log = get_logger(__name__)
 
 
 class UnknownModuleError(LookupError):
+    pass
+
+
+class UnknownDecisionError(LookupError):
+    pass
+
+
+class OverruleRefusedError(ValueError):
     pass
 
 
@@ -97,7 +105,28 @@ def run_brain(
     request = c.RunRequest(run_id=run_id, kind=kind, as_of=as_of, universe=universe, book=book, live=live)
     modes = load_modes(db)
     started = time.perf_counter()
-    ctx = execute(request, reader, registry, modes)
+    try:
+        ctx = execute(request, reader, registry, modes)
+    except Exception as exc:
+        # Modules cannot break a run, but the database or the reader can.
+        # Keep the failure so the console and health can see it, then raise.
+        if not db.is_active:  # only a failed flush leaves the session unusable
+            db.rollback()
+        db.add(
+            BrainRun(
+                id=run_id,
+                kind=kind,
+                as_of=as_of,
+                book=book,
+                live=live,
+                status="failed",
+                error=f"{type(exc).__name__}: {exc}",
+                ms=int((time.perf_counter() - started) * 1000),
+            )
+        )
+        db.commit()
+        log.error("brain.run.failed", run_id=run_id, kind=kind, error=str(exc))
+        raise
     elapsed_ms = int((time.perf_counter() - started) * 1000)
     _store(db, ctx, registry, modes, elapsed_ms)
     log.info(
@@ -121,6 +150,20 @@ def _jsonable(value):
     return value
 
 
+def _quality_summary(ctx: BrainContext) -> dict:
+    overall = ctx.quality.get("*")
+    return {
+        "overall": None
+        if overall is None
+        else {
+            "score": overall.score,
+            "fresh": overall.fresh,
+            "issues": list(overall.issues),
+        },
+        "stale": sorted(q.symbol for q in ctx.quality.values() if q.symbol != "*" and not q.fresh),
+    }
+
+
 def _store(db: Session, ctx: BrainContext, registry: ModuleRegistry, modes: dict, ms: int) -> None:
     req = ctx.request
     used_modes = {
@@ -140,6 +183,7 @@ def _store(db: Session, ctx: BrainContext, registry: ModuleRegistry, modes: dict
             banner_headline=ctx.banner.headline,
             modules=used_modes,
             trace=[_jsonable(asdict(e)) for e in ctx.trace],
+            quality=_quality_summary(ctx),
         )
     )
     db.flush()
@@ -170,7 +214,8 @@ def _store(db: Session, ctx: BrainContext, registry: ModuleRegistry, modes: dict
 
 
 def latest_run(db: Session, kind: str | None = None) -> BrainRun | None:
-    stmt = select(BrainRun)
+    """Newest finished run (failed runs have no decisions to show)."""
+    stmt = select(BrainRun).where(BrainRun.status == "done")
     if kind:
         stmt = stmt.where(BrainRun.kind == kind)
     return db.execute(stmt.order_by(BrainRun.started_at.desc()).limit(1)).scalar_one_or_none()
@@ -211,3 +256,72 @@ def step_overview(registry: ModuleRegistry = REGISTRY) -> list[dict]:
         {"step": step.value, "modules": [cls.manifest.id for cls in registry.for_step(step)]}
         for step in STEPS
     ]
+
+
+def list_runs(db: Session, kind: str | None = None, limit: int = 20) -> list[BrainRun]:
+    stmt = select(BrainRun)
+    if kind:
+        stmt = stmt.where(BrainRun.kind == kind)
+    return list(db.execute(stmt.order_by(BrainRun.started_at.desc()).limit(limit)).scalars())
+
+
+# --- owner actions ------------------------------------------------------------
+
+
+def overrule(db: Session, decision_id: int, word: str, reason: str, by: str) -> BrainDecision:
+    """Constitution C8: the owner may overrule any decision, but only toward
+    caution. The brain's own word stays on the row next to the overrule."""
+    d = db.get(BrainDecision, decision_id)
+    if d is None:
+        raise UnknownDecisionError(f"No decision {decision_id}.")
+    vocabulary = c.IdeaWord if d.kind == "idea" else c.HoldingWord
+    try:
+        new_word = vocabulary(word.upper())
+    except ValueError as exc:
+        raise OverruleRefusedError(f"{word} is not a word for a {d.kind}.") from exc
+    current = vocabulary(d.overruled_word or d.word)
+    if c.rank(new_word) >= c.rank(current):
+        raise OverruleRefusedError(
+            f"An overrule can only be more careful than {current.value}; {new_word.value} is not."
+        )
+    d.overruled_word = new_word.value
+    d.overrule_reason = reason.strip()
+    d.overruled_by = by
+    d.overruled_at = datetime.now(UTC)
+    db.commit()
+    return d
+
+
+# --- health ------------------------------------------------------------------
+
+
+def health(db: Session) -> dict:
+    last = db.execute(select(BrainRun).order_by(BrainRun.started_at.desc()).limit(1)).scalar_one_or_none()
+    last_ok_nightly = db.execute(
+        select(BrainRun.started_at)
+        .where(BrainRun.kind == "nightly", BrainRun.status == "done")
+        .order_by(BrainRun.started_at.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+    week_ago = datetime.now(UTC) - timedelta(days=7)
+    failed = db.execute(
+        select(func.count(BrainRun.id)).where(BrainRun.status == "failed", BrainRun.started_at >= week_ago)
+    ).scalar_one()
+    latest_done = latest_run(db)
+    overall = (latest_done.quality or {}).get("overall") if latest_done else None
+    return {
+        "last_run": None
+        if last is None
+        else {
+            "run_id": last.id,
+            "kind": last.kind,
+            "started_at": last.started_at,
+            "status": last.status,
+            "ms": last.ms,
+            "error": last.error,
+        },
+        "last_nightly_ok": last_ok_nightly,
+        "failed_runs_7d": int(failed),
+        "data": overall or {"score": None, "fresh": None, "issues": ["No data check has run yet."]},
+        "stale_count": len((latest_done.quality or {}).get("stale", [])) if latest_done else 0,
+    }

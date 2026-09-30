@@ -33,6 +33,9 @@ class BrainRun(Base):
     banner_headline: Mapped[str | None] = mapped_column(Text)
     modules: Mapped[dict] = mapped_column(JSONB, default=dict)  # module id -> mode used
     trace: Mapped[list] = mapped_column(JSONB, default=list)
+    # {"overall": {score, fresh, issues}, "stale": [symbols]} from the data
+    # gateway (M01), so the console can show data health without re-running.
+    quality: Mapped[dict] = mapped_column(JSONB, default=dict)
 
 
 class BrainDecision(Base):
@@ -54,6 +57,12 @@ class BrainDecision(Base):
     reasons: Mapped[list] = mapped_column(JSONB, default=list)
     downgraded_from: Mapped[str | None] = mapped_column(String(8))
     downgrade_reason: Mapped[str | None] = mapped_column(Text)
+    # The owner's overrule (constitution C8): only ever more cautious than
+    # `word`, and always with who and why. The brain's own word is kept.
+    overruled_word: Mapped[str | None] = mapped_column(String(8))
+    overrule_reason: Mapped[str | None] = mapped_column(Text)
+    overruled_by: Mapped[str | None] = mapped_column(String(128))
+    overruled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class BrainModuleSetting(Base, TimestampMixin):

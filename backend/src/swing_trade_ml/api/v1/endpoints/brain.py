@@ -10,7 +10,7 @@ from collections import Counter
 from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from swing_trade_ml.api.deps import DbSession
 from swing_trade_ml.brain import service
@@ -33,8 +33,27 @@ class RunCreate(BaseModel):
     book: str = Field("paper", pattern="^(paper|live)$")
 
 
+class OverruleCreate(BaseModel):
+    word: str
+    reason: str
+    by: str = "owner"
+
+    @field_validator("reason")
+    @classmethod
+    def _reason_required(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Say why you are overruling the brain.")
+        return value
+
+
 def _decision_out(d: BrainDecision) -> dict:
     return {
+        "id": d.id,
+        "run_id": d.run_id,
+        "overruled_word": d.overruled_word,
+        "overrule_reason": d.overrule_reason,
+        "overruled_by": d.overruled_by,
+        "overruled_at": d.overruled_at,
         "symbol": d.symbol,
         "kind": d.kind,
         "word": d.word,
@@ -52,9 +71,27 @@ def _decision_out(d: BrainDecision) -> dict:
     }
 
 
+def _run_summary(db, run: BrainRun) -> dict:
+    decisions = service.decisions_for(db, run.id)
+    return {
+        "run_id": run.id,
+        "kind": run.kind,
+        "as_of": run.as_of,
+        "live": run.live,
+        "started_at": run.started_at,
+        "ms": run.ms,
+        "status": run.status,
+        "error": run.error,
+        "banner": {"mode": run.banner_mode, "headline": run.banner_headline},
+        "counts": dict(Counter(d.word for d in decisions)),
+    }
+
+
 def _run_out(db, run: BrainRun) -> dict:
     decisions = service.decisions_for(db, run.id)
     return {
+        "quality": run.quality,
+        "error": run.error,
         "run_id": run.id,
         "kind": run.kind,
         "as_of": run.as_of,
@@ -100,6 +137,37 @@ def latest(db: DbSession, kind: str | None = Query(None)) -> dict:
     if run is None:
         raise HTTPException(404, "The brain has not run yet.")
     return _run_out(db, run)
+
+
+@router.get("/runs")
+def list_runs(
+    db: DbSession, kind: str | None = Query(None), limit: int = Query(20, ge=1, le=100)
+) -> list[dict]:
+    return [_run_summary(db, r) for r in service.list_runs(db, kind, limit)]
+
+
+@router.get("/runs/{run_id}")
+def get_run(run_id: str, db: DbSession) -> dict:
+    run = db.get(BrainRun, run_id)
+    if run is None:
+        raise HTTPException(404, "No such run.")
+    return _run_out(db, run)
+
+
+@router.post("/decisions/{decision_id}/overrule")
+def overrule(decision_id: int, payload: OverruleCreate, db: DbSession) -> dict:
+    try:
+        d = service.overrule(db, decision_id, payload.word, payload.reason, payload.by)
+    except service.UnknownDecisionError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except service.OverruleRefusedError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    return _decision_out(d)
+
+
+@router.get("/health")
+def health(db: DbSession) -> dict:
+    return service.health(db)
 
 
 @router.get("/runs/{run_id}/trace")

@@ -160,3 +160,9 @@ def test_every_refusal_explains_itself(mode):
     cands = [Candidate(s, 100.0, 0.9 - i / 10, "bank") for i, s in enumerate(("A1", "A2", "A3", "A4"))]
     out = _run(cands, account=_account(free_slots=1), mode=mode)
     assert all(v.reason for v in out.values() if not v.allowed)
+
+
+def test_a_full_account_says_so_instead_of_blaming_stronger_ideas():
+    out = _run([Candidate("AAA", 100.0, 0.9, None)], account=_account(free_slots=0))
+    assert out["AAA"].rule == "POSITION_LIMIT"
+    assert "already" in out["AAA"].reason and "stronger" not in out["AAA"].reason

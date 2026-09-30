@@ -119,7 +119,11 @@ def allocate(
         if slots_left <= 0:
             verdicts.append(
                 _refuse(
-                    cand, "POSITION_LIMIT", "Every free position slot went to a stronger idea in this run."
+                    cand,
+                    "POSITION_LIMIT",
+                    "Every free position slot went to a stronger idea in this run."
+                    if account.free_slots > 0
+                    else "All position slots are already in use by your current holdings.",
                 )
             )
             continue

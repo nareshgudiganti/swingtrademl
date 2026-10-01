@@ -6,10 +6,11 @@ from __future__ import annotations
 import time
 import uuid
 from dataclasses import asdict
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from enum import StrEnum
 
 from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 import swing_trade_ml.brain.modules  # noqa: F401 — registers installed modules
@@ -20,7 +21,7 @@ from swing_trade_ml.brain.reader import DatedReader
 from swing_trade_ml.brain.runner import execute
 from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.logging import get_logger
-from swing_trade_ml.db.models.brain import BrainDecision, BrainModuleSetting, BrainRun
+from swing_trade_ml.db.models.brain import BrainDecision, BrainModuleSetting, BrainRun, FeatureSnapshot
 
 log = get_logger(__name__)
 
@@ -212,7 +213,33 @@ def _store(db: Session, ctx: BrainContext, registry: ModuleRegistry, modes: dict
                 downgrade_reason=d.downgrade_reason,
             )
         )
+    if req.kind == "nightly":
+        _store_snapshots(db, ctx)
     db.commit()
+
+
+def _store_snapshots(db: Session, ctx: BrainContext) -> None:
+    """Upsert this night's feature snapshots (M02) — one per stock and day."""
+    for snap in ctx.snapshots.values():
+        if not snap.features:
+            continue  # the price-only fallback: nothing worth keeping
+        values = {
+            "symbol": snap.symbol,
+            "bar_date": date.fromisoformat(snap.as_of),
+            "feature_set_version": snap.feature_set_version,
+            "run_id": ctx.request.run_id,
+            "close": snap.close,
+            "atr_14": snap.atr_14,
+            "adv_inr_20": snap.adv_inr_20,
+            "features": dict(snap.features),
+        }
+        stmt = insert(FeatureSnapshot).values(**values)
+        db.execute(
+            stmt.on_conflict_do_update(
+                index_elements=["symbol", "bar_date", "feature_set_version"],
+                set_={k: stmt.excluded[k] for k in ("run_id", "close", "atr_14", "adv_inr_20", "features")},
+            )
+        )
 
 
 # --- reading back ------------------------------------------------------------

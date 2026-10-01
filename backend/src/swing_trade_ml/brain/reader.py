@@ -73,6 +73,51 @@ class DatedReader:
             return None
         return row.ts.astimezone(IST).date().isoformat(), float(row.close)
 
+    def ohlcv(self, symbol: str, n: int = 400) -> pd.DataFrame:
+        """The last `n` daily bars on or before as_of, ascending, in the shape
+        the feature pipeline expects (ts, open, high, low, close, volume)."""
+        rows = self.db.execute(
+            select(Candle.ts, Candle.open, Candle.high, Candle.low, Candle.close, Candle.volume)
+            .join(Instrument, Instrument.id == Candle.instrument_id)
+            .where(Instrument.tradingsymbol == symbol, Candle.interval == "day", Candle.ts <= self.as_of)
+            .order_by(Candle.ts.desc())
+            .limit(n)
+        ).all()
+        frame = (
+            pd.DataFrame(
+                [
+                    (r.ts, float(r.open), float(r.high), float(r.low), float(r.close), float(r.volume or 0))
+                    for r in rows
+                ],
+                columns=["ts", "open", "high", "low", "close", "volume"],
+            )
+            .iloc[::-1]
+            .reset_index(drop=True)
+        )
+        frame["ts"] = pd.to_datetime(frame["ts"], utc=True)
+        return frame
+
+    def context_frames(self, symbol: str) -> dict[str, pd.DataFrame]:
+        """NIFTY, the stock's sector index, India VIX and watchlist breadth,
+        each cut at as_of — the same loaders the model's own scans use."""
+        from swing_trade_ml.ml import market_context
+        from swing_trade_ml.ml.sector_map import get_sector_index
+
+        upto = pd.Timestamp(self.as_of)
+        return {
+            "index": market_context.load_index_candles(self.db, upto=upto),
+            "sector": market_context.load_sector_candles(self.db, get_sector_index(symbol), upto=upto),
+            "vix": market_context.load_vix_candles(self.db, upto=upto),
+            "breadth": market_context.load_market_breadth(self.db, upto=upto),
+        }
+
+    def clear_context_cache(self) -> None:
+        """The context loaders cache whole histories for the life of the
+        process; a long-running worker would otherwise reuse yesterday's."""
+        from swing_trade_ml.ml import market_context
+
+        market_context.clear_cache()
+
     def recent_bars(self, symbol: str, n: int = 260) -> pd.DataFrame:
         """The last `n` daily bars on or before as_of, ascending, with each
         bar's trading day (IST) in a `day` column."""

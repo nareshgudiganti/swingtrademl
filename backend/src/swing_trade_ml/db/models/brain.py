@@ -8,9 +8,9 @@ modules ran, which fell back, and why.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
-from sqlalchemy import BigInteger, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import BigInteger, Date, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -74,3 +74,24 @@ class BrainModuleSetting(Base, TimestampMixin):
     mode: Mapped[str] = mapped_column(String(8))  # on | shadow | off
     changed_by: Mapped[str | None] = mapped_column(String(128))
     note: Mapped[str | None] = mapped_column(Text)
+
+
+class FeatureSnapshot(Base):
+    """What the brain saw for one stock on one day (M02): the model's own
+    features and a few plain facts, from bars that end on that day. Stored by
+    nightly runs so any past day can be replayed exactly. One row per stock,
+    bar day and feature-set version; a re-run of the same night replaces it."""
+
+    __tablename__ = "feature_snapshots"
+    __table_args__ = (UniqueConstraint("symbol", "bar_date", "feature_set_version"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    symbol: Mapped[str] = mapped_column(String(64), index=True)
+    bar_date: Mapped[date] = mapped_column(Date, index=True)
+    feature_set_version: Mapped[str] = mapped_column(String(16))
+    run_id: Mapped[str | None] = mapped_column(ForeignKey("brain_runs.id", ondelete="SET NULL"))
+    close: Mapped[float] = mapped_column(Float)
+    atr_14: Mapped[float | None] = mapped_column(Float)
+    adv_inr_20: Mapped[float | None] = mapped_column(Float)
+    features: Mapped[dict] = mapped_column(JSONB, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

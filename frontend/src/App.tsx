@@ -95,6 +95,16 @@ export default function App() {
     enabled: hasToken,
     retry: false,
   })
+  // The brain's market mode as a small badge in the status strip — on every
+  // page without a banner that pushes tables down. Hidden until the brain has
+  // run (it is off in production until switched on).
+  const { data: brainRun } = useQuery({
+    queryKey: ['brainLatest'],
+    queryFn: () => api.brainLatestRun('nightly'),
+    enabled: hasToken,
+    retry: false,
+    refetchInterval: 300_000,
+  })
   const refresh = useMutation({
     mutationFn: api.refreshData,
     onSuccess: (data) => {
@@ -179,6 +189,21 @@ export default function App() {
             >
               {status?.broker_authenticated ? 'Kite connected' : 'Kite: no session'}
             </span>
+            {brainRun?.banner.mode && (
+              <NavLink
+                to="/brain"
+                className={`badge ${
+                  brainRun.banner.mode === 'NORMAL'
+                    ? 'badge-on'
+                    : brainRun.banner.mode === 'DEFENSIVE'
+                      ? 'badge-warn'
+                      : 'badge-off'
+                }`}
+                title={brainRun.banner.headline ?? undefined}
+              >
+                Brain: {brainRun.banner.mode === 'NO_NEW_TRADES' ? 'NO NEW TRADES' : brainRun.banner.mode}
+              </NavLink>
+            )}
             <span className="badge badge-off" title="Active model">
               {status?.active_model ?? 'no model'}
             </span>

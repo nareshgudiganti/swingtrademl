@@ -1,6 +1,8 @@
 // Thin fetch wrapper around the FastAPI backend.
 
 import type {
+  BrainAlertPreview,
+  BrainAlertSend,
   BrainDecision,
   BrainHealth,
   BrainModules,
@@ -447,6 +449,10 @@ export const api = {
   brainRunTrace: (runId: string) =>
     get<{ run_id: string; trace: BrainTraceEvent[] }>(`/brain/runs/${encodeURIComponent(runId)}/trace`),
   brainWhy: (symbol: string) => get<BrainWhy>(`/brain/why/${encodeURIComponent(symbol.trim().toUpperCase())}`),
+  brainAlertPreview: (runId: string) =>
+    get<BrainAlertPreview>(`/brain/runs/${encodeURIComponent(runId)}/alerts`),
+  brainAlertSend: (runId: string) =>
+    post<BrainAlertSend>(`/brain/runs/${encodeURIComponent(runId)}/alerts/send`),
   brainOverrule: (id: number, word: string, reason: string) =>
     post<BrainDecision>(`/brain/decisions/${id}/overrule`, { word, reason }),
 }

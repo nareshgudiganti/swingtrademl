@@ -126,6 +126,79 @@ function HowItDecided({ trace }: { trace: BrainTraceEvent[] }) {
   )
 }
 
+/** The plan as plain text, for pasting into a broker app or a note. Copies
+ * text only — the brain never places an order. */
+function planText(d: BrainDecision): string {
+  const zone =
+    d.entry_low != null && d.entry_high != null
+      ? `${formatCurrency(d.entry_low)} to ${formatCurrency(d.entry_high)}`
+      : '—'
+  return [
+    `${d.symbol}: TRADE`,
+    `Buy around ${zone}`,
+    `Target ${d.target != null ? formatCurrency(d.target) : '—'} (+8%)`,
+    `Stop ${d.stop != null ? formatCurrency(d.stop) : '—'} (−4%)`,
+    `Shares ${d.qty} · up to ${d.horizon_days} trading days`,
+  ].join('\n')
+}
+
+function CopyPlan({ decision }: { decision: BrainDecision }) {
+  const [copied, setCopied] = useState<'idle' | 'done' | 'failed'>('idle')
+  return (
+    <div style={{ marginTop: '0.6rem' }}>
+      <button
+        onClick={() => {
+          navigator.clipboard
+            .writeText(planText(decision))
+            .then(() => setCopied('done'))
+            .catch(() => setCopied('failed'))
+        }}
+      >
+        Copy plan
+      </button>
+      {copied === 'done' && <span className="stat-sub"> Copied.</span>}
+      {copied === 'failed' && <span className="stat-sub"> Could not copy; select the levels above instead.</span>}
+    </div>
+  )
+}
+
+function AlertCard({ runId }: { runId: string }) {
+  const preview = useQuery({ queryKey: ['brainAlert', runId], queryFn: () => api.brainAlertPreview(runId) })
+  const send = useMutation({ mutationFn: () => api.brainAlertSend(runId), onSuccess: () => void preview.refetch() })
+  const items = preview.data?.items ?? []
+  return (
+    <div className="card" style={{ marginBottom: '1.25rem' }}>
+      <div className="between">
+        <h2>Telegram alert for this run</h2>
+        <button className="primary" disabled={!items.length || send.isPending} onClick={() => send.mutate()}>
+          {send.isPending ? 'Sending…' : 'Send now'}
+        </button>
+      </div>
+      {preview.isLoading && <Loading />}
+      {!preview.isLoading && items.length === 0 && (
+        <p className="muted">Nothing new to tell since the last run (or it was already sent today).</p>
+      )}
+      {items.length > 0 && (
+        <ul className="brain-reasons">
+          {items.map((i) => (
+            <li key={i.key}>{i.text}</li>
+          ))}
+        </ul>
+      )}
+      {send.data && (
+        <p className="stat-sub">
+          {send.data.sent
+            ? `Sent ${send.data.count} update${send.data.count === 1 ? '' : 's'} to Telegram.`
+            : send.data.count
+              ? 'Not sent: Telegram is switched off or did not answer. Nothing was marked as told.'
+              : 'Nothing new to send.'}
+        </p>
+      )}
+      {send.isError && <ErrorBox error={send.error} />}
+    </div>
+  )
+}
+
 function DecisionDetail({
   decision,
   trace,
@@ -180,12 +253,21 @@ function DecisionDetail({
         </div>
       )}
 
+      {finalWord(decision) === 'TRADE' && <CopyPlan decision={decision} />}
+
       <h3>Why</h3>
       <ul className="brain-reasons">
         {decision.reasons.map((r, i) => (
           <li key={i}>{r}</li>
         ))}
       </ul>
+
+      {decision.evidence_text && (
+        <>
+          <h3>Evidence</h3>
+          <p className="muted">{decision.evidence_text}</p>
+        </>
+      )}
 
       <h3>How the brain decided</h3>
       {trace ? <HowItDecided trace={trace} /> : <Loading />}
@@ -480,6 +562,8 @@ export default function Brain() {
           {setMode.isError && <ErrorBox error={setMode.error} />}
         </div>
       )}
+
+      {run && run.live && <AlertCard runId={run.run_id} />}
 
       {runs.data && runs.data.length > 0 && (
         <div className="card">

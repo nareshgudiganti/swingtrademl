@@ -885,3 +885,14 @@ export interface BrainHealth {
   data: { score: number | null; fresh: boolean | null; issues: string[] }
   stale_count: number
 }
+
+export interface BrainAlertPreview {
+  items: { key: string; kind: string; symbol: string | null; text: string }[]
+  text: string | null
+}
+
+export interface BrainAlertSend {
+  sent: boolean
+  count: number
+  text: string | null
+}

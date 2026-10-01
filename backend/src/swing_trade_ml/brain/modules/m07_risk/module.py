@@ -19,6 +19,7 @@ from swing_trade_ml.brain import contracts as c
 from swing_trade_ml.brain.context import ContextView
 from swing_trade_ml.brain.module import BrainModule, Manifest, Mode, Step, register_module
 from swing_trade_ml.brain.modules.m07_risk.allocator import Account, Candidate, CheckResult, Policy, allocate
+from swing_trade_ml.brain.opinions import liked, pick_opinion, strength
 from swing_trade_ml.ml.sector_map import get_sector_bucket
 from swing_trade_ml.services import deployable, risk
 from swing_trade_ml.services.limits import limits_for
@@ -27,28 +28,6 @@ from swing_trade_ml.services.portfolio import portfolio_value_and_cash
 STOP_PCT = 0.04  # the locked -4% stop sizes the position
 DEFENSIVE_SIZE_FACTOR = 0.5
 DEFENSIVE_MAX_NEW = 2
-
-# Which opinion speaks for a stock when several exist: a reasoning module's
-# combined view (M06) first, then the active model.
-_SOURCE_PREFERENCE = ("combined", "model")
-
-
-def _pick(opinions: list[c.Opinion]) -> c.Opinion:
-    for source in _SOURCE_PREFERENCE:
-        for o in opinions:
-            if o.source == source:
-                return o
-    return max(opinions, key=lambda o: (o.stance, o.source))
-
-
-def _liked(o: c.Opinion) -> bool:
-    if o.probability is not None and o.threshold is not None:
-        return o.probability >= o.threshold
-    return o.stance > 0
-
-
-def _strength(o: c.Opinion) -> float:
-    return o.probability if o.probability is not None else (o.stance + 1) / 2
 
 
 def candidates_from(view: ContextView) -> tuple[list[Candidate], list[c.RiskVerdict]]:
@@ -61,8 +40,8 @@ def candidates_from(view: ContextView) -> tuple[list[Candidate], list[c.RiskVerd
     candidates: list[Candidate] = []
     refusals: list[c.RiskVerdict] = []
     for symbol in sorted(by_symbol):
-        opinion = _pick(by_symbol[symbol])
-        if not _liked(opinion):
+        opinion = pick_opinion(by_symbol[symbol])
+        if not liked(opinion):
             continue
         snap = view.snapshots.get(symbol)
         if snap is None or snap.close <= 0:
@@ -91,7 +70,7 @@ def candidates_from(view: ContextView) -> tuple[list[Candidate], list[c.RiskVerd
             Candidate(
                 symbol=symbol,
                 price=snap.close,
-                strength=_strength(opinion),
+                strength=strength(opinion),
                 bucket=get_sector_bucket(symbol),
                 instrument_id=view.reader.instrument_id(symbol),
             )

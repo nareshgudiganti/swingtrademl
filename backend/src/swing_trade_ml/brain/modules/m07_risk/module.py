@@ -180,7 +180,7 @@ class RiskGate(BrainModule):
         account = account_snapshot(db, book)
         market = view.market
         policy = Policy(
-            mode=market.mode if market is not None else c.MarketMode.DEFENSIVE,
+            mode=(market.mode if market is not None else None) or c.MarketMode.DEFENSIVE,
             defensive_size_factor=DEFENSIVE_SIZE_FACTOR,
             defensive_max_new=DEFENSIVE_MAX_NEW,
         )

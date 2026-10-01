@@ -306,3 +306,32 @@ def test_market_wide_stale_data_means_no_new_trades():
     assert ctx.banner.mode is MarketMode.NO_NEW_TRADES
     assert ctx.decisions["ABC"].word is IdeaWord.WATCH
     assert "NIFTY" in ctx.decisions["ABC"].downgrade_reason
+
+
+# --- market mode: M03 facts first, M10 decides ------------------------------------
+
+
+def _facts_module():
+    def run(view):
+        return c.Contribution(market=c.MarketState(trend="up", volatility="normal"))  # mode not decided
+
+    return make_module("M03", Step.STATE, writes=("MarketState@1",), run=run)
+
+
+def _mode_plugin():
+    def run(view):
+        return c.Contribution(market=c.MarketState(mode=MarketMode.NORMAL, reasons=("Broad rally",)))
+
+    return make_module("M10", Step.STATE, writes=("MarketState@1",), run=run, kind="plugin")
+
+
+def test_a_plugin_decides_the_mode_after_the_state_module_wrote_facts():
+    ctx = execute(request(), FakeReader(), registry(_facts_module(), _mode_plugin()), modes={})
+    assert ctx.market.trend == "up"
+    assert ctx.market.mode is MarketMode.NORMAL and ctx.market.reasons == ("Broad rally",)
+
+
+def test_without_the_market_plugin_the_fallback_still_sets_a_mode():
+    ctx = execute(request(), FakeReader(), registry(_facts_module()), modes={})
+    assert ctx.market.mode is not None
+    assert ctx.banner.mode is not None

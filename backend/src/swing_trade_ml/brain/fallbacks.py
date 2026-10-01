@@ -182,7 +182,7 @@ def decide(ctx: BrainContext) -> c.Contribution:
         )
 
     market = ctx.market
-    mode = market.mode if market is not None else c.MarketMode.DEFENSIVE
+    mode = (market.mode if market is not None else None) or c.MarketMode.DEFENSIVE
     reasons = market.reasons if market is not None else ("Market state is unknown.",)
     banner = c.Banner(mode=mode, headline=reasons[0] if reasons else mode.value, reasons=reasons)
     return c.Contribution(decisions=tuple(decisions), banner=banner)

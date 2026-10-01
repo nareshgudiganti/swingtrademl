@@ -120,7 +120,7 @@ class MarketState:
     breadth_pct: float | None = None
     fii_net_5d_cr: float | None = None
     vix: float | None = None
-    mode: MarketMode = MarketMode.DEFENSIVE
+    mode: MarketMode | None = None  # None = not decided yet; readers treat it as DEFENSIVE
     reasons: tuple[str, ...] = ()
 
 

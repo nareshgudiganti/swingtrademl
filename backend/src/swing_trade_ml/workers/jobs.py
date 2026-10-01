@@ -569,6 +569,10 @@ def _run_brain_job(kind: str) -> None:
         with session_scope() as db:
             _, run_id = brain_service.run_brain(db, kind=kind, book=settings.TRADING_MODE)
             log.info("job.brain.done", kind=kind, run_id=run_id)
+            if settings.BRAIN_ALERTS_ENABLED:
+                from swing_trade_ml.brain.alerts import service as brain_alerts
+
+                brain_alerts.send(db, run_id)
     except Exception as exc:  # noqa: BLE001
         _report_error(f"brain {kind} run", exc)
 

@@ -95,3 +95,19 @@ class FeatureSnapshot(Base):
     adv_inr_20: Mapped[float | None] = mapped_column(Float)
     features: Mapped[dict] = mapped_column(JSONB, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class BrainAlert(Base):
+    """One thing the owner was told (M16), so it is told only once a day."""
+
+    __tablename__ = "brain_alerts"
+    __table_args__ = (UniqueConstraint("alert_key", "alert_date"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    alert_key: Mapped[str] = mapped_column(String(96))
+    alert_date: Mapped[date] = mapped_column(Date, index=True)
+    run_id: Mapped[str | None] = mapped_column(ForeignKey("brain_runs.id", ondelete="SET NULL"))
+    kind: Mapped[str] = mapped_column(String(16))
+    text: Mapped[str] = mapped_column(Text)
+    channel: Mapped[str] = mapped_column(String(16), default="telegram")
+    sent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

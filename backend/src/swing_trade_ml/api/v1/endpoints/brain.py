@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from swing_trade_ml.api.deps import DbSession
 from swing_trade_ml.brain import service
+from swing_trade_ml.brain.alerts import service as alerts
 from swing_trade_ml.brain.module import Mode
 from swing_trade_ml.db.models.brain import BrainDecision, BrainRun
 
@@ -168,6 +169,21 @@ def overrule(decision_id: int, payload: OverruleCreate, db: DbSession) -> dict:
 @router.get("/health")
 def health(db: DbSession) -> dict:
     return service.health(db)
+
+
+@router.get("/runs/{run_id}/alerts")
+def alert_preview(run_id: str, db: DbSession) -> dict:
+    """What this run would tell the owner on Telegram (nothing is sent)."""
+    if db.get(BrainRun, run_id) is None:
+        raise HTTPException(404, "No such run.")
+    return alerts.preview(db, run_id)
+
+
+@router.post("/runs/{run_id}/alerts/send")
+def alert_send(run_id: str, db: DbSession) -> dict:
+    if db.get(BrainRun, run_id) is None:
+        raise HTTPException(404, "No such run.")
+    return alerts.send(db, run_id)
 
 
 @router.get("/runs/{run_id}/trace")

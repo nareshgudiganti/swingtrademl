@@ -170,6 +170,9 @@ class Settings(BaseSettings):
     # records decisions. Off by default so production is unchanged until the
     # owner turns it on; set BRAIN_ENABLED=true locally to schedule its runs.
     BRAIN_ENABLED: bool = False
+    # Telegram alerts after live brain runs (market mode changed, new TRADE ideas,
+    # holdings needing attention). Off by default; needs BRAIN_ENABLED too.
+    BRAIN_ALERTS_ENABLED: bool = False
 
     # --------------------------------------------------------------- risk --
     # MAX_POSITION_PCT and MAX_OPEN_POSITIONS are no longer read by the entry

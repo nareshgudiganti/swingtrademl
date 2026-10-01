@@ -155,3 +155,12 @@ def test_training_without_the_models_says_what_is_missing(db_session):
 
     with pytest.raises(TrainingError, match="no active model named 'nope'"):
         train_and_save(db_session, "nope", "nope_either")
+
+
+def test_the_reader_loads_a_registered_bundle_and_none_for_unknown(db_session, world):
+    from swing_trade_ml.brain.reader import DatedReader
+
+    reader = DatedReader(db_session, datetime(2026, 6, 30, 12, tzinfo=UTC), live=True)
+    bundle = reader.model_bundle("test_barrier", "v1")
+    assert bundle is not None and list(bundle["feature_names"]) == list(FEATURE_COLUMNS)
+    assert reader.model_bundle("test_barrier", "v9") is None

@@ -44,6 +44,7 @@ class DatedReader:
         self._model = None
         self._model_loaded = False
         self._context_checked = False
+        self._bundles: dict[tuple[str, str], dict | None] = {}
 
     def universe(self) -> tuple[str, ...]:
         rows = self.db.execute(
@@ -288,6 +289,25 @@ class DatedReader:
             )
             for sym, qty, price, stop, target, scaled in rows
         )
+
+    def model_bundle(self, name: str, version: str) -> dict | None:
+        """A saved model's bundle (estimator, scaler, feature names) by name and
+        version, or None when it is not registered or its file is unreachable.
+        Loaded once per run."""
+        from swing_trade_ml.db.models.ml import MLModel
+        from swing_trade_ml.ml.registry import load_artifact
+
+        key = (name, version)
+        if key not in self._bundles:
+            path = self.db.execute(
+                select(MLModel.artifact_path).where(MLModel.name == name, MLModel.version == version).limit(1)
+            ).scalar_one_or_none()
+            try:
+                self._bundles[key] = load_artifact(path) if path else None
+            except OSError as exc:
+                log.warning("brain.reader.bundle_unavailable", model=f"{name} {version}", error=str(exc))
+                self._bundles[key] = None
+        return self._bundles[key]
 
     def model_probability(self, symbol: str) -> tuple[float, float, str] | None:
         """The active model's score for the latest bar, or None. Live only:

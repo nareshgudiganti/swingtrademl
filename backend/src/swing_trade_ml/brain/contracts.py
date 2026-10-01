@@ -210,6 +210,10 @@ class Opinion:
     probability: float | None = None
     threshold: float | None = None
     horizon_days: int = 15
+    # True only when `probability` is a measured chance (M06's calibrated
+    # combiner), not a ranking score; `evidence` says how it was measured.
+    calibrated: bool = False
+    evidence: str = ""
 
 
 @dataclass(frozen=True, slots=True)

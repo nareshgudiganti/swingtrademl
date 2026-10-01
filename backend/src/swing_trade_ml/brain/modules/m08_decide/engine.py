@@ -63,6 +63,16 @@ def _evidence(f: IdeaFacts, qty: int, policy: DecidePolicy) -> str:
             f"{ev:+.2f} R per trade (1 R = the {policy.stop_pct:.0%} risked)."
         )
     o = f.opinion
+    if o is not None and o.calibrated and o.probability is not None and f.snapshot:
+        ev = expected_r(
+            o.probability, cost_pct(f.snapshot.close, cost_qty(f.verdict, f.snapshot.close, policy)), policy
+        )
+        return (
+            f"Calibrated chance of +{policy.target_pct:.0%} before -{policy.stop_pct:.0%}: "
+            f"{o.probability:.0%}. "
+            f"Expected result after costs: {ev:+.2f} R per trade (1 R = the {policy.stop_pct:.0%} risked). "
+            f"{o.evidence}"
+        ).strip()
     if o is not None and o.probability is not None:
         return (
             "No similar-case record yet, so the chance of reaching the target first is not known. "
@@ -89,6 +99,12 @@ def _draft_idea(f: IdeaFacts, policy: DecidePolicy) -> c.Decision:
     if o is None:
         return wait("No opinion about this stock today (no model score or reasoning module answer).")
     if not liked(o):
+        if o.calibrated and o.probability is not None:
+            return wait(
+                f"Calibrated chance {o.probability:.0%} is below the {o.threshold or 0:.0%} "
+                "needed to pay after costs.",
+                o.probability,
+            )
         if o.probability is not None:
             return wait(
                 f"Model score {o.probability:.0%} is below the buy level {o.threshold or 0:.0%}.",

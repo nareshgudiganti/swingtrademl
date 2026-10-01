@@ -24,6 +24,7 @@ the short "what we learned" companion: read it before starting a module.
 | M02 perception | brain/m02-perception | model's 53 features per stock per night, `feature_snapshots` |
 | M03 + M10 | brain/m03-m10-market | state facts + market mode on v1's regime table |
 | M08 decision engine | brain/m08-decide | draft → named rules (only lower) → opportunity notes; rules in `m08_decide/rules.py`, numbers in `policy.py` |
+| M16 alerts and cards | brain/m16-alerts | detectors (pluggable) → one Telegram message per run, once a day; console preview/send; sidebar badge; Copy plan |
 
 ## How to add a module (checklist)
 
@@ -42,6 +43,15 @@ the short "what we learned" companion: read it before starting a module.
 - Remove without deleting: put its id in `DecidePolicy.disabled`.
 - A rule can only make a decision more careful (the engine applies it with `downgrade`).
 - Change a threshold: edit `DecidePolicy` in `policy.py`, nowhere else.
+
+## How to add or remove an alert (M16)
+
+- Add: write `find(current_run, previous_run) -> list[AlertItem]` in `brain/alerts/detectors.py` and
+  append a `Detector(id, plain name, find)` to `DETECTORS`. Give items a stable `key` (used for
+  once-a-day de-duplication) and a `priority` (lower shows first).
+- Remove: pass its id in `disabled` to `detect`.
+- Alerts are sent only after live nightly/intraday runs, through v1's notifier as `signal`
+  events, and only when `BRAIN_ALERTS_ENABLED=true`.
 
 ## Invariants (do not break)
 
@@ -70,6 +80,11 @@ the short "what we learned" companion: read it before starting a module.
   must read the same opinion the same way (combined view, then model, then strongest).
 - **On real data (Sep 2026) the holding rules are informative**: 11 of 13 paper holdings were
   MONITOR (falling in a careful market, or trailing NIFTY by 15–20%).
+
+- **Owner asked for no banner on every page** (it pushed the Holdings table down), so the brain's
+  market mode is a small badge in the side menu's status strip.
+- **Record an alert only after Telegram really sent it**; otherwise turning Telegram on later
+  would silently skip what was never delivered.
 
 ## Testing traps (Windows)
 

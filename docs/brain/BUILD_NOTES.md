@@ -86,6 +86,13 @@ the short "what we learned" companion: read it before starting a module.
 - **Record an alert only after Telegram really sent it**; otherwise turning Telegram on later
   would silently skip what was never delivered.
 
+- **Checkpoint review 2026-10-01 (10 findings, all fixed)**: savepoint around run/store so a DB
+  failure is recorded with its cause; alert baseline = previous *alert-checked* run of the same
+  book; health uses live nightly runs only; never clear v1's market cache unless it is behind the
+  database (v1's 15:40 ingest refreshes it, and the 15:45 scan may be reading it); naive times are
+  India time; per-module `intraday_budget_s`; EV costs on a real position size; `downgrade` keeps a
+  holding's shares; fallbacks fill gaps only; one shared opinion rule set.
+
 ## Testing traps (Windows)
 
 - Run pytest with `env -u API_KEY -u DATABASE_URL -u JWT_SECRET_KEY -u TRADING_MODE`.

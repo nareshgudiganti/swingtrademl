@@ -348,6 +348,24 @@ def cmd_brain(args: argparse.Namespace) -> int:
             _, run_id = service.run_brain(db, kind=args.kind, as_of=as_of, symbols=symbols, book=args.book)
             _print_run(db, run_id)
             return 0
+        if args.brain_command == "meta-train":
+            from swing_trade_ml.brain.modules.m06_reason.training import TrainingError, train_and_save
+
+            try:
+                result = train_and_save(db, args.barrier_model, args.swing_model)
+            except TrainingError as exc:
+                print(f"❌ {exc}", file=sys.stderr)
+                return 1
+            r = result["report"]
+            print(f"Saved {result['path'].name}: {r['n_rows']} unseen stock-days, {r['n_symbols']} stocks, "
+                  f"{r['window_start']} to {r['window_end']}, {r['folds']} monthly tests")
+            print(f"Base rate (reached +8% first): {r['base_rate']:.1%}")
+            for name, m in r["candidates"].items():
+                auc = f"{m['auc']:.3f}" if m["auc"] is not None else "n/a"
+                top = f"{m['top_decile_hit_rate']:.1%}" if m["top_decile_hit_rate"] is not None else "n/a"
+                print(f"  {name:<19} error (Brier) {m['brier']:.4f}  AUC {auc}  top-10% hit rate {top}")
+            print(f"Chosen: {r['chosen']} — {r['why']}")
+            return 0
         if args.brain_command == "why":
             _, run_id = service.run_brain(db, kind="why", symbols=[args.symbol], book=args.book)
             _print_run(db, run_id)
@@ -477,6 +495,9 @@ def build_parser() -> argparse.ArgumentParser:
     b.add_argument("--as-of", default=None, help="YYYY-MM-DD: replay that day (no live-only inputs)")
     b.add_argument("--symbols", default=None, help="Comma-separated (default: the watchlist)")
     b.add_argument("--book", default="paper", choices=["paper", "live"])
+    b = brain_sub.add_parser("meta-train", help="Train and test M06's calibrated combiner on unseen months")
+    b.add_argument("--barrier-model", default="swing_classifier_barrier")
+    b.add_argument("--swing-model", default="swing_classifier")
     b = brain_sub.add_parser("why", help="Run the brain for one stock and show its full trace")
     b.add_argument("symbol")
     b.add_argument("--book", default="paper", choices=["paper", "live"])

@@ -25,6 +25,8 @@ class DecidePolicy:
     min_similar_cases: int = 30
     # A holding trailing NIFTY by this much over 60 days is watched closely.
     lagging_vs_nifty: float = -0.10
+    # Costs are priced on the approved size, or on a position this big when there is none.
+    cost_notional_inr: float = 100_000.0
     # Ids of rules to switch off (see rules.py), e.g. {"defensive_needs_uptrend"}.
     disabled: frozenset[str] = field(default_factory=frozenset)
 

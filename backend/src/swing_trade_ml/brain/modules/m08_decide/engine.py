@@ -15,9 +15,10 @@ from dataclasses import dataclass, replace
 
 from swing_trade_ml.brain import contracts as c
 from swing_trade_ml.brain.contracts import HoldingWord, IdeaWord, MarketMode
-from swing_trade_ml.brain.modules.m08_decide.money import cost_pct, expected_r
+from swing_trade_ml.brain.modules.m08_decide.money import cost_pct, cost_qty, expected_r
 from swing_trade_ml.brain.modules.m08_decide.policy import DecidePolicy
 from swing_trade_ml.brain.modules.m08_decide.rules import HOLDING_RULES, IDEA_RULES, Rule
+from swing_trade_ml.brain.opinions import liked, strength
 from swing_trade_ml.services.limits import format_inr
 
 
@@ -45,16 +46,12 @@ class HoldingFacts:
 # --- ideas -----------------------------------------------------------------------
 
 
-def _liked(o: c.Opinion) -> bool:
-    if o.probability is not None and o.threshold is not None:
-        return o.probability >= o.threshold
-    return o.stance > 0
-
-
 def _evidence(f: IdeaFacts, qty: int, policy: DecidePolicy) -> str:
     r = f.recall
     if r is not None and r.hit_rate is not None and r.n_similar >= policy.min_similar_cases and f.snapshot:
-        ev = expected_r(r.hit_rate, cost_pct(f.snapshot.close, max(1, qty)), policy)
+        ev = expected_r(
+            r.hit_rate, cost_pct(f.snapshot.close, cost_qty(f.verdict, f.snapshot.close, policy)), policy
+        )
         band = (
             f" · the middle half ended between {r.p25:+.1%} and {r.p75:+.1%}"
             if r.p25 is not None and r.p75 is not None
@@ -91,7 +88,7 @@ def _draft_idea(f: IdeaFacts, policy: DecidePolicy) -> c.Decision:
     o = f.opinion
     if o is None:
         return wait("No opinion about this stock today (no model score or reasoning module answer).")
-    if not _liked(o):
+    if not liked(o):
         if o.probability is not None:
             return wait(
                 f"Model score {o.probability:.0%} is below the buy level {o.threshold or 0:.0%}.",
@@ -184,7 +181,7 @@ def opportunity_notes(
         if f.verdict is not None
         and f.verdict.rule == "POSITION_LIMIT"
         and f.opinion is not None
-        and _liked(f.opinion)
+        and liked(f.opinion)
         and ideas.get(s) is not None
         and ideas[s].word is IdeaWord.WATCH
     ]
@@ -192,10 +189,10 @@ def opportunity_notes(
     if not waiting or not worried:
         return ideas, holdings
 
-    def strength(f: IdeaFacts) -> float:
-        return f.opinion.probability if f.opinion.probability is not None else (f.opinion.stance + 1) / 2
+    def strength_of(f: IdeaFacts) -> float:
+        return strength(f.opinion)
 
-    best = max(waiting, key=lambda f: (strength(f), f.symbol))
+    best = max(waiting, key=lambda f: (strength_of(f), f.symbol))
 
     def rel(symbol: str) -> float:
         stock = holding_facts[symbol].stock if symbol in holding_facts else None
@@ -208,7 +205,7 @@ def opportunity_notes(
         holdings[weakest],
         reasons=(
             *holdings[weakest].reasons,
-            f"A stronger idea is waiting ({best.symbol}, scored {strength(best):.0%}) "
+            f"A stronger idea is waiting ({best.symbol}, scored {strength_of(best):.0%}) "
             "while every slot is full; "
             "consider replacing this one.",
         ),

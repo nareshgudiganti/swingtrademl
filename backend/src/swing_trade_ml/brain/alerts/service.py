@@ -9,6 +9,7 @@ Telegram notifier as a `signal` event, and record only what was really sent
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
@@ -59,8 +60,10 @@ def _previous(db: Session, run: BrainRun) -> BrainRun | None:
         select(BrainRun)
         .where(
             BrainRun.kind == run.kind,
+            BrainRun.book == run.book,
             BrainRun.live.is_(True),
             BrainRun.status == "done",
+            BrainRun.alerts_checked_at.is_not(None),
             BrainRun.started_at < run.started_at,
         )
         .order_by(BrainRun.started_at.desc())
@@ -95,14 +98,25 @@ def preview(db: Session, run_id: str) -> dict:
     }
 
 
+def _mark_checked(db: Session, run: BrainRun | None) -> None:
+    """Nothing to tell is still a check: this run becomes the next baseline.
+    A failed send is NOT marked, so the next run compares against the older
+    baseline and the news is found again."""
+    if run is not None and run.live and run.kind in ALERTING_KINDS:
+        run.alerts_checked_at = datetime.now(UTC)
+        db.commit()
+
+
 def send(db: Session, run_id: str, sender: Sender | None = None) -> dict:
     run = db.get(BrainRun, run_id)
     items = pending(db, run_id)
     text = compose(items, _view(db, run)) if items else None
     if text is None:
+        _mark_checked(db, run)
         return {"sent": False, "count": 0, "text": None}
     sent = (sender or default_sender())(text)
     if sent:
+        run.alerts_checked_at = datetime.now(UTC)
         day = _alert_day(run)
         for item in items:
             db.execute(

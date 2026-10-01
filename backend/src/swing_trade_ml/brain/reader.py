@@ -12,7 +12,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 import pandas as pd
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from swing_trade_ml.brain import contracts as c
@@ -43,7 +43,7 @@ class DatedReader:
         self.live = live
         self._model = None
         self._model_loaded = False
-        self._context_cleared = False
+        self._context_checked = False
 
     def universe(self) -> tuple[str, ...]:
         rows = self.db.execute(
@@ -112,15 +112,41 @@ class DatedReader:
             "breadth": market_context.load_market_breadth(self.db, upto=upto),
         }
 
-    def clear_context_cache(self) -> None:
-        """The context loaders cache whole histories for the life of the
-        process; a long-running worker would otherwise reuse yesterday's."""
-        if self._context_cleared:
-            return  # once per run: rebuilding breadth reloads every watchlist stock
+    def _cached_index_last(self):
+        """Newest NIFTY bar in v1's market-context cache, or None if not cached."""
         from swing_trade_ml.ml import market_context
 
-        market_context.clear_cache()
-        self._context_cleared = True
+        cached = market_context._symbol_cache.get((settings.BENCHMARK_INDEX_SYMBOL, "day"))
+        if cached is None or cached.empty:
+            return None
+        return pd.Timestamp(cached["ts"].iloc[-1]).to_pydatetime()
+
+    def _db_index_last(self):
+        return self.db.execute(
+            select(func.max(Candle.ts))
+            .join(Instrument, Instrument.id == Candle.instrument_id)
+            .where(Instrument.tradingsymbol == settings.BENCHMARK_INDEX_SYMBOL, Candle.interval == "day")
+        ).scalar_one_or_none()
+
+    def refresh_context_if_stale(self) -> None:
+        """v1's market-context loaders cache whole histories per process, and
+        v1's 15:40 ingest job refreshes them in the worker. The brain must not
+        clear that shared cache on every run — v1's scan may be reading it on
+        another thread — so it clears only when the cache is behind the
+        database (in practice: the API process, where no scan runs). Checked
+        once per run."""
+        if self._context_checked:
+            return
+        self._context_checked = True
+        cached = self._cached_index_last()
+        if cached is None:
+            return  # nothing cached: the loaders will read fresh data
+        latest = self._db_index_last()
+        if latest is not None and latest > cached:
+            from swing_trade_ml.ml import market_context
+
+            market_context.clear_cache()
+            log.info("brain.reader.context_refreshed", cached=str(cached), latest=str(latest))
 
     def recent_bars(self, symbol: str, n: int = 260) -> pd.DataFrame:
         """The last `n` daily bars on or before as_of, ascending, with each

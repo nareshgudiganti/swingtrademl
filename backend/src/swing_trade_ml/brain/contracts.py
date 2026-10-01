@@ -265,7 +265,8 @@ def downgrade(decision: Decision, to: Word, reason: str) -> Decision:
         reasons=(reason, *decision.reasons),
         downgraded_from=decision.downgraded_from or decision.word,
         downgrade_reason=reason,
-        qty=0 if to is not IdeaWord.TRADE else decision.qty,
+        # An idea that is no longer a TRADE has nothing to buy; a holding keeps its shares.
+        qty=0 if isinstance(to, IdeaWord) and to is not IdeaWord.TRADE else decision.qty,
     )
 
 

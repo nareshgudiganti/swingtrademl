@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from collections import Counter
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
@@ -32,6 +33,14 @@ class RunCreate(BaseModel):
     symbols: list[str] | None = None
     as_of: datetime | None = None  # a past time makes it a replay
     book: str = Field("paper", pattern="^(paper|live)$")
+
+    @field_validator("as_of")
+    @classmethod
+    def _india_time_by_default(cls, value: datetime | None) -> datetime | None:
+        """A time without a timezone is the owner's clock (India), not the server's."""
+        if value is not None and value.tzinfo is None:
+            return value.replace(tzinfo=ZoneInfo("Asia/Kolkata"))
+        return value
 
 
 class OverruleCreate(BaseModel):

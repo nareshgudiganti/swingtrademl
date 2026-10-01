@@ -26,12 +26,13 @@ class StateEngine(BrainModule):
         reads=(),
         writes=("MarketState@1", "StockState@1", "PortfolioState@1", "SystemState@1"),
         budget_s=15.0,
+        intraday_budget_s=8.0,  # market facts are needed for holding words intraday too
         default_mode=Mode.ON,
     )
 
     def run(self, view: ContextView) -> c.Contribution:
         reader = view.reader
-        reader.clear_context_cache()
+        reader.refresh_context_if_stale()
         inputs = inputs_from(reader)
         market = c.MarketState(**market_facts(inputs))  # mode left open for M10
 

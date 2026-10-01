@@ -8,6 +8,7 @@ import uuid
 from dataclasses import asdict
 from datetime import UTC, date, datetime, timedelta
 from enum import StrEnum
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
@@ -96,6 +97,8 @@ def run_brain(
         raise ValueError(f"kind must be one of {sorted(STEPS_FOR)}")
     now = datetime.now(UTC)
     live = as_of is None
+    if as_of is not None and as_of.tzinfo is None:
+        as_of = as_of.replace(tzinfo=ZoneInfo("Asia/Kolkata"))  # the owner's clock
     as_of = as_of or now
     reader = DatedReader(db, as_of=as_of, live=live)
     if kind == "intraday":
@@ -108,29 +111,20 @@ def run_brain(
     modes = load_modes(db)
     started = time.perf_counter()
     try:
-        ctx = execute(request, reader, registry, modes)
-    except Exception as exc:
-        # Modules cannot break a run, but the database or the reader can.
-        # Keep the failure so the console and health can see it, then raise.
-        if not db.is_active:  # only a failed flush leaves the session unusable
-            db.rollback()
-        db.add(
-            BrainRun(
-                id=run_id,
-                kind=kind,
-                as_of=as_of,
-                book=book,
-                live=live,
-                status="failed",
-                error=f"{type(exc).__name__}: {exc}",
-                ms=int((time.perf_counter() - started) * 1000),
-            )
-        )
+        # A savepoint around the run: if the database fails mid-run (Postgres
+        # then refuses every further statement in the transaction), rolling
+        # back to it leaves the session usable to record the failure below.
+        with db.begin_nested():
+            ctx = execute(request, reader, registry, modes)
+        elapsed_ms = int((time.perf_counter() - started) * 1000)
+        with db.begin_nested():
+            _store(db, ctx, registry, modes, elapsed_ms)
         db.commit()
-        log.error("brain.run.failed", run_id=run_id, kind=kind, error=str(exc))
+    except Exception as exc:
+        # Modules cannot break a run, but the database, the reader or the
+        # storing can. Keep the failure so the console and health see it.
+        _record_failure(db, request, exc, int((time.perf_counter() - started) * 1000))
         raise
-    elapsed_ms = int((time.perf_counter() - started) * 1000)
-    _store(db, ctx, registry, modes, elapsed_ms)
     log.info(
         "brain.run.done",
         run_id=run_id,
@@ -140,6 +134,26 @@ def run_brain(
         ms=elapsed_ms,
     )
     return ctx, run_id
+
+
+def _record_failure(db: Session, request: c.RunRequest, exc: Exception, ms: int) -> None:
+    try:
+        db.add(
+            BrainRun(
+                id=request.run_id,
+                kind=request.kind,
+                as_of=request.as_of,
+                book=request.book,
+                live=request.live,
+                status="failed",
+                error=f"{type(exc).__name__}: {exc}",
+                ms=ms,
+            )
+        )
+        db.commit()
+    except Exception as record_exc:  # noqa: BLE001 — never hide the original error
+        log.error("brain.run.failure_not_recorded", run_id=request.run_id, error=str(record_exc))
+    log.error("brain.run.failed", run_id=request.run_id, kind=request.kind, error=str(exc))
 
 
 def _jsonable(value):
@@ -215,7 +229,6 @@ def _store(db: Session, ctx: BrainContext, registry: ModuleRegistry, modes: dict
         )
     if req.kind == "nightly":
         _store_snapshots(db, ctx)
-    db.commit()
 
 
 def _store_snapshots(db: Session, ctx: BrainContext) -> None:
@@ -334,7 +347,7 @@ def health(db: Session) -> dict:
     last = db.execute(select(BrainRun).order_by(BrainRun.started_at.desc()).limit(1)).scalar_one_or_none()
     last_ok_nightly = db.execute(
         select(BrainRun.started_at)
-        .where(BrainRun.kind == "nightly", BrainRun.status == "done")
+        .where(BrainRun.kind == "nightly", BrainRun.status == "done", BrainRun.live.is_(True))
         .order_by(BrainRun.started_at.desc())
         .limit(1)
     ).scalar_one_or_none()
@@ -342,7 +355,9 @@ def health(db: Session) -> dict:
     failed = db.execute(
         select(func.count(BrainRun.id)).where(BrainRun.status == "failed", BrainRun.started_at >= week_ago)
     ).scalar_one()
-    latest_done = latest_run(db)
+    latest_done = latest_run(
+        db, "nightly"
+    )  # live nightly only: a replay or one-stock run says nothing about today
     overall = (latest_done.quality or {}).get("overall") if latest_done else None
     return {
         "last_run": None

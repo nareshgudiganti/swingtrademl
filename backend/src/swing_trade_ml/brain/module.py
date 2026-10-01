@@ -55,12 +55,15 @@ class Manifest:
     version: str
     reads: tuple[str, ...] = ()
     writes: tuple[str, ...] = ()
-    budget_s: float = 10.0  # nightly budget; intraday gets a tenth
+    budget_s: float = 10.0  # nightly budget; intraday gets a tenth unless set below
+    intraday_budget_s: float | None = None
     mandatory: bool = False  # only the risk gate (M07)
     default_mode: Mode = Mode.SHADOW
 
     def budget(self, run_kind: str) -> float:
-        return self.budget_s / 10 if run_kind == "intraday" else self.budget_s
+        if run_kind != "intraday":
+            return self.budget_s
+        return self.intraday_budget_s if self.intraday_budget_s is not None else self.budget_s / 10
 
 
 @dataclass(frozen=True, slots=True)

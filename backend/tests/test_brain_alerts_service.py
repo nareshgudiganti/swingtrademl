@@ -98,11 +98,12 @@ def test_replays_and_why_runs_never_alert(db_session):
 
 
 def test_the_previous_run_is_the_same_kind_and_live(db_session):
-    _run(db_session, "al-10", mode="DEFENSIVE")
+    yesterday = T0 - timedelta(days=1)
+    _run(db_session, "al-10", when=yesterday, mode="DEFENSIVE")
+    service.send(db_session, "al-10", sender=Sender())  # yesterday's baseline (de-dup is per day)
     _run(db_session, "al-11", when=T0 + timedelta(minutes=5), live=False, mode="NORMAL")  # replay: ignored
     _run(db_session, "al-12", when=T0 + timedelta(minutes=10), mode="DEFENSIVE")
-    # Nothing was sent, so de-duplication cannot hide a wrong "previous run":
-    # compared with the replay (NORMAL) the banner would look changed.
+    # Compared with yesterday's DEFENSIVE run, not the NORMAL replay: no banner news.
     assert all(not i.key.startswith("banner") for i in service.pending(db_session, "al-12"))
 
 

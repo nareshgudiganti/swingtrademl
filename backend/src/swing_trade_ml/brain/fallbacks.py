@@ -30,6 +30,8 @@ _TREND = {"bullish": "up", "bearish": "down"}
 def perceive(ctx: BrainContext) -> c.Contribution:
     snapshots = []
     for symbol in ctx.all_symbols:
+        if symbol in ctx.snapshots:
+            continue  # a module already priced it
         last = ctx.reader.last_close(symbol)
         if last is not None:
             bar_date, close = last
@@ -38,6 +40,21 @@ def perceive(ctx: BrainContext) -> c.Contribution:
 
 
 def state(ctx: BrainContext) -> c.Contribution:
+    """Fills only what the state modules left: the market (when its mode is
+    still undecided), the system and the portfolio."""
+    market = None
+    if ctx.market is None or ctx.market.mode is None:
+        market = _market_from_trend(ctx)
+    return c.Contribution(
+        market=market,
+        system=ctx.reader.system_state() if ctx.system is None else None,
+        portfolio=(
+            c.PortfolioState(book=ctx.request.book, positions=ctx.holdings) if ctx.portfolio is None else None
+        ),
+    )
+
+
+def _market_from_trend(ctx: BrainContext) -> c.MarketState:
     closes = ctx.reader.index_closes()
     regime = classify_regime(closes if closes is not None else pd.Series(dtype=float))
     trend = _TREND.get(regime["regime"], "unknown")
@@ -56,11 +73,7 @@ def state(ctx: BrainContext) -> c.Contribution:
         mode = c.MarketMode.DEFENSIVE
         reasons = ("Market swings are larger than usual.",)
 
-    return c.Contribution(
-        market=c.MarketState(trend=trend, volatility=volatility, mode=mode, reasons=reasons),
-        system=ctx.reader.system_state(),
-        portfolio=c.PortfolioState(book=ctx.request.book, positions=ctx.holdings),
-    )
+    return c.MarketState(trend=trend, volatility=volatility, mode=mode, reasons=reasons)
 
 
 def nothing(ctx: BrainContext) -> c.Contribution:
@@ -73,7 +86,10 @@ def reason(ctx: BrainContext) -> c.Contribution:
     if not ctx.request.live:
         return c.Contribution()
     opinions = []
+    has_model = {o.symbol for o in ctx.opinions if o.source == "model"}
     for symbol in ctx.idea_symbols:
+        if symbol in has_model:
+            continue  # already scored by a module
         scored = ctx.reader.model_probability(symbol)
         if scored is None:
             continue
@@ -104,6 +120,8 @@ def decide(ctx: BrainContext) -> c.Contribution:
     risk gate) → TRADE with the locked levels; otherwise WAIT. Holdings → HOLD."""
     decisions = []
     for symbol in ctx.idea_symbols:
+        if symbol in ctx.decisions:
+            continue  # the decision engine already decided it
         snap = ctx.snapshots.get(symbol)
         if snap is None:
             decisions.append(
@@ -169,6 +187,8 @@ def decide(ctx: BrainContext) -> c.Contribution:
         )
 
     for holding in ctx.holdings:
+        if holding.symbol in ctx.decisions:
+            continue
         decisions.append(
             c.Decision(
                 symbol=holding.symbol,
@@ -185,7 +205,7 @@ def decide(ctx: BrainContext) -> c.Contribution:
     mode = (market.mode if market is not None else None) or c.MarketMode.DEFENSIVE
     reasons = market.reasons if market is not None else ("Market state is unknown.",)
     banner = c.Banner(mode=mode, headline=reasons[0] if reasons else mode.value, reasons=reasons)
-    return c.Contribution(decisions=tuple(decisions), banner=banner)
+    return c.Contribution(decisions=tuple(decisions), banner=banner if ctx.banner is None else None)
 
 
 FALLBACKS: dict[Step, Callable[[BrainContext], c.Contribution]] = {

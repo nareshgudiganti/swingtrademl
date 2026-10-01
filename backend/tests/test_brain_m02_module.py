@@ -103,13 +103,13 @@ def test_intraday_runs_skip_features_and_keep_the_price(db_session, market):
     assert snap.features == () and snap.close > 0
 
 
-def test_the_market_context_cache_is_cleared_each_run(db_session, market, monkeypatch):
+def test_m02_asks_the_reader_to_refresh_a_stale_market_cache(db_session, market, monkeypatch):
+    """M02 must not clear v1's shared cache on every run (the 15:45 scan may be
+    reading it); it asks the reader, which clears only when the cache is behind."""
     calls = []
-    real = market_context.clear_cache
-    monkeypatch.setattr(market_context, "clear_cache", lambda: (calls.append(1), real()))
+    monkeypatch.setattr(DatedReader, "refresh_context_if_stale", lambda self: calls.append(1))
     _run(db_session)
     assert calls
-
 
 # --- storage ---------------------------------------------------------------
 

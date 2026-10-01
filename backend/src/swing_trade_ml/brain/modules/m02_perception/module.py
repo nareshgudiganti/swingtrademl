@@ -37,7 +37,7 @@ class Perception(BrainModule):
         if view.request.kind == "intraday":
             return c.Contribution()
         reader = view.reader
-        reader.clear_context_cache()
+        reader.refresh_context_if_stale()
         version = feature_set_version()
         snapshots = []
         for symbol in dict.fromkeys((*view.request.universe, *(h.symbol for h in view.holdings))):

@@ -36,6 +36,10 @@ class BrainRun(Base):
     # {"overall": {score, fresh, issues}, "stale": [symbols]} from the data
     # gateway (M01), so the console can show data health without re-running.
     quality: Mapped[dict] = mapped_column(JSONB, default=dict)
+    # When the alert service compared this run with the one before (M16).
+    # Only such runs are a baseline for the next alert; a manual "Run now"
+    # never is, so it cannot swallow the scheduled run's alerts.
+    alerts_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class BrainDecision(Base):

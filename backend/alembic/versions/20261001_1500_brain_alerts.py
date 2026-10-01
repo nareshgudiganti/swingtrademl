@@ -32,8 +32,10 @@ def upgrade() -> None:
         sa.UniqueConstraint("alert_key", "alert_date", name="uq_brain_alerts_alert_key"),
     )
     op.create_index("ix_brain_alerts_alert_date", "brain_alerts", ["alert_date"])
+    op.add_column("brain_runs", sa.Column("alerts_checked_at", sa.DateTime(timezone=True)))
 
 
 def downgrade() -> None:
+    op.drop_column("brain_runs", "alerts_checked_at")
     op.drop_index("ix_brain_alerts_alert_date", table_name="brain_alerts")
     op.drop_table("brain_alerts")

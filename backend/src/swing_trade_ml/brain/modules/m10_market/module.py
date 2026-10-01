@@ -25,9 +25,10 @@ class MarketBrain(BrainModule):
         reads=(),
         writes=("MarketState@1",),
         budget_s=15.0,
+        intraday_budget_s=8.0,  # market facts are needed for holding words intraday too
         default_mode=Mode.ON,
     )
 
     def run(self, view: ContextView) -> c.Contribution:
-        view.reader.clear_context_cache()
+        view.reader.refresh_context_if_stale()
         return c.Contribution(market=judge(inputs_from(view.reader)))

@@ -2,15 +2,21 @@
 context into ONE calibrated probability of reaching +8% before -4% within
 15 trading days — and prove it on months no model has seen.
 
-Three candidates are compared by monthly walk-forward on the unseen window:
+Candidates compared by monthly walk-forward on the unseen window:
 
-* raw_barrier        the barrier model's own score (reported, never chosen)
-* calibrated_barrier that score passed through isotonic calibration
-* meta               a small logistic model on 8 inputs (META_INPUTS)
+* base_rate    everyone gets the training base rate (a reference, never chosen)
+* raw_barrier  the barrier model's own score
+* meta         a small logistic model on 8 inputs (META_INPUTS)
+* meta_recent  the same, with its probability LEVEL re-anchored on the last
+               3 months (Platt scaling) — the hit rate swings with the market
+               regime (3.5% to 35% a month in 2025-26), so a level learnt
+               long ago drifts
 
-The meta-model is adopted only if its out-of-sample Brier score beats the
-calibrated barrier's (by `prefer_simpler_margin`); otherwise the simpler
-calibration wins and the report says why. Pure: works on a DataFrame.
+Lesson from the first real run: the lowest error alone can be won by a
+constant guess that ranks nothing (AUC 0.500). So a candidate qualifies only
+if it ranks better than chance (AUC >= MIN_AUC); among those the lowest
+out-of-sample Brier error wins. If none qualifies, nothing is adopted.
+Pure: works on a DataFrame.
 """
 
 from __future__ import annotations
@@ -41,6 +47,9 @@ META_INPUTS: tuple[str, ...] = (
     "sector_trend_regime",
 )
 BUCKET_EDGES = (0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 1.0)
+MIN_AUC = 0.55
+RECENT_MONTHS = 3
+CANDIDATES = ("base_rate", "raw_barrier", "meta", "meta_recent")
 
 
 def _logit(p: pd.Series | np.ndarray) -> np.ndarray:
@@ -115,35 +124,59 @@ def calibration_buckets(p: np.ndarray, y: np.ndarray, edges: tuple[float, ...] =
 
 @dataclass
 class Combiner:
-    kind: str  # raw_barrier | calibrated_barrier | meta
+    kind: str  # base_rate | raw_barrier | calibrated_barrier | meta | meta_recent
     inputs: list[str] = field(default_factory=list)
     model: Any = None
+    recalibration: Any = None  # meta_recent: Platt scaling fitted on the last months
 
     @classmethod
     def fit(cls, frame: pd.DataFrame, kind: str) -> Combiner:
         frame = _with_logits(frame)
         y = frame["target"].astype(int).to_numpy()
+        if kind == "base_rate":
+            return cls(kind, [], float(y.mean()))
         if kind == "raw_barrier":
             return cls(kind, ["p_barrier"])
         if kind == "calibrated_barrier":
             iso = IsotonicRegression(out_of_bounds="clip", y_min=0.0, y_max=1.0)
             iso.fit(frame["p_barrier"].to_numpy(), y)
             return cls(kind, ["p_barrier"], iso)
-        if kind == "meta":
+        if kind in ("meta", "meta_recent"):
             pipe = make_pipeline(
                 SimpleImputer(strategy="median"), StandardScaler(), LogisticRegression(C=0.5, max_iter=2000)
             )
             pipe.fit(frame[list(META_INPUTS)].to_numpy(dtype=float), y)
-            return cls(kind, list(META_INPUTS), pipe)
+            combiner = cls(kind, list(META_INPUTS), pipe)
+            if kind == "meta_recent":
+                combiner.recalibration = _recent_platt(frame, combiner._raw_meta(frame), y)
+            return combiner
         raise ValueError(f"unknown combiner kind {kind!r}")
+
+    def _raw_meta(self, frame: pd.DataFrame) -> np.ndarray:
+        return self.model.predict_proba(frame[self.inputs].to_numpy(dtype=float))[:, 1]
 
     def predict(self, frame: pd.DataFrame) -> np.ndarray:
         frame = _with_logits(frame)
+        if self.kind == "base_rate":
+            return np.full(len(frame), self.model)
         if self.kind == "raw_barrier":
             return frame["p_barrier"].to_numpy(dtype=float)
         if self.kind == "calibrated_barrier":
             return self.model.predict(frame["p_barrier"].to_numpy(dtype=float))
-        return self.model.predict_proba(frame[self.inputs].to_numpy(dtype=float))[:, 1]
+        score = self._raw_meta(frame)
+        if self.recalibration is not None:
+            return self.recalibration.predict_proba(_logit(score).reshape(-1, 1))[:, 1]
+        return score
+
+
+def _recent_platt(frame: pd.DataFrame, score: np.ndarray, y: np.ndarray):
+    """Re-anchor the probability level on the last RECENT_MONTHS months; None
+    (no re-anchoring) when those months have only one outcome."""
+    months = frame["day"].dt.to_period("M")
+    recent = (months >= sorted(months.unique())[-RECENT_MONTHS]).to_numpy()
+    if len(set(y[recent])) < 2:
+        return None
+    return LogisticRegression(C=1e6, max_iter=1000).fit(_logit(score[recent]).reshape(-1, 1), y[recent])
 
 
 # --- evaluation ----------------------------------------------------------------------------
@@ -161,46 +194,57 @@ def _metrics(p: np.ndarray, y: np.ndarray) -> dict:
     }
 
 
-def evaluate(frame: pd.DataFrame, min_train_months: int = 3, prefer_simpler_margin: float = 0.0005) -> dict:
+def evaluate(frame: pd.DataFrame, min_train_months: int = 3) -> dict:
     frame = frame.sort_values("day").reset_index(drop=True)
     folds = monthly_folds(frame, min_train_months)
-    preds: dict[str, list[np.ndarray]] = {"raw_barrier": [], "calibrated_barrier": [], "meta": []}
-    ys: list[np.ndarray] = []
-    for train_idx, test_idx in folds:
-        train, test = frame.loc[train_idx], frame.loc[test_idx]
-        for kind in preds:
-            preds[kind].append(Combiner.fit(train, kind).predict(test))
-        ys.append(test["target"].astype(int).to_numpy())
-
     if not folds:
         return {
             "folds": 0,
             "n_test_rows": 0,
             "chosen": None,
-            "why": "Not enough unseen months to test a combiner (need at least 4).",
             "candidates": {},
+            "why": "Not enough unseen months to test a combiner (need at least 4).",
         }
+
+    preds: dict[str, list[np.ndarray]] = {kind: [] for kind in CANDIDATES}
+    ys: list[np.ndarray] = []
+    for train_idx, test_idx in folds:
+        train, test = frame.loc[train_idx], frame.loc[test_idx]
+        for kind in CANDIDATES:
+            preds[kind].append(Combiner.fit(train, kind).predict(test))
+        ys.append(test["target"].astype(int).to_numpy())
 
     y = np.concatenate(ys)
     candidates = {kind: _metrics(np.concatenate(p), y) for kind, p in preds.items()}
-    meta, cal = candidates["meta"]["brier"], candidates["calibrated_barrier"]["brier"]
-    if meta < cal - prefer_simpler_margin:
+    reference = candidates["base_rate"]["brier"]
+    qualified = {
+        kind: m
+        for kind, m in candidates.items()
+        if kind != "base_rate" and m["auc"] is not None and m["auc"] >= MIN_AUC
+    }
+    if not qualified:
         chosen, why = (
-            "meta",
-            f"The meta-model's error {meta:.4f} beat calibration alone ({cal:.4f}) on unseen months.",
+            None,
+            (
+                f"No combiner ranks stocks better than chance (AUC below {MIN_AUC}) on unseen months, "
+                "so M06 stays off."
+            ),
         )
     else:
-        chosen, why = (
-            "calibrated_barrier",
-            (
-                f"The meta-model ({meta:.4f}) did not beat calibration alone ({cal:.4f}) by enough, "
-                "so the simpler calibrated barrier score is used."
-            ),
+        chosen = min(qualified, key=lambda k: qualified[k]["brier"])
+        m = qualified[chosen]
+        why = (
+            f"{chosen} ranks stocks best among those better than chance (AUC {m['auc']:.3f}); its error "
+            f"{m['brier']:.4f} against {reference:.4f} for a constant guess."
         )
     return {
         "folds": len(folds),
         "n_test_rows": len(y),
         "base_rate": float(y.mean()),
+        "monthly_base_rate": {
+            str(k): round(float(v), 4)
+            for k, v in frame.groupby(frame["day"].dt.to_period("M"))["target"].mean().items()
+        },
         "window_start": str(frame["day"].min().date()),
         "window_end": str(frame["day"].max().date()),
         "candidates": candidates,

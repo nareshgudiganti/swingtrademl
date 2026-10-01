@@ -138,17 +138,16 @@ def test_no_artifact_loads_as_none(tmp_path, monkeypatch):
     assert artifact.load_latest() is None
 
 
-def test_training_end_to_end_saves_a_combiner_with_its_report(db_session, world, tmp_path, monkeypatch):
-    from swing_trade_ml.brain.modules.m06_reason.training import train_and_save
+def test_training_refuses_models_that_rank_nothing(db_session, world, tmp_path, monkeypatch):
+    """The stand-in models give every stock the same score, so no combiner can
+    rank better than chance: nothing is adopted or saved, and the reason says so."""
+    from swing_trade_ml.brain.modules.m06_reason.training import TrainingError, train_and_save
 
     monkeypatch.setattr(settings, "MODEL_ARTIFACT_DIR", str(tmp_path / "out"))
     barrier, swing = world
-    result = train_and_save(db_session, barrier.name, swing.name, symbols=["M06STOCK"])
-    assert result["path"].name == "brain_meta_v1.joblib"
-    assert result["report"]["chosen"] in {"meta", "calibrated_barrier"}
-    assert result["report"]["folds"] >= 1
-    saved = artifact.load_latest()
-    assert saved["base_models"]["barrier"] == "test_barrier v1"
+    with pytest.raises(TrainingError, match="better than chance"):
+        train_and_save(db_session, barrier.name, swing.name, symbols=["M06STOCK"])
+    assert artifact.load_latest() is None
 
 
 def test_training_without_the_models_says_what_is_missing(db_session):

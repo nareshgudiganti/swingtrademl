@@ -92,26 +92,45 @@ def test_calibration_buckets_compare_promised_with_actual():
 # --- evaluation and adoption -------------------------------------------------------
 
 
-def test_the_meta_model_is_adopted_when_it_beats_calibration():
+def test_a_combiner_that_ranks_well_is_adopted():
     report = evaluate(_frame(signal=1.0))
-    assert set(report["candidates"]) == {"raw_barrier", "calibrated_barrier", "meta"}
-    assert report["chosen"] == "meta"
-    assert report["candidates"]["meta"]["brier"] < report["candidates"]["calibrated_barrier"]["brier"]
+    assert set(report["candidates"]) == {"base_rate", "raw_barrier", "meta", "meta_recent"}
+    assert report["chosen"] in {"meta", "meta_recent"}
+    assert report["candidates"][report["chosen"]]["auc"] >= 0.55
     assert report["n_test_rows"] > 0 and report["folds"] == 7
 
 
-def test_calibration_is_chosen_when_the_meta_model_does_not_help():
-    frame = _frame(signal=1.0)
-    frame["breadth_pct_above_sma50"] = 0.5  # remove the extra information
-    report = evaluate(frame, prefer_simpler_margin=0.002)
-    assert report["chosen"] == "calibrated_barrier"
-    assert "did not beat" in report["why"]
+def test_a_constant_guess_can_never_be_chosen():
+    """A flat 'everyone gets the base rate' can score a low error while ranking
+    nothing — exactly what fooled the first version on real data."""
+    report = evaluate(_frame(signal=1.0))
+    assert report["chosen"] != "base_rate"
+    assert (
+        report["candidates"]["base_rate"]["auc"] in (None, 0.5)
+        or report["candidates"]["base_rate"]["auc"] < 0.55
+    )
+
+
+def test_nothing_is_adopted_when_no_combiner_ranks_better_than_chance():
+    frame = _frame(signal=0.0)
+    frame["breadth_pct_above_sma50"] = 0.5  # no information anywhere
+    report = evaluate(frame)
+    assert report["chosen"] is None
+    assert "better than chance" in report["why"]
+
+
+def test_the_recent_combiner_re_anchors_its_level_on_the_last_months():
+    frame = _frame(n_months=8, signal=1.0)
+    late = frame["day"] >= frame["day"].max() - pd.Timedelta(days=60)
+    frame.loc[late, "target"] = 0  # the market turned: almost nobody hits the target lately
+    plain = Combiner.fit(frame, "meta").predict(frame.tail(200)).mean()
+    recent = Combiner.fit(frame, "meta_recent").predict(frame.tail(200)).mean()
+    assert recent < plain
 
 
 def test_a_fitted_combiner_gives_probabilities_between_0_and_1():
     frame = _frame()
-    combiner = Combiner.fit(frame, kind="meta")
-    p = combiner.predict(frame.head(50))
-    assert ((p > 0) & (p < 1)).all() and combiner.inputs == list(META_INPUTS)
-    cal = Combiner.fit(frame, kind="calibrated_barrier")
-    assert ((cal.predict(frame.head(50)) >= 0) & (cal.predict(frame.head(50)) <= 1)).all()
+    for kind in ("meta", "meta_recent"):
+        combiner = Combiner.fit(frame, kind)
+        p = combiner.predict(frame.head(50))
+        assert ((p > 0) & (p < 1)).all() and combiner.inputs == list(META_INPUTS)

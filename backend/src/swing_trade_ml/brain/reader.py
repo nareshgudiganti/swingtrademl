@@ -20,7 +20,7 @@ from swing_trade_ml.brain.connectors import FEEDS
 from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.enums import PositionStatus
 from swing_trade_ml.core.logging import get_logger
-from swing_trade_ml.db.models.feeds import UpcomingEvent
+from swing_trade_ml.db.models.feeds import InstitutionalFlow, UpcomingEvent
 from swing_trade_ml.db.models.market import Candle, Instrument
 from swing_trade_ml.db.models.trading import Position
 from swing_trade_ml.services import system_state
@@ -43,6 +43,7 @@ class DatedReader:
         self.live = live
         self._model = None
         self._model_loaded = False
+        self._context_cleared = False
 
     def universe(self) -> tuple[str, ...]:
         rows = self.db.execute(
@@ -114,9 +115,12 @@ class DatedReader:
     def clear_context_cache(self) -> None:
         """The context loaders cache whole histories for the life of the
         process; a long-running worker would otherwise reuse yesterday's."""
+        if self._context_cleared:
+            return  # once per run: rebuilding breadth reloads every watchlist stock
         from swing_trade_ml.ml import market_context
 
         market_context.clear_cache()
+        self._context_cleared = True
 
     def recent_bars(self, symbol: str, n: int = 260) -> pd.DataFrame:
         """The last `n` daily bars on or before as_of, ascending, with each
@@ -162,22 +166,66 @@ class DatedReader:
         upto = self.as_of.astimezone(IST).date()
         return {feed.name: feed.latest(self.db, upto) for feed in FEEDS}
 
-    def index_closes(self) -> pd.Series:
+    def _closes(self, symbol: str) -> pd.Series:
         closes = (
             self.db.execute(
                 select(Candle.close)
                 .join(Instrument, Instrument.id == Candle.instrument_id)
-                .where(
-                    Instrument.tradingsymbol == settings.BENCHMARK_INDEX_SYMBOL,
-                    Candle.interval == "day",
-                    Candle.ts <= self.as_of,
-                )
+                .where(Instrument.tradingsymbol == symbol, Candle.interval == "day", Candle.ts <= self.as_of)
                 .order_by(Candle.ts.asc())
             )
             .scalars()
             .all()
         )
         return pd.Series([float(x) for x in closes], dtype=float)
+
+    def index_closes(self) -> pd.Series:
+        return self._closes(settings.BENCHMARK_INDEX_SYMBOL)
+
+    def vix_closes(self) -> pd.Series:
+        return self._closes("INDIA VIX")
+
+    def breadth_series(self) -> pd.Series:
+        """Share of watchlist stocks above their 50-day average, per day, to as_of."""
+        from swing_trade_ml.ml import market_context
+
+        frame = market_context.load_market_breadth(self.db, upto=pd.Timestamp(self.as_of))
+        if frame.empty:
+            return pd.Series(dtype=float)
+        return frame["breadth_pct_above_sma50"].astype(float).reset_index(drop=True)
+
+    def fii_net(self, days: int = 20) -> list[float]:
+        """FII net buying (crore) for the last `days` sessions to as_of, oldest first."""
+        upto = self.as_of.astimezone(IST).date()
+        rows = (
+            self.db.execute(
+                select(InstitutionalFlow.net_value)
+                .where(InstitutionalFlow.category == "FII", InstitutionalFlow.trade_date <= upto)
+                .order_by(InstitutionalFlow.trade_date.desc())
+                .limit(days)
+            )
+            .scalars()
+            .all()
+        )
+        return [float(v) for v in reversed(rows)]
+
+    def portfolio_numbers(self, book: str) -> dict | None:
+        """Account value, cash, drawdown and free slots — "now" data, so live
+        runs only (a replay gets None rather than today's account)."""
+        if not self.live:
+            return None
+        from swing_trade_ml.services import risk
+        from swing_trade_ml.services.limits import limits_for
+        from swing_trade_ml.services.portfolio import portfolio_value_and_cash
+
+        value, cash = portfolio_value_and_cash(self.db, book)
+        limits = limits_for(value)
+        return {
+            "value": value,
+            "cash": cash,
+            "drawdown_pct": risk.current_drawdown(self.db, book, value),
+            "free_slots": max(0, limits.max_positions - risk.open_position_count(self.db, book)),
+        }
 
     def system_state(self) -> c.SystemState:
         state = system_state.get_state(self.db)

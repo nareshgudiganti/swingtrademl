@@ -112,15 +112,30 @@ def _trim_last_day(inputs: MarketInputs) -> MarketInputs:
     )
 
 
-def judge(inputs: MarketInputs) -> MarketState:
+def market_facts(inputs: MarketInputs) -> dict:
+    """The plain facts about the market, with no judgement: what the state
+    engine (M03) reports even when this module is switched off."""
     regime = classify_regime(inputs.index_close)
-    facts = {
+    return {
         "trend": _TREND.get(regime["regime"], "unknown"),
         "volatility": regime["volatility_level"],
         "breadth_pct": _last(inputs.breadth),
         "vix": _last(inputs.vix_close),
         "fii_net_5d_cr": sum(inputs.fii_net[-5:]) if len(inputs.fii_net) >= 5 else None,
     }
+
+
+def inputs_from(reader) -> MarketInputs:
+    return MarketInputs(
+        index_close=reader.index_closes(),
+        vix_close=reader.vix_closes(),
+        breadth=reader.breadth_series(),
+        fii_net=reader.fii_net(20),
+    )
+
+
+def judge(inputs: MarketInputs) -> MarketState:
+    facts = market_facts(inputs)
     flow_note = (
         [] if len(inputs.fii_net) >= 5 else ["FII flow data is not available, so flows were not judged."]
     )

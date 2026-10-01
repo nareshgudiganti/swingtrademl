@@ -81,3 +81,14 @@ def client(db_session) -> TestClient:
         yield TestClient(app)
     finally:
         app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.fixture(autouse=True)
+def _brain_on_for_brain_tests(request, monkeypatch):
+    """The brain's API answers only while BRAIN_ENABLED is true (production
+    keeps it off until the owner switches it on). Brain tests run with it on;
+    a test that needs it off patches it back (see test_brain_visibility.py)."""
+    if request.module.__name__.startswith("test_brain"):
+        from swing_trade_ml.core.config import settings
+
+        monkeypatch.setattr(settings, "BRAIN_ENABLED", True)

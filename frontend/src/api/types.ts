@@ -23,6 +23,8 @@ export interface SystemStatus {
   environment: string
   trading_mode: TradingMode
   live_trading_enabled: boolean
+  /** The TradeMind brain is switched on (BRAIN_ENABLED); its page shows only then. */
+  brain_enabled?: boolean
   broker_authenticated: boolean
   scheduler_running: boolean
   scheduled_jobs: ScheduledJob[]

@@ -42,6 +42,10 @@ import {
 // They remain reachable by URL: /settings (watchlist editor, sync + backfill,
 // scheduler status), /models and /finance. Nothing was deleted — if any of
 // them needs to come back, add it here.
+// Shown only while the brain is switched on (BRAIN_ENABLED) — production
+// looks exactly like before until the owner turns it on.
+const BRAIN_NAV = { to: '/brain', label: 'Brain', Icon: BrainIcon }
+
 const NAV = [
   { to: '/dashboard', label: 'Dashboard', Icon: HomeIcon },
   { to: '/strategies', label: 'Strategies', Icon: ScaleIcon },
@@ -52,7 +56,6 @@ const NAV = [
   { to: '/scans', label: 'Scan Results', Icon: LayersIcon },
   { to: '/model-lab', label: 'Model Lab', Icon: BarChartIcon },
   { to: '/safety', label: 'Safety', Icon: AlertTriangleIcon },
-  { to: '/brain', label: 'Brain', Icon: BrainIcon },
 ]
 
 // The 4 destinations worth a one-tap reach on a phone — a real bottom tab
@@ -101,7 +104,7 @@ export default function App() {
   const { data: brainRun } = useQuery({
     queryKey: ['brainLatest'],
     queryFn: () => api.brainLatestRun('nightly'),
-    enabled: hasToken,
+    enabled: hasToken && !!status?.brain_enabled,
     retry: false,
     refetchInterval: 300_000,
   })
@@ -162,7 +165,7 @@ export default function App() {
         </div>
 
         <nav className="nav">
-          {NAV.map((item) => (
+          {[...NAV, ...(status?.brain_enabled ? [BRAIN_NAV] : [])].map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
@@ -189,7 +192,7 @@ export default function App() {
             >
               {status?.broker_authenticated ? 'Kite connected' : 'Kite: no session'}
             </span>
-            {brainRun?.banner.mode && (
+            {status?.brain_enabled && brainRun?.banner.mode && (
               <NavLink
                 to="/brain"
                 className={`badge ${
@@ -281,7 +284,12 @@ export default function App() {
             <Route path="/model-lab" element={<ModelLab />} />
             <Route path="/capital" element={<Capital />} />
             <Route path="/safety" element={<Safety />} />
-            <Route path="/brain" element={<Brain />} />
+            <Route
+              path="/brain"
+              element={
+                !status ? null : status.brain_enabled ? <Brain /> : <Navigate to="/dashboard" replace />
+              }
+            />
             <Route path="/finance" element={<Finance />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />

@@ -10,16 +10,24 @@ from collections import Counter
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
 
 from swing_trade_ml.api.deps import DbSession
 from swing_trade_ml.brain import service
 from swing_trade_ml.brain.alerts import service as alerts
 from swing_trade_ml.brain.module import Mode
+from swing_trade_ml.core.config import settings
 from swing_trade_ml.db.models.brain import BrainDecision, BrainRun
 
-router = APIRouter(prefix="/brain", tags=["brain"])
+def _brain_switched_on() -> None:
+    """While the brain is off (BRAIN_ENABLED=false, the production default),
+    its API does not exist — production looks exactly like it did before."""
+    if not settings.BRAIN_ENABLED:
+        raise HTTPException(404, "Not Found")
+
+
+router = APIRouter(prefix="/brain", tags=["brain"], dependencies=[Depends(_brain_switched_on)])
 
 
 class ModeUpdate(BaseModel):

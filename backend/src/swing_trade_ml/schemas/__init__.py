@@ -38,6 +38,8 @@ class SystemStatus(BaseModel):
     environment: str
     trading_mode: str
     live_trading_enabled: bool
+    # Whether the TradeMind brain is switched on; the app shows its page only then.
+    brain_enabled: bool = False
     broker_authenticated: bool
     scheduler_running: bool
     scheduled_jobs: list[dict[str, Any]]

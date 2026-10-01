@@ -583,3 +583,33 @@ def job_sync_instruments() -> None:
             log.info("job.instruments.synced", count=count)
     except Exception as exc:  # noqa: BLE001
         _report_error("sync_instruments", exc)
+
+
+def _run_brain_job(kind: str) -> None:
+    """A failed brain run is logged and reported, never raised: the brain is
+    advisory and must not disturb version 1's jobs."""
+    from swing_trade_ml.brain import service as brain_service
+
+    try:
+        with session_scope() as db:
+            _, run_id = brain_service.run_brain(db, kind=kind, book=settings.TRADING_MODE)
+            log.info("job.brain.done", kind=kind, run_id=run_id)
+            if settings.BRAIN_ALERTS_ENABLED:
+                from swing_trade_ml.brain.alerts import service as brain_alerts
+
+                brain_alerts.send(db, run_id)
+    except Exception as exc:  # noqa: BLE001
+        _report_error(f"brain {kind} run", exc)
+
+
+def job_brain_nightly() -> None:
+    _run_brain_job("nightly")
+
+
+def job_brain_intraday() -> None:
+    """Holdings only; skipped outside 09:30-15:15 so the first and last
+    quarter-hours, when prices are least settled, are left alone."""
+    now = datetime.now(IST)
+    if not ((now.hour, now.minute) >= (9, 30) and (now.hour, now.minute) <= (15, 15)):
+        return
+    _run_brain_job("intraday")

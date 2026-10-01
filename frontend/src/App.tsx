@@ -16,9 +16,11 @@ import Safety from './pages/Safety'
 import Capital from './pages/Capital'
 import ModelLab from './pages/ModelLab'
 import Settings from './pages/Settings'
+import Brain from './pages/Brain'
 import {
   AlertTriangleIcon,
   BarChartIcon,
+  BrainIcon,
   BriefcaseIcon,
   HomeIcon,
   LayersIcon,
@@ -50,6 +52,7 @@ const NAV = [
   { to: '/scans', label: 'Scan Results', Icon: LayersIcon },
   { to: '/model-lab', label: 'Model Lab', Icon: BarChartIcon },
   { to: '/safety', label: 'Safety', Icon: AlertTriangleIcon },
+  { to: '/brain', label: 'Brain', Icon: BrainIcon },
 ]
 
 // The 4 destinations worth a one-tap reach on a phone — a real bottom tab
@@ -91,6 +94,16 @@ export default function App() {
     queryFn: api.me,
     enabled: hasToken,
     retry: false,
+  })
+  // The brain's market mode as a small badge in the status strip — on every
+  // page without a banner that pushes tables down. Hidden until the brain has
+  // run (it is off in production until switched on).
+  const { data: brainRun } = useQuery({
+    queryKey: ['brainLatest'],
+    queryFn: () => api.brainLatestRun('nightly'),
+    enabled: hasToken,
+    retry: false,
+    refetchInterval: 300_000,
   })
   const refresh = useMutation({
     mutationFn: api.refreshData,
@@ -176,6 +189,21 @@ export default function App() {
             >
               {status?.broker_authenticated ? 'Kite connected' : 'Kite: no session'}
             </span>
+            {brainRun?.banner.mode && (
+              <NavLink
+                to="/brain"
+                className={`badge ${
+                  brainRun.banner.mode === 'NORMAL'
+                    ? 'badge-on'
+                    : brainRun.banner.mode === 'DEFENSIVE'
+                      ? 'badge-warn'
+                      : 'badge-off'
+                }`}
+                title={brainRun.banner.headline ?? undefined}
+              >
+                Brain: {brainRun.banner.mode === 'NO_NEW_TRADES' ? 'NO NEW TRADES' : brainRun.banner.mode}
+              </NavLink>
+            )}
             <span className="badge badge-off" title="Active model">
               {status?.active_model ?? 'no model'}
             </span>
@@ -253,6 +281,7 @@ export default function App() {
             <Route path="/model-lab" element={<ModelLab />} />
             <Route path="/capital" element={<Capital />} />
             <Route path="/safety" element={<Safety />} />
+            <Route path="/brain" element={<Brain />} />
             <Route path="/finance" element={<Finance />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />

@@ -8,6 +8,7 @@ from swing_trade_ml.api.deps import require_auth
 from swing_trade_ml.api.v1.endpoints import (
     auth,
     backtest,
+    brain,
     finance,
     instruments,
     market_data,
@@ -52,3 +53,4 @@ api_router.include_router(finance.router, dependencies=protected)
 api_router.include_router(mutual_funds.router, dependencies=protected)
 api_router.include_router(safety.router, dependencies=protected)
 api_router.include_router(risk.router, dependencies=protected)
+api_router.include_router(brain.router, dependencies=protected)

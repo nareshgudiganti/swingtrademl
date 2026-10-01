@@ -23,7 +23,7 @@ the short "what we learned" companion: read it before starting a module.
 | M17 console | brain/m17-console | `/brain` page, overrule toward caution, health |
 | M02 perception | brain/m02-perception | model's 53 features per stock per night, `feature_snapshots` |
 | M03 + M10 | brain/m03-m10-market | state facts + market mode on v1's regime table |
-| M08 decision engine | brain/m08-decide | in progress |
+| M08 decision engine | brain/m08-decide | draft → named rules (only lower) → opportunity notes; rules in `m08_decide/rules.py`, numbers in `policy.py` |
 
 ## How to add a module (checklist)
 
@@ -33,6 +33,15 @@ the short "what we learned" companion: read it before starting a module.
 4. Step modules leave fields they do not own empty (merge only fills gaps).
 5. Full suite with a clean environment; lint only brain paths; local check on the check DB.
 6. Update this file.
+
+## How to add or remove a decision rule (M08)
+
+- Add: write `check(decision, facts, policy) -> (word, reason) | None` in
+  `brain/modules/m08_decide/rules.py` and append a `Rule(id, plain name, "idea"|"holding", check)`
+  to `IDEA_RULES` or `HOLDING_RULES`. Add a test in `tests/test_brain_m08_engine.py`.
+- Remove without deleting: put its id in `DecidePolicy.disabled`.
+- A rule can only make a decision more careful (the engine applies it with `downgrade`).
+- Change a threshold: edit `DecidePolicy` in `policy.py`, nowhere else.
 
 ## Invariants (do not break)
 
@@ -56,6 +65,11 @@ the short "what we learned" companion: read it before starting a module.
 - **"Latest run" must skip replays**, or a past date shows up as today's ideas.
 - **Reasons must name the real cause**: "all slots are already in use", not "a stronger idea
   took the slot", when nothing was approved.
+
+- **Opinion choice is shared** (`brain/opinions.py`): the risk gate and the decision engine
+  must read the same opinion the same way (combined view, then model, then strongest).
+- **On real data (Sep 2026) the holding rules are informative**: 11 of 13 paper holdings were
+  MONITOR (falling in a careful market, or trailing NIFTY by 15–20%).
 
 ## Testing traps (Windows)
 

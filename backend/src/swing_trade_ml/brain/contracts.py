@@ -150,6 +150,9 @@ class Holding:
     symbol: str
     qty: int
     avg_price: float
+    stop: float | None = None  # v1's active stop (it only ever moves up)
+    target: float | None = None
+    scaled_out: bool = False  # half already booked at the first target
 
 
 @dataclass(frozen=True, slots=True)

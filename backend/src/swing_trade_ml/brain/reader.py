@@ -239,12 +239,29 @@ class DatedReader:
         if not self.live:
             return ()
         rows = self.db.execute(
-            select(Instrument.tradingsymbol, Position.quantity, Position.entry_price)
+            select(
+                Instrument.tradingsymbol,
+                Position.quantity,
+                Position.entry_price,
+                Position.stop_loss,
+                Position.take_profit,
+                Position.scaled_out_at,
+            )
             .join(Instrument, Instrument.id == Position.instrument_id)
             .where(Position.mode == book, Position.status == PositionStatus.OPEN)
             .order_by(Instrument.tradingsymbol, Position.id)
         ).all()
-        return tuple(c.Holding(symbol=s, qty=int(q), avg_price=float(p)) for s, q, p in rows)
+        return tuple(
+            c.Holding(
+                symbol=sym,
+                qty=int(qty),
+                avg_price=float(price),
+                stop=None if stop is None else float(stop),
+                target=None if target is None else float(target),
+                scaled_out=scaled is not None,
+            )
+            for sym, qty, price, stop, target, scaled in rows
+        )
 
     def model_probability(self, symbol: str) -> tuple[float, float, str] | None:
         """The active model's score for the latest bar, or None. Live only:

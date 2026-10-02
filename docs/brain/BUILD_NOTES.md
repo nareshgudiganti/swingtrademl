@@ -27,6 +27,7 @@ the short "what we learned" companion: read it before starting a module.
 | M08 decision engine | brain/m08-decide | draft → named rules (only lower) → opportunity notes; rules in `m08_decide/rules.py`, numbers in `policy.py` |
 | M16 alerts and cards | brain/m16-alerts | detectors (pluggable) → one Telegram message per run, once a day; console preview/send; sidebar badge; Copy plan |
 | M11 sector brain | brain/m11-sector | ranks 15 sector indices vs NIFTY (20 and 60 days), rotation quadrant, `sector` modifier opinion (tilt ±0.05/±0.1) + card line; table stored in `brain_runs.context` (migration 5b7e2d9c3a11) and shown on the console |
+| M13 news and events | brain/m13-news | results within 5 trading days → `results soon` (AVOID new ideas, line on holdings); split/bonus/rights within 2 trading days → `event blackout`; ex-date ± 2 days → `price reset` (M08 ignores a `breakdown` then); ASM/GSM ≤ 4 days old → `StockState.restrictions` (AVOID); `event` modifier lines. Replays read only rows stored by their date |
 | M06 reasoning | brain/m06-meta | `swingtrade brain meta-train` → `brain_meta_vN` (combiner + honesty map); live module writes a `combined`, `calibrated` opinion; buy level = break-even after costs + 5 points. SHADOW |
 
 ## How to add a module (checklist)
@@ -124,6 +125,14 @@ do not do that by accident.
   data to 07 Sep 2026: Metals, Capital markets, Pharma lead; IT ranks 15 of 15 (weakening).
 - **New brain_runs columns**: the test DB keeps its tables, so after adding a column run
   `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` on `swing_trade_ml_test` (and stamp/upgrade the check DB).
+
+- **M13 (2026-10-02)**: StockState merge was first-writer-wins for the whole record, so a
+  plug-in could never add restrictions to M03's record. Now `_fill_gaps` per symbol (the build
+  book's "M03's values are the floor" rule). Real check: TCS (results 08 Oct) is AVOID with the
+  spec's sentence; no watch-listed stock is on ASM/GSM. No filings table exists yet, so "fresh
+  filings as context" waits for a feed (connector contract).
+- **Card lines must not repeat a reason**: M08 drops a modifier line whose text a reason
+  already contains.
 
 ## Testing traps (Windows)
 

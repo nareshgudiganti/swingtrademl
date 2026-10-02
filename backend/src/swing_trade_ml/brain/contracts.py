@@ -197,6 +197,9 @@ class Recall:
     p25: float | None = None
     p75: float | None = None
     median_days: float | None = None
+    key: str = ""  # the situation key used, in words
+    widened: tuple[str, ...] = ()  # key parts dropped to find enough cases
+    typical_path: tuple[tuple[int, float, float, float], ...] = ()  # (day, p25, p50, p75) for M15
 
 
 @dataclass(frozen=True, slots=True)

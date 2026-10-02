@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from datetime import date, timedelta
+
 import numpy as np
 import pandas as pd
 import pytest
 
 from swing_trade_ml.brain.modules.m05_memory.cases import barrier_outcomes, build_cases, state_keys
+from swing_trade_ml.brain.modules.m05_memory.recall import recall
 
 
 def _bars(close, spread=0.01, start="2024-01-01") -> pd.DataFrame:
@@ -83,3 +86,65 @@ def test_cases_join_keys_and_outcomes_and_skip_unwarmed_days():
         "path_day",
         "path",
     } <= set(cases.columns)
+
+
+# --- recall ------------------------------------------------------------------------------------
+
+KEY = {"market": "correction", "stock": "down", "trend": "falling", "vol": "normal"}
+AS_OF = date(2026, 9, 1)
+
+
+def _cases(n, outcome="target", known=AS_OF - timedelta(days=1), **key):
+    k = {**KEY, **key}
+    ret = {"target": 0.08, "stop": -0.04, "timeout": 0.01}[outcome]
+    return pd.DataFrame(
+        {
+            "symbol": "X",
+            "day": [known - timedelta(days=20)] * n,
+            **{part: [v] * n for part, v in k.items()},
+            "outcome": [outcome] * n,
+            "exit_return": [ret] * n,
+            "days": [9] * n,
+            "outcome_day": [known] * n,
+            "path_day": [known] * n,
+            "path": [[0.005 * (d + 1) for d in range(15)]] * n,
+        }
+    )
+
+
+def test_the_hit_rate_band_and_days_of_exact_matches():
+    cases = pd.concat([_cases(12, "target"), _cases(22, "stop"), _cases(6, "timeout")])
+    r = recall(cases, "ABC", KEY, AS_OF)
+    assert r.n_similar == 40 and r.hit_rate == pytest.approx(0.3) and r.widened == ()
+    assert r.median_return == pytest.approx(-0.04) and (r.p25, r.p75) == (
+        pytest.approx(-0.04),
+        pytest.approx(0.08),
+    )
+    assert r.median_days == 9
+    assert r.typical_path[0] == (1, pytest.approx(0.005), pytest.approx(0.005), pytest.approx(0.005))
+
+
+def test_cases_not_known_by_as_of_are_excluded():
+    cases = pd.concat([_cases(40, "stop"), _cases(40, "target", known=AS_OF + timedelta(days=3))])
+    r = recall(cases, "ABC", KEY, AS_OF)
+    assert r.n_similar == 40 and r.hit_rate == 0.0
+
+
+def test_widening_drops_volatility_then_market_and_says_so():
+    other_vol = _cases(25, "target", vol="high")
+    exact = _cases(10, "stop")
+    r = recall(pd.concat([exact, other_vol]), "ABC", KEY, AS_OF)
+    assert r.widened == ("volatility",) and r.n_similar == 35
+    other_market = _cases(30, "target", vol="high", market="up-trend")
+    r2 = recall(pd.concat([_cases(5, "stop"), other_market]), "ABC", KEY, AS_OF)
+    assert r2.widened == ("volatility", "market") and r2.n_similar == 35
+
+
+def test_too_few_cases_even_widened_is_reported_as_is():
+    r = recall(_cases(7, "target"), "ABC", KEY, AS_OF)
+    assert r.n_similar == 7 and r.widened == ("volatility", "market", "trend")
+
+
+def test_no_cases_at_all_is_an_empty_recall():
+    r = recall(_cases(0), "ABC", KEY, AS_OF)
+    assert r.n_similar == 0 and r.hit_rate is None

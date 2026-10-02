@@ -953,3 +953,66 @@ export interface BrainAlertSend {
   count: number
   text: string | null
 }
+
+// -------------------------------------------------------- brain: learning --
+// M09 learning loop: a read-only report on how the brain's past ideas
+// actually worked out, plus proposals it wants the owner's permission to
+// act on (constitution C9 — nothing changes until Accept is pressed).
+
+export interface BrainLearningBand {
+  band: string
+  n: number
+  /** Average confidence the brain carried in this band, 0..1. */
+  said: number
+  /** Share that actually hit target, 0..1. */
+  hit: number
+  /** Average outcome in R (return ÷ the 4% risked). */
+  avg_r: number
+}
+
+export interface BrainLearningWord {
+  word: string
+  n: number
+  hit: number
+  avg_r: number
+}
+
+export interface BrainLearningWeek {
+  week: string
+  n: number
+  hit: number
+  avg_r: number
+}
+
+export interface BrainDrift {
+  feature: string
+  psi: number
+  level: 'stable' | 'moderate' | 'major'
+}
+
+export interface BrainLearning {
+  since: string | null
+  n_scored: number
+  by_band: BrainLearningBand[]
+  by_word: BrainLearningWord[]
+  by_week: BrainLearningWeek[]
+  failures: string[]
+  drift: BrainDrift[]
+  drift_lines: string[]
+  note: string | null
+}
+
+export type BrainProposalStatus = 'open' | 'accepted' | 'dismissed'
+
+export interface BrainProposal {
+  id: number
+  kind: string
+  title: string
+  evidence: string
+  change: Record<string, unknown>
+  status: BrainProposalStatus
+  created_at: string
+  decided_by: string | null
+  decided_at: string | null
+  decided_note: string | null
+}

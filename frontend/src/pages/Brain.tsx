@@ -5,6 +5,8 @@ import { ApiError, api } from '../api/client'
 import type {
   BrainDecision,
   BrainModuleInfo,
+  BrainProposal,
+  BrainProposalStatus,
   BrainTraceEvent,
   HoldingWord,
   IdeaWord,
@@ -356,6 +358,66 @@ function ModuleSwitch({ m, onChange }: { m: BrainModuleInfo; onChange: (mode: Mo
   )
 }
 
+const PROPOSAL_STATUS_LABEL: Record<BrainProposalStatus, string> = {
+  open: 'Open',
+  accepted: 'Accepted',
+  dismissed: 'Rejected',
+}
+
+const PROPOSAL_STATUS_BADGE: Record<BrainProposalStatus, string> = {
+  open: 'badge-watch',
+  accepted: 'badge-buy',
+  dismissed: 'badge-sell',
+}
+
+function ProposalRow({
+  p,
+  pending,
+  onDecide,
+}: {
+  p: BrainProposal
+  pending: boolean
+  onDecide: (id: number, action: 'accept' | 'reject', note: string) => void
+}) {
+  const [note, setNote] = useState('')
+  return (
+    <tr>
+      <td>
+        <strong>{p.title}</strong>
+        <div className="stat-sub">{p.evidence}</div>
+      </td>
+      <td>
+        <span className={`badge ${PROPOSAL_STATUS_BADGE[p.status]}`}>{PROPOSAL_STATUS_LABEL[p.status]}</span>
+        {p.status !== 'open' && (
+          <div className="stat-sub">
+            {p.decided_by ? `by ${p.decided_by}` : ''}
+            {p.decided_at ? ` on ${formatDateTime(p.decided_at)}` : ''}
+            {p.decided_note ? ` — “${p.decided_note}”` : ''}
+          </div>
+        )}
+      </td>
+      <td>
+        {p.status === 'open' && (
+          <div className="brain-overrule">
+            <input
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="Optional note"
+              aria-label={`Note for ${p.title}`}
+            />
+            <button className="primary" disabled={pending} onClick={() => onDecide(p.id, 'accept', note)}>
+              Accept
+            </button>
+            <button disabled={pending} onClick={() => onDecide(p.id, 'reject', note)}>
+              Reject
+            </button>
+          </div>
+        )}
+      </td>
+    </tr>
+  )
+}
+
 export default function Brain() {
   const queryClient = useQueryClient()
   const [open, setOpen] = useState<BrainDecision | null>(null)
@@ -382,6 +444,8 @@ export default function Brain() {
     queryFn: () => api.brainRunTrace(latest.data!.run_id),
     enabled: !!latest.data,
   })
+  const learning = useQuery({ queryKey: ['brainLearning'], queryFn: () => api.brainLearning() })
+  const proposals = useQuery({ queryKey: ['brainProposals'], queryFn: api.brainProposals })
 
   const refreshAll = () => {
     for (const key of ['brainLatest', 'brainHealth', 'brainRuns', 'brainModules', 'brainTrace']) {
@@ -394,6 +458,14 @@ export default function Brain() {
     onSuccess: refreshAll,
   })
   const why = useMutation({ mutationFn: (symbol: string) => api.brainWhy(symbol) })
+  const decideProposal = useMutation({
+    mutationFn: ({ id, action, note }: { id: number; action: 'accept' | 'reject'; note: string }) =>
+      api.brainProposalDecide(id, action, note),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['brainLearning'] })
+      void queryClient.invalidateQueries({ queryKey: ['brainProposals'] })
+    },
+  })
 
   const noRunYet = latest.error instanceof ApiError && latest.error.status === 404
   const run = latest.data
@@ -691,6 +763,169 @@ export default function Brain() {
           )}
         </div>
       )}
+
+      <div className="card" style={{ marginBottom: '1.25rem' }}>
+        <h2>Learning from results</h2>
+        <p className="stat-sub">
+          How well the brain's past ideas actually worked out, and any changes it wants to make. Nothing changes
+          until you press Accept.
+        </p>
+        {learning.isLoading && <Loading />}
+        {learning.isError && <ErrorBox error={learning.error} />}
+        {learning.data && (
+          <>
+            {learning.data.note && (
+              <div className="banner banner-info" style={{ margin: '0.6rem 0' }}>
+                {learning.data.note}
+              </div>
+            )}
+
+            {learning.data.by_band.length > 0 && (
+              <>
+                <h3>Expected vs actual</h3>
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Band</th>
+                        <th>Ideas</th>
+                        <th>The brain said</th>
+                        <th>What happened</th>
+                        <th>Average result</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {learning.data.by_band.map((b) => (
+                        <tr key={b.band}>
+                          <td>{b.band}</td>
+                          <td>{b.n}</td>
+                          <td>{(b.said * 100).toFixed(0)}%</td>
+                          <td>{(b.hit * 100).toFixed(0)}%</td>
+                          <td>
+                            {b.avg_r >= 0 ? '+' : ''}
+                            {b.avg_r.toFixed(2)} R
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+
+            {learning.data.by_word.length > 0 && (
+              <>
+                <h3>By decision</h3>
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Decision</th>
+                        <th>Ideas</th>
+                        <th>What happened</th>
+                        <th>Average result</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {learning.data.by_word.map((w) => (
+                        <tr key={w.word}>
+                          <td>
+                            <WordPill word={w.word} />
+                          </td>
+                          <td>{w.n}</td>
+                          <td>{(w.hit * 100).toFixed(0)}%</td>
+                          <td>
+                            {w.avg_r >= 0 ? '+' : ''}
+                            {w.avg_r.toFixed(2)} R
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+
+            {learning.data.by_week.length > 0 && (
+              <>
+                <h3>By week</h3>
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Week</th>
+                        <th>Ideas</th>
+                        <th>What happened</th>
+                        <th>Average result</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {learning.data.by_week.map((w) => (
+                        <tr key={w.week}>
+                          <td>{w.week}</td>
+                          <td>{w.n}</td>
+                          <td>{(w.hit * 100).toFixed(0)}%</td>
+                          <td>
+                            {w.avg_r >= 0 ? '+' : ''}
+                            {w.avg_r.toFixed(2)} R
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+
+            {learning.data.failures.length > 0 && (
+              <>
+                <h3>What tends to go wrong</h3>
+                <ul className="brain-reasons">
+                  {learning.data.failures.map((f, i) => (
+                    <li key={i}>{f}</li>
+                  ))}
+                </ul>
+              </>
+            )}
+
+            {learning.data.drift_lines.length > 0 && (
+              <>
+                <h3>Has the market changed under the model?</h3>
+                <ul className="brain-reasons">
+                  {learning.data.drift_lines.map((d, i) => (
+                    <li key={i}>{d}</li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </>
+        )}
+
+        <h3>Proposals</h3>
+        <p className="stat-sub">
+          Changes the brain wants to make, based on the results above. Nothing changes until you press Accept.
+        </p>
+        {proposals.isLoading && <Loading />}
+        {proposals.isError && <ErrorBox error={proposals.error} />}
+        {proposals.data && proposals.data.length === 0 && <Empty label="No proposals right now." />}
+        {proposals.data && proposals.data.length > 0 && (
+          <div className="table-wrap">
+            <table>
+              <tbody>
+                {proposals.data.map((p) => (
+                  <ProposalRow
+                    key={p.id}
+                    p={p}
+                    pending={decideProposal.isPending}
+                    onDecide={(id, action, note) => decideProposal.mutate({ id, action, note })}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {decideProposal.isError && <ErrorBox error={decideProposal.error} />}
+      </div>
 
       {modules.data && (
         <div className="card" style={{ marginBottom: '1.25rem' }}>

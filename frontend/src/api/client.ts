@@ -5,6 +5,8 @@ import type {
   BrainAlertSend,
   BrainDecision,
   BrainEpisode,
+  BrainLearning,
+  BrainProposal,
   BrainTrack,
   BrainWhatIf,
   BrainHealth,
@@ -462,4 +464,11 @@ export const api = {
     post<BrainAlertSend>(`/brain/runs/${encodeURIComponent(runId)}/alerts/send`),
   brainOverrule: (id: number, word: string, reason: string) =>
     post<BrainDecision>(`/brain/decisions/${id}/overrule`, { word, reason }),
+  // M09 learning loop: a read-only report plus proposals the owner can
+  // accept or reject — accepting is the only thing that ever changes
+  // behaviour (constitution C9).
+  brainLearning: (since?: string) => get<BrainLearning>(`/brain/learning${since ? `?since=${since}` : ''}`),
+  brainProposals: () => get<BrainProposal[]>('/brain/proposals'),
+  brainProposalDecide: (id: number, action: 'accept' | 'reject', note: string) =>
+    post<BrainProposal>(`/brain/proposals/${id}/${action}`, { note }),
 }

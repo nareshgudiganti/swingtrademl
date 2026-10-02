@@ -52,7 +52,7 @@ def test_modules_lists_the_eight_steps(client):
         "decide",
         "learn",
     ]
-    assert [m["id"] for m in body["modules"]] == ["M01", "M02", "M03", "M06", "M07", "M08", "M10"]
+    assert [m["id"] for m in body["modules"]] == ["M01", "M02", "M03", "M06", "M07", "M08", "M10", "M11"]
 
 
 def test_unknown_module_cannot_be_switched(client):

@@ -209,6 +209,18 @@ class DatedReader:
     def index_closes(self) -> pd.Series:
         return self._closes(settings.BENCHMARK_INDEX_SYMBOL)
 
+    def sector_closes(self) -> dict[str, pd.Series]:
+        """Closing prices of every sector index the stock map uses, up to as_of.
+        Indices with no bars are left out."""
+        from swing_trade_ml.ml.sector_map import SECTOR_INDEX_MAP
+
+        out = {}
+        for index in sorted(set(SECTOR_INDEX_MAP.values())):
+            closes = self._closes(index)
+            if not closes.empty:
+                out[index] = closes
+        return out
+
     def vix_closes(self) -> pd.Series:
         return self._closes("INDIA VIX")
 

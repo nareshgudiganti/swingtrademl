@@ -17,7 +17,6 @@ from typing import Any
 
 from swing_trade_ml.brain import contracts as c
 from swing_trade_ml.brain.contracts import HoldingWord, IdeaWord, MarketMode
-from swing_trade_ml.brain.modules.m08_decide.money import cost_pct, cost_qty, expected_r
 from swing_trade_ml.services.limits import format_inr
 
 Proposal = tuple[Any, str] | None
@@ -76,7 +75,9 @@ def _negative_expected_result(d, f, p) -> Proposal:
     r = f.recall
     if r is None or r.hit_rate is None or r.n_similar < p.min_similar_cases or f.snapshot is None:
         return None
-    ev = expected_r(r.hit_rate, cost_pct(f.snapshot.close, cost_qty(f.verdict, f.snapshot.close, p)), p)
+    from swing_trade_ml.brain.modules.m08_decide.engine import recall_r
+
+    ev = recall_r(r, f, p)
     if ev <= 0:
         return (
             IdeaWord.WAIT,

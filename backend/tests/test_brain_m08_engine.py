@@ -269,3 +269,45 @@ def test_no_opportunity_note_when_a_slot_is_free():
         {"HLD": held_facts},
     )
     assert not any("consider replacing" in r for r in holdings["HLD"].reasons)
+
+
+# --- honest recall (M05) -----------------------------------------------------------------
+
+
+def _honest(mean=0.005, honest_mean=0.004, **kw):
+    base = {
+        "symbol": "ABC",
+        "n_similar": 124,
+        "hit_rate": 0.38,
+        "mean_return": mean,
+        "honest_hit_rate": 0.24,
+        "honest_mean_return": honest_mean,
+        "p25": -0.03,
+        "p75": 0.05,
+        "median_days": 9.0,
+        "key": "market correction · stock trend down",
+    }
+    return c.Recall(**{**base, **kw})
+
+
+def test_honest_recall_reads_like_the_build_book_and_says_what_held_up():
+    d = decide_idea(_idea(recall=_honest()), POLICY)
+    t = d.evidence_text
+    assert t.startswith(
+        "Similar cases: 124 · reached +8% first in 38% · middle half ended between -3.0% and +5.0%"
+    )
+    assert "median 9 trading days" in t and "came true about 24%" in t
+
+
+def test_expected_result_uses_the_average_exit_not_every_miss_as_a_full_loss():
+    from swing_trade_ml.brain.modules.m08_decide.money import cost_pct, expected_r_from_mean
+
+    cost = cost_pct(1000.0, 25)
+    assert expected_r_from_mean(0.004, cost, POLICY) == pytest.approx((0.004 - cost) / 0.04)
+    d = decide_idea(_idea(recall=_honest()), POLICY)
+    assert f"{(0.004 - cost) / 0.04:+.2f} R per trade" in d.evidence_text
+
+
+def test_an_honest_average_below_costs_is_wait():
+    d = decide_idea(_idea(recall=_honest(honest_mean=-0.002)), POLICY)
+    assert d.word is IdeaWord.WAIT and "lost money on average" in d.reasons[0]

@@ -23,6 +23,13 @@ def expected_r(p_win: float, round_trip_cost_pct: float, policy: DecidePolicy) -
     return p_win * policy.reward_r - (1 - p_win) * 1.0 - round_trip_cost_pct / policy.stop_pct
 
 
+def expected_r_from_mean(mean_exit_return: float, round_trip_cost_pct: float, policy: DecidePolicy) -> float:
+    """Average result per trade in R from the average exit of similar trades
+    (+8%, -4%, or wherever day 15 closed) — unlike `expected_r`, a trade that
+    simply ran out of time is not counted as a full stop-loss."""
+    return (mean_exit_return - round_trip_cost_pct) / policy.stop_pct
+
+
 def cost_qty(verdict, price: float, policy: DecidePolicy) -> int:
     """The share count to price costs on: the size the risk gate approved, or
     a typical position when it approved none. Never 1 share — fixed charges

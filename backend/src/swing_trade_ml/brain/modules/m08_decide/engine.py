@@ -15,7 +15,7 @@ from dataclasses import dataclass, replace
 
 from swing_trade_ml.brain import contracts as c
 from swing_trade_ml.brain.contracts import HoldingWord, IdeaWord, MarketMode
-from swing_trade_ml.brain.modules.m08_decide.money import cost_pct, cost_qty, expected_r
+from swing_trade_ml.brain.modules.m08_decide.money import cost_pct, cost_qty, expected_r, expected_r_from_mean
 from swing_trade_ml.brain.modules.m08_decide.policy import DecidePolicy
 from swing_trade_ml.brain.modules.m08_decide.rules import HOLDING_RULES, IDEA_RULES, Rule
 from swing_trade_ml.brain.opinions import liked, strength
@@ -48,8 +48,36 @@ class HoldingFacts:
 # --- ideas -----------------------------------------------------------------------
 
 
+def recall_r(r: c.Recall, f, policy: DecidePolicy) -> float:
+    """Expected result after costs in R: from the honest average exit when M05
+    gives one, otherwise from the hit rate (every miss a full loss)."""
+    cost = cost_pct(f.snapshot.close, cost_qty(f.verdict, f.snapshot.close, policy))
+    if r.honest_mean_return is not None:
+        return expected_r_from_mean(r.honest_mean_return, cost, policy)
+    return expected_r(r.hit_rate, cost, policy)
+
+
 def _evidence(f: IdeaFacts, qty: int, policy: DecidePolicy) -> str:
     r = f.recall
+    if (
+        r is not None
+        and r.honest_hit_rate is not None
+        and r.n_similar >= policy.min_similar_cases
+        and f.snapshot
+    ):
+        days = f" · median {r.median_days:.0f} trading days" if r.median_days is not None else ""
+        band = (
+            f" · middle half ended between {r.p25:+.1%} and {r.p75:+.1%}"
+            if r.p25 is not None and r.p75 is not None
+            else ""
+        )
+        return (
+            f"Similar cases: {r.n_similar} · reached +{policy.target_pct:.0%} first in "
+            f"{r.hit_rate:.0%}{band}{days}. "
+            f"On months it had not seen, cases like these came true about {r.honest_hit_rate:.0%}; "
+            f"expected result after costs {recall_r(r, f, policy):+.2f} R per trade "
+            f"(1 R = the {policy.stop_pct:.0%} risked)."
+        )
     if r is not None and r.hit_rate is not None and r.n_similar >= policy.min_similar_cases and f.snapshot:
         ev = expected_r(
             r.hit_rate, cost_pct(f.snapshot.close, cost_qty(f.verdict, f.snapshot.close, policy)), policy

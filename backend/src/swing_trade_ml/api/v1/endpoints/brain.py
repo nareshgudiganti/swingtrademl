@@ -112,6 +112,7 @@ def _run_out(db, run: BrainRun) -> dict:
         "quality": run.quality,
         "sectors": (run.context or {}).get("sectors", []),
         "situations": (run.context or {}).get("situations", []),
+        "portfolio": (run.context or {}).get("portfolio", {}),
         "error": run.error,
         "run_id": run.id,
         "kind": run.kind,
@@ -189,6 +190,48 @@ def overrule(decision_id: int, payload: OverruleCreate, db: DbSession) -> dict:
 @router.get("/health")
 def health(db: DbSession) -> dict:
     return service.health(db)
+
+
+class WhatIfIn(BaseModel):
+    symbol: str
+    qty: int = Field(gt=0)
+    price: float | None = Field(default=None, gt=0)
+    book: str = "paper"
+
+
+@router.post("/whatif")
+def what_if_trade(body: WhatIfIn, db: DbSession) -> dict:
+    """What a planned trade would do to the portfolio (M14). Answers only; approves nothing."""
+    from datetime import UTC, datetime
+
+    from swing_trade_ml.brain.modules.m14_portfolio.whatif import what_if
+    from swing_trade_ml.brain.reader import DatedReader
+    from swing_trade_ml.services import risk
+    from swing_trade_ml.services.limits import limits_for
+    from swing_trade_ml.services.portfolio import portfolio_value_and_cash
+
+    symbol = body.symbol.strip().upper()
+    price = body.price
+    if price is None:
+        last = DatedReader(db, datetime.now(UTC), live=True).last_close(symbol)
+        if last is None:
+            raise HTTPException(status_code=404, detail=f"No price for {symbol}; give one.")
+        price = last[1]
+    value, cash = portfolio_value_and_cash(db, body.book)
+    limits = limits_for(value)
+    holdings: dict[str, float] = {}
+    for h in risk.open_holdings(db, body.book):
+        holdings[h.tradingsymbol] = holdings.get(h.tradingsymbol, 0.0) + h.value
+    return what_if(
+        symbol,
+        body.qty,
+        price,
+        value,
+        cash,
+        holdings,
+        limits.max_position_pct,
+        limits.sector_cap_pct if limits.sector_rule == "pct_cap" else None,
+    )
 
 
 @router.get("/episodes")

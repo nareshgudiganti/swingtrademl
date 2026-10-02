@@ -359,6 +359,10 @@ export default function Brain() {
   const [showQuiet, setShowQuiet] = useState(false)
   const [showSectors, setShowSectors] = useState(false)
   const [showEpisodes, setShowEpisodes] = useState(false)
+  const [plan, setPlan] = useState({ symbol: '', qty: '' })
+  const whatIf = useMutation({
+    mutationFn: () => api.brainWhatIf(plan.symbol, Number(plan.qty)),
+  })
   const [whySymbol, setWhySymbol] = useState('')
 
   const latest = useQuery({
@@ -574,6 +578,74 @@ export default function Brain() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {run && (
+        <div className="card" style={{ marginBottom: '1.25rem' }}>
+          <h2>Your portfolio as a whole</h2>
+          <p className="stat-sub">
+            Looking at everything together: what is biggest, and which holdings rise and fall together (owning two of
+            those is close to owning one twice).
+          </p>
+          <ul style={{ margin: '0.4rem 0 0.8rem 1rem' }}>
+            <li>
+              Biggest position:{' '}
+              {run.portfolio?.largest_position
+                ? `${run.portfolio.largest_position[0]}, ${(run.portfolio.largest_position[1] * 100).toFixed(0)}% of the portfolio`
+                : 'nothing held'}
+            </li>
+            <li>
+              Biggest sector:{' '}
+              {run.portfolio?.top_sector
+                ? `${run.portfolio.top_sector[0]}, ${(run.portfolio.top_sector[1] * 100).toFixed(0)}% of the portfolio`
+                : '—'}
+            </li>
+            <li>
+              Holdings that move together:{' '}
+              {(run.portfolio?.holdings_moving_together ?? []).length === 0
+                ? 'none'
+                : run.portfolio!.holdings_moving_together!.map(([a, b]) => `${a} & ${b}`).join(', ')}
+            </li>
+          </ul>
+          <form
+            className="row"
+            style={{ gap: '0.5rem', flexWrap: 'wrap' }}
+            onSubmit={(e) => {
+              e.preventDefault()
+              whatIf.mutate()
+            }}
+          >
+            <input
+              placeholder="Stock, e.g. TCS"
+              value={plan.symbol}
+              onChange={(e) => setPlan({ ...plan, symbol: e.target.value })}
+            />
+            <input
+              placeholder="Shares"
+              inputMode="numeric"
+              value={plan.qty}
+              onChange={(e) => setPlan({ ...plan, qty: e.target.value })}
+            />
+            <button disabled={!plan.symbol || !Number(plan.qty) || whatIf.isPending}>What if I buy this?</button>
+          </form>
+          {whatIf.isError && <ErrorBox error={whatIf.error} />}
+          {whatIf.data && (
+            <div className="stat-sub" style={{ marginTop: '0.6rem' }}>
+              {whatIf.data.qty} × {whatIf.data.symbol} ≈ {formatCurrency(whatIf.data.value)} → {whatIf.data.symbol} would be{' '}
+              {(whatIf.data.stock_share_after * 100).toFixed(0)}% of the portfolio
+              {whatIf.data.sector_share_after != null
+                ? `, ${whatIf.data.sector_name} ${(whatIf.data.sector_share_after * 100).toFixed(0)}%`
+                : ''}
+              , cash left {formatCurrency(whatIf.data.cash_after)}.
+              {whatIf.data.warnings.length === 0 ? ' Within your limits.' : ''}
+              {whatIf.data.warnings.map((w) => (
+                <div key={w} style={{ color: 'var(--warn, #b45309)' }}>
+                  {w}
+                </div>
+              ))}
             </div>
           )}
         </div>

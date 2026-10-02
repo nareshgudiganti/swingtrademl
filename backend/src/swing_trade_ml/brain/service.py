@@ -218,6 +218,23 @@ def _context_summary(ctx: BrainContext) -> dict:
     return {
         "sectors": [{**_jsonable(asdict(s)), "name": plain_name(s.sector)} for s in sectors],
         "situations": [_jsonable(asdict(s)) for s in ctx.situations],
+        "portfolio": _portfolio_summary(ctx),
+    }
+
+
+def _portfolio_summary(ctx: BrainContext) -> dict:
+    """M14's view of the book for the console: what is biggest, and which
+    holdings move together."""
+    p = ctx.portfolio
+    if p is None:
+        return {}
+    held = set(ctx.held_symbols)
+    return {
+        "largest_position": list(p.largest_position) if p.largest_position else None,
+        "top_sector": list(p.top_sector) if p.top_sector else None,
+        "holdings_moving_together": [
+            [a, b, round(r, 2)] for a, b, r in p.correlated if a in held and b in held
+        ],
     }
 
 

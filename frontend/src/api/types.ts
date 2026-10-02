@@ -862,12 +862,31 @@ export interface BrainEpisode {
   nifty_change: number | null
 }
 
+export interface BrainPortfolioView {
+  largest_position?: [string, number] | null
+  top_sector?: [string, number] | null
+  holdings_moving_together?: [string, string, number][]
+}
+
+export interface BrainWhatIf {
+  symbol: string
+  qty: number
+  price: number
+  value: number
+  cash_after: number
+  stock_share_after: number
+  sector_name: string | null
+  sector_share_after: number | null
+  warnings: string[]
+}
+
 export interface BrainRun extends BrainRunSummary {
   book: string
   modules: Record<string, ModuleMode>
   quality: BrainQuality
   sectors: BrainSector[]
   situations: BrainSituation[]
+  portfolio: BrainPortfolioView
   decisions: BrainDecision[]
 }
 

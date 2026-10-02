@@ -13,6 +13,7 @@ from swing_trade_ml.brain.module import REGISTRY, Mode, Step
 from swing_trade_ml.brain.modules.m07_risk.allocator import Account, Candidate, CheckResult, Policy, allocate
 from swing_trade_ml.brain.modules.m14_portfolio.correlation import close_pairs, concentration, correlations
 from swing_trade_ml.brain.modules.m14_portfolio.module import PortfolioBrain
+from swing_trade_ml.brain.modules.m14_portfolio.whatif import what_if
 from swing_trade_ml.brain.runner import execute
 
 
@@ -188,3 +189,76 @@ def test_m08_shows_the_note_on_a_trade_card():
     )
     d = decide_idea(facts, DecidePolicy())
     assert d.word.value == "TRADE" and note in d.reasons
+
+
+# --- what-if -------------------------------------------------------------------------------------
+
+
+def test_whatif_shows_shares_before_and_after_with_plain_warnings():
+    out = what_if(
+        "ICICIBANK",
+        qty=100,
+        price=1_000.0,
+        portfolio_value=500_000.0,
+        cash=200_000.0,
+        holdings={"HDFCBANK": 100_000.0},
+        max_position_pct=0.15,
+        sector_cap_pct=0.25,
+    )
+    assert out["value"] == 100_000.0 and out["cash_after"] == 100_000.0
+    assert out["stock_share_after"] == pytest.approx(0.20)
+    assert out["sector"] == "BANK" and out["sector_share_before"] == pytest.approx(0.20)
+    assert out["sector_share_after"] == pytest.approx(0.40)
+    assert "20% of the portfolio in ICICIBANK, above the 15% limit" in out["warnings"][0]
+    assert any("Banks would be 40%" in w or "BANK would be 40%" in w for w in out["warnings"])
+
+
+def test_whatif_adds_to_an_existing_holding():
+    out = what_if(
+        "HDFCBANK",
+        qty=10,
+        price=1_000.0,
+        portfolio_value=500_000.0,
+        cash=200_000.0,
+        holdings={"HDFCBANK": 40_000.0},
+        max_position_pct=0.15,
+        sector_cap_pct=0.25,
+    )
+    assert out["stock_share_before"] == pytest.approx(0.08) and out["stock_share_after"] == pytest.approx(
+        0.10
+    )
+    assert out["warnings"] == []
+
+
+def test_whatif_warns_when_cash_runs_short():
+    out = what_if(
+        "TCS",
+        qty=100,
+        price=4_000.0,
+        portfolio_value=500_000.0,
+        cash=100_000.0,
+        holdings={},
+        max_position_pct=1.0,
+        sector_cap_pct=None,
+    )
+    assert any("more than the" in w and "cash" in w for w in out["warnings"])
+
+
+def test_the_whatif_endpoint_answers(client):
+    r = client.post(
+        "/api/v1/brain/whatif",
+        json={"symbol": "tcs", "qty": 1, "price": 1000.0},
+        headers={"X-API-Key": "test-api-key"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["symbol"] == "TCS" and body["value"] == 1000.0 and "warnings" in body
+
+
+def test_the_run_keeps_the_portfolio_view_for_the_console():
+    from swing_trade_ml.brain.service import _portfolio_summary
+
+    ctx = _run(BookReader(CLOSES, holdings=(*HELD, c.Holding(symbol="ICICIBANK", qty=10, avg_price=1.0))))
+    summary = _portfolio_summary(ctx)
+    assert summary["largest_position"][0] == "HDFCBANK"
+    assert summary["holdings_moving_together"] == [["HDFCBANK", "ICICIBANK", 1.0]]

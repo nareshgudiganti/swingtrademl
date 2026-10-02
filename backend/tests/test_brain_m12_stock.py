@@ -127,8 +127,14 @@ def _delivery(recent, base=40.0, n=25):
 def test_delivery_above_average_on_most_recent_days():
     assert delivery_signal(_delivery([55, 52, 38, 60, 58])) == (
         "high",
-        "Delivery above average 4 of the last 5 days (buyers are taking shares home).",
+        "Delivery well above its usual level on 4 of the last 5 days (buyers are taking shares home).",
     )
+
+
+def test_delivery_only_a_little_above_average_is_no_signal():
+    """The spec's plain 'above average 3 of 5' fired on 53% of days with no edge
+    (18.8% vs 19.1% hit rate, 5 years of watch-list stocks); 1.2x did better."""
+    assert delivery_signal(_delivery([45, 46, 44, 47, 45])) == (None, None)
 
 
 def test_delivery_above_average_only_twice_is_no_signal():
@@ -270,7 +276,7 @@ def test_confirming_signals_add_up_to_at_most_point_four():
     (o,) = [o for o in ctx.opinions if o.symbol == "ABC"]
     assert o.source == "setup" and o.stance == pytest.approx(0.4)
     assert o.reasons[0].startswith("Setup: breakout")
-    assert any(r.startswith("Delivery above average") for r in o.reasons)
+    assert any(r.startswith("Delivery well above") for r in o.reasons)
     assert any(r.startswith("Big-investor buying") for r in o.reasons)
     assert o.reasons[-1].startswith("Usually moves about")
     assert [s.label for s in ctx.situations] == ["breakout"]

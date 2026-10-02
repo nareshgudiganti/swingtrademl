@@ -1,8 +1,11 @@
 """Who is buying: delivery percentage and big-investor deals.
 
 Delivery: the share of traded shares actually taken home rather than traded
-within the day. Above its own 20-day average on at least 3 of the last 5
-days → "high" (buyers are holding, not flipping).
+within the day. At least 1.2x its own 20-day average on at least 3 of the
+last 5 days → "high" (buyers are holding, not flipping). The build book's
+plain "above average 3 of 5" fired on 53% of days with no edge at all
+(18.8% vs 19.1% reaching +8% before -4%, 5 years of watch-list stocks);
+1.2x fires on about 6% of days and reached 22.3%.
 
 Deals: NSE's bulk and block deals are mostly high-frequency trading firms
 buying and selling the same stock the same day (seen in our stored data:
@@ -25,6 +28,7 @@ from swing_trade_ml.brain.modules.m13_news.calendar import trading_days_until
 AVERAGE_DAYS = 20
 RECENT_DAYS = 5
 ABOVE_NEEDED = 3
+ABOVE_MULTIPLE = 1.2
 DEAL_DAYS = 10  # trading days
 
 _INSTITUTION = re.compile(
@@ -51,11 +55,12 @@ def delivery_signal(rows: list[tuple[date, float | None]]) -> tuple[str | None, 
     above = 0
     for i in range(len(values) - RECENT_DAYS, len(values)):
         before = values[i - AVERAGE_DAYS : i]
-        if values[i] > sum(before) / len(before):
+        if values[i] >= ABOVE_MULTIPLE * sum(before) / len(before):
             above += 1
     if above >= ABOVE_NEEDED:
         return "high", (
-            f"Delivery above average {above} of the last {RECENT_DAYS} days (buyers are taking shares home)."
+            f"Delivery well above its usual level on {above} of the last {RECENT_DAYS} days "
+            "(buyers are taking shares home)."
         )
     return None, None
 

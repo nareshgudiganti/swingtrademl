@@ -7,7 +7,7 @@ this router can place an order.
 from __future__ import annotations
 
 from collections import Counter
-from datetime import datetime
+from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -18,7 +18,7 @@ from swing_trade_ml.brain import service
 from swing_trade_ml.brain.alerts import service as alerts
 from swing_trade_ml.brain.module import Mode
 from swing_trade_ml.core.config import settings
-from swing_trade_ml.db.models.brain import BrainDecision, BrainRun
+from swing_trade_ml.db.models.brain import BrainDecision, BrainProposal, BrainRun
 
 
 def _brain_switched_on() -> None:
@@ -63,6 +63,11 @@ class OverruleCreate(BaseModel):
         if not value.strip():
             raise ValueError("Say why you are overruling the brain.")
         return value
+
+
+class ProposalDecision(BaseModel):
+    note: str = ""
+    by: str = "owner"
 
 
 def _decision_out(d: BrainDecision) -> dict:
@@ -310,3 +315,62 @@ def why(symbol: str, db: DbSession, book: str = Query("paper", pattern="^(paper|
         "decision": _decision_out(decision) if decision else None,
         "trace": run.trace,
     }
+
+
+@router.get("/learning")
+def learning(db: DbSession, since: date | None = Query(None)) -> dict:
+    """The learning loop's report (M09): expected vs actual by confidence
+    band, word and week, failure patterns and feature drift. Never changes
+    anything by itself."""
+    from swing_trade_ml.brain.modules.m09_learn.learn import learning_report
+
+    return learning_report(db, since)
+
+
+def _proposal_out(p: BrainProposal) -> dict:
+    return {
+        "id": p.id,
+        "kind": p.kind,
+        "title": p.title,
+        "evidence": p.evidence,
+        "change": p.change,
+        "status": p.status,
+        "created_at": p.created_at,
+        "decided_by": p.decided_by,
+        "decided_at": p.decided_at,
+        "decided_note": p.decided_note,
+    }
+
+
+@router.get("/proposals")
+def proposals(db: DbSession, status: str | None = Query(None)) -> list[dict]:
+    from swing_trade_ml.brain.modules.m09_learn import store
+
+    return [_proposal_out(p) for p in store.list_proposals(db, status)]
+
+
+@router.post("/proposals/{proposal_id}/accept")
+def accept_proposal(proposal_id: int, payload: ProposalDecision, db: DbSession) -> dict:
+    """Constitution C9: nothing a proposal suggests takes effect until now."""
+    from swing_trade_ml.brain.modules.m09_learn import store
+
+    try:
+        p = store.accept(db, proposal_id, payload.by, payload.note)
+    except store.UnknownProposalError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    return _proposal_out(p)
+
+
+@router.post("/proposals/{proposal_id}/reject")
+def reject_proposal(proposal_id: int, payload: ProposalDecision, db: DbSession) -> dict:
+    from swing_trade_ml.brain.modules.m09_learn import store
+
+    try:
+        p = store.reject(db, proposal_id, payload.by, payload.note)
+    except store.UnknownProposalError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    return _proposal_out(p)

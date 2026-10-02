@@ -28,11 +28,16 @@ def test_brain_why_command_parses():
     assert args.symbol == "RELIANCE"
 
 
+def test_brain_learn_command_parses():
+    args = build_parser().parse_args(["brain", "learn", "--since", "2026-09-01"])
+    assert args.brain_command == "learn" and args.since == "2026-09-01"
+
+
 def test_brain_is_off_by_default():
     assert Settings(API_KEY="x", JWT_SECRET_KEY="x").BRAIN_ENABLED is False
 
 
-def test_brain_jobs_register_nightly_and_intraday():
+def test_brain_jobs_register_nightly_intraday_and_learn():
     s = BackgroundScheduler()
     add_brain_jobs(s)
-    assert {j.id for j in s.get_jobs()} == {"brain_nightly", "brain_intraday"}
+    assert {j.id for j in s.get_jobs()} == {"brain_nightly", "brain_intraday", "brain_learn"}

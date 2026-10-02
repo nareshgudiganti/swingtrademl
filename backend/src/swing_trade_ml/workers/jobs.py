@@ -613,3 +613,19 @@ def job_brain_intraday() -> None:
     if not ((now.hour, now.minute) >= (9, 30) and (now.hour, now.minute) <= (15, 15)):
         return
     _run_brain_job("intraday")
+
+
+def job_brain_learn() -> None:
+    """Weekly: score every idea whose outcome is now known, build the
+    learning report, and record any proposal the evidence supports — never
+    raised, like every other brain job (advisory, must not disturb v1)."""
+    from swing_trade_ml.brain.modules.m09_learn.learn import run_learning
+
+    try:
+        with session_scope() as db:
+            report = run_learning(db)
+            db.commit()
+            n_new = len(report["new_proposals"])
+            log.info("job.brain.learn.done", n_scored=report["n_scored"], new_proposals=n_new)
+    except Exception as exc:  # noqa: BLE001
+        _report_error("brain_learn", exc)

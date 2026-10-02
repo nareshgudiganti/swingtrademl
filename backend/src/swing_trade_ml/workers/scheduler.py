@@ -235,6 +235,12 @@ def add_brain_jobs(target: BackgroundScheduler) -> None:
         id="brain_intraday",
         replace_existing=True,
     )
+    target.add_job(
+        jobs.job_brain_learn,
+        CronTrigger(day_of_week="sat", hour=10, minute=0, timezone=IST),
+        id="brain_learn",
+        replace_existing=True,
+    )
 
 
 def stop_scheduler() -> None:

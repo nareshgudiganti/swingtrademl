@@ -8,7 +8,7 @@ swingtrade backfill --days 1825
 swingtrade train --algorithm lightgbm --activate
 swingtrade scan
 swingtrade status
-swingtrade brain modules | set M02 off | run [--as-of 2026-09-15] | why RELIANCE
+swingtrade brain modules | set M02 off | run [--as-of 2026-09-15] | why RELIANCE | learn [--since 2026-09-01]
 """
 
 from __future__ import annotations
@@ -314,7 +314,7 @@ def _print_run(db, run_id: str) -> None:
 
 
 def cmd_brain(args: argparse.Namespace) -> int:
-    from datetime import UTC, datetime, time
+    from datetime import UTC, date, datetime, time
 
     from swing_trade_ml.brain import service
     from swing_trade_ml.db.session import session_scope
@@ -387,6 +387,34 @@ def cmd_brain(args: argparse.Namespace) -> int:
                     change = (e.stats or {}).get("nifty_change")
                     print(f"  {e.label:<11} {e.start_day} to {end}  NIFTY {change:+.1%}" if change is not None
                           else f"  {e.label:<11} {e.start_day} to {end}")
+            return 0
+        if args.brain_command == "learn":
+            from swing_trade_ml.brain.modules.m09_learn.learn import run_learning
+
+            since = date.fromisoformat(args.since) if args.since else None
+            report = run_learning(db, since=since)
+            db.commit()
+            scope = f" since {since.isoformat()}" if since else ""
+            print(f"Scored {report['n_scored']} finished ideas{scope}.")
+            if report["note"]:
+                print(report["note"])
+            if report["by_band"]:
+                print("By confidence band:")
+                for b in report["by_band"]:
+                    print(
+                        f"  {b['band']:<8} n={b['n']:<4} said {b['said']:.0%}  "
+                        f"hit {b['hit']:.0%}  avg {b['avg_r']:+.2f} R"
+                    )
+            if report["by_word"]:
+                print("By decision word:")
+                for w in report["by_word"]:
+                    print(f"  {w['word']:<6} n={w['n']:<4} hit {w['hit']:.0%}  avg {w['avg_r']:+.2f} R")
+            for line in report["failures"]:
+                print(f"  ! {line}")
+            for line in report["drift_lines"]:
+                print(f"  ~ {line}")
+            for p in report["new_proposals"]:
+                print(f"  New proposal: {p['title']}")
             return 0
         if args.brain_command == "why":
             _, run_id = service.run_brain(db, kind="why", symbols=[args.symbol], book=args.book)
@@ -522,6 +550,10 @@ def build_parser() -> argparse.ArgumentParser:
     b.add_argument("--swing-model", default="swing_classifier")
     brain_sub.add_parser("memory-build", help="Rebuild the memory of past stock-days and their outcomes (M05)")
     brain_sub.add_parser("episodes-backfill", help="Label the whole NIFTY history into market episodes (M04)")
+    b = brain_sub.add_parser(
+        "learn", help="Score finished ideas and show the weekly learning report (M09)"
+    )
+    b.add_argument("--since", default=None, help="YYYY-MM-DD: only ideas decided on or after this day")
     b = brain_sub.add_parser("why", help="Run the brain for one stock and show its full trace")
     b.add_argument("symbol")
     b.add_argument("--book", default="paper", choices=["paper", "live"])

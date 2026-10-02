@@ -144,11 +144,13 @@ def _sync_episodes(db: Session, reader: DatedReader, registry: ModuleRegistry, m
     Replays and why-runs never write them; a failure here never fails the run."""
     from swing_trade_ml.brain.modules.m04_situations import store as episodes
     from swing_trade_ml.brain.modules.m05_memory import store as memory
+    from swing_trade_ml.brain.modules.m09_learn import scoring as learning
 
     # (module, modes it runs in, store, function) — looked up at call time.
     jobs = (
         ("M04", (Mode.ON,), episodes, "sync_from_reader"),
         ("M05", (Mode.ON, Mode.SHADOW), memory, "rebuild_from_reader"),
+        ("M09", (Mode.ON,), learning, "score_pending_from_reader"),
     )
     for module_id, wanted, store, name in jobs:
         cls = registry.get(module_id)

@@ -15,9 +15,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from swing_trade_ml.brain import contracts as c
 from swing_trade_ml.brain import service
-from swing_trade_ml.brain.module import Mode
-from swing_trade_ml.brain.modules.m09_learn import store
+from swing_trade_ml.brain.module import Mode, Step
+from swing_trade_ml.brain.modules.m09_learn import learn as learn_mod
+from swing_trade_ml.brain.modules.m09_learn import scoring, store
 from swing_trade_ml.brain.modules.m09_learn.drift import drift_lines, feature_drift, psi
 from swing_trade_ml.brain.modules.m09_learn.failures import failure_patterns
 from swing_trade_ml.brain.modules.m09_learn.outcomes import score
@@ -30,6 +32,7 @@ from swing_trade_ml.db.models.brain import BrainDecision, BrainRun
 from swing_trade_ml.db.models.market import Candle, Instrument
 
 IST = ZoneInfo("Asia/Kolkata")
+HEADERS = {"X-API-Key": "test-api-key"}
 
 
 def _bars(closes, spread: float = 0.01, start: str = "2026-09-02") -> pd.DataFrame:
@@ -627,3 +630,246 @@ def test_model_probability_uses_the_accepted_buy_level(db_session, monkeypatch):
     after = DatedReader(db_session, as_of=as_of, live=True)
     _, threshold_after, _ = after.model_probability("BRAINBUY")
     assert threshold_after == pytest.approx(0.7)
+
+
+# --- module.py (M09 is the LEARN step, starts ON) ---------------------------
+
+
+def test_m09_is_the_learn_step_and_starts_on():
+    import swing_trade_ml.brain.modules  # noqa: F401
+    from swing_trade_ml.brain.module import REGISTRY
+    from swing_trade_ml.brain.modules.m09_learn.module import Learning
+
+    assert REGISTRY.get("M09") is Learning
+    m = Learning.manifest
+    assert m.step is Step.LEARN and m.kind == "step" and m.default_mode is Mode.ON
+
+
+def test_m09_run_contributes_nothing():
+    from swing_trade_ml.brain.modules.m09_learn.module import Learning
+
+    assert Learning().run(view=None) == c.Contribution()
+
+
+# --- the after-run hook (service._sync_episodes) -----------------------------
+
+
+def test_only_live_nightly_runs_score_pending(db_session, monkeypatch):
+    calls = []
+
+    def _fake(db, reader):
+        calls.append(reader.live)
+        return 0
+
+    monkeypatch.setattr(scoring, "score_pending_from_reader", _fake)
+    for kind, as_of in (("nightly", None), ("why", None), ("nightly", datetime(2026, 9, 1, 12, tzinfo=UTC))):
+        service.run_brain(db_session, kind=kind, as_of=as_of, symbols=["ZZZ"])
+    assert calls == [True]
+
+
+# --- learn.learning_report (DB) ----------------------------------------------
+
+
+def test_learning_report_shape_on_empty_db(db_session):
+    report = learn_mod.learning_report(db_session)
+    assert report == {
+        "since": None,
+        "n_scored": 0,
+        "by_band": [],
+        "by_word": [],
+        "by_week": [],
+        "failures": [],
+        "drift": [],
+        "drift_lines": [],
+        "note": "Only 0 ideas have finished so far — too few to judge; keep collecting.",
+    }
+
+
+def _scored_run(
+    db,
+    run_id: str,
+    symbol: str,
+    confidence: float,
+    outcome: str,
+    ret: float,
+    market: str | None = None,
+    as_of: datetime = datetime(2026, 9, 1, 10, 0, tzinfo=UTC),
+) -> None:
+    context = {"situations": [{"scope": "market", "label": market}]} if market else None
+    db.add(
+        BrainRun(
+            id=run_id,
+            kind="nightly",
+            as_of=as_of,
+            book="paper",
+            live=True,
+            started_at=as_of,
+            status="done",
+            context=context,
+        )
+    )
+    db.flush()
+    db.add(
+        BrainDecision(
+            run_id=run_id,
+            symbol=symbol,
+            kind="idea",
+            word="TRADE",
+            confidence=confidence,
+            outcome=outcome,
+            outcome_return=ret,
+            reasons=["r"],
+        )
+    )
+
+
+def test_learning_report_groups_a_scored_decision(db_session):
+    _scored_run(db_session, "fx-learn-1", "ABC", 0.65, "target", 0.08, market="correction")
+    db_session.commit()
+
+    report = learn_mod.learning_report(db_session)
+    assert report["n_scored"] == 1
+    assert report["by_band"] == [
+        {"band": "60-70%", "n": 1, "said": pytest.approx(0.65), "hit": 1.0, "avg_r": pytest.approx(2.0)}
+    ]
+    assert report["by_word"] == [{"word": "TRADE", "n": 1, "hit": 1.0, "avg_r": pytest.approx(2.0)}]
+    expected_week = f"{date(2026, 9, 1).isocalendar()[0]}-W{date(2026, 9, 1).isocalendar()[1]:02d}"
+    assert report["by_week"] == [{"week": expected_week, "n": 1, "hit": 1.0, "avg_r": pytest.approx(2.0)}]
+    assert report["failures"] == []
+    assert report["note"] == "Only 1 ideas have finished so far — too few to judge; keep collecting."
+
+
+def test_learning_report_surfaces_failure_patterns_from_the_runs_market_label(db_session):
+    i = 0
+    for _ in range(6):
+        _scored_run(db_session, f"fx-stop-correction-{i}", f"S{i}", 0.6, "stop", -0.04, market="correction")
+        i += 1
+    for _ in range(4):
+        _scored_run(db_session, f"fx-stop-calm-{i}", f"C{i}", 0.6, "stop", -0.04, market="calm")
+        i += 1
+    for _ in range(10):
+        _scored_run(db_session, f"fx-target-calm-{i}", f"T{i}", 0.6, "target", 0.08, market="calm")
+        i += 1
+    db_session.commit()
+
+    report = learn_mod.learning_report(db_session)
+    assert report["failures"] == [
+        "6 of 10 stop-outs came when the market was in a correction (correction was 30% of all ideas)."
+    ]
+
+
+def test_scored_rows_resolves_sector_via_get_sector_bucket(db_session, monkeypatch):
+    monkeypatch.setattr(learn_mod, "get_sector_bucket", lambda symbol: f"SECTOR-{symbol}")
+    _scored_run(db_session, "fx-rows-1", "ABC", 0.6, "target", 0.08, market="calm")
+    db_session.commit()
+
+    rows = learn_mod._scored_rows(db_session, since=None)
+    assert len(rows) == 1
+    row = rows.iloc[0]
+    assert row["market"] == "calm"
+    assert row["sector"] == "SECTOR-ABC"
+    assert row["decision_day"] == date(2026, 9, 1)
+
+
+def test_learning_report_since_filters_by_decision_day(db_session):
+    _scored_run(
+        db_session, "fx-early", "ABC", 0.6, "target", 0.08, as_of=datetime(2026, 8, 1, 10, 0, tzinfo=UTC)
+    )
+    _scored_run(
+        db_session, "fx-late", "DEF", 0.6, "target", 0.08, as_of=datetime(2026, 9, 10, 10, 0, tzinfo=UTC)
+    )
+    db_session.commit()
+
+    report = learn_mod.learning_report(db_session, since=date(2026, 9, 1))
+    assert report["n_scored"] == 1
+    assert report["since"] == date(2026, 9, 1)
+
+
+# --- learn.run_learning (DB) --------------------------------------------------
+
+
+def test_run_learning_scores_pending_and_builds_the_report(db_session):
+    _insert_candles(
+        db_session, "RUNLEARN", 910501, [(DECISION_DAY, 100.0), *zip(AFTER_DAYS, AFTER_CLOSES, strict=True)]
+    )
+    _run(db_session, "fx-run-learning", "nightly", True, DECISION_AS_OF)
+    _idea_decision(db_session, "fx-run-learning", "RUNLEARN")
+    db_session.commit()
+
+    report = learn_mod.run_learning(db_session)
+    assert report["n_scored"] == 1
+    assert report["new_proposals"] == []
+
+
+def test_run_learning_creates_a_buy_level_proposal_when_warranted(db_session):
+    i = 0
+    for _ in range(15):
+        _scored_run(db_session, f"fx-prop-t-{i}", f"T{i}", 0.65, "target", 0.08)
+        i += 1
+    for _ in range(5):
+        _scored_run(db_session, f"fx-prop-u-{i}", f"U{i}", 0.65, "stop", -0.04)
+        i += 1
+    for _ in range(10):
+        _scored_run(db_session, f"fx-prop-v-{i}", f"V{i}", 0.6, "stop", -0.04)
+        i += 1
+    db_session.commit()
+
+    report = learn_mod.run_learning(db_session)
+    assert len(report["new_proposals"]) == 1
+    assert report["new_proposals"][0]["title"] == "Raise the buy level to 65%"
+    open_proposals = store.list_proposals(db_session, status="open")
+    assert len(open_proposals) == 1 and open_proposals[0].change == {"buy_level": 0.65}
+
+    second = learn_mod.run_learning(db_session)
+    assert second["new_proposals"] == []
+    assert len(store.list_proposals(db_session, status="open")) == 1
+
+
+# --- API: /brain/learning and /brain/proposals -------------------------------
+
+
+def test_api_learning_report_shape_on_empty_db(client):
+    r = client.get("/api/v1/brain/learning", headers=HEADERS)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["n_scored"] == 0
+    assert body["note"] == "Only 0 ideas have finished so far — too few to judge; keep collecting."
+    assert body["by_band"] == [] and body["by_word"] == [] and body["by_week"] == []
+    assert body["failures"] == [] and body["drift"] == [] and body["drift_lines"] == []
+
+
+def test_api_proposals_list_accept_reject_and_errors(client, db_session):
+    proposal = store.create(db_session, _buy_level_draft(0.65))
+    other = store.create(db_session, _buy_level_draft(0.7))
+    db_session.commit()
+
+    listed = client.get("/api/v1/brain/proposals", headers=HEADERS).json()
+    assert {p["id"] for p in listed} == {proposal.id, other.id}
+    assert listed[0]["kind"] == "buy_level"
+
+    open_only = client.get("/api/v1/brain/proposals", params={"status": "open"}, headers=HEADERS).json()
+    assert {p["id"] for p in open_only} == {proposal.id, other.id}
+
+    r = client.post(
+        f"/api/v1/brain/proposals/{proposal.id}/accept", json={"note": "looks good"}, headers=HEADERS
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert (
+        body["status"] == "accepted"
+        and body["decided_by"] == "owner"
+        and body["decided_note"] == "looks good"
+    )
+
+    r = client.post(f"/api/v1/brain/proposals/{other.id}/reject", json={}, headers=HEADERS)
+    assert r.status_code == 200 and r.json()["status"] == "dismissed"
+
+    # 409: already decided
+    r = client.post(f"/api/v1/brain/proposals/{proposal.id}/accept", json={}, headers=HEADERS)
+    assert r.status_code == 409
+
+    # 404: unknown id
+    r = client.post("/api/v1/brain/proposals/999999999/accept", json={}, headers=HEADERS)
+    assert r.status_code == 404
+    r = client.post("/api/v1/brain/proposals/999999999/reject", json={}, headers=HEADERS)
+    assert r.status_code == 404

@@ -83,3 +83,9 @@ def score_pending(db: Session, upto: date) -> int:
         scored += 1
     db.flush()
     return scored
+
+
+def score_pending_from_reader(db: Session, reader) -> int:
+    """The after-run hook's entry point (`service._sync_episodes`): score
+    everything resolvable as of this reader's own IST trading day."""
+    return score_pending(db, reader.as_of.astimezone(IST).date())

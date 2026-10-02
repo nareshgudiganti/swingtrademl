@@ -1046,7 +1046,15 @@ def test_run_learning_scores_pending_and_builds_the_report(db_session):
 
     report = learn_mod.run_learning(db_session)
     assert report["n_scored"] == 1
+    assert report["newly_scored"] == 1
     assert report["new_proposals"] == []
+
+    # Nothing left to score the second time round: n_scored (the running
+    # total) stays the same, but newly_scored — score_pending's own count
+    # for this call — drops to 0 (cli.py prints this, not n_scored, F9).
+    second = learn_mod.run_learning(db_session)
+    assert second["n_scored"] == 1
+    assert second["newly_scored"] == 0
 
 
 def test_run_learning_creates_a_buy_level_proposal_when_warranted(db_session):

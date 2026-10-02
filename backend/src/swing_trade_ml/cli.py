@@ -395,7 +395,10 @@ def cmd_brain(args: argparse.Namespace) -> int:
             report = run_learning(db, since=since)
             db.commit()
             scope = f" since {since.isoformat()}" if since else ""
-            print(f"Scored {report['n_scored']} finished ideas{scope}.")
+            print(
+                f"Scored {report['newly_scored']} newly finished ideas "
+                f"({report['n_scored']} in total){scope}."
+            )
             if report["note"]:
                 print(report["note"])
             if report["by_band"]:

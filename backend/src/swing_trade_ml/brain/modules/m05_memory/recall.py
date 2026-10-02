@@ -35,13 +35,14 @@ def describe(key: dict, dropped: tuple[str, ...] = ()) -> str:
     return " · ".join(f"{names[p]} {key[p]}" for p in PARTS if p in key and p not in dropped)
 
 
-def recall(
-    cases: pd.DataFrame, symbol: str, key: dict, as_of_day: date, min_cases: int = MIN_CASES
-) -> Recall:
+def similar_cases(
+    cases: pd.DataFrame, key: dict, as_of_day: date, min_cases: int = MIN_CASES
+) -> tuple[pd.DataFrame, tuple[str, ...]]:
+    """The cases known by `as_of_day` that match `key`, widened below
+    `min_cases`; also the key parts that were dropped."""
     known = cases[cases["outcome_day"] <= as_of_day] if len(cases) else cases
     parts = [p for p in PARTS if p in key]
     dropped: list[str] = []
-    widened: list[str] = []
 
     def matches(use: list[str]) -> pd.DataFrame:
         mask = np.ones(len(known), dtype=bool)
@@ -50,15 +51,24 @@ def recall(
         return known[mask]
 
     found = matches(parts)
-    for part, name in WIDEN:
+    for part, _ in WIDEN:
         if len(found) >= min_cases or part not in parts:
             continue
         dropped.append(part)
-        widened.append(name)
         found = matches([p for p in parts if p not in dropped])
+    return found, tuple(dropped)
+
+
+def recall(
+    cases: pd.DataFrame, symbol: str, key: dict, as_of_day: date, min_cases: int = MIN_CASES
+) -> Recall:
+    known = cases[cases["outcome_day"] <= as_of_day] if len(cases) else cases
+    found, dropped = similar_cases(cases, key, as_of_day, min_cases)
+    names = dict(WIDEN)
+    widened = [names[p] for p in dropped]
 
     if found.empty:
-        return Recall(symbol=symbol, n_similar=0, key=describe(key, tuple(dropped)), widened=tuple(widened))
+        return Recall(symbol=symbol, n_similar=0, key=describe(key, dropped), widened=tuple(widened))
 
     returns = found["exit_return"].to_numpy(float)
     base_hit = float((known["outcome"] == "target").mean())
@@ -90,7 +100,7 @@ def recall(
         p25=float(np.percentile(returns, 25)),
         p75=float(np.percentile(returns, 75)),
         median_days=float(np.median(hits["days"])) if len(hits) else None,
-        key=describe(key, tuple(dropped)),
+        key=describe(key, dropped),
         widened=tuple(widened),
         typical_path=path,
     )

@@ -18,10 +18,14 @@ from __future__ import annotations
 
 from datetime import date
 
+import pandas as pd
+
 from swing_trade_ml.brain.contracts import TrackPoint
 from swing_trade_ml.services.limits import format_inr
 
 HORIZON = 15
+FIRST_TARGET = 0.05
+MIN_CASES = 30
 
 
 def track(
@@ -57,7 +61,9 @@ def track(
     if not band or day_n > len(band):
         return TrackPoint(
             status="on track",
-            reason=f"Day {day_n} of up to {HORIZON}: {ret:+.1%}; no record of similar trades to compare with.",
+            reason=(
+                f"Day {day_n} of up to {HORIZON}: {ret:+.1%}; no record of similar trades to compare with."
+            ),
             **common,
         )
     _, low, mid, high = band[day_n - 1]
@@ -70,3 +76,15 @@ def track(
     else:
         status, reason = "drift", f"{where}, below {usual} but above the stop."
     return TrackPoint(status=status, reason=reason, band_low=low, band_mid=mid, band_high=high, **common)
+
+
+def after_first_target(similar: pd.DataFrame) -> str | None:
+    """Of similar trades whose close reached +5%, how many went on to +8% —
+    the evidence for booking half at +5% and trailing the rest."""
+    if similar.empty:
+        return None
+    reached = similar[similar["path"].map(lambda p: max(p) >= FIRST_TARGET)]
+    if len(reached) < MIN_CASES:
+        return None
+    share = float((reached["outcome"] == "target").mean())
+    return f"Of {len(reached)} similar trades that reached +5%, {share:.0%} went on to reach +8%."

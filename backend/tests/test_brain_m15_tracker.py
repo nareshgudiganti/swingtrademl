@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from datetime import date
 
+import pandas as pd
 import pytest
 
-from swing_trade_ml.brain.modules.m15_tracker.track import track
+from swing_trade_ml.brain.modules.m05_memory.recall import similar_cases
+from swing_trade_ml.brain.modules.m15_tracker.track import after_first_target, track
 
 BAND = tuple((d, -0.01 * d / 5, 0.004 * d, 0.01 * d) for d in range(1, 16))  # widening band
 
@@ -45,3 +47,35 @@ def test_bought_today_is_on_track_without_a_band():
 def test_past_the_horizon_says_so():
     t = track("ABC", 100.0, _closes(*([-0.03] * 17)), stop=96.0, band=BAND, atr_pct=0.01)
     assert t.status == "past horizon" and "30 calendar days" in t.reason
+
+
+# --- similar cases and the first-target evidence ------------------------------------------------
+
+
+def _case(outcome, peak, n):
+    path = [peak * (d + 1) / 15 for d in range(15)]
+    return pd.DataFrame({"outcome": [outcome] * n, "path": [path] * n})
+
+
+def test_similar_cases_returns_the_matches_and_what_was_dropped():
+    cases = pd.DataFrame(
+        {
+            "market": ["up-trend"] * 40,
+            "stock": ["up"] * 40,
+            "trend": ["rising"] * 40,
+            "vol": ["high"] * 40,
+            "outcome_day": [date(2026, 1, 1)] * 40,
+        }
+    )
+    key = {"market": "up-trend", "stock": "up", "trend": "rising", "vol": "normal"}
+    found, dropped = similar_cases(cases, key, date(2026, 9, 1))
+    assert len(found) == 40 and dropped == ("vol",)
+
+
+def test_after_the_first_target_says_how_many_went_on_to_eight():
+    cases = pd.concat([_case("target", 0.09, 18), _case("timeout", 0.06, 22), _case("stop", 0.02, 50)])
+    assert after_first_target(cases) == "Of 40 similar trades that reached +5%, 45% went on to reach +8%."
+
+
+def test_too_few_similar_trades_reached_five_percent_says_nothing():
+    assert after_first_target(_case("target", 0.09, 10)) is None

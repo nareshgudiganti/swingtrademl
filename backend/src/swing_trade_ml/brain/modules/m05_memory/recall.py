@@ -59,6 +59,24 @@ def similar_cases(
     return found, tuple(dropped)
 
 
+def typical_path(found: pd.DataFrame, as_of_day: date) -> tuple[tuple[int, float, float, float], ...]:
+    """Day-by-day (day, p25, median, p75) of returns since entry, from cases
+    whose whole 15-day path was known by `as_of_day`."""
+    full = found[found["path_day"] <= as_of_day] if len(found) else found
+    if not len(full):
+        return ()
+    paths = np.vstack(full["path"].to_numpy())
+    return tuple(
+        (
+            d + 1,
+            float(np.percentile(paths[:, d], 25)),
+            float(np.median(paths[:, d])),
+            float(np.percentile(paths[:, d], 75)),
+        )
+        for d in range(paths.shape[1])
+    )
+
+
 def recall(
     cases: pd.DataFrame, symbol: str, key: dict, as_of_day: date, min_cases: int = MIN_CASES
 ) -> Recall:
@@ -76,19 +94,7 @@ def recall(
     hit_rate = float((found["outcome"] == "target").mean())
     mean_return = float(returns.mean())
     hits = found[found["outcome"] == "target"]
-    full = found[found["path_day"] <= as_of_day]
-    path = ()
-    if len(full):
-        paths = np.vstack(full["path"].to_numpy())
-        path = tuple(
-            (
-                d + 1,
-                float(np.percentile(paths[:, d], 25)),
-                float(np.median(paths[:, d])),
-                float(np.percentile(paths[:, d], 75)),
-            )
-            for d in range(paths.shape[1])
-        )
+    path = typical_path(found, as_of_day)
     return Recall(
         symbol=symbol,
         n_similar=len(found),

@@ -6,6 +6,7 @@ from __future__ import annotations
 import ast
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -95,7 +96,8 @@ def test_reader_lists_open_positions_of_the_book(db_session, market):
     )
     db_session.commit()
     held = DatedReader(db_session, as_of=AS_OF, live=True).holdings("paper")
-    assert c.Holding(symbol="BRAINABC", qty=7, avg_price=95.0) in held
+    entered = (AS_OF - timedelta(days=3)).astimezone(ZoneInfo("Asia/Kolkata")).date()
+    assert c.Holding(symbol="BRAINABC", qty=7, avg_price=95.0, opened_on=entered) in held  # M15 needs the day
 
 
 def test_reader_without_an_active_model_gives_no_score(db_session, market):

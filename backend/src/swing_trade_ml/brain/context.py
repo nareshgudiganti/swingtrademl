@@ -30,6 +30,7 @@ CONTRACT_ATTR: dict[str, str] = {
     "RiskVerdict@1": "verdicts",
     "Decision@1": "decisions",
     "Banner@1": "banner",
+    "TrackPoint@1": "tracks",
 }
 
 
@@ -66,6 +67,7 @@ class BrainContext:
     verdicts: dict[str, c.RiskVerdict] = field(default_factory=dict)
     decisions: dict[str, c.Decision] = field(default_factory=dict)
     banner: c.Banner | None = None
+    tracks: dict[str, c.TrackPoint] = field(default_factory=dict)
     trace: list[c.TraceEvent] = field(default_factory=list)
     shadow: dict[str, c.Contribution] = field(default_factory=dict)
     risk_gate_ran: bool = False
@@ -106,6 +108,8 @@ class BrainContext:
             self.verdicts.setdefault(v.symbol, v)
         for d in contribution.decisions:
             self.decisions.setdefault(d.symbol, d)
+        for t in contribution.tracks:
+            self.tracks.setdefault(t.symbol, t)
         self.situations.extend(contribution.situations)
         seen = {(o.source, o.symbol) for o in self.opinions}
         self.opinions.extend(o for o in contribution.opinions if (o.source, o.symbol) not in seen)

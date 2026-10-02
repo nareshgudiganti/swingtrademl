@@ -14,7 +14,7 @@ modules missing is more careful, never bolder.
 from __future__ import annotations
 
 from dataclasses import dataclass, fields, replace
-from datetime import datetime
+from datetime import date, datetime
 from enum import StrEnum
 from typing import ClassVar
 
@@ -153,6 +153,7 @@ class Holding:
     stop: float | None = None  # v1's active stop (it only ever moves up)
     target: float | None = None
     scaled_out: bool = False  # half already booked at the first target
+    opened_on: date | None = None  # IST trading day of the entry (M15)
 
 
 @dataclass(frozen=True, slots=True)
@@ -347,6 +348,7 @@ class Contribution:
     verdicts: tuple[RiskVerdict, ...] = ()
     decisions: tuple[Decision, ...] = ()
     banner: Banner | None = None
+    tracks: tuple[TrackPoint, ...] = ()
 
     def records(self) -> list[object]:
         out: list[object] = []

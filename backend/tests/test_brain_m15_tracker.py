@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import UTC, date, datetime
 
+import numpy as np
 import pandas as pd
 import pytest
 
+from brain_fakes import FakeReader, registry
+from swing_trade_ml.brain import contracts as c
+from swing_trade_ml.brain.module import REGISTRY, Mode, Step
 from swing_trade_ml.brain.modules.m05_memory.recall import similar_cases
+from swing_trade_ml.brain.modules.m15_tracker.module import Tracker
 from swing_trade_ml.brain.modules.m15_tracker.track import after_first_target, track
+from swing_trade_ml.brain.runner import execute
 
 BAND = tuple((d, -0.01 * d / 5, 0.004 * d, 0.01 * d) for d in range(1, 16))  # widening band
 
@@ -79,3 +85,106 @@ def test_after_the_first_target_says_how_many_went_on_to_eight():
 
 def test_too_few_similar_trades_reached_five_percent_says_nothing():
     assert after_first_target(_case("target", 0.09, 10)) is None
+
+
+# --- the module --------------------------------------------------------------------------------
+
+ENTRY = date(2026, 8, 3)
+
+
+def _stock_bars(n_before=260, after=(0.01, 0.02, 0.025)):
+    days = list(pd.bdate_range(end=ENTRY, periods=n_before).date)
+    closes = list(100 * (1.002 ** np.arange(n_before)))
+    entry_close = closes[-1]
+    days += list(pd.bdate_range(ENTRY, periods=len(after) + 1).date[1:])
+    closes += [entry_close * (1 + r) for r in after]
+    closes = np.asarray(closes)
+    return pd.DataFrame(
+        {
+            "day": days,
+            "open": closes,
+            "high": closes * 1.01,
+            "low": closes * 0.99,
+            "close": closes,
+            "volume": 1e5,
+        }
+    ), float(entry_close)
+
+
+def _known_cases(n=40, stock="up", trend="rising"):
+    return pd.DataFrame(
+        {
+            "market": ["up-trend"] * n,
+            "stock": [stock] * n,
+            "trend": [trend] * n,
+            "vol": ["normal"] * n,
+            "outcome": ["timeout"] * n,
+            "exit_return": [0.01] * n,
+            "days": [15] * n,
+            "outcome_day": [date(2026, 1, 1)] * n,
+            "path_day": [date(2026, 1, 1)] * n,
+            "path": [[0.002 * (d + 1) for d in range(15)]] * n,
+        }
+    )
+
+
+class TrackReader(FakeReader):
+    def __init__(self, bars, cases, **kw):
+        super().__init__(**kw)
+        self.as_of = datetime(2026, 8, 6, 12, tzinfo=UTC)
+        self._b, self._cases = bars, cases
+
+    def dated_bars(self, symbol):
+        return self._b
+
+    def dated_closes(self, symbol):
+        return pd.Series(100 * (1.001 ** np.arange(300)), index=pd.bdate_range(end=ENTRY, periods=300).date)
+
+    def experience(self):
+        return self._cases
+
+
+def _track_run(reader, holding):
+    reader._holdings = (holding,)
+    req = c.RunRequest(run_id="t", kind="intraday", as_of=reader.as_of, universe=(), live=True)
+    return execute(req, reader, registry(Tracker), {"M15": Mode.ON})
+
+
+def test_m15_is_a_state_plugin_that_starts_on():
+    import swing_trade_ml.brain.modules  # noqa: F401
+
+    assert REGISTRY.get("M15") is Tracker
+    assert Tracker.manifest.step is Step.STATE and Tracker.manifest.default_mode is Mode.ON
+
+
+def test_a_holding_is_tracked_against_the_band_of_its_entry_day_situation():
+    bars, entry = _stock_bars()
+    holding = c.Holding(symbol="ABC", qty=10, avg_price=entry, stop=entry * 0.96, opened_on=ENTRY)
+    ctx = _track_run(TrackReader(bars, _known_cases()), holding)
+    t = ctx.tracks["ABC"]
+    assert t.day_n == 3 and t.status == "on track" and t.band_low == pytest.approx(0.006)
+    assert len(t.band) == 15
+
+
+def test_without_similar_cases_the_overall_path_is_used():
+    bars, entry = _stock_bars()
+    holding = c.Holding(symbol="ABC", qty=10, avg_price=entry, stop=entry * 0.96, opened_on=ENTRY)
+    ctx = _track_run(TrackReader(bars, _known_cases(stock="down", trend="falling hard")), holding)
+    t = ctx.tracks["ABC"]
+    assert t.band and "compared with all past trades" in t.reason
+
+
+def test_a_holding_without_entry_date_is_skipped():
+    bars, entry = _stock_bars()
+    ctx = _track_run(TrackReader(bars, _known_cases()), c.Holding(symbol="ABC", qty=10, avg_price=entry))
+    assert ctx.tracks == {}
+
+
+def test_at_the_first_target_the_evidence_is_attached():
+    bars, entry = _stock_bars(after=(0.02, 0.04, 0.06))
+    holding = c.Holding(symbol="ABC", qty=10, avg_price=entry, stop=entry * 0.96, opened_on=ENTRY)
+    cases = _known_cases()
+    cases["path"] = [[0.006 * (d + 1) for d in range(15)]] * len(cases)  # all reached +5%
+    cases.loc[:19, "outcome"] = "target"
+    t = _track_run(TrackReader(bars, cases), holding).tracks["ABC"]
+    assert t.first_target_note == "Of 40 similar trades that reached +5%, 50% went on to reach +8%."

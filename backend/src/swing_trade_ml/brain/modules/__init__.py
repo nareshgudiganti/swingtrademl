@@ -13,3 +13,4 @@ from swing_trade_ml.brain.modules.m11_sector import module as m11_sector  # noqa
 from swing_trade_ml.brain.modules.m12_stock import module as m12_stock  # noqa: F401
 from swing_trade_ml.brain.modules.m13_news import module as m13_news  # noqa: F401
 from swing_trade_ml.brain.modules.m14_portfolio import module as m14_portfolio  # noqa: F401
+from swing_trade_ml.brain.modules.m15_tracker import module as m15_tracker  # noqa: F401

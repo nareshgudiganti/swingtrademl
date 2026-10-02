@@ -391,6 +391,7 @@ class DatedReader:
                 Position.stop_loss,
                 Position.take_profit,
                 Position.scaled_out_at,
+                Position.entry_at,
             )
             .join(Instrument, Instrument.id == Position.instrument_id)
             .where(Position.mode == book, Position.status == PositionStatus.OPEN)
@@ -404,8 +405,9 @@ class DatedReader:
                 stop=None if stop is None else float(stop),
                 target=None if target is None else float(target),
                 scaled_out=scaled is not None,
+                opened_on=entered.astimezone(IST).date() if entered is not None else None,
             )
-            for sym, qty, price, stop, target, scaled in rows
+            for sym, qty, price, stop, target, scaled, entered in rows
         )
 
     def model_bundle(self, name: str, version: str) -> dict | None:

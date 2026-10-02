@@ -43,6 +43,7 @@ class DecisionEngine(BrainModule):
             "Situation@1",
             "Recall@1",
             "MarketState@1",
+            "TrackPoint@1",
         ),
         writes=("Decision@1", "Banner@1"),
         budget_s=10.0,
@@ -86,6 +87,7 @@ class DecisionEngine(BrainModule):
                 stock=view.stocks.get(h.symbol),
                 market_mode=mode,
                 notes=modifier_notes(opinions.get(h.symbol, [])),
+                track=view.tracks.get(h.symbol),
             )
             for h in view.holdings
         }

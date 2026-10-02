@@ -43,6 +43,7 @@ class HoldingFacts:
     stock: c.StockState | None
     market_mode: MarketMode
     notes: tuple[str, ...] = ()
+    track: c.TrackPoint | None = None  # M15: where the trade stands against similar trades
 
 
 # --- ideas -----------------------------------------------------------------------
@@ -211,6 +212,8 @@ def decide_holding(f: HoldingFacts, policy: DecidePolicy, rules: list[Rule] = HO
             target=h.target,
             qty=h.qty,
         )
+        if f.track is not None and f.track.status in ("on track", "past horizon"):
+            draft = replace(draft, reasons=(*draft.reasons, f.track.reason))
     return _apply(draft, f, policy, rules, "holding")
 
 

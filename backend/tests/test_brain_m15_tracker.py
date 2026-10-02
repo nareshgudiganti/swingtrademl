@@ -10,8 +10,11 @@ import pytest
 
 from brain_fakes import FakeReader, registry
 from swing_trade_ml.brain import contracts as c
+from swing_trade_ml.brain.contracts import HoldingWord, MarketMode
 from swing_trade_ml.brain.module import REGISTRY, Mode, Step
 from swing_trade_ml.brain.modules.m05_memory.recall import similar_cases
+from swing_trade_ml.brain.modules.m08_decide.engine import HoldingFacts, decide_holding
+from swing_trade_ml.brain.modules.m08_decide.policy import DecidePolicy
 from swing_trade_ml.brain.modules.m15_tracker.module import Tracker
 from swing_trade_ml.brain.modules.m15_tracker.track import after_first_target, track
 from swing_trade_ml.brain.runner import execute
@@ -188,3 +191,66 @@ def test_at_the_first_target_the_evidence_is_attached():
     cases.loc[:19, "outcome"] = "target"
     t = _track_run(TrackReader(bars, cases), holding).tracks["ABC"]
     assert t.first_target_note == "Of 40 similar trades that reached +5%, 50% went on to reach +8%."
+
+
+# --- holding words in the decision engine ------------------------------------------------------
+
+
+def _facts(point, gain=0.01, mode=MarketMode.NORMAL, trend="up", scaled=False, notes=()):
+    h = c.Holding(symbol="ABC", qty=10, avg_price=100.0, stop=96.0, scaled_out=scaled, opened_on=ENTRY)
+    snap = c.Snapshot(symbol="ABC", as_of="d", close=100.0 * (1 + gain))
+    return HoldingFacts(
+        holding=h,
+        snapshot=snap,
+        stock=c.StockState(symbol="ABC", trend=trend),
+        market_mode=mode,
+        notes=notes,
+        track=point,
+    )
+
+
+def _point(status, reason, **kw):
+    return c.TrackPoint(symbol="ABC", day_n=4, ret=kw.pop("ret", 0.01), status=status, reason=reason, **kw)
+
+
+def test_on_track_stays_hold_and_shows_the_day_count():
+    d = decide_holding(
+        _facts(_point("on track", "Day 4 of up to 15: +1.0%, inside the usual range.")), DecidePolicy()
+    )
+    assert d.word is HoldingWord.HOLD and "Day 4 of up to 15" in d.reasons[-1]
+
+
+def test_drift_is_monitor_and_says_what_changed():
+    point = _point(
+        "drift", "Day 4 of up to 15: -2.0%, below the usual range of similar trades but above the stop."
+    )
+    d = decide_holding(
+        _facts(
+            point,
+            gain=-0.02,
+            mode=MarketMode.DEFENSIVE,
+            trend="down",
+            notes=("Sector: IT, ranked 15 of 15, lagging (weaker than NIFTY).",),
+        ),
+        DecidePolicy(),
+    )
+    assert d.word is HoldingWord.MONITOR and d.reasons[0].startswith("Day 4 of up to 15: -2.0%")
+    assert (
+        "What has changed: the market is careful (DEFENSIVE); its own trend has turned down; "
+        "its sector is lagging NIFTY." in d.reasons[0]
+    )
+
+
+def test_drift_with_nothing_obvious_says_so():
+    point = _point("breakdown", "Day 4 of up to 15: -3.5%, well below the usual range of similar trades.")
+    d = decide_holding(_facts(point, gain=-0.035), DecidePolicy())
+    assert d.word is HoldingWord.MONITOR and "nothing obvious in the market or its sector" in d.reasons[0]
+
+
+def test_at_the_first_target_the_evidence_joins_the_reduce_reason():
+    note = "Of 40 similar trades that reached +5%, 50% went on to reach +8%."
+    point = _point(
+        "on track", "Day 4 of up to 15: +6.0%, inside the usual range.", ret=0.06, first_target_note=note
+    )
+    d = decide_holding(_facts(point, gain=0.06), DecidePolicy())
+    assert d.word is HoldingWord.REDUCE and note in d.reasons[0]

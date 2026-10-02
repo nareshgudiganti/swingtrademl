@@ -139,10 +139,33 @@ def _first_target(d, f, p) -> Proposal:
         return None
     gain = snap.close / h.avg_price - 1
     if gain >= p.first_target_pct:
+        evidence = (
+            f" {f.track.first_target_note}" if f.track is not None and f.track.first_target_note else ""
+        )
         return HoldingWord.REDUCE, (
             f"Up {gain:+.1%}: the first target (+{p.first_target_pct:.0%}) is reached — book half and "
-            "trail the rest (the exit rules do this)."
+            f"trail the rest (the exit rules do this).{evidence}"
         )
+    return None
+
+
+def _what_changed(f) -> str:
+    changes = []
+    if f.market_mode in CARE_MODES:
+        changes.append(f"the market is careful ({f.market_mode.value.replace('_', ' ')})")
+    if f.stock is not None and f.stock.trend == "down":
+        changes.append("its own trend has turned down")
+    if any(n.startswith("Sector:") and "lagging" in n for n in f.notes):
+        changes.append("its sector is lagging NIFTY")
+    if not changes:
+        return "What has changed: nothing obvious in the market or its sector — watch it closely."
+    return "What has changed: " + "; ".join(changes) + "."
+
+
+def _off_track(d, f, p) -> Proposal:
+    t = f.track
+    if t is not None and t.status in ("drift", "breakdown"):
+        return HoldingWord.MONITOR, f"{t.reason} {_what_changed(f)}"
     return None
 
 
@@ -162,6 +185,7 @@ def _lagging_nifty(d, f, p) -> Proposal:
 HOLDING_RULES: list[Rule] = [
     Rule("stop_hit", "A stop that has been hit is an exit", "holding", _stop_hit),
     Rule("first_target", "Book half at the first target", "holding", _first_target),
+    Rule("off_track", "Watch trades falling behind similar past trades", "holding", _off_track),
     Rule(
         "careful_market_falling",
         "Watch falling holdings closely in a careful market",

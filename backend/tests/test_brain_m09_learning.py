@@ -385,7 +385,7 @@ def test_failure_pattern_found_when_one_market_label_is_over_represented():
     )
     rows = _failure_rows(records)
     assert failure_patterns(rows) == [
-        "6 of 10 stop-outs came when the market was in a correction (correction was 30% of all ideas)."
+        "6 of 10 stop-outs came when the market was falling back (that was 30% of all ideas)."
     ]
 
 
@@ -419,9 +419,34 @@ def test_failure_patterns_orders_most_striking_first_and_names_sectors_plainly()
     ] * 10
     rows = _failure_rows(stop_rows + target_rows)
     assert failure_patterns(rows) == [
-        "6 of 8 stop-outs came when the market was in a correction (correction was 40% of all ideas).",
+        "6 of 8 stop-outs came when the market was falling back (that was 40% of all ideas).",
         "3 of 8 stop-outs were Banks stocks (Banks were 25% of all ideas).",
     ]
+
+
+def test_market_line_uses_a_plain_phrase_for_each_known_label():
+    records = (
+        [{"market": "crash", "outcome": "stop"}] * 3
+        + [{"market": "crash", "outcome": "target"}] * 2
+        + [{"market": "calm", "outcome": "target"}] * 5
+    )
+    rows = _failure_rows(records)
+    assert failure_patterns(rows) == [
+        "3 of 3 stop-outs came when the market was crashing (that was 50% of all ideas)."
+    ]
+
+
+def test_unlabelled_market_rows_are_dropped_from_the_market_scan():
+    """ "unlabelled" (too little NIFTY history) is not a market situation the
+    owner can act on; letting it through would produce a nonsense line and
+    could even look like the strongest pattern found."""
+    records = (
+        [{"market": "unlabelled", "outcome": "stop"}] * 6
+        + [{"market": "calm", "outcome": "stop"}] * 1
+        + [{"market": "calm", "outcome": "target"}] * 3
+    )
+    rows = _failure_rows(records)
+    assert failure_patterns(rows) == []
 
 
 # --- drift.py (pure) ---------------------------------------------------------
@@ -944,7 +969,7 @@ def test_learning_report_surfaces_failure_patterns_from_the_runs_market_label(db
 
     report = learn_mod.learning_report(db_session)
     assert report["failures"] == [
-        "6 of 10 stop-outs came when the market was in a correction (correction was 30% of all ideas)."
+        "6 of 10 stop-outs came when the market was falling back (that was 30% of all ideas)."
     ]
 
 

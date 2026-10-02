@@ -22,7 +22,10 @@ from swing_trade_ml.services.limits import format_inr
 
 Proposal = tuple[Any, str] | None
 CARE_MODES = {MarketMode.DEFENSIVE, MarketMode.NO_NEW_TRADES}
-AVOID_SITUATIONS = {"results soon", "event blackout", "breakdown"}
+# "breakdown" is deliberately absent: on 5 years of watch-list stocks a
+# breakdown reached +8% before -4% more often than an average day (20.4% vs
+# 17.6%), so avoiding it has no evidence behind it (see M12 notes).
+AVOID_SITUATIONS = {"results soon", "event blackout"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,12 +47,7 @@ def _exchange_watch_list(d, f, p) -> Proposal:
 
 
 def _event_window(d, f, p) -> Proposal:
-    # On and just after an ex-date the price drops by arithmetic (a split, a
-    # bonus), so a "breakdown" seen then is not one.
-    reset = any(sit.label == "price reset" for sit in f.situations)
     for sit in f.situations:
-        if sit.label == "breakdown" and reset:
-            continue
         if sit.label in AVOID_SITUATIONS:
             what = sit.evidence[0] if sit.evidence else sit.label.capitalize()
             if "avoids" in what:  # the situation already states the rule in full

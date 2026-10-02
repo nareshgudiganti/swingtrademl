@@ -244,7 +244,10 @@ def test_a_holding_with_results_soon_keeps_its_word_and_gets_the_line():
     assert d.word is HoldingWord.HOLD and d.reasons[-1] == "Results on 08 Oct."
 
 
-def test_an_ex_date_drop_is_not_a_breakdown():
+def test_a_breakdown_alone_does_not_block_a_trade():
+    """No evidence for it: breakdowns reached +8% first more often than an
+    average day (20.4% vs 17.6%). The ex-date case is handled in M12."""
+
     def breakdown(view):
         return c.Contribution(
             situations=(
@@ -259,7 +262,5 @@ def test_an_ex_date_drop_is_not_a_breakdown():
         )
 
     later = make_module("M12", Step.RECOGNISE, writes=("Situation@1",), run=breakdown, kind="plugin")
-    on_ex_date = _full(EventReader(events=[_action(date(2026, 10, 5))]), extra=(later,))
-    assert on_ex_date.decisions["ABC"].word is IdeaWord.TRADE
-    plain = _full(EventReader(), extra=(later,))
-    assert plain.decisions["ABC"].word is IdeaWord.AVOID
+    ctx = _full(EventReader(), extra=(later,))
+    assert ctx.decisions["ABC"].word is IdeaWord.TRADE

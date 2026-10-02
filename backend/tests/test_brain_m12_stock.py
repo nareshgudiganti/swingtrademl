@@ -222,10 +222,14 @@ def test_trading_firm_deals_and_old_deals_are_ignored():
 
 
 class StockReader(FakeReader):
-    def __init__(self, bars=None, delivery=None, deals=(), **kw):
+    def __init__(self, bars=None, delivery=None, deals=(), events=(), **kw):
         super().__init__(**kw)
         self.as_of = datetime(2026, 9, 29, 12, 0, tzinfo=UTC)
         self._bars, self._delivery, self._deals = bars or {}, delivery or {}, list(deals)
+        self._events = list(events)
+
+    def event_rows(self, symbols):
+        return [e for e in self._events if e.symbol in symbols]
 
     def ohlcv(self, symbol, n=400):
         return self._bars.get(symbol, super().ohlcv(symbol, n))
@@ -266,7 +270,10 @@ def test_m12_is_a_recognise_plugin_that_starts_on_trial():
     assert m.step is Step.RECOGNISE and m.kind == "plugin" and m.default_mode is Mode.SHADOW
 
 
-def test_confirming_signals_add_up_to_at_most_point_four():
+def test_only_signals_with_evidence_move_the_order():
+    """5 years of watch-list stocks: setups did not beat a random day for
+    +8% before -4% (pullback 16.7%, breakout 16.4%, base 13.0% vs 17.6%), so
+    they carry no tilt and stay off the cards; delivery 1.2x did (22.3%)."""
     reader = StockReader(
         bars={"ABC": _breakout_bars()},
         delivery={"ABC": _delivery([55, 52, 38, 60, 58])},
@@ -274,19 +281,33 @@ def test_confirming_signals_add_up_to_at_most_point_four():
     )
     ctx = _run(reader)
     (o,) = [o for o in ctx.opinions if o.symbol == "ABC"]
-    assert o.source == "setup" and o.stance == pytest.approx(0.4)
-    assert o.reasons[0].startswith("Setup: breakout")
+    assert o.source == "setup" and o.stance == pytest.approx(0.4)  # delivery + institution, not the breakout
+    assert not any(r.startswith("Setup:") for r in o.reasons)
     assert any(r.startswith("Delivery well above") for r in o.reasons)
     assert any(r.startswith("Big-investor buying") for r in o.reasons)
     assert o.reasons[-1].startswith("Usually moves about")
-    assert [s.label for s in ctx.situations] == ["breakout"]
+    (sit,) = ctx.situations
+    assert sit.label == "breakout" and sit.evidence[0].startswith(
+        "Setup: breakout"
+    )  # in the why, not the card
     assert ctx.stocks["ABC"].delivery_signal == "high"
 
 
-def test_a_breakdown_and_institutional_selling_count_against():
+def test_institutional_selling_counts_against_but_a_breakdown_does_not():
+    """Breakdowns reached +8% first 20.4% of the time vs 17.6% for any day."""
     reader = StockReader(bars={"ABC": _breakdown_bars()}, deals=[_deal("GOVERNMENT OF SINGAPORE", "SELL")])
-    (o,) = [o for o in _run(reader).opinions if o.symbol == "ABC"]
-    assert o.stance == pytest.approx(-0.4)
+    ctx = _run(reader)
+    (o,) = [o for o in ctx.opinions if o.symbol == "ABC"]
+    assert o.stance == pytest.approx(-0.2)
+    assert [s.label for s in ctx.situations] == ["breakdown"]
+
+
+def test_a_drop_on_an_ex_date_is_not_called_a_breakdown():
+    from swing_trade_ml.brain.modules.m13_news.calendar import EventRow
+
+    split = EventRow(symbol="ABC", kind="corporate_action", day=date(2026, 9, 29), detail="Split")
+    ctx = _run(StockReader(bars={"ABC": _breakdown_bars()}, events=[split]))
+    assert "breakdown" not in [s.label for s in ctx.situations]
 
 
 def test_a_stock_with_no_bars_gets_nothing():

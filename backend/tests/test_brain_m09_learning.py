@@ -11,9 +11,11 @@ from __future__ import annotations
 from datetime import UTC, date, datetime, time
 from zoneinfo import ZoneInfo
 
+import numpy as np
 import pandas as pd
 import pytest
 
+from swing_trade_ml.brain.modules.m09_learn.drift import drift_lines, feature_drift, psi
 from swing_trade_ml.brain.modules.m09_learn.failures import failure_patterns
 from swing_trade_ml.brain.modules.m09_learn.outcomes import score
 from swing_trade_ml.brain.modules.m09_learn.report import by_band, by_week, by_word, one_per_day
@@ -376,4 +378,92 @@ def test_failure_patterns_orders_most_striking_first_and_names_sectors_plainly()
     assert failure_patterns(rows) == [
         "6 of 8 stop-outs came when the market was in a correction (correction was 40% of all ideas).",
         "3 of 8 stop-outs were Banks stocks (Banks were 25% of all ideas).",
+    ]
+
+
+# --- drift.py (pure) ---------------------------------------------------------
+
+
+def test_psi_is_near_zero_for_two_samples_of_the_same_normal():
+    rng = np.random.default_rng(0)
+    reference = rng.normal(size=2000)
+    recent = rng.normal(size=2000)
+    assert psi(reference, recent) < 0.1
+
+
+def test_a_shifted_feature_is_flagged():
+    rng = np.random.default_rng(0)
+    reference = rng.normal(size=2000)
+    recent = rng.normal(size=2000) + 1.0  # mean shifted by one SD
+    assert psi(reference, recent) > 0.25
+
+
+def test_psi_is_none_under_fifty_values():
+    rng = np.random.default_rng(0)
+    reference = rng.normal(size=49)
+    recent = rng.normal(size=2000)
+    assert psi(reference, recent) is None
+    assert psi(recent, reference) is None
+
+
+def test_psi_drops_nan_before_counting():
+    rng = np.random.default_rng(0)
+    reference = np.concatenate([rng.normal(size=60), [np.nan] * 20])
+    recent = np.concatenate([rng.normal(size=60), [np.nan] * 20])
+    assert psi(reference, recent) is not None
+
+
+def _drift_frame(rng, n: int, shift: dict[str, float] | None = None) -> pd.DataFrame:
+    shift = shift or {}
+    cols = {
+        name: rng.normal(size=n) + shift.get(name, 0.0)
+        for name in [
+            "rsi_14",
+            "sma_50_ratio",
+            "sma_200_ratio",
+            "high_52w_dist",
+            "relative_strength_20d",
+            "vix_percentile_rank",
+            "breadth_pct_above_sma50",
+            "nifty_trend_regime",
+        ]
+    }
+    return pd.DataFrame(cols)
+
+
+def test_feature_drift_levels_and_ordering():
+    rng = np.random.default_rng(1)
+    reference = _drift_frame(rng, 2000)
+    recent = _drift_frame(
+        rng, 2000, shift={"high_52w_dist": 1.2, "rsi_14": 0.15}
+    )  # one major shift, one moderate-ish, rest stable
+    drift = feature_drift(reference, recent)
+    assert next(d["feature"] for d in drift) == "high_52w_dist"
+    assert drift[0]["level"] == "major"
+    levels = {d["feature"]: d["level"] for d in drift}
+    assert levels["nifty_trend_regime"] == "stable"
+    psis = [d["psi"] for d in drift]
+    assert psis == sorted(psis, reverse=True)
+
+
+def test_feature_drift_skips_features_missing_on_either_side():
+    rng = np.random.default_rng(2)
+    reference = _drift_frame(rng, 2000).drop(columns=["vix_percentile_rank"])
+    recent = _drift_frame(rng, 2000).drop(columns=["breadth_pct_above_sma50"])
+    drift = feature_drift(reference, recent)
+    names = {d["feature"] for d in drift}
+    assert "vix_percentile_rank" not in names
+    assert "breadth_pct_above_sma50" not in names
+
+
+def test_drift_lines_wording_for_moderate_and_major_only():
+    drift = [
+        {"feature": "high_52w_dist", "psi": 0.41, "level": "major"},
+        {"feature": "rsi_14", "psi": 0.18, "level": "moderate"},
+        {"feature": "sma_50_ratio", "psi": 0.03, "level": "stable"},
+    ]
+    lines = drift_lines(drift)
+    assert lines == [
+        "high_52w_dist has shifted a lot from what the model learnt on (stability index 0.41).",
+        "rsi_14 has shifted a little from what the model learnt on (stability index 0.18).",
     ]

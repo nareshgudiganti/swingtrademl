@@ -51,6 +51,8 @@ class DatedReader:
         self._model_loaded = False
         self._context_checked = False
         self._bundles: dict[tuple[str, str], dict | None] = {}
+        self._buy_level: float | None = None
+        self._buy_level_loaded = False
 
     def universe(self) -> tuple[str, ...]:
         rows = self.db.execute(
@@ -458,4 +460,10 @@ class DatedReader:
         if result is None:
             return None
         label = f"{self._model.name} {self._model.version}"
-        return result.probability, settings.ML_MIN_CONFIDENCE, label
+        if not self._buy_level_loaded:
+            from swing_trade_ml.brain.modules.m09_learn.store import accepted_buy_level
+
+            self._buy_level = accepted_buy_level(self.db)
+            self._buy_level_loaded = True
+        threshold = settings.ML_MIN_CONFIDENCE if self._buy_level is None else self._buy_level
+        return result.probability, threshold, label

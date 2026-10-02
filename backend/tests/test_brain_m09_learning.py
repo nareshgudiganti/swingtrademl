@@ -15,11 +15,17 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from swing_trade_ml.brain import service
+from swing_trade_ml.brain.module import Mode
+from swing_trade_ml.brain.modules.m09_learn import store
 from swing_trade_ml.brain.modules.m09_learn.drift import drift_lines, feature_drift, psi
 from swing_trade_ml.brain.modules.m09_learn.failures import failure_patterns
 from swing_trade_ml.brain.modules.m09_learn.outcomes import score
+from swing_trade_ml.brain.modules.m09_learn.proposals import Draft, buy_level_proposal
 from swing_trade_ml.brain.modules.m09_learn.report import by_band, by_week, by_word, one_per_day
 from swing_trade_ml.brain.modules.m09_learn.scoring import score_pending
+from swing_trade_ml.brain.reader import DatedReader
+from swing_trade_ml.core.config import settings
 from swing_trade_ml.db.models.brain import BrainDecision, BrainRun
 from swing_trade_ml.db.models.market import Candle, Instrument
 
@@ -467,3 +473,157 @@ def test_drift_lines_wording_for_moderate_and_major_only():
         "high_52w_dist has shifted a lot from what the model learnt on (stability index 0.41).",
         "rsi_14 has shifted a little from what the model learnt on (stability index 0.18).",
     ]
+
+
+# --- proposals.buy_level_proposal (pure) ------------------------------------
+
+
+def _rows_at(confidence: float, n: int, outcome: str, ret: float) -> list[dict]:
+    return [{"confidence": confidence, "outcome": outcome, "ret": ret}] * n
+
+
+def test_raise_proposal_with_exact_wording():
+    rows = pd.DataFrame(
+        _rows_at(0.65, 15, "target", 0.08)
+        + _rows_at(0.65, 5, "stop", -0.04)
+        + _rows_at(0.6, 10, "stop", -0.04)
+    )
+    draft = buy_level_proposal(rows, current=0.6)
+    assert draft.kind == "buy_level"
+    assert draft.change == {"buy_level": 0.65}
+    assert draft.title == "Raise the buy level to 65%"
+    assert draft.evidence == (
+        "Among 20 past ideas scored 65% or more, the average result was +1.25 R per trade, "
+        "against +0.50 R for 30 ideas at the current 60%. It would have skipped 10 of 15 "
+        "losing ideas and 0 of 15 winning ones."
+    )
+
+
+def test_lower_proposal_with_exact_wording():
+    rows = pd.DataFrame(
+        _rows_at(0.65, 5, "target", 0.08)
+        + _rows_at(0.65, 15, "stop", -0.04)
+        + _rows_at(0.6, 10, "target", 0.08)
+        # Dragging 0.55's own average well below 0.6's keeps 0.6 the clear
+        # best candidate even though 0.55 would otherwise see the same rows.
+        + _rows_at(0.58, 50, "stop", -0.04)
+    )
+    draft = buy_level_proposal(rows, current=0.65)
+    assert draft.kind == "buy_level"
+    assert draft.change == {"buy_level": 0.6}
+    assert draft.title == "Lower the buy level to 60%"
+    assert draft.evidence == (
+        "Among 30 past ideas scored 60% or more, the average result was +0.50 R per trade, "
+        "against -0.25 R for 20 ideas at the current 65%. It would have added 0 of 15 "
+        "losing ideas and 10 of 15 winning ones."
+    )
+
+
+def test_too_few_cases_propose_nothing():
+    """Even though 0.55 has plenty of great cases, `current` itself (0.9) has
+    too few to judge against — nothing is proposed."""
+    rows = pd.DataFrame(_rows_at(0.9, 5, "stop", -0.04) + _rows_at(0.55, 30, "target", 0.08))
+    assert buy_level_proposal(rows, current=0.9) is None
+
+
+def test_no_proposal_when_the_gain_is_below_min_gain_r():
+    rows = pd.DataFrame(_rows_at(0.65, 20, "stop", -0.04) + _rows_at(0.6, 5, "stop", -0.04))
+    assert buy_level_proposal(rows, current=0.6) is None
+
+
+def test_no_proposal_when_no_candidate_has_enough_cases():
+    rows = pd.DataFrame(_rows_at(0.6, 25, "target", 0.08))
+    assert buy_level_proposal(rows, current=0.6) is None
+
+
+# --- store.py (DB) -----------------------------------------------------------
+
+
+def _buy_level_draft(buy_level: float) -> Draft:
+    return Draft(kind="buy_level", title="t", evidence="e", change={"buy_level": buy_level})
+
+
+def test_create_deduplicates_open_proposals_with_the_same_change(db_session):
+    first = store.create(db_session, _buy_level_draft(0.65))
+    second = store.create(db_session, _buy_level_draft(0.65))
+    assert first is not None
+    assert second is None
+    assert len(store.list_proposals(db_session, status="open")) == 1
+
+
+def test_buy_level_changes_only_after_accept(db_session):
+    proposal = store.create(db_session, _buy_level_draft(0.65))
+    assert store.accepted_buy_level(db_session) is None
+
+    other = store.create(db_session, _buy_level_draft(0.70))
+    store.reject(db_session, other.id, by="owner")
+    assert store.accepted_buy_level(db_session) is None
+
+    store.accept(db_session, proposal.id, by="owner")
+    assert store.accepted_buy_level(db_session) == pytest.approx(0.65)
+
+
+def test_accepting_an_already_decided_proposal_raises(db_session):
+    proposal = store.create(db_session, _buy_level_draft(0.65))
+    store.accept(db_session, proposal.id, by="owner")
+    with pytest.raises(ValueError):
+        store.accept(db_session, proposal.id, by="owner")
+
+
+def test_rejecting_an_already_decided_proposal_raises(db_session):
+    proposal = store.create(db_session, _buy_level_draft(0.65))
+    store.reject(db_session, proposal.id, by="owner")
+    with pytest.raises(ValueError):
+        store.reject(db_session, proposal.id, by="owner")
+
+
+def test_accepting_a_module_mode_proposal_calls_set_mode(db_session):
+    draft = Draft(kind="module_mode", title="t", evidence="e", change={"module": "M05", "mode": "shadow"})
+    proposal = store.create(db_session, draft)
+    store.accept(db_session, proposal.id, by="owner", note="try it out")
+    assert service.load_modes(db_session)["M05"] == Mode.SHADOW
+    assert proposal.status == "accepted"
+    assert proposal.decided_by == "owner"
+    assert proposal.decided_note == "try it out"
+
+
+# --- reader.DatedReader.model_probability uses the accepted buy level ------
+
+
+def test_model_probability_uses_the_accepted_buy_level(db_session, monkeypatch):
+    from swing_trade_ml.core.enums import ModelStatus
+    from swing_trade_ml.db.models.ml import MLModel
+    from swing_trade_ml.ml import predict
+
+    inst = Instrument(
+        instrument_token=991099, tradingsymbol="BRAINBUY", exchange="NSE", is_watchlisted=True, is_active=True
+    )
+    db_session.add(inst)
+    db_session.add(
+        MLModel(
+            name="swing_classifier",
+            version="v9",
+            algorithm="lightgbm",
+            status=ModelStatus.ACTIVE,
+            artifact_path="/nowhere/model.joblib",
+            activated_at=datetime(2026, 9, 1, tzinfo=UTC),
+        )
+    )
+    db_session.commit()
+
+    class _Result:
+        probability = 0.77
+
+    monkeypatch.setattr(predict, "predict_instrument", lambda *a, **k: _Result())
+
+    as_of = datetime(2026, 9, 25, 12, 0, tzinfo=UTC)
+    before = DatedReader(db_session, as_of=as_of, live=True)
+    _, threshold, _ = before.model_probability("BRAINBUY")
+    assert threshold == settings.ML_MIN_CONFIDENCE
+
+    proposal = store.create(db_session, _buy_level_draft(0.7))
+    store.accept(db_session, proposal.id, by="owner")
+
+    after = DatedReader(db_session, as_of=as_of, live=True)
+    _, threshold_after, _ = after.model_probability("BRAINBUY")
+    assert threshold_after == pytest.approx(0.7)

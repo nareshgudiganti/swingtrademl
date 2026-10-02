@@ -1,39 +1,76 @@
-import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { Link, useNavigate } from 'react-router-dom'
 
-import { featured, ideas, series, type Action } from '../data'
-import { ActionPill, Card, CheckItem, GlowArea, Icon, Ring, Seg, StockLogo, inr, signed, toneClass } from '../ui'
+import { api } from '../../api/client'
+import type { BrainDecision, IdeaWord } from '../../api/types'
+import type { Action } from '../data'
+import { ideasFrom, useBrainStatus, useLatestRun } from '../live'
+import { ActionPill, BrainOff, Card, CheckItem, Icon, GlowArea, Ring, Seg, StockLogo, inr } from '../ui'
 
-type Filter = 'ALL' | Action
+type Filter = 'ALL' | IdeaWord
+
+// The owner's overrule, if any, otherwise the brain's own word. Duplicated
+// per screen, same as Brain.tsx's own copy.
+function finalWord(d: BrainDecision): string {
+  return d.overruled_word ?? d.word
+}
+
+function entryZone(d: BrainDecision): string {
+  if (d.entry_low == null || d.entry_high == null) return '—'
+  return `₹${inr(d.entry_low)} – ₹${inr(d.entry_high)}`
+}
 
 export default function Opportunities() {
+  const navigate = useNavigate()
+  const status = useBrainStatus()
+  const latest = useLatestRun()
   const [filter, setFilter] = useState<Filter>('ALL')
-  const [sector, setSector] = useState('All Sectors')
-  const [setup, setSetup] = useState('All Setups')
   const [query, setQuery] = useState('')
-  const [selected, setSelected] = useState(featured.symbol)
 
-  const count = (a: Action) => ideas.filter((i) => i.action === a).length
-  const sectors = ['All Sectors', ...Array.from(new Set(ideas.map((i) => i.sector)))]
-  const setups = ['All Setups', ...Array.from(new Set(ideas.map((i) => i.setup)))]
+  if (status === 'off') return <div className="tm-page"><BrainOff /></div>
 
-  const rows = useMemo(
-    () =>
-      ideas.filter(
-        (i) =>
-          (filter === 'ALL' || i.action === filter) &&
-          (sector === 'All Sectors' || i.sector === sector) &&
-          (setup === 'All Setups' || i.setup === setup) &&
-          (query === '' || `${i.symbol} ${i.name}`.toLowerCase().includes(query.toLowerCase())),
-      ),
-    [filter, sector, setup, query],
+  if (status === 'loading') {
+    return (
+      <div className="tm-page">
+        <p className="tm-dim">Connecting to the brain…</p>
+      </div>
+    )
+  }
+
+  if (status === 'error') {
+    return (
+      <div className="tm-page">
+        <Card title="Could not reach the brain">
+          <p className="tm-dim">Something went wrong talking to the brain. Try again shortly.</p>
+        </Card>
+      </div>
+    )
+  }
+
+  if (status === 'no-run') {
+    return (
+      <div className="tm-page">
+        <Card title="No run yet">
+          <p className="tm-dim">The brain has not run yet.</p>
+        </Card>
+      </div>
+    )
+  }
+
+  const run = latest.data!
+  const ideas = ideasFrom(run)
+  const count = (w: IdeaWord) => ideas.filter((i) => finalWord(i) === w).length
+
+  const rows = ideas.filter(
+    (i) =>
+      (filter === 'ALL' || finalWord(i) === filter) &&
+      (query === '' || i.symbol.toLowerCase().includes(query.toLowerCase())),
   )
 
-  const pick = ideas.find((i) => i.symbol === selected) ?? featured
-  const spark = useMemo(
-    () => series(pick.symbol.length * 31 + pick.confidence, 40, pick.price * 0.86, 0.004, 0.025),
-    [pick],
-  )
+  // Featured = top TRADE if there is one, otherwise top WATCH. ideasFrom
+  // already sorts TRADE/WATCH first by confidence, so the first match wins.
+  const featured = ideas.find((i) => finalWord(i) === 'TRADE') ?? ideas.find((i) => finalWord(i) === 'WATCH')
 
   return (
     <div className="tm-page tm-grid">
@@ -51,16 +88,6 @@ export default function Opportunities() {
             ]}
           />
           <span className="tm-spacer" />
-          <select className="tm-select" value={sector} onChange={(e) => setSector(e.target.value)}>
-            {sectors.map((s) => (
-              <option key={s}>{s}</option>
-            ))}
-          </select>
-          <select className="tm-select" value={setup} onChange={(e) => setSetup(e.target.value)}>
-            {setups.map((s) => (
-              <option key={s}>{s}</option>
-            ))}
-          </select>
           <span className="tm-flex" style={{ gap: 0, position: 'relative' }}>
             <span style={{ position: 'absolute', left: 8, color: 'var(--tm-faint)', display: 'flex' }}>
               <Icon.Search size={13} />
@@ -80,37 +107,32 @@ export default function Opportunities() {
             <thead>
               <tr>
                 <th>Stock</th>
-                <th className="tm-right">Price</th>
-                <th>Signal</th>
-                <th className="tm-right">Confidence</th>
-                <th className="tm-right" title="Expected reward for every ₹1 risked">
-                  Expected R
+                <th>Decision</th>
+                <th className="tm-right" title="A ranking, not a chance">
+                  Model score
                 </th>
-                <th>Timeframe</th>
-                <th>Setup</th>
+                <th>Entry zone</th>
+                <th>Target</th>
+                <th>Stop</th>
+                <th>Why</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((i) => (
                 <tr
-                  key={i.symbol}
-                  className={`tm-clickable ${i.symbol === selected ? 'tm-selected' : ''}`}
-                  onClick={() => setSelected(i.symbol)}
+                  key={i.id}
+                  className="tm-clickable"
+                  onClick={() => navigate(`/trademind/stock/${encodeURIComponent(i.symbol)}`)}
                 >
+                  <td className="tm-strong">{i.symbol}</td>
                   <td>
-                    <span className="tm-mini-dot" style={{ color: i.changePct >= 0 ? 'var(--tm-blue)' : 'var(--tm-red)' }} />
-                    <span className="tm-strong">{i.name.toUpperCase()}</span>
+                    <ActionPill action={finalWord(i) as Action} />
                   </td>
-                  <td className="tm-right tm-num">
-                    {inr(i.price)} <small className={toneClass(i.changePct)}>{signed(i.changePct)}</small>
-                  </td>
-                  <td>
-                    <ActionPill action={i.action} />
-                  </td>
-                  <td className="tm-right tm-num">{i.confidence}%</td>
-                  <td className={`tm-right tm-num ${i.expectedR >= 1 ? 'tm-pos' : 'tm-neg'}`}>+{i.expectedR.toFixed(1)}R</td>
-                  <td className="tm-dim">{i.timeframe}</td>
-                  <td>{i.setup}</td>
+                  <td className="tm-right tm-num">{i.confidence != null ? Math.round(i.confidence * 100) : '—'}</td>
+                  <td className="tm-dim">{finalWord(i) === 'TRADE' ? entryZone(i) : '—'}</td>
+                  <td className="tm-dim">{finalWord(i) === 'TRADE' && i.target != null ? `₹${inr(i.target)}` : '—'}</td>
+                  <td className="tm-dim">{finalWord(i) === 'TRADE' && i.stop != null ? `₹${inr(i.stop)}` : '—'}</td>
+                  <td className="tm-dim">{i.reasons[0] ?? '—'}</td>
                 </tr>
               ))}
               {rows.length === 0 && (
@@ -125,55 +147,75 @@ export default function Opportunities() {
         </div>
       </Card>
 
-      {/* Selected stock */}
-      <Card glow className="tm-feature">
-        <StockLogo symbol={pick.symbol} />
-        <div>
-          <div className="tm-strong" style={{ fontSize: '0.95rem' }}>
-            {pick.name.toUpperCase()}
-          </div>
-          <div className="tm-big tm-num" style={{ fontSize: '1.6rem' }}>
-            ₹{inr(pick.price)}{' '}
-            <span className={toneClass(pick.changePct)} style={{ fontSize: '1rem' }}>
-              {signed(pick.changePct)}
-            </span>
-          </div>
-          <div className="tm-pos" style={{ fontSize: '0.72rem' }}>
-            {pick.confidence}% Confidence
-          </div>
-        </div>
-        <div className="tm-flex" style={{ minWidth: 0 }}>
-          <Ring
-            value={pick.confidence}
-            size={84}
-            stroke={8}
-            center={
-              <>
-                <span className="tm-ring-value" style={{ fontSize: 20 }}>
-                  {pick.confidence}%
-                </span>
-                <span className="tm-ring-label">Confidence</span>
-              </>
-            }
-          />
-          <div style={{ flex: 1, minWidth: 120 }}>
-            <GlowArea data={spark} height={70} color={pick.changePct >= 0 ? '#2ee68a' : '#ff4d6a'} />
-          </div>
-        </div>
-        <div>
-          <div className="tm-strong" style={{ marginBottom: 2 }}>
-            Why TradeMind {pick.action === 'AVOID' ? 'avoids' : 'likes'} this?
-          </div>
-          {pick.why.map((w) => (
-            <CheckItem key={w} tone={pick.action === 'AVOID' ? 'neg' : 'pos'}>
-              {w}
-            </CheckItem>
-          ))}
-        </div>
-        <Link className="tm-btn" to={`/trademind/stock/${encodeURIComponent(pick.symbol)}`}>
-          View Details
-        </Link>
-      </Card>
+      {/* Featured idea: the top TRADE, or the top WATCH if there is no TRADE */}
+      {featured ? (
+        <FeaturedCard decision={featured} />
+      ) : (
+        <Card title="Featured Idea">
+          <p className="tm-dim">No TRADE or WATCH idea right now.</p>
+        </Card>
+      )}
     </div>
+  )
+}
+
+function FeaturedCard({ decision }: { decision: BrainDecision }) {
+  const candles = useQuery({
+    queryKey: ['candles', decision.symbol, 30],
+    queryFn: () => api.candles(decision.symbol, 30),
+  })
+  const points = (candles.data ?? []).map((c) => ({ t: c.ts.slice(5, 10), v: c.close }))
+
+  return (
+    <Card glow className="tm-feature">
+      <StockLogo symbol={decision.symbol} />
+      <div>
+        <div className="tm-strong" style={{ fontSize: '0.95rem' }}>
+          {decision.symbol}
+        </div>
+        <div className="tm-pos" style={{ fontSize: '0.72rem', marginTop: 4 }}>
+          <ActionPill action={finalWord(decision) as Action} />
+        </div>
+      </div>
+      <div className="tm-flex" style={{ minWidth: 0 }}>
+        <Ring
+          value={decision.confidence != null ? Math.round(decision.confidence * 100) : 0}
+          size={84}
+          stroke={8}
+          center={
+            <>
+              <span className="tm-ring-value" style={{ fontSize: 20 }}>
+                {decision.confidence != null ? Math.round(decision.confidence * 100) : '—'}
+              </span>
+              <span className="tm-ring-label">Model score</span>
+            </>
+          }
+        />
+        <div style={{ flex: 1, minWidth: 120 }}>
+          {candles.isLoading && <p className="tm-dim">Loading price…</p>}
+          {candles.isError && <p className="tm-dim">Price history not available.</p>}
+          {points.length > 0 && <GlowArea data={points} height={70} formatter={(v) => `₹${inr(v, 0)}`} />}
+        </div>
+      </div>
+      <div>
+        {finalWord(decision) === 'TRADE' && decision.entry_low != null && (
+          <p className="tm-note" style={{ marginBottom: '0.5rem' }}>
+            Buy around {entryZone(decision)} · target {decision.target != null ? `₹${inr(decision.target)}` : '—'} · stop{' '}
+            {decision.stop != null ? `₹${inr(decision.stop)}` : '—'}
+          </p>
+        )}
+        <div className="tm-strong" style={{ marginBottom: 2 }}>
+          Why TradeMind {finalWord(decision) === 'AVOID' ? 'avoids' : 'likes'} this
+        </div>
+        {decision.reasons.map((w, idx) => (
+          <CheckItem key={idx} tone={finalWord(decision) === 'AVOID' ? 'neg' : 'pos'}>
+            {w}
+          </CheckItem>
+        ))}
+      </div>
+      <Link className="tm-btn" to={`/trademind/stock/${encodeURIComponent(decision.symbol)}`}>
+        View Details
+      </Link>
+    </Card>
   )
 }

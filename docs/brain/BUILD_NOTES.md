@@ -27,6 +27,7 @@ the short "what we learned" companion: read it before starting a module.
 | M08 decision engine | brain/m08-decide | draft → named rules (only lower) → opportunity notes; rules in `m08_decide/rules.py`, numbers in `policy.py` |
 | M16 alerts and cards | brain/m16-alerts | detectors (pluggable) → one Telegram message per run, once a day; console preview/send; sidebar badge; Copy plan |
 | M11 sector brain | brain/m11-sector | ranks 15 sector indices vs NIFTY (20 and 60 days), rotation quadrant, `sector` modifier opinion (tilt ±0.05/±0.1) + card line; table stored in `brain_runs.context` (migration 5b7e2d9c3a11) and shown on the console |
+| M04 situations | brain/m04-situations | market label (crash › bear phase › correction › recovery › up-trend › sideways) + unknown check (nearest neighbour vs 99th pct) + a trend/extended label per stock; `brain/market_mode.effective_mode` turns a defensive suggestion into DEFENSIVE for M07, M08, the decide fallback and the constitution (C3); `brain_episodes` (migration 8d3f6a2b9e47) re-derived after live nightly runs and by `swingtrade brain episodes-backfill`; console shows the situation and Market history |
 | M12 stock brain | brain/m12-stock | setups (pullback, breakout, base, breakdown) → situations shown in the why; delivery ≥ 1.2× usual on 3 of 5 days; institutional deals (whitelist, same-day round trips ignored); one-line profile on cards; `setup` modifier weighted by the WEIGHTS table (evidence). SHADOW |
 | M13 news and events | brain/m13-news | results within 5 trading days → `results soon` (AVOID new ideas, line on holdings); split/bonus/rights within 2 trading days → `event blackout`; ex-date ± 2 days → `price reset` (M08 ignores a `breakdown` then); ASM/GSM ≤ 4 days old → `StockState.restrictions` (AVOID); `event` modifier lines. Replays read only rows stored by their date |
 | M06 reasoning | brain/m06-meta | `swingtrade brain meta-train` → `brain_meta_vN` (combiner + honesty map); live module writes a `combined`, `calibrated` opinion; buy level = break-even after costs + 5 points. SHADOW |
@@ -145,6 +146,20 @@ do not do that by accident.
 - **Bulk/block deals are mostly HFT firms** (QE Securities, HRTI, Jump…) buying and selling the
   same stock the same day; only whitelisted institutions count, round trips cancel. Only one
   day of deals is stored, so deal weights are untested.
+
+- **M04 (2026-10-02): the spec's caution goes AGAINST this data.** Watch-list stocks, +8% before
+  −4% in 15 trading days, by market label (Aug 2021–Sep 2026): up-trend 16.9% (−0.05 R),
+  correction 16.9%, bear phase 29.2% (+0.12 R), recovery 10.1% (−0.29 R), unknown 29.6%
+  (+0.37 R), crash 55.1% (+1.0 R). Few independent events (9 crash days, 16 unknown days) and a
+  survivor-biased list (today's 49 stocks) — both inflate buy-the-dip results — so the spec's
+  default (crash, bear phase, unknown → suggest DEFENSIVE) is KEPT for safety, as one set
+  (`DEFENSIVE_LABELS`, plus the unknown flag in module.py). Owner decision pending. Re-check with
+  `docs/brain/evidence/m04_labels_vs_outcomes.py` once history is longer / survivorship-free.
+- **Backfill sanity check**: crashes found on 04 Jun 2024 (election result), 05 Aug 2024 (global
+  sell-off), 07 Apr 2025 (tariffs) — real events. NIFTY history starts Aug 2021, so the spec's
+  23 Mar 2020 replay runs only on a synthetic fixture.
+- **Never run `ruff format` on the whole package** — it reformatted 51 v1 files (again, M04);
+  reverted. Format only `src/swing_trade_ml/brain`, brain tests, and files you created.
 
 ## Testing traps (Windows)
 

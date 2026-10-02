@@ -370,6 +370,16 @@ const PROPOSAL_STATUS_BADGE: Record<BrainProposalStatus, string> = {
   dismissed: 'badge-sell',
 }
 
+/** The buy_level proposal actually in force right now (if any): the most
+ * recently decided accepted one, when it did not revert back to the
+ * default. Mirrors store.accepted_buy_level's own ordering. */
+function currentBuyLevelProposal(proposals: BrainProposal[]): BrainProposal | null {
+  const accepted = proposals.filter((p) => p.kind === 'buy_level' && p.status === 'accepted')
+  if (accepted.length === 0) return null
+  const latest = accepted.reduce((a, b) => ((a.decided_at ?? '') > (b.decided_at ?? '') ? a : b))
+  return latest.change.buy_level != null ? latest : null
+}
+
 function ProposalRow({
   p,
   pending,
@@ -461,6 +471,13 @@ export default function Brain() {
   const decideProposal = useMutation({
     mutationFn: ({ id, action, note }: { id: number; action: 'accept' | 'reject'; note: string }) =>
       api.brainProposalDecide(id, action, note),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['brainLearning'] })
+      void queryClient.invalidateQueries({ queryKey: ['brainProposals'] })
+    },
+  })
+  const revertBuyLevel = useMutation({
+    mutationFn: api.brainRevertBuyLevel,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['brainLearning'] })
       void queryClient.invalidateQueries({ queryKey: ['brainProposals'] })
@@ -782,12 +799,12 @@ export default function Brain() {
 
             {learning.data.by_band.length > 0 && (
               <>
-                <h3>Expected vs actual</h3>
+                <h3>Model score (a ranking, not a chance)</h3>
                 <div className="table-wrap">
                   <table>
                     <thead>
                       <tr>
-                        <th>Band</th>
+                        <th>Model score</th>
                         <th>Ideas</th>
                         <th>The brain said</th>
                         <th>What happened</th>
@@ -877,6 +894,12 @@ export default function Brain() {
               </>
             )}
 
+            {(learning.data.by_band.length > 0 ||
+              learning.data.by_word.length > 0 ||
+              learning.data.by_week.length > 0) && (
+              <p className="stat-sub">(1 R = the 4% risked on each trade)</p>
+            )}
+
             {learning.data.failures.length > 0 && (
               <>
                 <h3>What tends to go wrong</h3>
@@ -888,7 +911,7 @@ export default function Brain() {
               </>
             )}
 
-            {learning.data.drift_lines.length > 0 && (
+            {learning.data.drift_lines.length > 0 ? (
               <>
                 <h3>Has the market changed under the model?</h3>
                 <ul className="brain-reasons">
@@ -897,6 +920,8 @@ export default function Brain() {
                   ))}
                 </ul>
               </>
+            ) : (
+              learning.data.drift_note && <p className="stat-sub">{learning.data.drift_note}</p>
             )}
           </>
         )}
@@ -905,6 +930,16 @@ export default function Brain() {
         <p className="stat-sub">
           Changes the brain wants to make, based on the results above. Nothing changes until you press Accept.
         </p>
+        <p className="stat-sub">
+          Accepting a buy level changes what the brain suggests from its next nightly run; it does not change
+          how the existing bot trades.
+        </p>
+        {proposals.data && currentBuyLevelProposal(proposals.data) && (
+          <button disabled={revertBuyLevel.isPending} onClick={() => revertBuyLevel.mutate()}>
+            Go back to the default buy level
+          </button>
+        )}
+        {revertBuyLevel.isError && <ErrorBox error={revertBuyLevel.error} />}
         {proposals.isLoading && <Loading />}
         {proposals.isError && <ErrorBox error={proposals.error} />}
         {proposals.data && proposals.data.length === 0 && <Empty label="No proposals right now." />}

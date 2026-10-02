@@ -999,6 +999,7 @@ export interface BrainLearning {
   failures: string[]
   drift: BrainDrift[]
   drift_lines: string[]
+  drift_note: string | null
   note: string | null
 }
 

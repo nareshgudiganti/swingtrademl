@@ -471,4 +471,5 @@ export const api = {
   brainProposals: () => get<BrainProposal[]>('/brain/proposals'),
   brainProposalDecide: (id: number, action: 'accept' | 'reject', note: string) =>
     post<BrainProposal>(`/brain/proposals/${id}/${action}`, { note }),
+  brainRevertBuyLevel: () => post<BrainProposal>('/brain/proposals/buy-level/revert', {}),
 }

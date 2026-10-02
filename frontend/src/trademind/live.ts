@@ -33,7 +33,10 @@ export function useLatestRun(): UseQueryResult<BrainRun> {
 }
 
 /**
- * 'live'    — the latest run loaded (even if it has zero decisions yet).
+ * 'live'    — a latest run actually loaded: there IS a run to show.
+ * 'no-run'  — the brain is switched on (modules answered) but has never
+ *             produced a run yet. Distinct from 'live': nothing here claims
+ *             a connection to a run that doesn't exist.
  * 'off'     — /brain/* answers 404 for everything: BRAIN_ENABLED is false.
  * 'loading' — still waiting to find out which of the above it is.
  * 'error'   — a real failure (not a 404) talking to the brain.
@@ -42,12 +45,15 @@ export function useLatestRun(): UseQueryResult<BrainRun> {
  * on but has never run yet — the same status code means two different
  * things. We tell them apart with /brain/modules: that endpoint only 404s
  * when the whole brain router is off. If modules loads fine while runs/
- * latest 404s, the brain is live and screens should render their own empty
- * state ("no run yet"), not a "brain off" message.
+ * latest 404s, the brain is on but quiet ('no-run'); screens should render
+ * their own "no run yet" empty state, not a "brain off" message.
  */
-export function useBrainStatus(): 'live' | 'off' | 'loading' | 'error' {
+export function useBrainStatus(): 'live' | 'no-run' | 'off' | 'loading' | 'error' {
   const latest = useLatestRun()
-  const modules = useModules()
+  // A separate query from useModules(): this one exists only to settle the
+  // off-vs-no-run question quickly, so unlike the shared useModules() (which
+  // keeps Brain.tsx's default retries) it never retries a 404.
+  const modules = useQuery({ queryKey: ['brainModules'], queryFn: api.brainModules, retry: false })
 
   if (latest.isSuccess) return 'live'
 
@@ -58,7 +64,7 @@ export function useBrainStatus(): 'live' | 'off' | 'loading' | 'error' {
   }
 
   // latest is a 404 — ambiguous until modules resolves.
-  if (modules.isSuccess) return 'live'
+  if (modules.isSuccess) return 'no-run'
   const modulesIs404 = modules.error instanceof ApiError && modules.error.status === 404
   if (modulesIs404) return 'off'
   if (modules.isError) return 'error'

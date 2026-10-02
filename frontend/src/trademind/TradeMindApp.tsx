@@ -31,6 +31,7 @@ const NAV = [
 
 const STATUS_CHIP: Record<ReturnType<typeof useBrainStatus>, { label: string; title: string }> = {
   live: { label: 'Live', title: "Connected to the brain's latest run" },
+  'no-run': { label: 'No run yet', title: 'The brain is on but has not run yet.' },
   off: { label: 'Brain off', title: 'The brain is switched off on this server' },
   loading: { label: 'Connecting…', title: 'Checking the connection to the brain' },
   error: { label: 'Error', title: 'Could not reach the brain' },

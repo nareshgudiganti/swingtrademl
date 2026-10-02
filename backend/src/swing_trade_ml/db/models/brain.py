@@ -89,6 +89,12 @@ class BrainDecision(Base):
     max_up: Mapped[float | None] = mapped_column(Float)
     max_down: Mapped[float | None] = mapped_column(Float)
     resolved_on: Mapped[date | None] = mapped_column(Date)
+    # What kind of opinion `confidence` came from (M09): "model" for a raw
+    # score, "combined" for M06's calibrated chance, etc. — None when
+    # `confidence` is some other opinion's own confidence, not a probability
+    # at all. Only "model" rows are a ranking the buy-level proposal can
+    # reason about; the rest would silently mix incomparable numbers.
+    score_source: Mapped[str | None] = mapped_column(String(16))
 
 
 class BrainProposal(Base, TimestampMixin):
@@ -107,6 +113,21 @@ class BrainProposal(Base, TimestampMixin):
     decided_by: Mapped[str | None] = mapped_column(String(128))
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     decided_note: Mapped[str | None] = mapped_column(Text)
+
+
+class BrainLearningRun(Base):
+    """One weekly learning-loop check's feature-drift result (M09), stored so
+    the console can read it back instantly — walking every watch-listed
+    stock's history to recompute drift is far too slow to do on every page
+    load (spec finding F3)."""
+
+    __tablename__ = "brain_learning_runs"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    drift: Mapped[list] = mapped_column(JSONB, default=list)
+    drift_lines: Mapped[list] = mapped_column(JSONB, default=list)
+    drift_note: Mapped[str | None] = mapped_column(Text)
 
 
 class BrainModuleSetting(Base, TimestampMixin):

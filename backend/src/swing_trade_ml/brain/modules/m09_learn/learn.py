@@ -15,8 +15,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from swing_trade_ml.brain.modules.m09_learn import store
+from swing_trade_ml.brain.modules.m09_learn.drift import MIN_RECENT_DAYS, drift_report, recent_bar_date_count
 from swing_trade_ml.brain.modules.m09_learn.drift import drift_lines as drift_lines_for
-from swing_trade_ml.brain.modules.m09_learn.drift import drift_report
 from swing_trade_ml.brain.modules.m09_learn.failures import failure_patterns
 from swing_trade_ml.brain.modules.m09_learn.proposals import buy_level_proposal
 from swing_trade_ml.brain.modules.m09_learn.report import by_band, by_week, by_word, one_per_day
@@ -27,6 +27,7 @@ from swing_trade_ml.db.models.brain import BrainDecision, BrainRun
 from swing_trade_ml.ml.sector_map import get_sector_bucket
 
 MIN_SCORED = 30
+DRIFT_NEVER_CHECKED_NOTE = "Drift has not been checked yet — it is checked every Saturday."
 
 _ROW_COLUMNS = (
     "run_started",
@@ -82,10 +83,16 @@ def learning_report(db: Session, since: date | None = None) -> dict:
     """Expected vs actual, grouped every way the owner might ask "is it
     working?" — plus any failure patterns and feature drift worth a look.
     `note` warns when there simply isn't enough graded history yet to trust
-    any of it."""
+    any of it. Drift is never recomputed here (walking every watch-listed
+    stock's history is far too slow for a page load, F3) — it reads back
+    whatever the latest weekly `run_learning` stored."""
     rows = _scored_rows(db, since)
     n_scored = len(one_per_day(rows))
-    drift = drift_report(db)
+    stored = store.latest_learning_run(db)
+    if stored is None:
+        drift, drift_lines, drift_note = [], [], DRIFT_NEVER_CHECKED_NOTE
+    else:
+        drift, drift_lines, drift_note = stored.drift, stored.drift_lines, stored.drift_note
     note = (
         f"Only {n_scored} ideas have finished so far — too few to judge; keep collecting."
         if n_scored < MIN_SCORED
@@ -99,19 +106,41 @@ def learning_report(db: Session, since: date | None = None) -> dict:
         "by_week": by_week(rows),
         "failures": failure_patterns(rows),
         "drift": drift,
-        "drift_lines": drift_lines_for(drift),
+        "drift_lines": drift_lines,
+        "drift_note": drift_note,
         "note": note,
     }
 
 
+def _check_drift(db: Session) -> tuple[list[dict], list[str], str | None]:
+    """Compute this week's drift and a plain note for why it is empty, when
+    that is for a reason the owner should know about (not enough recent
+    history yet) rather than just nothing having drifted."""
+    drift = drift_report(db)
+    lines = drift_lines_for(drift)
+    note = None
+    if not drift:
+        n = recent_bar_date_count(db)
+        if n < MIN_RECENT_DAYS:
+            note = (
+                "Not enough recent days yet to check whether the market has changed "
+                f"({n} so far; needs {MIN_RECENT_DAYS})."
+            )
+    return drift, lines, note
+
+
 def run_learning(db: Session, since: date | None = None) -> dict:
     """The weekly job (and `swingtrade brain learn`): score every idea whose
-    outcome is now known, build the report, and propose a different buy
-    level when the evidence plainly supports one (never applied by itself —
-    the owner must accept it, constitution C9)."""
+    outcome is now known, check feature drift and store it (F3), build the
+    report, and propose a different buy level when the evidence plainly
+    supports one (never applied by itself — the owner must accept it,
+    constitution C9)."""
     today = datetime.now(UTC).astimezone(IST).date()
-    score_pending(db, today)
+    newly_scored = score_pending(db, today)
+    drift, drift_lines, drift_note = _check_drift(db)
+    store.record_learning_run(db, drift, drift_lines, drift_note)
     report = learning_report(db, since)
+    report["newly_scored"] = newly_scored
     rows = one_per_day(_scored_rows(db, since))
     current = store.accepted_buy_level(db) or settings.ML_MIN_CONFIDENCE
     draft = buy_level_proposal(rows, current)

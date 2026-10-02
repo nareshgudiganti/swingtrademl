@@ -787,8 +787,51 @@ def test_learning_report_shape_on_empty_db(db_session):
         "failures": [],
         "drift": [],
         "drift_lines": [],
+        "drift_note": "Drift has not been checked yet — it is checked every Saturday.",
         "note": "Only 0 ideas have finished so far — too few to judge; keep collecting.",
     }
+
+
+def test_learning_report_does_not_recompute_drift(db_session, monkeypatch):
+    """Drift is only ever computed by `run_learning` (the weekly job/CLI) and
+    stored; `learning_report` must read it back, not recompute it on every
+    page load."""
+
+    def _boom(*a, **k):
+        raise AssertionError("learning_report must not call drift_report")
+
+    monkeypatch.setattr(learn_mod, "drift_report", _boom)
+    stored_drift = [{"feature": "rsi_14", "psi": 0.18, "level": "moderate"}]
+    stored_lines = ["rsi_14 has shifted a little from what the model learnt on (stability index 0.18)."]
+    store.record_learning_run(db_session, stored_drift, stored_lines, None)
+
+    report = learn_mod.learning_report(db_session)
+
+    assert report["drift"] == stored_drift
+    assert report["drift_lines"] == stored_lines
+    assert report["drift_note"] is None
+
+
+def test_learning_report_drift_note_when_never_checked(db_session):
+    report = learn_mod.learning_report(db_session)
+    assert report["drift"] == [] and report["drift_lines"] == []
+    assert report["drift_note"] == "Drift has not been checked yet — it is checked every Saturday."
+
+
+def test_run_learning_stores_the_drift_check(db_session):
+    """`run_learning` (not `learning_report`) is what actually checks drift,
+    and it must persist what it found so the console can read it back."""
+    report = learn_mod.run_learning(db_session)
+    stored = store.latest_learning_run(db_session)
+    assert stored is not None
+    assert report["drift"] == stored.drift
+    assert report["drift_lines"] == stored.drift_lines
+    assert report["drift_note"] == stored.drift_note
+    # No active model and no feature snapshots: not enough recent days yet.
+    assert (
+        report["drift_note"]
+        == "Not enough recent days yet to check whether the market has changed (0 so far; needs 15)."
+    )
 
 
 def _scored_run(

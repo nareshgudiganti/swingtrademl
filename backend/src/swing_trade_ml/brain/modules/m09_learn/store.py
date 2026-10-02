@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from swing_trade_ml.brain.modules.m09_learn.proposals import Draft
-from swing_trade_ml.db.models.brain import BrainProposal
+from swing_trade_ml.db.models.brain import BrainLearningRun, BrainProposal
 
 
 class UnknownProposalError(LookupError):
@@ -87,3 +87,25 @@ def accepted_buy_level(db: Session) -> float | None:
         .limit(1)
     ).scalar_one_or_none()
     return None if row is None else row.change.get("buy_level")
+
+
+# --- learning runs (feature drift, checked weekly) ---------------------------
+
+
+def record_learning_run(
+    db: Session, drift: list[dict], drift_lines: list[str], drift_note: str | None
+) -> BrainLearningRun:
+    """Store one weekly check's drift result so the console can read it back
+    without recomputing it (that walks every watch-listed stock's history)."""
+    row = BrainLearningRun(drift=drift, drift_lines=drift_lines, drift_note=drift_note)
+    db.add(row)
+    db.commit()
+    return row
+
+
+def latest_learning_run(db: Session) -> BrainLearningRun | None:
+    return db.execute(
+        select(BrainLearningRun)
+        .order_by(BrainLearningRun.created_at.desc(), BrainLearningRun.id.desc())
+        .limit(1)
+    ).scalar_one_or_none()

@@ -27,6 +27,7 @@ the short "what we learned" companion: read it before starting a module.
 | M08 decision engine | brain/m08-decide | draft → named rules (only lower) → opportunity notes; rules in `m08_decide/rules.py`, numbers in `policy.py` |
 | M16 alerts and cards | brain/m16-alerts | detectors (pluggable) → one Telegram message per run, once a day; console preview/send; sidebar badge; Copy plan |
 | M11 sector brain | brain/m11-sector | ranks 15 sector indices vs NIFTY (20 and 60 days), rotation quadrant, `sector` modifier opinion (tilt ±0.05/±0.1) + card line; table stored in `brain_runs.context` (migration 5b7e2d9c3a11) and shown on the console |
+| M14 portfolio | brain/m14-portfolio | 60-day return correlations (≥ 40 shared days), pairs > 0.7 and concentration into `PortfolioState`; `portfolio` modifier per idea (−0.1 "moves closely with X, which you already hold", +0.05 "adds variety"); allocator judges an idea that pairs with a stronger one of the same run last (`RiskVerdict.note`, shown by M08); `POST /brain/whatif`; console panel + what-if form |
 | M05 memory | brain/m05-memory | `brain_experience` (migration 3c9a7e1f5b28, 51k stock-days, rebuilt by `swingtrade brain memory-build` and after live nightly runs); key = market label · stock trend · last 20 days · volatility; recall widens below 30 (vol, then market, then trend) and records it; reports raw history AND honest figures (base + 0.25 × difference). SHADOW |
 | M04 situations | brain/m04-situations | market label (crash › bear phase › correction › recovery › up-trend › sideways) + unknown check (nearest neighbour vs 99th pct) + a trend/extended label per stock; `brain/market_mode.effective_mode` turns a defensive suggestion into DEFENSIVE for M07, M08, the decide fallback and the constitution (C3); `brain_episodes` (migration 8d3f6a2b9e47) re-derived after live nightly runs and by `swingtrade brain episodes-backfill`; console shows the situation and Market history |
 | M12 stock brain | brain/m12-stock | setups (pullback, breakout, base, breakdown) → situations shown in the why; delivery ≥ 1.2× usual on 3 of 5 days; institutional deals (whitelist, same-day round trips ignored); one-line profile on cards; `setup` modifier weighted by the WEIGHTS table (evidence). SHADOW |
@@ -175,6 +176,10 @@ do not do that by accident.
 - **Three modules, one lesson (M06, M12, M04, M05):** on these 49 large caps, under +8%/−4% in
   15 days, nothing simple has a real edge yet. The next real gain needs new information
   (fundamentals, news, flows) or a different universe/rule — not more rules on prices.
+
+- **M14 (2026-10-02)**: on 49 watch-list stocks only 6 of ~1,176 pairs exceed 0.7 (INFY–TCS,
+  JSWSTEEL–TATASTEEL, IT with TECHM, ADANIENT–ADANIPORTS); median 0.15 — the spec's 0.7 picks
+  real twins. Paper book today: 13 holdings, largest 1%, top sector FMCG 4%, no twins.
 
 ## Testing traps (Windows)
 

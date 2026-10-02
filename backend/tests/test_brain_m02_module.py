@@ -111,6 +111,7 @@ def test_m02_asks_the_reader_to_refresh_a_stale_market_cache(db_session, market,
     _run(db_session)
     assert calls
 
+
 # --- storage ---------------------------------------------------------------
 
 

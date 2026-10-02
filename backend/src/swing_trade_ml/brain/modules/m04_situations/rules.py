@@ -92,9 +92,9 @@ def _evidence(frame: pd.DataFrame) -> str:
             return f"NIFTY fell {-row['ret1']:.1%} on {day:%d %b %Y}."
         return f"India VIX jumped {row['vix_jump']:.0%} on {day:%d %b %Y} (fear spiking)."
     if label == "bear phase":
-        return f"NIFTY is {-last['dd']:.0%} below its 1-year high and under its 200-day average."
+        return f"NIFTY is {-last['dd']:.1%} below its 1-year high and under its 200-day average."
     if label == "correction":
-        return f"NIFTY is {-last['dd']:.0%} below its 1-year high."
+        return f"NIFTY is {-last['dd']:.1%} below its 1-year high."
     if label == "recovery":
         return (
             f"NIFTY is back within {-CORRECTION:.0%} of its high after falling "

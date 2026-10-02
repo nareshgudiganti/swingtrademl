@@ -194,7 +194,7 @@ def test_the_market_gets_one_situation_with_its_evidence():
     ctx = _module_run(_path((400, 0.0005), (30, -0.006)))
     (market,) = [s for s in ctx.situations if s.scope == "market"]
     assert market.subject == "NIFTY 50" and market.label == "bear phase" and market.suggest_defensive
-    assert market.evidence[0].startswith("NIFTY is 17% below its 1-year high")
+    assert market.evidence[0].startswith("NIFTY is 16.5% below its 1-year high")
 
 
 def test_each_stock_gets_a_trend_label_and_extended_when_stretched():

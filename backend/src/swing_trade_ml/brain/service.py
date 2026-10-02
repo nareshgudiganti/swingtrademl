@@ -184,6 +184,13 @@ def _quality_summary(ctx: BrainContext) -> dict:
     }
 
 
+def _context_summary(ctx: BrainContext) -> dict:
+    from swing_trade_ml.brain.modules.m11_sector.ranking import plain_name
+
+    sectors = sorted(ctx.sectors.values(), key=lambda s: s.rank)
+    return {"sectors": [{**_jsonable(asdict(s)), "name": plain_name(s.sector)} for s in sectors]}
+
+
 def _store(db: Session, ctx: BrainContext, registry: ModuleRegistry, modes: dict, ms: int) -> None:
     req = ctx.request
     used_modes = {
@@ -204,6 +211,7 @@ def _store(db: Session, ctx: BrainContext, registry: ModuleRegistry, modes: dict
             modules=used_modes,
             trace=[_jsonable(asdict(e)) for e in ctx.trace],
             quality=_quality_summary(ctx),
+            context=_context_summary(ctx),
         )
     )
     db.flush()

@@ -835,10 +835,20 @@ export interface BrainRunSummary {
   counts: Record<string, number>
 }
 
+export interface BrainSector {
+  sector: string
+  name: string
+  rank: number
+  of_total: number
+  strength_20d: number | null
+  rotation: 'leading' | 'improving' | 'weakening' | 'lagging' | 'unknown'
+}
+
 export interface BrainRun extends BrainRunSummary {
   book: string
   modules: Record<string, ModuleMode>
   quality: BrainQuality
+  sectors: BrainSector[]
   decisions: BrainDecision[]
 }
 

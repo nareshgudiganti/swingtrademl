@@ -87,3 +87,39 @@ def test_why_returns_one_decision_and_its_trace(client, stock):
     body = client.get("/api/v1/brain/why/BRAINAPI", headers=HEADERS).json()
     assert body["decision"]["symbol"] == "BRAINAPI"
     assert any(e["module_id"] == "fallback" for e in body["trace"])
+
+
+def test_a_run_shows_its_sector_table(client, db_session, stock):
+    from brain_fakes import make_module, registry
+
+    from swing_trade_ml.brain import contracts as c
+    from swing_trade_ml.brain import service
+    from swing_trade_ml.brain.module import Step
+
+    def sectors(view):
+        return c.Contribution(
+            sectors=(
+                c.SectorState(sector="NIFTY IT", rank=1, of_total=2, strength_20d=0.03, rotation="leading"),
+                c.SectorState(sector="NIFTY BANK", rank=2, of_total=2, strength_20d=-0.01, rotation="lagging"),
+            )
+        )
+
+    plug = make_module("M11", Step.STATE, writes=("SectorState@1",), run=sectors, kind="plugin")
+    _, run_id = service.run_brain(db_session, symbols=["BRAINAPI"], as_of=AS_OF, registry=registry(plug))
+    db_session.commit()
+    body = client.get(f"/api/v1/brain/runs/{run_id}", headers=HEADERS).json()
+    assert [(s["rank"], s["name"], s["rotation"]) for s in body["sectors"]] == [
+        (1, "IT", "leading"),
+        (2, "Banks", "lagging"),
+    ]
+    assert body["sectors"][0]["strength_20d"] == 0.03
+
+
+def test_runs_without_context_show_no_sectors(client, stock):
+    r = client.post(
+        "/api/v1/brain/runs",
+        json={"kind": "nightly", "symbols": ["BRAINAPI"], "as_of": AS_OF.isoformat()},
+        headers=HEADERS,
+    )
+    body = client.get(f"/api/v1/brain/runs/{r.json()['run_id']}", headers=HEADERS).json()
+    assert body["sectors"] == []

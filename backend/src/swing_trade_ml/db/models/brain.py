@@ -40,6 +40,9 @@ class BrainRun(Base):
     # Only such runs are a baseline for the next alert; a manual "Run now"
     # never is, so it cannot swallow the scheduled run's alerts.
     alerts_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # What the run knew beyond its decisions, for the console: {"sectors": [...]}
+    # (M11). None on runs stored before this column existed.
+    context: Mapped[dict | None] = mapped_column(JSONB)
 
 
 class BrainDecision(Base):

@@ -109,6 +109,7 @@ def _run_out(db, run: BrainRun) -> dict:
     decisions = service.decisions_for(db, run.id)
     return {
         "quality": run.quality,
+        "sectors": (run.context or {}).get("sectors", []),
         "error": run.error,
         "run_id": run.id,
         "kind": run.kind,

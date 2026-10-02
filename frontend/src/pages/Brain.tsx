@@ -31,6 +31,13 @@ const STEP_LABEL: Record<string, string> = {
 
 const MODE_LABEL: Record<ModuleMode, string> = { on: 'On', shadow: 'Trial', off: 'Off' }
 
+const ROTATION: Record<string, string> = {
+  leading: 'Leading — stronger for 1 and 3 months',
+  improving: 'Improving — stronger this month',
+  weakening: 'Weakening — slipping this month',
+  lagging: 'Lagging — weaker for 1 and 3 months',
+}
+
 const MARKET: Record<MarketMode, { label: string; className: string; plain: string }> = {
   NORMAL: { label: 'NORMAL', className: 'banner-ok', plain: 'New ideas are allowed at full size.' },
   DEFENSIVE: {
@@ -350,6 +357,7 @@ export default function Brain() {
   const queryClient = useQueryClient()
   const [open, setOpen] = useState<BrainDecision | null>(null)
   const [showQuiet, setShowQuiet] = useState(false)
+  const [showSectors, setShowSectors] = useState(false)
   const [whySymbol, setWhySymbol] = useState('')
 
   const latest = useQuery({
@@ -522,6 +530,43 @@ export default function Brain() {
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {run && (run.sectors ?? []).length > 0 && (
+        <div className="card" style={{ marginBottom: '1.25rem' }}>
+          <div className="between">
+            <h2>Sectors</h2>
+            <button onClick={() => setShowSectors((v) => !v)}>{showSectors ? 'Hide' : 'Show'}</button>
+          </div>
+          <p className="stat-sub">
+            Which parts of the market are doing better than NIFTY. Stocks in stronger sectors get a small nudge
+            when ideas are compared; a sector never decides a trade on its own.
+          </p>
+          {showSectors && (
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Rank</th>
+                    <th>Sector</th>
+                    <th>Direction</th>
+                    <th>Last month vs NIFTY</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {run.sectors.map((s) => (
+                    <tr key={s.sector}>
+                      <td>{s.rank}</td>
+                      <td>{s.name}</td>
+                      <td>{ROTATION[s.rotation] ?? s.rotation}</td>
+                      <td>{s.strength_20d == null ? '—' : `${s.strength_20d >= 0 ? '+' : ''}${(s.strength_20d * 100).toFixed(1)}%`}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 

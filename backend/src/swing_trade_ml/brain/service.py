@@ -139,19 +139,28 @@ def run_brain(
 
 
 def _sync_episodes(db: Session, reader: DatedReader, registry: ModuleRegistry, modes: dict) -> None:
-    """Refresh the market episodes (M04's memory) after a live nightly run.
+    """After a live nightly run, refresh what the brain remembers: market
+    episodes (M04, when on) and the experience table (M05, unless off).
     Replays and why-runs never write them; a failure here never fails the run."""
-    cls = registry.get("M04")
-    if cls is None or resolve_mode(cls.manifest, modes.get("M04")) is not Mode.ON:
-        return
-    from swing_trade_ml.brain.modules.m04_situations import store
+    from swing_trade_ml.brain.modules.m04_situations import store as episodes
+    from swing_trade_ml.brain.modules.m05_memory import store as memory
 
-    try:
-        with db.begin_nested():
-            store.sync_from_reader(db, reader)
-        db.commit()
-    except Exception as exc:  # noqa: BLE001 — episodes are a by-product, not the run
-        log.warning("brain.episodes.sync_failed", error=str(exc))
+    # (module, modes it runs in, store, function) — looked up at call time.
+    jobs = (
+        ("M04", (Mode.ON,), episodes, "sync_from_reader"),
+        ("M05", (Mode.ON, Mode.SHADOW), memory, "rebuild_from_reader"),
+    )
+    for module_id, wanted, store, name in jobs:
+        cls = registry.get(module_id)
+        if cls is None or resolve_mode(cls.manifest, modes.get(module_id)) not in wanted:
+            continue
+        job = getattr(store, name)
+        try:
+            with db.begin_nested():
+                job(db, reader)
+            db.commit()
+        except Exception as exc:  # noqa: BLE001 — memory is a by-product, not the run
+            log.warning("brain.memory.sync_failed", module=module_id, error=str(exc))
 
 
 def _record_failure(db: Session, request: c.RunRequest, exc: Exception, ms: int) -> None:

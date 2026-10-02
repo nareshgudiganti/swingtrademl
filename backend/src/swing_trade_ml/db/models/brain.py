@@ -134,3 +134,26 @@ class BrainEpisode(Base, TimestampMixin):
     end_day: Mapped[date | None] = mapped_column(Date)
     state_key: Mapped[str] = mapped_column(String(64), default="")
     stats: Mapped[dict] = mapped_column(JSONB, default=dict)
+
+
+class BrainExperience(Base):
+    """One past stock-day the memory (M05) can recall: its situation key and
+    what happened next under the locked rule. Rebuilt from candles, so it is
+    a cache of history, not a record of anything the brain did."""
+
+    __tablename__ = "brain_experience"
+    __table_args__ = (UniqueConstraint("symbol", "day", name="uq_brain_experience"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    symbol: Mapped[str] = mapped_column(String(64), index=True)
+    day: Mapped[date] = mapped_column(Date, index=True)
+    market: Mapped[str] = mapped_column(String(32))
+    stock: Mapped[str] = mapped_column(String(16))
+    trend: Mapped[str] = mapped_column(String(16))
+    vol: Mapped[str] = mapped_column(String(16))
+    outcome: Mapped[str] = mapped_column(String(8))  # target | stop | timeout
+    exit_return: Mapped[float] = mapped_column(Float)
+    days: Mapped[int] = mapped_column(Integer)
+    outcome_day: Mapped[date] = mapped_column(Date, index=True)
+    path_day: Mapped[date] = mapped_column(Date)
+    path: Mapped[list] = mapped_column(JSONB, default=list)

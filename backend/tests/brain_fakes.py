@@ -77,6 +77,12 @@ class FakeReader:
     def dated_closes(self, symbol: str) -> pd.Series:
         return pd.Series(dtype=float)
 
+    def dated_bars(self, symbol: str) -> pd.DataFrame:
+        return pd.DataFrame(columns=["day", "open", "high", "low", "close", "volume"])
+
+    def experience(self) -> pd.DataFrame:
+        return pd.DataFrame()
+
     def delivery_rows(self, symbols, days: int = 40) -> dict:
         return {}
 

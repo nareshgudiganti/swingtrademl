@@ -366,6 +366,14 @@ def cmd_brain(args: argparse.Namespace) -> int:
                 print(f"  {name:<19} error (Brier) {m['brier']:.4f}  AUC {auc}  top-10% hit rate {top}")
             print(f"Chosen: {r['chosen']} — {r['why']}")
             return 0
+        if args.brain_command == "memory-build":
+            from swing_trade_ml.brain.modules.m05_memory import store
+            from swing_trade_ml.brain.reader import DatedReader
+
+            count = store.rebuild_from_reader(db, DatedReader(db, datetime.now(UTC), live=True))
+            db.commit()
+            print(f"Stored {count} past stock-days with what happened next (+8% before -4% in 15 trading days).")
+            return 0
         if args.brain_command == "episodes-backfill":
             from swing_trade_ml.brain.modules.m04_situations import store
             from swing_trade_ml.brain.reader import DatedReader
@@ -512,6 +520,7 @@ def build_parser() -> argparse.ArgumentParser:
     b = brain_sub.add_parser("meta-train", help="Train and test M06's calibrated combiner on unseen months")
     b.add_argument("--barrier-model", default="swing_classifier_barrier")
     b.add_argument("--swing-model", default="swing_classifier")
+    brain_sub.add_parser("memory-build", help="Rebuild the memory of past stock-days and their outcomes (M05)")
     brain_sub.add_parser("episodes-backfill", help="Label the whole NIFTY history into market episodes (M04)")
     b = brain_sub.add_parser("why", help="Run the brain for one stock and show its full trace")
     b.add_argument("symbol")

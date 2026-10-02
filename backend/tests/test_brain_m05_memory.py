@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import numpy as np
 import pandas as pd
 import pytest
 
+from brain_fakes import FakeReader, make_module, registry
+from swing_trade_ml.brain import contracts as c
+from swing_trade_ml.brain.module import REGISTRY, Mode, Step
 from swing_trade_ml.brain.modules.m05_memory.cases import barrier_outcomes, build_cases, state_keys
+from swing_trade_ml.brain.modules.m05_memory.module import Memory
 from swing_trade_ml.brain.modules.m05_memory.recall import recall
+from swing_trade_ml.brain.runner import execute
 
 
 def _bars(close, spread=0.01, start="2024-01-01") -> pd.DataFrame:
@@ -163,3 +168,86 @@ def test_recall_also_reports_the_honest_figures():
     base_mean = (12 * 0.08 - 22 * 0.04 + 166 * 0.01) / 200
     assert r.mean_return == pytest.approx(mean_similar)
     assert r.honest_mean_return == pytest.approx(base_mean + 0.25 * (mean_similar - base_mean))
+
+
+# --- storage, the module and the nightly rebuild ---------------------------------------------
+
+
+def _history_cases():
+    rows = [
+        _cases(30, "target", stock="up", trend="rising"),
+        _cases(30, "stop", stock="down", trend="falling"),
+    ]
+    return pd.concat(rows, ignore_index=True)
+
+
+class MemoryReader(FakeReader):
+    def __init__(self, cases, bars, **kw):
+        super().__init__(**kw)
+        self.as_of = datetime(2026, 9, 1, 12, tzinfo=UTC)
+        self._cases, self._bars_by = cases, bars
+
+    def experience(self):
+        return self._cases
+
+    def dated_bars(self, symbol):
+        return self._bars_by.get(symbol, _bars([]))
+
+
+def test_m05_is_the_remember_step_and_starts_on_trial():
+    import swing_trade_ml.brain.modules  # noqa: F401
+
+    assert REGISTRY.get("M05") is Memory
+    m = Memory.manifest
+    assert m.step is Step.REMEMBER and m.kind == "step" and m.default_mode is Mode.SHADOW
+
+
+def test_ideas_and_holdings_get_a_recall_keyed_on_todays_situation():
+    rising = _bars(_rate(260, 0.003), start="2025-06-01")
+    falling = _bars(_rate(260, -0.003), start="2025-06-01")
+    reader = MemoryReader(
+        _history_cases(),
+        {"ABC": rising, "HELD": falling},
+        holdings=(c.Holding(symbol="HELD", qty=1, avg_price=1.0),),
+    )
+    market = c.Situation(scope="market", subject="NIFTY 50", label="correction", confidence=0.8)
+
+    def recognise(view):
+        return c.Contribution(situations=(market,))
+
+    m04 = make_module("M04", Step.RECOGNISE, writes=("Situation@1",), run=recognise)
+    req = c.RunRequest(run_id="t", kind="nightly", as_of=reader.as_of, universe=("ABC",), live=True)
+    ctx = execute(req, reader, registry(m04, Memory), {"M05": Mode.ON})
+    assert ctx.recalls["ABC"].hit_rate == 1.0 and "market correction" in ctx.recalls["ABC"].key
+    assert ctx.recalls["HELD"].hit_rate == 0.0  # holdings get one too (M15 needs the path)
+
+
+def test_a_stock_without_enough_bars_gets_no_recall():
+    reader = MemoryReader(_history_cases(), {})
+    req = c.RunRequest(run_id="t", kind="nightly", as_of=reader.as_of, universe=("ABC",), live=True)
+    ctx = execute(req, reader, registry(Memory), {"M05": Mode.ON})
+    assert "ABC" not in ctx.recalls
+
+
+def test_experience_round_trips_through_the_table(db_session):
+    from swing_trade_ml.brain.modules.m05_memory.store import load_experience, sync_experience
+
+    cases = _history_cases()
+    cases["day"] = [date(2026, 1, 5) + timedelta(days=i) for i in range(len(cases))]
+    assert sync_experience(db_session, cases) == 60
+    assert sync_experience(db_session, cases) == 60  # replaced, not doubled
+    back = load_experience(db_session, upto=AS_OF)
+    assert len(back) == 60 and set(back["outcome"]) == {"target", "stop"}
+    assert len(back.iloc[0]["path"]) == 15
+    assert load_experience(db_session, upto=date(2026, 1, 1)).empty  # nothing known yet
+
+
+def test_only_live_nightly_runs_rebuild_the_memory(db_session, monkeypatch):
+    from swing_trade_ml.brain import service
+    from swing_trade_ml.brain.modules.m05_memory import store
+
+    calls = []
+    monkeypatch.setattr(store, "rebuild_from_reader", lambda db, reader: calls.append(reader.live))
+    for kind, as_of in (("nightly", None), ("why", None), ("nightly", datetime(2026, 9, 1, 12, tzinfo=UTC))):
+        service.run_brain(db_session, kind=kind, as_of=as_of, symbols=["ZZZ"])
+    assert calls == [True]

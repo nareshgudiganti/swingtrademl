@@ -297,6 +297,21 @@ class DatedReader:
             dtype=float,
         )
 
+    def dated_bars(self, symbol: str) -> pd.DataFrame:
+        """All daily bars up to as_of with their IST trading day (day, open,
+        high, low, close, volume)."""
+        bars = self.ohlcv(symbol, 100_000)
+        if bars.empty:
+            return pd.DataFrame(columns=["day", "open", "high", "low", "close", "volume"])
+        bars.insert(0, "day", bars["ts"].dt.tz_convert(IST).dt.date)
+        return bars.drop(columns=["ts"])
+
+    def experience(self) -> pd.DataFrame:
+        """Past cases whose outcome was known by the run's IST date (M05)."""
+        from swing_trade_ml.brain.modules.m05_memory.store import load_experience
+
+        return load_experience(self.db, self.as_of.astimezone(IST).date())
+
     def index_closes(self) -> pd.Series:
         return self._closes(settings.BENCHMARK_INDEX_SYMBOL)
 

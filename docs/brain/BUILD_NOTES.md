@@ -11,7 +11,8 @@ the short "what we learned" companion: read it before starting a module.
   holdings HOLD / MONITOR / REDUCE / EXIT; market NORMAL / DEFENSIVE / NO NEW TRADES.
 - Locked trade rule: +8% target, −4% stop, half booked at +5%, up to 15 trading days.
 - Rules must be addable and removable without touching the rest (pluggable rule lists).
-- Open: combine opinions with one calibrated meta-model (decide before M06).
+- M06 = ONE calibrated combining model (owner, 2026-10-01). Starts in trial (SHADOW); switch
+  on only if unseen-month evidence says its chances pay after costs.
 
 ## Status
 
@@ -25,6 +26,7 @@ the short "what we learned" companion: read it before starting a module.
 | M03 + M10 | brain/m03-m10-market | state facts + market mode on v1's regime table |
 | M08 decision engine | brain/m08-decide | draft → named rules (only lower) → opportunity notes; rules in `m08_decide/rules.py`, numbers in `policy.py` |
 | M16 alerts and cards | brain/m16-alerts | detectors (pluggable) → one Telegram message per run, once a day; console preview/send; sidebar badge; Copy plan |
+| M06 reasoning | brain/m06-meta | `swingtrade brain meta-train` → `brain_meta_vN` (combiner + honesty map); live module writes a `combined`, `calibrated` opinion; buy level = break-even after costs + 5 points. SHADOW |
 
 ## How to add a module (checklist)
 
@@ -92,6 +94,19 @@ the short "what we learned" companion: read it before starting a module.
   database (v1's 15:40 ingest refreshes it, and the 15:45 scan may be reading it); naive times are
   India time; per-module `intraday_budget_s`; EV costs on a real position size; `downgrade` keeps a
   holding's shares; fallbacks fill gaps only; one shared opinion rule set.
+
+- **M06 (2026-10-01/02): ranking is not the same as a chance you can trade on.** On 9,551
+  unseen stock-days (Nov 2025–Aug 2026) the combiner ranks better than the old model (AUC 0.636
+  vs 0.614; top 10% hit 40.9% vs 17.4% base), but the first live run gave every stock 57–82%
+  while its own record said such scores came true about a third of the time — the logistic step
+  extrapolated into a market (Sep 2026, falling) it had barely seen. Fix: the **honesty map**
+  (isotonic on walk-forward predictions, capped where fewer than 20 *different days* back a
+  level — 47 stocks on one day are one market bet). Result: ceiling 24.5%, so every stock is
+  WAIT against the 41% needed. M06 stays SHADOW. Do not "fix" this by lowering the margin:
+  the evidence says no score level has paid +8%/−4% after costs over enough days.
+- **M02 vs batch features differ on `obv_slope`** (snapshot −0.96 vs batch −0.02 for WIPRO,
+  09-07): OBV is cumulative, so its slope depends on how many bars were loaded (M02 loads 400).
+  Small effect on scores today (0.75 vs 0.74), but it is train/serve skew — fix in M02 later.
 
 ## Testing traps (Windows)
 

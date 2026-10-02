@@ -27,6 +27,7 @@ the short "what we learned" companion: read it before starting a module.
 | M08 decision engine | brain/m08-decide | draft → named rules (only lower) → opportunity notes; rules in `m08_decide/rules.py`, numbers in `policy.py` |
 | M16 alerts and cards | brain/m16-alerts | detectors (pluggable) → one Telegram message per run, once a day; console preview/send; sidebar badge; Copy plan |
 | M11 sector brain | brain/m11-sector | ranks 15 sector indices vs NIFTY (20 and 60 days), rotation quadrant, `sector` modifier opinion (tilt ±0.05/±0.1) + card line; table stored in `brain_runs.context` (migration 5b7e2d9c3a11) and shown on the console |
+| M09 learning loop | brain/m09-learn | scores every live-nightly IDEA decision (+8%/−4%/15d from the decision day's close, no look-ahead) into `brain_decisions` outcome columns; expected vs actual by model score (model-scored rows only — `score_source`), by word, by week; stop-out patterns; feature drift (≥ 15 recent days, market-wide features once per day) stored weekly in `brain_learning_runs`; buy-level proposals in `brain_proposals` — NOTHING changes until Accept (reader then uses the accepted buy level; "Go back to the default" reverts). Weekly job Sat 10:00 IST, `swingtrade brain learn`, `/brain/learning`, `/brain/proposals`, console "Learning from results". Built with subagent-driven development (plan 2026-10-03-brain-m09-learning.md) |
 | M15 trade tracker | brain/m15-tracker | STATE plug-in (runs intraday too): each holding with an entry day vs the 25–75% band of similar trades keyed on its ENTRY-day situation (M05 `similar_cases`/`typical_path`; all past trades when no match, said on the card); on track / ahead / drift / breakdown / stop hit / past horizon / no data; M08 `off_track` rule → MONITOR with what changed; +5% evidence on REDUCE; `brain_track` (migration 6e1b4d8a2c73, stop never stored lower), `GET /brain/track/{symbol}`, `HoldingTracker` chart |
 | M14 portfolio | brain/m14-portfolio | 60-day return correlations (≥ 40 shared days), pairs > 0.7 and concentration into `PortfolioState`; `portfolio` modifier per idea (−0.1 "moves closely with X, which you already hold", +0.05 "adds variety"); allocator judges an idea that pairs with a stronger one of the same run last (`RiskVerdict.note`, shown by M08); `POST /brain/whatif`; console panel + what-if form |
 | M05 memory | brain/m05-memory | `brain_experience` (migration 3c9a7e1f5b28, 51k stock-days, rebuilt by `swingtrade brain memory-build` and after live nightly runs); key = market label · stock trend · last 20 days · volatility; recall widens below 30 (vol, then market, then trend) and records it; reports raw history AND honest figures (base + 0.25 × difference). SHADOW |
@@ -188,6 +189,13 @@ do not do that by accident.
 - **Shell traps**: one long bash command with several heredocs can fail to parse and run
   NOTHING — write files with the Write tool, keep edit scripts in the scratchpad. Prettier has no
   repo config here: never run it on existing files (defaults reformat to double quotes).
+
+- **M09 (2026-10-03)**: on the check DB nothing can be scored yet — stored runs are 30 Sep–2 Oct
+  but prices end 07 Sep. The first drift check compared ONE day × 60 stocks (index 8.4,
+  nonsense); fixed with a 15-day minimum and once-per-day market-wide features.
+  `BrainDecision.confidence` holds different kinds of number — `score_source` says which.
+- **Subagents**: implementers must never use `git stash` (shared stack); one full-suite run had
+  1 unidentified failure that did not reproduce on two re-runs (960 passed) — watch for a flaky test.
 
 ## Testing traps (Windows)
 

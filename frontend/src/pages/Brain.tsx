@@ -13,6 +13,7 @@ import type {
 } from '../api/types'
 import { Empty, ErrorBox, Loading } from '../components/Loading'
 import Modal from '../components/Modal'
+import { HoldingTracker } from '../components/HoldingTracker'
 import { formatCurrency, formatDateTime } from '../lib/format'
 
 /* The brain console (build book module M17). Everything here is in plain
@@ -232,6 +233,8 @@ function DecisionDetail({
       <p className="muted" style={{ marginTop: '0.3rem' }}>
         {WORD_PLAIN[finalWord(decision)]}
       </p>
+
+      {decision.kind === 'holding' && <HoldingTracker symbol={decision.symbol} />}
 
       {decision.overruled_word && (
         <div className="banner banner-info" style={{ margin: '0.6rem 0' }}>

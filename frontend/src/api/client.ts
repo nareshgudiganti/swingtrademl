@@ -5,6 +5,7 @@ import type {
   BrainAlertSend,
   BrainDecision,
   BrainEpisode,
+  BrainTrack,
   BrainWhatIf,
   BrainHealth,
   BrainModules,
@@ -446,6 +447,7 @@ export const api = {
     put<{ module_id: string; mode: string }>(`/brain/modules/${id}`, { mode }),
   brainHealth: () => get<BrainHealth>('/brain/health'),
   brainEpisodes: () => get<BrainEpisode[]>('/brain/episodes'),
+  brainTrack: (symbol: string) => get<BrainTrack>(`/brain/track/${encodeURIComponent(symbol)}`),
   brainWhatIf: (symbol: string, qty: number, price?: number) =>
     post<BrainWhatIf>('/brain/whatif', { symbol, qty, price }),
   brainRuns: (limit = 10) => get<BrainRunSummary[]>(`/brain/runs?limit=${limit}`),

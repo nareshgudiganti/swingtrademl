@@ -880,6 +880,13 @@ export interface BrainWhatIf {
   warnings: string[]
 }
 
+export interface BrainTrack {
+  symbol: string
+  opened_on: string | null
+  points: { day: string; day_n: number; ret: number; status: string; reason: string; stop: number | null }[]
+  band: [number, number, number, number][]
+}
+
 export interface BrainRun extends BrainRunSummary {
   book: string
   modules: Record<string, ModuleMode>

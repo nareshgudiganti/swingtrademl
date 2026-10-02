@@ -19,7 +19,7 @@ from collections.abc import Iterable
 from swing_trade_ml.brain.contracts import Opinion
 
 SOURCE_PREFERENCE = ("combined", "model")
-MODIFIER_SOURCES = frozenset({"sector", "event", "setup"})
+MODIFIER_SOURCES = frozenset({"sector", "event", "setup", "portfolio"})
 # How much the modifiers' stances move the order: a leading sector (+0.1)
 # adds 2.5 points to a 0..1 strength — enough to break a near tie, never
 # enough to lift a weak idea over a clearly stronger one.

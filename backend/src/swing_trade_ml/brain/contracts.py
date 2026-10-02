@@ -164,6 +164,11 @@ class PortfolioState:
     positions: tuple[Holding, ...] = ()
     drawdown_pct: float | None = None
     free_slots: int | None = None
+    # M14: pairs (a, b, correlation) of stocks that moved closely together over
+    # 60 days, and the largest position and sector as shares of the portfolio.
+    correlated: tuple[tuple[str, str, float], ...] = ()
+    largest_position: tuple[str, float] | None = None
+    top_sector: tuple[str, float] | None = None
 
 
 @dataclass(frozen=True, slots=True)

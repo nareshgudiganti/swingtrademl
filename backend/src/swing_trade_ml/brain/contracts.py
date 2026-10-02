@@ -213,6 +213,25 @@ class Recall:
 
 
 @dataclass(frozen=True, slots=True)
+class TrackPoint:
+    """One open trade today against the band of similar past trades (M15)."""
+
+    CONTRACT: ClassVar[str] = "TrackPoint@1"
+    symbol: str
+    day_n: int  # trading days since entry (0 = bought today)
+    ret: float  # since entry, at the latest close
+    status: str  # on track | drift | breakdown | stop hit | past horizon
+    reason: str
+    horizon: int = 15
+    band_low: float | None = None  # the 25th-75th percentile of similar trades on this day
+    band_mid: float | None = None
+    band_high: float | None = None
+    stop: float | None = None
+    first_target_note: str = ""
+    band: tuple[tuple[int, float, float, float], ...] = ()  # the whole path, for the chart
+
+
+@dataclass(frozen=True, slots=True)
 class Opinion:
     CONTRACT: ClassVar[str] = "Opinion@1"
     source: str

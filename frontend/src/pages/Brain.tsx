@@ -358,6 +358,7 @@ export default function Brain() {
   const [open, setOpen] = useState<BrainDecision | null>(null)
   const [showQuiet, setShowQuiet] = useState(false)
   const [showSectors, setShowSectors] = useState(false)
+  const [showEpisodes, setShowEpisodes] = useState(false)
   const [whySymbol, setWhySymbol] = useState('')
 
   const latest = useQuery({
@@ -366,6 +367,7 @@ export default function Brain() {
     retry: false,
   })
   const health = useQuery({ queryKey: ['brainHealth'], queryFn: api.brainHealth })
+  const episodes = useQuery({ queryKey: ['brainEpisodes'], queryFn: api.brainEpisodes })
   const modules = useQuery({ queryKey: ['brainModules'], queryFn: api.brainModules })
   const runs = useQuery({ queryKey: ['brainRuns'], queryFn: () => api.brainRuns(8) })
   const trace = useQuery({
@@ -394,6 +396,7 @@ export default function Brain() {
   const active = ideas.filter((d) => ['TRADE', 'WATCH'].includes(finalWord(d)))
   const quiet = ideas.filter((d) => !['TRADE', 'WATCH'].includes(finalWord(d)))
   const market = run?.banner.mode ? MARKET[run.banner.mode] : null
+  const marketSituation = (run?.situations ?? []).find((s) => s.scope === 'market')
   const moduleById = new Map((modules.data?.modules ?? []).map((m) => [m.id, m]))
 
   return (
@@ -419,6 +422,12 @@ export default function Brain() {
           <div className="stat-sub" style={{ color: 'inherit' }}>
             {market.plain}
           </div>
+          {marketSituation && marketSituation.label !== 'unlabelled' && (
+            <div className="stat-sub" style={{ color: 'inherit' }}>
+              Situation: {marketSituation.label}
+              {marketSituation.is_unknown ? ' (unlike any day in its history)' : ''} — {marketSituation.evidence[0]}
+            </div>
+          )}
         </div>
       )}
 
@@ -561,6 +570,44 @@ export default function Brain() {
                       <td>{s.name}</td>
                       <td>{ROTATION[s.rotation] ?? s.rotation}</td>
                       <td>{s.strength_20d == null ? '—' : `${s.strength_20d >= 0 ? '+' : ''}${(s.strength_20d * 100).toFixed(1)}%`}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {(episodes.data ?? []).length > 0 && (
+        <div className="card" style={{ marginBottom: '1.25rem' }}>
+          <div className="between">
+            <h2>Market history</h2>
+            <button onClick={() => setShowEpisodes((v) => !v)}>{showEpisodes ? 'Hide' : 'Show'}</button>
+          </div>
+          <p className="stat-sub">
+            The stretches the market went through, as the brain names them. This is the start of its memory.
+          </p>
+          {showEpisodes && (
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Situation</th>
+                    <th>From</th>
+                    <th>To</th>
+                    <th>NIFTY change</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(episodes.data ?? []).map((e) => (
+                    <tr key={e.start_day}>
+                      <td>{e.label}</td>
+                      <td>{e.start_day}</td>
+                      <td>{e.end_day ?? 'still going'}</td>
+                      <td>
+                        {e.nifty_change == null ? '—' : `${e.nifty_change >= 0 ? '+' : ''}${(e.nifty_change * 100).toFixed(1)}%`}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

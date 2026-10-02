@@ -118,3 +118,19 @@ class BrainAlert(Base):
     text: Mapped[str] = mapped_column(Text)
     channel: Mapped[str] = mapped_column(String(16), default="telegram")
     sent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class BrainEpisode(Base, TimestampMixin):
+    """A stretch of days under one situation label — the start of the brain's
+    market memory (M04). `end_day` is empty while the episode is still going."""
+
+    __tablename__ = "brain_episodes"
+    __table_args__ = (UniqueConstraint("scope", "start_day", name="uq_brain_episode_start"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    scope: Mapped[str] = mapped_column(String(16), index=True)  # market (later: sector, stock)
+    label: Mapped[str] = mapped_column(String(32))
+    start_day: Mapped[date] = mapped_column(Date, index=True)
+    end_day: Mapped[date | None] = mapped_column(Date)
+    state_key: Mapped[str] = mapped_column(String(64), default="")
+    stats: Mapped[dict] = mapped_column(JSONB, default=dict)

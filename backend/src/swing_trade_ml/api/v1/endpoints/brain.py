@@ -20,6 +20,7 @@ from swing_trade_ml.brain.module import Mode
 from swing_trade_ml.core.config import settings
 from swing_trade_ml.db.models.brain import BrainDecision, BrainRun
 
+
 def _brain_switched_on() -> None:
     """While the brain is off (BRAIN_ENABLED=false, the production default),
     its API does not exist — production looks exactly like it did before."""
@@ -110,6 +111,7 @@ def _run_out(db, run: BrainRun) -> dict:
     return {
         "quality": run.quality,
         "sectors": (run.context or {}).get("sectors", []),
+        "situations": (run.context or {}).get("situations", []),
         "error": run.error,
         "run_id": run.id,
         "kind": run.kind,
@@ -187,6 +189,23 @@ def overrule(decision_id: int, payload: OverruleCreate, db: DbSession) -> dict:
 @router.get("/health")
 def health(db: DbSession) -> dict:
     return service.health(db)
+
+
+@router.get("/episodes")
+def market_episodes(db: DbSession) -> list[dict]:
+    """Past market situations (M04), newest first."""
+    from swing_trade_ml.brain.modules.m04_situations.store import market_episodes as load
+
+    return [
+        {
+            "label": e.label,
+            "start_day": e.start_day,
+            "end_day": e.end_day,
+            "days": (e.stats or {}).get("days"),
+            "nifty_change": (e.stats or {}).get("nifty_change"),
+        }
+        for e in load(db)
+    ]
 
 
 @router.get("/runs/{run_id}/alerts")

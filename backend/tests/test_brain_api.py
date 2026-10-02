@@ -53,7 +53,7 @@ def test_modules_lists_the_eight_steps(client):
         "learn",
     ]
     ids = [m["id"] for m in body["modules"]]
-    assert ids == ["M01", "M02", "M03", "M06", "M07", "M08", "M10", "M11", "M12", "M13"]
+    assert ids == ["M01", "M02", "M03", "M04", "M06", "M07", "M08", "M10", "M11", "M12", "M13"]
 
 
 def test_unknown_module_cannot_be_switched(client):
@@ -125,3 +125,35 @@ def test_runs_without_context_show_no_sectors(client, stock):
     )
     body = client.get(f"/api/v1/brain/runs/{r.json()['run_id']}", headers=HEADERS).json()
     assert body["sectors"] == []
+
+
+def test_market_episodes_are_listed_newest_first(client, db_session):
+    from datetime import date
+
+    from swing_trade_ml.db.models.brain import BrainEpisode
+
+    db_session.add_all(
+        [
+            BrainEpisode(
+                scope="market",
+                label="correction",
+                start_day=date(2026, 3, 2),
+                end_day=date(2026, 4, 10),
+                stats={"days": 28, "nifty_change": -0.08},
+            ),
+            BrainEpisode(
+                scope="market",
+                label="up-trend",
+                start_day=date(2026, 4, 13),
+                end_day=None,
+                stats={"days": 100, "nifty_change": 0.05},
+            ),
+        ]
+    )
+    db_session.commit()
+    body = client.get("/api/v1/brain/episodes", headers=HEADERS).json()
+    assert [(e["label"], e["start_day"], e["end_day"]) for e in body] == [
+        ("up-trend", "2026-04-13", None),
+        ("correction", "2026-03-02", "2026-04-10"),
+    ]
+    assert body[1]["days"] == 28 and body[1]["nifty_change"] == -0.08

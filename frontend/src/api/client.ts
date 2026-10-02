@@ -4,6 +4,7 @@ import type {
   BrainAlertPreview,
   BrainAlertSend,
   BrainDecision,
+  BrainEpisode,
   BrainHealth,
   BrainModules,
   BrainRun,
@@ -443,6 +444,7 @@ export const api = {
   setBrainModuleMode: (id: string, mode: 'on' | 'shadow' | 'off') =>
     put<{ module_id: string; mode: string }>(`/brain/modules/${id}`, { mode }),
   brainHealth: () => get<BrainHealth>('/brain/health'),
+  brainEpisodes: () => get<BrainEpisode[]>('/brain/episodes'),
   brainRuns: (limit = 10) => get<BrainRunSummary[]>(`/brain/runs?limit=${limit}`),
   brainLatestRun: (kind = 'nightly') => get<BrainRun>(`/brain/runs/latest?kind=${kind}`),
   brainRunNow: () => post<BrainRun>('/brain/runs', { kind: 'nightly' }),

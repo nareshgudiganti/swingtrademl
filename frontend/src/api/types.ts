@@ -844,11 +844,30 @@ export interface BrainSector {
   rotation: 'leading' | 'improving' | 'weakening' | 'lagging' | 'unknown'
 }
 
+export interface BrainSituation {
+  scope: 'market' | 'sector' | 'stock'
+  subject: string
+  label: string
+  confidence: number
+  is_unknown: boolean
+  suggest_defensive: boolean
+  evidence: string[]
+}
+
+export interface BrainEpisode {
+  label: string
+  start_day: string
+  end_day: string | null
+  days: number | null
+  nifty_change: number | null
+}
+
 export interface BrainRun extends BrainRunSummary {
   book: string
   modules: Record<string, ModuleMode>
   quality: BrainQuality
   sectors: BrainSector[]
+  situations: BrainSituation[]
   decisions: BrainDecision[]
 }
 

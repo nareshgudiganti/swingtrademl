@@ -125,6 +125,8 @@ def run_brain(
         # storing can. Keep the failure so the console and health see it.
         _record_failure(db, request, exc, int((time.perf_counter() - started) * 1000))
         raise
+    if kind == "nightly" and live:
+        _sync_episodes(db, reader, registry, modes)
     log.info(
         "brain.run.done",
         run_id=run_id,
@@ -134,6 +136,22 @@ def run_brain(
         ms=elapsed_ms,
     )
     return ctx, run_id
+
+
+def _sync_episodes(db: Session, reader: DatedReader, registry: ModuleRegistry, modes: dict) -> None:
+    """Refresh the market episodes (M04's memory) after a live nightly run.
+    Replays and why-runs never write them; a failure here never fails the run."""
+    cls = registry.get("M04")
+    if cls is None or resolve_mode(cls.manifest, modes.get("M04")) is not Mode.ON:
+        return
+    from swing_trade_ml.brain.modules.m04_situations import store
+
+    try:
+        with db.begin_nested():
+            store.sync_from_reader(db, reader)
+        db.commit()
+    except Exception as exc:  # noqa: BLE001 — episodes are a by-product, not the run
+        log.warning("brain.episodes.sync_failed", error=str(exc))
 
 
 def _record_failure(db: Session, request: c.RunRequest, exc: Exception, ms: int) -> None:
@@ -188,7 +206,10 @@ def _context_summary(ctx: BrainContext) -> dict:
     from swing_trade_ml.brain.modules.m11_sector.ranking import plain_name
 
     sectors = sorted(ctx.sectors.values(), key=lambda s: s.rank)
-    return {"sectors": [{**_jsonable(asdict(s)), "name": plain_name(s.sector)} for s in sectors]}
+    return {
+        "sectors": [{**_jsonable(asdict(s)), "name": plain_name(s.sector)} for s in sectors],
+        "situations": [_jsonable(asdict(s)) for s in ctx.situations],
+    }
 
 
 def _store(db: Session, ctx: BrainContext, registry: ModuleRegistry, modes: dict, ms: int) -> None:

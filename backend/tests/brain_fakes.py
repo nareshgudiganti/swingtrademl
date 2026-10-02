@@ -74,6 +74,9 @@ class FakeReader:
     def ohlcv(self, symbol: str, n: int = 400) -> pd.DataFrame:
         return pd.DataFrame(columns=["ts", "open", "high", "low", "close", "volume"])
 
+    def dated_closes(self, symbol: str) -> pd.Series:
+        return pd.Series(dtype=float)
+
     def delivery_rows(self, symbols, days: int = 40) -> dict:
         return {}
 

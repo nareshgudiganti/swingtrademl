@@ -2,13 +2,22 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import numpy as np
 import pandas as pd
 import pytest
 
+from brain_fakes import FakeReader, make_module, registry, request
+from swing_trade_ml.brain import contracts as c
+from swing_trade_ml.brain.module import REGISTRY, Mode, Step
 from swing_trade_ml.brain.modules.m04_situations.episodes import episodes_from_labels
+from swing_trade_ml.brain.modules.m04_situations.module import SituationRecognition
 from swing_trade_ml.brain.modules.m04_situations.novelty import novelty, state_vectors
 from swing_trade_ml.brain.modules.m04_situations.rules import label_days, market_situation
+from swing_trade_ml.brain.runner import execute
+
+AS_OF_PAST = datetime(2026, 9, 1, 12, tzinfo=UTC)
 
 
 def _dated(values) -> pd.Series:
@@ -154,3 +163,81 @@ def test_episodes_carry_plain_stats_and_skip_unlabelled_days():
     (ep,) = episodes_from_labels(labels, closes)
     assert ep.label == "up-trend" and ep.days == 10
     assert ep.stats["nifty_change"] == pytest.approx(closes.iloc[-1] / closes.iloc[5] - 1)
+
+
+# --- the module, storage and the run ----------------------------------------------------------
+
+
+class MarketReader(FakeReader):
+    def __init__(self, nifty, vix=None, **kw):
+        super().__init__(**kw)
+        self._nifty, self._vix = nifty, _calm_vix(nifty) if vix is None else vix
+
+    def dated_closes(self, symbol):
+        return self._vix if symbol == "INDIA VIX" else self._nifty
+
+
+def _module_run(nifty, universe=("ABC", "XYZ"), extra=()):
+    reg = registry(SituationRecognition, *extra)
+    return execute(request(universe=universe), MarketReader(nifty), reg, {"M04": Mode.ON})
+
+
+def test_m04_is_the_recognise_step_module_and_starts_on():
+    import swing_trade_ml.brain.modules  # noqa: F401
+
+    assert REGISTRY.get("M04") is SituationRecognition
+    m = SituationRecognition.manifest
+    assert m.step is Step.RECOGNISE and m.kind == "step" and m.default_mode is Mode.ON
+
+
+def test_the_market_gets_one_situation_with_its_evidence():
+    ctx = _module_run(_path((400, 0.0005), (30, -0.006)))
+    (market,) = [s for s in ctx.situations if s.scope == "market"]
+    assert market.subject == "NIFTY 50" and market.label == "bear phase" and market.suggest_defensive
+    assert market.evidence[0].startswith("NIFTY is 17% below its 1-year high")
+
+
+def test_each_stock_gets_a_trend_label_and_extended_when_stretched():
+    def state(view):
+        feats = (("sma_50_ratio", 0.22),)
+        return c.Contribution(
+            stocks=(c.StockState(symbol="ABC", trend="up"), c.StockState(symbol="XYZ", trend="down")),
+            snapshots=(c.Snapshot(symbol="ABC", as_of="d", close=100.0, features=feats),),
+        )
+
+    st = make_module("M02", Step.PERCEIVE, writes=("StockState@1", "Snapshot@1"), run=state)
+    ctx = _module_run(_path((400, 0.0005)), extra=(st,))
+    stocks = {s.subject: s for s in ctx.situations if s.scope == "stock"}
+    assert stocks["ABC"].label == "extended" and "22% above its 50-day average" in stocks["ABC"].evidence[0]
+    assert stocks["XYZ"].label == "down-trend"
+
+
+def test_without_nifty_history_the_market_is_unlabelled():
+    ctx = _module_run(pd.Series(dtype=float))
+    (market,) = [s for s in ctx.situations if s.scope == "market"]
+    assert market.label == "unlabelled" and market.confidence == 0.0 and not market.suggest_defensive
+
+
+def test_episodes_are_stored_and_replaced(db_session):
+    from swing_trade_ml.brain.modules.m04_situations.store import market_episodes, sync_market_episodes
+
+    labels, closes = _labelled(("up-trend", 10), ("crash", 1), ("bear phase", 8))
+    sync_market_episodes(db_session, episodes_from_labels(labels, closes))
+    sync_market_episodes(db_session, episodes_from_labels(labels, closes))  # idempotent
+    rows = market_episodes(db_session)
+    assert [(r.label, r.end_day is None) for r in rows] == [
+        ("bear phase", True),
+        ("crash", False),
+        ("up-trend", False),
+    ]
+
+
+def test_only_live_nightly_runs_sync_episodes(db_session, monkeypatch):
+    from swing_trade_ml.brain import service
+    from swing_trade_ml.brain.modules.m04_situations import store
+
+    calls = []
+    monkeypatch.setattr(store, "sync_from_reader", lambda db, reader: calls.append(reader.live))
+    for kind, as_of in (("nightly", None), ("why", None), ("nightly", AS_OF_PAST)):
+        service.run_brain(db_session, kind=kind, as_of=as_of, symbols=["ZZZ"])
+    assert calls == [True]

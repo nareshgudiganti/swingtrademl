@@ -283,6 +283,20 @@ class DatedReader:
         )
         return pd.Series([float(x) for x in closes], dtype=float)
 
+    def dated_closes(self, symbol: str) -> pd.Series:
+        """Daily closes up to as_of, indexed by their IST trading day."""
+        rows = self.db.execute(
+            select(Candle.ts, Candle.close)
+            .join(Instrument, Instrument.id == Candle.instrument_id)
+            .where(Instrument.tradingsymbol == symbol, Candle.interval == "day", Candle.ts <= self.as_of)
+            .order_by(Candle.ts.asc())
+        ).all()
+        return pd.Series(
+            [float(close) for _, close in rows],
+            index=[ts.astimezone(IST).date() for ts, _ in rows],
+            dtype=float,
+        )
+
     def index_closes(self) -> pd.Series:
         return self._closes(settings.BENCHMARK_INDEX_SYMBOL)
 

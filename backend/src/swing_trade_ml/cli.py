@@ -366,6 +366,20 @@ def cmd_brain(args: argparse.Namespace) -> int:
                 print(f"  {name:<19} error (Brier) {m['brier']:.4f}  AUC {auc}  top-10% hit rate {top}")
             print(f"Chosen: {r['chosen']} — {r['why']}")
             return 0
+        if args.brain_command == "episodes-backfill":
+            from swing_trade_ml.brain.modules.m04_situations import store
+            from swing_trade_ml.brain.reader import DatedReader
+
+            count = store.sync_from_reader(db, DatedReader(db, datetime.now(UTC), live=True))
+            db.commit()
+            print(f"Stored {count} market episodes from the whole NIFTY history.")
+            for e in store.market_episodes(db, limit=100):
+                if e.label in ("correction", "bear phase", "crash"):
+                    end = e.end_day.isoformat() if e.end_day else "still going"
+                    change = (e.stats or {}).get("nifty_change")
+                    print(f"  {e.label:<11} {e.start_day} to {end}  NIFTY {change:+.1%}" if change is not None
+                          else f"  {e.label:<11} {e.start_day} to {end}")
+            return 0
         if args.brain_command == "why":
             _, run_id = service.run_brain(db, kind="why", symbols=[args.symbol], book=args.book)
             _print_run(db, run_id)
@@ -498,6 +512,7 @@ def build_parser() -> argparse.ArgumentParser:
     b = brain_sub.add_parser("meta-train", help="Train and test M06's calibrated combiner on unseen months")
     b.add_argument("--barrier-model", default="swing_classifier_barrier")
     b.add_argument("--swing-model", default="swing_classifier")
+    brain_sub.add_parser("episodes-backfill", help="Label the whole NIFTY history into market episodes (M04)")
     b = brain_sub.add_parser("why", help="Run the brain for one stock and show its full trace")
     b.add_argument("symbol")
     b.add_argument("--book", default="paper", choices=["paper", "live"])

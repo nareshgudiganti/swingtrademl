@@ -9,8 +9,9 @@ from sqlalchemy import text
 
 from brain_fakes import FakeReader, make_module, registry, request
 from swing_trade_ml.brain import contracts as c
-from swing_trade_ml.brain import service
+from swing_trade_ml.brain import fallbacks, service
 from swing_trade_ml.brain.alerts import service as alerts
+from swing_trade_ml.brain.context import BrainContext
 from swing_trade_ml.brain.module import Manifest, Step
 from swing_trade_ml.brain.modules.m08_decide.engine import IdeaFacts, decide_idea
 from swing_trade_ml.brain.modules.m08_decide.money import cost_pct
@@ -248,3 +249,56 @@ def test_the_perceive_fallback_skips_stocks_a_module_already_priced():
         request(), reader, registry(make_module("M02", Step.PERCEIVE, writes=("Snapshot@1",), run=snaps)), {}
     )
     assert reader.last_close_calls == 0
+
+
+# 10 · confidence_source: which kind of number a decision's confidence is (F4) -------
+
+
+def test_the_decide_fallback_marks_a_model_opinion_as_the_score_source():
+    """The DECIDE step's fallback (no M08 installed) only ever reads a model
+    opinion's probability, so every confidence it sets must say "model" —
+    the learning loop needs this to tell a raw score from a calibrated
+    chance (M09's buy-level proposal only reasons about "model" rows)."""
+    req = request(universe=("ABC",))
+    ctx = BrainContext(request=req, reader=None)
+    ctx.snapshots["ABC"] = c.Snapshot(symbol="ABC", as_of="2026-09-29", close=100.0)
+    ctx.opinions.append(
+        c.Opinion(
+            source="model",
+            symbol="ABC",
+            stance=0.6,
+            confidence=0.8,
+            probability=0.8,
+            threshold=0.6,
+            reasons=("x",),
+        )
+    )
+    ctx.verdicts["ABC"] = c.RiskVerdict(symbol="ABC", allowed=True, max_qty=5)
+
+    contribution = fallbacks.decide(ctx)
+
+    d = next(d for d in contribution.decisions if d.symbol == "ABC")
+    assert d.word is c.IdeaWord.TRADE
+    assert d.confidence == pytest.approx(0.8) and d.confidence_source == "model"
+
+
+def test_store_persists_a_decisions_confidence_source(db_session):
+    """`service._store` must carry `Decision.confidence_source` onto
+    `BrainDecision.score_source` — nothing else writes this column."""
+    req = c.RunRequest(run_id="fx-score-source", kind="nightly", as_of=T0, universe=("ABC",), live=True)
+    ctx = BrainContext(request=req, reader=None)
+    ctx.decisions["ABC"] = c.Decision(
+        symbol="ABC",
+        kind="idea",
+        word=c.IdeaWord.TRADE,
+        reasons=("ok",),
+        confidence=0.8,
+        confidence_source="model",
+    )
+    ctx.banner = c.Banner(mode=c.MarketMode.NORMAL, headline="ok")
+
+    service._store(db_session, ctx, registry(), {}, ms=1)
+    db_session.commit()
+
+    stored = db_session.query(BrainDecision).filter_by(run_id="fx-score-source").one()
+    assert stored.score_source == "model"

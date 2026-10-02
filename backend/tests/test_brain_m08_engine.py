@@ -81,6 +81,60 @@ def test_no_price_or_no_opinion_is_wait():
     assert decide_idea(_idea(opinion=None), POLICY).word is IdeaWord.WAIT
 
 
+# --- confidence_source (F4): which kind of number `confidence` is --------------------
+
+
+def test_trade_carries_the_speaking_opinions_source_as_confidence_source():
+    d = decide_idea(_idea(), POLICY)
+    assert d.confidence == pytest.approx(0.7) and d.confidence_source == "model"
+
+
+def test_wait_below_the_buy_level_carries_the_opinions_source():
+    op = c.Opinion(
+        source="model",
+        symbol="ABC",
+        stance=-0.1,
+        confidence=0.1,
+        probability=0.45,
+        threshold=0.6,
+        reasons=("x",),
+    )
+    d = decide_idea(_idea(opinion=op), POLICY)
+    assert d.confidence == pytest.approx(0.45) and d.confidence_source == "model"
+
+
+def test_calibrated_wait_carries_the_opinions_source():
+    op = c.Opinion(
+        source="combined",
+        symbol="ABC",
+        stance=-0.2,
+        confidence=0.3,
+        probability=0.4,
+        threshold=0.55,
+        calibrated=True,
+        reasons=("x",),
+    )
+    d = decide_idea(_idea(opinion=op), POLICY)
+    assert d.word is IdeaWord.WAIT
+    assert d.confidence == pytest.approx(0.4) and d.confidence_source == "combined"
+
+
+def test_wait_with_only_an_opinions_own_confidence_has_no_score_source():
+    """`confidence_source` is only set when `confidence` is a probability; an
+    opinion's own confidence (no probability at all) is not one."""
+    op = c.Opinion(
+        source="combined", symbol="ABC", stance=0.2, confidence=0.15, reasons=("Model yes, rules no",)
+    )
+    d = decide_idea(_idea(opinion=op), POLICY)
+    assert d.word is IdeaWord.WAIT
+    assert d.confidence == pytest.approx(0.15) and d.confidence_source is None
+
+
+def test_no_price_or_no_opinion_has_no_confidence_source():
+    assert decide_idea(_idea(snapshot=None), POLICY).confidence_source is None
+    assert decide_idea(_idea(opinion=None), POLICY).confidence_source is None
+
+
 # --- idea rules ------------------------------------------------------------------
 
 

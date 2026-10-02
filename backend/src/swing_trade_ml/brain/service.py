@@ -278,6 +278,7 @@ def _store(db: Session, ctx: BrainContext, registry: ModuleRegistry, modes: dict
                 qty=d.qty,
                 horizon_days=d.horizon_days,
                 confidence=d.confidence,
+                score_source=d.confidence_source,
                 evidence_text=d.evidence_text or None,
                 reasons=list(d.reasons),
                 downgraded_from=d.downgraded_from.value if d.downgraded_from else None,

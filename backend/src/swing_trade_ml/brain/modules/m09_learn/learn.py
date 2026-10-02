@@ -35,6 +35,7 @@ _ROW_COLUMNS = (
     "symbol",
     "word",
     "confidence",
+    "score_source",
     "outcome",
     "ret",
     "market",
@@ -70,6 +71,7 @@ def _scored_rows(db: Session, since: date | None) -> pd.DataFrame:
                 "symbol": decision.symbol,
                 "word": decision.word,
                 "confidence": decision.confidence,
+                "score_source": decision.score_source,
                 "outcome": decision.outcome,
                 "ret": decision.outcome_return,
                 "market": _market_label(context),
@@ -88,6 +90,12 @@ def learning_report(db: Session, since: date | None = None) -> dict:
     whatever the latest weekly `run_learning` stored."""
     rows = _scored_rows(db, since)
     n_scored = len(one_per_day(rows))
+    # A confidence band only means something when every row in it is the
+    # same kind of number; "model" is a raw ranking score, while a
+    # calibrated chance (or no probability at all) reads on a different
+    # scale, so mixing them into one band would be comparing apples to
+    # oranges (F4).
+    model_rows = rows[rows["score_source"] == "model"]
     stored = store.latest_learning_run(db)
     if stored is None:
         drift, drift_lines, drift_note = [], [], DRIFT_NEVER_CHECKED_NOTE
@@ -101,7 +109,7 @@ def learning_report(db: Session, since: date | None = None) -> dict:
     return {
         "since": since,
         "n_scored": n_scored,
-        "by_band": by_band(rows),
+        "by_band": by_band(model_rows),
         "by_word": by_word(rows),
         "by_week": by_week(rows),
         "failures": failure_patterns(rows),
@@ -142,8 +150,9 @@ def run_learning(db: Session, since: date | None = None) -> dict:
     report = learning_report(db, since)
     report["newly_scored"] = newly_scored
     rows = one_per_day(_scored_rows(db, since))
+    model_rows = rows[rows["score_source"] == "model"]
     current = store.accepted_buy_level(db) or settings.ML_MIN_CONFIDENCE
-    draft = buy_level_proposal(rows, current)
+    draft = buy_level_proposal(model_rows, current)
     new_proposals = []
     if draft is not None:
         created = store.create(db, draft)

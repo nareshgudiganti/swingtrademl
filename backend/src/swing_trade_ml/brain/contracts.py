@@ -278,6 +278,12 @@ class Decision:
     qty: int = 0
     horizon_days: int = 15
     confidence: float | None = None
+    # What kind of opinion `confidence` is: "model" for a raw model score
+    # (a ranking, not a chance), "combined" for M06's calibrated chance, etc.
+    # None when `confidence` is not a probability at all (e.g. an opinion's
+    # own confidence). Only "model" rows are comparable to each other for
+    # the learning loop's buy-level proposal (M09).
+    confidence_source: str | None = None
     evidence_text: str = ""
     downgraded_from: Word | None = None
     downgrade_reason: str | None = None

@@ -843,6 +843,7 @@ def _scored_run(
     ret: float,
     market: str | None = None,
     as_of: datetime = datetime(2026, 9, 1, 10, 0, tzinfo=UTC),
+    score_source: str | None = "model",
 ) -> None:
     context = {"situations": [{"scope": "market", "label": market}]} if market else None
     db.add(
@@ -865,6 +866,7 @@ def _scored_run(
             kind="idea",
             word="TRADE",
             confidence=confidence,
+            score_source=score_source,
             outcome=outcome,
             outcome_return=ret,
             reasons=["r"],
@@ -920,6 +922,20 @@ def test_scored_rows_resolves_sector_via_get_sector_bucket(db_session, monkeypat
     assert row["decision_day"] == date(2026, 9, 1)
 
 
+def test_learning_report_by_band_ignores_non_model_scored_rows(db_session):
+    """A raw model score and a calibrated chance are different kinds of
+    numbers; mixing them into one confidence band would be meaningless, so
+    `by_band` only ever sees "model"-sourced rows (F4)."""
+    _scored_run(db_session, "fx-band-model", "ABC", 0.65, "target", 0.08, score_source="model")
+    _scored_run(db_session, "fx-band-combined", "DEF", 0.65, "stop", -0.04, score_source="combined")
+    db_session.commit()
+
+    report = learn_mod.learning_report(db_session)
+    assert report["by_band"] == [
+        {"band": "60-70%", "n": 1, "said": pytest.approx(0.65), "hit": 1.0, "avg_r": pytest.approx(2.0)}
+    ]
+
+
 def test_learning_report_since_filters_by_decision_day(db_session):
     _scored_run(
         db_session, "fx-early", "ABC", 0.6, "target", 0.08, as_of=datetime(2026, 8, 1, 10, 0, tzinfo=UTC)
@@ -972,6 +988,29 @@ def test_run_learning_creates_a_buy_level_proposal_when_warranted(db_session):
     second = learn_mod.run_learning(db_session)
     assert second["new_proposals"] == []
     assert len(store.list_proposals(db_session, status="open")) == 1
+
+
+def test_run_learning_ignores_non_model_rows_for_the_buy_level_proposal(db_session):
+    """The same evidence that would plainly justify a proposal when it is
+    model-scored must not justify one when it is not — a calibrated chance
+    (or any other source) is not a ranking score the proposal can reason
+    about (F4)."""
+    i = 0
+    for _ in range(15):
+        _scored_run(db_session, f"fx-ncs-t-{i}", f"T{i}", 0.65, "target", 0.08, score_source="combined")
+        i += 1
+    for _ in range(5):
+        _scored_run(db_session, f"fx-ncs-u-{i}", f"U{i}", 0.65, "stop", -0.04, score_source="combined")
+        i += 1
+    for _ in range(10):
+        _scored_run(db_session, f"fx-ncs-v-{i}", f"V{i}", 0.6, "stop", -0.04, score_source="combined")
+        i += 1
+    db_session.commit()
+
+    report = learn_mod.run_learning(db_session)
+
+    assert report["new_proposals"] == []
+    assert store.list_proposals(db_session, status="open") == []
 
 
 # --- API: /brain/learning and /brain/proposals -------------------------------

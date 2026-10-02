@@ -114,13 +114,16 @@ def _evidence(f: IdeaFacts, qty: int, policy: DecidePolicy) -> str:
 
 
 def _draft_idea(f: IdeaFacts, policy: DecidePolicy) -> c.Decision:
-    def wait(reason: str, confidence: float | None = None) -> c.Decision:
+    def wait(
+        reason: str, confidence: float | None = None, confidence_source: str | None = None
+    ) -> c.Decision:
         return c.Decision(
             symbol=f.symbol,
             kind="idea",
             word=IdeaWord.WAIT,
             reasons=(reason,),
             confidence=confidence,
+            confidence_source=confidence_source,
             evidence_text=_evidence(f, 0, policy),
         )
 
@@ -135,11 +138,13 @@ def _draft_idea(f: IdeaFacts, policy: DecidePolicy) -> c.Decision:
                 f"Calibrated chance {o.probability:.0%} is below the {o.threshold or 0:.0%} "
                 "needed to pay after costs.",
                 o.probability,
+                o.source,
             )
         if o.probability is not None:
             return wait(
                 f"Model score {o.probability:.0%} is below the buy level {o.threshold or 0:.0%}.",
                 o.probability,
+                o.source,
             )
         return wait("The signals do not favour buying this stock today.", o.confidence)
 
@@ -165,6 +170,7 @@ def _draft_idea(f: IdeaFacts, policy: DecidePolicy) -> c.Decision:
         qty=qty,
         horizon_days=policy.horizon_days,
         confidence=o.probability if o.probability is not None else o.confidence,
+        confidence_source=o.source if o.probability is not None else None,
         evidence_text=_evidence(f, qty, policy),
     )
 

@@ -151,6 +151,7 @@ def decide(ctx: BrainContext) -> c.Contribution:
                     kind="idea",
                     word=c.IdeaWord.WAIT,
                     confidence=p,
+                    confidence_source="model",
                     reasons=(f"Model score {p:.0%} is below the buy level {threshold:.0%}.",),
                 )
             )
@@ -163,6 +164,7 @@ def decide(ctx: BrainContext) -> c.Contribution:
                     kind="idea",
                     word=c.IdeaWord.WATCH,
                     confidence=p,
+                    confidence_source="model",
                     reasons=(f"Good score ({p:.0%}), but the risk check said no: {verdict.reason}",),
                 )
             )
@@ -174,6 +176,7 @@ def decide(ctx: BrainContext) -> c.Contribution:
                 kind="idea",
                 word=c.IdeaWord.TRADE,
                 confidence=p,
+                confidence_source="model",
                 entry_low=close,
                 entry_high=close,
                 target=round(close * (1 + TARGET_PCT), 2),

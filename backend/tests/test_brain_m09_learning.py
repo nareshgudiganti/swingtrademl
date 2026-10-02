@@ -14,7 +14,9 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 import pytest
 
+from swing_trade_ml.brain.modules.m09_learn.failures import failure_patterns
 from swing_trade_ml.brain.modules.m09_learn.outcomes import score
+from swing_trade_ml.brain.modules.m09_learn.report import by_band, by_week, by_word, one_per_day
 from swing_trade_ml.brain.modules.m09_learn.scoring import score_pending
 from swing_trade_ml.db.models.brain import BrainDecision, BrainRun
 from swing_trade_ml.db.models.market import Candle, Instrument
@@ -179,3 +181,199 @@ def test_unresolved_decisions_stay_unscored(db_session):
 
     assert scored == 0
     assert decision.outcome is None
+
+
+# --- report.py (pure) -------------------------------------------------------
+
+
+def _report_rows(records: list[dict]) -> pd.DataFrame:
+    """records: dicts overriding run_started/decision_day/symbol/word/
+    confidence/outcome/ret defaults."""
+    defaults = {
+        "run_started": datetime(2026, 9, 1, 10, 0, tzinfo=UTC),
+        "decision_day": date(2026, 9, 1),
+        "symbol": "ABC",
+        "word": "TRADE",
+        "confidence": 0.5,
+        "outcome": "target",
+        "ret": 0.08,
+    }
+    rows = [{**defaults, **r} for r in records]
+    return pd.DataFrame(rows)
+
+
+def test_one_decision_per_stock_per_day():
+    rows = _report_rows(
+        [
+            {
+                "symbol": "ABC",
+                "decision_day": date(2026, 9, 1),
+                "run_started": datetime(2026, 9, 1, 9, 0, tzinfo=UTC),
+                "outcome": "stop",
+                "ret": -0.04,
+            },
+            {
+                "symbol": "ABC",
+                "decision_day": date(2026, 9, 1),
+                "run_started": datetime(2026, 9, 1, 15, 0, tzinfo=UTC),
+                "outcome": "target",
+                "ret": 0.08,
+            },
+            {"symbol": "XYZ", "decision_day": date(2026, 9, 1), "outcome": "stop", "ret": -0.04},
+        ]
+    )
+    kept = one_per_day(rows)
+    assert len(kept) == 2
+    abc = kept[kept["symbol"] == "ABC"].iloc[0]
+    assert abc["outcome"] == "target" and abc["ret"] == pytest.approx(0.08)
+
+
+def test_by_band_calls_one_per_day_itself():
+    rows = _report_rows(
+        [
+            {
+                "symbol": "ABC",
+                "decision_day": date(2026, 9, 1),
+                "run_started": datetime(2026, 9, 1, 9, 0, tzinfo=UTC),
+                "confidence": 0.55,
+                "outcome": "stop",
+                "ret": -0.04,
+            },
+            {
+                "symbol": "ABC",
+                "decision_day": date(2026, 9, 1),
+                "run_started": datetime(2026, 9, 1, 15, 0, tzinfo=UTC),
+                "confidence": 0.55,
+                "outcome": "target",
+                "ret": 0.08,
+            },
+        ]
+    )
+    bands = by_band(rows)
+    assert len(bands) == 1
+    assert bands[0]["n"] == 1
+    assert bands[0]["hit"] == pytest.approx(1.0)
+
+
+def test_by_band_groups_by_confidence_and_computes_hit_and_avg_r():
+    rows = _report_rows(
+        [
+            {"symbol": "A1", "confidence": 0.52, "outcome": "target", "ret": 0.08},
+            {"symbol": "A2", "confidence": 0.58, "outcome": "stop", "ret": -0.04},
+            {"symbol": "A3", "confidence": 0.65, "outcome": "target", "ret": 0.08},
+        ]
+    )
+    bands = by_band(rows)
+    assert [b["band"] for b in bands] == ["50-60%", "60-70%"]
+    fifty = bands[0]
+    assert fifty["n"] == 2
+    assert fifty["said"] == pytest.approx((0.52 + 0.58) / 2)
+    assert fifty["hit"] == pytest.approx(0.5)
+    assert fifty["avg_r"] == pytest.approx(((0.08 / 0.04) + (-0.04 / 0.04)) / 2)
+    sixty = bands[1]
+    assert sixty["n"] == 1 and sixty["hit"] == pytest.approx(1.0)
+
+
+def test_by_band_skips_rows_without_confidence_and_empty_bands():
+    rows = _report_rows(
+        [
+            {"symbol": "A1", "confidence": None, "outcome": "target", "ret": 0.08},
+            {"symbol": "A2", "confidence": 0.9, "outcome": "stop", "ret": -0.04},
+        ]
+    )
+    bands = by_band(rows)
+    assert len(bands) == 1
+    assert bands[0]["band"] == "70%+"
+    assert bands[0]["n"] == 1
+
+
+def test_by_word_orders_trade_watch_wait_avoid_and_skips_missing():
+    rows = _report_rows(
+        [
+            {"symbol": "A1", "word": "AVOID", "outcome": "stop", "ret": -0.04},
+            {"symbol": "A2", "word": "TRADE", "outcome": "target", "ret": 0.08},
+            {"symbol": "A3", "word": "WATCH", "outcome": "target", "ret": 0.08},
+        ]
+    )
+    words = by_word(rows)
+    assert [w["word"] for w in words] == ["TRADE", "WATCH", "AVOID"]
+    assert words[0]["n"] == 1 and words[0]["hit"] == pytest.approx(1.0)
+
+
+def test_by_week_ascending_by_iso_week():
+    rows = _report_rows(
+        [
+            {"symbol": "A1", "decision_day": date(2026, 9, 29), "outcome": "target", "ret": 0.08},  # W40
+            {"symbol": "A2", "decision_day": date(2026, 9, 7), "outcome": "stop", "ret": -0.04},  # W37
+        ]
+    )
+    weeks = by_week(rows)
+    assert [w["week"] for w in weeks] == ["2026-W37", "2026-W40"]
+    assert weeks[0]["n"] == 1 and weeks[0]["hit"] == pytest.approx(0.0)
+    assert weeks[1]["hit"] == pytest.approx(1.0)
+
+
+# --- failures.py (pure) ------------------------------------------------------
+
+
+def _failure_rows(records: list[dict]) -> pd.DataFrame:
+    rows = []
+    for i, r in enumerate(records):
+        row = {
+            "run_started": datetime(2026, 9, 1, 10, 0, tzinfo=UTC),
+            "decision_day": date(2026, 9, 1),
+            "symbol": f"SYM{i}",
+            "outcome": "target",
+            "market": None,
+            "sector": None,
+        }
+        row.update(r)
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def test_failure_pattern_found_when_one_market_label_is_over_represented():
+    records = (
+        [{"market": "correction", "outcome": "stop"}] * 6
+        + [{"market": "calm", "outcome": "stop"}] * 4
+        + [{"market": "calm", "outcome": "target"}] * 10
+    )
+    rows = _failure_rows(records)
+    assert failure_patterns(rows) == [
+        "6 of 10 stop-outs came when the market was in a correction (correction was 30% of all ideas)."
+    ]
+
+
+def test_no_failure_pattern_when_stops_are_spread_evenly():
+    records = (
+        [{"market": "correction", "outcome": "stop"}] * 3
+        + [{"market": "correction", "outcome": "target"}] * 7
+        + [{"market": "calm", "outcome": "stop"}] * 3
+        + [{"market": "calm", "outcome": "target"}] * 7
+    )
+    rows = _failure_rows(records)
+    assert failure_patterns(rows) == []
+
+
+def test_no_failure_pattern_below_min_stops():
+    records = [{"market": "correction", "outcome": "stop"}] * 2 + [
+        {"market": "calm", "outcome": "target"}
+    ] * 18
+    rows = _failure_rows(records)
+    assert failure_patterns(rows) == []
+
+
+def test_failure_patterns_orders_most_striking_first_and_names_sectors_plainly():
+    stop_rows = (
+        [{"market": "correction", "sector": "BANK", "outcome": "stop"}] * 3
+        + [{"market": "correction", "sector": "IT", "outcome": "stop"}] * 3
+        + [{"market": "calm", "sector": "IT", "outcome": "stop"}] * 2
+    )
+    target_rows = [{"market": "correction", "sector": "BANK", "outcome": "target"}] * 2 + [
+        {"market": "calm", "sector": "IT", "outcome": "target"}
+    ] * 10
+    rows = _failure_rows(stop_rows + target_rows)
+    assert failure_patterns(rows) == [
+        "6 of 8 stop-outs came when the market was in a correction (correction was 40% of all ideas).",
+        "3 of 8 stop-outs were Banks stocks (Banks were 25% of all ideas).",
+    ]

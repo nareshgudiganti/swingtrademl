@@ -27,6 +27,7 @@ the short "what we learned" companion: read it before starting a module.
 | M08 decision engine | brain/m08-decide | draft → named rules (only lower) → opportunity notes; rules in `m08_decide/rules.py`, numbers in `policy.py` |
 | M16 alerts and cards | brain/m16-alerts | detectors (pluggable) → one Telegram message per run, once a day; console preview/send; sidebar badge; Copy plan |
 | M11 sector brain | brain/m11-sector | ranks 15 sector indices vs NIFTY (20 and 60 days), rotation quadrant, `sector` modifier opinion (tilt ±0.05/±0.1) + card line; table stored in `brain_runs.context` (migration 5b7e2d9c3a11) and shown on the console |
+| M05 memory | brain/m05-memory | `brain_experience` (migration 3c9a7e1f5b28, 51k stock-days, rebuilt by `swingtrade brain memory-build` and after live nightly runs); key = market label · stock trend · last 20 days · volatility; recall widens below 30 (vol, then market, then trend) and records it; reports raw history AND honest figures (base + 0.25 × difference). SHADOW |
 | M04 situations | brain/m04-situations | market label (crash › bear phase › correction › recovery › up-trend › sideways) + unknown check (nearest neighbour vs 99th pct) + a trend/extended label per stock; `brain/market_mode.effective_mode` turns a defensive suggestion into DEFENSIVE for M07, M08, the decide fallback and the constitution (C3); `brain_episodes` (migration 8d3f6a2b9e47) re-derived after live nightly runs and by `swingtrade brain episodes-backfill`; console shows the situation and Market history |
 | M12 stock brain | brain/m12-stock | setups (pullback, breakout, base, breakdown) → situations shown in the why; delivery ≥ 1.2× usual on 3 of 5 days; institutional deals (whitelist, same-day round trips ignored); one-line profile on cards; `setup` modifier weighted by the WEIGHTS table (evidence). SHADOW |
 | M13 news and events | brain/m13-news | results within 5 trading days → `results soon` (AVOID new ideas, line on holdings); split/bonus/rights within 2 trading days → `event blackout`; ex-date ± 2 days → `price reset` (M08 ignores a `breakdown` then); ASM/GSM ≤ 4 days old → `StockState.restrictions` (AVOID); `event` modifier lines. Replays read only rows stored by their date |
@@ -160,6 +161,20 @@ do not do that by accident.
   23 Mar 2020 replay runs only on a synthetic fixture.
 - **Never run `ruff format` on the whole package** — it reformatted 51 v1 files (again, M04);
   reverted. Format only `src/swing_trade_ml/brain`, brain tests, and files you created.
+
+- **M05 (2026-10-02): similar-case memory does not predict on unseen months.** 46 months,
+  46,109 stock-days, walk-forward (only cases known before each month): AUC 0.520, Brier 0.1491
+  vs 0.1457 for the plain average; matches scored 40%+ came true 22.5%. Adding distance from the
+  1-year high to the key: AUC 0.526 — no real gain. So recall shows raw history with an honest
+  figure beside it (RELIABILITY 0.25 in recall.py, from that slope), stays SHADOW, and is kept
+  for M15's day-by-day band. Real check: HDFCBANK, TCS and WIPRO share one key → identical
+  recall (1,199 cases, 16%, honest 18%) — the keys are too coarse to tell stocks apart.
+- **M08's old expected-result formula counted every miss as a full −4% loss** — but ~41% of
+  cases are day-15 timeouts near flat. With M05's average exit it now uses
+  `expected_r_from_mean`; the old formula remains only for a recall without an average.
+- **Three modules, one lesson (M06, M12, M04, M05):** on these 49 large caps, under +8%/−4% in
+  15 days, nothing simple has a real edge yet. The next real gain needs new information
+  (fundamentals, news, flows) or a different universe/rule — not more rules on prices.
 
 ## Testing traps (Windows)
 

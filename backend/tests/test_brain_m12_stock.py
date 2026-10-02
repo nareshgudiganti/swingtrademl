@@ -2,11 +2,20 @@
 
 from __future__ import annotations
 
+from datetime import date, timedelta
+
 import numpy as np
 import pandas as pd
+import pytest
 
 from swing_trade_ml.brain.modules.m12_stock.profile import profile_line
 from swing_trade_ml.brain.modules.m12_stock.setups import find_setups
+from swing_trade_ml.brain.modules.m12_stock.signals import (
+    DealRow,
+    deal_signal,
+    delivery_signal,
+    is_institution,
+)
 
 
 def _bars(close, volume=None, spread=0.01, open_=None) -> pd.DataFrame:
@@ -97,3 +106,102 @@ def test_the_profile_in_plain_words():
         "Usually moves about 2.0% in a day; opens with a jump of more than 2% on 0% of days; "
         "reached +8% within 15 trading days 100% of the time in the last year (typically in 7 days)."
     )
+
+
+# --- delivery and deals --------------------------------------------------------------------
+
+TODAY = date(2026, 9, 29)
+
+
+def _delivery(recent, base=40.0, n=25):
+    days = [TODAY - timedelta(days=n - i) for i in range(n)]
+    pcts = [base] * (n - len(recent)) + list(recent)
+    return list(zip(days, pcts, strict=True))
+
+
+def test_delivery_above_average_on_most_recent_days():
+    assert delivery_signal(_delivery([55, 52, 38, 60, 58])) == (
+        "high",
+        "Delivery above average 4 of the last 5 days (buyers are taking shares home).",
+    )
+
+
+def test_delivery_above_average_only_twice_is_no_signal():
+    assert delivery_signal(_delivery([55, 38, 38, 60, 39])) == (None, None)
+
+
+def test_delivery_needs_enough_history():
+    assert delivery_signal(_delivery([55, 52, 58, 60, 58], n=12)) == (None, None)
+
+
+def test_delivery_ignores_missing_values():
+    rows = _delivery([55, 52, 38, 60, 58])
+    rows[-1] = (rows[-1][0], None)
+    rows[-2] = (rows[-2][0], None)
+    assert delivery_signal(rows) == (None, None)  # only 3 of the last 5 days usable; 2 above
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "HDFC MUTUAL FUND",
+        "SBI MUTUAL FUND A/C SBI SMALL CAP FUND",
+        "LIFE INSURANCE CORPORATION OF INDIA",
+        "GOLDMAN SACHS (SINGAPORE) PTE - ODI",
+        "MORGAN STANLEY ASIA (SINGAPORE) PTE.",
+        "SOCIETE GENERALE - ODI",
+        "GOVERNMENT OF SINGAPORE",
+        "ABU DHABI INVESTMENT AUTHORITY",
+        "BELGRAVE INVESTMENT FUND",
+    ],
+)
+def test_long_term_institutions_are_recognised(name):
+    assert is_institution(name)
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "QE SECURITIES LLP",
+        "HRTI PRIVATE LIMITED",
+        "JUMP TRADING FINANCIAL INDIA PRIVATE LIMITED",
+        "MATHISYS QUANTCAP LLP",
+        "JUNOMONETA FINSOL PRIVATE LIMITED",
+        "ASHA KEJRIWAL",
+        "SILVERLEAF CAPITAL SERVICES PRIVATE LIMITED",
+        "ABC FUNDING LIMITED",
+    ],
+)
+def test_trading_firms_are_not_institutions(name):
+    assert not is_institution(name)
+
+
+def _deal(client, side, day=TODAY, qty=100_000, symbol="ABC"):
+    return DealRow(symbol=symbol, day=day, client=client, side=side, quantity=qty)
+
+
+def test_an_institutional_buy_is_a_positive_signal():
+    sign, line = deal_signal([_deal("HDFC MUTUAL FUND", "BUY", qty=120_000)], TODAY)
+    assert sign == 1
+    assert line == "Big-investor buying: HDFC MUTUAL FUND bought 1,20,000 shares on 29 Sep."
+
+
+def test_an_institutional_sell_counts_against():
+    sign, line = deal_signal([_deal("GOVERNMENT OF SINGAPORE", "SELL")], TODAY)
+    assert sign == -1 and line.startswith("Big-investor selling: GOVERNMENT OF SINGAPORE sold")
+
+
+def test_same_day_round_trips_are_ignored():
+    rows = [
+        _deal("GOLDMAN SACHS (SINGAPORE) PTE - ODI", "BUY"),
+        _deal("GOLDMAN SACHS (SINGAPORE) PTE - ODI", "SELL"),
+    ]
+    assert deal_signal(rows, TODAY) == (0, None)
+
+
+def test_trading_firm_deals_and_old_deals_are_ignored():
+    rows = [
+        _deal("QE SECURITIES LLP", "BUY"),
+        _deal("HDFC MUTUAL FUND", "BUY", day=TODAY - timedelta(days=30)),
+    ]
+    assert deal_signal(rows, TODAY) == (0, None)

@@ -18,7 +18,7 @@ import swing_trade_ml.brain.modules  # noqa: F401 — registers installed module
 from swing_trade_ml.brain import contracts as c
 from swing_trade_ml.brain.context import BrainContext
 from swing_trade_ml.brain.module import REGISTRY, STEPS, STEPS_FOR, Mode, ModuleRegistry, resolve_mode
-from swing_trade_ml.brain.reader import DatedReader
+from swing_trade_ml.brain.reader import IST, DatedReader
 from swing_trade_ml.brain.runner import execute
 from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.logging import get_logger
@@ -284,6 +284,11 @@ def _store(db: Session, ctx: BrainContext, registry: ModuleRegistry, modes: dict
         )
     if req.kind == "nightly":
         _store_snapshots(db, ctx)
+    if req.live and req.kind in ("nightly", "intraday") and ctx.tracks:
+        from swing_trade_ml.brain.modules.m15_tracker.store import save_points
+
+        opened = {h.symbol: h.opened_on for h in ctx.holdings if h.opened_on is not None}
+        save_points(db, req.book, opened, list(ctx.tracks.values()), req.as_of.astimezone(IST).date())
 
 
 def _store_snapshots(db: Session, ctx: BrainContext) -> None:

@@ -234,6 +234,31 @@ def what_if_trade(body: WhatIfIn, db: DbSession) -> dict:
     )
 
 
+@router.get("/track/{symbol}")
+def holding_track(symbol: str, db: DbSession, book: str = Query("paper")) -> dict:
+    """An open trade day by day against the band of similar trades (M15)."""
+    from swing_trade_ml.brain.modules.m15_tracker.store import track_rows
+
+    symbol = symbol.strip().upper()
+    rows = track_rows(db, book, symbol)
+    return {
+        "symbol": symbol,
+        "opened_on": rows[0].opened_on if rows else None,
+        "points": [
+            {
+                "day": r.day,
+                "day_n": r.day_n,
+                "ret": r.ret,
+                "status": r.status,
+                "reason": r.reason,
+                "stop": r.stop,
+            }
+            for r in rows
+        ],
+        "band": rows[-1].band if rows else [],
+    }
+
+
 @router.get("/episodes")
 def market_episodes(db: DbSession) -> list[dict]:
     """Past market situations (M04), newest first."""

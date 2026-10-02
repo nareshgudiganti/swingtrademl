@@ -254,3 +254,47 @@ def test_at_the_first_target_the_evidence_joins_the_reduce_reason():
     )
     d = decide_holding(_facts(point, gain=0.06), DecidePolicy())
     assert d.word is HoldingWord.REDUCE and note in d.reasons[0]
+
+
+# --- storage and the API ---------------------------------------------------------------------------
+
+
+def _tp(stop, day_n=1, status="on track"):
+    return c.TrackPoint(
+        symbol="TRK",
+        day_n=day_n,
+        ret=0.01,
+        status=status,
+        reason="r",
+        stop=stop,
+        band=((1, -0.01, 0.0, 0.01),),
+    )
+
+
+def test_a_stored_stop_never_goes_down(db_session):
+    from swing_trade_ml.brain.modules.m15_tracker.store import save_points, track_rows
+
+    save_points(db_session, "paper", {"TRK": ENTRY}, [_tp(96.0)], date(2026, 8, 4))
+    save_points(db_session, "paper", {"TRK": ENTRY}, [_tp(94.0, day_n=2)], date(2026, 8, 5))  # lower: ignored
+    save_points(db_session, "paper", {"TRK": ENTRY}, [_tp(97.5, day_n=3)], date(2026, 8, 6))
+    rows = track_rows(db_session, "paper", "TRK")
+    assert [r.stop for r in rows] == [96.0, 96.0, 97.5]
+
+
+def test_the_same_day_is_updated_not_duplicated(db_session):
+    from swing_trade_ml.brain.modules.m15_tracker.store import save_points, track_rows
+
+    save_points(db_session, "paper", {"TRK": ENTRY}, [_tp(96.0)], date(2026, 8, 4))
+    save_points(db_session, "paper", {"TRK": ENTRY}, [_tp(96.0, status="drift")], date(2026, 8, 4))
+    rows = track_rows(db_session, "paper", "TRK")
+    assert len(rows) == 1 and rows[0].status == "drift"
+
+
+def test_the_track_endpoint_returns_the_days_and_the_band(client, db_session):
+    from swing_trade_ml.brain.modules.m15_tracker.store import save_points
+
+    save_points(db_session, "paper", {"TRK": ENTRY}, [_tp(96.0)], date(2026, 8, 4))
+    db_session.commit()
+    body = client.get("/api/v1/brain/track/trk", headers={"X-API-Key": "test-api-key"}).json()
+    assert body["symbol"] == "TRK" and body["opened_on"] == "2026-08-03"
+    assert body["points"][0]["status"] == "on track" and body["band"] == [[1, -0.01, 0.0, 0.01]]

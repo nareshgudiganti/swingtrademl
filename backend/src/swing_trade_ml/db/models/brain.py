@@ -157,3 +157,23 @@ class BrainExperience(Base):
     outcome_day: Mapped[date] = mapped_column(Date, index=True)
     path_day: Mapped[date] = mapped_column(Date)
     path: Mapped[list] = mapped_column(JSONB, default=list)
+
+
+class BrainTrack(Base, TimestampMixin):
+    """One open trade on one day against the band of similar trades (M15).
+    The stop stored here never goes below the one stored the day before."""
+
+    __tablename__ = "brain_track"
+    __table_args__ = (UniqueConstraint("book", "symbol", "opened_on", "day", name="uq_brain_track_day"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    book: Mapped[str] = mapped_column(String(8))
+    symbol: Mapped[str] = mapped_column(String(64), index=True)
+    opened_on: Mapped[date] = mapped_column(Date)
+    day: Mapped[date] = mapped_column(Date, index=True)
+    day_n: Mapped[int] = mapped_column(Integer)
+    ret: Mapped[float] = mapped_column(Float)
+    status: Mapped[str] = mapped_column(String(16))
+    reason: Mapped[str] = mapped_column(Text, default="")
+    stop: Mapped[float | None] = mapped_column(Float)
+    band: Mapped[list] = mapped_column(JSONB, default=list)

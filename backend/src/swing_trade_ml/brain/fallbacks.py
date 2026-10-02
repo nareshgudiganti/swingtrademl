@@ -17,6 +17,7 @@ import pandas as pd
 
 from swing_trade_ml.brain import contracts as c
 from swing_trade_ml.brain.context import BrainContext
+from swing_trade_ml.brain.market_mode import effective_mode
 from swing_trade_ml.brain.module import Step
 from swing_trade_ml.ml.market_context import classify_regime
 
@@ -202,8 +203,10 @@ def decide(ctx: BrainContext) -> c.Contribution:
         )
 
     market = ctx.market
-    mode = (market.mode if market is not None else None) or c.MarketMode.DEFENSIVE
+    mode, suggested = effective_mode(market, ctx.situations)
     reasons = market.reasons if market is not None else ("Market state is unknown.",)
+    if suggested:
+        reasons = (suggested, *reasons)
     banner = c.Banner(mode=mode, headline=reasons[0] if reasons else mode.value, reasons=reasons)
     return c.Contribution(decisions=tuple(decisions), banner=banner if ctx.banner is None else None)
 

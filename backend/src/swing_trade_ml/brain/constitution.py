@@ -4,6 +4,8 @@ switched off. It only ever lowers decisions (via `contracts.downgrade`).
 C1  no TRADE without an allowed verdict from the mandatory risk gate
 C2  no risk gate, an owner halt, or market-wide data not fresh → banner
     NO NEW TRADES, every TRADE → WATCH
+C3  a defensive suggestion from situation recognition (M04) turns a NORMAL
+    banner DEFENSIVE
 C5  data not checked, or stale → TRADE capped at WATCH
 C11 every stock in the run gets a decision with a reason
 """
@@ -12,6 +14,7 @@ from __future__ import annotations
 
 from swing_trade_ml.brain import contracts as c
 from swing_trade_ml.brain.context import BrainContext
+from swing_trade_ml.brain.market_mode import effective_mode
 
 NO_RISK_GATE = "The risk gate is not installed or did not run, so the brain will not suggest new trades."
 NOT_APPROVED = "The risk gate did not approve this trade."
@@ -58,6 +61,12 @@ def enforce(ctx: BrainContext) -> None:
         )
     elif ctx.banner is None:
         ctx.banner = c.Banner(mode=c.MarketMode.DEFENSIVE, headline="Market state is unknown.")
+    elif ctx.banner.mode is c.MarketMode.NORMAL:
+        # C3: a defensive suggestion from situation recognition is never lost,
+        # whichever module wrote the banner.
+        mode, suggested = effective_mode(ctx.market, ctx.situations)
+        if suggested:
+            ctx.banner = c.Banner(mode=mode, headline=suggested, reasons=(suggested, *ctx.banner.reasons))
 
     for symbol in ctx.idea_symbols:
         if symbol not in ctx.decisions:

@@ -13,6 +13,7 @@ from collections import defaultdict
 
 from swing_trade_ml.brain import contracts as c
 from swing_trade_ml.brain.context import ContextView
+from swing_trade_ml.brain.market_mode import effective_mode
 from swing_trade_ml.brain.module import BrainModule, Manifest, Mode, Step, register_module
 from swing_trade_ml.brain.modules.m08_decide.engine import (
     HoldingFacts,
@@ -51,7 +52,7 @@ class DecisionEngine(BrainModule):
     def run(self, view: ContextView) -> c.Contribution:
         policy = DEFAULT_POLICY
         market = view.market
-        mode = (market.mode if market is not None else None) or c.MarketMode.DEFENSIVE
+        mode, suggested = effective_mode(market, view.situations)
 
         opinions: dict[str, list[c.Opinion]] = defaultdict(list)
         for o in view.opinions:
@@ -94,5 +95,7 @@ class DecisionEngine(BrainModule):
         ideas, holdings = opportunity_notes(ideas, idea_facts, holdings, holding_facts)
 
         reasons = market.reasons if market is not None and market.reasons else ("Market state is unknown.",)
+        if suggested:
+            reasons = (suggested, *reasons)
         banner = c.Banner(mode=mode, headline=reasons[0], reasons=reasons)
         return c.Contribution(decisions=(*ideas.values(), *holdings.values()), banner=banner)

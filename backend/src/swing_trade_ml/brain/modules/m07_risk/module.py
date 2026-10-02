@@ -17,6 +17,7 @@ from collections import defaultdict
 
 from swing_trade_ml.brain import contracts as c
 from swing_trade_ml.brain.context import ContextView
+from swing_trade_ml.brain.market_mode import effective_mode
 from swing_trade_ml.brain.module import BrainModule, Manifest, Mode, Step, register_module
 from swing_trade_ml.brain.modules.m07_risk.allocator import Account, Candidate, CheckResult, Policy, allocate
 from swing_trade_ml.brain.opinions import liked, pick_opinion, rank_strength
@@ -132,7 +133,7 @@ class RiskGate(BrainModule):
         step=Step.RISK,
         kind="step",
         version="1.0.0",
-        reads=("Opinion@1", "Snapshot@1", "MarketState@1", "DataQuality@1"),
+        reads=("Opinion@1", "Snapshot@1", "MarketState@1", "DataQuality@1", "Situation@1"),
         writes=("RiskVerdict@1",),
         budget_s=20.0,
         mandatory=True,
@@ -159,7 +160,7 @@ class RiskGate(BrainModule):
         account = account_snapshot(db, book)
         market = view.market
         policy = Policy(
-            mode=(market.mode if market is not None else None) or c.MarketMode.DEFENSIVE,
+            mode=effective_mode(market, view.situations)[0],
             defensive_size_factor=DEFENSIVE_SIZE_FACTOR,
             defensive_max_new=DEFENSIVE_MAX_NEW,
         )

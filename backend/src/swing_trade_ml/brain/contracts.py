@@ -197,6 +197,11 @@ class Recall:
     p25: float | None = None
     p75: float | None = None
     median_days: float | None = None
+    mean_return: float | None = None  # average exit: +8%, -4%, or the day-15 close
+    # What the evidence says to expect: the overall average plus only the part
+    # of the similar cases' difference that held up on unseen months (M05).
+    honest_hit_rate: float | None = None
+    honest_mean_return: float | None = None
     key: str = ""  # the situation key used, in words
     widened: tuple[str, ...] = ()  # key parts dropped to find enough cases
     typical_path: tuple[tuple[int, float, float, float], ...] = ()  # (day, p25, p50, p75) for M15

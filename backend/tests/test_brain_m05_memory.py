@@ -148,3 +148,18 @@ def test_too_few_cases_even_widened_is_reported_as_is():
 def test_no_cases_at_all_is_an_empty_recall():
     r = recall(_cases(0), "ABC", KEY, AS_OF)
     assert r.n_similar == 0 and r.hit_rate is None
+
+
+def test_recall_also_reports_the_honest_figures():
+    """46 unseen months: memory's distance from the average came true only
+    about a quarter of the time, so the honest figure keeps a quarter of it."""
+    similar = pd.concat([_cases(12, "target"), _cases(22, "stop"), _cases(6, "timeout")])
+    others = _cases(160, "timeout", stock="up", trend="flat")  # everything else, for the base rate
+    r = recall(pd.concat([similar, others]), "ABC", KEY, AS_OF)
+    base_hit = 12 / 200
+    assert r.hit_rate == pytest.approx(0.3)
+    assert r.honest_hit_rate == pytest.approx(base_hit + 0.25 * (0.3 - base_hit))
+    mean_similar = (12 * 0.08 - 22 * 0.04 + 6 * 0.01) / 40
+    base_mean = (12 * 0.08 - 22 * 0.04 + 166 * 0.01) / 200
+    assert r.mean_return == pytest.approx(mean_similar)
+    assert r.honest_mean_return == pytest.approx(base_mean + 0.25 * (mean_similar - base_mean))

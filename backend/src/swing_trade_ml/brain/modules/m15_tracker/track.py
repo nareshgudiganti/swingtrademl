@@ -71,7 +71,9 @@ def track(
     _, low, mid, high = band[day_n - 1]
     where = f"Day {day_n} of up to {HORIZON}: {ret:+.1%}"
     usual = f"the usual range of similar trades ({low:+.1%} to {high:+.1%})"
-    if ret >= low:
+    if ret > high:
+        status, reason = "on track", f"{where}, ahead of {usual}."
+    elif ret >= low:
         status, reason = "on track", f"{where}, inside {usual}."
     elif atr_pct is not None and ret < low - atr_pct:
         status, reason = "breakdown", f"{where}, well below {usual}."

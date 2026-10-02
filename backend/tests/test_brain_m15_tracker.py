@@ -307,3 +307,8 @@ def test_no_price_since_an_older_entry_says_so_instead_of_bought_today():
     t = _track_run(TrackReader(bars, _known_cases()), holding).tracks["ABC"]
     assert t.status == "no data"
     assert t.reason == "No price since it was bought on 05 Aug (latest price is from 03 Aug)."
+
+
+def test_above_the_band_is_on_track_and_says_ahead():
+    t = track("ABC", 100.0, _closes(0.02, 0.04, 0.05), stop=96.0, band=BAND, atr_pct=0.02)
+    assert t.status == "on track" and "ahead of the usual range" in t.reason

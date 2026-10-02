@@ -133,7 +133,14 @@ class RiskGate(BrainModule):
         step=Step.RISK,
         kind="step",
         version="1.0.0",
-        reads=("Opinion@1", "Snapshot@1", "MarketState@1", "DataQuality@1", "Situation@1"),
+        reads=(
+            "Opinion@1",
+            "Snapshot@1",
+            "MarketState@1",
+            "DataQuality@1",
+            "Situation@1",
+            "PortfolioState@1",
+        ),
         writes=("RiskVerdict@1",),
         budget_s=20.0,
         mandatory=True,
@@ -163,6 +170,10 @@ class RiskGate(BrainModule):
             mode=effective_mode(market, view.situations)[0],
             defensive_size_factor=DEFENSIVE_SIZE_FACTOR,
             defensive_max_new=DEFENSIVE_MAX_NEW,
+            pairs=frozenset(
+                frozenset((a, b))
+                for a, b, _ in (view.portfolio.correlated if view.portfolio is not None else ())
+            ),
         )
         verdicts = allocate(
             candidates, account, _v1_check(db, book, account.portfolio_value), policy, risk.buy_cost

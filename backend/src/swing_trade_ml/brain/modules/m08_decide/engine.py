@@ -156,7 +156,7 @@ def _draft_idea(f: IdeaFacts, policy: DecidePolicy) -> c.Decision:
         symbol=f.symbol,
         kind="idea",
         word=IdeaWord.TRADE,
-        reasons=(*o.reasons, plan),
+        reasons=(*o.reasons, plan, *((f.verdict.note,) if f.verdict is not None and f.verdict.note else ())),
         entry_low=round(close - half_zone, 2),
         entry_high=round(close + half_zone, 2),
         target=target,

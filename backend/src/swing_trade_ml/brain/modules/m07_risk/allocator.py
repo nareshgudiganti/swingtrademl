@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from swing_trade_ml.brain.contracts import MarketMode, RiskVerdict
 from swing_trade_ml.services.limits import format_inr
@@ -61,6 +61,9 @@ class Policy:
     mode: MarketMode
     defensive_size_factor: float = 0.5
     defensive_max_new: int = 2
+    # Pairs of symbols that moved closely together over 60 days (M14). An idea
+    # that pairs with a stronger idea of the same run is judged after the rest.
+    pairs: frozenset[frozenset[str]] = frozenset()
 
 
 Check = Callable[[Candidate, float], CheckResult]
@@ -77,6 +80,10 @@ def _refuse(cand: Candidate, rule: str, reason: str, amount: float | None = None
     return RiskVerdict(symbol=cand.symbol, allowed=False, rule=rule, reason=reason, amount_inr=amount)
 
 
+def _with_notes(verdicts: list[RiskVerdict], notes: dict[str, str]) -> list[RiskVerdict]:
+    return [replace(v, note=notes[v.symbol]) if v.symbol in notes else v for v in verdicts]
+
+
 def _fit(qty: int, binding: str | None, room: float, price: float, rule: str) -> tuple[int, str | None]:
     """Shrink `qty` to the whole shares that fit in `room`; name the rule if it binds."""
     fits = max(0, math.floor(room / price))
@@ -91,6 +98,20 @@ def allocate(
     buy_cost: BuyCost,
 ) -> list[RiskVerdict]:
     order = sorted(candidates, key=lambda c: (-c.strength, c.symbol))
+    notes: dict[str, str] = {}
+    if policy.pairs:
+        first, later = [], []
+        for cand in order:
+            twin = next((f.symbol for f in first if frozenset({cand.symbol, f.symbol}) in policy.pairs), None)
+            if twin is None:
+                first.append(cand)
+            else:
+                later.append(cand)
+                notes[cand.symbol] = (
+                    f"Judged after {twin}: it has moved closely with {twin} over 60 days, "
+                    "so buying both is close to doubling one position."
+                )
+        order = first + later
     if policy.mode is MarketMode.NO_NEW_TRADES:
         return [
             _refuse(c, "MARKET", "The market mode is NO NEW TRADES, so no new buys are approved.")
@@ -195,4 +216,4 @@ def allocate(
             sector_used[cand.bucket] = sector_used.get(cand.bucket, 0.0) + value
             approved_buckets.add(cand.bucket)
 
-    return verdicts
+    return _with_notes(verdicts, notes)

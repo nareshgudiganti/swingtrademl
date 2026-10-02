@@ -238,6 +238,7 @@ class RiskVerdict:
     rule: str | None = None
     reason: str = ""
     amount_inr: float | None = None
+    note: str = ""  # context for the card (e.g. judged after a correlated idea, M14)
 
 
 Word = IdeaWord | HoldingWord

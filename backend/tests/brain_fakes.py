@@ -71,6 +71,15 @@ class FakeReader:
     def restriction_rows(self, symbols) -> list:
         return []
 
+    def ohlcv(self, symbol: str, n: int = 400) -> pd.DataFrame:
+        return pd.DataFrame(columns=["ts", "open", "high", "low", "close", "volume"])
+
+    def delivery_rows(self, symbols, days: int = 40) -> dict:
+        return {}
+
+    def deal_rows(self, symbols, days: int = 10) -> list:
+        return []
+
     def model_probability(self, symbol: str) -> tuple[float, float, str] | None:
         p = self._probabilities.get(symbol)
         return None if p is None else (p, self._threshold, "swing_classifier v1")

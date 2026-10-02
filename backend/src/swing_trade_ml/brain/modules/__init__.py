@@ -8,4 +8,5 @@ from swing_trade_ml.brain.modules.m07_risk import module as m07_risk  # noqa: F4
 from swing_trade_ml.brain.modules.m08_decide import module as m08_decide  # noqa: F401
 from swing_trade_ml.brain.modules.m10_market import module as m10_market  # noqa: F401
 from swing_trade_ml.brain.modules.m11_sector import module as m11_sector  # noqa: F401
+from swing_trade_ml.brain.modules.m12_stock import module as m12_stock  # noqa: F401
 from swing_trade_ml.brain.modules.m13_news import module as m13_news  # noqa: F401

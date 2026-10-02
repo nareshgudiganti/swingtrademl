@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import numpy as np
 import pandas as pd
 import pytest
 
+from brain_fakes import FakeReader, registry
+from swing_trade_ml.brain import contracts as c
+from swing_trade_ml.brain.module import REGISTRY, Mode, Step
+from swing_trade_ml.brain.modules.m12_stock.module import StockBrain
 from swing_trade_ml.brain.modules.m12_stock.profile import profile_line
 from swing_trade_ml.brain.modules.m12_stock.setups import find_setups
 from swing_trade_ml.brain.modules.m12_stock.signals import (
@@ -16,6 +20,7 @@ from swing_trade_ml.brain.modules.m12_stock.signals import (
     delivery_signal,
     is_institution,
 )
+from swing_trade_ml.brain.runner import execute
 
 
 def _bars(close, volume=None, spread=0.01, open_=None) -> pd.DataFrame:
@@ -205,3 +210,124 @@ def test_trading_firm_deals_and_old_deals_are_ignored():
         _deal("HDFC MUTUAL FUND", "BUY", day=TODAY - timedelta(days=30)),
     ]
     assert deal_signal(rows, TODAY) == (0, None)
+
+
+# --- the module ------------------------------------------------------------------------------
+
+
+class StockReader(FakeReader):
+    def __init__(self, bars=None, delivery=None, deals=(), **kw):
+        super().__init__(**kw)
+        self.as_of = datetime(2026, 9, 29, 12, 0, tzinfo=UTC)
+        self._bars, self._delivery, self._deals = bars or {}, delivery or {}, list(deals)
+
+    def ohlcv(self, symbol, n=400):
+        return self._bars.get(symbol, super().ohlcv(symbol, n))
+
+    def delivery_rows(self, symbols, days=40):
+        return {s: self._delivery[s] for s in symbols if s in self._delivery}
+
+    def deal_rows(self, symbols, days=10):
+        return [d for d in self._deals if d.symbol in symbols]
+
+
+def _breakout_bars():
+    close = np.full(80, 100.0)
+    close[-1] = 105.0
+    volume = np.full(80, 100_000.0)
+    volume[-1] = 200_000.0
+    return _bars(close, volume)
+
+
+def _breakdown_bars():
+    close = np.full(80, 100.0)
+    close[-1] = 94.0
+    volume = np.full(80, 100_000.0)
+    volume[-1] = 250_000.0
+    return _bars(close, volume)
+
+
+def _run(reader, universe=("ABC", "XYZ")):
+    req = c.RunRequest(run_id="t", kind="nightly", as_of=reader.as_of, universe=universe, live=True)
+    return execute(req, reader, registry(StockBrain), {"M12": Mode.ON})
+
+
+def test_m12_is_a_recognise_plugin_that_starts_on_trial():
+    import swing_trade_ml.brain.modules  # noqa: F401
+
+    assert REGISTRY.get("M12") is StockBrain
+    m = StockBrain.manifest
+    assert m.step is Step.RECOGNISE and m.kind == "plugin" and m.default_mode is Mode.SHADOW
+
+
+def test_confirming_signals_add_up_to_at_most_point_four():
+    reader = StockReader(
+        bars={"ABC": _breakout_bars()},
+        delivery={"ABC": _delivery([55, 52, 38, 60, 58])},
+        deals=[_deal("HDFC MUTUAL FUND", "BUY")],
+    )
+    ctx = _run(reader)
+    (o,) = [o for o in ctx.opinions if o.symbol == "ABC"]
+    assert o.source == "setup" and o.stance == pytest.approx(0.4)
+    assert o.reasons[0].startswith("Setup: breakout")
+    assert any(r.startswith("Delivery above average") for r in o.reasons)
+    assert any(r.startswith("Big-investor buying") for r in o.reasons)
+    assert o.reasons[-1].startswith("Usually moves about")
+    assert [s.label for s in ctx.situations] == ["breakout"]
+    assert ctx.stocks["ABC"].delivery_signal == "high"
+
+
+def test_a_breakdown_and_institutional_selling_count_against():
+    reader = StockReader(bars={"ABC": _breakdown_bars()}, deals=[_deal("GOVERNMENT OF SINGAPORE", "SELL")])
+    (o,) = [o for o in _run(reader).opinions if o.symbol == "ABC"]
+    assert o.stance == pytest.approx(-0.4)
+
+
+def test_a_stock_with_no_bars_gets_nothing():
+    ctx = _run(StockReader())
+    assert not ctx.opinions and not ctx.situations
+
+
+def test_setup_opinions_are_modifiers():
+    from swing_trade_ml.brain.opinions import MODIFIER_SOURCES
+
+    assert "setup" in MODIFIER_SOURCES
+
+
+def test_the_reader_keeps_eq_delivery_and_nothing_after_the_run(db_session):
+    from swing_trade_ml.brain.reader import DatedReader
+    from swing_trade_ml.db.models.feeds import BlockDeal, DailyDelivery
+
+    db_session.add_all(
+        [
+            DailyDelivery(symbol="M12A", series="EQ", trade_date=date(2026, 9, 28), delivery_pct=51.0),
+            DailyDelivery(symbol="M12A", series="BE", trade_date=date(2026, 9, 28), delivery_pct=99.0),
+            DailyDelivery(
+                symbol="M12A", series="EQ", trade_date=date(2026, 9, 30), delivery_pct=70.0
+            ),  # later
+            BlockDeal(
+                deal_key="m12-a",
+                trade_date=date(2026, 9, 28),
+                symbol="M12A",
+                kind="bulk",
+                client_name="HDFC MUTUAL FUND",
+                side="BUY",
+                quantity=1000,
+                price=10.0,
+            ),
+            BlockDeal(
+                deal_key="m12-b",
+                trade_date=date(2026, 9, 30),
+                symbol="M12A",
+                kind="bulk",
+                client_name="HDFC MUTUAL FUND",
+                side="SELL",
+                quantity=1000,
+                price=10.0,
+            ),
+        ]
+    )
+    db_session.flush()
+    reader = DatedReader(db_session, datetime(2026, 9, 29, 12, 0, tzinfo=UTC), live=False)
+    assert reader.delivery_rows(["M12A"]) == {"M12A": [(date(2026, 9, 28), 51.0)]}
+    assert [(d.side, d.day) for d in reader.deal_rows(["M12A"])] == [("BUY", date(2026, 9, 28))]

@@ -20,7 +20,13 @@ from swing_trade_ml.brain.connectors import FEEDS
 from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.enums import PositionStatus
 from swing_trade_ml.core.logging import get_logger
-from swing_trade_ml.db.models.feeds import InstitutionalFlow, TradingRestriction, UpcomingEvent
+from swing_trade_ml.db.models.feeds import (
+    BlockDeal,
+    DailyDelivery,
+    InstitutionalFlow,
+    TradingRestriction,
+    UpcomingEvent,
+)
 from swing_trade_ml.db.models.market import Candle, Instrument
 from swing_trade_ml.db.models.trading import Position
 from swing_trade_ml.services import system_state
@@ -214,6 +220,50 @@ class DatedReader:
             ).where(TradingRestriction.symbol.in_(list(symbols)), TradingRestriction.as_of <= upto)
         ).all()
         return [RestrictionRow(symbol=s, kind=k, stage=stage or "", as_of=d) for s, k, stage, d in rows]
+
+    def delivery_rows(self, symbols, days: int = 40) -> dict[str, list]:
+        """Each stock's (day, delivery %) for the last `days` calendar weeks'
+        worth of sessions up to the run's IST date, ordinary (EQ) series only."""
+        from datetime import timedelta
+
+        upto = self.as_of.astimezone(IST).date()
+        rows = self.db.execute(
+            select(DailyDelivery.symbol, DailyDelivery.trade_date, DailyDelivery.delivery_pct)
+            .where(
+                DailyDelivery.symbol.in_(list(symbols)),
+                DailyDelivery.series == "EQ",
+                DailyDelivery.trade_date <= upto,
+                DailyDelivery.trade_date > upto - timedelta(days=days * 7 // 5 + 7),
+            )
+            .order_by(DailyDelivery.trade_date)
+        ).all()
+        out: dict[str, list] = {}
+        for symbol, day, pct in rows:
+            out.setdefault(symbol, []).append((day, None if pct is None else float(pct)))
+        return out
+
+    def deal_rows(self, symbols, days: int = 10) -> list:
+        """Bulk and block deals in these stocks over the last `days` trading
+        days (with a margin; the caller counts trading days), up to the run's date."""
+        from datetime import timedelta
+
+        from swing_trade_ml.brain.modules.m12_stock.signals import DealRow
+
+        upto = self.as_of.astimezone(IST).date()
+        rows = self.db.execute(
+            select(
+                BlockDeal.symbol,
+                BlockDeal.trade_date,
+                BlockDeal.client_name,
+                BlockDeal.side,
+                BlockDeal.quantity,
+            ).where(
+                BlockDeal.symbol.in_(list(symbols)),
+                BlockDeal.trade_date <= upto,
+                BlockDeal.trade_date > upto - timedelta(days=days * 2 + 7),
+            )
+        ).all()
+        return [DealRow(symbol=s, day=d, client=cl, side=side, quantity=int(q)) for s, d, cl, side, q in rows]
 
     def feed_latest(self) -> dict[str, object]:
         """Newest day each side feed has, on or before as_of's IST date."""

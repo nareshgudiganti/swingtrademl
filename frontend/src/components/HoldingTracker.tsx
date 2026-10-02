@@ -7,6 +7,7 @@ const STATUS_PLAIN: Record<string, string> = {
   breakdown: 'Breaking down',
   'stop hit': 'Stop hit',
   'past horizon': 'Past 15 days',
+  'no data': 'No new prices',
 }
 
 const W = 320

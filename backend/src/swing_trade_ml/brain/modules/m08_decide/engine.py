@@ -212,7 +212,7 @@ def decide_holding(f: HoldingFacts, policy: DecidePolicy, rules: list[Rule] = HO
             target=h.target,
             qty=h.qty,
         )
-        if f.track is not None and f.track.status in ("on track", "past horizon"):
+        if f.track is not None and f.track.status in ("on track", "past horizon", "no data"):
             draft = replace(draft, reasons=(*draft.reasons, f.track.reason))
     return _apply(draft, f, policy, rules, "holding")
 

@@ -76,6 +76,23 @@ class Tracker(BrainModule):
                 continue
             before = bars[bars["day"] <= h.opened_on]
             since = bars[bars["day"] > h.opened_on]
+            last_day = bars["day"].iloc[-1]
+            if since.empty and last_day < today and h.opened_on < today:
+                # Stale prices, not a fresh buy: say so rather than "bought today".
+                points.append(
+                    c.TrackPoint(
+                        symbol=h.symbol,
+                        day_n=0,
+                        ret=0.0,
+                        status="no data",
+                        reason=(
+                            f"No price since it was bought on {h.opened_on:%d %b} "
+                            f"(latest price is from {last_day:%d %b})."
+                        ),
+                        stop=h.stop,
+                    )
+                )
+                continue
             entry_label = (
                 labels[labels.index <= h.opened_on].iloc[-1]
                 if len(labels[labels.index <= h.opened_on])

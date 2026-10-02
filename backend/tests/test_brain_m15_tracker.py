@@ -298,3 +298,12 @@ def test_the_track_endpoint_returns_the_days_and_the_band(client, db_session):
     body = client.get("/api/v1/brain/track/trk", headers={"X-API-Key": "test-api-key"}).json()
     assert body["symbol"] == "TRK" and body["opened_on"] == "2026-08-03"
     assert body["points"][0]["status"] == "on track" and body["band"] == [[1, -0.01, 0.0, 0.01]]
+
+
+def test_no_price_since_an_older_entry_says_so_instead_of_bought_today():
+    bars, entry = _stock_bars(after=())  # prices stop on the entry day
+    later = date(2026, 8, 5)  # bought two days after the last price
+    holding = c.Holding(symbol="ABC", qty=10, avg_price=entry, stop=entry * 0.96, opened_on=later)
+    t = _track_run(TrackReader(bars, _known_cases()), holding).tracks["ABC"]
+    assert t.status == "no data"
+    assert t.reason == "No price since it was bought on 05 Aug (latest price is from 03 Aug)."

@@ -221,7 +221,7 @@ class TrackPoint:
     symbol: str
     day_n: int  # trading days since entry (0 = bought today)
     ret: float  # since entry, at the latest close
-    status: str  # on track | drift | breakdown | stop hit | past horizon
+    status: str  # on track | drift | breakdown | stop hit | past horizon | no data
     reason: str
     horizon: int = 15
     band_low: float | None = None  # the 25th-75th percentile of similar trades on this day

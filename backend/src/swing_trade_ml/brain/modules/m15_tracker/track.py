@@ -11,6 +11,8 @@ after entry (M05's memory). Today's status:
 * breakdown     more than one average day's range (ATR) below the low edge
 * drift         below the band, but not that far, and above the stop
 
+(The module adds "no data" when no price has arrived since an older entry.)
+
 Pure.
 """
 

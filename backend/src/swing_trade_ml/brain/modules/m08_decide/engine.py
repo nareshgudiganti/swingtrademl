@@ -33,6 +33,7 @@ class IdeaFacts:
     situations: tuple[c.Situation, ...]
     recall: c.Recall | None
     market_mode: MarketMode
+    notes: tuple[str, ...] = ()  # context lines from modifier opinions; never change the word
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,6 +42,7 @@ class HoldingFacts:
     snapshot: c.Snapshot | None
     stock: c.StockState | None
     market_mode: MarketMode
+    notes: tuple[str, ...] = ()
 
 
 # --- ideas -----------------------------------------------------------------------
@@ -146,6 +148,8 @@ def _apply(d: c.Decision, facts, policy: DecidePolicy, rules: list[Rule], kind: 
         if proposal is not None:
             word, reason = proposal
             d = c.downgrade(d, word, reason)  # never bolder, whatever the rule asked
+    if facts.notes:
+        d = replace(d, reasons=(*d.reasons, *facts.notes))
     return d
 
 

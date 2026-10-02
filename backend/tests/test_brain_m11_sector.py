@@ -33,7 +33,12 @@ def test_relative_strength_is_the_sector_return_minus_nifty():
 
 @pytest.mark.parametrize(
     ("rs20", "rs60", "label"),
-    [(0.02, 0.05, "leading"), (0.02, -0.05, "improving"), (-0.02, 0.05, "weakening"), (-0.02, -0.05, "lagging")],
+    [
+        (0.02, 0.05, "leading"),
+        (0.02, -0.05, "improving"),
+        (-0.02, 0.05, "weakening"),
+        (-0.02, -0.05, "lagging"),
+    ],
 )
 def test_rotation_comes_from_the_20_and_60_day_signs(rs20, rs60, label):
     assert rotation(rs20, rs60) == label

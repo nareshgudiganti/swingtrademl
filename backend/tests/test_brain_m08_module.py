@@ -51,7 +51,7 @@ def test_with_only_m08_installed_every_stock_is_still_decided_and_nothing_trades
 def test_pick_opinion_prefers_the_combined_view_then_the_model():
     model = c.Opinion(source="model", symbol="A", stance=0.5, confidence=0.5, reasons=("m",))
     combined = c.Opinion(source="combined", symbol="A", stance=-0.2, confidence=0.6, reasons=("c",))
-    other = c.Opinion(source="sector", symbol="A", stance=0.9, confidence=0.9, reasons=("s",))
+    other = c.Opinion(source="pattern", symbol="A", stance=0.9, confidence=0.9, reasons=("s",))
     assert pick_opinion([other, model, combined]) is combined
     assert pick_opinion([other, model]) is model
     assert pick_opinion([other]) is other

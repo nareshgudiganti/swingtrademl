@@ -19,7 +19,7 @@ from swing_trade_ml.brain import contracts as c
 from swing_trade_ml.brain.context import ContextView
 from swing_trade_ml.brain.module import BrainModule, Manifest, Mode, Step, register_module
 from swing_trade_ml.brain.modules.m07_risk.allocator import Account, Candidate, CheckResult, Policy, allocate
-from swing_trade_ml.brain.opinions import liked, pick_opinion, strength
+from swing_trade_ml.brain.opinions import liked, pick_opinion, rank_strength
 from swing_trade_ml.ml.sector_map import get_sector_bucket
 from swing_trade_ml.services import deployable, risk
 from swing_trade_ml.services.limits import limits_for
@@ -41,7 +41,7 @@ def candidates_from(view: ContextView) -> tuple[list[Candidate], list[c.RiskVerd
     refusals: list[c.RiskVerdict] = []
     for symbol in sorted(by_symbol):
         opinion = pick_opinion(by_symbol[symbol])
-        if not liked(opinion):
+        if opinion is None or not liked(opinion):
             continue
         snap = view.snapshots.get(symbol)
         if snap is None or snap.close <= 0:
@@ -70,7 +70,7 @@ def candidates_from(view: ContextView) -> tuple[list[Candidate], list[c.RiskVerd
             Candidate(
                 symbol=symbol,
                 price=snap.close,
-                strength=strength(opinion),
+                strength=rank_strength(by_symbol[symbol]),
                 bucket=get_sector_bucket(symbol),
                 instrument_id=view.reader.instrument_id(symbol),
             )

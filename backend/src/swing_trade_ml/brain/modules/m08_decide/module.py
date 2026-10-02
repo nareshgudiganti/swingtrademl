@@ -22,7 +22,7 @@ from swing_trade_ml.brain.modules.m08_decide.engine import (
     opportunity_notes,
 )
 from swing_trade_ml.brain.modules.m08_decide.policy import DEFAULT_POLICY
-from swing_trade_ml.brain.opinions import pick_opinion
+from swing_trade_ml.brain.opinions import modifier_notes, pick_opinion
 
 
 @register_module
@@ -73,6 +73,7 @@ class DecisionEngine(BrainModule):
                 situations=tuple(situations.get(symbol, [])),
                 recall=view.recalls.get(symbol),
                 market_mode=mode,
+                notes=modifier_notes(opinions.get(symbol, [])),
             )
             for symbol in view.request.universe
             if symbol not in held
@@ -83,6 +84,7 @@ class DecisionEngine(BrainModule):
                 snapshot=view.snapshots.get(h.symbol),
                 stock=view.stocks.get(h.symbol),
                 market_mode=mode,
+                notes=modifier_notes(opinions.get(h.symbol, [])),
             )
             for h in view.holdings
         }

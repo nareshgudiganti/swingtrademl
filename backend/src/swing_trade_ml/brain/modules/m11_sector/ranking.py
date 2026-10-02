@@ -78,7 +78,9 @@ def rank_sectors(closes: dict[str, pd.Series], nifty: pd.Series) -> list[SectorS
         scored.append((index, rs20, rs60))
     scored.sort(key=lambda t: (-t[1], -t[2], t[0]))
     return [
-        SectorState(sector=index, rank=i, of_total=len(scored), strength_20d=rs20, rotation=rotation(rs20, rs60))
+        SectorState(
+            sector=index, rank=i, of_total=len(scored), strength_20d=rs20, rotation=rotation(rs20, rs60)
+        )
         for i, (index, rs20, rs60) in enumerate(scored, start=1)
     ]
 

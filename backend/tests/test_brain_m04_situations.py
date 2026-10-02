@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+import pytest
 
+from swing_trade_ml.brain.modules.m04_situations.episodes import episodes_from_labels
 from swing_trade_ml.brain.modules.m04_situations.novelty import novelty, state_vectors
 from swing_trade_ml.brain.modules.m04_situations.rules import label_days, market_situation
 
@@ -114,3 +116,41 @@ def test_short_history_is_never_unknown():
     vix.iloc[-1] = 60.0
     result = novelty(state_vectors(nifty, vix))
     assert not result.is_unknown and result.threshold is None
+
+
+# --- market episodes ---------------------------------------------------------------------------
+
+
+def _labelled(*runs: tuple[str, int]) -> tuple[pd.Series, pd.Series]:
+    labels = [name for name, n in runs for _ in range(n)]
+    index = pd.bdate_range("2024-01-01", periods=len(labels)).date
+    return pd.Series(labels, index=index), pd.Series(np.linspace(100, 110, len(labels)), index=index)
+
+
+def test_a_label_must_hold_three_days_except_a_crash():
+    labels, closes = _labelled(
+        ("up-trend", 10),
+        ("correction", 1),
+        ("up-trend", 1),
+        ("correction", 2),
+        ("up-trend", 5),
+        ("correction", 4),
+        ("up-trend", 6),
+    )
+    eps = episodes_from_labels(labels, closes)
+    assert [e.label for e in eps] == ["up-trend", "correction", "up-trend"]
+    assert eps[1].start == labels.index[19] and eps[1].end == labels.index[22]
+    assert eps[-1].end is None  # still open
+
+
+def test_a_crash_opens_an_episode_on_its_first_day():
+    labels, closes = _labelled(("up-trend", 10), ("crash", 1), ("bear phase", 8))
+    eps = episodes_from_labels(labels, closes)
+    assert [(e.label, e.days) for e in eps] == [("up-trend", 10), ("crash", 1), ("bear phase", 8)]
+
+
+def test_episodes_carry_plain_stats_and_skip_unlabelled_days():
+    labels, closes = _labelled(("unlabelled", 5), ("up-trend", 10))
+    (ep,) = episodes_from_labels(labels, closes)
+    assert ep.label == "up-trend" and ep.days == 10
+    assert ep.stats["nifty_change"] == pytest.approx(closes.iloc[-1] / closes.iloc[5] - 1)

@@ -10,7 +10,18 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from sqlalchemy import BigInteger, Date, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    BigInteger,
+    Date,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -70,6 +81,32 @@ class BrainDecision(Base):
     overrule_reason: Mapped[str | None] = mapped_column(Text)
     overruled_by: Mapped[str | None] = mapped_column(String(128))
     overruled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # The learning loop's grade of this idea against the locked rule (M09):
+    # target | stop | timeout, written once the outcome is fully known.
+    outcome: Mapped[str | None] = mapped_column(String(8))
+    outcome_return: Mapped[float | None] = mapped_column(Float)
+    outcome_days: Mapped[int | None] = mapped_column(Integer)
+    max_up: Mapped[float | None] = mapped_column(Float)
+    max_down: Mapped[float | None] = mapped_column(Float)
+    resolved_on: Mapped[date | None] = mapped_column(Date)
+
+
+class BrainProposal(Base, TimestampMixin):
+    """Something the learning loop noticed and wants to change (M09) — never
+    takes effect on its own (constitution C9): the owner must accept it first."""
+
+    __tablename__ = "brain_proposals"
+    __table_args__ = (Index("ix_brain_proposals_status", "status"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    kind: Mapped[str] = mapped_column(String(24))  # e.g. buy_level | module_mode
+    title: Mapped[str] = mapped_column(Text)
+    evidence: Mapped[str] = mapped_column(Text)
+    change: Mapped[dict] = mapped_column(JSONB, default=dict)
+    status: Mapped[str] = mapped_column(String(12), default="open")  # open | accepted | dismissed
+    decided_by: Mapped[str | None] = mapped_column(String(128))
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    decided_note: Mapped[str | None] = mapped_column(Text)
 
 
 class BrainModuleSetting(Base, TimestampMixin):

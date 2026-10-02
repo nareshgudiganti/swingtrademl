@@ -615,14 +615,30 @@ def job_brain_intraday() -> None:
     _run_brain_job("intraday")
 
 
+def _m09_is_off(db) -> bool:
+    """Whether the owner has switched M09 (the learning loop) off — resolved
+    the same way `service._sync_episodes` decides whether to run its own
+    after-run jobs: the stored mode, or the manifest's own default."""
+    from swing_trade_ml.brain import service as brain_service
+    from swing_trade_ml.brain.module import REGISTRY, Mode, resolve_mode
+
+    modes = brain_service.load_modes(db)
+    cls = REGISTRY.get("M09")
+    return cls is not None and resolve_mode(cls.manifest, modes.get("M09")) is Mode.OFF
+
+
 def job_brain_learn() -> None:
     """Weekly: score every idea whose outcome is now known, build the
     learning report, and record any proposal the evidence supports — never
-    raised, like every other brain job (advisory, must not disturb v1)."""
+    raised, like every other brain job (advisory, must not disturb v1).
+    Skipped while the owner has switched M09 off."""
     from swing_trade_ml.brain.modules.m09_learn.learn import run_learning
 
     try:
         with session_scope() as db:
+            if _m09_is_off(db):
+                log.info("job.brain.learn.skipped", reason="M09 is off")
+                return
             report = run_learning(db)
             db.commit()
             n_new = len(report["new_proposals"])

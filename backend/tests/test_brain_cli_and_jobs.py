@@ -41,3 +41,19 @@ def test_brain_jobs_register_nightly_intraday_and_learn():
     s = BackgroundScheduler()
     add_brain_jobs(s)
     assert {j.id for j in s.get_jobs()} == {"brain_nightly", "brain_intraday", "brain_learn"}
+
+
+def test_m09_is_off_resolves_the_stored_mode_like_sync_episodes_does(db_session):
+    """`job_brain_learn` must skip while the owner has switched M09 off —
+    resolved the same way `service._sync_episodes` resolves it for its own
+    after-run jobs (the stored mode, falling back to the manifest default)."""
+    from swing_trade_ml.brain import service
+    from swing_trade_ml.workers.jobs import _m09_is_off
+
+    assert _m09_is_off(db_session) is False  # M09's manifest default is ON
+
+    service.set_mode(db_session, "M09", "off", by="test-suite")
+    assert _m09_is_off(db_session) is True
+
+    service.set_mode(db_session, "M09", "on", by="test-suite")
+    assert _m09_is_off(db_session) is False

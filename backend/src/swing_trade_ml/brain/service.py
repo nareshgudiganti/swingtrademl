@@ -162,7 +162,7 @@ def _sync_episodes(db: Session, reader: DatedReader, registry: ModuleRegistry, m
                 job(db, reader)
             db.commit()
         except Exception as exc:  # noqa: BLE001 — memory is a by-product, not the run
-            log.warning("brain.memory.sync_failed", module=module_id, error=str(exc))
+            log.warning("brain.afterrun.job_failed", module=module_id, error=str(exc))
 
 
 def _record_failure(db: Session, request: c.RunRequest, exc: Exception, ms: int) -> None:

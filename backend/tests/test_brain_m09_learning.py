@@ -837,6 +837,25 @@ def test_only_live_nightly_runs_score_pending(db_session, monkeypatch):
     assert calls == [True]
 
 
+def test_a_failed_afterrun_job_logs_brain_afterrun_job_failed(db_session, monkeypatch):
+    """`_sync_episodes` must never fail the run itself (M04/M05/M09 are a
+    by-product of it), but the failure still has to be visible — under the
+    event name `brain.afterrun.job_failed`, not the old M05-specific
+    `brain.memory.sync_failed` (M09 is not "memory")."""
+    from structlog.testing import capture_logs
+
+    def _boom(db, reader):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(scoring, "score_pending_from_reader", _boom)
+
+    with capture_logs() as logs:
+        service.run_brain(db_session, kind="nightly", as_of=None, symbols=["ZZZ"])
+
+    entry = next(e for e in logs if e["event"] == "brain.afterrun.job_failed")
+    assert entry["module"] == "M09" and "boom" in entry["error"]
+
+
 # --- learn.learning_report (DB) ----------------------------------------------
 
 

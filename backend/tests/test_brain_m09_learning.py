@@ -544,8 +544,10 @@ def test_drift_lines_wording_for_moderate_and_major_only():
     ]
     lines = drift_lines(drift)
     assert lines == [
-        "high_52w_dist has shifted a lot from what the model learnt on (stability index 0.41).",
-        "rsi_14 has shifted a little from what the model learnt on (stability index 0.18).",
+        "Distance from the 1-year high has shifted a lot from what the model learnt on "
+        "(stability index 0.41).",
+        "Short-term momentum (RSI) has shifted a little from what the model learnt on "
+        "(stability index 0.18).",
     ]
 
 

@@ -121,13 +121,32 @@ def feature_drift(
 
 _WORDING = {"moderate": "a little", "major": "a lot"}
 
+# The owner has no finance/ML background, so a drift line never names a raw
+# feature column — it reads in plain English instead.
+_PLAIN_FEATURE_NAMES = {
+    "rsi_14": "short-term momentum (RSI)",
+    "sma_50_ratio": "distance from the 50-day average",
+    "sma_200_ratio": "distance from the 200-day average",
+    "high_52w_dist": "distance from the 1-year high",
+    "relative_strength_20d": "strength against NIFTY over 20 days",
+    "vix_percentile_rank": "market fear level (India VIX)",
+    "breadth_pct_above_sma50": "share of stocks in an up-trend",
+    "nifty_trend_regime": "NIFTY's trend",
+}
+
+
+def _plain_feature_name(feature: str) -> str:
+    """The plain name, capitalised for the start of a sentence."""
+    name = _PLAIN_FEATURE_NAMES.get(feature, feature)
+    return name[0].upper() + name[1:]
+
 
 def drift_lines(drift: list[dict]) -> list[str]:
     """Plain lines for every feature that has drifted at least moderately;
     a stable feature says nothing (it would just be noise)."""
     return [
-        f"{d['feature']} has shifted {_WORDING[d['level']]} from what the model learnt on "
-        f"(stability index {d['psi']:.2f})."
+        f"{_plain_feature_name(d['feature'])} has shifted {_WORDING[d['level']]} from what the model "
+        f"learnt on (stability index {d['psi']:.2f})."
         for d in drift
         if d["level"] in _WORDING
     ]

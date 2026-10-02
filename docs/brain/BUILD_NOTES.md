@@ -26,6 +26,7 @@ the short "what we learned" companion: read it before starting a module.
 | M03 + M10 | brain/m03-m10-market | state facts + market mode on v1's regime table |
 | M08 decision engine | brain/m08-decide | draft → named rules (only lower) → opportunity notes; rules in `m08_decide/rules.py`, numbers in `policy.py` |
 | M16 alerts and cards | brain/m16-alerts | detectors (pluggable) → one Telegram message per run, once a day; console preview/send; sidebar badge; Copy plan |
+| M11 sector brain | brain/m11-sector | ranks 15 sector indices vs NIFTY (20 and 60 days), rotation quadrant, `sector` modifier opinion (tilt ±0.05/±0.1) + card line; table stored in `brain_runs.context` (migration 5b7e2d9c3a11) and shown on the console |
 | M06 reasoning | brain/m06-meta | `swingtrade brain meta-train` → `brain_meta_vN` (combiner + honesty map); live module writes a `combined`, `calibrated` opinion; buy level = break-even after costs + 5 points. SHADOW |
 
 ## How to add a module (checklist)
@@ -45,6 +46,16 @@ the short "what we learned" companion: read it before starting a module.
 - Remove without deleting: put its id in `DecidePolicy.disabled`.
 - A rule can only make a decision more careful (the engine applies it with `downgrade`).
 - Change a threshold: edit `DecidePolicy` in `policy.py`, nowhere else.
+
+## How to add a modifier (sector tilt, setups, events)
+
+A *modifier* opinion is context, never a view: `brain/opinions.py` skips it when choosing the
+opinion that speaks for a stock, so a stock no model scored can never become TRADE because of
+a modifier. Its stance nudges the order of liked ideas (`rank_strength`, weight `TILT_WEIGHT`
+= 0.25) and its reasons become the last lines of the card (`modifier_notes`). To add one:
+write `Opinion(source="<name>", stance=small, reasons=("Plain line.",))` from the module and
+add `"<name>"` to `MODIFIER_SOURCES`. Removing it from that set turns it back into a view —
+do not do that by accident.
 
 ## How to add or remove an alert (M16)
 
@@ -107,6 +118,12 @@ the short "what we learned" companion: read it before starting a module.
 - **M02 vs batch features differ on `obv_slope`** (snapshot −0.96 vs batch −0.02 for WIPRO,
   09-07): OBV is cumulative, so its slope depends on how many bars were loaded (M02 loads 400).
   Small effect on scores today (0.75 vs 0.74), but it is train/serve skew — fix in M02 later.
+
+- **M11 (2026-10-02)**: a sector tilt written as a normal opinion would have let a stock with no
+  model score become TRADE (positive stance = "liked"). Hence modifier opinions. Real check,
+  data to 07 Sep 2026: Metals, Capital markets, Pharma lead; IT ranks 15 of 15 (weakening).
+- **New brain_runs columns**: the test DB keeps its tables, so after adding a column run
+  `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` on `swing_trade_ml_test` (and stamp/upgrade the check DB).
 
 ## Testing traps (Windows)
 

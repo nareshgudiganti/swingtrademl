@@ -91,7 +91,6 @@ def test_why_returns_one_decision_and_its_trace(client, stock):
 
 def test_a_run_shows_its_sector_table(client, db_session, stock):
     from brain_fakes import make_module, registry
-
     from swing_trade_ml.brain import contracts as c
     from swing_trade_ml.brain import service
     from swing_trade_ml.brain.module import Step
@@ -100,7 +99,9 @@ def test_a_run_shows_its_sector_table(client, db_session, stock):
         return c.Contribution(
             sectors=(
                 c.SectorState(sector="NIFTY IT", rank=1, of_total=2, strength_20d=0.03, rotation="leading"),
-                c.SectorState(sector="NIFTY BANK", rank=2, of_total=2, strength_20d=-0.01, rotation="lagging"),
+                c.SectorState(
+                    sector="NIFTY BANK", rank=2, of_total=2, strength_20d=-0.01, rotation="lagging"
+                ),
             )
         )
 

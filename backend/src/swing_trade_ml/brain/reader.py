@@ -20,7 +20,7 @@ from swing_trade_ml.brain.connectors import FEEDS
 from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.enums import PositionStatus
 from swing_trade_ml.core.logging import get_logger
-from swing_trade_ml.db.models.feeds import InstitutionalFlow, UpcomingEvent
+from swing_trade_ml.db.models.feeds import InstitutionalFlow, TradingRestriction, UpcomingEvent
 from swing_trade_ml.db.models.market import Candle, Instrument
 from swing_trade_ml.db.models.trading import Position
 from swing_trade_ml.services import system_state
@@ -187,6 +187,33 @@ class DatedReader:
         for symbol, day in rows:
             out.setdefault(symbol, set()).add(day)
         return out
+
+    def event_rows(self, symbols) -> list:
+        """Results dates and price-resetting corporate actions for these stocks,
+        as known by as_of (rows stored later are a future the run cannot see)."""
+        from swing_trade_ml.brain.modules.m13_news.calendar import EventRow
+
+        rows = self.db.execute(
+            select(UpcomingEvent.symbol, UpcomingEvent.kind, UpcomingEvent.event_date, UpcomingEvent.detail)
+            .where(UpcomingEvent.symbol.in_(list(symbols)), UpcomingEvent.created_at <= self.as_of)
+            .order_by(UpcomingEvent.event_date)
+        ).all()
+        return [EventRow(symbol=s, kind=k, day=d, detail=detail or "") for s, k, d, detail in rows]
+
+    def restriction_rows(self, symbols) -> list:
+        """ASM/GSM rows for these stocks dated on or before the run's IST date."""
+        from swing_trade_ml.brain.modules.m13_news.calendar import RestrictionRow
+
+        upto = self.as_of.astimezone(IST).date()
+        rows = self.db.execute(
+            select(
+                TradingRestriction.symbol,
+                TradingRestriction.kind,
+                TradingRestriction.stage,
+                TradingRestriction.as_of,
+            ).where(TradingRestriction.symbol.in_(list(symbols)), TradingRestriction.as_of <= upto)
+        ).all()
+        return [RestrictionRow(symbol=s, kind=k, stage=stage or "", as_of=d) for s, k, stage, d in rows]
 
     def feed_latest(self) -> dict[str, object]:
         """Newest day each side feed has, on or before as_of's IST date."""

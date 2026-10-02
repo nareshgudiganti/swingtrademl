@@ -65,6 +65,12 @@ class FakeReader:
     def sector_closes(self) -> dict[str, pd.Series]:
         return {}
 
+    def event_rows(self, symbols) -> list:
+        return []
+
+    def restriction_rows(self, symbols) -> list:
+        return []
+
     def model_probability(self, symbol: str) -> tuple[float, float, str] | None:
         p = self._probabilities.get(symbol)
         return None if p is None else (p, self._threshold, "swing_classifier v1")

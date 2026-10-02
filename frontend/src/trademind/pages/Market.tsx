@@ -1,221 +1,189 @@
-import {
-  breadth,
-  indices,
-  marketEvents,
-  marketSignals,
-  marketState,
-  regimeHistory,
-  regimeTimeline,
-  sectors,
-  series,
-} from '../data'
-import { Card, Donut, GlowArea, HBar, Icon, Ring, Tag, inr, signed, toneClass } from '../ui'
+import { useQuery } from '@tanstack/react-query'
 
-const MOOD_COLORS = ['#2ee68a', '#ffb547', '#ff7a45', '#ff4d6a']
-const vix = series(77, 40, 16, -0.004, 0.06)
-const VIX = indices[2]!
+import { api } from '../../api/client'
+import { marketSituation, useBrainStatus, useEpisodes, useLatestRun } from '../live'
+import { BrainOff, Card, NotConnected, Tag, inr } from '../ui'
 
-function RegimeStrip() {
-  // One column per day, height = Nifty level, colour = the brain's mood that day.
-  const vals = regimeTimeline.map((p) => p.v)
-  const lo = Math.min(...vals)
-  const hi = Math.max(...vals)
-  const W = 300
-  const H = 120
-  const w = W / regimeTimeline.length
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} preserveAspectRatio="none">
-      {regimeTimeline.map((p, i) => {
-        const h = 20 + ((p.v - lo) / (hi - lo || 1)) * (H - 26)
-        return (
-          <rect
-            key={i}
-            x={i * w}
-            y={H - h}
-            width={w + 0.4}
-            height={h}
-            fill={MOOD_COLORS[p.mood]}
-            opacity={0.75}
-            style={{ filter: `drop-shadow(0 0 3px ${MOOD_COLORS[p.mood]})` }}
-          />
-        )
-      })}
-    </svg>
-  )
+const MARKET_PLAIN: Record<string, string> = {
+  NORMAL: 'New ideas are allowed at full size.',
+  DEFENSIVE: 'Careful market: at most two new ideas, at half size.',
+  NO_NEW_TRADES: 'No new buys today. Stocks you hold are still watched and sold as usual.',
+}
+
+const MARKET_TONE: Record<string, 'green' | 'amber' | 'red'> = {
+  NORMAL: 'green',
+  DEFENSIVE: 'amber',
+  NO_NEW_TRADES: 'red',
+}
+
+const ROTATION: Record<string, string> = {
+  leading: 'Leading — stronger for 1 and 3 months',
+  improving: 'Improving — stronger this month',
+  weakening: 'Weakening — slipping this month',
+  lagging: 'Lagging — weaker for 1 and 3 months',
+  unknown: 'Not enough history yet',
+}
+
+const REGIME_PLAIN: Record<string, string> = {
+  bullish: 'Above its own trend — a rising market.',
+  bearish: 'Below its own trend — a falling market.',
+  unknown: 'Not enough data to judge the trend.',
 }
 
 export default function Market() {
-  const total = breadth.advancing + breadth.declining + breadth.unchanged
-  const advPct = Math.round((breadth.advancing / total) * 100)
-  const maxSector = Math.max(...sectors.map((s) => Math.abs(s.changePct)))
+  const status = useBrainStatus()
+  const latest = useLatestRun()
+  const episodes = useEpisodes()
+  const regime = useQuery({ queryKey: ['marketRegime'], queryFn: api.marketRegime })
+
+  if (status === 'off') return <div className="tm-page"><BrainOff /></div>
+
+  if (status === 'loading') {
+    return (
+      <div className="tm-page">
+        <p className="tm-dim">Connecting to the brain…</p>
+      </div>
+    )
+  }
+
+  if (status === 'error') {
+    return (
+      <div className="tm-page">
+        <Card title="Could not reach the brain">
+          <p className="tm-dim">Something went wrong talking to the brain. Try again shortly.</p>
+        </Card>
+      </div>
+    )
+  }
+
+  if (status === 'no-run') {
+    return (
+      <div className="tm-page">
+        <Card title="No run yet">
+          <p className="tm-dim">The brain has not run yet.</p>
+        </Card>
+      </div>
+    )
+  }
+
+  const run = latest.data!
+  const situation = marketSituation(run)
+  const sectors = run.sectors ?? []
 
   return (
     <div className="tm-page tm-grid">
       <div className="tm-grid tm-cols-3">
-        <Card glow className="tm-span-2" title="Market Regime">
-          <div className="tm-flex" style={{ alignItems: 'stretch', gap: '1.25rem' }}>
-            <div className="tm-hero-state" style={{ minWidth: 200 }}>
-              <span className="tm-state-icon">
-                <Icon.Check />
-              </span>
-              <div>
-                <div className="tm-state-word" style={{ fontSize: '1.7rem' }}>
-                  {marketState.mood}
-                </div>
-                <div className="tm-pos" style={{ fontWeight: 600, marginTop: 4 }}>
-                  {marketState.confidence}% Confidence
-                </div>
+        <Card glow className="tm-span-2" title="Market Mode">
+          <div className="tm-hero-state" style={{ minWidth: 200 }}>
+            <div>
+              <div className="tm-state-word" style={{ fontSize: '1.7rem' }}>
+                {run.banner.mode ?? 'Unknown'}
               </div>
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <GlowArea data={regimeTimeline} height={150} />
+              {run.banner.mode && (
+                <Tag tone={MARKET_TONE[run.banner.mode] ?? 'blue'}>{MARKET_PLAIN[run.banner.mode]}</Tag>
+              )}
             </div>
           </div>
-          <p className="tm-note">{marketState.headline}</p>
+          {run.banner.headline && <p className="tm-note">{run.banner.headline}</p>}
+          {situation && situation.label !== 'unlabelled' ? (
+            <p className="tm-note">
+              Situation: {situation.label}
+              {situation.is_unknown ? ' — never seen before' : ''}
+              {situation.evidence.length > 0 ? ` — ${situation.evidence.join('; ')}` : ''}
+            </p>
+          ) : (
+            <p className="tm-dim">The brain did not recognise a named market situation today.</p>
+          )}
         </Card>
 
-        <Card title="Regime History" sub="The brain's market mood, last 3 months">
-          <div className="tm-flex" style={{ alignItems: 'flex-start' }}>
-            <div className="tm-legend" style={{ minWidth: 92 }}>
-              {regimeHistory.map((r) => (
-                <div key={r.mood} style={{ color: r.color }}>
-                  <span className="tm-swatch" />
-                  <span style={{ color: 'var(--tm-text)' }}>{r.mood}</span>
-                </div>
-              ))}
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <RegimeStrip />
-            </div>
-          </div>
-          <div className="tm-flex tm-wrap" style={{ marginTop: '0.6rem', gap: '0.4rem' }}>
-            {regimeHistory.map((r) => (
-              <span key={r.mood} className="tm-faint" style={{ fontSize: '0.72rem' }}>
-                {r.mood} {r.share}%
-              </span>
-            ))}
-          </div>
+        <Card title="NIFTY 50" sub="From the market data service">
+          {regime.isLoading && <p className="tm-dim">Loading…</p>}
+          {regime.isError && <p className="tm-dim">Could not load the NIFTY level.</p>}
+          {regime.data && (
+            <>
+              <div className="tm-big tm-num" style={{ fontSize: '1.6rem' }}>
+                {regime.data.nifty_close != null ? `₹${inr(regime.data.nifty_close, 0)}` : '—'}
+              </div>
+              <p className="tm-note">{REGIME_PLAIN[regime.data.regime] ?? REGIME_PLAIN.unknown}</p>
+              <p className="tm-dim" style={{ fontSize: '0.78rem' }}>
+                Volatility: {regime.data.volatility_level}
+              </p>
+            </>
+          )}
         </Card>
       </div>
 
       <div className="tm-grid tm-cols-3">
-        <Card title="Sector Rotation" sub="Today's change by sector">
-          {sectors.map((s) => (
-            <HBar
-              key={s.name}
-              label={s.name}
-              value={s.changePct}
-              max={maxSector}
-              tone={s.changePct > 0.5 ? 'up' : s.changePct < 0 ? 'down' : 'flat'}
-              right={signed(s.changePct)}
-            />
-          ))}
+        <Card className="tm-span-2" title="Sector Rotation" sub="Rank among all sectors, last 20 trading days">
+          {sectors.length === 0 ? (
+            <p className="tm-dim">No sector data in this run.</p>
+          ) : (
+            <table className="tm-table">
+              <thead>
+                <tr>
+                  <th>Rank</th>
+                  <th>Sector</th>
+                  <th>Direction</th>
+                  <th className="tm-right">20-day strength</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sectors.map((s) => (
+                  <tr key={s.sector}>
+                    <td className="tm-num">{s.rank}/{s.of_total}</td>
+                    <td className="tm-strong">{s.name}</td>
+                    <td className="tm-dim">{ROTATION[s.rotation] ?? s.rotation}</td>
+                    <td className="tm-right tm-num">
+                      {s.strength_20d == null ? '—' : `${s.strength_20d >= 0 ? '+' : ''}${(s.strength_20d * 100).toFixed(1)}%`}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </Card>
 
-        <Card title="Market Breadth" sub="How many stocks rose vs fell today">
-          <div style={{ display: 'grid', placeItems: 'center', padding: '0.4rem 0' }}>
-            <Ring
-              value={advPct}
-              size={150}
-              stroke={12}
-              center={
-                <>
-                  <span className="tm-ring-value" style={{ fontSize: 34 }}>
-                    {advPct}
-                    <small style={{ fontSize: 16 }}>%</small>
-                  </span>
-                  <span className="tm-pos" style={{ fontSize: '0.78rem' }}>
-                    Advancing
-                  </span>
-                </>
-              }
-            />
-          </div>
-          <div className="tm-between" style={{ marginTop: '0.6rem', padding: '0 0.6rem' }}>
-            <div style={{ textAlign: 'center' }}>
-              <div className="tm-stat-value tm-pos" style={{ fontSize: '1.4rem' }}>
-                {inr(breadth.advancing, 0)}
-              </div>
-              <div className="tm-stat-label">Advancing</div>
-            </div>
-            <div style={{ textAlign: 'center' }}>
-              <div className="tm-stat-value tm-neg" style={{ fontSize: '1.4rem' }}>
-                {inr(breadth.declining, 0)}
-              </div>
-              <div className="tm-stat-label">Declining</div>
-            </div>
-          </div>
-        </Card>
-
-        <Card title="Key Market Signals">
-          <div className="tm-rows">
-            {marketSignals.map((s) => (
-              <div key={s.label} className="tm-row" title={s.hint}>
-                <span className="tm-flex" style={{ gap: '0.55rem' }}>
-                  <span
-                    className="tm-check-icon"
-                    style={{ color: s.tone === 'pos' ? 'var(--tm-green)' : 'var(--tm-amber)', width: 18, height: 18 }}
-                  >
-                    {s.tone === 'pos' ? <Icon.Check /> : <Icon.Minus />}
-                  </span>
-                  <span className={s.tone === 'pos' ? 'tm-pos' : 'tm-warn'}>{s.label}</span>
-                </span>
-                <span className="tm-num tm-strong">{s.value}</span>
-              </div>
-            ))}
-          </div>
-        </Card>
+        <NotConnected
+          what="Market Breadth"
+          reason="How many stocks rose vs fell today is not connected yet — no endpoint reports it."
+        />
       </div>
 
-      <div className="tm-grid tm-cols-3">
-        <Card title="Fear Gauge (India VIX)" sub="Lower = calmer market, better for new trades">
-          <GlowArea data={vix} color="#33d6ff" height={140} formatter={(v) => v.toFixed(1)} />
-          <div className="tm-between tm-note">
-            <span>Now {VIX.value}</span>
-            <span className={toneClass(-VIX.changePct)}>{signed(VIX.changePct, 1)} today</span>
-          </div>
+      <div className="tm-grid tm-cols-2">
+        <Card title="Market History" sub="The stretches the market went through, as the brain names them">
+          {episodes.isLoading && <p className="tm-dim">Loading…</p>}
+          {episodes.isError && <p className="tm-dim">Could not load market history.</p>}
+          {episodes.data && episodes.data.length === 0 && <p className="tm-dim">No history recorded yet.</p>}
+          {episodes.data && episodes.data.length > 0 && (
+            <table className="tm-table">
+              <thead>
+                <tr>
+                  <th>Situation</th>
+                  <th>From</th>
+                  <th>To</th>
+                  <th className="tm-right">NIFTY change</th>
+                </tr>
+              </thead>
+              <tbody>
+                {episodes.data.map((e) => (
+                  <tr key={e.start_day}>
+                    <td>{e.label}</td>
+                    <td className="tm-dim">{e.start_day}</td>
+                    <td className="tm-dim">{e.end_day ?? 'still going'}</td>
+                    <td className="tm-right tm-num">
+                      {e.nifty_change == null ? '—' : `${e.nifty_change >= 0 ? '+' : ''}${(e.nifty_change * 100).toFixed(1)}%`}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </Card>
-        <Card title="Breadth Mix">
-          <div className="tm-flex" style={{ gap: '1.25rem' }}>
-            <Donut
-              size={130}
-              stroke={18}
-              segments={[
-                { pct: breadth.advancing, color: '#2ee68a', name: 'Advancing' },
-                { pct: breadth.declining, color: '#ff4d6a', name: 'Declining' },
-                { pct: breadth.unchanged, color: '#4f8cff', name: 'Unchanged' },
-              ]}
-              center={<span className="tm-dim" style={{ fontSize: '0.72rem' }}>{inr(total, 0)} stocks</span>}
-            />
-            <div className="tm-legend" style={{ flex: 1 }}>
-              <div className="tm-legend-row" style={{ color: '#2ee68a' }}>
-                <span><span className="tm-swatch" /><span style={{ color: 'var(--tm-text)' }}>Advancing</span></span>
-                <span>{inr(breadth.advancing, 0)}</span>
-              </div>
-              <div className="tm-legend-row" style={{ color: '#ff4d6a' }}>
-                <span><span className="tm-swatch" /><span style={{ color: 'var(--tm-text)' }}>Declining</span></span>
-                <span>{inr(breadth.declining, 0)}</span>
-              </div>
-              <div className="tm-legend-row" style={{ color: '#4f8cff' }}>
-                <span><span className="tm-swatch" /><span style={{ color: 'var(--tm-text)' }}>Unchanged</span></span>
-                <span>{inr(breadth.unchanged, 0)}</span>
-              </div>
-            </div>
-          </div>
-        </Card>
-        <Card title="Key Events" sub="Dates that can move the market">
-          <div className="tm-rows">
-            {marketEvents.map((e) => (
-              <div className="tm-row" key={e.title}>
-                <span>
-                  <span className="tm-faint" style={{ marginRight: 8 }}>{e.date}</span>
-                  {e.title}
-                </span>
-                <Tag tone={e.impact === 'High' ? 'red' : 'amber'}>{e.impact}</Tag>
-              </div>
-            ))}
-          </div>
-        </Card>
+
+        <NotConnected
+          what="Fear Gauge (India VIX)"
+          reason="The brain does not read the VIX index yet — only a volatility level, shown on the NIFTY card."
+        />
       </div>
     </div>
   )

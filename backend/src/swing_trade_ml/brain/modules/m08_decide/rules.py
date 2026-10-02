@@ -44,7 +44,12 @@ def _exchange_watch_list(d, f, p) -> Proposal:
 
 
 def _event_window(d, f, p) -> Proposal:
+    # On and just after an ex-date the price drops by arithmetic (a split, a
+    # bonus), so a "breakdown" seen then is not one.
+    reset = any(sit.label == "price reset" for sit in f.situations)
     for sit in f.situations:
+        if sit.label == "breakdown" and reset:
+            continue
         if sit.label in AVOID_SITUATIONS:
             what = sit.evidence[0] if sit.evidence else sit.label.capitalize()
             return IdeaWord.AVOID, f"{what} — the brain avoids new trades around this."

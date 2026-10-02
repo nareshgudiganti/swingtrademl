@@ -97,7 +97,9 @@ class BrainContext:
         for s in contribution.sectors:
             self.sectors.setdefault(s.sector, s)
         for s in contribution.stocks:
-            self.stocks.setdefault(s.symbol, s)
+            # The state engine's values are the floor; a plug-in only fills the
+            # fields it left empty (e.g. M13's exchange restrictions).
+            self.stocks[s.symbol] = _fill_gaps(self.stocks.get(s.symbol), s)
         for r in contribution.recalls:
             self.recalls.setdefault(r.symbol, r)
         for v in contribution.verdicts:

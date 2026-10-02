@@ -5,6 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from swing_trade_ml.brain.modules.m04_situations.novelty import novelty, state_vectors
 from swing_trade_ml.brain.modules.m04_situations.rules import label_days, market_situation
 
 
@@ -80,3 +81,36 @@ def test_recovery_says_how_far_it_fell():
     nifty = _path((400, 0.0005), (1, -0.05), (19, -0.015), (32, 0.01))
     sit = market_situation(nifty, _calm_vix(nifty))
     assert sit.evidence[0].startswith("NIFTY is back within 5% of its high after falling 29%")
+
+
+# --- the unknown-market detector ------------------------------------------------------------
+
+
+def _random_market(n=700, seed=4):
+    rng = np.random.default_rng(seed)
+    nifty = _dated(10_000 * np.cumprod(1 + rng.normal(0.0004, 0.009, n)))
+    vix = pd.Series(np.clip(15 + rng.normal(0, 1.5, n), 9, None), index=nifty.index)
+    return nifty, vix
+
+
+def test_an_ordinary_day_is_not_unknown():
+    nifty, vix = _random_market()
+    result = novelty(state_vectors(nifty, vix))
+    assert not result.is_unknown and result.threshold > 0
+    assert result.nearest_day is not None
+
+
+def test_a_day_unlike_any_before_is_unknown():
+    nifty, vix = _random_market()
+    vix.iloc[-1] = 60.0  # fear four times anything seen
+    nifty.iloc[-1] = nifty.iloc[-2] * 0.97
+    result = novelty(state_vectors(nifty, vix))
+    assert result.is_unknown and result.distance > result.threshold
+    assert result.line.startswith("Today's market looks unlike any day")
+
+
+def test_short_history_is_never_unknown():
+    nifty, vix = _random_market(n=200)
+    vix.iloc[-1] = 60.0
+    result = novelty(state_vectors(nifty, vix))
+    assert not result.is_unknown and result.threshold is None

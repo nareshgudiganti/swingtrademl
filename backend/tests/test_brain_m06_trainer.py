@@ -10,8 +10,10 @@ import pytest
 from swing_trade_ml.brain.modules.m06_reason.trainer import (
     META_INPUTS,
     Combiner,
+    HonestyMap,
     calibration_buckets,
     evaluate,
+    fit_honesty,
     monthly_folds,
     unseen_rows,
 )
@@ -134,3 +136,37 @@ def test_a_fitted_combiner_gives_probabilities_between_0_and_1():
         combiner = Combiner.fit(frame, kind)
         p = combiner.predict(frame.head(50))
         assert ((p > 0) & (p < 1)).all() and combiner.inputs == list(META_INPUTS)
+
+
+# --- the honesty map: what really happened when it said X --------------------------
+
+
+def test_over_confident_scores_are_mapped_to_what_really_happened():
+    rng = np.random.default_rng(5)
+    p = rng.uniform(0.0, 0.9, 20_000)
+    y = (rng.uniform(0, 1, p.size) < p / 2).astype(int)  # it promised twice what happened
+    days = pd.Series(pd.bdate_range("2025-11-03", periods=200)).sample(p.size, replace=True, random_state=1)
+    honest = fit_honesty(p, y, days.to_numpy())
+    assert honest.apply(np.array([0.8]))[0] == pytest.approx(0.4, abs=0.05)
+    assert honest.apply(np.array([0.2]))[0] == pytest.approx(0.1, abs=0.04)
+
+
+def test_chances_are_capped_where_evidence_covers_too_few_days():
+    """High scores seen on only 3 days, all of which happened to win, must not
+    be shown as near-certain: the chance stops at the best well-evidenced level."""
+    rng = np.random.default_rng(6)
+    days_all = pd.bdate_range("2025-11-03", periods=100)
+    p = np.r_[rng.uniform(0.0, 0.5, 5000), np.full(300, 0.9)]
+    y = np.r_[(rng.uniform(0, 1, 5000) < p[:5000]).astype(int), np.ones(300, dtype=int)]
+    days = np.r_[rng.choice(days_all, 5000), rng.choice(days_all[:3], 300)]
+    honest = fit_honesty(p, y, days, min_days=20)
+    assert honest.apply(np.array([0.9]))[0] <= 0.55
+    assert honest.max_seen == pytest.approx(0.9)
+
+
+def test_evaluate_learns_and_checks_the_honesty_map_on_later_months():
+    report = evaluate(_frame(signal=1.0))
+    assert isinstance(report["honesty_map"], HonestyMap)
+    check = report["honesty_check"]
+    assert {"months", "brier_raw", "brier_honest"} <= set(check)
+    assert check["brier_honest"] <= check["brier_raw"] + 0.01

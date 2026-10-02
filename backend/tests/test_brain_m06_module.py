@@ -14,7 +14,7 @@ from swing_trade_ml.brain.module import REGISTRY, Mode, Step
 from swing_trade_ml.brain.modules.m06_reason import artifact
 from swing_trade_ml.brain.modules.m06_reason import module as m06
 from swing_trade_ml.brain.modules.m06_reason.module import Reasoning
-from swing_trade_ml.brain.modules.m06_reason.trainer import Combiner
+from swing_trade_ml.brain.modules.m06_reason.trainer import Combiner, fit_honesty
 from swing_trade_ml.brain.modules.m08_decide.module import DecisionEngine
 from swing_trade_ml.brain.runner import execute
 from swing_trade_ml.ml.features import FEATURE_COLUMNS
@@ -125,7 +125,7 @@ def test_a_combined_calibrated_opinion_with_a_break_even_threshold():
     op = next(o for o in ctx.opinions if o.source == "combined" and o.symbol == "ABC")
     assert op.calibrated and 0 < op.probability < 1
     assert 0.35 < op.threshold < 0.5  # break-even (about a third) plus a margin
-    assert "unseen" in op.evidence and "9551" in op.evidence
+    assert "Tested on 9551 unseen" in op.evidence
 
 
 def test_m08_shows_the_calibrated_chance_and_expected_result():
@@ -160,3 +160,31 @@ def test_stocks_without_features_are_skipped():
         Reader(), _payload(), make_module("M02", Step.PERCEIVE, writes=("Snapshot@1",), run=bare), Reasoning
     )
     assert not [o for o in ctx.opinions if o.source == "combined"]
+
+
+def test_the_honesty_map_decides_the_chance_shown():
+    """The combiner says ~60%; on unseen months such scores came true 30% of
+    the time, so 30% is what the brain shows, and it waits."""
+    payload = _payload()
+    payload["honesty"] = fit_honesty(
+        np.array([0.05, 0.95] * 500),
+        np.array([0, 0, 1, 0, 0, 0] * 166 + [0] * 4),
+        np.array(pd.bdate_range("2026-01-01", periods=1000)),
+    )
+    reg = (_perceive(0.6), Reasoning, allow_all_risk_gate(), fresh_quality(), DecisionEngine)
+    ctx = _run(Reader(), payload, *reg)
+    op = next(o for o in ctx.opinions if o.source == "combined")
+    assert op.probability == pytest.approx(payload["honesty"].apply(np.array([0.6]))[0])
+    assert op.probability < 0.4 and ctx.decisions["ABC"].word is IdeaWord.WAIT
+
+
+def test_scores_beyond_what_testing_covered_are_flagged():
+    payload = _payload()
+    payload["honesty"] = fit_honesty(
+        np.linspace(0.0, 0.3, 1000),
+        np.array([0, 1] * 500),
+        np.array(pd.bdate_range("2026-01-01", periods=1000)),
+    )
+    ctx = _run(Reader(), payload, _perceive(0.6), Reasoning)
+    op = next(o for o in ctx.opinions if o.source == "combined")
+    assert "beyond" in op.evidence

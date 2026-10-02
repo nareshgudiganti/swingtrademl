@@ -48,6 +48,18 @@ def _bucket_line(report: dict, p: float) -> str:
     return ""
 
 
+def _honesty_line(honesty, raw: float, p: float) -> str:
+    line = f"Combined score {raw:.0%}; on unseen months scores like it came true about {p:.0%} of the time."
+    if raw > honesty.max_seen:
+        line += (
+            f" Today's score is beyond anything seen in testing (highest {honesty.max_seen:.0%}), "
+            "so treat it with care."
+        )
+    elif p >= honesty.ceiling - 1e-9 and raw > p:
+        line += f" Capped: fewer than {honesty.min_days} days of evidence back anything higher."
+    return line
+
+
 def _base(reader, label: str):
     name, _, version = label.rpartition(" ")
     loader = getattr(reader, "model_bundle", None)
@@ -97,13 +109,15 @@ class Reasoning(BrainModule):
                 continue
             row = {"p_barrier": p_barrier, "p_swing": p_swing}
             row.update({col: feats.get(col, np.nan) for col in CONTEXT_COLUMNS})
-            p = float(np.clip(saved["combiner"].predict(pd.DataFrame([row]))[0], 0.0, 1.0))
+            raw = float(np.clip(saved["combiner"].predict(pd.DataFrame([row]))[0], 0.0, 1.0))
+            honesty = saved.get("honesty")
+            p = float(honesty.apply(np.array([raw]))[0]) if honesty is not None else raw
             threshold = break_even(snap.close) + SAFETY_MARGIN
             evidence = " ".join(
                 part
                 for part in (
-                    f"Calibrated on {n_seen} unseen stock-days ({saved.get('version', '?')}).",
-                    _bucket_line(report, p),
+                    f"Tested on {n_seen} unseen stock-days ({saved.get('version', '?')}).",
+                    _honesty_line(honesty, raw, p) if honesty is not None else _bucket_line(report, raw),
                 )
                 if part
             )

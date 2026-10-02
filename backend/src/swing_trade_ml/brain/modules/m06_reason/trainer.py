@@ -50,6 +50,9 @@ BUCKET_EDGES = (0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 1.0)
 MIN_AUC = 0.55
 RECENT_MONTHS = 3
 CANDIDATES = ("base_rate", "raw_barrier", "meta", "meta_recent")
+# The honesty map trusts a score level only when the cases at or above it span
+# this many different days: 47 stocks on one day are one market bet, not 47.
+MIN_EVIDENCE_DAYS = 20
 
 
 def _logit(p: pd.Series | np.ndarray) -> np.ndarray:
@@ -117,6 +120,40 @@ def calibration_buckets(p: np.ndarray, y: np.ndarray, edges: tuple[float, ...] =
                 }
             )
     return out
+
+
+# --- the honesty map -------------------------------------------------------------------
+
+
+@dataclass
+class HonestyMap:
+    """'When it said X on unseen months, Y really happened' — learnt from the
+    walk-forward predictions, applied to every live score. Never claims more
+    than the best level backed by MIN_EVIDENCE_DAYS different days."""
+
+    iso: Any
+    ceiling: float
+    max_seen: float
+    min_days: int
+
+    def apply(self, p: np.ndarray) -> np.ndarray:
+        return np.minimum(self.iso.predict(np.asarray(p, dtype=float)), self.ceiling)
+
+
+def fit_honesty(
+    p: np.ndarray, y: np.ndarray, days: np.ndarray, min_days: int = MIN_EVIDENCE_DAYS
+) -> HonestyMap:
+    p, y = np.asarray(p, dtype=float), np.asarray(y, dtype=float)
+    iso = IsotonicRegression(out_of_bounds="clip", y_min=0.0, y_max=1.0).fit(p, y)
+    order = np.argsort(-p, kind="stable")
+    seen: set = set()
+    cut = p[order[-1]]
+    for i in order:  # walk down from the highest score until enough days back it
+        seen.add(pd.Timestamp(days[i]).normalize())
+        if len(seen) >= min_days:
+            cut = p[i]
+            break
+    return HonestyMap(iso, float(iso.predict([cut])[0]), float(p.max()), min_days)
 
 
 # --- the combiner ----------------------------------------------------------------------
@@ -208,11 +245,13 @@ def evaluate(frame: pd.DataFrame, min_train_months: int = 3) -> dict:
 
     preds: dict[str, list[np.ndarray]] = {kind: [] for kind in CANDIDATES}
     ys: list[np.ndarray] = []
+    test_days: list[np.ndarray] = []
     for train_idx, test_idx in folds:
         train, test = frame.loc[train_idx], frame.loc[test_idx]
         for kind in CANDIDATES:
             preds[kind].append(Combiner.fit(train, kind).predict(test))
         ys.append(test["target"].astype(int).to_numpy())
+        test_days.append(test["day"].to_numpy())
 
     y = np.concatenate(ys)
     candidates = {kind: _metrics(np.concatenate(p), y) for kind, p in preds.items()}
@@ -237,6 +276,9 @@ def evaluate(frame: pd.DataFrame, min_train_months: int = 3) -> dict:
             f"{chosen} ranks stocks best among those better than chance (AUC {m['auc']:.3f}); its error "
             f"{m['brier']:.4f} against {reference:.4f} for a constant guess."
         )
+    honesty_map, honesty_check = None, None
+    if chosen is not None:
+        honesty_map, honesty_check = _honesty(preds[chosen], ys, test_days)
     return {
         "folds": len(folds),
         "n_test_rows": len(y),
@@ -250,4 +292,27 @@ def evaluate(frame: pd.DataFrame, min_train_months: int = 3) -> dict:
         "candidates": candidates,
         "chosen": chosen,
         "why": why,
+        "honesty_map": honesty_map,
+        "honesty_check": honesty_check,
     }
+
+
+def _honesty(preds: list[np.ndarray], ys: list[np.ndarray], days: list[np.ndarray]):
+    """The map for live use is learnt from every test month. It is checked the
+    same honest way: learnt on the earlier test months only, scored on the last
+    RECENT_MONTHS it never saw."""
+    p, y, d = np.concatenate(preds), np.concatenate(ys), np.concatenate(days)
+    check = None
+    if len(preds) > RECENT_MONTHS:
+        k = len(preds) - RECENT_MONTHS
+        early = fit_honesty(np.concatenate(preds[:k]), np.concatenate(ys[:k]), np.concatenate(days[:k]))
+        p_late, y_late = np.concatenate(preds[k:]), np.concatenate(ys[k:])
+        check = {
+            "months": RECENT_MONTHS,
+            "brier_raw": float(brier_score_loss(y_late, np.clip(p_late, 0, 1))),
+            "brier_honest": float(brier_score_loss(y_late, early.apply(p_late))),
+            "mean_raw": float(p_late.mean()),
+            "mean_honest": float(early.apply(p_late).mean()),
+            "actual": float(y_late.mean()),
+        }
+    return fit_honesty(p, y, d), check

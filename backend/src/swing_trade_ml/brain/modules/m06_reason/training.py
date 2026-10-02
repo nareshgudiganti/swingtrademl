@@ -48,6 +48,7 @@ def train_and_save(
     if report["chosen"] is None:
         raise TrainingError(report["why"])
     combiner = Combiner.fit(frame, report["chosen"])
+    honesty = report.pop("honesty_map")
     report["n_rows"] = len(frame)
     report["n_symbols"] = int(frame["symbol"].nunique())
     path = artifact.save(
@@ -57,5 +58,6 @@ def train_and_save(
             "barrier": f"{barrier.name} {barrier.version}",
             "swing": f"{swing.name} {swing.version}",
         },
+        honesty=honesty,
     )
     return {"path": path, "report": report}

@@ -31,7 +31,7 @@ def _versions() -> list[tuple[int, Path]]:
     return sorted(found)
 
 
-def save(combiner: Any, report: dict, base_models: dict[str, str]) -> Path:
+def save(combiner: Any, report: dict, base_models: dict[str, str], honesty: Any = None) -> Path:
     folder = _folder()
     folder.mkdir(parents=True, exist_ok=True)
     version = (_versions()[-1][0] if _versions() else 0) + 1
@@ -42,9 +42,16 @@ def save(combiner: Any, report: dict, base_models: dict[str, str]) -> Path:
         "combiner": combiner,
         "report": report,
         "base_models": base_models,
+        "honesty": honesty,
     }
     joblib.dump(payload, path)
-    readable = {k: v for k, v in payload.items() if k != "combiner"}
+    readable = {k: v for k, v in payload.items() if k not in ("combiner", "honesty")}
+    if honesty is not None:
+        readable["honesty"] = {
+            "ceiling": honesty.ceiling,
+            "max_seen": honesty.max_seen,
+            "min_days": honesty.min_days,
+        }
     path.with_suffix(".json").write_text(json.dumps(readable, indent=2, default=str), encoding="utf-8")
     return path
 

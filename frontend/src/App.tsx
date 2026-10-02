@@ -17,6 +17,7 @@ import Capital from './pages/Capital'
 import ModelLab from './pages/ModelLab'
 import Settings from './pages/Settings'
 import Brain from './pages/Brain'
+import TradeMindApp from './trademind/TradeMindApp'
 import {
   AlertTriangleIcon,
   BarChartIcon,
@@ -45,6 +46,8 @@ import {
 // Shown only while the brain is switched on (BRAIN_ENABLED) — production
 // looks exactly like before until the owner turns it on.
 const BRAIN_NAV = { to: '/brain', label: 'Brain', Icon: BrainIcon }
+// The new full-screen TradeMind design (sample data for now) — same switch.
+const TRADEMIND_NAV = { to: '/trademind', label: 'TradeMind', Icon: BrainIcon }
 
 const NAV = [
   { to: '/dashboard', label: 'Dashboard', Icon: HomeIcon },
@@ -153,6 +156,13 @@ export default function App() {
     )
   }
 
+  // TradeMind is a full-screen app of its own with its own top menu, so it
+  // renders outside the classic sidebar layout. Same brain switch as /brain.
+  if (location.pathname.startsWith('/trademind')) {
+    if (!status) return null
+    return status.brain_enabled ? <TradeMindApp /> : <Navigate to="/dashboard" replace />
+  }
+
   return (
     <div className="layout">
       <aside className="sidebar">
@@ -165,7 +175,7 @@ export default function App() {
         </div>
 
         <nav className="nav">
-          {[...NAV, ...(status?.brain_enabled ? [BRAIN_NAV] : [])].map((item) => (
+          {[...NAV, ...(status?.brain_enabled ? [BRAIN_NAV, TRADEMIND_NAV] : [])].map((item) => (
             <NavLink
               key={item.to}
               to={item.to}

@@ -490,6 +490,9 @@ export const backtests = [
 
 // ------------------------------------------------------------------ hook --
 
+/** @deprecated Sample data only — no screen should call this once it's on
+ * live data. Use the hooks and mappers in `./live.ts` instead. Removed in
+ * Task 5 once the last screen stops importing it. */
 export function useTradeMind() {
   // Later: swap for react-query calls against /brain/* — same shape.
   return {

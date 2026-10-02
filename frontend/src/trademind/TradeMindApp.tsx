@@ -4,6 +4,7 @@
 import { NavLink, Navigate, Route, Routes, Link } from 'react-router-dom'
 
 import './trademind.css'
+import { useBrainStatus } from './live'
 import { Icon } from './ui'
 import Home from './pages/Home'
 import Market from './pages/Market'
@@ -28,7 +29,17 @@ const NAV = [
   { to: '/trademind/system', label: 'System' },
 ]
 
+const STATUS_CHIP: Record<ReturnType<typeof useBrainStatus>, { label: string; title: string }> = {
+  live: { label: 'Live', title: "Connected to the brain's latest run" },
+  off: { label: 'Brain off', title: 'The brain is switched off on this server' },
+  loading: { label: 'Connecting…', title: 'Checking the connection to the brain' },
+  error: { label: 'Error', title: 'Could not reach the brain' },
+}
+
 export default function TradeMindApp() {
+  const status = useBrainStatus()
+  const chip = STATUS_CHIP[status]
+
   return (
     <div className="tm">
       <header className="tm-topbar">
@@ -44,8 +55,8 @@ export default function TradeMindApp() {
           ))}
         </nav>
         <div className="tm-topbar-right">
-          <span className="tm-demo-chip" title="These screens show sample numbers until the brain is connected">
-            Demo data
+          <span className="tm-demo-chip" title={chip.title}>
+            {chip.label}
           </span>
           <Link to="/dashboard" className="tm-avatar" title="Back to the classic app">
             <Icon.User />

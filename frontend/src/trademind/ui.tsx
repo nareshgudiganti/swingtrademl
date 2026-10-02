@@ -170,6 +170,26 @@ export function PageHead({ title, sub, right }: { title: string; sub?: string; r
   )
 }
 
+/** A muted card for anything the brain doesn't (yet) answer — never fill
+ * the gap with a sample number. */
+export function NotConnected({ what, reason }: { what: string; reason?: string }) {
+  return (
+    <Card title={what}>
+      <p className="tm-dim">{reason ?? 'Not connected yet.'}</p>
+    </Card>
+  )
+}
+
+/** Shown wherever a screen would otherwise ask the brain for something and
+ * every brain endpoint is 404ing — BRAIN_ENABLED is off on this server. */
+export function BrainOff() {
+  return (
+    <Card title="Brain off">
+      <p className="tm-dim">The brain is switched off on this server.</p>
+    </Card>
+  )
+}
+
 const ACTION_HINT: Record<Action, string> = {
   TRADE: 'Worth buying now, at the suggested size',
   WATCH: 'Interesting — wait for a better moment',

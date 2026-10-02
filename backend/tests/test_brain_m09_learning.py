@@ -20,7 +20,13 @@ from swing_trade_ml.brain import service
 from swing_trade_ml.brain.module import Mode, Step
 from swing_trade_ml.brain.modules.m09_learn import learn as learn_mod
 from swing_trade_ml.brain.modules.m09_learn import scoring, store
-from swing_trade_ml.brain.modules.m09_learn.drift import drift_lines, feature_drift, psi
+from swing_trade_ml.brain.modules.m09_learn.drift import (
+    collapse_one_per_day,
+    drift_lines,
+    drift_report,
+    feature_drift,
+    psi,
+)
 from swing_trade_ml.brain.modules.m09_learn.failures import failure_patterns
 from swing_trade_ml.brain.modules.m09_learn.outcomes import score
 from swing_trade_ml.brain.modules.m09_learn.proposals import Draft, buy_level_proposal
@@ -472,15 +478,27 @@ def test_feature_drift_levels_and_ordering():
     rng = np.random.default_rng(1)
     reference = _drift_frame(rng, 2000)
     recent = _drift_frame(
-        rng, 2000, shift={"high_52w_dist": 1.2, "rsi_14": 0.15}
-    )  # one major shift, one moderate-ish, rest stable
+        rng, 2000, shift={"high_52w_dist": 1.2, "rsi_14": 0.35}
+    )  # one major shift, one moderate, rest stable
     drift = feature_drift(reference, recent)
     assert next(d["feature"] for d in drift) == "high_52w_dist"
     assert drift[0]["level"] == "major"
     levels = {d["feature"]: d["level"] for d in drift}
+    assert levels["rsi_14"] == "moderate"
     assert levels["nifty_trend_regime"] == "stable"
     psis = [d["psi"] for d in drift]
     assert psis == sorted(psis, reverse=True)
+
+
+def test_feature_drift_skips_an_undersized_but_present_feature():
+    """A feature that exists on both sides but has fewer than 50 non-NaN
+    values is skipped (via `psi` returning None), not reported as "stable"."""
+    rng = np.random.default_rng(3)
+    reference = _drift_frame(rng, 2000)
+    recent = _drift_frame(rng, 2000)
+    recent.loc[49:, "rsi_14"] = np.nan  # only 49 non-NaN values left, under MIN_ROWS
+    drift = feature_drift(reference, recent)
+    assert "rsi_14" not in {d["feature"] for d in drift}
 
 
 def test_feature_drift_skips_features_missing_on_either_side():
@@ -504,6 +522,66 @@ def test_drift_lines_wording_for_moderate_and_major_only():
         "high_52w_dist has shifted a lot from what the model learnt on (stability index 0.41).",
         "rsi_14 has shifted a little from what the model learnt on (stability index 0.18).",
     ]
+
+
+def test_collapse_one_per_day_keeps_one_row_per_day():
+    """A market-wide feature repeats the same value for every stock on a
+    given day; collapsing must drop that repetition, not the days."""
+    frame = pd.DataFrame(
+        {
+            "bar_date": [date(2026, 9, 1)] * 3 + [date(2026, 9, 2)] * 2,
+            "vix_percentile_rank": [0.4, 0.4, 0.4, 0.6, 0.6],
+        }
+    )
+    collapsed = collapse_one_per_day(frame, "bar_date")
+    assert len(collapsed) == 2
+    assert sorted(collapsed["bar_date"].tolist()) == [date(2026, 9, 1), date(2026, 9, 2)]
+
+
+def test_collapse_one_per_day_on_an_empty_frame():
+    assert collapse_one_per_day(pd.DataFrame(), "bar_date").empty
+
+
+# --- drift.drift_report (DB) --------------------------------------------------
+
+
+def test_drift_report_empty_for_a_single_recent_bar_day(db_session):
+    """The real check DB once held `feature_snapshots` for only one bar date
+    across 60 stocks — not enough distinct recent days to say anything about
+    drift, whatever `psi` would compute on it."""
+    from swing_trade_ml.brain.modules.m02_perception.snapshot import feature_set_version
+    from swing_trade_ml.core.enums import ModelStatus
+    from swing_trade_ml.db.models.brain import FeatureSnapshot
+    from swing_trade_ml.db.models.ml import MLModel
+
+    db_session.add(
+        MLModel(
+            name="swing_classifier",
+            version="v1",
+            algorithm="lightgbm",
+            status=ModelStatus.ACTIVE,
+            artifact_path="/nowhere/model.joblib",
+            activated_at=datetime(2026, 9, 1, tzinfo=UTC),
+        )
+    )
+    version = feature_set_version()
+    for i in range(5):
+        db_session.add(
+            FeatureSnapshot(
+                symbol=f"S{i}",
+                bar_date=date(2026, 9, 7),
+                feature_set_version=version,
+                close=100.0,
+                features={"rsi_14": 50.0},
+            )
+        )
+    db_session.commit()
+
+    assert drift_report(db_session) == []
+
+
+def test_drift_report_none_when_there_is_no_active_model(db_session):
+    assert drift_report(db_session) == []
 
 
 # --- proposals.buy_level_proposal (pure) ------------------------------------

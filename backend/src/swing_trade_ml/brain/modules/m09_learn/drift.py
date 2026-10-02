@@ -2,10 +2,10 @@
 (PSI) comparing the features the active model learnt on with the features
 the brain sees now.
 
-Pure: `psi`, `feature_drift`, `drift_lines` take arrays/frames the caller
-already built; no side effects, no database. `drift_report` is the DB
-service that builds those frames from the active model's training window
-(reference) and `feature_snapshots` (recent).
+Pure: `psi`, `feature_drift`, `drift_lines`, `collapse_one_per_day` take
+arrays/frames the caller already built; no side effects, no database.
+`drift_report` is the DB service that builds those frames from the active
+model's training window (reference) and `feature_snapshots` (recent).
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ import pandas as pd
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from swing_trade_ml.brain.modules.m02_perception.snapshot import feature_set_version
 from swing_trade_ml.db.models.brain import FeatureSnapshot
 from swing_trade_ml.db.models.market import Instrument
 from swing_trade_ml.ml.dataset import load_candles
@@ -34,6 +35,13 @@ IST = ZoneInfo("Asia/Kolkata")
 MIN_ROWS = 50
 MAX_REFERENCE_ROWS = 20_000
 REFERENCE_SEED = 42
+# Fewer distinct recent bar dates than this isn't "recent history" — the real
+# check DB once held `feature_snapshots` for a single bar date across 60
+# stocks, which made the stability index compare one sample against itself.
+MIN_RECENT_DAYS = 15
+# A market-wide feature has only one value a day (every stock sees the same
+# number), so it needs far more days before `psi` has the 50 values it wants.
+MARKET_WIDE_RECENT_DAYS = 60
 
 KEY_FEATURES = (
     "rsi_14",
@@ -45,6 +53,15 @@ KEY_FEATURES = (
     "breadth_pct_above_sma50",
     "nifty_trend_regime",
 )
+
+# These three repeat the same value for every stock on a given day (the
+# market's situation, not the stock's). Comparing them row-by-row like the
+# others would make `psi` think it has 60x the independent evidence it
+# actually does, so they are collapsed to one row a day before comparison.
+MARKET_WIDE: frozenset[str] = frozenset(
+    {"vix_percentile_rank", "breadth_pct_above_sma50", "nifty_trend_regime"}
+)
+STOCK_FEATURES: tuple[str, ...] = tuple(f for f in KEY_FEATURES if f not in MARKET_WIDE)
 
 
 def psi(reference: np.ndarray, recent: np.ndarray, bins: int = 10) -> float | None:
@@ -116,6 +133,16 @@ def drift_lines(drift: list[dict]) -> list[str]:
     ]
 
 
+def collapse_one_per_day(frame: pd.DataFrame, day_col: str) -> pd.DataFrame:
+    """One row per distinct value of `day_col`. For a market-wide feature
+    every row on the same day carries the same value, so keeping every row
+    would overcount how much evidence there really is; the particular row
+    kept for a day does not matter since the market-wide columns agree."""
+    if frame.empty or day_col not in frame.columns:
+        return frame.iloc[0:0]
+    return frame.drop_duplicates(subset=[day_col]).reset_index(drop=True)
+
+
 def _watchlist(db: Session) -> list[str]:
     return list(
         db.execute(
@@ -132,7 +159,15 @@ def _reference_frame(db: Session, model) -> pd.DataFrame:
     training window — exactly as `m06_reason.dataset.build_dataset` loads
     context, so the comparison is apples to apples. Capped at
     `MAX_REFERENCE_ROWS`, sampled with a fixed seed so the report is
-    reproducible."""
+    reproducible. Carries a `day` column (the IST day of each bar) so
+    `collapse_one_per_day` can group the market-wide features by day; every
+    other feature simply ignores the extra column.
+
+    Unlike `build_dataset`, this does not skip symbols with under 260 bars of
+    history: `psi` already drops NaN values on each side, and the training-
+    window filter below already keeps only the rows that matter, so a
+    short-history symbol just contributes fewer rows here rather than
+    needing its own gate."""
     if model.train_start is None or model.train_end is None:
         return pd.DataFrame()
     start = model.train_start.astimezone(IST).date()
@@ -153,8 +188,9 @@ def _reference_frame(db: Session, model) -> pd.DataFrame:
             candles, index_df, load_sector_candles(db, get_sector_index(symbol)), vix_df, breadth_df
         )
         day = pd.to_datetime(featured["ts"], utc=True).dt.tz_convert(IST).dt.date
-        in_window = featured[(day >= start) & (day <= end)]
+        in_window = featured[(day >= start) & (day <= end)].copy()
         if not in_window.empty:
+            in_window["day"] = day[in_window.index]
             parts.append(in_window)
 
     if not parts:
@@ -165,41 +201,69 @@ def _reference_frame(db: Session, model) -> pd.DataFrame:
     return reference
 
 
-def _recent_frame(db: Session, recent_days: int) -> pd.DataFrame:
-    """One row per `feature_snapshots` row from the last `recent_days`
-    distinct bar dates, one column per feature. `features` is stored as
-    either a JSON mapping or a list of (name, value) pairs (M02 stores a
-    tuple, which JSON round-trips as a list of pairs) — `dict(...)` accepts
-    either form."""
-    dates = (
+def _recent_dates(db: Session, limit: int) -> list:
+    """The most recent `limit` distinct `feature_snapshots` bar dates,
+    newest first."""
+    return list(
         db.execute(
-            select(FeatureSnapshot.bar_date)
-            .distinct()
-            .order_by(FeatureSnapshot.bar_date.desc())
-            .limit(recent_days)
-        )
-        .scalars()
-        .all()
+            select(FeatureSnapshot.bar_date).distinct().order_by(FeatureSnapshot.bar_date.desc()).limit(limit)
+        ).scalars()
     )
+
+
+def recent_bar_date_count(db: Session, limit: int = MIN_RECENT_DAYS) -> int:
+    """How many distinct recent bar dates `feature_snapshots` holds, capped
+    at `limit` — just enough for the learning report to say why `drift_report`
+    came back empty when there simply is not enough history yet."""
+    return len(_recent_dates(db, limit))
+
+
+def _recent_frame(db: Session, dates: list) -> pd.DataFrame:
+    """One row per `feature_snapshots` row on these bar dates, one column per
+    feature plus `bar_date` (so `collapse_one_per_day` can group the
+    market-wide features) — only the current feature-set version, so a
+    snapshot from a retired feature list is never compared against today's
+    model. `features` is stored as either a JSON mapping or a list of
+    (name, value) pairs (M02 stores a tuple, which JSON round-trips as a list
+    of pairs) — `dict(...)` accepts either form."""
     if not dates:
         return pd.DataFrame()
-    rows = (
-        db.execute(select(FeatureSnapshot.features).where(FeatureSnapshot.bar_date.in_(dates)))
-        .scalars()
-        .all()
-    )
-    return pd.DataFrame([dict(row) for row in rows])
+    rows = db.execute(
+        select(FeatureSnapshot.bar_date, FeatureSnapshot.features).where(
+            FeatureSnapshot.bar_date.in_(dates),
+            FeatureSnapshot.feature_set_version == feature_set_version(),
+        )
+    ).all()
+    return pd.DataFrame([{**dict(features), "bar_date": bar_date} for bar_date, features in rows])
 
 
 def drift_report(db: Session, model_name: str = "swing_classifier", recent_days: int = 20) -> list[dict]:
     """How far the features the brain sees now have drifted from what
     `model_name`'s active version learnt on. [] when there is no active
-    model, or no recent snapshots to compare against."""
+    model, or fewer than `MIN_RECENT_DAYS` distinct recent bar dates — one
+    bar day's snapshots are one sample, not recent history, and `psi` on them
+    is noise rather than a signal."""
     model = get_active_model(db, model_name)
     if model is None:
         return []
-    recent = _recent_frame(db, recent_days)
+    dates = _recent_dates(db, recent_days)
+    if len(dates) < MIN_RECENT_DAYS:
+        return []
+    recent = _recent_frame(db, dates)
     if recent.empty:
         return []
     reference = _reference_frame(db, model)
-    return feature_drift(reference, recent)
+
+    drift = feature_drift(reference, recent, STOCK_FEATURES)
+
+    # The market-wide features get their own, longer window and are
+    # collapsed to one row a day on both sides before comparison; until that
+    # longer window actually holds 50+ days, `psi` naturally skips them (too
+    # few values), rather than this function needing a separate gate.
+    market_dates = _recent_dates(db, MARKET_WIDE_RECENT_DAYS)
+    recent_market = collapse_one_per_day(_recent_frame(db, market_dates), "bar_date")
+    reference_market = collapse_one_per_day(reference, "day")
+    drift += feature_drift(reference_market, recent_market, tuple(MARKET_WIDE))
+
+    drift.sort(key=lambda d: d["psi"], reverse=True)
+    return drift

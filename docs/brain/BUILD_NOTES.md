@@ -27,6 +27,7 @@ the short "what we learned" companion: read it before starting a module.
 | M08 decision engine | brain/m08-decide | draft → named rules (only lower) → opportunity notes; rules in `m08_decide/rules.py`, numbers in `policy.py` |
 | M16 alerts and cards | brain/m16-alerts | detectors (pluggable) → one Telegram message per run, once a day; console preview/send; sidebar badge; Copy plan |
 | M11 sector brain | brain/m11-sector | ranks 15 sector indices vs NIFTY (20 and 60 days), rotation quadrant, `sector` modifier opinion (tilt ±0.05/±0.1) + card line; table stored in `brain_runs.context` (migration 5b7e2d9c3a11) and shown on the console |
+| M12 stock brain | brain/m12-stock | setups (pullback, breakout, base, breakdown) → situations shown in the why; delivery ≥ 1.2× usual on 3 of 5 days; institutional deals (whitelist, same-day round trips ignored); one-line profile on cards; `setup` modifier weighted by the WEIGHTS table (evidence). SHADOW |
 | M13 news and events | brain/m13-news | results within 5 trading days → `results soon` (AVOID new ideas, line on holdings); split/bonus/rights within 2 trading days → `event blackout`; ex-date ± 2 days → `price reset` (M08 ignores a `breakdown` then); ASM/GSM ≤ 4 days old → `StockState.restrictions` (AVOID); `event` modifier lines. Replays read only rows stored by their date |
 | M06 reasoning | brain/m06-meta | `swingtrade brain meta-train` → `brain_meta_vN` (combiner + honesty map); live module writes a `combined`, `calibrated` opinion; buy level = break-even after costs + 5 points. SHADOW |
 
@@ -134,7 +135,20 @@ do not do that by accident.
 - **Card lines must not repeat a reason**: M08 drops a modifier line whose text a reason
   already contains.
 
+- **M12 (2026-10-02): test every rule against history before trusting it.** 5 years of
+  watch-list stocks, +8% before −4% in 15 trading days, any day 17.6%: pullback 16.7%,
+  breakout 16.4%, tight base 13.0%, **breakdown 20.4%**; the build book's delivery rule
+  ("above average 3 of 5 days") fired on 53% of days with no edge (18.8%), 1.2× fired on 6% and
+  reached 22.3%. So setups carry no weight and are not card lines, breakdown is no longer an
+  AVOID (removed from M08's `AVOID_SITUATIONS`), delivery uses 1.2×. Re-run
+  `docs/brain/evidence/m12_*.py` (check DB env vars) before changing WEIGHTS.
+- **Bulk/block deals are mostly HFT firms** (QE Securities, HRTI, Jump…) buying and selling the
+  same stock the same day; only whitelisted institutions count, round trips cancel. Only one
+  day of deals is stored, so deal weights are untested.
+
 ## Testing traps (Windows)
+
+- Printing ₹ to the Windows console crashes (cp1252): set `PYTHONIOENCODING=utf-8` for scripts.
 
 - Run pytest with `env -u API_KEY -u DATABASE_URL -u JWT_SECRET_KEY -u TRADING_MODE`.
 - After adding columns to an existing brain table, drop it in `swing_trade_ml_test` (create_all

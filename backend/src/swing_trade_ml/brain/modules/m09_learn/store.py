@@ -56,10 +56,27 @@ def _decide(db: Session, proposal_id: int, status: str, by: str, note: str) -> B
     return row
 
 
+def _dismiss_other_open_buy_level_proposals(db: Session, by: str, except_id: int | None = None) -> None:
+    """Accepting (or reverting) a buy level makes every other open
+    buy_level proposal moot — there is only ever one buy level in force, so
+    an old "raise it to 70%" sitting open next to the one just accepted
+    would be a dangling suggestion nobody asked about any more."""
+    stmt = select(BrainProposal).where(BrainProposal.status == "open", BrainProposal.kind == "buy_level")
+    if except_id is not None:
+        stmt = stmt.where(BrainProposal.id != except_id)
+    for other in db.execute(stmt).scalars():
+        other.status = "dismissed"
+        other.decided_by = by
+        other.decided_at = datetime.now(UTC)
+        other.decided_note = "Replaced by a newer decision."
+
+
 def accept(db: Session, proposal_id: int, by: str, note: str = "") -> BrainProposal:
     """Raises ValueError if the proposal is not open (also raised by
     `reject`); raises UnknownProposalError if it does not exist."""
     row = _decide(db, proposal_id, "accepted", by, note)
+    if row.kind == "buy_level":
+        _dismiss_other_open_buy_level_proposals(db, by, except_id=row.id)
     if row.kind == "module_mode":
         # Lazy: swing_trade_ml.brain.service imports swing_trade_ml.brain.modules,
         # which (via the M09 module, once registered) would otherwise import
@@ -79,7 +96,9 @@ def reject(db: Session, proposal_id: int, by: str, note: str = "") -> BrainPropo
 
 def accepted_buy_level(db: Session) -> float | None:
     """`change["buy_level"]` of the most recently accepted `buy_level`
-    proposal, or None while none has ever been accepted."""
+    proposal, or None while none has ever been accepted — or the owner's
+    most recent decision was to go back to the default (`revert_buy_level`
+    stores that as an accepted change of `{"buy_level": None}`)."""
     row = db.execute(
         select(BrainProposal)
         .where(BrainProposal.status == "accepted", BrainProposal.kind == "buy_level")
@@ -87,6 +106,28 @@ def accepted_buy_level(db: Session) -> float | None:
         .limit(1)
     ).scalar_one_or_none()
     return None if row is None else row.change.get("buy_level")
+
+
+def revert_buy_level(db: Session, by: str) -> BrainProposal:
+    """The owner's way back to the default buy level: writes an already-
+    accepted proposal whose change is null, so `accepted_buy_level` reads
+    None again. Dismisses every other open buy_level proposal too, the same
+    as a normal accept (constitution C9: this still only happens because
+    the owner asked for it, right here)."""
+    _dismiss_other_open_buy_level_proposals(db, by)
+    row = BrainProposal(
+        kind="buy_level",
+        title="Go back to the default buy level",
+        evidence="The owner chose to return to the default buy level.",
+        change={"buy_level": None},
+        status="accepted",
+        decided_by=by,
+        decided_at=datetime.now(UTC),
+        decided_note="",
+    )
+    db.add(row)
+    db.commit()
+    return row
 
 
 # --- learning runs (feature drift, checked weekly) ---------------------------

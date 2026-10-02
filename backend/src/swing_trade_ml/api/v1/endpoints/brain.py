@@ -70,6 +70,10 @@ class ProposalDecision(BaseModel):
     by: str = "owner"
 
 
+class BuyLevelRevert(BaseModel):
+    by: str = "owner"
+
+
 def _decision_out(d: BrainDecision) -> dict:
     return {
         "id": d.id,
@@ -373,4 +377,15 @@ def reject_proposal(proposal_id: int, payload: ProposalDecision, db: DbSession) 
         raise HTTPException(404, str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(409, str(exc)) from exc
+    return _proposal_out(p)
+
+
+@router.post("/proposals/buy-level/revert")
+def revert_buy_level(payload: BuyLevelRevert, db: DbSession) -> dict:
+    """The owner's way back from any buy-level proposal they accepted
+    earlier. Constitution C9: still only takes effect because the owner
+    asked for it, right here."""
+    from swing_trade_ml.brain.modules.m09_learn import store
+
+    p = store.revert_buy_level(db, payload.by)
     return _proposal_out(p)

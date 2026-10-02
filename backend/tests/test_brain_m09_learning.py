@@ -696,6 +696,45 @@ def test_accepting_a_module_mode_proposal_calls_set_mode(db_session):
     assert proposal.decided_note == "try it out"
 
 
+def test_accepting_a_buy_level_proposal_dismisses_other_open_buy_level_ones(db_session):
+    """Only one buy level is ever in force; an old open suggestion next to
+    the one just accepted would be a dangling, unexplained proposal."""
+    kept = store.create(db_session, _buy_level_draft(0.65))
+    other = store.create(db_session, _buy_level_draft(0.70))
+
+    store.accept(db_session, kept.id, by="owner")
+
+    assert kept.status == "accepted"
+    assert other.status == "dismissed"
+    assert other.decided_by == "owner"
+    assert other.decided_note == "Replaced by a newer decision."
+
+
+def test_revert_buy_level_writes_an_accepted_proposal_with_a_null_change(db_session):
+    proposal = store.create(db_session, _buy_level_draft(0.65))
+    store.accept(db_session, proposal.id, by="owner")
+    assert store.accepted_buy_level(db_session) == pytest.approx(0.65)
+
+    reverted = store.revert_buy_level(db_session, by="owner")
+
+    assert reverted.kind == "buy_level"
+    assert reverted.title == "Go back to the default buy level"
+    assert reverted.evidence == "The owner chose to return to the default buy level."
+    assert reverted.change == {"buy_level": None}
+    assert reverted.status == "accepted"
+    assert reverted.decided_by == "owner"
+    assert store.accepted_buy_level(db_session) is None
+
+
+def test_revert_buy_level_dismisses_other_open_buy_level_proposals(db_session):
+    other = store.create(db_session, _buy_level_draft(0.75))
+
+    store.revert_buy_level(db_session, by="owner")
+
+    assert other.status == "dismissed"
+    assert other.decided_note == "Replaced by a newer decision."
+
+
 # --- reader.DatedReader.model_probability uses the accepted buy level ------
 
 
@@ -1027,13 +1066,18 @@ def test_api_learning_report_shape_on_empty_db(client):
 
 
 def test_api_proposals_list_accept_reject_and_errors(client, db_session):
+    # A module_mode proposal (not another buy_level one) so accepting
+    # `proposal` below cannot sweep `other` up via F5's buy-level dismissal.
     proposal = store.create(db_session, _buy_level_draft(0.65))
-    other = store.create(db_session, _buy_level_draft(0.7))
+    other = store.create(
+        db_session,
+        Draft(kind="module_mode", title="t", evidence="e", change={"module": "M05", "mode": "shadow"}),
+    )
     db_session.commit()
 
     listed = client.get("/api/v1/brain/proposals", headers=HEADERS).json()
     assert {p["id"] for p in listed} == {proposal.id, other.id}
-    assert listed[0]["kind"] == "buy_level"
+    assert {p["kind"] for p in listed} == {"buy_level", "module_mode"}
 
     open_only = client.get("/api/v1/brain/proposals", params={"status": "open"}, headers=HEADERS).json()
     assert {p["id"] for p in open_only} == {proposal.id, other.id}
@@ -1061,3 +1105,21 @@ def test_api_proposals_list_accept_reject_and_errors(client, db_session):
     assert r.status_code == 404
     r = client.post("/api/v1/brain/proposals/999999999/reject", json={}, headers=HEADERS)
     assert r.status_code == 404
+
+
+def test_api_revert_buy_level(client, db_session):
+    proposal = store.create(db_session, _buy_level_draft(0.65))
+    db_session.commit()
+    client.post(f"/api/v1/brain/proposals/{proposal.id}/accept", json={}, headers=HEADERS)
+    assert store.accepted_buy_level(db_session) == pytest.approx(0.65)
+
+    r = client.post("/api/v1/brain/proposals/buy-level/revert", json={}, headers=HEADERS)
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["kind"] == "buy_level"
+    assert body["title"] == "Go back to the default buy level"
+    assert body["status"] == "accepted"
+    assert body["decided_by"] == "owner"
+    assert body["change"] == {"buy_level": None}
+    assert store.accepted_buy_level(db_session) is None

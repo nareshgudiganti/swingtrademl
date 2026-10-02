@@ -206,3 +206,17 @@ do not do that by accident.
   does not alter tables).
 - Format only brain paths, never the whole package.
 - Only roll back a session in code under test when `not db.is_active`.
+
+## M09 follow-ups (deferred minors from the subagent reviews, 2026-10-03)
+
+- Task 1: minor (deferred): scoring._bars loads full candle history per symbol; add a ts <= upto filter in SQL.
+- Task 1: minor (deferred): score_pending flushes, caller must commit — T5 hook (_sync_episodes) commits; CLI/job must too.
+- Task 2: minor (deferred): add "calls one_per_day itself" tests for by_word/by_week/failure_patterns.
+- Task 2: minor (deferred): failure_patterns share-of-all includes rows with no market/sector label.
+- Task 3: minor (deferred): assert levels["rsi_14"] == "moderate" via a computed PSI; test a present-but-undersized feature being skipped; comment why _reference_frame omits build_dataset's 260-bar skip.
+- Task 4: minor (deferred): rename test_no_proposal_when_no_candidate_has_enough_cases (None comes from min_gain_r); comment tie-break (lowest threshold wins).
+- Task 5: minor (deferred): after-run hook failure event is still named "brain.memory.sync_failed" — rename to a job-agnostic name.
+- Task 5: minor (deferred): learning_report filters `since` in Python after a full fetch — push into SQL when the table grows.
+- Task 5: minor (deferred): new_proposals shape {id, kind, title, evidence} chosen by implementer.
+- Task 6: minor (deferred): one shared pending flag disables every proposal's buttons during any decision.
+- Final review: deferred (minor, not in the fix wave): #6 module_mode accept for unknown module → 500 (no generator yet); #7 no row lock on accept (single owner); #8 holiday nightly runs double-count a setup; #9 upto during market hours could freeze a partial close; #14 unscoreable ideas re-queried; #15 no note length limit; T2/T4/T5/T6 minors as triaged by the final reviewer.

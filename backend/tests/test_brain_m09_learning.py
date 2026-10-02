@@ -194,6 +194,34 @@ def test_unresolved_decisions_stay_unscored(db_session):
     assert decision.outcome is None
 
 
+def test_bars_are_loaded_once_per_symbol(db_session, monkeypatch):
+    """Two pending decisions on the same symbol must load that symbol's bars
+    only once — `bars_by_symbol.setdefault(sym, _bars(db, sym))` used to call
+    `_bars` for every decision because the default is always evaluated."""
+    _insert_candles(
+        db_session, "TWICE", 910003, [(DECISION_DAY, 100.0), *zip(AFTER_DAYS, AFTER_CLOSES, strict=True)]
+    )
+    _run(db_session, "fx-twice-1", "nightly", True, DECISION_AS_OF)
+    _idea_decision(db_session, "fx-twice-1", "TWICE")
+    _run(db_session, "fx-twice-2", "nightly", True, DECISION_AS_OF)
+    _idea_decision(db_session, "fx-twice-2", "TWICE")
+    db_session.commit()
+
+    calls = []
+    real_bars = scoring._bars
+
+    def _counting_bars(db, symbol, *a, **k):
+        calls.append(symbol)
+        return real_bars(db, symbol, *a, **k)
+
+    monkeypatch.setattr(scoring, "_bars", _counting_bars)
+
+    scored = score_pending(db_session, AFTER_DAYS[-1])
+
+    assert scored == 2
+    assert calls == ["TWICE"]
+
+
 # --- report.py (pure) -------------------------------------------------------
 
 

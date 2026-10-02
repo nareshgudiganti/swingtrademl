@@ -5,7 +5,7 @@ evidence for the learning loop to grade."""
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 import pandas as pd
@@ -25,12 +25,15 @@ def _decision_day(as_of: datetime) -> date:
     return as_of.astimezone(IST).date()
 
 
-def _bars(db: Session, symbol: str) -> pd.DataFrame:
-    """Every daily bar for this symbol, ascending, with its IST trading day."""
+def _bars(db: Session, symbol: str, upto: date) -> pd.DataFrame:
+    """Every daily bar for this symbol up to and including `upto`, ascending,
+    with its IST trading day. Bounded by `upto` so a symbol scored early in a
+    long history does not pull bars no pending decision can ever need."""
+    ceiling = datetime.combine(upto + timedelta(days=1), time(0, 0), tzinfo=IST)
     rows = db.execute(
         select(Candle.ts, Candle.high, Candle.low, Candle.close)
         .join(Instrument, Instrument.id == Candle.instrument_id)
-        .where(Instrument.tradingsymbol == symbol, Candle.interval == "day")
+        .where(Instrument.tradingsymbol == symbol, Candle.interval == "day", Candle.ts < ceiling)
         .order_by(Candle.ts.asc())
     ).all()
     return pd.DataFrame(
@@ -62,7 +65,9 @@ def score_pending(db: Session, upto: date) -> int:
     bars_by_symbol: dict[str, pd.DataFrame] = {}
     scored = 0
     for decision, as_of in pending:
-        bars = bars_by_symbol.setdefault(decision.symbol, _bars(db, decision.symbol))
+        if decision.symbol not in bars_by_symbol:
+            bars_by_symbol[decision.symbol] = _bars(db, decision.symbol, upto)
+        bars = bars_by_symbol[decision.symbol]
         if bars.empty:
             continue
         decision_day = _decision_day(as_of)

@@ -52,6 +52,8 @@ def _event_window(d, f, p) -> Proposal:
             continue
         if sit.label in AVOID_SITUATIONS:
             what = sit.evidence[0] if sit.evidence else sit.label.capitalize()
+            if "avoids" in what:  # the situation already states the rule in full
+                return IdeaWord.AVOID, what if what.endswith(".") else f"{what}."
             return IdeaWord.AVOID, f"{what} — the brain avoids new trades around this."
     return None
 

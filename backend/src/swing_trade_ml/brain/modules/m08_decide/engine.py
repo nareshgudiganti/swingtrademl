@@ -148,8 +148,11 @@ def _apply(d: c.Decision, facts, policy: DecidePolicy, rules: list[Rule], kind: 
         if proposal is not None:
             word, reason = proposal
             d = c.downgrade(d, word, reason)  # never bolder, whatever the rule asked
-    if facts.notes:
-        d = replace(d, reasons=(*d.reasons, *facts.notes))
+    # Context lines go last, except ones a reason already says ("Results on
+    # 08 Oct." when the AVOID reason names that date).
+    notes = tuple(n for n in facts.notes if not any(n.rstrip(".") in r for r in d.reasons))
+    if notes:
+        d = replace(d, reasons=(*d.reasons, *notes))
     return d
 
 

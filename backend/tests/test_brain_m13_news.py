@@ -233,10 +233,8 @@ def test_results_in_three_trading_days_is_avoid_for_a_new_idea():
     ctx = _full(EventReader(events=[_results(date(2026, 10, 8))]))
     d = ctx.decisions["ABC"]
     assert d.word is IdeaWord.AVOID
-    assert d.reasons[0].startswith(
-        "Results on 08 Oct: the brain avoids new trades 5 trading days before results"
-    )
-    assert d.reasons[-1] == "Results on 08 Oct."
+    assert d.reasons[0] == "Results on 08 Oct: the brain avoids new trades 5 trading days before results."
+    assert sum("08 Oct" in r for r in d.reasons) == 1  # the card line does not repeat the date
 
 
 def test_a_holding_with_results_soon_keeps_its_word_and_gets_the_line():

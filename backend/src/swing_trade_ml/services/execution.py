@@ -861,12 +861,29 @@ def process_decision(
             signal.rejection_reason = "No open position to exit"
             db.commit()
             return signal
-        if is_advisory(strategy):
+        # exits_are_advisory, not is_advisory: a staged (brain) row's positions
+        # exist only because the owner approved the order, so they are sold here.
+        if exits_are_advisory(strategy):
             signal.advisory_only = True
             db.commit()
             for position in existing_positions:
                 notifier.send_sync(
                     _advisory_exit_message(instrument, position, decision.reason, mode), "signal"
+                )
+            return signal
+        if mode != broker.mode:
+            # Only a staged row gets here (the scan refuses an auto row whose
+            # mode differs from the broker's). Selling now would go through
+            # the other book's broker, so the owner is told instead.
+            signal.advisory_only = True
+            db.commit()
+            for position in existing_positions:
+                notifier.send_sync(
+                    _advisory_exit_message(
+                        instrument, position, decision.reason, mode,
+                        note=_other_book_note(position.mode, broker.mode),
+                    ),
+                    "signal",
                 )
             return signal
         # An EXIT decision is strategy-level ("get out of this name"), so
@@ -1154,6 +1171,11 @@ def check_exits(db: Session) -> list[Trade]:
         # A brain position (staged type) is the exception: the owner approved
         # its order, so v1 protects it with real exits.
         position_is_advisory = exits_are_advisory(position.strategy)
+        # A position whose exits are real is only ever sold through the broker
+        # of its own book. The query above admits an other-book position only
+        # through its advisory row (in practice a brain position after the bot
+        # switched paper/live); it gets a one-off alert instead of a sale.
+        other_book = not position_is_advisory and position.mode != mode
 
         reason: ExitReason | None = None
         if position.stop_loss and price <= position.stop_loss:
@@ -1166,7 +1188,7 @@ def check_exits(db: Session) -> list[Trade]:
             reason = ExitReason.TIME_STOP
 
         if reason is None:
-            if position_is_advisory:
+            if position_is_advisory or other_book:
                 # Advisory positions are the user's own; only the full-exit
                 # alerts above apply to them.
                 continue
@@ -1189,6 +1211,18 @@ def check_exits(db: Session) -> list[Trade]:
             # user records the exit via manual_close_position().
             if position.advisory_alert_sent_at is None:
                 notifier.send_sync(_advisory_exit_message(instrument, position, reason, mode), "signal")
+                position.advisory_alert_sent_at = datetime.now(UTC)
+            continue
+
+        if other_book:
+            if position.advisory_alert_sent_at is None:
+                notifier.send_sync(
+                    _advisory_exit_message(
+                        instrument, position, reason, position.mode,
+                        note=_other_book_note(position.mode, mode),
+                    ),
+                    "signal",
+                )
                 position.advisory_alert_sent_at = datetime.now(UTC)
             continue
 
@@ -1555,14 +1589,22 @@ def _advisory_entry_message(instrument, decision, strategy, quantity, mode) -> s
     return "\n".join(lines)
 
 
-def _advisory_exit_message(instrument, position, reason, mode) -> str:
+def _advisory_exit_message(instrument, position, reason, mode, note: str | None = None) -> str:
     badge = "📝 PAPER" if mode == "paper" else "💰 <b>LIVE</b>"
     return (
         f"🔔 <b>EXIT RECOMMENDED · {instrument.tradingsymbol}</b>  ({badge})\n\n"
         f"Reason: {reason}\n"
-        f"Entry: ₹{position.entry_price:,.2f}  ·  Current: ₹{position.current_price or 0:,.2f}\n"
+        + (f"{note}\n" if note else "")
+        + f"Entry: ₹{position.entry_price:,.2f}  ·  Current: ₹{position.current_price or 0:,.2f}\n"
         f"Quantity: {position.quantity:,}\n\n"
         f"Sold this? Record it: POST /portfolio/positions/{position.id}/manual-close"
+    )
+
+
+def _other_book_note(position_mode: str, bot_mode: str) -> str:
+    return (
+        f"This position belongs to the {position_mode} book while the bot is in {bot_mode} "
+        "mode, so it is not sold automatically."
     )
 
 

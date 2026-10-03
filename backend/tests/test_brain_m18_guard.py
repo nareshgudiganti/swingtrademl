@@ -143,3 +143,116 @@ def test_an_approved_brain_position_at_its_stop_is_sold_by_version_1(db_session,
     monkeypatch.setattr(execution, "_release_exit", lambda db, p: None)
     execution.check_exits(db_session)
     assert closed == [(pos.id, ExitReason.STOP_LOSS_HIT)]
+
+
+# --- Fix round 1: a position is only ever sold through the broker of its own book.
+
+
+def _open_position(db, strategy, inst, mode: str = "paper") -> Position:
+    pos = Position(
+        strategy_id=strategy.id,
+        instrument_id=inst.id,
+        mode=mode,
+        status=PositionStatus.OPEN,
+        quantity=10,
+        initial_quantity=10,
+        entry_price=100.0,
+        entry_at=datetime.now(UTC),
+        stop_loss=96.0,
+        initial_stop_loss=96.0,
+        take_profit=108.0,
+        highest_price=100.0,
+        current_price=100.0,
+        total_charges=0.0,
+    )
+    db.add(pos)
+    db.flush()
+    return pos
+
+
+def _watch_exits(monkeypatch, broker_mode: str, prices: dict[str, float]):
+    fake = no_broker(monkeypatch)
+    fake.mode = broker_mode
+    fake.get_ltp = lambda keys, db: {k: v for k, v in prices.items() if k in keys}
+    closed: list = []
+    sent: list[str] = []
+    monkeypatch.setattr(
+        execution,
+        "close_position",
+        lambda db, p, price, reason, note=None, quantity=None: closed.append((p.id, reason, quantity)),
+    )
+    monkeypatch.setattr(execution, "_claim_exit", lambda db, p: True)
+    monkeypatch.setattr(execution, "_release_exit", lambda db, p: None)
+    monkeypatch.setattr(
+        execution.notifier, "send_sync", lambda text, event="system": sent.append(text) or True
+    )
+    return closed, sent
+
+
+def test_a_paper_brain_position_at_its_stop_is_not_sold_while_the_bot_is_live(db_session, monkeypatch):
+    strategy = brain_strategy(db_session, name="m18-book-brain")
+    inst = instrument(db_session, "M18GRG", 918104)
+    pos = _open_position(db_session, strategy, inst, mode="paper")
+    closed, sent = _watch_exits(monkeypatch, "live", {inst.symbol_key: 95.0})
+    execution.check_exits(db_session)
+    execution.check_exits(db_session)  # alerts once, not every minute
+    assert closed == []
+    assert len(sent) == 1 and "paper book" in sent[0] and "live mode" in sent[0]
+    assert pos.advisory_alert_sent_at is not None
+
+
+def test_a_paper_brain_position_is_not_partly_sold_while_the_bot_is_live(db_session, monkeypatch):
+    strategy = brain_strategy(db_session, name="m18-book-brain-half")
+    inst = instrument(db_session, "M18GRH", 918105)
+    _open_position(db_session, strategy, inst, mode="paper")
+    closed, sent = _watch_exits(monkeypatch, "live", {inst.symbol_key: 106.0})
+    monkeypatch.setattr(execution, "scale_out_quantity", lambda policy, **kw: 5)  # half-out is due
+    execution.check_exits(db_session)
+    assert closed == [] and sent == []
+
+
+def test_version_1_positions_exit_exactly_as_before(db_session, monkeypatch):
+    auto = v1_strategy(db_session, name="m18-book-v1-auto")
+    adv = v1_strategy(db_session, name="m18-book-v1-adv", execution_mode="advisory")
+    i1 = instrument(db_session, "M18GRI", 918106)
+    i2 = instrument(db_session, "M18GRJ", 918107)
+    p_auto = _open_position(db_session, auto, i1, mode="paper")
+    p_adv = _open_position(db_session, adv, i2, mode="paper")
+    closed, sent = _watch_exits(monkeypatch, "paper", {i1.symbol_key: 95.0, i2.symbol_key: 95.0})
+    execution.check_exits(db_session)
+    assert closed == [(p_auto.id, ExitReason.STOP_LOSS_HIT, None)]
+    assert len(sent) == 1 and "book" not in sent[0]  # the advisory one: plain alert, as before
+    assert p_adv.advisory_alert_sent_at is not None
+
+
+def test_a_version_1_auto_paper_position_is_left_alone_while_the_bot_is_live(db_session, monkeypatch):
+    auto = v1_strategy(db_session, name="m18-book-v1-auto-live")
+    inst = instrument(db_session, "M18GRK", 918108)
+    _open_position(db_session, auto, inst, mode="paper")
+    closed, sent = _watch_exits(monkeypatch, "live", {inst.symbol_key: 95.0})
+    execution.check_exits(db_session)
+    assert closed == [] and sent == []
+
+
+EXIT = SignalDecision(SignalType.EXIT, 95.0, 0.7, "The brain no longer likes this stock.")
+
+
+def test_a_brain_exit_decision_sells_an_approved_position_in_its_own_book(db_session, monkeypatch):
+    strategy = brain_strategy(db_session, name="m18-exit-decision")
+    inst = instrument(db_session, "M18GRL", 918109)
+    pos = _open_position(db_session, strategy, inst, mode="paper")
+    closed, sent = _watch_exits(monkeypatch, "paper", {})
+    sig = execution.process_decision(db_session, strategy, inst, EXIT)
+    assert closed == [(pos.id, ExitReason.SIGNAL_EXIT, None)]
+    assert sent == [] and sig.advisory_only is False
+
+
+def test_a_brain_exit_decision_only_alerts_when_the_bot_is_in_the_other_mode(db_session, monkeypatch):
+    strategy = brain_strategy(db_session, name="m18-exit-decision-live")
+    inst = instrument(db_session, "M18GRM", 918110)
+    _open_position(db_session, strategy, inst, mode="paper")
+    closed, sent = _watch_exits(monkeypatch, "live", {})
+    sig = execution.process_decision(db_session, strategy, inst, EXIT)
+    assert closed == []
+    assert len(sent) == 1 and "paper book" in sent[0] and "live mode" in sent[0]
+    assert sig.advisory_only is True and sig.was_executed is False

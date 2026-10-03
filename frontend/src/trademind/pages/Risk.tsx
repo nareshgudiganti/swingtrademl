@@ -1,26 +1,120 @@
-import { drawdownSeries, portfolio, riskChecks, riskLimits } from '../data'
-import { Card, CheckItem, GlowArea, Meter, Ring } from '../ui'
+import { useQuery } from '@tanstack/react-query'
+
+import { api } from '../../api/client'
+import { biggestSector, currentDrawdownPct, drawdownChartSeries, refusedDecisions } from '../live-system'
+import { useBrainStatus, useLatestRun } from '../live'
+import { BrainOff, Card, CheckItem, GlowArea, Meter, NotConnected, Ring, inr } from '../ui'
+
+type Check = { name: string; ok: boolean; note?: string }
 
 export default function Risk() {
-  const blocked = riskChecks.filter((r) => !r.ok)
+  const limits = useQuery({ queryKey: ['riskLimits'], queryFn: api.riskLimits })
+  const equity = useQuery({ queryKey: ['equityCurve', 400], queryFn: () => api.equityCurve(400) })
+  const status = useQuery({ queryKey: ['status'], queryFn: api.status })
+  const brainStatus = useBrainStatus()
+  const latest = useLatestRun()
+
+  if (limits.isLoading) {
+    return (
+      <div className="tm-page">
+        <p className="tm-dim">Loading risk limits…</p>
+      </div>
+    )
+  }
+
+  if (limits.isError || !limits.data) {
+    return (
+      <div className="tm-page">
+        <Card title="Could not load risk limits">
+          <p className="tm-dim">Something went wrong talking to the risk service. Try again shortly.</p>
+        </Card>
+      </div>
+    )
+  }
+
+  const d = limits.data
+  const points = equity.data ?? []
+  const ddPct = currentDrawdownPct(points)
+  const haltPct = d.max_drawdown_pct * 100
+  const big = biggestSector(d.sectors)
+  const deployedPct = d.deployable_ceiling_inr > 0 ? (d.invested_inr / d.deployable_ceiling_inr) * 100 : 0
+  const cashPct = d.portfolio_value > 0 ? (d.cash / d.portfolio_value) * 100 : 0
+
+  const checks: Check[] = []
+  checks.push({
+    name: 'Open positions',
+    ok: d.open_positions <= d.max_positions,
+    note:
+      d.open_positions > d.max_positions
+        ? `${d.open_positions} open against a limit of ${d.max_positions}`
+        : undefined,
+  })
+  if (d.sector_cap_pct != null && big) {
+    const overCap = big.pct_of_portfolio >= d.sector_cap_pct
+    checks.push({
+      name: 'Sector limit',
+      ok: !overCap,
+      note: overCap
+        ? `${big.sector} is ${(big.pct_of_portfolio * 100).toFixed(0)}% — over the ${(d.sector_cap_pct * 100).toFixed(0)}% limit`
+        : undefined,
+    })
+  }
+  checks.push({
+    name: 'Cash floor',
+    ok: d.cash >= d.cash_floor_inr,
+    note: d.cash < d.cash_floor_inr ? `₹${inr(d.cash, 0)} free, below the ₹${inr(d.cash_floor_inr, 0)} floor` : undefined,
+  })
+  if (ddPct != null) {
+    checks.push({
+      name: 'Drawdown halt',
+      ok: ddPct < haltPct,
+      note: ddPct >= haltPct ? `${ddPct.toFixed(1)}% below peak — at the ${haltPct.toFixed(0)}% halt level` : undefined,
+    })
+  }
+  if (status.data) {
+    checks.push({
+      name: 'Broker connected',
+      ok: status.data.broker_authenticated,
+      note: status.data.broker_authenticated ? undefined : 'Zerodha is not connected — no trade can be placed.',
+    })
+  }
+  if (brainStatus === 'live' && latest.data) {
+    const mode = latest.data.banner.mode
+    checks.push({
+      name: 'Market allows new trades',
+      ok: mode !== 'NO_NEW_TRADES',
+      note: mode === 'NO_NEW_TRADES' ? latest.data.banner.headline ?? 'New buys are paused today.' : undefined,
+    })
+  }
+  const blocked = checks.filter((c) => !c.ok)
 
   return (
     <div className="tm-page tm-grid">
       <Card glow={blocked.length ? true : 'green'}>
         <div className="tm-between tm-wrap">
           <div className="tm-flex">
-            <span className="tm-state-icon" style={blocked.length ? { borderColor: 'var(--tm-amber)', color: 'var(--tm-amber)', boxShadow: '0 0 24px rgba(255,181,71,.5)' } : undefined}>
+            <span
+              className="tm-state-icon"
+              style={
+                blocked.length
+                  ? { borderColor: 'var(--tm-amber)', color: 'var(--tm-amber)', boxShadow: '0 0 24px rgba(255,181,71,.5)' }
+                  : undefined
+              }
+            >
               <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6l8-3z" />
               </svg>
             </span>
             <div>
-              <div className="tm-state-word" style={{ fontSize: '1.5rem', color: blocked.length ? 'var(--tm-amber)' : undefined, textShadow: 'none' }}>
+              <div
+                className="tm-state-word"
+                style={{ fontSize: '1.5rem', color: blocked.length ? 'var(--tm-amber)' : undefined, textShadow: 'none' }}
+              >
                 {blocked.length ? 'TRADING ALLOWED — WITH LIMITS' : 'ALL CLEAR'}
               </div>
               <div className="tm-dim" style={{ marginTop: 4 }}>
                 {blocked.length
-                  ? `${blocked.length} limit is reached: ${blocked.map((b) => b.note).join('; ')}`
+                  ? `${blocked.length} check${blocked.length > 1 ? 's' : ''} need attention: ${blocked.map((b) => b.name).join('; ')}`
                   : 'Every safety check passed — new trades are allowed.'}
               </div>
             </div>
@@ -31,37 +125,73 @@ export default function Risk() {
       <div className="tm-grid tm-cols-4">
         <Card>
           <div className="tm-score">
-            <Ring value={portfolio.riskUsedPct} size={76} stroke={7} color="amber" center={<span className="tm-ring-value" style={{ fontSize: 18 }}>{portfolio.riskUsedPct}%</span>} />
+            <Ring
+              value={Math.round(deployedPct)}
+              size={76}
+              stroke={7}
+              color="blue"
+              center={<span className="tm-ring-value" style={{ fontSize: 16 }}>{Math.round(deployedPct)}%</span>}
+            />
             <div>
-              <div className="tm-score-name">Risk used</div>
-              <div className="tm-score-verdict tm-warn">Moderate</div>
+              <div className="tm-score-name">Capital deployed</div>
+              <div className="tm-score-verdict">of today's ceiling</div>
             </div>
           </div>
         </Card>
-        <Card>
-          <div className="tm-score">
-            <Ring value={4.2} max={15} size={76} stroke={7} color="red" center={<span className="tm-ring-value" style={{ fontSize: 16 }}>4.2%</span>} />
-            <div>
-              <div className="tm-score-name">Drawdown (halt at 15%)</div>
-              <div className="tm-score-verdict tm-pos">Safe</div>
+        {ddPct != null ? (
+          <Card>
+            <div className="tm-score">
+              <Ring
+                value={Math.round(ddPct * 10) / 10}
+                max={haltPct}
+                size={76}
+                stroke={7}
+                color="red"
+                center={<span className="tm-ring-value" style={{ fontSize: 16 }}>{ddPct.toFixed(1)}%</span>}
+              />
+              <div>
+                <div className="tm-score-name">Drawdown (halt at {haltPct.toFixed(0)}%)</div>
+                <div className={ddPct < haltPct ? 'tm-score-verdict tm-pos' : 'tm-score-verdict tm-warn'}>
+                  {ddPct < haltPct ? 'Safe' : 'At the halt level'}
+                </div>
+              </div>
             </div>
-          </div>
-        </Card>
+          </Card>
+        ) : (
+          <NotConnected what="Drawdown" reason="No portfolio history yet." />
+        )}
         <Card>
           <div className="tm-score">
-            <Ring value={8} max={10} size={76} stroke={7} color="blue" center={<span className="tm-ring-value" style={{ fontSize: 18 }}>8/10</span>} />
+            <Ring
+              value={d.open_positions}
+              max={Math.max(d.max_positions, d.open_positions)}
+              size={76}
+              stroke={7}
+              color="violet"
+              center={<span className="tm-ring-value" style={{ fontSize: 18 }}>{d.open_positions}/{d.max_positions}</span>}
+            />
             <div>
               <div className="tm-score-name">Open positions</div>
-              <div className="tm-score-verdict">2 slots free</div>
+              <div className="tm-score-verdict">
+                {d.open_positions > d.max_positions
+                  ? 'Over the limit'
+                  : `${d.max_positions - d.open_positions} slot${d.max_positions - d.open_positions === 1 ? '' : 's'} free`}
+              </div>
             </div>
           </div>
         </Card>
         <Card>
           <div className="tm-score">
-            <Ring value={portfolio.cashPct} size={76} stroke={7} color="violet" center={<span className="tm-ring-value" style={{ fontSize: 18 }}>{portfolio.cashPct}%</span>} />
+            <Ring
+              value={Math.round(cashPct)}
+              size={76}
+              stroke={7}
+              color="green"
+              center={<span className="tm-ring-value" style={{ fontSize: 18 }}>{Math.round(cashPct)}%</span>}
+            />
             <div>
               <div className="tm-score-name">Cash available</div>
-              <div className="tm-score-verdict tm-pos">Healthy</div>
+              <div className="tm-score-verdict">{d.cash >= d.cash_floor_inr ? 'Above the reserved floor' : 'Below the reserved floor'}</div>
             </div>
           </div>
         </Card>
@@ -70,7 +200,38 @@ export default function Risk() {
       <div className="tm-grid tm-cols-3">
         <Card className="tm-span-2" title="Risk Limits" sub="Each bar shows how close you are to a hard limit">
           <div className="tm-stack" style={{ gap: '0.9rem' }}>
-            {riskLimits.map((l) => {
+            {[
+              { name: 'Open positions', used: d.open_positions, limit: d.max_positions, unit: '', plain: 'Most trades held at once' },
+              {
+                name: 'Capital deployed',
+                used: Math.round(deployedPct),
+                limit: 100,
+                unit: '%',
+                plain: "How much of today's allowed capital is in stocks",
+              },
+              ...(d.sector_cap_pct != null && big
+                ? [
+                    {
+                      name: `Biggest sector (${big.sector})`,
+                      used: Math.round(big.pct_of_portfolio * 100),
+                      limit: Math.round(d.sector_cap_pct * 100),
+                      unit: '%',
+                      plain: 'No sector should be over the cap',
+                    },
+                  ]
+                : []),
+              ...(ddPct != null
+                ? [
+                    {
+                      name: 'Drawdown from peak',
+                      used: Math.round(ddPct * 10) / 10,
+                      limit: Math.round(haltPct),
+                      unit: '%',
+                      plain: 'Trading stops automatically at this level',
+                    },
+                  ]
+                : []),
+            ].map((l) => {
               const pct = (l.used / l.limit) * 100
               const color = pct >= 100 ? '#ff4d6a' : pct >= 75 ? '#ffb547' : '#2ee68a'
               return (
@@ -92,27 +253,57 @@ export default function Risk() {
             })}
           </div>
         </Card>
-        <Card title="Safety Checks" sub="Run before every new trade">
-          {riskChecks.map((r) => (
-            <CheckItem key={r.name} tone={r.ok ? 'pos' : 'warn'}>
-              {r.name}
-              {r.note && <div className="tm-faint">{r.note}</div>}
+        <Card title="Safety Checks" sub="Checked against your risk limits right now">
+          {checks.map((c) => (
+            <CheckItem key={c.name} tone={c.ok ? 'pos' : 'warn'}>
+              {c.name}
+              {c.note && <div className="tm-faint">{c.note}</div>}
             </CheckItem>
           ))}
         </Card>
       </div>
 
       <div className="tm-grid tm-cols-3">
-        <Card className="tm-span-2" title="Drawdown" sub="How far the portfolio was below its best point, day by day">
-          <GlowArea data={drawdownSeries} color="#ff4d6a" height={180} axes domain={[-5, 0]} formatter={(v) => `${v.toFixed(1)}%`} />
-        </Card>
-        <Card title="What the brain does automatically">
-          <CheckItem tone="neutral">Loss today over 2% → pauses new trades until tomorrow</CheckItem>
-          <CheckItem tone="neutral">Drawdown hits 15% → stops all new trades</CheckItem>
-          <CheckItem tone="neutral">A sector over 25% → no more trades in it</CheckItem>
-          <CheckItem tone="neutral">Market turns Defensive → smaller sizes</CheckItem>
+        {points.length > 1 ? (
+          <Card className="tm-span-2" title="Drawdown" sub="How far the portfolio was below its best point, day by day">
+            <GlowArea data={drawdownChartSeries(points)} color="#ff4d6a" height={180} axes domain={['dataMin', 0]} formatter={(v) => `${v.toFixed(1)}%`} />
+          </Card>
+        ) : (
+          <div className="tm-span-2">
+            <NotConnected what="Drawdown" reason="Not enough portfolio history yet to draw a chart." />
+          </div>
+        )}
+        <Card title="What these limits do automatically">
+          <CheckItem tone="neutral">Each trade risks about {(d.risk_per_trade_pct * 100).toFixed(1)}% of the account</CheckItem>
+          <CheckItem tone="neutral">Drawdown hits {haltPct.toFixed(0)}% → stops all new trades</CheckItem>
+          {d.sector_cap_pct != null && (
+            <CheckItem tone="neutral">A sector over {(d.sector_cap_pct * 100).toFixed(0)}% → no more trades in it</CheckItem>
+          )}
+          <CheckItem tone="neutral">
+            The market looks {d.plain_regime} → up to {(d.deployable_fraction * 100).toFixed(0)}% of the account can be in stocks
+          </CheckItem>
         </Card>
       </div>
+
+      <Card title="Ideas Turned Down Today" sub="Where the brain wanted to act, but a check said no">
+        {brainStatus === 'off' && <BrainOff />}
+        {brainStatus === 'loading' && <p className="tm-dim">Connecting to the brain…</p>}
+        {brainStatus === 'error' && <p className="tm-dim">Something went wrong talking to the brain. Try again shortly.</p>}
+        {brainStatus === 'no-run' && <p className="tm-dim">The brain has not run yet.</p>}
+        {brainStatus === 'live' && latest.data && (
+          <>
+            {refusedDecisions(latest.data).length === 0 ? (
+              <p className="tm-dim">Nothing was turned down in the latest run.</p>
+            ) : (
+              refusedDecisions(latest.data).map((dec) => (
+                <CheckItem key={dec.id} tone="warn">
+                  <span className="tm-strong">{dec.symbol}</span>: risk check said no — {dec.downgrade_reason}
+                </CheckItem>
+              ))
+            )}
+          </>
+        )}
+      </Card>
     </div>
   )
 }

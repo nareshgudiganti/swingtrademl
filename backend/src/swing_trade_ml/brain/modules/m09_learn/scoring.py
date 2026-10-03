@@ -21,6 +21,15 @@ from swing_trade_ml.db.models.market import Candle, Instrument
 IST = ZoneInfo("Asia/Kolkata")
 
 
+# Written to `outcome` for an idea that can never be graded (no candles for the
+# symbol, or none on/before its decision day) so the weekly job stops
+# re-querying it. Reports only ever read target/stop/timeout.
+UNSCORABLE = "noscore"
+# Candles can arrive late (a fresh listing, a backfill), so an idea only
+# counts as hopeless once its decision day is this many calendar days old.
+UNSCORABLE_AFTER = timedelta(days=45)
+SCORED_OUTCOMES = ("target", "stop", "timeout")
+
 # NSE's cash session closes 15:30 IST; ten minutes later the day's bar is final.
 SESSION_FINAL = time(15, 40)
 
@@ -87,11 +96,11 @@ def score_pending(db: Session, upto: date) -> int:
         if decision.symbol not in bars_by_symbol:
             bars_by_symbol[decision.symbol] = _bars(db, decision.symbol, upto)
         bars = bars_by_symbol[decision.symbol]
-        if bars.empty:
-            continue
         decision_day = _decision_day(as_of)
         before = bars[bars["day"] <= decision_day]
-        if before.empty:
+        if before.empty:  # no candles at all, or none on/before the decision day
+            if upto - decision_day > UNSCORABLE_AFTER:
+                decision.outcome = UNSCORABLE
             continue
         entry = float(before.iloc[-1]["close"])
         after = bars[(bars["day"] > decision_day) & (bars["day"] <= upto)].reset_index(drop=True)

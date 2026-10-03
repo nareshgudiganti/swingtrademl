@@ -20,7 +20,11 @@ from swing_trade_ml.brain.modules.m09_learn.drift import drift_lines as drift_li
 from swing_trade_ml.brain.modules.m09_learn.failures import failure_patterns
 from swing_trade_ml.brain.modules.m09_learn.proposals import buy_level_proposal
 from swing_trade_ml.brain.modules.m09_learn.report import by_band, by_week, by_word, one_per_day
-from swing_trade_ml.brain.modules.m09_learn.scoring import last_closed_trading_day, score_pending
+from swing_trade_ml.brain.modules.m09_learn.scoring import (
+    SCORED_OUTCOMES,
+    last_closed_trading_day,
+    score_pending,
+)
 from swing_trade_ml.brain.reader import IST
 from swing_trade_ml.core.config import settings
 from swing_trade_ml.db.models.brain import BrainDecision, BrainRun
@@ -57,7 +61,7 @@ def _scored_rows(db: Session, since: date | None) -> pd.DataFrame:
     stmt = (
         select(BrainDecision, BrainRun.started_at, BrainRun.as_of, BrainRun.context)
         .join(BrainRun, BrainRun.id == BrainDecision.run_id)
-        .where(BrainDecision.outcome.is_not(None))
+        .where(BrainDecision.outcome.in_(SCORED_OUTCOMES))
     )
     records = []
     if since is not None:

@@ -1348,3 +1348,70 @@ def test_afterrun_scoring_uses_the_last_closed_day_of_the_readers_clock(db_sessi
 
     scoring.score_pending_from_reader(db_session, _Reader())
     assert seen == [date(2026, 9, 2)]
+
+
+# --- ideas that can never be scored (#14) -------------------------------------
+
+LONG_AFTER = date(2026, 12, 1)  # months past DECISION_DAY: well beyond the grace period
+
+
+def test_an_old_idea_with_no_candles_is_marked_unscorable_and_not_requeried(db_session, monkeypatch):
+    _run(db_session, "fx-nocandles", "nightly", True, DECISION_AS_OF)
+    decision = _idea_decision(db_session, "fx-nocandles", "GHOSTSYM")
+    db_session.commit()
+
+    assert score_pending(db_session, LONG_AFTER) == 0
+    assert decision.outcome == scoring.UNSCORABLE
+
+    calls = []
+    real_bars = scoring._bars
+    monkeypatch.setattr(
+        scoring, "_bars", lambda db, sym, *a, **k: calls.append(sym) or real_bars(db, sym, *a, **k)
+    )
+    assert score_pending(db_session, LONG_AFTER) == 0
+    assert calls == []
+
+
+def test_an_old_idea_with_no_bar_on_or_before_its_day_is_marked_unscorable(db_session):
+    late_days = list(pd.bdate_range(start=DECISION_DAY + pd.Timedelta(days=3), periods=16).date)
+    _insert_candles(db_session, "LATELIST", 910701, [(d, 100.0) for d in late_days])
+    _run(db_session, "fx-latelist", "nightly", True, DECISION_AS_OF)
+    decision = _idea_decision(db_session, "fx-latelist", "LATELIST")
+    db_session.commit()
+
+    score_pending(db_session, LONG_AFTER)
+    assert decision.outcome == scoring.UNSCORABLE
+
+
+def test_a_recent_idea_with_no_candles_yet_stays_pending_to_retry(db_session):
+    _run(db_session, "fx-recent-nocandles", "nightly", True, DECISION_AS_OF)
+    decision = _idea_decision(db_session, "fx-recent-nocandles", "NEWLISTING")
+    db_session.commit()
+
+    score_pending(db_session, DECISION_DAY + pd.Timedelta(days=5))
+    assert decision.outcome is None
+
+
+def test_unscorable_ideas_never_reach_the_report(db_session):
+    _run(db_session, "fx-unscorable-report", "nightly", True, DECISION_AS_OF)
+    _idea_decision(db_session, "fx-unscorable-report", "GHOSTSYM2")
+    db_session.commit()
+
+    report = learn_mod.run_learning(db_session, now=datetime(2026, 12, 1, 18, 0, tzinfo=IST))
+    assert report["n_scored"] == 0 and report["newly_scored"] == 0
+    assert report["by_word"] == []
+
+
+def test_scorable_ideas_behave_as_before_next_to_an_unscorable_one(db_session):
+    _insert_candles(
+        db_session, "GOODONE", 910702, [(DECISION_DAY, 100.0), *zip(AFTER_DAYS, AFTER_CLOSES, strict=True)]
+    )
+    _run(db_session, "fx-good", "nightly", True, DECISION_AS_OF)
+    good = _idea_decision(db_session, "fx-good", "GOODONE")
+    _run(db_session, "fx-ghost", "nightly", True, DECISION_AS_OF)
+    ghost = _idea_decision(db_session, "fx-ghost", "GHOSTSYM3")
+    db_session.commit()
+
+    assert score_pending(db_session, LONG_AFTER) == 1
+    assert good.outcome == "target"
+    assert ghost.outcome == scoring.UNSCORABLE

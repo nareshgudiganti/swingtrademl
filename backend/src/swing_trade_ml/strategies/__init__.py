@@ -9,6 +9,7 @@ from swing_trade_ml.strategies.base import (
     get_strategy,
     register_strategy,
 )
+from swing_trade_ml.strategies.brain import BrainStrategy
 from swing_trade_ml.strategies.long_term_value import LongTermValueStrategy
 from swing_trade_ml.strategies.ml_swing import MLSwingStrategy
 from swing_trade_ml.strategies.sma_crossover import SMACrossoverStrategy
@@ -16,6 +17,7 @@ from swing_trade_ml.strategies.sma_crossover import SMACrossoverStrategy
 __all__ = [
     "STRATEGY_REGISTRY",
     "BaseStrategy",
+    "BrainStrategy",
     "LongTermValueStrategy",
     "MLSwingStrategy",
     "SMACrossoverStrategy",

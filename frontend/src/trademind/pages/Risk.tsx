@@ -5,12 +5,18 @@ import { biggestSector, currentDrawdownPct, drawdownChartSeries, refusedDecision
 import { useBrainStatus, useLatestRun } from '../live'
 import { BrainOff, Card, CheckItem, GlowArea, Meter, NotConnected, Ring, inr } from '../ui'
 
-type Check = { name: string; ok: boolean; note?: string }
+// `hard` marks a check that actually stops new trades outright (the kill
+// switch, the drawdown halt, the market saying no new buys, or the broker
+// being disconnected) — as opposed to a soft limit like a sector cap, which
+// still allows trading. The headline card uses this split so it never says
+// "allowed" while a hard stop is in force (F2).
+type Check = { name: string; ok: boolean; note?: string; hard?: boolean }
 
 export default function Risk() {
   const limits = useQuery({ queryKey: ['riskLimits'], queryFn: api.riskLimits })
   const equity = useQuery({ queryKey: ['equityCurve', 400], queryFn: () => api.equityCurve(400) })
   const status = useQuery({ queryKey: ['status'], queryFn: api.status })
+  const safety = useQuery({ queryKey: ['safetyState'], queryFn: api.safetyState })
   const brainStatus = useBrainStatus()
   const latest = useLatestRun()
 
@@ -39,6 +45,10 @@ export default function Risk() {
   const big = biggestSector(d.sectors)
   const deployedPct = d.deployable_ceiling_inr > 0 ? (d.invested_inr / d.deployable_ceiling_inr) * 100 : 0
   const cashPct = d.portfolio_value > 0 ? (d.cash / d.portfolio_value) * 100 : 0
+
+  // The headline card waits for every input it judges to settle, so it
+  // never has to guess "ALL CLEAR" before it actually knows (F2).
+  const inputsLoading = status.isLoading || safety.isLoading || equity.isLoading || brainStatus === 'loading'
 
   const checks: Check[] = []
   checks.push({
@@ -69,6 +79,7 @@ export default function Risk() {
       name: 'Drawdown halt',
       ok: ddPct < haltPct,
       note: ddPct >= haltPct ? `${ddPct.toFixed(1)}% below peak — at the ${haltPct.toFixed(0)}% halt level` : undefined,
+      hard: true,
     })
   }
   if (status.data) {
@@ -76,6 +87,7 @@ export default function Risk() {
       name: 'Broker connected',
       ok: status.data.broker_authenticated,
       note: status.data.broker_authenticated ? undefined : 'Zerodha is not connected — no trade can be placed.',
+      hard: true,
     })
   }
   if (brainStatus === 'live' && latest.data) {
@@ -84,43 +96,69 @@ export default function Risk() {
       name: 'Market allows new trades',
       ok: mode !== 'NO_NEW_TRADES',
       note: mode === 'NO_NEW_TRADES' ? latest.data.banner.headline ?? 'New buys are paused today.' : undefined,
+      hard: true,
+    })
+  }
+  if (safety.data) {
+    checks.push({
+      name: 'New trades switched on',
+      ok: safety.data.new_entries_enabled,
+      note: safety.data.new_entries_enabled ? undefined : safety.data.halt_reason ?? 'New trades are paused.',
+      hard: true,
     })
   }
   const blocked = checks.filter((c) => !c.ok)
+  const hardBlocked = blocked.filter((c) => c.hard)
+  const softBlocked = blocked.filter((c) => !c.hard)
+  const paused = hardBlocked.length > 0
 
   return (
     <div className="tm-page tm-grid">
-      <Card glow={blocked.length ? true : 'green'}>
-        <div className="tm-between tm-wrap">
-          <div className="tm-flex">
-            <span
-              className="tm-state-icon"
-              style={
-                blocked.length
-                  ? { borderColor: 'var(--tm-amber)', color: 'var(--tm-amber)', boxShadow: '0 0 24px rgba(255,181,71,.5)' }
-                  : undefined
-              }
-            >
-              <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6l8-3z" />
-              </svg>
-            </span>
-            <div>
-              <div
-                className="tm-state-word"
-                style={{ fontSize: '1.5rem', color: blocked.length ? 'var(--tm-amber)' : undefined, textShadow: 'none' }}
+      {inputsLoading ? (
+        <Card>
+          <p className="tm-dim">Checking today's safety status…</p>
+        </Card>
+      ) : (
+        <Card glow={paused ? true : softBlocked.length ? true : 'green'}>
+          <div className="tm-between tm-wrap">
+            <div className="tm-flex">
+              <span
+                className="tm-state-icon"
+                style={
+                  paused
+                    ? { borderColor: 'var(--tm-red)', color: 'var(--tm-red)', boxShadow: '0 0 24px rgba(255,77,106,.5)' }
+                    : softBlocked.length
+                    ? { borderColor: 'var(--tm-amber)', color: 'var(--tm-amber)', boxShadow: '0 0 24px rgba(255,181,71,.5)' }
+                    : undefined
+                }
               >
-                {blocked.length ? 'TRADING ALLOWED — WITH LIMITS' : 'ALL CLEAR'}
-              </div>
-              <div className="tm-dim" style={{ marginTop: 4 }}>
-                {blocked.length
-                  ? `${blocked.length} check${blocked.length > 1 ? 's' : ''} need attention: ${blocked.map((b) => b.name).join('; ')}`
-                  : 'Every safety check passed — new trades are allowed.'}
+                <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6l8-3z" />
+                </svg>
+              </span>
+              <div>
+                <div
+                  className="tm-state-word"
+                  style={{
+                    fontSize: '1.5rem',
+                    color: paused ? 'var(--tm-red)' : softBlocked.length ? 'var(--tm-amber)' : undefined,
+                    textShadow: 'none',
+                  }}
+                >
+                  {paused ? 'NEW TRADES PAUSED' : softBlocked.length ? 'TRADING ALLOWED — WITH LIMITS' : 'ALL CLEAR'}
+                </div>
+                <div className="tm-dim" style={{ marginTop: 4 }}>
+                  {paused
+                    ? hardBlocked.map((b) => b.note ?? b.name).join('; ')
+                    : softBlocked.length
+                    ? `${softBlocked.length} check${softBlocked.length > 1 ? 's' : ''} need attention: ${softBlocked.map((b) => b.name).join('; ')}`
+                    : 'Every safety check passed — new trades are allowed.'}
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      </Card>
+        </Card>
+      )}
 
       <div className="tm-grid tm-cols-4">
         <Card>
@@ -240,7 +278,9 @@ export default function Risk() {
                   ]
                 : []),
             ].map((l) => {
-              const pct = (l.used / l.limit) * 100
+              // A limit of 0 would otherwise divide by zero and render an
+              // "Infinity%" bar (M7).
+              const pct = l.limit > 0 ? (l.used / l.limit) * 100 : 0
               const color = pct >= 100 ? '#ff4d6a' : pct >= 75 ? '#ffb547' : '#2ee68a'
               return (
                 <div key={l.name}>

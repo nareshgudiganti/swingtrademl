@@ -635,11 +635,14 @@ export function HBar({
   right?: ReactNode
   labelWidth?: number
 }) {
+  // A limit/max of 0 would otherwise divide by zero and render an
+  // "Infinity%" width — treat it as nothing to fill instead.
+  const pct = max > 0 ? Math.min(100, (Math.abs(value) / max) * 100) : 0
   return (
     <div className="tm-hbar" style={labelWidth ? { gridTemplateColumns: `${labelWidth}px 1fr 40px` } : undefined}>
       <span className="tm-dim">{label}</span>
       <div className="tm-hbar-track">
-        <div className={`tm-hbar-fill tm-${tone}`} style={{ width: `${Math.min(100, (Math.abs(value) / max) * 100)}%` }} />
+        <div className={`tm-hbar-fill tm-${tone}`} style={{ width: `${pct}%` }} />
       </div>
       <span className={clsx('tm-right tm-num', tone === 'up' ? 'tm-pos' : tone === 'down' ? 'tm-neg' : '')}>{right}</span>
     </div>

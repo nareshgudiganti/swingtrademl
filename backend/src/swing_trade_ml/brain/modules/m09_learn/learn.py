@@ -20,7 +20,7 @@ from swing_trade_ml.brain.modules.m09_learn.drift import drift_lines as drift_li
 from swing_trade_ml.brain.modules.m09_learn.failures import failure_patterns
 from swing_trade_ml.brain.modules.m09_learn.proposals import buy_level_proposal
 from swing_trade_ml.brain.modules.m09_learn.report import by_band, by_week, by_word, one_per_day
-from swing_trade_ml.brain.modules.m09_learn.scoring import score_pending
+from swing_trade_ml.brain.modules.m09_learn.scoring import last_closed_trading_day, score_pending
 from swing_trade_ml.brain.reader import IST
 from swing_trade_ml.core.config import settings
 from swing_trade_ml.db.models.brain import BrainDecision, BrainRun
@@ -139,14 +139,15 @@ def _check_drift(db: Session) -> tuple[list[dict], list[str], str | None]:
     return drift, lines, note
 
 
-def run_learning(db: Session, since: date | None = None) -> dict:
+def run_learning(db: Session, since: date | None = None, now: datetime | None = None) -> dict:
     """The weekly job (and `swingtrade brain learn`): score every idea whose
     outcome is now known, check feature drift and store it (F3), build the
     report, and propose a different buy level when the evidence plainly
     supports one (never applied by itself — the owner must accept it,
     constitution C9)."""
-    today = datetime.now(UTC).astimezone(IST).date()
-    newly_scored = score_pending(db, today)
+    # Never a partial day's bar: score up to the last fully closed trading day.
+    upto = last_closed_trading_day(now or datetime.now(UTC))
+    newly_scored = score_pending(db, upto)
     drift, drift_lines, drift_note = _check_drift(db)
     store.record_learning_run(db, drift, drift_lines, drift_note)
     report = learning_report(db, since)

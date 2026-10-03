@@ -1297,3 +1297,54 @@ def test_api_proposal_note_is_capped_at_2000_characters(client, db_session):
         f"/api/v1/brain/proposals/{proposal.id}/accept", json={"note": "x" * 2000}, headers=HEADERS
     )
     assert r.status_code == 200
+
+
+# --- upto = the last fully closed trading day (#9) -----------------------------
+
+
+@pytest.mark.parametrize(
+    ("now_ist", "expected"),
+    [
+        (datetime(2026, 9, 3, 11, 0, tzinfo=IST), date(2026, 9, 2)),  # Thu mid-session -> Wed
+        (datetime(2026, 9, 3, 15, 39, tzinfo=IST), date(2026, 9, 2)),  # one minute before the cutoff
+        (datetime(2026, 9, 3, 15, 40, tzinfo=IST), date(2026, 9, 3)),  # cutoff: today counts
+        (datetime(2026, 9, 3, 22, 0, tzinfo=IST), date(2026, 9, 3)),
+        (datetime(2026, 9, 7, 9, 0, tzinfo=IST), date(2026, 9, 4)),  # Mon morning -> Fri
+        (datetime(2026, 9, 5, 16, 0, tzinfo=IST), date(2026, 9, 4)),  # Saturday -> Fri
+        (datetime(2026, 9, 6, 16, 0, tzinfo=IST), date(2026, 9, 4)),  # Sunday -> Fri
+    ],
+)
+def test_last_closed_trading_day(now_ist, expected):
+    assert scoring.last_closed_trading_day(now_ist.astimezone(UTC)) == expected
+
+
+def test_run_learning_never_scores_with_a_partial_days_bar(db_session):
+    """Decision 1 Sep; target bar lands on day 7. With the clock at 11:00 IST
+    on that day the bar is still forming, so nothing is scored; after 15:40
+    the same bar is final and the idea resolves."""
+    _insert_candles(
+        db_session, "PARTIAL", 910601, [(DECISION_DAY, 100.0), *zip(AFTER_DAYS, AFTER_CLOSES, strict=True)]
+    )
+    _run(db_session, "fx-partial", "nightly", True, DECISION_AS_OF)
+    decision = _idea_decision(db_session, "fx-partial", "PARTIAL")
+    db_session.commit()
+    hit_day = AFTER_DAYS[6]
+
+    during = datetime.combine(hit_day, time(11, 0), tzinfo=IST).astimezone(UTC)
+    assert learn_mod.run_learning(db_session, now=during)["newly_scored"] == 0
+    assert decision.outcome is None
+
+    after = datetime.combine(hit_day, time(15, 45), tzinfo=IST).astimezone(UTC)
+    assert learn_mod.run_learning(db_session, now=after)["newly_scored"] == 1
+    assert decision.outcome == "target"
+
+
+def test_afterrun_scoring_uses_the_last_closed_day_of_the_readers_clock(db_session, monkeypatch):
+    seen = []
+    monkeypatch.setattr(scoring, "score_pending", lambda db, upto: seen.append(upto) or 0)
+
+    class _Reader:
+        as_of = datetime(2026, 9, 3, 11, 0, tzinfo=IST).astimezone(UTC)
+
+    scoring.score_pending_from_reader(db_session, _Reader())
+    assert seen == [date(2026, 9, 2)]

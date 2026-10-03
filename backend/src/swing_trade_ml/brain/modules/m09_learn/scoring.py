@@ -21,6 +21,25 @@ from swing_trade_ml.db.models.market import Candle, Instrument
 IST = ZoneInfo("Asia/Kolkata")
 
 
+# NSE's cash session closes 15:30 IST; ten minutes later the day's bar is final.
+SESSION_FINAL = time(15, 40)
+
+
+def last_closed_trading_day(now: datetime) -> date:
+    """The latest IST weekday whose daily bar can no longer change: today only
+    from 15:40 IST on a weekday, otherwise the weekday before. (Exchange
+    holidays are not known here; a holiday simply has no bar.) Scoring must
+    never see a partial day's bar, or a half-formed high/low/close could
+    freeze a wrong outcome for good."""
+    ist = now.astimezone(IST)
+    day = ist.date()
+    if ist.weekday() >= 5 or ist.time() < SESSION_FINAL:
+        day -= timedelta(days=1)
+    while day.weekday() >= 5:
+        day -= timedelta(days=1)
+    return day
+
+
 def _decision_day(as_of: datetime) -> date:
     return as_of.astimezone(IST).date()
 
@@ -92,5 +111,6 @@ def score_pending(db: Session, upto: date) -> int:
 
 def score_pending_from_reader(db: Session, reader) -> int:
     """The after-run hook's entry point (`service._sync_episodes`): score
-    everything resolvable as of this reader's own IST trading day."""
-    return score_pending(db, reader.as_of.astimezone(IST).date())
+    everything resolvable as of the last fully closed trading day at this
+    reader's own clock."""
+    return score_pending(db, last_closed_trading_day(reader.as_of))

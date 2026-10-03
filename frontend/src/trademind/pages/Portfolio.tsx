@@ -2,28 +2,10 @@ import { useMemo, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 
 import { api } from '../../api/client'
-import type { BrainDecision, BrainRun, DetailedPosition } from '../../api/types'
-import { holdingsFrom, useBrainStatus, useLatestRun } from '../live'
+import type { BrainRun, DetailedPosition } from '../../api/types'
+import { finalWord, holdingsFrom, useBrainStatus, useLatestRun } from '../live'
+import { wordTagColor, wordTone } from '../vocab'
 import { BrainOff, Card, CheckItem, Donut, GlowArea, Tag, inr, signed, toneClass } from '../ui'
-
-// Same private copy as every other TradeMind screen (see Home.tsx) — the
-// owner's overrule, if any, otherwise the brain's own word.
-function finalWord(d: BrainDecision): string {
-  return d.overruled_word ?? d.word
-}
-
-const HOLDING_TONE: Record<string, 'green' | 'blue' | 'amber' | 'red'> = {
-  HOLD: 'green',
-  MONITOR: 'blue',
-  REDUCE: 'amber',
-  EXIT: 'red',
-}
-
-const SUGGESTION_TONE: Record<string, 'warn' | 'neg'> = {
-  MONITOR: 'warn',
-  REDUCE: 'warn',
-  EXIT: 'neg',
-}
 
 // Purely a colour wheel for the donut — never a data value, so cycling a
 // fixed palette by rank is fine even though the sectors themselves are real.
@@ -182,7 +164,14 @@ export default function Portfolio() {
               </div>
               <div className="tm-row" title="Biggest fall from a high point">
                 <span className="tm-dim">Max Drawdown</span>
-                <span className="tm-strong tm-neg">−{(summary.data.max_drawdown_pct * 100).toFixed(1)}%</span>
+                {(() => {
+                  const ddPct = Math.round(summary.data.max_drawdown_pct * 1000) / 10
+                  return (
+                    <span className={`tm-strong ${ddPct > 0 ? 'tm-neg' : ''}`}>
+                      {ddPct > 0 ? `−${ddPct.toFixed(1)}%` : '0%'}
+                    </span>
+                  )
+                })()}
               </div>
             </div>
           )}
@@ -247,7 +236,7 @@ export default function Portfolio() {
           {status === 'loading' && <p className="tm-dim">Connecting to the brain…</p>}
           {status === 'error' && <p className="tm-dim">Something went wrong talking to the brain.</p>}
           {status === 'no-run' && <p className="tm-dim">The brain has not run yet.</p>}
-          {status === 'live' && holdings.length === 0 && <p className="tm-dim">You are not holding anything right now.</p>}
+          {status === 'live' && holdings.length === 0 && <p className="tm-dim">The brain's last run saw no holdings.</p>}
           {status === 'live' && holdings.length > 0 && (
             <div className="tm-table-wrap">
               <table className="tm-table">
@@ -274,7 +263,7 @@ export default function Portfolio() {
                           {p ? `${p.unrealized_pnl >= 0 ? '+' : '−'}₹${inr(Math.abs(p.unrealized_pnl), 0)}` : '—'}
                         </td>
                         <td>
-                          <Tag tone={HOLDING_TONE[finalWord(h)] ?? 'blue'}>{finalWord(h)}</Tag>
+                          <Tag tone={wordTagColor(finalWord(h))}>{finalWord(h)}</Tag>
                           {h.reasons[0] && <div className="tm-dim" style={{ fontSize: '0.75rem', marginTop: 2 }}>{h.reasons[0]}</div>}
                         </td>
                       </tr>
@@ -298,7 +287,7 @@ export default function Portfolio() {
               }
               return flagged.map((h) =>
                 h.reasons[0] ? (
-                  <CheckItem key={h.id} tone={SUGGESTION_TONE[finalWord(h)] ?? 'warn'}>
+                  <CheckItem key={h.id} tone={wordTone(finalWord(h))}>
                     {h.symbol}: {h.reasons[0]}
                   </CheckItem>
                 ) : null,

@@ -77,7 +77,7 @@ def _note(n_days: int, brain: dict, v1: dict, min_finished: int) -> str:
         f"On the same {days}, the brain's ideas reached their target {brain['hit_rate']:.0%} of the time "
         f"(average result {brain['avg_outcome_pct'] or 0.0:+.1%}); "
         f"version 1's reached it {v1['hit_rate']:.0%} of the time "
-        f" (average {v1['avg_outcome_pct'] or 0.0:+.1%})."
+        f"(average {v1['avg_outcome_pct'] or 0.0:+.1%})."
     )
 
 

@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from swing_trade_ml.brokers import get_broker
 from swing_trade_ml.core.enums import SignalType
-from swing_trade_ml.core.strategy_policy import is_advisory
+from swing_trade_ml.core.strategy_policy import STAGED_TYPES, is_advisory
 from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.db.models.market import Instrument
 from swing_trade_ml.db.models.trading import Strategy
@@ -199,6 +199,10 @@ def run_all_active(db: Session, interval: str = "day") -> ScanResult:
         db.execute(
             select(Strategy).where(
                 Strategy.is_active.is_(True),
+                # Staged strategies (the brain, M18) run right after the brain's
+                # own nightly run instead (services/brain_golive/shadow.py): at
+                # 15:45 the brain has not run yet.
+                Strategy.strategy_type.not_in(sorted(STAGED_TYPES)),
                 (Strategy.mode == mode) | (Strategy.execution_mode == "advisory")
                 | (Strategy.strategy_type == "long_term_value"),
             )

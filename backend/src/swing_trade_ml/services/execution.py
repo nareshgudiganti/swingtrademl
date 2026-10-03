@@ -15,7 +15,12 @@ from sqlalchemy.orm import Session
 
 from swing_trade_ml.brokers import OrderRequest, OrderResult, get_broker
 from swing_trade_ml.core.config import settings
-from swing_trade_ml.core.strategy_policy import is_advisory, require_broker_execution
+from swing_trade_ml.core.strategy_policy import (
+    exits_are_advisory,
+    is_advisory,
+    is_staged,
+    require_broker_execution,
+)
 from swing_trade_ml.core.enums import (
     ExitReason,
     OrderStatus,
@@ -933,10 +938,14 @@ def process_decision(
     if is_advisory(strategy):
         signal.advisory_only = True
         db.commit()
-        notifier.send_sync(
-            _advisory_entry_message(instrument, decision, strategy, verdict.quantity, mode),
-            "signal",
-        )
+        # A staged (brain) strategy's ideas are announced by its approvals
+        # service instead; in practice mode they are not announced at all, so
+        # the owner is never nudged to act on a practice idea.
+        if not is_staged(strategy):
+            notifier.send_sync(
+                _advisory_entry_message(instrument, decision, strategy, verdict.quantity, mode),
+                "signal",
+            )
         return signal
 
     notifier.send_sync(
@@ -1142,7 +1151,9 @@ def check_exits(db: Session) -> list[Trade]:
         # was ever misconfigured as execution_mode="auto" — otherwise this
         # one path (the scale-out branch just below) would be the one place
         # that safety rule doesn't hold.
-        position_is_advisory = is_advisory(position.strategy)
+        # A brain position (staged type) is the exception: the owner approved
+        # its order, so v1 protects it with real exits.
+        position_is_advisory = exits_are_advisory(position.strategy)
 
         reason: ExitReason | None = None
         if position.stop_loss and price <= position.stop_loss:

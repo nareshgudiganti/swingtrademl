@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.enums import ExitReason, OrderStatus, PositionStatus, TransactionType
 from swing_trade_ml.core.logging import get_logger
+from swing_trade_ml.core.strategy_policy import STAGED_TYPES
 from swing_trade_ml.db.models.market import Candle, Instrument
 from swing_trade_ml.db.models.trading import (
     Order,
@@ -85,11 +86,17 @@ def rank_buy_candidates(candidates: list[tuple[int, float]]) -> list[tuple[int, 
 
 
 def active_strategy_count(db: Session, mode: str) -> int:
-    """How many strategies are competing for this mode's position slots."""
+    """How many strategies are competing for this mode's position slots.
+
+    A staged strategy (the brain, M18) is left out so switching it on never
+    shrinks version 1's own share (P6); its positions still count account-wide.
+    """
     return int(
         db.execute(
             select(func.count(Strategy.id)).where(
-                Strategy.is_active.is_(True), Strategy.mode == mode
+                Strategy.is_active.is_(True),
+                Strategy.mode == mode,
+                Strategy.strategy_type.not_in(sorted(STAGED_TYPES)),
             )
         ).scalar_one()
         or 0

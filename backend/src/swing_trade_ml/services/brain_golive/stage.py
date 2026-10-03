@@ -31,16 +31,16 @@ class StageRefusedError(ValueError):
 
 
 def _latest(db: Session) -> BrainStageChange | None:
+    """Newest by insert order (id), never by changed_at: the app clock can step
+    back, and an older "auto" row must never outrank a later rollback."""
     return db.execute(
-        select(BrainStageChange)
-        .order_by(BrainStageChange.changed_at.desc(), BrainStageChange.id.desc())
-        .limit(1)
+        select(BrainStageChange).order_by(BrainStageChange.id.desc()).limit(1)
     ).scalar_one_or_none()
 
 
 def current_stage(db: Session) -> str:
     row = _latest(db)
-    return row.stage if row is not None else "shadow"
+    return row.stage if row is not None and row.stage in STAGES else "shadow"  # fail closed
 
 
 def set_stage(db: Session, stage: str, by: str, reason: str) -> BrainStageChange:
@@ -74,9 +74,7 @@ def stage_overview(db: Session, history_limit: int = 20) -> dict:
     stage = current_stage(db)
     finished = finished_brain_ideas(db)
     history = db.execute(
-        select(BrainStageChange)
-        .order_by(BrainStageChange.changed_at.desc(), BrainStageChange.id.desc())
-        .limit(history_limit)
+        select(BrainStageChange).order_by(BrainStageChange.id.desc()).limit(history_limit)
     ).scalars()
     return {
         "stage": stage,

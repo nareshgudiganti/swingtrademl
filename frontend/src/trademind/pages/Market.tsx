@@ -2,9 +2,9 @@ import { useQuery } from '@tanstack/react-query'
 
 import { api } from '../../api/client'
 import { formatDateTime } from '../../lib/format'
-import { marketSituation, useBrainStatus, useEpisodes, useLatestRun } from '../live'
+import { marketSituation, useEpisodes, useLatestRun } from '../live'
 import { MARKET_LABEL, MARKET_PLAIN, MARKET_TONE } from '../vocab'
-import { BrainOff, Card, NotConnected, Tag, inr } from '../ui'
+import { BrainGate, Card, NotConnected, Tag, inr } from '../ui'
 
 const ROTATION: Record<string, string> = {
   leading: 'Leading — stronger for 1 and 3 months',
@@ -21,40 +21,17 @@ const REGIME_PLAIN: Record<string, string> = {
 }
 
 export default function Market() {
-  const status = useBrainStatus()
+  return (
+    <BrainGate>
+      <MarketBody />
+    </BrainGate>
+  )
+}
+
+function MarketBody() {
   const latest = useLatestRun()
   const episodes = useEpisodes()
   const regime = useQuery({ queryKey: ['marketRegime'], queryFn: api.marketRegime })
-
-  if (status === 'off') return <div className="tm-page"><BrainOff /></div>
-
-  if (status === 'loading') {
-    return (
-      <div className="tm-page">
-        <p className="tm-dim">Connecting to the brain…</p>
-      </div>
-    )
-  }
-
-  if (status === 'error') {
-    return (
-      <div className="tm-page">
-        <Card title="Could not reach the brain">
-          <p className="tm-dim">Something went wrong talking to the brain. Try again shortly.</p>
-        </Card>
-      </div>
-    )
-  }
-
-  if (status === 'no-run') {
-    return (
-      <div className="tm-page">
-        <Card title="No run yet">
-          <p className="tm-dim">The brain has not run yet.</p>
-        </Card>
-      </div>
-    )
-  }
 
   const run = latest.data!
   const situation = marketSituation(run)

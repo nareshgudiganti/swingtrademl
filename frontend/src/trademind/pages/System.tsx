@@ -2,9 +2,9 @@ import { useQuery } from '@tanstack/react-query'
 
 import { api } from '../../api/client'
 import type { ModuleMode } from '../../api/types'
-import { useBrainStatus, useHealth, useModules, useRuns } from '../live'
+import { useHealth, useModules, useRuns } from '../live'
 import { MARKET_LABEL, STEP_LABEL } from '../vocab'
-import { BrainOff, Card, NotConnected, Tag } from '../ui'
+import { BrainGate, Card, NotConnected, Tag } from '../ui'
 import { formatDateTime } from '../../lib/format'
 
 const MODE_LABEL: Record<ModuleMode, string> = { on: 'On', shadow: 'Trial', off: 'Off' }
@@ -20,32 +20,19 @@ const RUN_STATUS_TEXT: Record<string, string> = { running: 'Running…', queued:
 const NOT_MEASURED = 'Not measured yet — the learning loop reports real results once ideas finish.'
 
 export default function System() {
-  const status = useBrainStatus()
+  return (
+    <BrainGate allowNoRun>
+      <SystemBody />
+    </BrainGate>
+  )
+}
+
+function SystemBody() {
   const health = useHealth()
   const modules = useModules()
   const runs = useRuns(8)
   const appStatus = useQuery({ queryKey: ['status'], queryFn: api.status })
   const moduleById = new Map((modules.data?.modules ?? []).map((m) => [m.id, m]))
-
-  if (status === 'off') return <div className="tm-page"><BrainOff /></div>
-
-  if (status === 'loading') {
-    return (
-      <div className="tm-page">
-        <p className="tm-dim">Connecting to the brain…</p>
-      </div>
-    )
-  }
-
-  if (status === 'error') {
-    return (
-      <div className="tm-page">
-        <Card title="Could not reach the brain">
-          <p className="tm-dim">Something went wrong talking to the brain. Try again shortly.</p>
-        </Card>
-      </div>
-    )
-  }
 
   return (
     <div className="tm-page tm-grid">

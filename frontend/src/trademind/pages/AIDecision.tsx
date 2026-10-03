@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom'
 
 import { finalWord, ideasFrom, useBrainStatus, useLatestRun, useRunTrace, useWhy } from '../live'
 import { STEP_LABEL, traceLine, wordClassName, wordTone } from '../vocab'
-import { BrainOff, Card, CheckItem, Icon, NotConnected, Tabs, inr } from '../ui'
+import { BrainGate, Card, CheckItem, Icon, NotConnected, Tabs, inr } from '../ui'
 
 const TABS = ['Summary', 'Evidence', 'Similar Cases', 'Model Output', 'Risk Analysis'] as const
 type TabId = (typeof TABS)[number]
@@ -15,6 +15,14 @@ function money(n: number): string {
 }
 
 export default function AIDecision() {
+  return (
+    <BrainGate>
+      <AIDecisionBody />
+    </BrainGate>
+  )
+}
+
+function AIDecisionBody() {
   const { symbol: rawSymbol } = useParams()
   const status = useBrainStatus()
   const latest = useLatestRun()
@@ -33,36 +41,6 @@ export default function AIDecision() {
 
   const [tab, setTab] = useState<TabId>('Summary')
   const [step, setStep] = useState(0)
-
-  if (status === 'off') return <div className="tm-page"><BrainOff /></div>
-
-  if (status === 'loading') {
-    return (
-      <div className="tm-page">
-        <p className="tm-dim">Connecting to the brain…</p>
-      </div>
-    )
-  }
-
-  if (status === 'error') {
-    return (
-      <div className="tm-page">
-        <Card title="Could not reach the brain">
-          <p className="tm-dim">Something went wrong talking to the brain. Try again shortly.</p>
-        </Card>
-      </div>
-    )
-  }
-
-  if (status === 'no-run') {
-    return (
-      <div className="tm-page">
-        <Card title="No run yet">
-          <p className="tm-dim">The brain has not run yet.</p>
-        </Card>
-      </div>
-    )
-  }
 
   const stillLookingUp = fromRun ? runTrace.isLoading : why.isLoading
   if (stillLookingUp) {

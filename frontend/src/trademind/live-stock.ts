@@ -9,6 +9,7 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 
 export function barsFrom(candles: Candle[]): CandleBar[] {
   return candles.map((c) => {
+    // Assumes the viewer is in IST: the date is read with local getDate()/getMonth(), so other time zones can show the neighbouring day.
     const d = new Date(c.ts)
     return { t: `${d.getDate()} ${MONTHS[d.getMonth()]}`, o: c.open, h: c.high, l: c.low, c: c.close, vol: c.volume ?? 0 }
   })

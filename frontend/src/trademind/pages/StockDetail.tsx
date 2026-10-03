@@ -8,7 +8,7 @@ import type { Action } from '../types'
 import { barsFrom } from '../live-stock'
 import { finalWord, stockSituations, useBrainStatus, useLatestRun, useWhy } from '../live'
 import { wordClassName, wordTagColor, wordTone } from '../vocab'
-import { ActionPill, BrainOff, Candles, Card, CheckItem, Icon, NotConnected, Seg, Tabs, Tag, inr, signed, toneClass } from '../ui'
+import { ActionPill, BrainGate, Candles, Card, CheckItem, Icon, NotConnected, Seg, Tabs, Tag, inr, signed, toneClass } from '../ui'
 
 const TABS = ['Overview', 'Technical', 'Fundamental', 'AI Analysis', 'Similar Cases', 'News', 'Options'] as const
 type TabId = (typeof TABS)[number]
@@ -18,6 +18,14 @@ type Range = (typeof RANGES)[number]
 const RANGE_DAYS: Record<Range, number> = { '1M': 22, '3M': 66, '6M': 132, '1Y': 252 }
 
 export default function StockDetail() {
+  return (
+    <BrainGate>
+      <StockDetailBody />
+    </BrainGate>
+  )
+}
+
+function StockDetailBody() {
   const { symbol: rawSymbol } = useParams()
   const symbol = (rawSymbol ?? '').toUpperCase()
 
@@ -35,36 +43,6 @@ export default function StockDetail() {
     enabled: !!symbol,
   })
   const bars = useMemo(() => barsFrom(candlesQ.data ?? []), [candlesQ.data])
-
-  if (status === 'off') return <div className="tm-page"><BrainOff /></div>
-
-  if (status === 'loading') {
-    return (
-      <div className="tm-page">
-        <p className="tm-dim">Connecting to the brain…</p>
-      </div>
-    )
-  }
-
-  if (status === 'error') {
-    return (
-      <div className="tm-page">
-        <Card title="Could not reach the brain">
-          <p className="tm-dim">Something went wrong talking to the brain. Try again shortly.</p>
-        </Card>
-      </div>
-    )
-  }
-
-  if (status === 'no-run') {
-    return (
-      <div className="tm-page">
-        <Card title="No run yet">
-          <p className="tm-dim">The brain has not run yet.</p>
-        </Card>
-      </div>
-    )
-  }
 
   const stillLookingUp = !fromRun && why.isLoading
   if (stillLookingUp) {

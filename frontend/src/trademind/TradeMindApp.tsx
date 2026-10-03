@@ -60,7 +60,7 @@ export default function TradeMindApp() {
           ))}
         </nav>
         <div className="tm-topbar-right">
-          <span className="tm-demo-chip" title={chipTitle}>
+          <span className="tm-status-chip" title={chipTitle}>
             {chip.label}
           </span>
           <Link to="/dashboard" className="tm-avatar" title="Back to the classic app">

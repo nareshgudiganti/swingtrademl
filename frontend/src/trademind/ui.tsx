@@ -5,6 +5,7 @@ import { useId, type ReactNode } from 'react'
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import clsx from 'clsx'
 
+import { useBrainStatus } from './live'
 import type { Action, CandleBar, Point } from './types'
 
 // ------------------------------------------------------------- formatting --
@@ -190,6 +191,54 @@ export function BrainOff() {
   )
 }
 
+/** The one place that turns the brain's loading / off / no-run / error states
+ * into a page. Children render only once the brain is live. `allowNoRun` is
+ * for pages whose own data does not depend on a run (System, Learn): they
+ * still render when the brain has not run yet. */
+export function BrainGate({
+  children,
+  what = 'the brain',
+  allowNoRun = false,
+}: {
+  children: ReactNode
+  what?: string
+  allowNoRun?: boolean
+}) {
+  const status = useBrainStatus()
+
+  if (status === 'off') return <div className="tm-page"><BrainOff /></div>
+
+  if (status === 'loading') {
+    return (
+      <div className="tm-page">
+        <p className="tm-dim">Connecting to {what}…</p>
+      </div>
+    )
+  }
+
+  if (status === 'error') {
+    return (
+      <div className="tm-page">
+        <Card title="Could not reach the brain">
+          <p className="tm-dim">Something went wrong talking to the brain. Try again shortly.</p>
+        </Card>
+      </div>
+    )
+  }
+
+  if (status === 'no-run' && !allowNoRun) {
+    return (
+      <div className="tm-page">
+        <Card title="No run yet">
+          <p className="tm-dim">The brain has not run yet.</p>
+        </Card>
+      </div>
+    )
+  }
+
+  return <>{children}</>
+}
+
 const ACTION_HINT: Record<Action, string> = {
   TRADE: 'Worth buying now, at the suggested size',
   WATCH: 'Interesting — wait for a better moment',
@@ -290,6 +339,7 @@ export function Ring({
   center,
   label,
   valueSize,
+  empty = false,
 }: {
   value: number
   max?: number
@@ -299,6 +349,8 @@ export function Ring({
   center?: ReactNode
   label?: ReactNode
   valueSize?: number
+  /** No value to show: draw only the empty track, no fill and no glow. */
+  empty?: boolean
 }) {
   const id = useId().replace(/:/g, '')
   const r = (size - stroke) / 2 - 2
@@ -307,7 +359,7 @@ export function Ring({
   const [a, b] = RING_COLORS[color] ?? RING_COLORS.green!
   return (
     <div className="tm-ring" style={{ width: size, height: size }}>
-      <svg width={size} height={size} style={{ filter: `drop-shadow(0 0 6px ${b}88)` }}>
+      <svg width={size} height={size} style={empty ? undefined : { filter: `drop-shadow(0 0 6px ${b}88)` }}>
         <defs>
           <linearGradient id={`rg${id}`} x1="0" y1="0" x2="1" y2="1">
             <stop offset="0%" stopColor={a} />
@@ -315,17 +367,19 @@ export function Ring({
           </linearGradient>
         </defs>
         <circle cx={size / 2} cy={size / 2} r={r} stroke="rgba(139,124,255,0.12)" strokeWidth={stroke} fill="none" />
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={r}
-          stroke={`url(#rg${id})`}
-          strokeWidth={stroke}
-          fill="none"
-          strokeLinecap="round"
-          strokeDasharray={`${c * pct} ${c}`}
-          transform={`rotate(-90 ${size / 2} ${size / 2})`}
-        />
+        {!empty && (
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={r}
+            stroke={`url(#rg${id})`}
+            strokeWidth={stroke}
+            fill="none"
+            strokeLinecap="round"
+            strokeDasharray={`${c * pct} ${c}`}
+            transform={`rotate(-90 ${size / 2} ${size / 2})`}
+          />
+        )}
       </svg>
       <div className="tm-ring-center">
         {center ?? (

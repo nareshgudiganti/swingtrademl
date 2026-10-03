@@ -5,9 +5,9 @@ import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../../api/client'
 import type { BrainDecision, IdeaWord } from '../../api/types'
 import type { Action } from '../types'
-import { finalWord, ideasFrom, useBrainStatus, useLatestRun } from '../live'
+import { finalWord, ideasFrom, useLatestRun } from '../live'
 import { wordTone } from '../vocab'
-import { ActionPill, BrainOff, Card, CheckItem, Icon, GlowArea, Ring, Seg, StockLogo, inr } from '../ui'
+import { ActionPill, BrainGate, Card, CheckItem, Icon, GlowArea, Ring, Seg, StockLogo, inr } from '../ui'
 
 type Filter = 'ALL' | IdeaWord
 
@@ -17,41 +17,18 @@ function entryZone(d: BrainDecision): string {
 }
 
 export default function Opportunities() {
+  return (
+    <BrainGate>
+      <OpportunitiesBody />
+    </BrainGate>
+  )
+}
+
+function OpportunitiesBody() {
   const navigate = useNavigate()
-  const status = useBrainStatus()
   const latest = useLatestRun()
   const [filter, setFilter] = useState<Filter>('ALL')
   const [query, setQuery] = useState('')
-
-  if (status === 'off') return <div className="tm-page"><BrainOff /></div>
-
-  if (status === 'loading') {
-    return (
-      <div className="tm-page">
-        <p className="tm-dim">Connecting to the brain…</p>
-      </div>
-    )
-  }
-
-  if (status === 'error') {
-    return (
-      <div className="tm-page">
-        <Card title="Could not reach the brain">
-          <p className="tm-dim">Something went wrong talking to the brain. Try again shortly.</p>
-        </Card>
-      </div>
-    )
-  }
-
-  if (status === 'no-run') {
-    return (
-      <div className="tm-page">
-        <Card title="No run yet">
-          <p className="tm-dim">The brain has not run yet.</p>
-        </Card>
-      </div>
-    )
-  }
 
   const run = latest.data!
   const ideas = ideasFrom(run)
@@ -175,6 +152,7 @@ function FeaturedCard({ decision }: { decision: BrainDecision }) {
       <div className="tm-flex" style={{ minWidth: 0 }}>
         <Ring
           value={decision.confidence != null ? Math.round(decision.confidence * 100) : 0}
+          empty={decision.confidence == null}
           size={84}
           stroke={8}
           center={

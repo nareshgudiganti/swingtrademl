@@ -8,7 +8,7 @@ durable (the CLI, the weekly job) must `db.commit()` itself afterwards.
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, time
 
 import pandas as pd
 from sqlalchemy import select
@@ -60,10 +60,12 @@ def _scored_rows(db: Session, since: date | None) -> pd.DataFrame:
         .where(BrainDecision.outcome.is_not(None))
     )
     records = []
+    if since is not None:
+        # decision day = the run's as_of read in IST, so its first instant is
+        # IST midnight of `since`.
+        stmt = stmt.where(BrainRun.as_of >= datetime.combine(since, time(0, 0), tzinfo=IST))
     for decision, started_at, as_of, context in db.execute(stmt).all():
         decision_day = as_of.astimezone(IST).date()
-        if since is not None and decision_day < since:
-            continue
         records.append(
             {
                 "run_started": started_at,

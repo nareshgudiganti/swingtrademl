@@ -4,7 +4,7 @@ import { Link, useNavigate } from 'react-router-dom'
 
 import { api } from '../../api/client'
 import type { BrainDecision, IdeaWord } from '../../api/types'
-import type { Action } from '../data'
+import type { Action } from '../types'
 import { ideasFrom, useBrainStatus, useLatestRun } from '../live'
 import { ActionPill, BrainOff, Card, CheckItem, Icon, GlowArea, Ring, Seg, StockLogo, inr } from '../ui'
 

@@ -3,7 +3,7 @@
 // belongs to one symbol's price history, not a brain run.
 
 import type { Candle } from '../api/types'
-import type { CandleBar } from './data'
+import type { CandleBar } from './types'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 

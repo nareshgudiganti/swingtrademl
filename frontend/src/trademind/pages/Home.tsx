@@ -1,6 +1,6 @@
 import { useNavigate, Link } from 'react-router-dom'
 
-import type { Action } from '../data'
+import type { Action } from '../types'
 import type { BrainDecision, IdeaWord } from '../../api/types'
 import { ideasFrom, holdingsFrom, marketSituation, useBrainStatus, useLatestRun, useLearning } from '../live'
 import { ActionPill, BrainArt, BrainOff, Card, CheckItem, Icon, Tag } from '../ui'

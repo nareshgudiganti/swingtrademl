@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 
 import { api } from '../../api/client'
 import type { BrainDecision } from '../../api/types'
-import type { Action } from '../data'
+import type { Action } from '../types'
 import { barsFrom } from '../live-stock'
 import { stockSituations, useBrainStatus, useLatestRun, useWhy } from '../live'
 import { ActionPill, BrainOff, Candles, Card, CheckItem, Icon, NotConnected, Seg, Tabs, Tag, inr, signed, toneClass } from '../ui'

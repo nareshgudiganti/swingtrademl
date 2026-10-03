@@ -3,7 +3,7 @@
 // mappers: easy to call from render, easy to test later.
 
 import type { BrainDecision, BrainProposal, BrainRun, EquityPoint, SectorExposure } from '../api/types'
-import type { Point } from './data'
+import type { Point } from './types'
 
 /** Ideas and holdings the brain actually turned down this run — a TRADE (or
  * a less careful holding word) brought down a notch, with the reason it

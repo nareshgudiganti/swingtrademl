@@ -5,7 +5,7 @@ import { useId, type ReactNode } from 'react'
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import clsx from 'clsx'
 
-import type { Action, CandleBar, Point } from './data'
+import type { Action, CandleBar, Point } from './types'
 
 // ------------------------------------------------------------- formatting --
 

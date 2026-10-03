@@ -220,3 +220,13 @@ do not do that by accident.
 - Task 5: minor (deferred): new_proposals shape {id, kind, title, evidence} chosen by implementer.
 - Task 6: minor (deferred): one shared pending flag disables every proposal's buttons during any decision.
 - Final review: deferred (minor, not in the fix wave): #6 module_mode accept for unknown module → 500 (no generator yet); #7 no row lock on accept (single owner); #8 holiday nightly runs double-count a setup; #9 upto during market hours could freeze a partial close; #14 unscoreable ideas re-queried; #15 no note length limit; T2/T4/T5/T6 minors as triaged by the final reviewer.
+
+## TradeMind live-data follow-ups (deferred minors, 2026-10-04)
+
+- Task 1: minor (deferred): chip keeps CSS class name tm-demo-chip (rename when trademind.css is touched).
+- Task 2: minor (deferred): Home's top-ideas score has no visible label; MARKET_PLAIN/MARKET_TONE duplicated in Home.tsx and Market.tsx; Opportunities ring shows 0-fill when confidence is null.
+- Task 4: minor (deferred): spot-check PositionBand reason wording in the browser pass.
+- Task 3: minor (deferred): WORD_TONE falls back to 'pos' for an unknown word (should be neutral); date parsing comment in live-stock.ts; finalWord duplicated; index keys.
+- Task 5: minor (deferred): STEP_LABEL/MODE_LABEL copied from Brain.tsx into System.tsx.
+- BrainGate component to replace the off/loading/error/no-run block copied into 9 pages.
+- Local check DB has the wrong 28 Sep opening equity (₹1,83,647 vs ₹9,79,792) → Portfolio shows +435.6% / Max drawdown −81.6% (v1 data, not a UI bug).

@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { useParams } from 'react-router-dom'
 
-import type { BrainDecision, BrainTraceEvent } from '../../api/types'
-import { useBrainStatus, useLatestRun, useRunTrace, useWhy } from '../live'
+import { finalWord, ideasFrom, useBrainStatus, useLatestRun, useRunTrace, useWhy } from '../live'
+import { STEP_LABEL, traceLine, wordClassName, wordTone } from '../vocab'
 import { BrainOff, Card, CheckItem, Icon, NotConnected, Tabs, inr } from '../ui'
 
 const TABS = ['Summary', 'Evidence', 'Similar Cases', 'Model Output', 'Risk Analysis'] as const
@@ -10,75 +10,19 @@ type TabId = (typeof TABS)[number]
 
 const STEP_ICONS = [Icon.Pulse, Icon.Target, Icon.Layers, Icon.Book, Icon.Chart, Icon.Shield, Icon.Bolt]
 
-// Same step names and trace wording as the brain console — see Brain.tsx's
-// STEP_LABEL / traceLine. Duplicated rather than imported: neither is
-// exported, and this screen must never drift from that wording by hand.
-const STEP_LABEL: Record<string, string> = {
-  perceive: '1 · Look at the data',
-  state: '2 · Read the market',
-  recognise: '3 · Recognise the situation',
-  remember: '4 · Remember similar times',
-  reason: '5 · Form an opinion',
-  risk: '6 · Safety check',
-  decide: '7 · Decide',
-  learn: '8 · Learn from results',
-}
-
-function traceLine(e: BrainTraceEvent): string {
-  if (e.module_id === 'fallback') return 'Simple built-in answer (no module installed for this step)'
-  switch (e.status) {
-    case 'used':
-      return `${e.module_id} answered`
-    case 'shadow':
-      return `${e.module_id} ran on trial — recorded, not used`
-    case 'skipped':
-      return `${e.module_id} is switched off`
-    case 'rejected':
-      return `${e.module_id}'s answer was refused: ${e.reason}`
-    default:
-      return `${e.module_id} did not answer (${e.reason}); the simple built-in answer was used`
-  }
-}
-
-// The owner's overrule, if any, otherwise the brain's own word. Duplicated
-// in each TradeMind screen rather than shared, same as Brain.tsx's own copy.
-function finalWord(d: BrainDecision): string {
-  return d.overruled_word ?? d.word
-}
-
-// Positive: TRADE / HOLD. Caution: WATCH / WAIT / MONITOR. Negative: AVOID /
-// REDUCE / EXIT. Same mapping as StockDetail.tsx, duplicated rather than
-// shared (this screen owns no shared module to put it in).
-const WORD_TONE: Record<string, 'pos' | 'warn' | 'neg'> = {
-  TRADE: 'pos',
-  HOLD: 'pos',
-  WATCH: 'warn',
-  WAIT: 'warn',
-  MONITOR: 'warn',
-  AVOID: 'neg',
-  REDUCE: 'neg',
-  EXIT: 'neg',
-}
-
-function wordTone(d: BrainDecision): 'pos' | 'warn' | 'neg' {
-  return WORD_TONE[finalWord(d)] ?? 'pos'
-}
-
-function wordClass(d: BrainDecision): string {
-  return `tm-${wordTone(d)}`
-}
-
 function money(n: number): string {
   return `${n < 0 ? '−' : '+'}₹${inr(Math.abs(n), 0)}`
 }
 
 export default function AIDecision() {
   const { symbol: rawSymbol } = useParams()
-  const symbol = (rawSymbol ?? '').toUpperCase()
-
   const status = useBrainStatus()
   const latest = useLatestRun()
   const run = latest.data
+  // No symbol in the URL (/trademind/ai): default to today's top idea,
+  // same as Positions defaults to holdings[0] (F3).
+  const defaultIdea = run && !rawSymbol ? ideasFrom(run)[0] : undefined
+  const symbol = (rawSymbol ?? defaultIdea?.symbol ?? '').toUpperCase()
   const fromRun = run?.decisions.find((d) => d.symbol.toUpperCase() === symbol)
   // The symbol is already in the latest nightly run: read that run's stored
   // trace (fast) instead of asking the brain to reason about it again
@@ -142,10 +86,13 @@ export default function AIDecision() {
 
   const decision = fromRun ?? why.data?.decision
   if (!decision) {
+    const noSymbolGiven = !rawSymbol
     return (
       <div className="tm-page">
-        <Card title={symbol || 'Unknown stock'}>
-          <p className="tm-dim">No decision for this stock today.</p>
+        <Card title={noSymbolGiven ? 'No ideas yet' : symbol || 'Unknown stock'}>
+          <p className="tm-dim">
+            {noSymbolGiven ? 'The brain has no ideas to show right now.' : 'No decision for this stock today.'}
+          </p>
         </Card>
       </div>
     )
@@ -163,7 +110,11 @@ export default function AIDecision() {
   return (
     <div className="tm-page">
       <div className="tm-grid tm-ai-grid">
-        <Card glow>
+        <Card
+          glow
+          title="How the brain worked through this run"
+          sub="The steps are the same for every stock in a run."
+        >
           <div className="tm-chain">
             {trace.length > 0 ? (
               trace.map((e, i) => {
@@ -184,7 +135,7 @@ export default function AIDecision() {
                 )
               })
             ) : (
-              <p className="tm-dim">No reasoning trace recorded for this decision.</p>
+              <p className="tm-dim">No reasoning trace recorded for this run.</p>
             )}
           </div>
           {current && (
@@ -204,13 +155,13 @@ export default function AIDecision() {
             <>
               <p className="tm-strong" style={{ marginTop: 0 }}>
                 TradeMind {decision.kind === 'idea' ? 'recommends' : 'currently has'}{' '}
-                <span className={wordClass(decision)}>{finalWord(decision)}</span> for {symbol}
+                <span className={wordClassName(finalWord(decision))}>{finalWord(decision)}</span> for {symbol}
                 {decision.confidence != null && (
                   <>
                     {' '}
                     with{' '}
-                    <span className="tm-pos" title="A ranking, not a chance — not a probability">
-                      {Math.round(decision.confidence * 100)}% model score
+                    <span title="A ranking, not a chance — not a probability">
+                      {Math.round(decision.confidence * 100)} model score
                     </span>
                   </>
                 )}
@@ -264,14 +215,24 @@ export default function AIDecision() {
           {tab === 'Risk Analysis' && (
             <div className="tm-grid tm-cols-2">
               <div>
+                {/* The verdict for THIS stock comes from the decision itself
+                 * (did the risk gate bring its word down, and to what) —
+                 * never from whether a shared run-level module "answered". */}
+                <CheckItem tone={decision.downgraded_from != null ? 'warn' : wordTone(finalWord(decision))}>
+                  {decision.downgraded_from != null
+                    ? `Brought down from ${decision.downgraded_from} to ${finalWord(decision)}${
+                        decision.downgrade_reason ? ` — ${decision.downgrade_reason}` : ''
+                      }`
+                    : `Passed the brain's risk check — stayed at ${finalWord(decision)}.`}
+                </CheckItem>
                 {riskTrace.length > 0 ? (
                   riskTrace.map((e, i) => (
-                    <CheckItem key={i} tone={e.status === 'rejected' ? 'neg' : e.status === 'skipped' ? 'neutral' : 'pos'}>
+                    <CheckItem key={i} tone="neutral">
                       {traceLine(e)}
                     </CheckItem>
                   ))
                 ) : (
-                  <p className="tm-dim">No risk-check step recorded for this decision.</p>
+                  <p className="tm-dim">No risk-check step recorded for this run.</p>
                 )}
               </div>
               {ifStopInr != null || ifTargetInr != null || decision.qty > 0 ? (

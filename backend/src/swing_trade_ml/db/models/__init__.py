@@ -5,6 +5,7 @@ module must be re-exported here.
 """
 
 from swing_trade_ml.db.models.brain import BrainAlert, BrainDecision, BrainModuleSetting, BrainRun, FeatureSnapshot
+from swing_trade_ml.db.models.brain_golive import BrainStageChange
 from swing_trade_ml.db.models.finance import (
     FinanceCustomRule,
     FinanceDailyCategory,
@@ -42,6 +43,7 @@ __all__ = [
     "BrainDecision",
     "BrainModuleSetting",
     "BrainRun",
+    "BrainStageChange",
     "BrokerFill",
     "BrokerSession",
     "Candle",

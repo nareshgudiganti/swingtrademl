@@ -23,6 +23,29 @@ const HOLDING_TONE: Record<string, 'green' | 'blue' | 'amber' | 'red'> = {
   EXIT: 'red',
 }
 
+// Positive: TRADE / HOLD. Caution: WATCH / WAIT / MONITOR. Negative: AVOID /
+// REDUCE / EXIT. Drives both the word's text colour and CheckItem's tone
+// wherever this screen writes the word or its reasons in plain prose
+// (the header pill already carries its own colour via ActionPill/Tag).
+const WORD_TONE: Record<string, 'pos' | 'warn' | 'neg'> = {
+  TRADE: 'pos',
+  HOLD: 'pos',
+  WATCH: 'warn',
+  WAIT: 'warn',
+  MONITOR: 'warn',
+  AVOID: 'neg',
+  REDUCE: 'neg',
+  EXIT: 'neg',
+}
+
+function wordTone(d: BrainDecision): 'pos' | 'warn' | 'neg' {
+  return WORD_TONE[finalWord(d)] ?? 'pos'
+}
+
+function wordClass(d: BrainDecision): string {
+  return `tm-${wordTone(d)}`
+}
+
 // The owner's overrule, if any, otherwise the brain's own word. Duplicated
 // in each TradeMind screen rather than shared, same as Brain.tsx's own copy.
 function finalWord(d: BrainDecision): string {
@@ -83,6 +106,17 @@ export default function StockDetail() {
     return (
       <div className="tm-page">
         <p className="tm-dim">Looking up {symbol}…</p>
+      </div>
+    )
+  }
+
+  const lookupFailed = !fromRun && why.isError
+  if (lookupFailed) {
+    return (
+      <div className="tm-page">
+        <Card title="Could not reach the brain">
+          <p className="tm-dim">Something went wrong talking to the brain. Try again shortly.</p>
+        </Card>
       </div>
     )
   }
@@ -166,7 +200,11 @@ export default function StockDetail() {
             {chart}
             <Card glow title="TradeMind Decision">
               {decision.reasons.length > 0 ? (
-                decision.reasons.map((r, i) => <CheckItem key={i}>{r}</CheckItem>)
+                decision.reasons.map((r, i) => (
+                  <CheckItem key={i} tone={wordTone(decision)}>
+                    {r}
+                  </CheckItem>
+                ))
               ) : (
                 <p className="tm-dim">No reasons recorded for this decision.</p>
               )}
@@ -257,7 +295,11 @@ export default function StockDetail() {
         <div className="tm-grid tm-cols-2">
           <Card glow title="Why the brain decided this">
             {decision.reasons.length > 0 ? (
-              decision.reasons.map((r, i) => <CheckItem key={i}>{r}</CheckItem>)
+              decision.reasons.map((r, i) => (
+                <CheckItem key={i} tone={wordTone(decision)}>
+                  {r}
+                </CheckItem>
+              ))
             ) : (
               <p className="tm-dim">No reasons recorded for this decision.</p>
             )}
@@ -265,8 +307,8 @@ export default function StockDetail() {
           </Card>
           <Card title="In plain words">
             <p style={{ marginTop: 0 }}>
-              TradeMind {decision.kind === 'idea' ? 'suggests' : 'currently has'} <strong className="tm-pos">{finalWord(decision)}</strong>{' '}
-              for {symbol}
+              TradeMind {decision.kind === 'idea' ? 'suggests' : 'currently has'}{' '}
+              <strong className={wordClass(decision)}>{finalWord(decision)}</strong> for {symbol}
               {decision.confidence != null && (
                 <>
                   {' '}

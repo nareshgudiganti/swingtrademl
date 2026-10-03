@@ -667,7 +667,9 @@ def test_no_proposal_when_the_gain_is_below_min_gain_r():
     assert buy_level_proposal(rows, current=0.6) is None
 
 
-def test_no_proposal_when_no_candidate_has_enough_cases():
+def test_no_proposal_when_every_candidate_gain_is_too_small():
+    """All 25 rows sit at the current 0.6, so every candidate has the same
+    cases and the same average: the gain is 0, below `min_gain_r`."""
     rows = pd.DataFrame(_rows_at(0.6, 25, "target", 0.08))
     assert buy_level_proposal(rows, current=0.6) is None
 
@@ -1177,3 +1179,67 @@ def test_api_revert_buy_level(client, db_session):
     assert body["decided_by"] == "owner"
     assert body["change"] == {"buy_level": None}
     assert store.accepted_buy_level(db_session) is None
+
+
+def _same_day_twice() -> pd.DataFrame:
+    """ABC decided twice on one day: an early stop-out and a later target.
+    Counting both would give n=2; the freshest call alone gives n=1, hit=1."""
+    return _report_rows(
+        [
+            {
+                "symbol": "ABC",
+                "decision_day": date(2026, 9, 1),
+                "run_started": datetime(2026, 9, 1, 9, 0, tzinfo=UTC),
+                "confidence": 0.55,
+                "outcome": "stop",
+                "ret": -0.04,
+            },
+            {
+                "symbol": "ABC",
+                "decision_day": date(2026, 9, 1),
+                "run_started": datetime(2026, 9, 1, 15, 0, tzinfo=UTC),
+                "confidence": 0.55,
+                "outcome": "target",
+                "ret": 0.08,
+            },
+        ]
+    )
+
+
+def test_by_word_calls_one_per_day_itself():
+    words = by_word(_same_day_twice())
+    assert len(words) == 1
+    assert words[0]["n"] == 1 and words[0]["hit"] == pytest.approx(1.0)
+
+
+def test_by_week_calls_one_per_day_itself():
+    weeks = by_week(_same_day_twice())
+    assert len(weeks) == 1
+    assert weeks[0]["n"] == 1 and weeks[0]["hit"] == pytest.approx(1.0)
+
+
+def test_failure_patterns_calls_one_per_day_itself():
+    """The same ABC stop-out is re-decided later the same day and the second
+    call is a target: only that second call counts, so no stops remain and
+    no pattern can be flagged (min_stops=1 would flag it if the stale first
+    row were counted)."""
+    rows = _failure_rows(
+        [
+            {
+                "symbol": "ABC",
+                "decision_day": date(2026, 9, 1),
+                "run_started": datetime(2026, 9, 1, 9, 0, tzinfo=UTC),
+                "outcome": "stop",
+                "market": "crash",
+            },
+            {
+                "symbol": "ABC",
+                "decision_day": date(2026, 9, 1),
+                "run_started": datetime(2026, 9, 1, 15, 0, tzinfo=UTC),
+                "outcome": "target",
+                "market": "crash",
+            },
+            *[{"market": "up-trend"} for _ in range(3)],
+        ]
+    )
+    assert failure_patterns(rows, min_stops=1) == []

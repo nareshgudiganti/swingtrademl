@@ -63,6 +63,8 @@ def buy_level_proposal(
         if len(group) < min_cases:
             continue
         avg_r = _avg_r(group)
+        # Strict `>` keeps the first of equal averages; candidates run lowest
+        # threshold first, so on a tie the lowest threshold wins.
         if avg_r > best_avg_r:
             best_t, best_avg_r, best_group = t, avg_r, group
 

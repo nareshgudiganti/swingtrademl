@@ -99,7 +99,14 @@ export default function Risk() {
       hard: true,
     })
   }
-  if (safety.data) {
+  if (safety.isError) {
+    checks.push({
+      name: 'New trades switched on',
+      ok: false,
+      note: 'The safety switch could not be checked. Treat new trades as paused.',
+      hard: true,
+    })
+  } else if (safety.data) {
     checks.push({
       name: 'New trades switched on',
       ok: safety.data.new_entries_enabled,
@@ -110,6 +117,7 @@ export default function Risk() {
   const blocked = checks.filter((c) => !c.ok)
   const hardBlocked = blocked.filter((c) => c.hard)
   const softBlocked = blocked.filter((c) => !c.hard)
+  const cannotConfirmSafety = safety.isError
   const paused = hardBlocked.length > 0
 
   return (
@@ -145,7 +153,13 @@ export default function Risk() {
                     textShadow: 'none',
                   }}
                 >
-                  {paused ? 'NEW TRADES PAUSED' : softBlocked.length ? 'TRADING ALLOWED — WITH LIMITS' : 'ALL CLEAR'}
+                  {cannotConfirmSafety
+                    ? 'CAN\'T CONFIRM — the safety switch could not be checked. Treat new trades as paused.'
+                    : paused
+                    ? 'NEW TRADES PAUSED'
+                    : softBlocked.length
+                    ? 'TRADING ALLOWED — WITH LIMITS'
+                    : 'ALL CLEAR'}
                 </div>
                 <div className="tm-dim" style={{ marginTop: 4 }}>
                   {paused

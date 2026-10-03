@@ -180,7 +180,10 @@ export default function Home() {
                         <ActionPill action={finalWord(i) as Action} />
                       </td>
                       <td className="tm-num tm-right" title="Model score — a ranking, not a chance">
-                        {i.confidence != null ? Math.round(i.confidence * 100) : '—'}
+                        <span style={{ display: 'inline-flex', gap: '0.3rem', alignItems: 'center' }}>
+                          {i.confidence != null ? Math.round(i.confidence * 100) : '—'}
+                          <span className="tm-dim">model score</span>
+                        </span>
                       </td>
                       <td className="tm-dim">{i.reasons[0]}</td>
                     </tr>

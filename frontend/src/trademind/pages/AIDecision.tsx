@@ -1,51 +1,168 @@
 import { useState } from 'react'
 import { useParams } from 'react-router-dom'
 
-import { findIdea, keyFactors, modelOutputs, reasoningChain, riskChecks, similarCases, stockAnalysis, technicals } from '../data'
-import { Card, CheckItem, Icon, Meter, Tabs, Tag, signed, toneClass } from '../ui'
+import type { BrainDecision, BrainTraceEvent } from '../../api/types'
+import { useBrainStatus, useWhy } from '../live'
+import { BrainOff, Card, CheckItem, Icon, NotConnected, Tabs, inr } from '../ui'
 
 const TABS = ['Summary', 'Evidence', 'Similar Cases', 'Model Output', 'Risk Analysis'] as const
 type TabId = (typeof TABS)[number]
 
 const STEP_ICONS = [Icon.Pulse, Icon.Target, Icon.Layers, Icon.Book, Icon.Chart, Icon.Shield, Icon.Bolt]
 
+// Same step names and trace wording as the brain console — see Brain.tsx's
+// STEP_LABEL / traceLine. Duplicated rather than imported: neither is
+// exported, and this screen must never drift from that wording by hand.
+const STEP_LABEL: Record<string, string> = {
+  perceive: '1 · Look at the data',
+  state: '2 · Read the market',
+  recognise: '3 · Recognise the situation',
+  remember: '4 · Remember similar times',
+  reason: '5 · Form an opinion',
+  risk: '6 · Safety check',
+  decide: '7 · Decide',
+  learn: '8 · Learn from results',
+}
+
+function traceLine(e: BrainTraceEvent): string {
+  if (e.module_id === 'fallback') return 'Simple built-in answer (no module installed for this step)'
+  switch (e.status) {
+    case 'used':
+      return `${e.module_id} answered`
+    case 'shadow':
+      return `${e.module_id} ran on trial — recorded, not used`
+    case 'skipped':
+      return `${e.module_id} is switched off`
+    case 'rejected':
+      return `${e.module_id}'s answer was refused: ${e.reason}`
+    default:
+      return `${e.module_id} did not answer (${e.reason}); the simple built-in answer was used`
+  }
+}
+
+// The owner's overrule, if any, otherwise the brain's own word. Duplicated
+// in each TradeMind screen rather than shared, same as Brain.tsx's own copy.
+function finalWord(d: BrainDecision): string {
+  return d.overruled_word ?? d.word
+}
+
+function money(n: number): string {
+  return `${n < 0 ? '−' : '+'}₹${inr(Math.abs(n), 0)}`
+}
+
 export default function AIDecision() {
-  const { symbol } = useParams()
-  const idea = findIdea(symbol)
+  const { symbol: rawSymbol } = useParams()
+  const symbol = (rawSymbol ?? '').toUpperCase()
+
+  const status = useBrainStatus()
+  const why = useWhy(status === 'live' && symbol ? symbol : undefined)
+
   const [tab, setTab] = useState<TabId>('Summary')
-  const [step, setStep] = useState(reasoningChain.length - 1)
+  const [step, setStep] = useState(0)
+
+  if (status === 'off') return <div className="tm-page"><BrainOff /></div>
+
+  if (status === 'loading') {
+    return (
+      <div className="tm-page">
+        <p className="tm-dim">Connecting to the brain…</p>
+      </div>
+    )
+  }
+
+  if (status === 'error') {
+    return (
+      <div className="tm-page">
+        <Card title="Could not reach the brain">
+          <p className="tm-dim">Something went wrong talking to the brain. Try again shortly.</p>
+        </Card>
+      </div>
+    )
+  }
+
+  if (status === 'no-run') {
+    return (
+      <div className="tm-page">
+        <Card title="No run yet">
+          <p className="tm-dim">The brain has not run yet.</p>
+        </Card>
+      </div>
+    )
+  }
+
+  if (why.isLoading) {
+    return (
+      <div className="tm-page">
+        <p className="tm-dim">Looking up {symbol || 'this stock'}…</p>
+      </div>
+    )
+  }
+
+  if (why.isError) {
+    return (
+      <div className="tm-page">
+        <Card title="Could not reach the brain">
+          <p className="tm-dim">Something went wrong talking to the brain. Try again shortly.</p>
+        </Card>
+      </div>
+    )
+  }
+
+  const decision = why.data?.decision
+  if (!decision) {
+    return (
+      <div className="tm-page">
+        <Card title={symbol || 'Unknown stock'}>
+          <p className="tm-dim">No decision for this stock today.</p>
+        </Card>
+      </div>
+    )
+  }
+
+  const trace = why.data?.trace ?? []
+  const current = trace[step]
+  const riskTrace = trace.filter((e) => e.step === 'risk')
+
+  const ifStopInr =
+    decision.stop != null && decision.entry_low != null ? (decision.stop - decision.entry_low) * decision.qty : undefined
+  const ifTargetInr =
+    decision.target != null && decision.entry_low != null ? (decision.target - decision.entry_low) * decision.qty : undefined
 
   return (
     <div className="tm-page">
       <div className="tm-grid tm-ai-grid">
         <Card glow>
           <div className="tm-chain">
-            {reasoningChain.map((s, i) => {
-              const StepIcon = STEP_ICONS[i] ?? Icon.Check
-              const last = i === reasoningChain.length - 1
-              return (
-                <div
-                  key={s.title}
-                  className={`tm-chain-step ${last ? 'tm-final' : ''} ${i === step ? 'tm-active' : ''}`}
-                  onClick={() => setStep(i)}
-                >
-                  <span className="tm-chain-dot">{last ? <Icon.Check /> : <StepIcon />}</span>
-                  <div>
-                    <div className="tm-chain-title">{s.title}</div>
-                    <div className={`tm-chain-sub ${last ? 'tm-pos' : ''}`} style={last ? { fontWeight: 600, fontSize: '0.86rem', color: 'var(--tm-green)' } : undefined}>
-                      {last ? `${idea.action} — High Confidence` : s.sub}
+            {trace.length > 0 ? (
+              trace.map((e, i) => {
+                const StepIcon = STEP_ICONS[i] ?? Icon.Check
+                const last = i === trace.length - 1
+                return (
+                  <div
+                    key={i}
+                    className={`tm-chain-step ${last ? 'tm-final' : ''} ${i === step ? 'tm-active' : ''}`}
+                    onClick={() => setStep(i)}
+                  >
+                    <span className="tm-chain-dot">{last ? <Icon.Check /> : <StepIcon />}</span>
+                    <div>
+                      <div className="tm-chain-title">{STEP_LABEL[e.step] ?? e.step}</div>
+                      <div className="tm-chain-sub">{traceLine(e)}</div>
                     </div>
                   </div>
-                </div>
-              )
-            })}
+                )
+              })
+            ) : (
+              <p className="tm-dim">No reasoning trace recorded for this decision.</p>
+            )}
           </div>
-          <div className="tm-callout" style={{ marginTop: '0.4rem' }}>
-            <div className="tm-strong" style={{ marginBottom: 4 }}>
-              {reasoningChain[step]?.title}
+          {current && (
+            <div className="tm-callout" style={{ marginTop: '0.4rem' }}>
+              <div className="tm-strong" style={{ marginBottom: 4 }}>
+                {STEP_LABEL[current.step] ?? current.step}
+              </div>
+              {current.reason || traceLine(current)}
             </div>
-            {reasoningChain[step]?.detail}
-          </div>
+          )}
         </Card>
 
         <Card glow title="AI Reasoning Details">
@@ -54,18 +171,16 @@ export default function AIDecision() {
           {tab === 'Summary' && (
             <>
               <p className="tm-strong" style={{ marginTop: 0 }}>
-                TradeMind recommends <span className="tm-pos">{idea.action}</span> for {idea.name.toUpperCase()} with{' '}
-                <span className="tm-pos">{idea.confidence}% confidence</span>.
+                TradeMind {decision.kind === 'idea' ? 'recommends' : 'currently has'}{' '}
+                <span className="tm-pos">{finalWord(decision)}</span> for {symbol}
+                {decision.confidence != null && (
+                  <>
+                    {' '}
+                    with <span className="tm-pos">{Math.round(decision.confidence * 100)}% model score</span>
+                  </>
+                )}
+                .
               </p>
-              <ul className="tm-bullets">
-                <li>The stock has broken out from a 3-month range with high volume</li>
-                <li>Its sector is showing relative strength in the current market</li>
-                <li>Several chart signals agree (momentum, trend and averages)</li>
-                <li>The business outlook is positive, with growing profits</li>
-                <li>Similar past situations ended in profit 78% of the time</li>
-                <li>The reward is good compared with the risk</li>
-                <li>Suggested size: 4-6% of the portfolio</li>
-              </ul>
 
               <div className="tm-card" style={{ marginTop: '1rem' }}>
                 <div className="tm-card-head">
@@ -74,109 +189,80 @@ export default function AIDecision() {
                   </h4>
                 </div>
                 <div className="tm-rows">
-                  {keyFactors.map((f) => (
-                    <div key={f.name} className="tm-row">
-                      <span>{f.name}</span>
-                      <span className={f.impact === 'High' ? 'tm-pos' : 'tm-warn'} style={{ fontWeight: 600 }}>
-                        {f.impact} impact
-                      </span>
-                    </div>
-                  ))}
+                  {decision.reasons.length > 0 ? (
+                    decision.reasons.map((r, i) => (
+                      <div key={i} className="tm-row">
+                        <span>{r}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="tm-dim">No reasons recorded for this decision.</p>
+                  )}
                 </div>
               </div>
             </>
           )}
 
-          {tab === 'Evidence' && (
-            <div className="tm-grid tm-cols-2">
-              <div>
-                <div className="tm-card-title" style={{ marginBottom: 6 }}>
-                  For the trade
-                </div>
-                {stockAnalysis.map((s) => (
-                  <CheckItem key={s}>{s}</CheckItem>
-                ))}
-                {technicals
-                  .filter((t) => t.tone === 'pos')
-                  .slice(0, 3)
-                  .map((t) => (
-                    <CheckItem key={t.name}>{t.plain}</CheckItem>
-                  ))}
-              </div>
-              <div>
-                <div className="tm-card-title" style={{ marginBottom: 6 }}>
-                  Against the trade
-                </div>
-                <CheckItem tone="neg">Analysts flag EV margin pressure</CheckItem>
-                <CheckItem tone="warn">Quarterly results in 3 weeks can cause a big move</CheckItem>
-                <CheckItem tone="warn">Price is already 6% above the breakout point</CheckItem>
-              </div>
-            </div>
-          )}
+          {tab === 'Evidence' &&
+            (decision.evidence_text ? (
+              <p className="tm-dim" style={{ whiteSpace: 'pre-wrap' }}>
+                {decision.evidence_text}
+              </p>
+            ) : (
+              <p className="tm-dim">No evidence text recorded for this decision.</p>
+            ))}
 
-          {tab === 'Similar Cases' && (
-            <div className="tm-table-wrap">
-              <table className="tm-table">
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Stock</th>
-                    <th>Situation</th>
-                    <th className="tm-right">Outcome</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {similarCases.slice(0, 6).map((c) => (
-                    <tr key={c.date + c.symbol}>
-                      <td>{c.date}</td>
-                      <td className="tm-strong">{c.symbol}</td>
-                      <td>{c.situation}</td>
-                      <td className={`tm-right tm-num ${toneClass(c.outcomePct)}`}>{signed(c.outcomePct)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          {tab === 'Similar Cases' &&
+            (decision.evidence_text?.includes('Similar cases') ? (
+              <p className="tm-dim">{decision.evidence_text}</p>
+            ) : (
+              <NotConnected what="Similar cases" reason="The brain hasn't recorded similar-case evidence for this decision." />
+            ))}
 
           {tab === 'Model Output' && (
-            <div className="tm-stack">
-              {modelOutputs.map((m) => (
-                <div key={m.model}>
-                  <div className="tm-between" style={{ marginBottom: 4 }}>
-                    <span>{m.model}</span>
-                    <span className="tm-flex" style={{ gap: '0.5rem' }}>
-                      <span className="tm-num tm-strong">{Math.round(m.score * 100)}%</span>
-                      <Tag tone={m.vote === 'Up' ? 'green' : 'blue'}>{m.vote}</Tag>
-                    </span>
-                  </div>
-                  <Meter pct={m.score * 100} color={m.vote === 'Up' ? '#2ee68a' : '#4f8cff'} />
-                </div>
-              ))}
-              <p className="tm-note">4 of 5 models point up. Sample figures — real models will report calibrated chances.</p>
-            </div>
+            <NotConnected
+              what="Model output"
+              reason="Individual model scores aren't connected yet — the brain reports one combined model score, not per-model votes."
+            />
           )}
 
           {tab === 'Risk Analysis' && (
             <div className="tm-grid tm-cols-2">
               <div>
-                {riskChecks.map((r) => (
-                  <CheckItem key={r.name} tone={r.ok ? 'pos' : 'warn'}>
-                    {r.name}
-                    {r.note && <div className="tm-faint">{r.note}</div>}
-                  </CheckItem>
-                ))}
+                {riskTrace.length > 0 ? (
+                  riskTrace.map((e, i) => (
+                    <CheckItem key={i} tone={e.status === 'rejected' ? 'neg' : e.status === 'skipped' ? 'neutral' : 'pos'}>
+                      {traceLine(e)}
+                    </CheckItem>
+                  ))
+                ) : (
+                  <p className="tm-dim">No risk-check step recorded for this decision.</p>
+                )}
               </div>
-              <dl className="tm-kv">
-                <dt>If the stop is hit</dt>
-                <dd className="tm-neg">−₹4,350</dd>
-                <dt>If the target is hit</dt>
-                <dd className="tm-pos">+₹9,480</dd>
-                <dt>Suggested size</dt>
-                <dd>5% of portfolio</dd>
-                <dt>Auto sector after this</dt>
-                <dd>23% (limit 25%)</dd>
-              </dl>
+              {ifStopInr != null || ifTargetInr != null || decision.qty > 0 ? (
+                <dl className="tm-kv">
+                  {ifStopInr != null && (
+                    <>
+                      <dt>If the stop is hit</dt>
+                      <dd className="tm-neg">{money(ifStopInr)}</dd>
+                    </>
+                  )}
+                  {ifTargetInr != null && (
+                    <>
+                      <dt>If the target is hit</dt>
+                      <dd className="tm-pos">{money(ifTargetInr)}</dd>
+                    </>
+                  )}
+                  {decision.qty > 0 && (
+                    <>
+                      <dt>Shares suggested</dt>
+                      <dd>{decision.qty}</dd>
+                    </>
+                  )}
+                </dl>
+              ) : (
+                <NotConnected what="Money at risk" reason="No entry, target or stop recorded for this decision." />
+              )}
             </div>
           )}
         </Card>

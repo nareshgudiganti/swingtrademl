@@ -19,8 +19,9 @@ import type { BrainDecision, BrainRun, BrainSituation } from '../api/types'
 // ----------------------------------------------------------------- status --
 
 /** The word the brain actually settled on: an owner's overrule, if any,
- * otherwise its own word. Mirrors Brain.tsx's private finalWord(). */
-function finalWord(d: BrainDecision): string {
+ * otherwise its own word. Mirrors Brain.tsx's private finalWord(). The one
+ * copy every TradeMind screen imports — no more private per-page copies. */
+export function finalWord(d: BrainDecision): string {
   return d.overruled_word ?? d.word
 }
 
@@ -108,22 +109,33 @@ export function stockSituations(run: BrainRun, symbol: string): BrainSituation[]
 
 // ------------------------------------------------------------ thin queries --
 
+/** api.brainWhy(symbol) STARTS A FRESH STORED BRAIN RUN on the server
+ * (service.run_brain(kind="why"), ~15s) — it is not a cheap read. Never let
+ * this refetch on its own: no polling, no refetch-on-focus, and cache it
+ * forever once it answers. */
 export function useWhy(symbol?: string) {
   return useQuery({
     queryKey: ['brainWhy', symbol],
     queryFn: () => api.brainWhy(symbol!),
     enabled: !!symbol,
+    staleTime: Infinity,
+    refetchInterval: false,
+    refetchOnWindowFocus: false,
   })
 }
 
 /** A run's reasoning trace — the same query Brain.tsx uses (shared cache key
  * ['brainTrace', runId]), so a screen showing a decision that's already in
- * the latest run can read its trace without paying for a fresh brain run. */
+ * the latest run can read its trace without paying for a fresh brain run.
+ * Same no-refetch rule as useWhy: the trace for a given run never changes. */
 export function useRunTrace(runId?: string) {
   return useQuery({
     queryKey: ['brainTrace', runId],
     queryFn: () => api.brainRunTrace(runId!),
     enabled: !!runId,
+    staleTime: Infinity,
+    refetchInterval: false,
+    refetchOnWindowFocus: false,
   })
 }
 

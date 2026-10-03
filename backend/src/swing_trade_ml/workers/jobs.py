@@ -587,7 +587,8 @@ def job_sync_instruments() -> None:
 
 def _run_brain_job(kind: str) -> None:
     """A failed brain run is logged and reported, never raised: the brain is
-    advisory and must not disturb version 1's jobs."""
+    advisory and must not disturb version 1's jobs. After a nightly run the
+    brain strategy (M18) turns its ideas into version 1 signals."""
     from swing_trade_ml.brain import service as brain_service
 
     try:
@@ -600,6 +601,27 @@ def _run_brain_job(kind: str) -> None:
                 brain_alerts.send(db, run_id)
     except Exception as exc:  # noqa: BLE001
         _report_error(f"brain {kind} run", exc)
+        return
+    if kind == "nightly":
+        job_brain_strategy()
+
+
+def job_brain_strategy() -> None:
+    """M18: record today's brain ideas as the brain strategy's signals, scored
+    like version 1's. The scan path never orders for it. Never raised."""
+    from swing_trade_ml.services.brain_golive import shadow
+
+    try:
+        with session_scope() as db:
+            result = shadow.run_brain_strategy(db)
+            log.info(
+                "job.brain.strategy.done",
+                signals=result.signals_generated,
+                buys=result.buys,
+                errors=len(result.errors),
+            )
+    except Exception as exc:  # noqa: BLE001
+        _report_error("brain strategy scan", exc)
 
 
 def job_brain_nightly() -> None:

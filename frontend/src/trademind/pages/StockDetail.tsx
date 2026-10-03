@@ -6,7 +6,8 @@ import { api } from '../../api/client'
 import type { BrainDecision } from '../../api/types'
 import type { Action } from '../types'
 import { barsFrom } from '../live-stock'
-import { stockSituations, useBrainStatus, useLatestRun, useWhy } from '../live'
+import { finalWord, stockSituations, useBrainStatus, useLatestRun, useWhy } from '../live'
+import { wordClassName, wordTagColor, wordTone } from '../vocab'
 import { ActionPill, BrainOff, Candles, Card, CheckItem, Icon, NotConnected, Seg, Tabs, Tag, inr, signed, toneClass } from '../ui'
 
 const TABS = ['Overview', 'Technical', 'Fundamental', 'AI Analysis', 'Similar Cases', 'News', 'Options'] as const
@@ -15,42 +16,6 @@ type TabId = (typeof TABS)[number]
 const RANGES = ['1M', '3M', '6M', '1Y'] as const
 type Range = (typeof RANGES)[number]
 const RANGE_DAYS: Record<Range, number> = { '1M': 22, '3M': 66, '6M': 132, '1Y': 252 }
-
-const HOLDING_TONE: Record<string, 'green' | 'blue' | 'amber' | 'red'> = {
-  HOLD: 'green',
-  MONITOR: 'blue',
-  REDUCE: 'amber',
-  EXIT: 'red',
-}
-
-// Positive: TRADE / HOLD. Caution: WATCH / WAIT / MONITOR. Negative: AVOID /
-// REDUCE / EXIT. Drives both the word's text colour and CheckItem's tone
-// wherever this screen writes the word or its reasons in plain prose
-// (the header pill already carries its own colour via ActionPill/Tag).
-const WORD_TONE: Record<string, 'pos' | 'warn' | 'neg'> = {
-  TRADE: 'pos',
-  HOLD: 'pos',
-  WATCH: 'warn',
-  WAIT: 'warn',
-  MONITOR: 'warn',
-  AVOID: 'neg',
-  REDUCE: 'neg',
-  EXIT: 'neg',
-}
-
-function wordTone(d: BrainDecision): 'pos' | 'warn' | 'neg' {
-  return WORD_TONE[finalWord(d)] ?? 'pos'
-}
-
-function wordClass(d: BrainDecision): string {
-  return `tm-${wordTone(d)}`
-}
-
-// The owner's overrule, if any, otherwise the brain's own word. Duplicated
-// in each TradeMind screen rather than shared, same as Brain.tsx's own copy.
-function finalWord(d: BrainDecision): string {
-  return d.overruled_word ?? d.word
-}
 
 export default function StockDetail() {
   const { symbol: rawSymbol } = useParams()
@@ -183,11 +148,11 @@ export default function StockDetail() {
         {decision.kind === 'idea' ? (
           <ActionPill action={finalWord(decision) as Action} />
         ) : (
-          <Tag tone={HOLDING_TONE[finalWord(decision)] ?? 'blue'}>{finalWord(decision)}</Tag>
+          <Tag tone={wordTagColor(finalWord(decision))}>{finalWord(decision)}</Tag>
         )}
         {decision.confidence != null && (
           <span title="A ranking, not a chance — not a probability">
-            <Tag tone="violet">{Math.round(decision.confidence * 100)}% model score</Tag>
+            <Tag tone="violet">{Math.round(decision.confidence * 100)} model score</Tag>
           </span>
         )}
       </div>
@@ -201,7 +166,7 @@ export default function StockDetail() {
             <Card glow title="TradeMind Decision">
               {decision.reasons.length > 0 ? (
                 decision.reasons.map((r, i) => (
-                  <CheckItem key={i} tone={wordTone(decision)}>
+                  <CheckItem key={i} tone={wordTone(finalWord(decision))}>
                     {r}
                   </CheckItem>
                 ))
@@ -296,7 +261,7 @@ export default function StockDetail() {
           <Card glow title="Why the brain decided this">
             {decision.reasons.length > 0 ? (
               decision.reasons.map((r, i) => (
-                <CheckItem key={i} tone={wordTone(decision)}>
+                <CheckItem key={i} tone={wordTone(finalWord(decision))}>
                   {r}
                 </CheckItem>
               ))
@@ -308,11 +273,11 @@ export default function StockDetail() {
           <Card title="In plain words">
             <p style={{ marginTop: 0 }}>
               TradeMind {decision.kind === 'idea' ? 'suggests' : 'currently has'}{' '}
-              <strong className={wordClass(decision)}>{finalWord(decision)}</strong> for {symbol}
+              <strong className={wordClassName(finalWord(decision))}>{finalWord(decision)}</strong> for {symbol}
               {decision.confidence != null && (
                 <>
                   {' '}
-                  with <strong>{Math.round(decision.confidence * 100)}% model score</strong>
+                  with <strong>{Math.round(decision.confidence * 100)} model score</strong>
                 </>
               )}
               .

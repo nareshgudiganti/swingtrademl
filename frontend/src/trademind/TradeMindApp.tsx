@@ -4,7 +4,8 @@
 import { NavLink, Navigate, Route, Routes, Link } from 'react-router-dom'
 
 import './trademind.css'
-import { useBrainStatus } from './live'
+import { formatDateTime } from '../lib/format'
+import { useBrainStatus, useLatestRun } from './live'
 import { Icon } from './ui'
 import Home from './pages/Home'
 import Market from './pages/Market'
@@ -39,7 +40,10 @@ const STATUS_CHIP: Record<ReturnType<typeof useBrainStatus>, { label: string; ti
 
 export default function TradeMindApp() {
   const status = useBrainStatus()
+  const latest = useLatestRun()
   const chip = STATUS_CHIP[status]
+  const chipTitle =
+    status === 'live' && latest.data ? `From the brain's run on ${formatDateTime(latest.data.started_at)}` : chip.title
 
   return (
     <div className="tm">
@@ -56,7 +60,7 @@ export default function TradeMindApp() {
           ))}
         </nav>
         <div className="tm-topbar-right">
-          <span className="tm-demo-chip" title={chip.title}>
+          <span className="tm-demo-chip" title={chipTitle}>
             {chip.label}
           </span>
           <Link to="/dashboard" className="tm-avatar" title="Back to the classic app">

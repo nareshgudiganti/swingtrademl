@@ -152,6 +152,7 @@ function FeaturedCard({ decision }: { decision: BrainDecision }) {
       <div className="tm-flex" style={{ minWidth: 0 }}>
         <Ring
           value={decision.confidence != null ? Math.round(decision.confidence * 100) : 0}
+          empty={decision.confidence == null}
           size={84}
           stroke={8}
           center={

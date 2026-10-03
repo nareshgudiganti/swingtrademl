@@ -339,6 +339,7 @@ export function Ring({
   center,
   label,
   valueSize,
+  empty = false,
 }: {
   value: number
   max?: number
@@ -348,6 +349,8 @@ export function Ring({
   center?: ReactNode
   label?: ReactNode
   valueSize?: number
+  /** No value to show: draw only the empty track, no fill and no glow. */
+  empty?: boolean
 }) {
   const id = useId().replace(/:/g, '')
   const r = (size - stroke) / 2 - 2
@@ -356,7 +359,7 @@ export function Ring({
   const [a, b] = RING_COLORS[color] ?? RING_COLORS.green!
   return (
     <div className="tm-ring" style={{ width: size, height: size }}>
-      <svg width={size} height={size} style={{ filter: `drop-shadow(0 0 6px ${b}88)` }}>
+      <svg width={size} height={size} style={empty ? undefined : { filter: `drop-shadow(0 0 6px ${b}88)` }}>
         <defs>
           <linearGradient id={`rg${id}`} x1="0" y1="0" x2="1" y2="1">
             <stop offset="0%" stopColor={a} />
@@ -364,17 +367,19 @@ export function Ring({
           </linearGradient>
         </defs>
         <circle cx={size / 2} cy={size / 2} r={r} stroke="rgba(139,124,255,0.12)" strokeWidth={stroke} fill="none" />
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={r}
-          stroke={`url(#rg${id})`}
-          strokeWidth={stroke}
-          fill="none"
-          strokeLinecap="round"
-          strokeDasharray={`${c * pct} ${c}`}
-          transform={`rotate(-90 ${size / 2} ${size / 2})`}
-        />
+        {!empty && (
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={r}
+            stroke={`url(#rg${id})`}
+            strokeWidth={stroke}
+            fill="none"
+            strokeLinecap="round"
+            strokeDasharray={`${c * pct} ${c}`}
+            transform={`rotate(-90 ${size / 2} ${size / 2})`}
+          />
+        )}
       </svg>
       <div className="tm-ring-center">
         {center ?? (

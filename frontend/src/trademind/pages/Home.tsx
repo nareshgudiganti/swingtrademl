@@ -1,36 +1,13 @@
 import { useNavigate, Link } from 'react-router-dom'
 
 import type { Action } from '../types'
-import type { BrainDecision, IdeaWord } from '../../api/types'
-import { ideasFrom, holdingsFrom, marketSituation, useBrainStatus, useLatestRun, useLearning } from '../live'
+import type { IdeaWord } from '../../api/types'
+import { formatDateTime } from '../../lib/format'
+import { finalWord, ideasFrom, holdingsFrom, marketSituation, useBrainStatus, useLatestRun, useLearning } from '../live'
+import { MARKET_LABEL, MARKET_PLAIN, MARKET_TONE, wordTagColor } from '../vocab'
 import { ActionPill, BrainArt, BrainOff, Card, CheckItem, Icon, Tag } from '../ui'
 
-// The owner's overrule, if any, otherwise the brain's own word. Duplicated
-// in each TradeMind screen rather than shared, same as Brain.tsx's own copy.
-function finalWord(d: BrainDecision): string {
-  return d.overruled_word ?? d.word
-}
-
-const MARKET_PLAIN: Record<string, string> = {
-  NORMAL: 'New ideas are allowed at full size.',
-  DEFENSIVE: 'Careful market: at most two new ideas, at half size.',
-  NO_NEW_TRADES: 'No new buys today. Stocks you hold are still watched and sold as usual.',
-}
-
-const MARKET_TONE: Record<string, 'green' | 'amber' | 'red'> = {
-  NORMAL: 'green',
-  DEFENSIVE: 'amber',
-  NO_NEW_TRADES: 'red',
-}
-
 const IDEA_WORDS: IdeaWord[] = ['TRADE', 'WATCH', 'WAIT', 'AVOID']
-
-const HOLDING_TONE: Record<string, 'green' | 'blue' | 'amber' | 'red'> = {
-  HOLD: 'green',
-  MONITOR: 'blue',
-  REDUCE: 'amber',
-  EXIT: 'red',
-}
 
 export default function Home() {
   const navigate = useNavigate()
@@ -106,12 +83,24 @@ export default function Home() {
           <div className="tm-card-title" style={{ marginBottom: '0.9rem' }}>
             Market Mode
           </div>
+          <p className="tm-dim" style={{ fontSize: '0.72rem', margin: '-0.6rem 0 0.9rem' }}>
+            From the brain's run on {formatDateTime(run.started_at)}
+          </p>
           <div className="tm-hero-state">
-            <span className="tm-state-icon">
-              <Icon.Check />
+            <span
+              className="tm-state-icon"
+              style={
+                run.banner.mode && MARKET_TONE[run.banner.mode] !== 'green'
+                  ? MARKET_TONE[run.banner.mode] === 'red'
+                    ? { borderColor: 'var(--tm-red)', color: 'var(--tm-red)', boxShadow: '0 0 24px rgba(255,77,106,.5)' }
+                    : { borderColor: 'var(--tm-amber)', color: 'var(--tm-amber)', boxShadow: '0 0 24px rgba(255,181,71,.5)' }
+                  : undefined
+              }
+            >
+              {run.banner.mode === 'NO_NEW_TRADES' ? <Icon.X /> : run.banner.mode === 'DEFENSIVE' ? <Icon.Alert /> : <Icon.Check />}
             </span>
             <div>
-              <div className="tm-state-word">{run.banner.mode ?? 'Unknown'}</div>
+              <div className="tm-state-word">{run.banner.mode ? MARKET_LABEL[run.banner.mode] : 'Unknown'}</div>
               {run.banner.mode && (
                 <Tag tone={MARKET_TONE[run.banner.mode] ?? 'blue'}>{MARKET_PLAIN[run.banner.mode]}</Tag>
               )}
@@ -152,7 +141,9 @@ export default function Home() {
         </Card>
 
         <Card title="Holdings Needing Attention" sub="Stocks you hold that the brain flagged">
-          {attention.length === 0 ? (
+          {holdings.length === 0 ? (
+            <p className="tm-dim">The brain's last run saw no holdings.</p>
+          ) : attention.length === 0 ? (
             <p className="tm-dim">Nothing needs attention — your holdings look fine.</p>
           ) : (
             <div className="tm-rows">
@@ -166,7 +157,7 @@ export default function Home() {
                     <span className="tm-strong">{d.symbol}</span>
                     <span className="tm-dim">{d.reasons[0]}</span>
                   </span>
-                  <Tag tone={HOLDING_TONE[finalWord(d)] ?? 'blue'}>{finalWord(d)}</Tag>
+                  <Tag tone={wordTagColor(finalWord(d))}>{finalWord(d)}</Tag>
                 </div>
               ))}
             </div>

@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from swing_trade_ml.db.models.brain import BrainRun
 from swing_trade_ml.db.models.market import Candle, Instrument
 
 HEADERS = {"X-API-Key": "test-api-key"}
@@ -88,6 +89,21 @@ def test_why_returns_one_decision_and_its_trace(client, stock):
     body = client.get("/api/v1/brain/why/BRAINAPI", headers=HEADERS).json()
     assert body["decision"]["symbol"] == "BRAINAPI"
     assert any(e["module_id"] == "fallback" for e in body["trace"])
+
+
+def test_why_for_an_unknown_stock_answers_without_starting_a_run(client, db_session, monkeypatch):
+    def boom(*a, **k):
+        raise AssertionError("run_brain must not be called for an unknown stock")
+
+    monkeypatch.setattr("swing_trade_ml.brain.service.run_brain", boom)
+    before = db_session.query(BrainRun).count()
+    resp = client.get("/api/v1/brain/why/NOSUCHSTOCK", headers=HEADERS)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["decision"] is None
+    assert body["run_id"] is None
+    assert body["trace"] == []
+    assert db_session.query(BrainRun).count() == before
 
 
 def test_a_run_shows_its_sector_table(client, db_session, stock):

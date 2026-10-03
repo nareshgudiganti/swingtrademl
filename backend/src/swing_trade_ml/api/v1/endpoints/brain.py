@@ -19,6 +19,7 @@ from swing_trade_ml.brain.alerts import service as alerts
 from swing_trade_ml.brain.module import Mode
 from swing_trade_ml.core.config import settings
 from swing_trade_ml.db.models.brain import BrainDecision, BrainProposal, BrainRun
+from swing_trade_ml.db.models.market import Instrument
 
 
 def _brain_switched_on() -> None:
@@ -310,6 +311,10 @@ def run_trace(run_id: str, db: DbSession) -> dict:
 
 @router.get("/why/{symbol}")
 def why(symbol: str, db: DbSession, book: str = Query("paper", pattern="^(paper|live)$")) -> dict:
+    known = db.query(Instrument.id).filter(Instrument.tradingsymbol == symbol.upper()).first()
+    if known is None:
+        # Not a real stock: answer at once instead of running (and storing) the whole brain.
+        return {"run_id": None, "banner": {"mode": None, "headline": None}, "decision": None, "trace": []}
     _ctx, run_id = service.run_brain(db, kind="why", symbols=[symbol], book=book)
     run = db.get(BrainRun, run_id)
     decision = next((d for d in service.decisions_for(db, run_id) if d.symbol == symbol.upper()), None)

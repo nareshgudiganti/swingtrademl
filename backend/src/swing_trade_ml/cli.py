@@ -9,6 +9,7 @@ swingtrade train --algorithm lightgbm --activate
 swingtrade scan
 swingtrade status
 swingtrade brain modules | set M02 off | run [--as-of 2026-09-15] | why RELIANCE | learn [--since 2026-09-01]
+swingtrade brain strategy-create | shadow-scan
 """
 
 from __future__ import annotations
@@ -419,6 +420,26 @@ def cmd_brain(args: argparse.Namespace) -> int:
             for p in report["new_proposals"]:
                 print(f"  New proposal: {p['title']}")
             return 0
+        if args.brain_command == "strategy-create":
+            from swing_trade_ml.services.brain_golive.shadow import ensure_brain_strategy
+
+            s = ensure_brain_strategy(db)
+            print(
+                f"✅ Brain strategy '{s.name}' (id {s.id}) is active in practice mode: "
+                "its ideas are recorded and scored, nothing is bought."
+            )
+            return 0
+        if args.brain_command == "shadow-scan":
+            from swing_trade_ml.services.brain_golive.shadow import run_brain_strategy
+
+            result = run_brain_strategy(db)
+            print(
+                f"✅ Brain strategy scan: {result.signals_generated} signals "
+                f"({result.buys} ideas to buy, nothing bought)"
+            )
+            for err in result.errors[:10]:
+                print(f"   • {err}")
+            return 0
         if args.brain_command == "why":
             _, run_id = service.run_brain(db, kind="why", symbols=[args.symbol], book=args.book)
             _print_run(db, run_id)
@@ -557,6 +578,8 @@ def build_parser() -> argparse.ArgumentParser:
         "learn", help="Score finished ideas and show the weekly learning report (M09)"
     )
     b.add_argument("--since", default=None, help="YYYY-MM-DD: only ideas decided on or after this day")
+    brain_sub.add_parser("strategy-create", help="Create the brain strategy in practice mode (M18)")
+    brain_sub.add_parser("shadow-scan", help="Record today's brain ideas as strategy signals (M18)")
     b = brain_sub.add_parser("why", help="Run the brain for one stock and show its full trace")
     b.add_argument("symbol")
     b.add_argument("--book", default="paper", choices=["paper", "live"])

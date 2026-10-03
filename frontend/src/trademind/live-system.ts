@@ -2,7 +2,7 @@
 // into what those screens draw. No hooks here, same spirit as live.ts's own
 // mappers: easy to call from render, easy to test later.
 
-import type { BrainDecision, BrainRun, EquityPoint, SectorExposure } from '../api/types'
+import type { BrainDecision, BrainProposal, BrainRun, EquityPoint, SectorExposure } from '../api/types'
 import type { Point } from './data'
 
 /** Ideas and holdings the brain actually turned down this run — a TRADE (or
@@ -32,4 +32,14 @@ export function currentDrawdownPct(points: EquityPoint[]): number | null {
  * negative percentage so it plots the same way the sample chart did. */
 export function drawdownChartSeries(points: EquityPoint[]): Point[] {
   return points.map((p) => ({ t: p.date.slice(5), v: -Math.round(p.drawdown_pct * 1000) / 10 }))
+}
+
+/** The buy_level proposal actually in force right now (if any) — same rule
+ * as Brain.tsx's own copy: the most recently decided accepted one, when it
+ * did not revert back to the default. */
+export function currentBuyLevelProposal(proposals: BrainProposal[]): BrainProposal | null {
+  const accepted = proposals.filter((p) => p.kind === 'buy_level' && p.status === 'accepted')
+  if (accepted.length === 0) return null
+  const latest = accepted.reduce((a, b) => ((a.decided_at ?? '') > (b.decided_at ?? '') ? a : b))
+  return latest.change.buy_level != null ? latest : null
 }

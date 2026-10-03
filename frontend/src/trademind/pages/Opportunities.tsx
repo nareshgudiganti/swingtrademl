@@ -5,16 +5,11 @@ import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../../api/client'
 import type { BrainDecision, IdeaWord } from '../../api/types'
 import type { Action } from '../types'
-import { ideasFrom, useBrainStatus, useLatestRun } from '../live'
+import { finalWord, ideasFrom, useBrainStatus, useLatestRun } from '../live'
+import { wordTone } from '../vocab'
 import { ActionPill, BrainOff, Card, CheckItem, Icon, GlowArea, Ring, Seg, StockLogo, inr } from '../ui'
 
 type Filter = 'ALL' | IdeaWord
-
-// The owner's overrule, if any, otherwise the brain's own word. Duplicated
-// per screen, same as Brain.tsx's own copy.
-function finalWord(d: BrainDecision): string {
-  return d.overruled_word ?? d.word
-}
 
 function entryZone(d: BrainDecision): string {
   if (d.entry_low == null || d.entry_high == null) return '—'
@@ -208,7 +203,7 @@ function FeaturedCard({ decision }: { decision: BrainDecision }) {
           Why TradeMind {finalWord(decision) === 'AVOID' ? 'avoids' : 'likes'} this
         </div>
         {decision.reasons.map((w, idx) => (
-          <CheckItem key={idx} tone={finalWord(decision) === 'AVOID' ? 'neg' : 'pos'}>
+          <CheckItem key={idx} tone={wordTone(finalWord(decision))}>
             {w}
           </CheckItem>
         ))}

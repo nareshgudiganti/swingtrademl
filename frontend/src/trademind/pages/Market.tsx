@@ -1,20 +1,10 @@
 import { useQuery } from '@tanstack/react-query'
 
 import { api } from '../../api/client'
+import { formatDateTime } from '../../lib/format'
 import { marketSituation, useBrainStatus, useEpisodes, useLatestRun } from '../live'
+import { MARKET_LABEL, MARKET_PLAIN, MARKET_TONE } from '../vocab'
 import { BrainOff, Card, NotConnected, Tag, inr } from '../ui'
-
-const MARKET_PLAIN: Record<string, string> = {
-  NORMAL: 'New ideas are allowed at full size.',
-  DEFENSIVE: 'Careful market: at most two new ideas, at half size.',
-  NO_NEW_TRADES: 'No new buys today. Stocks you hold are still watched and sold as usual.',
-}
-
-const MARKET_TONE: Record<string, 'green' | 'amber' | 'red'> = {
-  NORMAL: 'green',
-  DEFENSIVE: 'amber',
-  NO_NEW_TRADES: 'red',
-}
 
 const ROTATION: Record<string, string> = {
   leading: 'Leading — stronger for 1 and 3 months',
@@ -73,11 +63,16 @@ export default function Market() {
   return (
     <div className="tm-page tm-grid">
       <div className="tm-grid tm-cols-3">
-        <Card glow className="tm-span-2" title="Market Mode">
+        <Card
+          glow
+          className="tm-span-2"
+          title="Market Mode"
+          sub={`From the brain's run on ${formatDateTime(run.started_at)}`}
+        >
           <div className="tm-hero-state" style={{ minWidth: 200 }}>
             <div>
               <div className="tm-state-word" style={{ fontSize: '1.7rem' }}>
-                {run.banner.mode ?? 'Unknown'}
+                {run.banner.mode ? MARKET_LABEL[run.banner.mode] : 'Unknown'}
               </div>
               {run.banner.mode && (
                 <Tag tone={MARKET_TONE[run.banner.mode] ?? 'blue'}>{MARKET_PLAIN[run.banner.mode]}</Tag>
@@ -102,7 +97,7 @@ export default function Market() {
           {regime.data && (
             <>
               <div className="tm-big tm-num" style={{ fontSize: '1.6rem' }}>
-                {regime.data.nifty_close != null ? `₹${inr(regime.data.nifty_close, 0)}` : '—'}
+                {regime.data.nifty_close != null ? `${inr(regime.data.nifty_close, 0)} pts` : '—'}
               </div>
               <p className="tm-note">{REGIME_PLAIN[regime.data.regime] ?? REGIME_PLAIN.unknown}</p>
               <p className="tm-dim" style={{ fontSize: '0.78rem' }}>

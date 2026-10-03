@@ -6,8 +6,8 @@ from datetime import timedelta
 
 import pandas as pd
 import pytest
-from brain_m18_fixtures import DAY, brain_strategy, decision, instrument, run
 
+from brain_m18_fixtures import DAY, brain_strategy, decision, instrument, run
 from swing_trade_ml.core.enums import SignalType
 from swing_trade_ml.strategies import STRATEGY_REGISTRY, get_strategy
 from swing_trade_ml.strategies import brain as brain_mod

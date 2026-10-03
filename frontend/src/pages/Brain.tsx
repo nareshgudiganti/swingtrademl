@@ -16,6 +16,7 @@ import type {
 import { Empty, ErrorBox, Loading } from '../components/Loading'
 import Modal from '../components/Modal'
 import { HoldingTracker } from '../components/HoldingTracker'
+import { BrainCompareCard } from '../components/BrainGoLive'
 import { formatCurrency, formatDateTime } from '../lib/format'
 
 /* The brain console (build book module M17). Everything here is in plain
@@ -961,6 +962,8 @@ export default function Brain() {
         )}
         {decideProposal.isError && <ErrorBox error={decideProposal.error} />}
       </div>
+
+      <BrainCompareCard />
 
       {modules.data && (
         <div className="card" style={{ marginBottom: '1.25rem' }}>

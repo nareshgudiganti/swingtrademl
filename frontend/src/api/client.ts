@@ -3,6 +3,7 @@
 import type {
   BrainAlertPreview,
   BrainAlertSend,
+  BrainCompare,
   BrainDecision,
   BrainEpisode,
   BrainLearning,
@@ -472,4 +473,7 @@ export const api = {
   brainProposalDecide: (id: number, action: 'accept' | 'reject', note: string) =>
     post<BrainProposal>(`/brain/proposals/${id}/${action}`, { note }),
   brainRevertBuyLevel: () => post<BrainProposal>('/brain/proposals/buy-level/revert', {}),
+
+  // M18 go-live: comparison, the owner's stage, approvals.
+  brainCompare: () => get<BrainCompare>('/brain/compare'),
 }

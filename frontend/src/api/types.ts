@@ -1017,3 +1017,36 @@ export interface BrainProposal {
   decided_at: string | null
   decided_note: string | null
 }
+
+// M18 go-live: the brain beside version 1, scored the same way.
+export interface BrainCompareSummary {
+  ideas: number
+  finished: number
+  hit_rate: number | null
+  stopped: number | null
+  avg_outcome_pct: number | null
+}
+
+export interface BrainCompareStrategy extends BrainCompareSummary {
+  name: string
+  is_brain: boolean
+}
+
+export interface BrainCompareWeek {
+  week: string
+  brain: BrainCompareSummary
+  version1: BrainCompareSummary
+}
+
+export interface BrainCompare {
+  days: number
+  first_day: string | null
+  last_day: string | null
+  strategies: BrainCompareStrategy[]
+  brain: BrainCompareSummary
+  version1: BrainCompareSummary
+  by_week: BrainCompareWeek[]
+  note: string
+  brain_finished: number
+  needed: number
+}

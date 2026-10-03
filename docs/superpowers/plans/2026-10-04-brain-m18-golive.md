@@ -2838,3 +2838,11 @@ git commit -m "M18: console stage switch and approvals, rollback guide, notes"
 6. **Stage 3 behaviour:** the plan makes "auto" = the system pressing Approve through the same checks right after the evening scan; it is allowed only from the approval stage, with no extra evidence bar. Does the owner want a further bar (e.g. N approved trades) before auto can be chosen?
 7. **Exits:** positions opened through an approval get v1's automatic stop/target/time-stop sells (not alerts only). Rolling back to shadow does not sell them.
 8. **"Owner":** the app has no owner role; like the overrule endpoint, any authenticated caller is the owner and `by` defaults to "owner".
+
+---
+
+## Owner decisions (2026-10-04) — binding, override anything above that conflicts
+
+1. **Approval validity: next morning.** An approval stays valid until the close of the next trading session (IST). An approval made while the market is closed places NO order at that moment: the approval is stored as "approved — waiting for the market to open", and a job at the next market open (09:15–09:20 IST, trading days only) re-runs every Approve check (still TRADE in the latest live nightly run, no open brain position, broker mode, `risk.check_entry`) and only then calls `open_position`. An approval made during market hours orders immediately (same checks). An approval not executed by the next session's close expires with a plain reason. Never send an after-close order.
+2. **Rollback keeps positions.** Switching back to shadow (or approval) stops NEW buys only; open brain positions keep v1's normal stop / target / 30-calendar-day time-stop exits. Say so on the console and in GO_LIVE.md.
+3. **Auto stage needs only the owner's judgement.** No extra measured bar beyond the plan's rules (30 finished ideas; auto only reachable from approval). The console states plainly that the switch is the owner's call.

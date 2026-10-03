@@ -46,6 +46,28 @@ function finalWord(d: BrainDecision): string {
   return d.overruled_word ?? d.word
 }
 
+// Positive: TRADE / HOLD. Caution: WATCH / WAIT / MONITOR. Negative: AVOID /
+// REDUCE / EXIT. Same mapping as StockDetail.tsx, duplicated rather than
+// shared (this screen owns no shared module to put it in).
+const WORD_TONE: Record<string, 'pos' | 'warn' | 'neg'> = {
+  TRADE: 'pos',
+  HOLD: 'pos',
+  WATCH: 'warn',
+  WAIT: 'warn',
+  MONITOR: 'warn',
+  AVOID: 'neg',
+  REDUCE: 'neg',
+  EXIT: 'neg',
+}
+
+function wordTone(d: BrainDecision): 'pos' | 'warn' | 'neg' {
+  return WORD_TONE[finalWord(d)] ?? 'pos'
+}
+
+function wordClass(d: BrainDecision): string {
+  return `tm-${wordTone(d)}`
+}
+
 function money(n: number): string {
   return `${n < 0 ? '−' : '+'}₹${inr(Math.abs(n), 0)}`
 }
@@ -172,11 +194,14 @@ export default function AIDecision() {
             <>
               <p className="tm-strong" style={{ marginTop: 0 }}>
                 TradeMind {decision.kind === 'idea' ? 'recommends' : 'currently has'}{' '}
-                <span className="tm-pos">{finalWord(decision)}</span> for {symbol}
+                <span className={wordClass(decision)}>{finalWord(decision)}</span> for {symbol}
                 {decision.confidence != null && (
                   <>
                     {' '}
-                    with <span className="tm-pos">{Math.round(decision.confidence * 100)}% model score</span>
+                    with{' '}
+                    <span className="tm-pos" title="A ranking, not a chance — not a probability">
+                      {Math.round(decision.confidence * 100)}% model score
+                    </span>
                   </>
                 )}
                 .

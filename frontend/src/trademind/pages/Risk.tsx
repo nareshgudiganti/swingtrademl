@@ -138,7 +138,15 @@ export default function Risk() {
             </div>
           </div>
         </Card>
-        {ddPct != null ? (
+        {equity.isLoading ? (
+          <Card>
+            <p className="tm-dim">Loading…</p>
+          </Card>
+        ) : equity.isError ? (
+          <Card title="Drawdown">
+            <p className="tm-dim">Could not load portfolio history. Try again shortly.</p>
+          </Card>
+        ) : ddPct != null ? (
           <Card>
             <div className="tm-score">
               <Ring
@@ -264,7 +272,19 @@ export default function Risk() {
       </div>
 
       <div className="tm-grid tm-cols-3">
-        {points.length > 1 ? (
+        {equity.isLoading ? (
+          <div className="tm-span-2">
+            <Card title="Drawdown">
+              <p className="tm-dim">Loading…</p>
+            </Card>
+          </div>
+        ) : equity.isError ? (
+          <div className="tm-span-2">
+            <Card title="Drawdown">
+              <p className="tm-dim">Could not load portfolio history. Try again shortly.</p>
+            </Card>
+          </div>
+        ) : points.length > 1 ? (
           <Card className="tm-span-2" title="Drawdown" sub="How far the portfolio was below its best point, day by day">
             <GlowArea data={drawdownChartSeries(points)} color="#ff4d6a" height={180} axes domain={['dataMin', 0]} formatter={(v) => `${v.toFixed(1)}%`} />
           </Card>
@@ -285,7 +305,10 @@ export default function Risk() {
         </Card>
       </div>
 
-      <Card title="Ideas Turned Down Today" sub="Where the brain wanted to act, but a check said no">
+      <Card
+        title="Ideas Turned Down Today"
+        sub="The reason shown is the brain's own — a turn-down can come from stale data or a careful market, not only the risk check."
+      >
         {brainStatus === 'off' && <BrainOff />}
         {brainStatus === 'loading' && <p className="tm-dim">Connecting to the brain…</p>}
         {brainStatus === 'error' && <p className="tm-dim">Something went wrong talking to the brain. Try again shortly.</p>}
@@ -297,7 +320,7 @@ export default function Risk() {
             ) : (
               refusedDecisions(latest.data).map((dec) => (
                 <CheckItem key={dec.id} tone="warn">
-                  <span className="tm-strong">{dec.symbol}</span>: risk check said no — {dec.downgrade_reason}
+                  <span className="tm-strong">{dec.symbol}</span>: turned down — {dec.downgrade_reason}
                 </CheckItem>
               ))
             )}

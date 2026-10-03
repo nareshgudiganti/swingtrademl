@@ -3,7 +3,9 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 
 import { api } from '../../api/client'
 import type { BrainProposal, BrainProposalStatus } from '../../api/types'
+import { formatDateTime } from '../../lib/format'
 import { useBrainStatus, useLearning, useProposals } from '../live'
+import { currentBuyLevelProposal } from '../live-system'
 import { BrainOff, Card, CheckItem, Tag } from '../ui'
 
 const PROPOSAL_STATUS_LABEL: Record<BrainProposalStatus, string> = {
@@ -16,16 +18,6 @@ const PROPOSAL_STATUS_TONE: Record<BrainProposalStatus, 'blue' | 'green' | 'red'
   open: 'blue',
   accepted: 'green',
   dismissed: 'red',
-}
-
-/** The buy_level proposal actually in force right now (if any) — same rule
- * as Brain.tsx's own copy: the most recently decided accepted one, when it
- * did not revert back to the default. */
-function currentBuyLevelProposal(proposals: BrainProposal[]): BrainProposal | null {
-  const accepted = proposals.filter((p) => p.kind === 'buy_level' && p.status === 'accepted')
-  if (accepted.length === 0) return null
-  const latest = accepted.reduce((a, b) => ((a.decided_at ?? '') > (b.decided_at ?? '') ? a : b))
-  return latest.change.buy_level != null ? latest : null
 }
 
 function ProposalRow({
@@ -49,6 +41,7 @@ function ProposalRow({
         {p.status !== 'open' && (
           <div className="tm-faint">
             {p.decided_by ? `by ${p.decided_by}` : ''}
+            {p.decided_at ? ` on ${formatDateTime(p.decided_at)}` : ''}
             {p.decided_note ? ` — “${p.decided_note}”` : ''}
           </div>
         )}

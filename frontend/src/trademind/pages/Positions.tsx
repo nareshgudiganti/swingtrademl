@@ -1,109 +1,36 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import {
-  Area,
-  CartesianGrid,
-  ComposedChart,
-  Line,
-  ReferenceLine,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts'
+import { useQuery } from '@tanstack/react-query'
 
-import { exitPlan, openPositions, pathData, position, reevalTriggers } from '../data'
-import { ActionPill, Card, CheckItem, Icon, Seg, Tabs, Tag, inr, signed, toneClass } from '../ui'
+import { api } from '../../api/client'
+import type { BrainDecision, DetailedPosition } from '../../api/types'
+import { formatDate } from '../../lib/format'
+import { holdingsFrom, useBrainStatus, useLatestRun, useTrack } from '../live'
+import { BrainOff, Card, CheckItem, Icon, Seg, Tabs, Tag, inr, signed, toneClass } from '../ui'
+import { PositionBand } from '../PositionBand'
 
-const TABS = ['Position Overview', 'Expected vs Actual', 'Re-evaluation', 'Exit Strategy', 'Notes'] as const
+// Same private copy as every other TradeMind screen (see Home.tsx) — the
+// owner's overrule, if any, otherwise the brain's own word.
+function finalWord(d: BrainDecision): string {
+  return d.overruled_word ?? d.word
+}
+
+const HOLDING_TONE: Record<string, 'green' | 'blue' | 'amber' | 'red'> = {
+  HOLD: 'green',
+  MONITOR: 'blue',
+  REDUCE: 'amber',
+  EXIT: 'red',
+}
+
+const REASON_TONE: Record<string, 'pos' | 'neg' | 'warn' | 'neutral'> = {
+  HOLD: 'pos',
+  MONITOR: 'warn',
+  REDUCE: 'warn',
+  EXIT: 'neg',
+}
+
+const TABS = ['Position Overview', 'Re-evaluation & Exit', 'Notes'] as const
 type TabId = (typeof TABS)[number]
-
-const LEVEL_TONE: Record<string, 'green' | 'amber' | 'red'> = { Normal: 'green', Watch: 'amber', High: 'red' }
-
-function usePosition(symbol: string | undefined) {
-  return useMemo(() => {
-    const h = openPositions.find((p) => p.symbol === symbol) ?? openPositions[0]!
-    if (h.symbol === position.symbol) return { ...position, name: h.name, status: h.status }
-    const entry = h.avg
-    return {
-      symbol: h.symbol,
-      name: h.name,
-      status: h.status,
-      entry,
-      current: Math.round(entry * (1 + h.pnlPct / 100) * 10) / 10,
-      pnlPct: h.pnlPct,
-      sizePct: 5,
-      target: Math.round(entry * 1.16),
-      stop: Math.round(entry * 0.93),
-      expectedR: 1.6,
-      timeframe: '2-4 weeks',
-      enteredOn: `${h.days} days ago`,
-      daysHeld: h.days,
-    }
-  }, [symbol])
-}
-
-function PathChart({ entry, target, stop, height }: { entry: number; target: number; stop: number; height: number }) {
-  const k = entry / position.entry
-  const data = pathData.map((d) => ({
-    t: d.t,
-    expected: d.expected * k,
-    actual: d.actual === null ? null : d.actual * k,
-    band: [d.lower * k, d.upper * k] as [number, number],
-  }))
-  return (
-    <div className="tm-chart" style={{ height }}>
-      <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart data={data} margin={{ top: 10, right: 70, left: -6, bottom: 0 }}>
-          <defs>
-            <linearGradient id="tmBand" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#4f8cff" stopOpacity={0.22} />
-              <stop offset="100%" stopColor="#4f8cff" stopOpacity={0.04} />
-            </linearGradient>
-          </defs>
-          <CartesianGrid vertical={false} />
-          <XAxis dataKey="t" tickLine={false} axisLine={false} interval={0} />
-          <YAxis
-            domain={[stop * 0.97, target * 1.06]}
-            tickLine={false}
-            axisLine={false}
-            width={50}
-            tickFormatter={(v: number) => inr(v, 0)}
-          />
-          <Tooltip
-            content={({ active, payload }) =>
-              active && payload?.length ? (
-                <div className="tm-tooltip">
-                  {payload
-                    .filter((p) => p.dataKey !== 'band' && p.value != null)
-                    .map((p) => (
-                      <div key={String(p.dataKey)} style={{ color: p.color }}>
-                        {p.dataKey === 'actual' ? 'Actual' : 'Expected'}: ₹{inr(Number(p.value))}
-                      </div>
-                    ))}
-                </div>
-              ) : null
-            }
-          />
-          <Area dataKey="band" stroke="none" fill="url(#tmBand)" isAnimationActive={false} />
-          <ReferenceLine y={target} stroke="#2ee68a" strokeDasharray="5 4" label={{ value: `Target ₹${inr(target, 0)}`, position: 'right', fill: '#2ee68a', fontSize: 10 }} />
-          <ReferenceLine y={entry} stroke="#8f97c0" strokeDasharray="3 4" label={{ value: 'Entry', position: 'right', fill: '#8f97c0', fontSize: 10 }} />
-          <ReferenceLine y={stop} stroke="#ff4d6a" strokeDasharray="5 4" label={{ value: `Stop ₹${inr(stop, 0)}`, position: 'right', fill: '#ff4d6a', fontSize: 10 }} />
-          <Line dataKey="expected" stroke="#4f8cff" strokeDasharray="6 5" strokeWidth={2} dot={false} isAnimationActive={false} />
-          <Line
-            dataKey="actual"
-            stroke="#2ee68a"
-            strokeWidth={2.4}
-            dot={false}
-            connectNulls={false}
-            isAnimationActive={false}
-            style={{ filter: 'drop-shadow(0 0 5px #2ee68a)' }}
-          />
-        </ComposedChart>
-      </ResponsiveContainer>
-    </div>
-  )
-}
 
 const NOTES_KEY = 'tm_position_notes'
 
@@ -125,65 +52,160 @@ function writeNotes(symbol: string, text: string) {
   }
 }
 
+/** The fixed plan every TRADE is held to, applied to this position's real
+ * entry price and real decision levels — never a guessed number. */
+function ExitPlan({ decision, pos }: { decision: BrainDecision; pos: DetailedPosition | undefined }) {
+  const entry = pos?.entry_price ?? null
+  const steps = [
+    {
+      step: 'First target',
+      price: entry != null ? `₹${inr(entry * 1.05, 0)} (rule: entry +5%)` : 'Rule: entry +5%',
+      action: 'Sell half, lock in profit',
+      icon: <Icon.Target />,
+    },
+    {
+      step: 'Protect the rest',
+      price: entry != null ? `Move stop to ₹${inr(entry, 0)}` : 'Move stop to your entry price',
+      action: 'Worst case: break even',
+      icon: <Icon.Shield />,
+    },
+    {
+      step: 'Final target',
+      price: decision.target != null ? `₹${inr(decision.target, 0)}` : '—',
+      action: 'Sell the rest',
+      icon: <Icon.Target />,
+    },
+    {
+      step: 'Stop loss',
+      price: decision.stop != null ? `₹${inr(decision.stop, 0)}` : '—',
+      action: 'Sell everything, no questions',
+      icon: <Icon.X />,
+    },
+    {
+      step: 'Time stop',
+      price: pos?.entry_at
+        ? `by ${formatDate(new Date(new Date(pos.entry_at).getTime() + 30 * 86_400_000).toISOString())}`
+        : 'Rule: 30 calendar days after entry',
+      action: 'Sell if nothing has happened by then',
+      icon: <Icon.Clock />,
+    },
+  ]
+  return (
+    <div className="tm-chain">
+      {steps.map((s, i) => (
+        <div key={s.step} className={`tm-chain-step ${i === 3 ? 'tm-final' : ''}`}>
+          <span className="tm-chain-dot">{s.icon}</span>
+          <div>
+            <div className="tm-chain-title">
+              {s.step} · <span className="tm-num">{s.price}</span>
+            </div>
+            <div className="tm-chain-sub">{s.action}</div>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export default function Positions() {
-  const { symbol } = useParams()
+  const { symbol: urlSymbol } = useParams()
   const navigate = useNavigate()
-  const p = usePosition(symbol)
+  const status = useBrainStatus()
+  const latest = useLatestRun()
+  const positions = useQuery({ queryKey: ['positions'], queryFn: api.positions })
+
+  const run = latest.data
+  const holdings = run ? holdingsFrom(run) : []
+  const selected = holdings.find((h) => h.symbol === urlSymbol) ?? holdings[0]
+  const track = useTrack(selected?.symbol)
+
   const [tab, setTab] = useState<TabId>('Position Overview')
-  const [notes, setNotes] = useState(() => readNotes(p.symbol))
-  const [reevaluated, setReevaluated] = useState(false)
+  const [notes, setNotes] = useState('')
+
+  useEffect(() => {
+    if (selected) setNotes(readNotes(selected.symbol))
+  }, [selected?.symbol])
+
+  if (status === 'off') return <div className="tm-page"><BrainOff /></div>
+
+  if (status === 'loading') {
+    return (
+      <div className="tm-page">
+        <p className="tm-dim">Connecting to the brain…</p>
+      </div>
+    )
+  }
+
+  if (status === 'error') {
+    return (
+      <div className="tm-page">
+        <Card title="Could not reach the brain">
+          <p className="tm-dim">Something went wrong talking to the brain. Try again shortly.</p>
+        </Card>
+      </div>
+    )
+  }
+
+  if (status === 'no-run') {
+    return (
+      <div className="tm-page">
+        <Card title="No run yet">
+          <p className="tm-dim">The brain has not run yet.</p>
+        </Card>
+      </div>
+    )
+  }
+
+  if (!selected) {
+    return (
+      <div className="tm-page">
+        <Card title="No positions">
+          <p className="tm-dim">You are not holding anything right now.</p>
+        </Card>
+      </div>
+    )
+  }
+
+  const pos = (positions.data ?? []).find((p) => p.symbol === selected.symbol)
 
   const details = (
     <Card title="Position Details">
-      <dl className="tm-kv">
-        <dt>Entry Price</dt>
-        <dd>₹{inr(p.entry)}</dd>
-        <dt>Current Price</dt>
-        <dd>₹{inr(p.current)}</dd>
-        <dt>P&amp;L</dt>
-        <dd className={toneClass(p.pnlPct)}>{signed(p.pnlPct)}</dd>
-        <dt>Position Size</dt>
-        <dd>{p.sizePct}%</dd>
-        <dt>Target Price</dt>
-        <dd className="tm-pos">₹{inr(p.target, 0)}</dd>
-        <dt>Stop Loss</dt>
-        <dd className="tm-neg">₹{inr(p.stop, 0)}</dd>
-        <dt title="Expected reward for every ₹1 risked">Expected R</dt>
-        <dd className="tm-pos">+{p.expectedR}R</dd>
-        <dt>Timeframe</dt>
-        <dd style={{ color: 'var(--tm-violet)' }}>{p.timeframe}</dd>
-      </dl>
+      {positions.isLoading && <p className="tm-dim">Loading live price…</p>}
+      {positions.isError && <p className="tm-dim">Live price is not available right now.</p>}
+      {!positions.isLoading && !positions.isError && (
+        <dl className="tm-kv">
+          <dt>Entry Price</dt>
+          <dd>{pos ? `₹${inr(pos.entry_price)}` : '—'}</dd>
+          <dt>Current Price</dt>
+          <dd>{pos ? `₹${inr(pos.current_price)}` : '—'}</dd>
+          <dt>P&amp;L</dt>
+          <dd className={pos ? toneClass(pos.unrealized_pnl_pct) : undefined}>
+            {pos ? signed(pos.unrealized_pnl_pct * 100) : '—'}
+          </dd>
+          <dt>Quantity</dt>
+          <dd>{pos ? pos.quantity : '—'}</dd>
+          <dt>Target Price</dt>
+          <dd className="tm-pos">{selected.target != null ? `₹${inr(selected.target, 0)}` : '—'}</dd>
+          <dt>Stop Loss</dt>
+          <dd className="tm-neg">{selected.stop != null ? `₹${inr(selected.stop, 0)}` : '—'}</dd>
+          <dt>Horizon</dt>
+          <dd style={{ color: 'var(--tm-violet)' }}>up to {selected.horizon_days} trading days</dd>
+        </dl>
+      )}
     </Card>
   )
 
   const triggers = (
-    <Card
-      glow
-      title="Re-evaluation Triggers"
-      sub="The brain looks at this trade again if any of these happen"
-      action={
-        <button className="tm-btn" onClick={() => setReevaluated(true)}>
-          Re-evaluate Now
-        </button>
-      }
-    >
-      <div className="tm-rows">
-        {reevalTriggers.map((t) => (
-          <div key={t.text} className="tm-row">
-            <span className="tm-flex" style={{ gap: '0.55rem' }}>
-              <span className="tm-check-icon" style={{ color: t.level === 'High' ? 'var(--tm-red)' : t.level === 'Watch' ? 'var(--tm-amber)' : 'var(--tm-green)', width: 18, height: 18 }}>
-                <Icon.Alert />
-              </span>
-              {t.text}
-            </span>
-            <Tag tone={LEVEL_TONE[t.level] ?? 'amber'}>{t.level}</Tag>
-          </div>
-        ))}
-      </div>
-      {reevaluated && (
-        <div className="tm-callout" style={{ marginTop: '0.7rem' }}>
-          Re-checked just now: still <strong className="tm-pos">HOLD</strong> — nothing has changed enough to act.
-          <span className="tm-faint"> (Demo — will call the brain once connected.)</span>
+    <Card glow title="What the Brain Is Watching" sub="The reasons behind today's word — re-checked on the brain's next run">
+      {selected.reasons.length === 0 ? (
+        <p className="tm-dim">No specific reasons recorded for this decision.</p>
+      ) : (
+        <div className="tm-rows">
+          {selected.reasons.map((r, i) => (
+            <CheckItem key={i} tone={REASON_TONE[finalWord(selected)] ?? 'neutral'}>
+              {r}
+            </CheckItem>
+          ))}
         </div>
       )}
     </Card>
@@ -194,19 +216,11 @@ export default function Positions() {
       <div className="tm-toolbar">
         <Seg
           small
-          active={p.symbol}
-          onChange={(s) => {
-            setNotes(readNotes(s))
-            setReevaluated(false)
-            navigate(`/trademind/positions/${s}`)
-          }}
-          options={openPositions.map((o) => ({
-            id: o.symbol,
-            label: (
-              <>
-                {o.name} <span className={toneClass(o.pnlPct)}>{signed(o.pnlPct)}</span>
-              </>
-            ),
+          active={selected.symbol}
+          onChange={(s) => navigate(`/trademind/positions/${s}`)}
+          options={holdings.map((h) => ({
+            id: h.symbol,
+            label: <>{h.symbol} <Tag tone={HOLDING_TONE[finalWord(h)] ?? 'blue'}>{finalWord(h)}</Tag></>,
           }))}
         />
       </div>
@@ -215,17 +229,19 @@ export default function Positions() {
         <span className="tm-icon-badge" style={{ borderColor: 'rgba(79,140,255,.6)', color: 'var(--tm-blue)' }}>
           <Icon.Target />
         </span>
-        <span style={{ fontSize: '1.25rem', fontWeight: 700 }}>{p.name.toUpperCase()}</span>
-        <span className="tm-num" style={{ fontSize: '1.1rem', fontWeight: 600 }}>
-          ₹{inr(p.current)}
-        </span>
-        <span className={`tm-num ${toneClass(p.pnlPct)}`} style={{ fontWeight: 600 }}>
-          {signed(p.pnlPct)}
-        </span>
-        <ActionPill action="TRADE" />
-        <Tag tone="violet">82% Confidence</Tag>
-        <Tag tone="blue">Active Position</Tag>
-        <Tag tone={p.status === 'Behind' || p.status === 'Watch' ? 'amber' : 'green'}>{p.status}</Tag>
+        <span style={{ fontSize: '1.25rem', fontWeight: 700 }}>{selected.symbol}</span>
+        {pos && (
+          <>
+            <span className="tm-num" style={{ fontSize: '1.1rem', fontWeight: 600 }}>
+              ₹{inr(pos.current_price)}
+            </span>
+            <span className={`tm-num ${toneClass(pos.unrealized_pnl_pct)}`} style={{ fontWeight: 600 }}>
+              {signed(pos.unrealized_pnl_pct * 100)}
+            </span>
+          </>
+        )}
+        <Tag tone={HOLDING_TONE[finalWord(selected)] ?? 'blue'}>{finalWord(selected)}</Tag>
+        {selected.confidence != null && <Tag tone="violet">{Math.round(selected.confidence * 100)} model score</Tag>}
       </div>
 
       <Tabs tabs={TABS} active={tab} onChange={setTab} />
@@ -233,16 +249,12 @@ export default function Positions() {
       {tab === 'Position Overview' && (
         <div className="tm-grid">
           <div className="tm-grid tm-cols-3">
-            <Card
-              className="tm-span-2"
-              title={
-                <span className="tm-flex" style={{ gap: '1rem', fontWeight: 500, fontSize: '0.78rem' }}>
-                  <span style={{ color: '#4f8cff' }}>◆ Expected Path</span>
-                  <span style={{ color: '#2ee68a' }}>◆ Actual Price</span>
-                </span>
-              }
-            >
-              <PathChart entry={p.entry} target={p.target} stop={p.stop} height={290} />
+            <Card className="tm-span-2" title="This Trade vs. Similar Past Trades">
+              {track.isLoading && <p className="tm-dim">Loading…</p>}
+              {track.isError && <p className="tm-dim">Not available right now.</p>}
+              {track.data && (
+                <PositionBand track={track.data} entry={pos?.entry_price} target={selected.target} stop={selected.stop} />
+              )}
             </Card>
             {details}
           </div>
@@ -250,52 +262,13 @@ export default function Positions() {
         </div>
       )}
 
-      {tab === 'Expected vs Actual' && (
-        <div className="tm-grid">
-          <Card glow title="Is the trade on track?" sub="Blue dashed line = where the brain expected the price; shaded band = normal range">
-            <PathChart entry={p.entry} target={p.target} stop={p.stop} height={340} />
-          </Card>
-          <div className="tm-grid tm-cols-4">
-            <Card>
-              <div className="tm-stat-label">Days held</div>
-              <div className="tm-stat-value">{p.daysHeld}</div>
-            </Card>
-            <Card>
-              <div className="tm-stat-label">Expected by now</div>
-              <div className="tm-stat-value">+5.1%</div>
-            </Card>
-            <Card>
-              <div className="tm-stat-label">Actually</div>
-              <div className={`tm-stat-value ${toneClass(p.pnlPct)}`}>{signed(p.pnlPct)}</div>
-            </Card>
-            <Card>
-              <div className="tm-stat-label">Verdict</div>
-              <div className="tm-stat-value tm-pos">{p.status}</div>
-            </Card>
-          </div>
-        </div>
-      )}
-
-      {tab === 'Re-evaluation' && <div className="tm-grid tm-cols-2">{triggers}{details}</div>}
-
-      {tab === 'Exit Strategy' && (
+      {tab === 'Re-evaluation & Exit' && (
         <div className="tm-grid tm-cols-3">
           <Card glow className="tm-span-2" title="How this trade will end" sub="The plan is fixed when the trade opens — no guessing later">
-            <div className="tm-chain">
-              {exitPlan.map((s, i) => (
-                <div key={s.step} className={`tm-chain-step ${i === 3 ? 'tm-final' : ''}`}>
-                  <span className="tm-chain-dot">{i === 3 ? <Icon.X /> : i === 4 ? <Icon.Clock /> : <Icon.Target />}</span>
-                  <div>
-                    <div className="tm-chain-title">
-                      {s.step} · <span className="tm-num">{s.price}</span>
-                    </div>
-                    <div className="tm-chain-sub">{s.action}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <ExitPlan decision={selected} pos={pos} />
           </Card>
           {details}
+          <div className="tm-span-3">{triggers}</div>
         </div>
       )}
 
@@ -309,16 +282,11 @@ export default function Positions() {
               value={notes}
               onChange={(e) => {
                 setNotes(e.target.value)
-                writeNotes(p.symbol, e.target.value)
+                writeNotes(selected.symbol, e.target.value)
               }}
             />
           </Card>
-          <Card title="Brain log">
-            <CheckItem>Entered {p.enteredOn} at ₹{inr(p.entry)}</CheckItem>
-            <CheckItem>Day 5: on track, kept HOLD</CheckItem>
-            <CheckItem tone="warn">Day 11: sector dipped, moved to MONITOR</CheckItem>
-            <CheckItem>Day 14: sector recovered, back to HOLD</CheckItem>
-          </Card>
+          {details}
         </div>
       )}
     </div>

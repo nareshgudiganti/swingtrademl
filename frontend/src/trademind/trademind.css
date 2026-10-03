@@ -401,7 +401,11 @@
   border-radius: 999px;
   font-size: 0.68rem;
   font-weight: 600;
-  white-space: nowrap;
+  /* A one-word badge (TRADE, HOLD…) never wraps anyway — no space to break
+     at. A market-mode sentence does need to, or it pushes a narrow phone
+     screen wider than the viewport (nowrap forced the whole sentence onto
+     one line regardless of the card's width). */
+  white-space: normal;
 }
 
 .tm-tag-green {

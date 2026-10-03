@@ -118,28 +118,30 @@ export default function Market() {
           {sectors.length === 0 ? (
             <p className="tm-dim">No sector data in this run.</p>
           ) : (
-            <table className="tm-table">
-              <thead>
-                <tr>
-                  <th>Rank</th>
-                  <th>Sector</th>
-                  <th>Direction</th>
-                  <th className="tm-right">20-day strength</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sectors.map((s) => (
-                  <tr key={s.sector}>
-                    <td className="tm-num">{s.rank}/{s.of_total}</td>
-                    <td className="tm-strong">{s.name}</td>
-                    <td className="tm-dim">{ROTATION[s.rotation] ?? s.rotation}</td>
-                    <td className="tm-right tm-num">
-                      {s.strength_20d == null ? '—' : `${s.strength_20d >= 0 ? '+' : ''}${(s.strength_20d * 100).toFixed(1)}%`}
-                    </td>
+            <div className="tm-table-wrap">
+              <table className="tm-table">
+                <thead>
+                  <tr>
+                    <th>Rank</th>
+                    <th>Sector</th>
+                    <th>Direction</th>
+                    <th className="tm-right">20-day strength</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {sectors.map((s) => (
+                    <tr key={s.sector}>
+                      <td className="tm-num">{s.rank}/{s.of_total}</td>
+                      <td className="tm-strong">{s.name}</td>
+                      <td className="tm-dim">{ROTATION[s.rotation] ?? s.rotation}</td>
+                      <td className="tm-right tm-num">
+                        {s.strength_20d == null ? '—' : `${s.strength_20d >= 0 ? '+' : ''}${(s.strength_20d * 100).toFixed(1)}%`}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </Card>
 
@@ -155,28 +157,30 @@ export default function Market() {
           {episodes.isError && <p className="tm-dim">Could not load market history.</p>}
           {episodes.data && episodes.data.length === 0 && <p className="tm-dim">No history recorded yet.</p>}
           {episodes.data && episodes.data.length > 0 && (
-            <table className="tm-table">
-              <thead>
-                <tr>
-                  <th>Situation</th>
-                  <th>From</th>
-                  <th>To</th>
-                  <th className="tm-right">NIFTY change</th>
-                </tr>
-              </thead>
-              <tbody>
-                {episodes.data.map((e) => (
-                  <tr key={e.start_day}>
-                    <td>{e.label}</td>
-                    <td className="tm-dim">{e.start_day}</td>
-                    <td className="tm-dim">{e.end_day ?? 'still going'}</td>
-                    <td className="tm-right tm-num">
-                      {e.nifty_change == null ? '—' : `${e.nifty_change >= 0 ? '+' : ''}${(e.nifty_change * 100).toFixed(1)}%`}
-                    </td>
+            <div className="tm-table-wrap">
+              <table className="tm-table">
+                <thead>
+                  <tr>
+                    <th>Situation</th>
+                    <th>From</th>
+                    <th>To</th>
+                    <th className="tm-right">NIFTY change</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {episodes.data.map((e) => (
+                    <tr key={e.start_day}>
+                      <td>{e.label}</td>
+                      <td className="tm-dim">{e.start_day}</td>
+                      <td className="tm-dim">{e.end_day ?? 'still going'}</td>
+                      <td className="tm-right tm-num">
+                        {e.nifty_change == null ? '—' : `${e.nifty_change >= 0 ? '+' : ''}${(e.nifty_change * 100).toFixed(1)}%`}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </Card>
 

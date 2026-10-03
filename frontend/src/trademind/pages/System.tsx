@@ -179,40 +179,42 @@ export default function System() {
         {runs.isError && <p className="tm-dim">Could not load recent runs.</p>}
         {runs.data && runs.data.length === 0 && <p className="tm-dim">No runs recorded yet.</p>}
         {runs.data && runs.data.length > 0 && (
-          <table className="tm-table">
-            <thead>
-              <tr>
-                <th>When</th>
-                <th>Market</th>
-                <th>Result</th>
-              </tr>
-            </thead>
-            <tbody>
-              {runs.data.map((r) => (
-                <tr key={r.run_id}>
-                  <td>
-                    {formatDateTime(r.started_at)}
-                    <div className="tm-faint">
-                      {RUN_KIND[r.kind] ?? r.kind}
-                      {!r.live && ' · replay'}
-                    </div>
-                  </td>
-                  <td className="tm-dim">{r.banner.mode ? MARKET_LABEL[r.banner.mode] ?? r.banner.mode : '—'}</td>
-                  <td>
-                    {r.status === 'failed' ? (
-                      <Tag tone="red">Failed</Tag>
-                    ) : (
-                      <span className="tm-dim">
-                        {Object.entries(r.counts)
-                          .map(([w, n]) => `${n} ${w}`)
-                          .join(' · ')}
-                      </span>
-                    )}
-                  </td>
+          <div className="tm-table-wrap">
+            <table className="tm-table">
+              <thead>
+                <tr>
+                  <th>When</th>
+                  <th>Market</th>
+                  <th>Result</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {runs.data.map((r) => (
+                  <tr key={r.run_id}>
+                    <td>
+                      {formatDateTime(r.started_at)}
+                      <div className="tm-faint">
+                        {RUN_KIND[r.kind] ?? r.kind}
+                        {!r.live && ' · replay'}
+                      </div>
+                    </td>
+                    <td className="tm-dim">{r.banner.mode ? MARKET_LABEL[r.banner.mode] ?? r.banner.mode : '—'}</td>
+                    <td>
+                      {r.status === 'failed' ? (
+                        <Tag tone="red">Failed</Tag>
+                      ) : (
+                        <span className="tm-dim">
+                          {Object.entries(r.counts)
+                            .map(([w, n]) => `${n} ${w}`)
+                            .join(' · ')}
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </Card>
     </div>

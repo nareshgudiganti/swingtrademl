@@ -179,22 +179,24 @@ export default function Home() {
           {top.length === 0 ? (
             <p className="tm-dim">No ideas to show right now.</p>
           ) : (
-            <table className="tm-table">
-              <tbody>
-                {top.map((i) => (
-                  <tr key={i.id} className="tm-clickable" onClick={() => navigate(`/trademind/stock/${encodeURIComponent(i.symbol)}`)}>
-                    <td className="tm-strong">{i.symbol}</td>
-                    <td>
-                      <ActionPill action={finalWord(i) as Action} />
-                    </td>
-                    <td className="tm-num tm-right" title="Model score — a ranking, not a chance">
-                      {i.confidence != null ? Math.round(i.confidence * 100) : '—'}
-                    </td>
-                    <td className="tm-dim">{i.reasons[0]}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="tm-table-wrap">
+              <table className="tm-table">
+                <tbody>
+                  {top.map((i) => (
+                    <tr key={i.id} className="tm-clickable" onClick={() => navigate(`/trademind/stock/${encodeURIComponent(i.symbol)}`)}>
+                      <td className="tm-strong">{i.symbol}</td>
+                      <td>
+                        <ActionPill action={finalWord(i) as Action} />
+                      </td>
+                      <td className="tm-num tm-right" title="Model score — a ranking, not a chance">
+                        {i.confidence != null ? Math.round(i.confidence * 100) : '—'}
+                      </td>
+                      <td className="tm-dim">{i.reasons[0]}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </Card>
 

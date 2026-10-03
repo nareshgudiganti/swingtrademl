@@ -3,30 +3,19 @@ import { useQuery } from '@tanstack/react-query'
 import { api } from '../../api/client'
 import type { ModuleMode } from '../../api/types'
 import { useBrainStatus, useHealth, useModules, useRuns } from '../live'
+import { MARKET_LABEL, STEP_LABEL } from '../vocab'
 import { BrainOff, Card, NotConnected, Tag } from '../ui'
 import { formatDateTime } from '../../lib/format'
-
-const STEP_LABEL: Record<string, string> = {
-  perceive: '1 · Look at the data',
-  state: '2 · Read the market',
-  recognise: '3 · Recognise the situation',
-  remember: '4 · Remember similar times',
-  reason: '5 · Form an opinion',
-  risk: '6 · Safety check',
-  decide: '7 · Decide',
-  learn: '8 · Learn from results',
-}
 
 const MODE_LABEL: Record<ModuleMode, string> = { on: 'On', shadow: 'Trial', off: 'Off' }
 const MODE_TONE: Record<ModuleMode, 'green' | 'blue' | 'red'> = { on: 'green', shadow: 'blue', off: 'red' }
 
-const MARKET_LABEL: Record<string, string> = {
-  NORMAL: 'Normal',
-  DEFENSIVE: 'Defensive',
-  NO_NEW_TRADES: 'No new trades',
-}
-
 const RUN_KIND: Record<string, string> = { nightly: 'Nightly', intraday: 'Holdings check', why: 'One stock' }
+
+// A run that hasn't finished yet (anything other than 'done'/'failed') is
+// shown by its own status word rather than the generic "Failed: null" the
+// old code produced for any non-'done' status (M3).
+const RUN_STATUS_TEXT: Record<string, string> = { running: 'Running…', queued: 'Queued' }
 
 const NOT_MEASURED = 'Not measured yet — the learning loop reports real results once ideas finish.'
 
@@ -73,7 +62,9 @@ export default function System() {
                 <div className="tm-stat-label">
                   {health.data.last_run.status === 'done'
                     ? `Took ${(health.data.last_run.ms / 1000).toFixed(1)} s`
-                    : `Failed: ${health.data.last_run.error}`}
+                    : health.data.last_run.status === 'failed'
+                    ? `Failed: ${health.data.last_run.error ?? 'Unknown error'}`
+                    : RUN_STATUS_TEXT[health.data.last_run.status] ?? health.data.last_run.status}
                 </div>
               )}
             </>

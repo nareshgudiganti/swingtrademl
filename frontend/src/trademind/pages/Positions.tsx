@@ -5,29 +5,10 @@ import { useQuery } from '@tanstack/react-query'
 import { api } from '../../api/client'
 import type { BrainDecision, DetailedPosition } from '../../api/types'
 import { formatDate } from '../../lib/format'
-import { holdingsFrom, useBrainStatus, useLatestRun, useTrack } from '../live'
+import { finalWord, holdingsFrom, useBrainStatus, useLatestRun, useTrack } from '../live'
+import { wordTagColor, wordTone } from '../vocab'
 import { BrainOff, Card, CheckItem, Icon, Seg, Tabs, Tag, inr, signed, toneClass } from '../ui'
 import { PositionBand } from '../PositionBand'
-
-// Same private copy as every other TradeMind screen (see Home.tsx) — the
-// owner's overrule, if any, otherwise the brain's own word.
-function finalWord(d: BrainDecision): string {
-  return d.overruled_word ?? d.word
-}
-
-const HOLDING_TONE: Record<string, 'green' | 'blue' | 'amber' | 'red'> = {
-  HOLD: 'green',
-  MONITOR: 'blue',
-  REDUCE: 'amber',
-  EXIT: 'red',
-}
-
-const REASON_TONE: Record<string, 'pos' | 'neg' | 'warn' | 'neutral'> = {
-  HOLD: 'pos',
-  MONITOR: 'warn',
-  REDUCE: 'warn',
-  EXIT: 'neg',
-}
 
 const TABS = ['Position Overview', 'Re-evaluation & Exit', 'Notes'] as const
 type TabId = (typeof TABS)[number]
@@ -116,7 +97,11 @@ export default function Positions() {
 
   const run = latest.data
   const holdings = run ? holdingsFrom(run) : []
-  const selected = holdings.find((h) => h.symbol === urlSymbol) ?? holdings[0]
+  // A symbol in the URL that isn't one of today's holdings is never a
+  // silent fallback to holdings[0] — that would show the wrong stock
+  // without saying so (M4). No symbol in the URL still defaults to the
+  // first holding, same as AIDecision defaults to the first idea.
+  const selected = urlSymbol ? holdings.find((h) => h.symbol === urlSymbol) : holdings[0]
   const track = useTrack(selected?.symbol)
 
   const [tab, setTab] = useState<TabId>('Position Overview')
@@ -159,8 +144,10 @@ export default function Positions() {
   if (!selected) {
     return (
       <div className="tm-page">
-        <Card title="No positions">
-          <p className="tm-dim">You are not holding anything right now.</p>
+        <Card title={urlSymbol ? 'Not one of your holdings' : 'No positions'}>
+          <p className="tm-dim">
+            {urlSymbol ? 'Not one of your holdings.' : "The brain's last run saw no holdings."}
+          </p>
         </Card>
       </div>
     )
@@ -202,7 +189,7 @@ export default function Positions() {
       ) : (
         <div className="tm-rows">
           {selected.reasons.map((r, i) => (
-            <CheckItem key={i} tone={REASON_TONE[finalWord(selected)] ?? 'neutral'}>
+            <CheckItem key={i} tone={wordTone(finalWord(selected))}>
               {r}
             </CheckItem>
           ))}
@@ -220,7 +207,7 @@ export default function Positions() {
           onChange={(s) => navigate(`/trademind/positions/${s}`)}
           options={holdings.map((h) => ({
             id: h.symbol,
-            label: <>{h.symbol} <Tag tone={HOLDING_TONE[finalWord(h)] ?? 'blue'}>{finalWord(h)}</Tag></>,
+            label: <>{h.symbol} <Tag tone={wordTagColor(finalWord(h))}>{finalWord(h)}</Tag></>,
           }))}
         />
       </div>
@@ -240,7 +227,7 @@ export default function Positions() {
             </span>
           </>
         )}
-        <Tag tone={HOLDING_TONE[finalWord(selected)] ?? 'blue'}>{finalWord(selected)}</Tag>
+        <Tag tone={wordTagColor(finalWord(selected))}>{finalWord(selected)}</Tag>
         {selected.confidence != null && <Tag tone="violet">{Math.round(selected.confidence * 100)} model score</Tag>}
       </div>
 
@@ -253,7 +240,13 @@ export default function Positions() {
               {track.isLoading && <p className="tm-dim">Loading…</p>}
               {track.isError && <p className="tm-dim">Not available right now.</p>}
               {track.data && (
-                <PositionBand track={track.data} entry={pos?.entry_price} target={selected.target} stop={selected.stop} />
+                <PositionBand
+                  track={track.data}
+                  entry={pos?.entry_price}
+                  target={selected.target}
+                  stop={selected.stop}
+                  horizonDays={selected.horizon_days}
+                />
               )}
             </Card>
             {details}

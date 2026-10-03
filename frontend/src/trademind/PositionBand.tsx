@@ -24,7 +24,6 @@ const STATUS_PLAIN: Record<string, string> = {
   drift: 'Drifting',
   breakdown: 'Breaking down',
   'stop hit': 'Stop hit',
-  'past horizon': 'Past 15 days',
   'no data': 'No new prices',
 }
 
@@ -33,16 +32,20 @@ export function PositionBand({
   entry,
   target,
   stop,
+  horizonDays = 15,
   height = 240,
 }: {
   track: BrainTrack
   entry?: number | null
   target?: number | null
   stop?: number | null
+  horizonDays?: number
   height?: number
 }) {
   const last = track.points[track.points.length - 1]
   if (!last) return <p className="tm-dim">No days tracked yet for this trade.</p>
+
+  const statusLabel = last.status === 'past horizon' ? `Past ${horizonDays} days` : STATUS_PLAIN[last.status] ?? last.status
 
   const byDay = new Map<number, { low?: number; high?: number; actual?: number | null }>()
   for (const [day, low, , high] of track.band) {
@@ -68,9 +71,10 @@ export function PositionBand({
   return (
     <div>
       <div className="tm-flex" style={{ justifyContent: 'space-between', marginBottom: '0.4rem' }}>
-        <strong>{STATUS_PLAIN[last.status] ?? last.status}</strong>
+        <strong>{statusLabel}</strong>
         <span className={`tm-num ${toneClass(last.ret)}`}>
-          {last.day_n <= 15 ? `day ${last.day_n} of up to 15` : `day ${last.day_n}`} · {signed(last.ret * 100)}
+          {last.day_n <= horizonDays ? `day ${last.day_n} of up to ${horizonDays}` : `day ${last.day_n}`} ·{' '}
+          {signed(last.ret * 100)}
         </span>
       </div>
       <div className="tm-chart" style={{ height }}>

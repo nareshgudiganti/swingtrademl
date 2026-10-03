@@ -4,9 +4,9 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../../api/client'
 import type { BrainProposal, BrainProposalStatus } from '../../api/types'
 import { formatDateTime } from '../../lib/format'
-import { useBrainStatus, useLearning, useProposals } from '../live'
+import { useLearning, useProposals } from '../live'
 import { currentBuyLevelProposal } from '../live-system'
-import { BrainOff, Card, CheckItem, Tag } from '../ui'
+import { BrainGate, Card, CheckItem, Tag } from '../ui'
 
 const PROPOSAL_STATUS_LABEL: Record<BrainProposalStatus, string> = {
   open: 'Open',
@@ -71,7 +71,14 @@ function ProposalRow({
 }
 
 export default function Learn() {
-  const status = useBrainStatus()
+  return (
+    <BrainGate allowNoRun>
+      <LearnBody />
+    </BrainGate>
+  )
+}
+
+function LearnBody() {
   const queryClient = useQueryClient()
   const learning = useLearning()
   const proposals = useProposals()
@@ -91,26 +98,6 @@ export default function Learn() {
       void queryClient.invalidateQueries({ queryKey: ['brainProposals'] })
     },
   })
-
-  if (status === 'off') return <div className="tm-page"><BrainOff /></div>
-
-  if (status === 'loading') {
-    return (
-      <div className="tm-page">
-        <p className="tm-dim">Connecting to the brain…</p>
-      </div>
-    )
-  }
-
-  if (status === 'error') {
-    return (
-      <div className="tm-page">
-        <Card title="Could not reach the brain">
-          <p className="tm-dim">Something went wrong talking to the brain. Try again shortly.</p>
-        </Card>
-      </div>
-    )
-  }
 
   const data = learning.data
   const hasBreakdown = !!data && (data.by_band.length > 0 || data.by_word.length > 0 || data.by_week.length > 0)

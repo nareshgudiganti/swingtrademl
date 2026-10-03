@@ -5,9 +5,9 @@ import { useQuery } from '@tanstack/react-query'
 import { api } from '../../api/client'
 import type { BrainDecision, DetailedPosition } from '../../api/types'
 import { formatDate } from '../../lib/format'
-import { finalWord, holdingsFrom, useBrainStatus, useLatestRun, useTrack } from '../live'
+import { finalWord, holdingsFrom, useLatestRun, useTrack } from '../live'
 import { wordTagColor, wordTone } from '../vocab'
-import { BrainOff, Card, CheckItem, Icon, Seg, Tabs, Tag, inr, signed, toneClass } from '../ui'
+import { BrainGate, Card, CheckItem, Icon, Seg, Tabs, Tag, inr, signed, toneClass } from '../ui'
 import { PositionBand } from '../PositionBand'
 
 const TABS = ['Position Overview', 'Re-evaluation & Exit', 'Notes'] as const
@@ -89,9 +89,16 @@ function ExitPlan({ decision, pos }: { decision: BrainDecision; pos: DetailedPos
 }
 
 export default function Positions() {
+  return (
+    <BrainGate>
+      <PositionsBody />
+    </BrainGate>
+  )
+}
+
+function PositionsBody() {
   const { symbol: urlSymbol } = useParams()
   const navigate = useNavigate()
-  const status = useBrainStatus()
   const latest = useLatestRun()
   const positions = useQuery({ queryKey: ['positions'], queryFn: api.positions })
 
@@ -110,36 +117,6 @@ export default function Positions() {
   useEffect(() => {
     if (selected) setNotes(readNotes(selected.symbol))
   }, [selected?.symbol])
-
-  if (status === 'off') return <div className="tm-page"><BrainOff /></div>
-
-  if (status === 'loading') {
-    return (
-      <div className="tm-page">
-        <p className="tm-dim">Connecting to the brain…</p>
-      </div>
-    )
-  }
-
-  if (status === 'error') {
-    return (
-      <div className="tm-page">
-        <Card title="Could not reach the brain">
-          <p className="tm-dim">Something went wrong talking to the brain. Try again shortly.</p>
-        </Card>
-      </div>
-    )
-  }
-
-  if (status === 'no-run') {
-    return (
-      <div className="tm-page">
-        <Card title="No run yet">
-          <p className="tm-dim">The brain has not run yet.</p>
-        </Card>
-      </div>
-    )
-  }
 
   if (!selected) {
     return (

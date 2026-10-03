@@ -5,6 +5,7 @@ import { useId, type ReactNode } from 'react'
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import clsx from 'clsx'
 
+import { useBrainStatus } from './live'
 import type { Action, CandleBar, Point } from './types'
 
 // ------------------------------------------------------------- formatting --
@@ -188,6 +189,54 @@ export function BrainOff() {
       <p className="tm-dim">The brain is switched off on this server.</p>
     </Card>
   )
+}
+
+/** The one place that turns the brain's loading / off / no-run / error states
+ * into a page. Children render only once the brain is live. `allowNoRun` is
+ * for pages whose own data does not depend on a run (System, Learn): they
+ * still render when the brain has not run yet. */
+export function BrainGate({
+  children,
+  what = 'the brain',
+  allowNoRun = false,
+}: {
+  children: ReactNode
+  what?: string
+  allowNoRun?: boolean
+}) {
+  const status = useBrainStatus()
+
+  if (status === 'off') return <div className="tm-page"><BrainOff /></div>
+
+  if (status === 'loading') {
+    return (
+      <div className="tm-page">
+        <p className="tm-dim">Connecting to {what}…</p>
+      </div>
+    )
+  }
+
+  if (status === 'error') {
+    return (
+      <div className="tm-page">
+        <Card title="Could not reach the brain">
+          <p className="tm-dim">Something went wrong talking to the brain. Try again shortly.</p>
+        </Card>
+      </div>
+    )
+  }
+
+  if (status === 'no-run' && !allowNoRun) {
+    return (
+      <div className="tm-page">
+        <Card title="No run yet">
+          <p className="tm-dim">The brain has not run yet.</p>
+        </Card>
+      </div>
+    )
+  }
+
+  return <>{children}</>
 }
 
 const ACTION_HINT: Record<Action, string> = {

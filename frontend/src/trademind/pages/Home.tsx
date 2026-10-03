@@ -3,47 +3,24 @@ import { useNavigate, Link } from 'react-router-dom'
 import type { Action } from '../types'
 import type { IdeaWord } from '../../api/types'
 import { formatDateTime } from '../../lib/format'
-import { finalWord, ideasFrom, holdingsFrom, marketSituation, useBrainStatus, useLatestRun, useLearning } from '../live'
+import { finalWord, ideasFrom, holdingsFrom, marketSituation, useLatestRun, useLearning } from '../live'
 import { MARKET_LABEL, MARKET_PLAIN, MARKET_TONE, wordTagColor } from '../vocab'
-import { ActionPill, BrainArt, BrainOff, Card, CheckItem, Icon, Tag } from '../ui'
+import { ActionPill, BrainArt, BrainGate, Card, CheckItem, Icon, Tag } from '../ui'
 
 const IDEA_WORDS: IdeaWord[] = ['TRADE', 'WATCH', 'WAIT', 'AVOID']
 
 export default function Home() {
+  return (
+    <BrainGate>
+      <HomeBody />
+    </BrainGate>
+  )
+}
+
+function HomeBody() {
   const navigate = useNavigate()
-  const status = useBrainStatus()
   const latest = useLatestRun()
   const learning = useLearning()
-
-  if (status === 'off') return <div className="tm-page"><BrainOff /></div>
-
-  if (status === 'loading') {
-    return (
-      <div className="tm-page">
-        <p className="tm-dim">Connecting to the brain…</p>
-      </div>
-    )
-  }
-
-  if (status === 'error') {
-    return (
-      <div className="tm-page">
-        <Card title="Could not reach the brain">
-          <p className="tm-dim">Something went wrong talking to the brain. Try again shortly.</p>
-        </Card>
-      </div>
-    )
-  }
-
-  if (status === 'no-run') {
-    return (
-      <div className="tm-page">
-        <Card title="No run yet">
-          <p className="tm-dim">The brain has not run yet.</p>
-        </Card>
-      </div>
-    )
-  }
 
   const run = latest.data!
   const ideas = ideasFrom(run)

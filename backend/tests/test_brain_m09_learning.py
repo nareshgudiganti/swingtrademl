@@ -1243,3 +1243,57 @@ def test_failure_patterns_calls_one_per_day_itself():
         ]
     )
     assert failure_patterns(rows, min_stops=1) == []
+
+
+def test_learning_report_since_uses_the_ist_day_at_the_boundary(db_session):
+    # 20:00 UTC on 31 Aug is 01:30 IST on 1 Sep: inside `since` = 1 Sep.
+    _scored_run(
+        db_session, "fx-edge-in", "ABC", 0.6, "target", 0.08, as_of=datetime(2026, 8, 31, 20, 0, tzinfo=UTC)
+    )
+    # 17:00 UTC on 31 Aug is 22:30 IST on 31 Aug: outside.
+    _scored_run(
+        db_session, "fx-edge-out", "DEF", 0.6, "target", 0.08, as_of=datetime(2026, 8, 31, 17, 0, tzinfo=UTC)
+    )
+    db_session.commit()
+    assert learn_mod.learning_report(db_session, since=date(2026, 9, 1))["n_scored"] == 1
+
+
+def test_api_accepting_a_module_mode_proposal_for_an_unknown_module_is_a_plain_422(client, db_session):
+    proposal = store.create(
+        db_session,
+        Draft(kind="module_mode", title="t", evidence="e", change={"module": "M99", "mode": "shadow"}),
+    )
+    db_session.commit()
+    r = client.post(f"/api/v1/brain/proposals/{proposal.id}/accept", json={}, headers=HEADERS)
+    assert r.status_code == 422
+    assert "M99" in r.json()["detail"]
+    # Nothing was decided: the proposal is still open and can be rejected.
+    db_session.expire_all()
+    assert store.list_proposals(db_session, "open")[0].id == proposal.id
+    assert (
+        client.post(f"/api/v1/brain/proposals/{proposal.id}/reject", json={}, headers=HEADERS).status_code
+        == 200
+    )
+
+
+def test_api_accepting_a_module_mode_proposal_the_gate_refuses_is_a_409(client, db_session):
+    proposal = store.create(
+        db_session,
+        Draft(kind="module_mode", title="t", evidence="e", change={"module": "M07", "mode": "off"}),
+    )
+    db_session.commit()
+    r = client.post(f"/api/v1/brain/proposals/{proposal.id}/accept", json={}, headers=HEADERS)
+    assert r.status_code == 409
+
+
+def test_api_proposal_note_is_capped_at_2000_characters(client, db_session):
+    proposal = store.create(db_session, _buy_level_draft(0.65))
+    db_session.commit()
+    r = client.post(
+        f"/api/v1/brain/proposals/{proposal.id}/accept", json={"note": "x" * 2001}, headers=HEADERS
+    )
+    assert r.status_code == 422
+    r = client.post(
+        f"/api/v1/brain/proposals/{proposal.id}/accept", json={"note": "x" * 2000}, headers=HEADERS
+    )
+    assert r.status_code == 200

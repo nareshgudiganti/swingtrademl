@@ -83,7 +83,13 @@ def accept(db: Session, proposal_id: int, by: str, note: str = "") -> BrainPropo
         # this module eagerly and create an import cycle.
         from swing_trade_ml.brain import service
 
-        service.set_mode(db, row.change["module"], row.change["mode"], by=by, note=note or None)
+        try:
+            service.set_mode(db, row.change["module"], row.change["mode"], by=by, note=note or None)
+        except Exception:
+            # The proposal was marked accepted above; undo that so a refused
+            # change leaves it open instead of half-decided.
+            db.rollback()
+            raise
     db.commit()
     return row
 

@@ -67,7 +67,7 @@ class OverruleCreate(BaseModel):
 
 
 class ProposalDecision(BaseModel):
-    note: str = ""
+    note: str = Field("", max_length=2000)
     by: str = "owner"
 
 
@@ -367,6 +367,8 @@ def accept_proposal(proposal_id: int, payload: ProposalDecision, db: DbSession) 
         p = store.accept(db, proposal_id, payload.by, payload.note)
     except store.UnknownProposalError as exc:
         raise HTTPException(404, str(exc)) from exc
+    except LookupError as exc:  # a module_mode proposal naming a module that is not installed
+        raise HTTPException(422, f"This proposal cannot be applied: {exc}") from exc
     except ValueError as exc:
         raise HTTPException(409, str(exc)) from exc
     return _proposal_out(p)

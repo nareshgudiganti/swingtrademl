@@ -116,6 +116,17 @@ export function useWhy(symbol?: string) {
   })
 }
 
+/** A run's reasoning trace — the same query Brain.tsx uses (shared cache key
+ * ['brainTrace', runId]), so a screen showing a decision that's already in
+ * the latest run can read its trace without paying for a fresh brain run. */
+export function useRunTrace(runId?: string) {
+  return useQuery({
+    queryKey: ['brainTrace', runId],
+    queryFn: () => api.brainRunTrace(runId!),
+    enabled: !!runId,
+  })
+}
+
 export function useTrack(symbol?: string) {
   return useQuery({
     queryKey: ['brainTrack', symbol],

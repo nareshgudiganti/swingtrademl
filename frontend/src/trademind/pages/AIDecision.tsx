@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useParams } from 'react-router-dom'
 
 import type { BrainDecision, BrainTraceEvent } from '../../api/types'
-import { useBrainStatus, useWhy } from '../live'
+import { useBrainStatus, useLatestRun, useRunTrace, useWhy } from '../live'
 import { BrainOff, Card, CheckItem, Icon, NotConnected, Tabs, inr } from '../ui'
 
 const TABS = ['Summary', 'Evidence', 'Similar Cases', 'Model Output', 'Risk Analysis'] as const
@@ -77,7 +77,15 @@ export default function AIDecision() {
   const symbol = (rawSymbol ?? '').toUpperCase()
 
   const status = useBrainStatus()
-  const why = useWhy(status === 'live' && symbol ? symbol : undefined)
+  const latest = useLatestRun()
+  const run = latest.data
+  const fromRun = run?.decisions.find((d) => d.symbol.toUpperCase() === symbol)
+  // The symbol is already in the latest nightly run: read that run's stored
+  // trace (fast) instead of asking the brain to reason about it again
+  // (api.brainWhy triggers a fresh ~15s run). Only fall back to brainWhy
+  // when the symbol isn't in the latest run.
+  const runTrace = useRunTrace(fromRun ? run?.run_id : undefined)
+  const why = useWhy(status === 'live' && !fromRun && symbol ? symbol : undefined)
 
   const [tab, setTab] = useState<TabId>('Summary')
   const [step, setStep] = useState(0)
@@ -112,7 +120,8 @@ export default function AIDecision() {
     )
   }
 
-  if (why.isLoading) {
+  const stillLookingUp = fromRun ? runTrace.isLoading : why.isLoading
+  if (stillLookingUp) {
     return (
       <div className="tm-page">
         <p className="tm-dim">Looking up {symbol || 'this stock'}…</p>
@@ -120,7 +129,8 @@ export default function AIDecision() {
     )
   }
 
-  if (why.isError) {
+  const lookupFailed = fromRun ? runTrace.isError : why.isError
+  if (lookupFailed) {
     return (
       <div className="tm-page">
         <Card title="Could not reach the brain">
@@ -130,7 +140,7 @@ export default function AIDecision() {
     )
   }
 
-  const decision = why.data?.decision
+  const decision = fromRun ?? why.data?.decision
   if (!decision) {
     return (
       <div className="tm-page">
@@ -141,7 +151,7 @@ export default function AIDecision() {
     )
   }
 
-  const trace = why.data?.trace ?? []
+  const trace = (fromRun ? runTrace.data?.trace : why.data?.trace) ?? []
   const current = trace[step]
   const riskTrace = trace.filter((e) => e.step === 'risk')
 

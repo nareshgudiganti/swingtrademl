@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -44,18 +44,39 @@ def _expected_latest_trading_day(now_ist: datetime) -> date:
     return d
 
 
+# Auto-login fires at 06:10 IST; the missing-session nag starts at 06:15.
+AUTO_LOGIN_GRACE = time(6, 15)
+
+
+def _is_market_closed_day(d: date) -> bool:
+    return d.weekday() >= 5 or is_trading_holiday(d)
+
+
+def _next_trading_day(d: date) -> date:
+    d += timedelta(days=1)
+    while _is_market_closed_day(d):
+        d += timedelta(days=1)
+    return d
+
+
 def _plain_status(
     *,
     broker_authenticated: bool,
     scheduler_running: bool,
     latest_candle_date: date | None,
     last_scan_at: datetime | None,
+    now_ist: datetime | None = None,
 ) -> tuple[str, str]:
     """One plain-English sentence a non-technical user can act on, instead of
     three separate technical flags they'd have to interpret themselves."""
-    now_ist = datetime.now(IST)
+    now_ist = now_ist or datetime.now(IST)
 
-    if not broker_authenticated:
+    # Zerodha expires the token every morning, weekends included, but the
+    # auto-login job only runs on trading days at 06:10. So on a weekend or
+    # holiday (or a trading day before that job) "not logged in" is expected,
+    # not something to act on — logging in then buys nothing.
+    login_not_due = _is_market_closed_day(now_ist.date()) or now_ist.time() < AUTO_LOGIN_GRACE
+    if not broker_authenticated and not login_not_due:
         return "warning", "Not logged into Zerodha today — log in below to keep prices and trading current."
 
     if not scheduler_running:
@@ -70,6 +91,17 @@ def _plain_status(
         return "warning", f"Market data hasn't updated since {seen} — may need a manual refresh."
 
     scan_desc = last_scan_at.astimezone(IST).strftime("%d %b, %I:%M %p") if last_scan_at else "not yet today"
+    if not broker_authenticated:
+        if _is_market_closed_day(now_ist.date()):
+            reopen = _next_trading_day(now_ist.date()).strftime("%a %d %b")
+            when = f"Market is closed today. The bot will log into Zerodha by itself on {reopen} at 6:10 AM"
+        else:
+            when = "The bot logs into Zerodha by itself at 6:10 AM"
+        return (
+            "ok",
+            f"{when} — nothing to do. Data current as of {latest_candle_date.strftime('%d %b')}, "
+            f"last scan {scan_desc} IST.",
+        )
     return (
         "ok",
         f"All good — logged in, data current as of {latest_candle_date.strftime('%d %b')}, "

@@ -4,6 +4,7 @@ exits. No test here can reach a broker."""
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
@@ -12,7 +13,7 @@ import pytest
 from brain_m18_fixtures import brain_strategy, instrument, no_broker, v1_strategy
 from swing_trade_ml.core import strategy_policy as policy
 from swing_trade_ml.core.enums import ExitReason, PositionStatus, SignalType
-from swing_trade_ml.db.models.trading import Order, Position
+from swing_trade_ml.db.models.trading import Order, Position, Strategy
 from swing_trade_ml.services import engine, execution, risk
 from swing_trade_ml.services.risk import RiskDecision
 from swing_trade_ml.strategies.base import SignalDecision
@@ -103,11 +104,75 @@ def test_the_daily_scan_never_runs_the_brain_strategy(db_session, monkeypatch):
     assert "brain" not in ran and "ml_swing" in ran
 
 
-def test_an_active_brain_strategy_does_not_shrink_version_1s_slot_share(db_session):
-    v1_strategy(db_session, name="m18-share-v1")
-    before = risk.active_strategy_count(db_session, "paper")
-    brain_strategy(db_session, name="m18-share-brain")
-    assert risk.active_strategy_count(db_session, "paper") == before
+def _hold(db, strategy, symbol: str, token: int) -> None:
+    inst = instrument(db, symbol, token)
+    db.add(
+        Position(
+            strategy_id=strategy.id,
+            instrument_id=inst.id,
+            mode="paper",
+            status=PositionStatus.OPEN,
+            quantity=1,
+            initial_quantity=1,
+            entry_price=100.0,
+            entry_at=datetime.now(UTC),
+            stop_loss=96.0,
+            initial_stop_loss=96.0,
+            take_profit=108.0,
+            highest_price=100.0,
+            current_price=100.0,
+            total_charges=0.0,
+        )
+    )
+    db.flush()
+
+
+def _entry(db, strategy, inst) -> RiskDecision:
+    return risk.check_entry(
+        db=db,
+        mode="paper",
+        instrument_id=inst.id,
+        price=100.0,
+        stop_loss=96.0,
+        portfolio_value=1_000_000.0,
+        available_cash=1_000_000.0,
+        strategy=strategy,
+    )
+
+
+def test_the_brain_gets_a_slot_share_and_version_1_keeps_its_own(db_session, monkeypatch):
+    """1 version-1 strategy, 5 slots account-wide: the brain may hold
+    5 // (1 + 1) = 2, so its morning buys can never fill every slot before
+    version 1's 15:45 scan; version 1 keeps its full share up to the account cap."""
+    real = risk.limits_for
+    monkeypatch.setattr(risk, "limits_for", lambda value, s=None: replace(real(value, s), max_positions=5))
+    db_session.query(Strategy).filter(Strategy.mode == "paper").update({"is_active": False})
+    v1 = v1_strategy(db_session, name="m18-share-v1")
+    brain = brain_strategy(db_session, name="m18-share-brain")
+    _hold(db_session, brain, "M18SH1", 918201)
+    _hold(db_session, brain, "M18SH2", 918202)
+    refused = _entry(db_session, brain, instrument(db_session, "M18SH3", 918203))
+    assert not refused.allowed and refused.rule == "POSITION_LIMIT"
+    assert "2 of its 2 positions" in refused.reason
+    _hold(db_session, v1, "M18SH4", 918204)
+    _hold(db_session, v1, "M18SH5", 918205)
+    assert _entry(db_session, v1, instrument(db_session, "M18SH6", 918206)).rule != "POSITION_LIMIT"
+    _hold(db_session, v1, "M18SH7", 918207)
+    full = _entry(db_session, v1, instrument(db_session, "M18SH8", 918208))
+    assert not full.allowed and full.rule == "POSITION_LIMIT"
+    assert "You already hold 5 positions" in full.reason
+
+
+def test_an_active_brain_strategy_does_not_shrink_version_1s_slot_share(db_session, monkeypatch):
+    real = risk.limits_for
+    monkeypatch.setattr(risk, "limits_for", lambda value, s=None: replace(real(value, s), max_positions=4))
+    db_session.query(Strategy).filter(Strategy.mode == "paper").update({"is_active": False})
+    v1 = v1_strategy(db_session, name="m18-share-v1b")
+    brain_strategy(db_session, name="m18-share-brain-b")
+    for i in range(3):
+        _hold(db_session, v1, f"M18SV{i}", 918210 + i)
+    # With the brain switched on, version 1 alone may still take every slot.
+    assert _entry(db_session, v1, instrument(db_session, "M18SV9", 918219)).rule != "POSITION_LIMIT"
 
 
 def test_an_approved_brain_position_at_its_stop_is_sold_by_version_1(db_session, monkeypatch):

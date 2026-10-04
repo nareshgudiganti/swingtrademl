@@ -78,6 +78,7 @@ STATUS_PLAIN = {
     "expired": "Expired",
 }
 NOTHING_BOUGHT = "Nothing was bought."
+STAGE_UNREADABLE = "Could not confirm the go-live switch just before buying, so nothing was bought."
 
 
 class ApprovalError(Exception):
@@ -352,14 +353,29 @@ def _order(db: Session, a: BrainApproval, ready: _Ready) -> BrainApproval:
         raise ApprovalFailed(a.result_note)
     # Re-read the stage right before the order: a switch back that landed
     # after the checks (rollback in flight) must still stop this buy.
-    stage_now = current_stage(db)
-    if not (stage_now == "approval" or stage_now == "auto") or (ready.automatic and stage_now != "auto"):
-        note = (
-            "The automatic stage was switched off before the order was sent. Nothing was bought."
-            if stage_now == "approval"
-            else "The brain was switched back to practice mode (shadow) before the order was sent. "
-            "Nothing was bought."
-        )
+    try:
+        stage_now = current_stage(db)
+    except Exception as exc:  # noqa: BLE001 - fail closed: no confirmed stage, no order
+        if isinstance(exc, SQLAlchemyError):
+            db.rollback()
+        log.error("brain_golive.approval.stage_unreadable", symbol=a.symbol, error=str(exc))
+        stage_now, unreadable = None, True
+    else:
+        unreadable = False
+    if (
+        unreadable
+        or not (stage_now == "approval" or stage_now == "auto")
+        or (ready.automatic and stage_now != "auto")
+    ):
+        if unreadable:
+            note = STAGE_UNREADABLE
+        elif stage_now == "approval":
+            note = "The automatic stage was switched off before the order was sent. Nothing was bought."
+        else:
+            note = (
+                "The brain was switched back to practice mode (shadow) before the order was sent. "
+                "Nothing was bought."
+            )
         db.execute(
             update(BrainApproval)
             .where(BrainApproval.id == a.id, BrainApproval.status == "approved")
@@ -536,6 +552,25 @@ def approve(db: Session, approval_id: int, by: str, note: str = "") -> BrainAppr
     return _order(db, a, ready)
 
 
+def _execute_one(db: Session, a: BrainApproval, now: datetime, dropped: list[str]) -> bool:
+    """One waiting OK at the open: True when the order was sent."""
+    try:
+        ready = _check(db, a, now, automatic=a.decided_by == AUTO_BY, live=True)
+    except ApprovalError as exc:
+        note = str(exc) if "nothing was bought" in str(exc).lower() else f"{exc} {NOTHING_BOUGHT}"
+        if _expire(db, a, note):
+            dropped.append(f"{a.symbol}: {exc}")
+        return False
+    if not _claim(db, a, "waiting", "approved"):
+        return False
+    try:
+        _order(db, a, ready)
+    except ApprovalError as exc:
+        dropped.append(f"{a.symbol}: {exc}")
+        return False
+    return True
+
+
 def execute_waiting(db: Session) -> list[BrainApproval]:
     """The market-open job: buy each approved-and-waiting idea, but only in the
     first minutes of a trading session and only after every check runs again.
@@ -552,21 +587,15 @@ def execute_waiting(db: Session) -> list[BrainApproval]:
     ordered: list[BrainApproval] = []
     dropped: list[str] = []
     for a in waiting:
+        symbol = a.symbol
         try:
-            ready = _check(db, a, now, automatic=a.decided_by == AUTO_BY, live=True)
-        except ApprovalError as exc:
-            note = str(exc) if "nothing was bought" in str(exc).lower() else f"{exc} {NOTHING_BOUGHT}"
-            if _expire(db, a, note):
-                dropped.append(f"{a.symbol}: {exc}")
-            continue
-        if not _claim(db, a, "waiting", "approved"):
-            continue
-        try:
-            _order(db, a, ready)
-        except ApprovalError as exc:
-            dropped.append(f"{a.symbol}: {exc}")
-            continue
-        ordered.append(a)
+            if _execute_one(db, a, now, dropped):
+                ordered.append(a)
+        except Exception as exc:  # noqa: BLE001 - one row never stops the others or the summary
+            if isinstance(exc, SQLAlchemyError):
+                db.rollback()
+            log.error("brain_golive.approval.open_job_row_failed", symbol=symbol, error=str(exc))
+            dropped.append(f"{symbol}: something went wrong while checking it ({exc}). {NOTHING_BOUGHT}")
     if dropped:
         notifier.send_sync(
             "🧠 Approved brain ideas not bought at the market open:\n" + "\n".join(dropped), "signal"

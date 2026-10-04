@@ -693,6 +693,54 @@ def test_a_pending_idea_expiring_sends_nothing(fx):
 # ------------------------------------------------------------ fix round 2 --
 
 
+def test_a_stage_read_failure_just_before_buying_fails_closed(fx, monkeypatch):
+    a = _pending(fx)
+    real = approvals.current_stage
+    calls = {"n": 0}
+
+    def flaky(db):
+        calls["n"] += 1
+        if calls["n"] >= 2:  # the checks read it fine; the re-read before the order fails
+            raise RuntimeError("database went away")
+        return real(db)
+
+    monkeypatch.setattr(approvals, "current_stage", flaky)
+    with pytest.raises(approvals.ApprovalExpired, match="Could not confirm the go-live switch"):
+        approvals.approve(fx.db, a.id, by="owner")
+    assert fx.opened == []
+    row = fx.db.get(BrainApproval, a.id)
+    assert row.status == "expired"
+    assert row.decided_note == (
+        "Could not confirm the go-live switch just before buying, so nothing was bought."
+    )
+
+
+def test_one_rows_unexpected_error_does_not_stop_the_market_open_job(fx, monkeypatch):
+    other = instrument(fx.db, "M18APU", 918304)
+    d = decision(fx.db, "m18-apr", "M18APU", "TRADE")
+    d.entry_low, d.entry_high = 98.0, 103.0
+    other_sig = signal(fx.db, fx.strategy, other, DAY)
+    _stage(fx.db, "approval")
+    first, second = sorted(approvals.create_pending(fx.db, DAY), key=lambda x: x.symbol)
+    assert (first.symbol, second.symbol) == ("M18APR", "M18APU")
+    fx.clock["now"] = at(DAY, 20, 0)
+    approvals.approve(fx.db, first.id, by="owner")
+    approvals.approve(fx.db, second.id, by="owner")
+
+    def price(db, inst):
+        if inst.tradingsymbol == "M18APR":
+            raise RuntimeError("something unexpected")
+        return 100.0
+
+    monkeypatch.setattr(approvals, "_live_price", price)
+    fx.sent.clear()
+    fx.clock["now"] = at(TUE, 9, 15)
+    assert [x.id for x in approvals.execute_waiting(fx.db)] == [second.id]
+    assert fx.opened == [(other_sig.id, 12)]
+    (text,) = fx.sent
+    assert "M18APR" in text and "not bought" in text
+
+
 class _Broker:
     def __init__(self, result):
         self.result = result

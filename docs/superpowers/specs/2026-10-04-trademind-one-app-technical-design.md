@@ -1,6 +1,6 @@
 # TradeMind One App: Technical Design (backend)
 
-Date: 2026-10-04 · Status: proposed, implementation not started · Branch: `brain/universe`
+Date: 2026-10-04 · Status: approved 2026-10-04; Step 1 (async runs) in progress · Branch: `brain/universe`
 (production = `0c7bf1b`).
 
 **Scope.** The 5-section UI (Decisions · Discover · Portfolio · Performance · Settings) is fixed
@@ -250,10 +250,12 @@ quantity. The UI only needs to show `qty × entry`. No backend change is needed.
    shares.
 7. `GET /attention`, then the UI reshuffle into 5 sections reads these.
 
-## 11. Open owner decisions
-1. Do your own Zerodha shares count toward the sector limits (recommended: yes)?
-2. Keep superseded same-day runs visible in Performance or hide them (recommended: hide; keep
-   them in the audit)?
+## 11. Owner decisions (answered 2026-10-04)
+1. **Own Zerodha shares count toward the sector limits** together with the bot's trades — the
+   account's total risk is what matters (§4: `risk.check_entry` sector/concentration rules read
+   `Exposure(scope='all')`; position-slot limits stay bot-only).
+2. **Superseded same-day runs are hidden from the normal Performance view** once a newer run
+   finishes, but kept in history/audit for traceability (§3 `superseded` status).
 
 ## 12. Not in scope
 UI layout (fixed). Fundamentals, news and macro data. After-close order method (separate live

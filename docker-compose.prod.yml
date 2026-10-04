@@ -15,8 +15,16 @@
 # already does for "/api/" to the api container.
 
 services:
+  # The TradeMind brain, in practice mode: its ideas are recorded and scored
+  # next to version 1, nothing is bought (docs/brain/GO_LIVE.md). Set to
+  # "false" here and redeploy to hide it again.
+  api:
+    environment:
+      BRAIN_ENABLED: "true"
+
   worker:
     environment:
+      BRAIN_ENABLED: "true"
       # Second copy of every trained model (ml/backup.py, daily at 16:30 IST).
       # Its own volume, so losing or wiping model_data does not take the
       # backup with it. Same disk, though - not a substitute for off-server.

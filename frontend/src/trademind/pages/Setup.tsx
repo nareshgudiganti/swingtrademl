@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 
-import { api } from '../../api/client'
+import { api, clearToken } from '../../api/client'
 import type { MLModel, Strategy } from '../../api/types'
 import SymbolPicker from '../../components/SymbolPicker'
 import { formatDate, formatPercent, modelLabel } from '../../lib/format'
@@ -39,6 +39,17 @@ function AccountTab() {
             </div>
           </>
         )}
+        <div className="tm-gl-actions" style={{ marginTop: '0.7rem' }}>
+          <button
+            className="tm-btn tm-btn-ghost"
+            onClick={() => {
+              clearToken()
+              window.location.assign('/')
+            }}
+          >
+            Log out
+          </button>
+        </div>
       </Card>
 
       <Card title="Zerodha connection">

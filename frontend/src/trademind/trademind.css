@@ -1389,3 +1389,17 @@
 .tm-picker .symbol-picker-option {
   color: #e8ecff;
 }
+
+/* log out (top bar) */
+.tm-logout {
+  border: 0;
+  background: transparent;
+  color: var(--tm-dim);
+  font-size: 0.75rem;
+  cursor: pointer;
+  padding: 0.3rem 0.4rem;
+}
+
+.tm-logout:hover {
+  color: var(--tm-text);
+}

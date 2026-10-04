@@ -6,6 +6,7 @@ import { NavLink, Navigate, Route, Routes, Link } from 'react-router-dom'
 
 import './trademind.css'
 import { api } from '../api/client'
+import { clearToken } from '../api/client'
 import { formatDateTime } from '../lib/format'
 import { useBrainStatus, useLatestRun } from './live'
 import { Icon } from './ui'
@@ -93,6 +94,16 @@ export default function TradeMindApp() {
           <Link to="/trademind/setup" className="tm-avatar" title="Your account and settings">
             <Icon.User />
           </Link>
+          <button
+            className="tm-logout"
+            title="Log out of this app"
+            onClick={() => {
+              clearToken()
+              window.location.assign('/')
+            }}
+          >
+            Log out
+          </button>
         </div>
       </header>
 

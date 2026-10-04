@@ -404,12 +404,23 @@ def _order(db: Session, a: BrainApproval, ready: _Ready) -> BrainApproval:
 
 
 def expire_stale(db: Session, now: datetime | None = None) -> int:
-    """Expire every live idea past the close of the next trading session."""
+    """Expire every live idea past the close of the next trading session.
+    An OK the owner gave that was never bought (e.g. the open job did not
+    run) is reported on Telegram once, naming the stock and why."""
     now = now or _now()
     n = 0
+    unbought: list[str] = []
     for a in db.execute(select(BrainApproval).where(BrainApproval.status.in_(LIVE))).scalars().all():
-        if now >= valid_until(a.decision_day) and _expire(db, a, _stale_note(a)):
+        if now < valid_until(a.decision_day):
+            continue
+        was_waiting = a.status == "waiting"
+        note = _stale_note(a)
+        if _expire(db, a, note):
             n += 1
+            if was_waiting:
+                unbought.append(f"{a.symbol}: {note}")
+    if unbought:
+        notifier.send_sync("🧠 Approved brain ideas that expired unbought:\n" + "\n".join(unbought), "signal")
     return n
 
 

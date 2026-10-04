@@ -13,9 +13,10 @@ from swing_trade_ml import __version__
 from swing_trade_ml.api.deps import DbSession, require_auth
 from swing_trade_ml.brokers import get_broker, kite_broker
 from swing_trade_ml.core.config import settings
-from swing_trade_ml.core.enums import PositionStatus
+from swing_trade_ml.core.enums import ModelStatus, PositionStatus
 from swing_trade_ml.core.holidays import is_trading_holiday
 from swing_trade_ml.db.models.market import Candle, Instrument
+from swing_trade_ml.db.models.ml import MLModel
 from swing_trade_ml.db.models.trading import Position, Signal, Strategy
 from swing_trade_ml.db.session import check_connection
 from swing_trade_ml.ml.registry import get_active_model
@@ -148,6 +149,10 @@ def _build_status(db: DbSession) -> SystemStatus:
         scheduled_jobs=list_jobs(),
         telegram_enabled=settings.TELEGRAM_ENABLED,
         active_model=f"{active_model.name}:{active_model.version}" if active_model else None,
+        active_models=sorted(
+            f"{m.name}:{m.version}"
+            for m in db.execute(select(MLModel).where(MLModel.status == ModelStatus.ACTIVE)).scalars()
+        ),
         watchlist_size=int(
             db.execute(
                 select(func.count(Instrument.id)).where(Instrument.is_watchlisted.is_(True))

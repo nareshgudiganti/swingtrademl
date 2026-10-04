@@ -3,6 +3,7 @@ import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api, captureTokenFromRedirect, clearToken, getToken } from './api/client'
+import { modelLabel } from './lib/format'
 import AuthScreen from './components/AuthScreen'
 import Dashboard from './pages/Dashboard'
 import Finance from './pages/Finance'
@@ -217,8 +218,13 @@ export default function App() {
                 Brain: {brainRun.banner.mode === 'NO_NEW_TRADES' ? 'NO NEW TRADES' : brainRun.banner.mode}
               </NavLink>
             )}
-            <span className="badge badge-off" title="Active model">
-              {status?.active_model ?? 'no model'}
+            <span
+              className="badge badge-off"
+              title={(status?.active_models ?? []).map(modelLabel).join('\n') || 'Active model'}
+            >
+              {(status?.active_models ?? []).length > 1
+                ? `${status!.active_models!.length} models`
+                : status?.active_model ?? 'no model'}
             </span>
           </div>
           <div className="status-strip-user">

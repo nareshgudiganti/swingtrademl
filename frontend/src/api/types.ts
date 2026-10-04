@@ -30,6 +30,8 @@ export interface SystemStatus {
   scheduled_jobs: ScheduledJob[]
   telegram_enabled: boolean
   active_model: string | null
+  /** Every active model, one per company size, as name:version (sorted). */
+  active_models?: string[]
   watchlist_size: number
   active_strategies: number
   open_positions: number

@@ -5,7 +5,7 @@ import type { ModuleMode } from '../../api/types'
 import { useHealth, useModules, useRuns } from '../live'
 import { MARKET_LABEL, MODULE_PLAIN, STEP_LABEL, moduleName } from '../vocab'
 import { BrainGate, Card, NotConnected, Tag } from '../ui'
-import { formatDateTime } from '../../lib/format'
+import { formatDateTime, modelLabel } from '../../lib/format'
 
 const MODE_LABEL: Record<ModuleMode, string> = { on: 'On', shadow: 'Trial', off: 'Off' }
 const MODE_TONE: Record<ModuleMode, 'green' | 'blue' | 'red'> = { on: 'green', shadow: 'blue', off: 'red' }
@@ -94,8 +94,16 @@ function SystemBody() {
         {appStatus.data && (
           <div className="tm-grid tm-cols-4">
             <div>
-              <div className="tm-stat-value">{appStatus.data.active_model ?? 'No model set'}</div>
-              <div className="tm-stat-label">Active model</div>
+              {(appStatus.data.active_models ?? []).length > 0 ? (
+                appStatus.data.active_models!.map((m) => (
+                  <div key={m} className="tm-strong" title={m}>
+                    {modelLabel(m)}
+                  </div>
+                ))
+              ) : (
+                <div className="tm-stat-value">{appStatus.data.active_model ?? 'No model set'}</div>
+              )}
+              <div className="tm-stat-label">Active models</div>
             </div>
             <div>
               <div className="tm-stat-value">{appStatus.data.broker_authenticated ? 'Connected' : 'Not connected'}</div>

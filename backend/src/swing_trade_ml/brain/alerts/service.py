@@ -62,7 +62,7 @@ def _previous(db: Session, run: BrainRun) -> BrainRun | None:
             BrainRun.kind == run.kind,
             BrainRun.book == run.book,
             BrainRun.live.is_(True),
-            BrainRun.status == "done",
+            BrainRun.status.in_(("done", "superseded")),
             BrainRun.alerts_checked_at.is_not(None),
             BrainRun.started_at < run.started_at,
         )

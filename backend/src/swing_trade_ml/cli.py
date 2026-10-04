@@ -346,7 +346,17 @@ def cmd_brain(args: argparse.Namespace) -> int:
                 day = datetime.fromisoformat(args.as_of).date()
                 as_of = datetime.combine(day, time(23, 59), tzinfo=ZoneInfo("Asia/Kolkata")).astimezone(UTC)
             symbols = [s.strip().upper() for s in args.symbols.split(",")] if args.symbols else None
-            _, run_id = service.run_brain(db, kind=args.kind, as_of=as_of, symbols=symbols, book=args.book)
+            from swing_trade_ml.brain import queue as brain_queue
+
+            # Same single-flight lock as the worker: never overlap a run in progress.
+            try:
+                with brain_queue.run_lock(args.kind, args.book, wait_seconds=30):
+                    _, run_id = service.run_brain(
+                        db, kind=args.kind, as_of=as_of, symbols=symbols, book=args.book
+                    )
+            except brain_queue.RunBusyError as exc:
+                print(f"⏳ {exc} Try again when it has finished.")
+                return 1
             _print_run(db, run_id)
             return 0
         if args.brain_command == "meta-train":

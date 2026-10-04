@@ -37,7 +37,7 @@ def test_brain_is_off_by_default():
     assert Settings(API_KEY="x", JWT_SECRET_KEY="x").BRAIN_ENABLED is False
 
 
-def test_brain_jobs_register_nightly_intraday_learn_and_approvals_open():
+def test_brain_jobs_register_nightly_intraday_learn_approvals_open_and_run_queue():
     s = BackgroundScheduler()
     add_brain_jobs(s)
     assert {j.id for j in s.get_jobs()} == {
@@ -45,6 +45,7 @@ def test_brain_jobs_register_nightly_intraday_learn_and_approvals_open():
         "brain_intraday",
         "brain_learn",
         "brain_approvals_open",  # M18: buys approved-while-closed ideas at the open
+        "brain_run_queue",  # one-app step 1: runs queued "Run the brain now" requests
     }
 
 

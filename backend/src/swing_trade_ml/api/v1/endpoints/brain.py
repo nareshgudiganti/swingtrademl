@@ -111,6 +111,7 @@ def _run_summary(db, run: BrainRun) -> dict:
         "ms": run.ms,
         "status": run.status,
         "error": run.error,
+        "progress": run.progress,
         "banner": {"mode": run.banner_mode, "headline": run.banner_headline},
         "counts": dict(Counter(d.word for d in decisions)),
     }
@@ -132,6 +133,9 @@ def _run_out(db, run: BrainRun) -> dict:
         "started_at": run.started_at,
         "ms": run.ms,
         "status": run.status,
+        "progress": run.progress,
+        "requested_at": run.requested_at,
+        "finished_at": run.finished_at,
         "banner": {"mode": run.banner_mode, "headline": run.banner_headline},
         "modules": run.modules,
         "counts": dict(Counter(d.word for d in decisions)),
@@ -155,12 +159,24 @@ def switch_module(module_id: str, payload: ModeUpdate, db: DbSession) -> dict:
     return {"module_id": row.module_id, "mode": row.mode}
 
 
-@router.post("/runs")
+@router.post("/runs", status_code=202)
 def start_run(payload: RunCreate, db: DbSession) -> dict:
-    _, run_id = service.run_brain(
-        db, kind=payload.kind, as_of=payload.as_of, symbols=payload.symbols, book=payload.book
+    """Queue a run and answer at once: a full run takes minutes, far longer
+    than a web request may (the worker runs it; poll GET /runs/{run_id}).
+    A run of the same kind already waiting or running is returned instead."""
+    from swing_trade_ml.brain import queue
+
+    run, already = queue.request_run(
+        db, kind=payload.kind, book=payload.book, symbols=payload.symbols, as_of=payload.as_of
     )
-    return _run_out(db, db.get(BrainRun, run_id))
+    return {
+        "run_id": run.id,
+        "status": run.status,
+        "kind": run.kind,
+        "book": run.book,
+        "requested_at": run.requested_at,
+        "already_running": already,
+    }
 
 
 @router.get("/runs/latest")

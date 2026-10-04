@@ -824,6 +824,17 @@ export interface BrainQuality {
   stale: string[]
 }
 
+/** queued → running → done | failed. `superseded` = an earlier run of the same
+ *  day, replaced by a newer one (kept for history, left out of results). */
+export type BrainRunStatus = 'queued' | 'running' | 'done' | 'failed' | 'superseded'
+
+/** Steps finished so far while a queued run is thinking. */
+export interface BrainRunProgress {
+  done: number
+  total: number | null
+  step: string | null
+}
+
 export interface BrainRunSummary {
   run_id: string
   kind: 'nightly' | 'intraday' | 'why'
@@ -831,10 +842,21 @@ export interface BrainRunSummary {
   live: boolean
   started_at: string
   ms: number
-  status: 'done' | 'failed'
+  status: BrainRunStatus
   error: string | null
+  progress?: BrainRunProgress | null
   banner: BrainBanner
   counts: Record<string, number>
+}
+
+/** POST /brain/runs only queues a run (the worker runs it). */
+export interface BrainRunQueued {
+  run_id: string
+  status: BrainRunStatus
+  kind: string
+  book: string
+  requested_at: string | null
+  already_running: boolean
 }
 
 export interface BrainSector {
@@ -891,6 +913,8 @@ export interface BrainTrack {
 
 export interface BrainRun extends BrainRunSummary {
   book: string
+  requested_at?: string | null
+  finished_at?: string | null
   modules: Record<string, ModuleMode>
   quality: BrainQuality
   sectors: BrainSector[]

@@ -1,10 +1,10 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api } from '../../api/client'
 import type { BrainModuleInfo, ModuleMode } from '../../api/types'
 import { Confirm } from '../Confirm'
-import { useHealth, useModules, useRuns } from '../live'
+import { runNowLine, useBrainRunNow, useHealth, useModules, useRuns } from '../live'
 import { MARKET_LABEL, MODULE_PLAIN, STEP_LABEL, moduleName } from '../vocab'
 import { BrainGate, Card, NotConnected, Seg, Tag } from '../ui'
 import { formatDateTime, modelLabel } from '../../lib/format'
@@ -16,7 +16,11 @@ const RUN_KIND: Record<string, string> = { nightly: 'Nightly', intraday: 'Holdin
 // A run that hasn't finished yet (anything other than 'done'/'failed') is
 // shown by its own status word rather than the generic "Failed: null" the
 // old code produced for any non-'done' status (M3).
-const RUN_STATUS_TEXT: Record<string, string> = { running: 'Running…', queued: 'Queued' }
+const RUN_STATUS_TEXT: Record<string, string> = {
+  running: 'Thinking…',
+  queued: 'Waiting to start',
+  superseded: 'Replaced by a later run today',
+}
 
 const MODE_MEANING: Record<ModuleMode, string> = {
   on: 'On: the module works and its answer is used.',
@@ -231,11 +235,14 @@ function SystemBody() {
                     <td>
                       {r.status === 'failed' ? (
                         <Tag tone="red">Failed</Tag>
+                      ) : r.status === 'queued' || r.status === 'running' ? (
+                        <Tag tone="blue">{RUN_STATUS_TEXT[r.status]}</Tag>
                       ) : (
                         <span className="tm-dim">
                           {Object.entries(r.counts)
                             .map(([w, n]) => `${n} ${w}`)
                             .join(' · ')}
+                          {r.status === 'superseded' && ' · replaced by a later run today'}
                         </span>
                       )}
                     </td>
@@ -266,33 +273,42 @@ function RunControls() {
     queryFn: () => api.brainAlertPreview(runId!),
     enabled: !!runId,
   })
-  const runNow = useMutation({
-    mutationFn: api.brainRunNow,
-    onSuccess: () => {
-      for (const key of [...BRAIN_KEYS, 'brainAlert']) void queryClient.invalidateQueries({ queryKey: [key] })
-    },
-  })
+  const refreshBrain = useCallback(() => {
+    for (const key of [...BRAIN_KEYS, 'brainAlert']) void queryClient.invalidateQueries({ queryKey: [key] })
+  }, [queryClient])
+  const runNow = useBrainRunNow(refreshBrain)
   const send = useMutation({
     mutationFn: () => api.brainAlertSend(runId!),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['brainAlert'] }),
   })
   const items = preview.data?.items ?? []
-  const done = runNow.data
+  const done = runNow.thinking ? undefined : runNow.run
   const counts = done ? Object.entries(done.counts).map(([w, n]) => `${n} ${w}`).join(' · ') : ''
 
   return (
     <div className="tm-grid tm-cols-2">
       <Card title="Run the brain now" sub="Makes the brain think again about every stock right now, instead of waiting for tonight.">
         <div className="tm-gl-actions">
-          <button className="tm-btn" disabled={runNow.isPending} onClick={() => setAsking(true)}>
-            {runNow.isPending ? 'Thinking…' : 'Run the brain now'}
+          <button className="tm-btn" disabled={runNow.thinking} onClick={() => setAsking(true)}>
+            {runNow.thinking ? 'Thinking…' : 'Run the brain now'}
           </button>
         </div>
-        {runNow.isPending && <p className="tm-dim">This takes a few minutes. You can leave this page open.</p>}
-        {runNow.isError && (
-          <p className="tm-neg">The run failed: {runNow.error instanceof Error ? runNow.error.message : String(runNow.error)}</p>
+        {runNow.thinking && (
+          <p className="tm-dim">
+            {runNowLine(runNow.status, runNow.run?.progress)}
+            {runNow.run?.progress?.step
+              ? ` (just finished: ${(STEP_LABEL[runNow.run.progress.step] ?? runNow.run.progress.step).replace(/^\d+ · /, '')})`
+              : ''}
+            {runNow.alreadyRunning ? ' The brain was already thinking, so this is that run.' : ''} This takes a few
+            minutes; you can leave this page and come back.
+          </p>
         )}
-        {done && !runNow.isPending && (
+        {runNow.startError && (
+          <p className="tm-neg">
+            Could not start the run: {runNow.startError instanceof Error ? runNow.startError.message : String(runNow.startError)}
+          </p>
+        )}
+        {done && (
           <p className="tm-dim">
             {done.status === 'failed'
               ? `The run failed: ${done.error ?? 'unknown error'}`
@@ -338,7 +354,7 @@ function RunControls() {
           confirmLabel="Run now"
           onConfirm={() => {
             // Do not hold the dialog open for the whole run; the card shows progress and errors.
-            runNow.mutate()
+            runNow.start()
           }}
           onClose={() => setAsking(false)}
         >

@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from brain_run_helpers import run_via_api
 from swing_trade_ml.db.models.brain import BrainRun
 from swing_trade_ml.db.models.market import Candle, Instrument
 
@@ -63,13 +64,9 @@ def test_unknown_module_cannot_be_switched(client):
 
 
 def test_run_then_read_latest(client, stock):
-    r = client.post(
-        "/api/v1/brain/runs",
-        json={"kind": "nightly", "symbols": ["BRAINAPI"], "as_of": AS_OF.isoformat()},
-        headers=HEADERS,
-    )
-    assert r.status_code == 200
-    run_id = r.json()["run_id"]
+    run_id = run_via_api(
+        client, {"kind": "nightly", "symbols": ["BRAINAPI"], "as_of": AS_OF.isoformat()}, HEADERS
+    )["run_id"]
     latest = client.get("/api/v1/brain/runs/latest?kind=nightly&include_replays=true", headers=HEADERS).json()
     assert latest["run_id"] == run_id
     # The test database has no NIFTY history, so the data gateway (M01)
@@ -134,12 +131,9 @@ def test_a_run_shows_its_sector_table(client, db_session, stock):
 
 
 def test_runs_without_context_show_no_sectors(client, stock):
-    r = client.post(
-        "/api/v1/brain/runs",
-        json={"kind": "nightly", "symbols": ["BRAINAPI"], "as_of": AS_OF.isoformat()},
-        headers=HEADERS,
+    body = run_via_api(
+        client, {"kind": "nightly", "symbols": ["BRAINAPI"], "as_of": AS_OF.isoformat()}, HEADERS
     )
-    body = client.get(f"/api/v1/brain/runs/{r.json()['run_id']}", headers=HEADERS).json()
     assert body["sectors"] == []
 
 

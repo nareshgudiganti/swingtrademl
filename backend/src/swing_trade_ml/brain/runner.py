@@ -10,7 +10,7 @@ the step's fallback answers instead. Every choice is written to the trace.
 from __future__ import annotations
 
 import time
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 
 from swing_trade_ml.brain import constitution
 from swing_trade_ml.brain import contracts as c
@@ -84,9 +84,13 @@ def execute(
     reader,
     registry: ModuleRegistry,
     modes: Mapping[str, Mode | str],
+    on_step: Callable[[int, int, str], None] | None = None,
 ) -> BrainContext:
+    """`on_step(done, total, step)` is told after each step finishes, so a
+    queued run can show "step 3 of 8" while it thinks; it never affects the run."""
     ctx = BrainContext.start(request, reader)
-    for step in STEPS_FOR[request.kind]:
+    steps = STEPS_FOR[request.kind]
+    for n, step in enumerate(steps, start=1):
         used = False
         for cls in registry.for_step(step):
             mode = resolve_mode(cls.manifest, modes.get(cls.manifest.id))
@@ -106,5 +110,7 @@ def execute(
                     ms=_ms(started),
                 )
             )
+        if on_step is not None:
+            on_step(n, len(steps), step.value)
     constitution.enforce(ctx)
     return ctx

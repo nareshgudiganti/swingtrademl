@@ -16,6 +16,7 @@ import type {
   BrainHealth,
   BrainModules,
   BrainRun,
+  BrainRunQueued,
   BrainRunSummary,
   BrainTraceEvent,
   BrainWhy,
@@ -458,7 +459,9 @@ export const api = {
     post<BrainWhatIf>('/brain/whatif', { symbol, qty, price }),
   brainRuns: (limit = 10) => get<BrainRunSummary[]>(`/brain/runs?limit=${limit}`),
   brainLatestRun: (kind = 'nightly') => get<BrainRun>(`/brain/runs/latest?kind=${kind}`),
-  brainRunNow: () => post<BrainRun>('/brain/runs', { kind: 'nightly' }),
+  // Queues a run and answers at once; poll brainRunGet until done/failed.
+  brainRunNow: () => post<BrainRunQueued>('/brain/runs', { kind: 'nightly' }),
+  brainRunGet: (runId: string) => get<BrainRun>(`/brain/runs/${encodeURIComponent(runId)}`),
   brainRunTrace: (runId: string) =>
     get<{ run_id: string; trace: BrainTraceEvent[] }>(`/brain/runs/${encodeURIComponent(runId)}/trace`),
   brainWhy: (symbol: string) => get<BrainWhy>(`/brain/why/${encodeURIComponent(symbol.trim().toUpperCase())}`),

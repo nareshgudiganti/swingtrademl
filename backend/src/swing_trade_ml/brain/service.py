@@ -91,8 +91,13 @@ def run_brain(
     symbols: list[str] | None = None,
     book: str = "paper",
     registry: ModuleRegistry = REGISTRY,
+    run_id: str | None = None,
+    on_step=None,
 ) -> tuple[BrainContext, str]:
-    """Run and store. `as_of` in the past makes it a replay: no live-only inputs."""
+    """Run and store. `as_of` in the past makes it a replay: no live-only inputs.
+
+    `run_id` is a run already queued (brain/queue.py): its row is completed in
+    place rather than a second row added. `on_step` is passed to the runner."""
     if kind not in STEPS_FOR:
         raise ValueError(f"kind must be one of {sorted(STEPS_FOR)}")
     now = datetime.now(UTC)
@@ -106,7 +111,7 @@ def run_brain(
     else:
         universe = tuple(s.upper() for s in symbols) if symbols else reader.universe()
 
-    run_id = f"{kind}-{now.strftime('%Y%m%dT%H%M%S')}-{uuid.uuid4().hex[:6]}"
+    run_id = run_id or new_run_id(kind, now)
     request = c.RunRequest(run_id=run_id, kind=kind, as_of=as_of, universe=universe, book=book, live=live)
     modes = load_modes(db)
     started = time.perf_counter()
@@ -115,7 +120,7 @@ def run_brain(
         # then refuses every further statement in the transaction), rolling
         # back to it leaves the session usable to record the failure below.
         with db.begin_nested():
-            ctx = execute(request, reader, registry, modes)
+            ctx = execute(request, reader, registry, modes, on_step=on_step)
         elapsed_ms = int((time.perf_counter() - started) * 1000)
         with db.begin_nested():
             _store(db, ctx, registry, modes, elapsed_ms)
@@ -165,20 +170,32 @@ def _sync_episodes(db: Session, reader: DatedReader, registry: ModuleRegistry, m
             log.warning("brain.afterrun.job_failed", module=module_id, error=str(exc))
 
 
+def new_run_id(kind: str, now: datetime | None = None) -> str:
+    now = now or datetime.now(UTC)
+    return f"{kind}-{now.strftime('%Y%m%dT%H%M%S')}-{uuid.uuid4().hex[:6]}"
+
+
+def _run_row(db: Session, request: c.RunRequest) -> BrainRun:
+    """The queued row for this run, or a new one for a run started directly
+    (the scheduled jobs, the CLI, why-runs)."""
+    row = db.get(BrainRun, request.run_id)
+    if row is None:
+        row = BrainRun(id=request.run_id)
+        db.add(row)
+    row.kind = request.kind
+    row.as_of = request.as_of
+    row.book = request.book
+    row.live = request.live
+    return row
+
+
 def _record_failure(db: Session, request: c.RunRequest, exc: Exception, ms: int) -> None:
     try:
-        db.add(
-            BrainRun(
-                id=request.run_id,
-                kind=request.kind,
-                as_of=request.as_of,
-                book=request.book,
-                live=request.live,
-                status="failed",
-                error=f"{type(exc).__name__}: {exc}",
-                ms=ms,
-            )
-        )
+        row = _run_row(db, request)
+        row.status = "failed"
+        row.error = f"{type(exc).__name__}: {exc}"
+        row.ms = ms
+        row.finished_at = datetime.now(UTC)
         db.commit()
     except Exception as record_exc:  # noqa: BLE001 — never hide the original error
         log.error("brain.run.failure_not_recorded", run_id=request.run_id, error=str(record_exc))
@@ -246,24 +263,19 @@ def _store(db: Session, ctx: BrainContext, registry: ModuleRegistry, modes: dict
         cls.manifest.id: resolve_mode(cls.manifest, modes.get(cls.manifest.id)).value
         for cls in registry.all()
     }
-    db.add(
-        BrainRun(
-            id=req.run_id,
-            kind=req.kind,
-            as_of=req.as_of,
-            book=req.book,
-            live=req.live,
-            ms=ms,
-            status="done",
-            banner_mode=ctx.banner.mode.value,
-            banner_headline=ctx.banner.headline,
-            modules=used_modes,
-            trace=[_jsonable(asdict(e)) for e in ctx.trace],
-            quality=_quality_summary(ctx),
-            context=_context_summary(ctx),
-        )
-    )
+    run = _run_row(db, req)
+    run.ms = ms
+    run.status = "done"
+    run.error = None
+    run.finished_at = datetime.now(UTC)
+    run.banner_mode = ctx.banner.mode.value
+    run.banner_headline = ctx.banner.headline
+    run.modules = used_modes
+    run.trace = [_jsonable(asdict(e)) for e in ctx.trace]
+    run.quality = _quality_summary(ctx)
+    run.context = _context_summary(ctx)
     db.flush()
+    _supersede_earlier(db, req)
     carried = _todays_overrules(db, req) if req.live else {}
     for d in ctx.decisions.values():
         row = BrainDecision(
@@ -295,21 +307,48 @@ def _store(db: Session, ctx: BrainContext, registry: ModuleRegistry, modes: dict
         save_points(db, req.book, opened, list(ctx.tracks.values()), req.as_of.astimezone(IST).date())
 
 
+def _ist_day_bounds(when: datetime) -> tuple[datetime, datetime]:
+    start = datetime.combine(when.astimezone(IST).date(), datetime.min.time(), tzinfo=IST)
+    return start, start + timedelta(days=1)
+
+
+def _supersede_earlier(db: Session, req: c.RunRequest) -> None:
+    """A newer live nightly run replaces the earlier ones of the same IST day
+    and book (owner decision 2026-10-04): they are hidden from Performance but
+    kept, with their decisions, for history. Replays never supersede."""
+    if not (req.live and req.kind == "nightly"):
+        return
+    start, end = _ist_day_bounds(req.as_of)
+    for older in db.execute(
+        select(BrainRun).where(
+            BrainRun.kind == "nightly",
+            BrainRun.live.is_(True),
+            BrainRun.status == "done",
+            BrainRun.book == req.book,
+            BrainRun.as_of >= start,
+            BrainRun.as_of < end,
+            BrainRun.id != req.run_id,
+        )
+    ).scalars():
+        older.status = "superseded"
+
+
 def _todays_overrules(db: Session, req: c.RunRequest) -> dict[tuple[str, str], BrainDecision]:
     """The owner's overrules on earlier live runs of the same IST day and book,
     most careful per (symbol, kind). A rerun ("Run the brain now") becomes
     today's run for buying and approvals, so it must not drop them (C8)."""
-    day = req.as_of.astimezone(IST).date()
-    start = datetime.combine(day, datetime.min.time(), tzinfo=IST)
+    start, end = _ist_day_bounds(req.as_of)
     rows = db.execute(
         select(BrainDecision)
         .join(BrainRun, BrainRun.id == BrainDecision.run_id)
         .where(
             BrainRun.live.is_(True),
-            BrainRun.status == "done",
+            # A superseded run's overrules still count: superseding hides a
+            # run from Performance, it never undoes the owner's word.
+            BrainRun.status.in_(("done", "superseded")),
             BrainRun.book == req.book,
             BrainRun.as_of >= start,
-            BrainRun.as_of < start + timedelta(days=1),
+            BrainRun.as_of < end,
             BrainRun.id != req.run_id,
             BrainDecision.overruled_word.is_not(None),
         )

@@ -8,6 +8,7 @@ import pytest
 from sqlalchemy import text
 
 from brain_fakes import FakeReader, make_module, registry, request
+from brain_run_helpers import run_via_api
 from swing_trade_ml.brain import contracts as c
 from swing_trade_ml.brain import fallbacks, service
 from swing_trade_ml.brain.alerts import service as alerts
@@ -149,13 +150,9 @@ def test_a_fresh_market_cache_is_left_alone(db_session, monkeypatch):
 
 
 def test_a_naive_as_of_is_read_as_india_time(client):
-    r = client.post(
-        "/api/v1/brain/runs",
-        json={"kind": "nightly", "symbols": ["NONE"], "as_of": "2026-09-15T15:30:00"},
-        headers=HEADERS,
-    )
-    assert r.status_code == 200
-    as_of = datetime.fromisoformat(r.json()["as_of"])
+    payload = {"kind": "nightly", "symbols": ["NONE"], "as_of": "2026-09-15T15:30:00"}
+    body = run_via_api(client, payload, HEADERS)
+    as_of = datetime.fromisoformat(body["as_of"])
     assert as_of.utcoffset() is not None
     assert as_of.astimezone(UTC).hour == 10  # 15:30 IST = 10:00 UTC
 

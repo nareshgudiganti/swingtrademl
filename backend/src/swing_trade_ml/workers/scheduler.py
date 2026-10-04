@@ -243,6 +243,16 @@ def add_brain_jobs(target: BackgroundScheduler) -> None:
         id="brain_approvals_open",
         replace_existing=True,
     )
+    # Queued runs ("Run the brain now"): the web request only queues, this
+    # runs them — one at a time, never inside a web request (one-app step 1).
+    target.add_job(
+        jobs.job_brain_run_queue,
+        IntervalTrigger(seconds=10),
+        id="brain_run_queue",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
     target.add_job(
         jobs.job_brain_learn,
         CronTrigger(day_of_week="sat", hour=10, minute=0, timezone=IST),

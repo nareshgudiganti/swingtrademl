@@ -585,12 +585,41 @@ def job_sync_instruments() -> None:
         _report_error("sync_instruments", exc)
 
 
+# How long a scheduled run waits for a run of the same kind already in
+# progress (a queued "Run the brain now"). The nightly run waits it out — it
+# must still happen after the day's data — the 15-minute holdings check skips.
+BRAIN_LOCK_WAIT_SECONDS = {"nightly": 20 * 60, "intraday": 0}
+
+
 def _run_brain_job(kind: str) -> None:
     """A failed brain run is logged and reported, never raised: the brain is
     advisory and must not disturb version 1's jobs. After a nightly run the
-    brain strategy (M18) turns its ideas into version 1 signals."""
+    brain strategy (M18) turns its ideas into version 1 signals. Holds the
+    same single-flight lock as queued runs (brain/queue.py), so the two never
+    overlap."""
+    from swing_trade_ml.brain import queue as brain_queue
     from swing_trade_ml.brain import service as brain_service
 
+    try:
+        with brain_queue.run_lock(kind, settings.TRADING_MODE, BRAIN_LOCK_WAIT_SECONDS.get(kind, 0)):
+            _run_brain_now(brain_service, kind)
+    except brain_queue.RunBusyError as exc:
+        if BRAIN_LOCK_WAIT_SECONDS.get(kind, 0):
+            _report_error(f"brain {kind} run", exc)
+        else:
+            log.info("job.brain.skipped_busy", kind=kind)
+        return
+    except _BrainRunFailedError:
+        return
+    if kind == "nightly":
+        job_brain_strategy()
+
+
+class _BrainRunFailedError(Exception):
+    """Already reported; stop before the follow-up jobs."""
+
+
+def _run_brain_now(brain_service, kind: str) -> None:
     try:
         with session_scope() as db:
             _, run_id = brain_service.run_brain(db, kind=kind, book=settings.TRADING_MODE)
@@ -599,11 +628,23 @@ def _run_brain_job(kind: str) -> None:
                 from swing_trade_ml.brain.alerts import service as brain_alerts
 
                 brain_alerts.send(db, run_id)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         _report_error(f"brain {kind} run", exc)
-        return
-    if kind == "nightly":
-        job_brain_strategy()
+        raise _BrainRunFailedError from exc
+
+
+def job_brain_run_queue() -> None:
+    """Every few seconds: run the oldest queued brain run (a "Run the brain
+    now" from the app). Never raised."""
+    from swing_trade_ml.brain import queue as brain_queue
+
+    try:
+        with session_scope() as db:
+            run_id = brain_queue.process_next(db)
+            if run_id:
+                log.info("job.brain.queue.ran", run_id=run_id)
+    except Exception as exc:  # noqa: BLE001
+        _report_error("brain queued run", exc)
 
 
 def job_brain_strategy() -> None:

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { ApiError, api } from '../api/client'
@@ -19,6 +19,7 @@ import { HoldingTracker } from '../components/HoldingTracker'
 import { BrainApprovalsCard, BrainCompareCard, BrainStageCard } from '../components/BrainGoLive'
 import { formatCurrency, formatDateTime } from '../lib/format'
 import { MODULE_PLAIN, moduleName, traceLine } from '../trademind/vocab'
+import { runNowLine, useBrainRunNow } from '../trademind/live'
 
 /* The brain console (build book module M17). Everything here is in plain
  * words: the brain only suggests and records; it never places an order. */
@@ -443,12 +444,12 @@ export default function Brain() {
   const learning = useQuery({ queryKey: ['brainLearning'], queryFn: () => api.brainLearning() })
   const proposals = useQuery({ queryKey: ['brainProposals'], queryFn: api.brainProposals })
 
-  const refreshAll = () => {
+  const refreshAll = useCallback(() => {
     for (const key of ['brainLatest', 'brainHealth', 'brainRuns', 'brainModules', 'brainTrace']) {
       void queryClient.invalidateQueries({ queryKey: [key] })
     }
-  }
-  const runNow = useMutation({ mutationFn: api.brainRunNow, onSuccess: refreshAll })
+  }, [queryClient])
+  const runNow = useBrainRunNow(refreshAll)
   const setMode = useMutation({
     mutationFn: ({ id, mode }: { id: string; mode: ModuleMode }) => api.setBrainModuleMode(id, mode),
     onSuccess: refreshAll,
@@ -485,14 +486,18 @@ export default function Brain() {
     <>
       <div className="page-head">
         <h1>Brain</h1>
-        <button className="primary" disabled={runNow.isPending} onClick={() => runNow.mutate()}>
-          {runNow.isPending ? 'Thinking…' : 'Run now'}
+        <button className="primary" disabled={runNow.thinking} onClick={() => runNow.start()}>
+          {runNow.thinking ? 'Thinking…' : 'Run now'}
         </button>
       </div>
       <p className="muted" style={{ marginTop: '-0.4rem' }}>
         The new decision system, running beside the bot. It only suggests and records — it never places an order.
       </p>
-      {runNow.isError && <ErrorBox error={runNow.error} />}
+      {runNow.thinking && <p className="muted">{runNowLine(runNow.status, runNow.run?.progress)} This takes a few minutes.</p>}
+      {runNow.startError && <ErrorBox error={runNow.startError} />}
+      {runNow.run?.status === 'failed' && !runNow.thinking && (
+        <p className="neg">The run failed: {runNow.run.error ?? 'unknown error'}</p>
+      )}
 
       {latest.isLoading && <Loading />}
       {latest.isError && !noRunYet && <ErrorBox error={latest.error} />}

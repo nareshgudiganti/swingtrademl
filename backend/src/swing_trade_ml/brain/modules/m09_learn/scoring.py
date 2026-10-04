@@ -73,22 +73,33 @@ def _bars(db: Session, symbol: str, upto: date) -> pd.DataFrame:
     )
 
 
+def pending_ideas(db: Session) -> list:
+    """(decision, run as_of) for every unscored idea of a published live
+    nightly run. Superseded runs (an earlier run of the same day, replaced by
+    a newer one) are left out so a day is never counted twice (owner
+    decision 2026-10-04); they stay stored for history."""
+    return list(
+        db.execute(
+            select(BrainDecision, BrainRun.as_of)
+            .join(BrainRun, BrainRun.id == BrainDecision.run_id)
+            .where(
+                BrainDecision.kind == "idea",
+                BrainDecision.outcome.is_(None),
+                BrainRun.kind == "nightly",
+                BrainRun.live.is_(True),
+                BrainRun.status == "done",
+            )
+        ).all()
+    )
+
+
 def score_pending(db: Session, upto: date) -> int:
     """Score every unscored idea decision of a live nightly run whose outcome
     is known by `upto` (IST trading day). decision day = `brain_runs.as_of` in
     Asia/Kolkata as a date; entry = the stock's last daily close on or before
     that day; bars_after = daily bars with IST day > decision day and <= upto.
     Writes the six outcome columns. Returns how many were scored."""
-    pending = db.execute(
-        select(BrainDecision, BrainRun.as_of)
-        .join(BrainRun, BrainRun.id == BrainDecision.run_id)
-        .where(
-            BrainDecision.kind == "idea",
-            BrainDecision.outcome.is_(None),
-            BrainRun.kind == "nightly",
-            BrainRun.live.is_(True),
-        )
-    ).all()
+    pending = pending_ideas(db)
 
     bars_by_symbol: dict[str, pd.DataFrame] = {}
     scored = 0

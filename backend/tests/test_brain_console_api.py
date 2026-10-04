@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from brain_run_helpers import run_via_api
 from swing_trade_ml.brain import service
 from swing_trade_ml.db.models.brain import BrainDecision, BrainRun
 from swing_trade_ml.db.models.market import Candle, Instrument
@@ -40,13 +41,9 @@ def stock(db_session):
 
 
 def _run(client):
-    r = client.post(
-        "/api/v1/brain/runs",
-        json={"kind": "nightly", "symbols": ["CONSOLE1"], "as_of": AS_OF.isoformat()},
-        headers=HEADERS,
+    return run_via_api(
+        client, {"kind": "nightly", "symbols": ["CONSOLE1"], "as_of": AS_OF.isoformat()}, HEADERS
     )
-    assert r.status_code == 200
-    return r.json()
 
 
 def test_runs_are_listed_newest_first_with_counts(client, stock):

@@ -38,8 +38,17 @@ class BrainRun(Base):
     live: Mapped[bool] = mapped_column(default=True)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
     ms: Mapped[int] = mapped_column(Integer, default=0)
-    status: Mapped[str] = mapped_column(String(16), default="done")  # done | failed
+    # queued | running | done | failed | superseded (an earlier live nightly run
+    # of the same IST day and book, replaced by a newer one; kept for history).
+    status: Mapped[str] = mapped_column(String(16), default="done", index=True)
     error: Mapped[str | None] = mapped_column(Text)
+    # Queued runs (one-app design step 1): who asked and when, when it ended,
+    # step progress while running, and the request it was queued with.
+    requested_by: Mapped[str | None] = mapped_column(String(128))
+    requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    progress: Mapped[dict | None] = mapped_column(JSONB)
+    request: Mapped[dict | None] = mapped_column(JSONB)
     banner_mode: Mapped[str | None] = mapped_column(String(16))
     banner_headline: Mapped[str | None] = mapped_column(Text)
     modules: Mapped[dict] = mapped_column(JSONB, default=dict)  # module id -> mode used

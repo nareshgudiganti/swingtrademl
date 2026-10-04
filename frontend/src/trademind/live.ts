@@ -11,7 +11,8 @@
 // that a future "why" or "intraday" run kind can get its own cache entry
 // without colliding with the nightly one every TradeMind screen reads.
 
-import { useQuery, type UseQueryResult } from '@tanstack/react-query'
+import { useEffect, useRef, useState } from 'react'
+import { useMutation, useQuery, type UseQueryResult } from '@tanstack/react-query'
 
 import { ApiError, api } from '../api/client'
 import type { BrainDecision, BrainRun, BrainSituation } from '../api/types'
@@ -161,6 +162,56 @@ export function useHealth() {
 
 export function useRuns(n?: number) {
   return useQuery({ queryKey: ['brainRuns', n], queryFn: () => api.brainRuns(n) })
+}
+
+/** "Run the brain now": the request only queues the run (a full run takes
+ *  minutes, longer than a web request may), then this checks it every 3 s
+ *  until it is done or failed and calls `onFinished` once. After a page
+ *  reload it picks up a run that is still waiting or thinking. */
+export function useBrainRunNow(onFinished?: () => void) {
+  const [runId, setRunId] = useState<string | null>(null)
+  const recent = useQuery({ queryKey: ['brainRuns', 5], queryFn: () => api.brainRuns(5) })
+  useEffect(() => {
+    if (runId) return
+    const active = recent.data?.find((r) => r.kind === 'nightly' && (r.status === 'queued' || r.status === 'running'))
+    if (active) setRunId(active.run_id)
+  }, [recent.data, runId])
+  const start = useMutation({ mutationFn: api.brainRunNow, onSuccess: (q) => setRunId(q.run_id) })
+  const run = useQuery({
+    queryKey: ['brainRunNow', runId],
+    queryFn: () => api.brainRunGet(runId!),
+    enabled: !!runId,
+    refetchInterval: (q) => {
+      const s = q.state.data?.status
+      return !s || s === 'queued' || s === 'running' ? 3000 : false
+    },
+  })
+  const status = run.data?.status
+  const finished = useRef<string | null>(null)
+  useEffect(() => {
+    if (runId && (status === 'done' || status === 'failed' || status === 'superseded') && finished.current !== runId) {
+      finished.current = runId
+      onFinished?.()
+    }
+  }, [status, runId, onFinished])
+  return {
+    start: () => start.mutate(),
+    thinking: start.isPending || status === 'queued' || status === 'running',
+    status,
+    run: run.data,
+    alreadyRunning: start.data?.already_running ?? false,
+    startError: start.error,
+  }
+}
+
+/** One plain line for where a queued run is, e.g. "Thinking… step 3 of 8". */
+export function runNowLine(status?: string, progress?: { done: number; total: number | null; step: string | null } | null) {
+  if (status === 'queued') return 'Waiting to start…'
+  if (status === 'running') {
+    if (progress?.total) return `Thinking… ${progress.done} of ${progress.total} steps done`
+    return 'Thinking…'
+  }
+  return ''
 }
 
 export function useLearning() {

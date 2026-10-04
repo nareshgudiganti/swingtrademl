@@ -34,6 +34,7 @@ MIN_SCORED = 30
 DRIFT_NEVER_CHECKED_NOTE = "Drift has not been checked yet — it is checked every Saturday."
 
 _ROW_COLUMNS = (
+    "run_id",
     "run_started",
     "decision_day",
     "symbol",
@@ -61,7 +62,9 @@ def _scored_rows(db: Session, since: date | None) -> pd.DataFrame:
     stmt = (
         select(BrainDecision, BrainRun.started_at, BrainRun.as_of, BrainRun.context)
         .join(BrainRun, BrainRun.id == BrainDecision.run_id)
-        .where(BrainDecision.outcome.in_(SCORED_OUTCOMES))
+        # Superseded runs are hidden from Performance (owner decision
+        # 2026-10-04); they stay stored for history.
+        .where(BrainDecision.outcome.in_(SCORED_OUTCOMES), BrainRun.status == "done")
     )
     records = []
     if since is not None:
@@ -72,6 +75,7 @@ def _scored_rows(db: Session, since: date | None) -> pd.DataFrame:
         decision_day = as_of.astimezone(IST).date()
         records.append(
             {
+                "run_id": decision.run_id,
                 "run_started": started_at,
                 "decision_day": decision_day,
                 "symbol": decision.symbol,

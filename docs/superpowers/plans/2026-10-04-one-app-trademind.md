@@ -37,18 +37,18 @@ Legend: ✅ TradeMind already has it · 🟡 partly · ❌ missing
 2. **Records.** Trade history + closed trades, v1 scan results and buy list, strategy results,
    real holdings (import, mark sold) and the real-money report (tradebook import, sync).
 3. **Setup.** Settings (watch list, data coverage/backfill, instruments, Telegram test), model
-   accuracy and calibration (read-only), strategies list with on/off.
-4. **Personal finance** as its own TradeMind section (largest single piece).
+   accuracy and calibration (read-only), strategies list with on/off only (no create/delete/train).
+4. **Personal finance stays separate** (owner decision): keep `/finance` reachable on its own.
 5. **Switch home to TradeMind.** Old screens move behind a small "Classic view" link for a
    couple of weeks, then are removed. Rollback = git tag `v1` / the previous release.
 
-## Open owner decisions
+## Owner decisions (2026-10-04)
 
-- **Personal finance:** keep it inside the final app (phase 4) or as a separate app?
-  Recommendation: keep it, as its own tab.
-- **Strategy create/delete and model train/activate:** the v1 freeze (2026-09-28) earmarked these
-  for v2 ("do not build into v1"). Recommendation: final app shows strategies and models
-  read-only with on/off only; create/delete/train stay out until v2.
+- **Personal finance stays a SEPARATE app.** It is not moved into TradeMind; when the old trading
+  screens are retired, `/finance` keeps working on its own (phase 4 = keep it reachable, nothing
+  else).
+- **Strategies and models: view + on/off only.** No create/delete strategy, no train/activate
+  model in the final app until v2 (v1 freeze, 2026-09-28).
 
 ## Rules
 

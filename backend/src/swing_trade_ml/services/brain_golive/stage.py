@@ -82,6 +82,18 @@ def set_stage(db: Session, stage: str, by: str, reason: str) -> BrainStageChange
     return row
 
 
+SWITCHED_OFF_REASON = "Brain strategy switched off"
+
+
+def brain_strategy_switched_off(db: Session, by: str = "owner") -> None:
+    """Deactivating the brain strategy also returns the stage to practice, so
+    switching it back on never silently resumes approval or automatic buying.
+    Positions already held keep version 1's exits."""
+    now = current_stage(db)
+    if now == "approval" or now == "auto":
+        set_stage(db, "shadow", by=by, reason=SWITCHED_OFF_REASON)
+
+
 def _settle_approvals(db: Session, stage: str, previous: str, by: str) -> None:
     """Rollback stops NEW buys only (owner decision 2): ideas waiting for an OK
     and OKs not yet bought expire; open brain positions are left to v1's exits.

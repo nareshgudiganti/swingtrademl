@@ -152,3 +152,42 @@ def test_nothing_else_touches_the_stage_table():
     assert table_names == {model, migration}
     assert statements <= {service}
     assert stage_sets <= {service}
+
+
+def _raw(db, name: str) -> None:
+    db.add(BrainStageChange(stage=name, previous_stage="approval", changed_by="test", reason="test"))
+    db.flush()
+
+
+@pytest.mark.parametrize("how", ["patch", "deactivate"])
+def test_switching_the_brain_strategy_off_returns_the_stage_to_practice(db_session, client, how):
+    s = brain_strategy(db_session, name=f"m18-off-{how}")
+    _raw(db_session, "approval")
+    _raw(db_session, "auto")
+    if how == "patch":
+        r = client.patch(f"/api/v1/strategies/{s.id}", json={"is_active": False}, headers=HEADERS)
+    else:
+        r = client.post(f"/api/v1/strategies/{s.id}/deactivate", headers=HEADERS)
+    assert r.status_code == 200 and r.json()["is_active"] is False
+    assert stage.current_stage(db_session) == "shadow"
+    latest = db_session.query(BrainStageChange).order_by(BrainStageChange.id.desc()).first()
+    assert (latest.previous_stage, latest.reason) == ("auto", "Brain strategy switched off")
+    # switching it back on does not resume buying by itself
+    assert client.post(f"/api/v1/strategies/{s.id}/activate", headers=HEADERS).status_code == 200
+    assert stage.current_stage(db_session) == "shadow"
+
+
+def test_switching_off_a_version_1_strategy_leaves_the_brain_stage_alone(db_session, client):
+    from brain_m18_fixtures import v1_strategy
+
+    v1 = v1_strategy(db_session, name="m18-off-v1")
+    _raw(db_session, "approval")
+    assert client.post(f"/api/v1/strategies/{v1.id}/deactivate", headers=HEADERS).status_code == 200
+    assert stage.current_stage(db_session) == "approval"
+
+
+def test_switching_off_the_brain_in_practice_writes_no_extra_stage_row(db_session, client):
+    s = brain_strategy(db_session, name="m18-off-shadow")
+    before = db_session.query(BrainStageChange).count()
+    assert client.post(f"/api/v1/strategies/{s.id}/deactivate", headers=HEADERS).status_code == 200
+    assert db_session.query(BrainStageChange).count() == before

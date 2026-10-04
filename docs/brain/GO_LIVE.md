@@ -42,6 +42,8 @@ The same applies when you go from Automatic back to "Your OK needed": new buying
 
 Go to the Strategies page and deactivate the **TradeMind brain** strategy. Its ideas then stop being recorded, and the brain stays advisory only. Shares already bought through it still keep version 1's protection until they are sold.
 
+Deactivating it also moves the trading stage back to **Practice (shadow)**, recorded with the reason "Brain strategy switched off". Ideas waiting for your OK, and approvals not yet placed, are cancelled as in a rollback. Switching the strategy on again does **not** bring back "Your OK needed" or "Automatic": the stage stays Practice until you change it on the Brain page.
+
 ## Last resort
 
 Version 1 is saved as the tag `v1` (commit `64fcb05`). It is the frozen point to return to if everything else fails.

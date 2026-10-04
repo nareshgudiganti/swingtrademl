@@ -56,6 +56,6 @@ export function modelLabel(nameVersion: string): string {
     : name === 'swing_classifier'
     ? 'Large companies'
     : full
-  const label = barrier && size !== full ? `${size} (+8% / −4% model)` : size
+  const label = barrier && size !== full ? `${size} (+8% before −4% in 15 days model)` : size
   return version ? `${label} · ${version}` : label
 }

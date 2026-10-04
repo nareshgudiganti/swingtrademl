@@ -771,6 +771,19 @@ def position_action(
     return "hold", f"Neutral ({last_confidence:.0%} today) — below buy bar, holding steady{horizon_note}"
 
 
+def _is_practice_brain(db: Session, strategy: Strategy) -> bool:
+    """A staged (brain) strategy while the owner's stage is practice (shadow):
+    its refused ideas are not risk events — nothing could have been bought —
+    so they stay off /safety/risk-events; the signal still records why."""
+    if not is_staged(strategy):
+        return False
+    # Imported here: brain_golive.approvals imports this module.
+    from swing_trade_ml.services.brain_golive.stage import current_stage
+
+    stage_now = current_stage(db)
+    return not (stage_now == "approval" or stage_now == "auto")
+
+
 def process_decision(
     db: Session,
     strategy: Strategy,
@@ -932,21 +945,22 @@ def process_decision(
 
     if not verdict.allowed:
         signal.rejection_reason = verdict.reason
-        # ---- risk events (portfolio risk layer) ----
-        # Every check_entry rejection is also logged as a RiskEvent, committed
-        # with the signal so the two cannot disagree. check_entry itself stays
-        # write-free. (The two pre-filters above — ranked out, position already
-        # open — are routine scan outcomes, not risk limits, and are not logged.)
-        system_state.record_risk_event(
-            db,
-            mode=mode,
-            rule=verdict.rule or "OTHER",
-            reason=verdict.reason,
-            strategy_id=strategy.id,
-            instrument_id=instrument.id,
-            symbol=instrument.tradingsymbol,
-            amount_inr=verdict.amount_inr,
-        )
+        if not _is_practice_brain(db, strategy):
+            # ---- risk events (portfolio risk layer) ----
+            # Every check_entry rejection is also logged as a RiskEvent, committed
+            # with the signal so the two cannot disagree. check_entry itself stays
+            # write-free. (The two pre-filters above — ranked out, position already
+            # open — are routine scan outcomes, not risk limits, and are not logged.)
+            system_state.record_risk_event(
+                db,
+                mode=mode,
+                rule=verdict.rule or "OTHER",
+                reason=verdict.reason,
+                strategy_id=strategy.id,
+                instrument_id=instrument.id,
+                symbol=instrument.tradingsymbol,
+                amount_inr=verdict.amount_inr,
+            )
         db.commit()
         log.info(
             "execution.entry.blocked",

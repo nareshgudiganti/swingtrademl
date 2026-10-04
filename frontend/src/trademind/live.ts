@@ -160,6 +160,11 @@ export function useHealth() {
   return useQuery({ queryKey: ['brainHealth'], queryFn: api.brainHealth })
 }
 
+/** Is the market open right now (the app's one market clock), checked each minute. */
+export function useMarketSession() {
+  return useQuery({ queryKey: ['marketSession'], queryFn: api.marketSession, refetchInterval: 60_000 })
+}
+
 export function useRuns(n?: number) {
   return useQuery({ queryKey: ['brainRuns', n], queryFn: () => api.brainRuns(n) })
 }

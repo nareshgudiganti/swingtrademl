@@ -13,6 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from swing_trade_ml.brain.modules.m09_learn.outcomes import score
+from swing_trade_ml.core.market_session import SESSION_FINAL, last_closed_trading_day  # noqa: F401
 from swing_trade_ml.db.models.brain import BrainDecision, BrainRun
 from swing_trade_ml.db.models.market import Candle, Instrument
 
@@ -30,23 +31,8 @@ UNSCORABLE = "noscore"
 UNSCORABLE_AFTER = timedelta(days=45)
 SCORED_OUTCOMES = ("target", "stop", "timeout")
 
-# NSE's cash session closes 15:30 IST; ten minutes later the day's bar is final.
-SESSION_FINAL = time(15, 40)
-
-
-def last_closed_trading_day(now: datetime) -> date:
-    """The latest IST weekday whose daily bar can no longer change: today only
-    from 15:40 IST on a weekday, otherwise the weekday before. (Exchange
-    holidays are not known here; a holiday simply has no bar.) Scoring must
-    never see a partial day's bar, or a half-formed high/low/close could
-    freeze a wrong outcome for good."""
-    ist = now.astimezone(IST)
-    day = ist.date()
-    if ist.weekday() >= 5 or ist.time() < SESSION_FINAL:
-        day -= timedelta(days=1)
-    while day.weekday() >= 5:
-        day -= timedelta(days=1)
-    return day
+# The last finished trading day (holidays too) comes from the app's one
+# market clock; the day's bar is final ten minutes after the 15:30 close.
 
 
 def _decision_day(as_of: datetime) -> date:

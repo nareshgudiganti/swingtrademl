@@ -6,7 +6,7 @@ import { api } from '../../api/client'
 import type { BrainDecision, DetailedPosition } from '../../api/types'
 import { strategyLabel } from '../../lib/tiers'
 import { formatDate } from '../../lib/format'
-import { finalWord, holdingsFrom, useLatestRun, useTrack } from '../live'
+import { finalWord, holdingsFrom, useLatestRun, useMarketSession, useTrack } from '../live'
 import { wordTagColor, wordTone } from '../vocab'
 import { BrainGate, Card, CheckItem, Icon, Seg, Tabs, Tag, inr, signed, toneClass } from '../ui'
 import { PositionBand } from '../PositionBand'
@@ -149,6 +149,8 @@ function PositionsBody() {
   const matches = (positions.data ?? []).filter((p) => p.symbol === selected.symbol)
   const pos = matches.find((p) => p.id === pickedId) ?? (matches.length === 1 ? matches[0] : undefined)
   const isReal = status.data?.trading_mode === 'live'
+  const market = useMarketSession()
+  const realButClosed = isReal && market.data != null && market.data.state !== 'open'
   const moneyKind = status.data ? (isReal ? 'REAL money' : 'practice money (paper trading)') : null
 
   async function closeNow(id: number) {
@@ -270,6 +272,9 @@ function PositionsBody() {
         >
           This sends a sell order now for all {pos.quantity} shares of {pos.symbol} held by {ownerOf(pos.strategy_name)}
           (bought {formatDate(pos.entry_at)}), at the market price (about ₹{inr(pos.current_price)} a share).{' '}
+          {realButClosed && market.data
+            ? `The market is closed right now (${market.data.plain.replace(/^Market closed · /, '')}), so a real-money sale cannot be sent until then. `
+            : ''}
           {isReal
             ? 'Do this while the market is open (9:15 am to 3:30 pm on weekdays): outside those hours Zerodha may refuse the order, and nothing is sold.'
             : 'Outside market hours the practice sale uses the last known price.'}{' '}

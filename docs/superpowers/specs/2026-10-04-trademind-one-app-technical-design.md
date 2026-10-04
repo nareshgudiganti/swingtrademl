@@ -1,6 +1,6 @@
 # TradeMind One App: Technical Design (backend)
 
-Date: 2026-10-04 · Status: approved 2026-10-04; Step 1 (async runs) in progress · Branch: `brain/universe`
+Date: 2026-10-04 · Status: approved 2026-10-04; Step 1 (async runs) and Step 2 (market session) built · Branch: `brain/universe`
 (production = `0c7bf1b`).
 
 **Scope.** The 5-section UI (Decisions · Discover · Portfolio · Performance · Settings) is fixed
@@ -198,6 +198,14 @@ feeds a "History of changes" list under Settings.
 - Add the 2027 NSE holidays once published.
 
 ---
+
+**Built (step 2, 2026-10-04) — one deviation:** a missing holiday year does **not** raise. Raising
+would stop version 1's scans on 1 January; the long-standing rule (weekdays count as trading days,
+a scan on an unlisted holiday finds no new bar) is kept and made visible instead:
+`market_session.calendar_warning()` is shown in `/status` and `/market/session` from 1 November of
+the year before. Also fixed: M09's last finished trading day now skips holidays (it only skipped
+weekends). A real-money manual close outside the session is refused with a plain reason; paper is
+unchanged; v1's scheduled order paths are untouched (the after-close blocker stays separate).
 
 ## 8. Signal vs final decision
 

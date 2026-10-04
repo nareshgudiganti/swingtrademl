@@ -17,6 +17,7 @@ import type {
   BrainModules,
   BrainRun,
   BrainRunQueued,
+  MarketSession,
   BrainRunSummary,
   BrainTraceEvent,
   BrainWhy,
@@ -457,6 +458,7 @@ export const api = {
   brainTrack: (symbol: string) => get<BrainTrack>(`/brain/track/${encodeURIComponent(symbol)}`),
   brainWhatIf: (symbol: string, qty: number, price?: number) =>
     post<BrainWhatIf>('/brain/whatif', { symbol, qty, price }),
+  marketSession: () => get<MarketSession>('/market/session'),
   brainRuns: (limit = 10) => get<BrainRunSummary[]>(`/brain/runs?limit=${limit}`),
   brainLatestRun: (kind = 'nightly') => get<BrainRun>(`/brain/runs/latest?kind=${kind}`),
   // Queues a run and answers at once; poll brainRunGet until done/failed.

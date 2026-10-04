@@ -18,7 +18,6 @@ from sqlalchemy.orm import Session
 from swing_trade_ml.brokers.kite import kite_broker
 from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.enums import PositionStatus
-from swing_trade_ml.core.holidays import is_trading_holiday
 from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.db.models.market import Candle, Instrument, Quote
 from swing_trade_ml.db.models.trading import Position
@@ -51,12 +50,9 @@ def is_market_open(now: datetime | None = None) -> bool:
     A holiday not yet in core.holidays.NSE_HOLIDAYS still degrades safely —
     the session just looks open and an ingestion run finds no new bars.
     """
-    now = (now or datetime.now(UTC)).astimezone(IST)
-    if now.weekday() >= 5:
-        return False
-    if is_trading_holiday(now.date()):
-        return False
-    return settings.market_open <= now.time() <= settings.market_close
+    from swing_trade_ml.core import market_session
+
+    return market_session.is_open(now or datetime.now(UTC), include_close=True)
 
 
 def sync_instruments(db: Session, exchange: str = "NSE", equity_only: bool = True) -> int:

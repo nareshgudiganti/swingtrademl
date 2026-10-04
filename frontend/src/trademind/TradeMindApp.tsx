@@ -8,7 +8,7 @@ import './trademind.css'
 import { api } from '../api/client'
 import { clearToken } from '../api/client'
 import { formatDateTime } from '../lib/format'
-import { useBrainStatus, useLatestRun } from './live'
+import { useBrainStatus, useLatestRun, useMarketSession } from './live'
 import { Icon } from './ui'
 import Home from './pages/Home'
 import Market from './pages/Market'
@@ -100,6 +100,7 @@ export default function TradeMindApp() {
   const latest = useLatestRun()
   const broker = useQuery({ queryKey: ['status'], queryFn: api.status })
   const section = sectionFor(useLocation().pathname)
+  const market = useMarketSession()
   const chip = STATUS_CHIP[status]
   const chipTitle =
     status === 'live' && latest.data ? `From the brain's run on ${formatDateTime(latest.data.started_at)}` : chip.title
@@ -119,6 +120,14 @@ export default function TradeMindApp() {
           ))}
         </nav>
         <div className="tm-topbar-right">
+          {market.data && (
+            <span
+              className={`tm-zchip tm-market-chip ${market.data.state === 'open' ? 'tm-zchip-ok' : ''}`}
+              title={market.data.calendar_warning ?? 'Indian stock market (NSE) hours, 9:15 am to 3:30 pm on trading days'}
+            >
+              {market.data.plain}
+            </span>
+          )}
           {broker.data && (
             <Link
               to="/trademind/control"

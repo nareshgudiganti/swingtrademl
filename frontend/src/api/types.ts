@@ -1117,3 +1117,16 @@ export interface BrainApproval {
   created_at: string | null
   valid_until: string | null
 }
+
+/** The app's one market clock (GET /market/session). */
+export interface MarketSession {
+  state: 'pre_open' | 'open' | 'closed' | 'weekend' | 'holiday'
+  plain: string
+  trading_day: boolean
+  opens_at: string | null
+  closes_at: string | null
+  next_open: string
+  next_close: string
+  last_closed_trading_day: string
+  calendar_warning: string | null
+}

@@ -30,16 +30,16 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from swing_trade_ml.brokers import current_mode, get_broker
+from swing_trade_ml.core import market_session
 from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.enums import OrderStatus, SignalType
-from swing_trade_ml.core.holidays import is_trading_holiday
 from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.db.models.brain import BrainDecision, BrainRun
 from swing_trade_ml.db.models.brain_golive import BrainApproval
 from swing_trade_ml.db.models.market import Instrument
 from swing_trade_ml.db.models.trading import Order, Position, Signal, Strategy
 from swing_trade_ml.notifications import notifier
-from swing_trade_ml.services import ingestion, risk
+from swing_trade_ml.services import risk
 from swing_trade_ml.services.brain_golive.stage import AUTO_BY, current_stage
 from swing_trade_ml.services.execution import open_position
 from swing_trade_ml.services.portfolio import portfolio_value_and_cash
@@ -109,17 +109,9 @@ def _now() -> datetime:
 # ------------------------------------------------------------------ clock --
 
 
-def _is_trading_day(d: date) -> bool:
-    # The app's NSE calendar (core.holidays), the same rule as
-    # services.ingestion.is_market_open and the brain's M01 is_trading_day.
-    return d.weekday() < 5 and not is_trading_holiday(d)
-
-
-def _next_trading_day(d: date) -> date:
-    d += timedelta(days=1)
-    while not _is_trading_day(d):
-        d += timedelta(days=1)
-    return d
+# The app's one market clock (core.market_session).
+_is_trading_day = market_session.is_trading_day
+_next_trading_day = market_session.next_trading_day
 
 
 def valid_until(decision_day: date) -> datetime:
@@ -129,7 +121,7 @@ def valid_until(decision_day: date) -> datetime:
 
 def _market_open(now: datetime) -> bool:
     """In the session, strictly before the close: never an order at or after it."""
-    return ingestion.is_market_open(now) and now.astimezone(IST).time() < settings.market_close
+    return market_session.is_open(now)
 
 
 def _in_opening_window(now: datetime) -> bool:

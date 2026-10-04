@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, time
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -12,9 +12,9 @@ from sqlalchemy import func, select
 from swing_trade_ml import __version__
 from swing_trade_ml.api.deps import DbSession, require_auth
 from swing_trade_ml.brokers import get_broker, kite_broker
+from swing_trade_ml.core import market_session
 from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.enums import ModelStatus, PositionStatus
-from swing_trade_ml.core.holidays import is_trading_holiday
 from swing_trade_ml.db.models.market import Candle, Instrument
 from swing_trade_ml.db.models.ml import MLModel
 from swing_trade_ml.db.models.trading import Position, Signal, Strategy
@@ -38,10 +38,7 @@ def _expected_latest_trading_day(now_ist: datetime) -> date:
     trading day. So "today" is never the right expectation; the bar is
     always the previous trading day, all day today, regardless of the hour.
     """
-    d = now_ist.date() - timedelta(days=1)
-    while d.weekday() >= 5 or is_trading_holiday(d):
-        d -= timedelta(days=1)
-    return d
+    return market_session.previous_trading_day(now_ist.date())
 
 
 # Auto-login fires at 06:10 IST; the missing-session nag starts at 06:15.
@@ -49,14 +46,10 @@ AUTO_LOGIN_GRACE = time(6, 15)
 
 
 def _is_market_closed_day(d: date) -> bool:
-    return d.weekday() >= 5 or is_trading_holiday(d)
+    return not market_session.is_trading_day(d)
 
 
-def _next_trading_day(d: date) -> date:
-    d += timedelta(days=1)
-    while _is_market_closed_day(d):
-        d += timedelta(days=1)
-    return d
+_next_trading_day = market_session.next_trading_day
 
 
 def _plain_status(
@@ -66,6 +59,7 @@ def _plain_status(
     latest_candle_date: date | None,
     last_scan_at: datetime | None,
     now_ist: datetime | None = None,
+    calendar_warning: str | None = None,
 ) -> tuple[str, str]:
     """One plain-English sentence a non-technical user can act on, instead of
     three separate technical flags they'd have to interpret themselves."""
@@ -89,6 +83,9 @@ def _plain_status(
     if latest_candle_date is None or latest_candle_date < expected_day:
         seen = latest_candle_date.strftime("%d %b") if latest_candle_date else "never"
         return "warning", f"Market data hasn't updated since {seen} — may need a manual refresh."
+
+    if calendar_warning:
+        return "warning", calendar_warning
 
     scan_desc = last_scan_at.astimezone(IST).strftime("%d %b, %I:%M %p") if last_scan_at else "not yet today"
     if not broker_authenticated:
@@ -168,6 +165,7 @@ def _build_status(db: DbSession) -> SystemStatus:
         scheduler_running=heartbeat.is_alive(),
         latest_candle_date=latest_candle_date,
         last_scan_at=last_scan_at,
+        calendar_warning=market_session.calendar_warning(),
     )
 
     return SystemStatus(
@@ -216,6 +214,24 @@ def status(db: DbSession) -> SystemStatus:
     ever asks for it once logged in (App.tsx gates the query on a token).
     """
     return _build_status(db)
+
+
+@router.get("/market/session", dependencies=[Depends(require_auth)])
+def market_session_now() -> dict:
+    """Is the market open right now, when it next opens and closes, and a
+    plain line for the top bar (the app's one market clock)."""
+    s = market_session.session()
+    return {
+        "state": s.state.value,
+        "plain": s.plain,
+        "trading_day": s.trading_day,
+        "opens_at": s.opens_at,
+        "closes_at": s.closes_at,
+        "next_open": s.next_open,
+        "next_close": s.next_close,
+        "last_closed_trading_day": s.last_closed_trading_day,
+        "calendar_warning": market_session.calendar_warning(s.now.date()),
+    }
 
 
 @router.post("/refresh-data", response_model=SystemStatus, dependencies=[Depends(require_auth)])

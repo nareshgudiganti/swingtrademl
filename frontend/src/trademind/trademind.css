@@ -1463,3 +1463,10 @@
     font-size: 0.74rem;
   }
 }
+
+/* market clock chip (top bar); hidden on a phone like the Zerodha chip */
+@media (max-width: 1100px) {
+  .tm-market-chip {
+    display: none;
+  }
+}

@@ -9,14 +9,15 @@ these reasons on the decision cards.
 
 from __future__ import annotations
 
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, time
 from itertools import pairwise
 from zoneinfo import ZoneInfo
 
 import pandas as pd
 
 from swing_trade_ml.brain.contracts import DataQuality
-from swing_trade_ml.core.holidays import is_trading_holiday
+from swing_trade_ml.core.market_session import is_trading_day, trading_days_between
+from swing_trade_ml.core.market_session import previous_trading_day as _previous_trading_day
 
 IST = ZoneInfo("Asia/Kolkata")
 INGEST_DONE = time(15, 40)  # v1's daily_ingest job; the day's bar exists after this
@@ -38,17 +39,6 @@ PENALTY = {
 }
 
 
-def is_trading_day(d: date) -> bool:
-    return d.weekday() < 5 and not is_trading_holiday(d)
-
-
-def _previous_trading_day(d: date) -> date:
-    d -= timedelta(days=1)
-    while not is_trading_day(d):
-        d -= timedelta(days=1)
-    return d
-
-
 def expected_bar_day(as_of: datetime) -> date:
     """The newest daily bar that should exist at `as_of`."""
     local = as_of.astimezone(IST)
@@ -56,16 +46,6 @@ def expected_bar_day(as_of: datetime) -> date:
     if is_trading_day(today) and local.time() >= INGEST_DONE:
         return today
     return _previous_trading_day(today)
-
-
-def trading_days_between(earlier: date, later: date) -> int:
-    """Trading days strictly after `earlier`, up to and including `later`."""
-    count, d = 0, earlier + timedelta(days=1)
-    while d <= later:
-        if is_trading_day(d):
-            count += 1
-        d += timedelta(days=1)
-    return count
 
 
 def _plural(n: int, word: str) -> str:

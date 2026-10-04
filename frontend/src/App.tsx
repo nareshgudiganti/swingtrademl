@@ -1,4 +1,4 @@
-import { useState, type ComponentType, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ComponentType, type ReactNode } from 'react'
 import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
@@ -24,11 +24,13 @@ import {
   AlertTriangleIcon,
   BarChartIcon,
   BriefcaseIcon,
+  ChevronDownIcon,
   GearIcon,
   HomeIcon,
   LayersIcon,
   ScaleIcon,
   SproutIcon,
+  UserIcon,
   WalletIcon,
 } from './components/icons'
 
@@ -54,8 +56,8 @@ type Screen = {
 // Settings and ML Models are still routed but deliberately left out of the
 // top-level nav — they're admin/config screens, not something a day-to-day
 // user needs alongside Dashboard/Strategies/Portfolio/Reports. The user and
-// Log out already live in the sidebar status strip below, so Settings earned
-// no place in the nav once auto-login removed the daily Kite login chore.
+// Log out live in the top bar's account menu (which also links Settings), so
+// Settings earned no place in the main nav once auto-login removed the daily Kite login chore.
 //
 // Finance is hidden the same way as of 2026-09-28 — parked at the user's
 // request until they confirm it should come back, not retired. Its page,
@@ -110,16 +112,21 @@ const SCREENS: Screen[] = [
 ]
 
 // The destinations worth a one-tap reach on a phone — a real bottom tab
-// bar, shown only under the same 800px breakpoint the sidebar already
+// bar, shown only under the same 800px breakpoint the top bar's menu
 // collapses at. This sits alongside that collapsed horizontal strip rather
 // than replacing it: the strip stays the full list, the tab bar is just the
 // handful used every day. Filtered by plan like everything else.
 const TAB_BAR = ['/home', '/dashboard', '/portfolio', '/reports', '/scans']
 
+// The top bar shows this many menu entries directly; the rest sit under
+// "More", the way most broker sites do it. On phones the bar turns into a
+// sideways-scrolling strip of every entry instead, so nothing is hidden there.
+const PRIMARY_NAV_COUNT = 6
+
 // Real money is at stake once live_trading_enabled flips true — this must be
 // acknowledged explicitly per browser before the rest of the app is usable,
 // rather than trusting someone to notice the small PAPER/LIVE badge in the
-// sidebar on their own.
+// top bar on their own.
 const LIVE_ACK_STORAGE = 'stml_live_trading_ack'
 
 // Runs once at module load, before the first render decides whether to show
@@ -172,6 +179,21 @@ export default function App() {
       queryClient.invalidateQueries({ queryKey: ['predictions'] })
     },
   })
+  // Which top-bar dropdown is open. Closed on every page change and on any
+  // click outside the menus.
+  const [openMenu, setOpenMenu] = useState<'more' | 'user' | null>(null)
+  const menusRef = useRef<HTMLElement>(null)
+  const userMenuRef = useRef<HTMLDivElement>(null)
+  useEffect(() => setOpenMenu(null), [location.pathname])
+  useEffect(() => {
+    if (!openMenu) return
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as Node
+      if (!menusRef.current?.contains(t) && !userMenuRef.current?.contains(t)) setOpenMenu(null)
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [openMenu])
   const [liveAcked, setLiveAcked] = useState(
     () => localStorage.getItem(LIVE_ACK_STORAGE) === 'true',
   )
@@ -215,70 +237,121 @@ export default function App() {
     !!s.inNav && canSee(s) && !(seesAll && s.planHome) && !(s.manage && plan?.previewing)
   const nav = plan ? SCREENS.filter(inMenu) : []
   const tabBar = TAB_BAR.map((to) => nav.find((s) => s.to === to)).filter((s): s is Screen => !!s)
+  const moreItems = nav.slice(PRIMARY_NAV_COUNT)
+  const moreActive = moreItems.some((s) => location.pathname.startsWith(s.to))
   const homePath = seesAll ? '/dashboard' : '/home'
   const planKey = plan?.plan ?? 'free'
 
   return (
     <div className="layout">
-      <aside className="sidebar">
-        <div className="brand" title="Swing Trade ML">
-          <span className="brand-mark">📈</span>
-          <span className="brand-label">
-            Swing Trade ML
-            <small>{seesAll ? (status?.environment ?? '—') : `${PLAN_LABELS[planKey] ?? planKey} plan`}</small>
-          </span>
-        </div>
+      <header className="topbar">
+        <div className="topbar-inner">
+          <NavLink to={homePath} className="brand" title="Swing Trade ML">
+            <span className="brand-mark">📈</span>
+            <span className="brand-label">
+              Swing Trade ML
+              <small>{seesAll ? (status?.environment ?? '—') : `${PLAN_LABELS[planKey] ?? planKey} plan`}</small>
+            </span>
+          </NavLink>
 
-        <nav className="nav">
-          {nav.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              title={item.label}
-              className={({ isActive }) => (isActive ? 'active' : '')}
-            >
-              <item.Icon />
-              <span className="nav-label">{item.label}</span>
-            </NavLink>
-          ))}
-        </nav>
+          <nav className="nav" ref={menusRef}>
+            {nav.map((item, i) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                title={item.label}
+                className={({ isActive }) =>
+                  `${isActive ? 'active' : ''}${i >= PRIMARY_NAV_COUNT ? ' nav-overflow' : ''}`
+                }
+              >
+                <item.Icon />
+                <span className="nav-label">{item.label}</span>
+              </NavLink>
+            ))}
+            {moreItems.length > 0 && (
+              <div className="nav-more">
+                <button
+                  type="button"
+                  className={`nav-more-button${moreActive ? ' active' : ''}`}
+                  aria-expanded={openMenu === 'more'}
+                  onClick={() => setOpenMenu(openMenu === 'more' ? null : 'more')}
+                >
+                  More <ChevronDownIcon />
+                </button>
+                {openMenu === 'more' && (
+                  <div className="dropdown">
+                    {moreItems.map((item) => (
+                      <NavLink
+                        key={item.to}
+                        to={item.to}
+                        className={({ isActive }) => `dropdown-item${isActive ? ' active' : ''}`}
+                      >
+                        <item.Icon />
+                        {item.label}
+                      </NavLink>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </nav>
 
-        <div className="status-strip">
-          {seesAll && (
-            <div className="status-strip-badges">
+          <div className="topbar-right" ref={userMenuRef}>
+            {seesAll && (
               <span
                 className={`badge ${status?.live_trading_enabled ? 'badge-live' : 'badge-paper'}`}
-                title="Mode"
+                title={status?.live_trading_enabled ? 'Real money' : 'Practice money — no real orders'}
               >
                 {status?.live_trading_enabled ? 'LIVE' : 'PAPER'}
               </span>
-              <span
-                className={`badge ${status?.broker_authenticated ? 'badge-on' : 'badge-off'}`}
-                title="Kite"
-              >
-                {status?.broker_authenticated ? 'Kite connected' : 'Kite: no session'}
-              </span>
-              <span className="badge badge-off" title="Active model">
-                {status?.active_model ?? 'no model'}
-              </span>
-            </div>
-          )}
-          <div className="status-strip-user">
-            <span className="muted" title={me?.email ?? undefined}>
-              {me?.username ?? '…'}
-            </span>
+            )}
             <button
-              onClick={() => {
-                setPreviewPlan(null)
-                clearToken()
-                window.location.reload()
-              }}
+              type="button"
+              className="user-button"
+              aria-expanded={openMenu === 'user'}
+              onClick={() => setOpenMenu(openMenu === 'user' ? null : 'user')}
             >
-              Log out
+              <UserIcon />
+              <span className="user-name">{me?.username ?? '…'}</span>
+              <ChevronDownIcon />
             </button>
+            {openMenu === 'user' && (
+              <div className="dropdown dropdown-right">
+                {me?.email && <div className="dropdown-note">{me.email}</div>}
+                {seesAll && (
+                  <>
+                    <div className="dropdown-row">
+                      <span>Zerodha (Kite)</span>
+                      <span className={`badge ${status?.broker_authenticated ? 'badge-on' : 'badge-off'}`}>
+                        {status?.broker_authenticated ? 'Connected' : 'Not connected'}
+                      </span>
+                    </div>
+                    <div className="dropdown-row">
+                      <span>Model</span>
+                      <span className="badge badge-off">{status?.active_model ?? 'none'}</span>
+                    </div>
+                    <NavLink to="/settings" className="dropdown-item">
+                      <GearIcon />
+                      Settings
+                    </NavLink>
+                  </>
+                )}
+                <button
+                  type="button"
+                  className="dropdown-item"
+                  onClick={() => {
+                    setPreviewPlan(null)
+                    clearToken()
+                    window.location.reload()
+                  }}
+                >
+                  Log out
+                </button>
+              </div>
+            )}
           </div>
         </div>
-      </aside>
+      </header>
 
       <main className="content">
         {plan?.previewing && (

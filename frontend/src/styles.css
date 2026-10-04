@@ -37,8 +37,6 @@ a {
 /* ------------------------------------------------------------- layout -- */
 
 .layout {
-  display: grid;
-  grid-template-columns: 220px 1fr;
   min-height: 100vh;
   /* On the iPhone home-screen shell there's no browser chrome to absorb the
      notch/home-indicator, so the layout has to (viewport-fit=cover in
@@ -47,22 +45,36 @@ a {
   padding-right: env(safe-area-inset-right);
 }
 
-.sidebar {
+/* Top bar — brand, the menu across the middle, account on the right, the
+   way broker sites (Tickertape, Kite) lay it out. Replaced the 220px left
+   sidebar so pages get the full screen width. Sticky so the menu is always
+   one click away on long pages. */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
   background: var(--surface);
-  border-right: 1px solid var(--border);
-  padding: calc(1.25rem + env(safe-area-inset-top)) 1rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  padding-top: env(safe-area-inset-top);
+}
+
+.topbar-inner {
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 1.5rem;
+  height: 60px;
+  padding: 0 2rem;
 }
 
 .brand {
   display: flex;
   align-items: center;
   gap: 0.6rem;
+  flex-shrink: 0;
   font-weight: 700;
   font-size: 1.05rem;
   letter-spacing: -0.01em;
+  white-space: nowrap;
 }
 
 .brand-mark {
@@ -74,23 +86,29 @@ a {
 .brand small {
   display: block;
   font-weight: 400;
-  font-size: 0.72rem;
+  font-size: 0.7rem;
+  line-height: 1.2;
   color: var(--text-dim);
 }
 
 .nav {
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 0.15rem;
+  flex: 1;
+  min-width: 0;
 }
 
-.nav a {
+.nav a,
+.nav-more-button {
   display: flex;
   align-items: center;
-  gap: 0.65rem;
-  padding: 0.55rem 0.75rem;
+  gap: 0.45rem;
+  padding: 0.45rem 0.75rem;
   border-radius: var(--radius);
   color: var(--text-dim);
+  font-weight: 550;
+  white-space: nowrap;
   transition: background 0.15s, color 0.15s, transform 0.1s;
 }
 
@@ -102,45 +120,135 @@ a {
   transform: scale(0.97);
 }
 
-.nav a:hover {
+.nav a:hover,
+.nav-more-button:hover {
   background: var(--surface-2);
   color: var(--text);
 }
 
-.nav a.active {
-  background: var(--accent);
-  color: #fff;
+.nav a.active,
+.nav-more-button.active {
+  background: var(--surface-2);
+  color: var(--text);
+  box-shadow: inset 0 -2px 0 var(--accent);
 }
 
-/* Sidebar's bottom Mode/Kite/Model/user block — a compact strip of wrapping
-   badges plus one small username row, instead of four stacked label/value
-   rows, so it reads at a glance without eating a quarter of the sidebar's
-   height. */
-.status-strip {
-  margin-top: auto;
-  font-size: 0.78rem;
+/* Entries past the first few live in the "More" dropdown on desktop, and
+   are only shown inline in the phone strip (see the 800px block). */
+.nav a.nav-overflow {
+  display: none;
+}
+
+.nav-more {
+  position: relative;
+}
+
+.nav-more-button {
+  background: none;
+  border: none;
+  font: inherit;
+  cursor: pointer;
+}
+
+.dropdown {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  left: 0;
+  min-width: 200px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  padding: 0.35rem;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.1rem;
+  z-index: 30;
 }
 
-.status-strip-badges {
+.dropdown-right {
+  left: auto;
+  right: 0;
+  min-width: 240px;
+}
+
+.dropdown-item {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
+  align-items: center;
+  gap: 0.55rem;
+  width: 100%;
+  padding: 0.5rem 0.65rem;
+  border-radius: 8px;
+  color: var(--text-dim);
+  background: none;
+  border: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
-.status-strip-user {
+.dropdown-item:hover,
+.dropdown-item.active {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.dropdown-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.5rem;
-  padding-top: 0.4rem;
-  border-top: 1px solid var(--border);
+  gap: 0.75rem;
+  padding: 0.4rem 0.65rem;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+}
+
+.dropdown-note {
+  padding: 0.4rem 0.65rem 0.5rem;
+  margin-bottom: 0.2rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.topbar-right {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.user-button {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.4rem 0.8rem;
+  border-radius: var(--radius);
+  background: var(--text);
+  color: var(--bg);
+  border: none;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.user-button:hover {
+  opacity: 0.9;
+}
+
+.user-name {
+  max-width: 12ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .content {
-  padding: 1rem 2rem calc(3rem + env(safe-area-inset-bottom));
+  padding: 1.25rem 2rem calc(3rem + env(safe-area-inset-bottom));
   overflow-x: auto;
 }
 
@@ -1149,82 +1257,61 @@ tr.sig-detail-row td {
   margin: 0 0 0.6rem;
 }
 
-/* ---------------------------------------------- mid-width: icon-only rail -- */
-/* Between the full 220px sidebar and the 800px full-collapse (below), there's
-   a range where a labelled 220px sidebar eats too much of the content area
-   but the screen is still wide enough for a real two-column layout (not the
-   horizontal-scrolling strip the sub-800px breakpoint switches to). Shrink to
-   a 64px icon-only rail instead — same nav, same order, just no label text;
-   `title` on each link covers the hover-for-name case a mouse user has here
-   that a touch user at 800px doesn't. Scoped with min-width so it never
-   overlaps the 800px breakpoint below (that one wins outright once the strip
-   layout takes over). */
-@media (max-width: 1100px) and (min-width: 801px) {
-  .layout {
-    grid-template-columns: 64px 1fr;
-  }
-  .sidebar {
-    padding: calc(1.25rem + env(safe-area-inset-top)) 0.5rem 1rem;
-  }
-  .brand {
-    justify-content: center;
-  }
-  .brand-label {
+/* ------------------------------------------------ narrower screens -- */
+/* Laptop widths: drop the menu icons and the brand's sub-line so all the
+   primary entries still fit on one row. */
+@media (max-width: 1280px) {
+  .nav > a svg {
     display: none;
   }
-  .nav a {
-    justify-content: center;
-    padding: 0.6rem;
-  }
-  .nav-label {
+  .brand small {
     display: none;
   }
-  .status-strip-badges {
-    flex-direction: column;
-    align-items: center;
-  }
-  .status-strip-badges .badge {
-    width: 100%;
-    text-align: center;
-  }
-  .status-strip-user {
-    flex-direction: column;
-    align-items: center;
-    gap: 0.35rem;
-  }
-  .status-strip-user span {
-    display: none;
+  .topbar-inner {
+    gap: 1rem;
+    padding: 0 1.25rem;
   }
 }
 
+/* Phones: brand + account on the first row, and the whole menu (overflow
+   entries included, no "More") as a sideways-scrolling strip underneath.
+   The bottom tab bar further down adds one-tap reach for the daily screens. */
 @media (max-width: 800px) {
-  .layout {
-    /* minmax(0, 1fr), not bare 1fr: a bare fr track's default min-width is
-       auto (its content's min-content size), and .nav below is a nowrap flex
-       row whose min-content is the sum of all 11 links — without the 0 floor
-       here, that alone stretches this single column (and everything sharing
-       it, sidebar and content both) to fit nav instead of letting nav's own
-       overflow-x scroll it internally. */
-    grid-template-columns: minmax(0, 1fr);
+  .topbar-inner {
+    flex-wrap: wrap;
+    height: auto;
+    padding: 0.6rem 1rem 0;
+    row-gap: 0.4rem;
   }
-  .sidebar {
-    border-right: none;
-    border-bottom: 1px solid var(--border);
+  .brand {
+    order: 1;
+  }
+  .topbar-right {
+    order: 2;
   }
   .nav {
-    flex-direction: row;
-    flex-wrap: nowrap;
+    order: 3;
+    flex-basis: 100%;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
     margin: 0 -1rem;
-    padding: 0 1rem;
+    padding: 0 1rem 0.5rem;
   }
   .nav::-webkit-scrollbar {
     display: none;
   }
   .nav a {
     flex-shrink: 0;
+  }
+  .nav a.nav-overflow {
+    display: flex;
+  }
+  .nav-more {
+    display: none;
+  }
+  .user-name {
+    display: none;
   }
   .content {
     padding: 1rem;
@@ -1435,7 +1522,7 @@ tr.sig-detail-row td {
 
 /* --------------------------------------------------- mobile bottom tabs -- */
 /* A real bottom tab bar for the mobile/Capacitor build — better reach and a
-   more familiar pattern than the horizontal-scrolling strip the sidebar nav
+   more familiar pattern than the horizontal-scrolling strip the top-bar nav
    collapses to. Sits alongside that strip rather than replacing it: the
    strip stays as the full 6-item list (useful once in a while, e.g. Settings
    or Finance), the tab bar surfaces the handful of destinations worth a

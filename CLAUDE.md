@@ -4,12 +4,17 @@ Read this first in every session. Then read `docs/architecture/CURRENT-STATE.md`
 
 ## What this repo is
 
-- **Version 1 (v1)**: the live swing-trading app (FastAPI + Postgres/TimescaleDB + Redis +
-  APScheduler, React/Vite frontend). Running in production at swingtrademl.com (DigitalOcean
-  droplet). Git tag `v1` = `64fcb05` is the frozen rollback point. Push to `main` = deploy.
-- **TradeMind Brain**: a decision layer built *around* v1 under
-  `backend/src/swing_trade_ml/brain/`. It lives on local `brain/*` branches (worktree
-  `.claude/worktrees/brain-m00`) and is **not pushed**. `BRAIN_ENABLED=false` hides it in prod.
+- **Production** runs from GitHub `main` (latest on origin: `8ea5e63`, “One market clock”). Push to
+  `main` deploys to swingtrademl.com (DigitalOcean droplet). Git tag `v1` = `64fcb05` is a **frozen
+  rollback reference only** — prod does not run from that tag.
+- **Version 1 (v1)**: the swing-trading app stack (FastAPI + Postgres/TimescaleDB + Redis +
+  APScheduler, React/Vite frontend). Still the core runtime; brain modules plug into it.
+- **TradeMind Brain**: decision layer under `backend/src/swing_trade_ml/brain/`. The full stack
+  (including `753e3e7`) is on `main` and **live in production since 2026-10-04 in practice mode**
+  (M18 shadow / practice stage — no auto brain-driven orders yet). Use local `brain/*` branches
+  (e.g. worktree `.claude/worktrees/brain-m00`) for brain work that has **not** shipped to `main`.
+  `BRAIN_ENABLED` can still gate scheduling/API exposure in some environments; in prod the brain
+  code is present and runs in practice mode — it is not “off by default” there.
 
 ## TradeMind architecture principles (settled — do not change without the owner)
 
@@ -34,9 +39,10 @@ Read this first in every session. Then read `docs/architecture/CURRENT-STATE.md`
 
 ## Current implementation status (2026-10-04)
 
-- Brain modules M00–M17 built and folded into `brain/integration`.
-- **M18 (shadow → manual approval → auto) built and merged into `brain/integration`**
-  (`10ae6d1`, 2026-10-04). It runs in shadow until 30 brain ideas have finished.
+- Brain modules M00–M17 on `main`, folded into `brain/integration`.
+- **M18 (shadow → manual approval → auto)** on `main` (`10ae6d1` integration; brain stack through
+  `753e3e7`). **Production is in M18 practice mode** (shadow): brain runs and records ideas; stage
+  advances after 30 finished brain ideas, then manual approval, then auto — per `docs/brain/GO_LIVE.md`.
 - **Service 1 gap integration (13 "NEW GAP" items): analysed only. Nothing implemented. Owner has
   not yet approved a build list.** See `docs/architecture/architecture-gaps.md`.
 
@@ -68,7 +74,9 @@ Read this first in every session. Then read `docs/architecture/CURRENT-STATE.md`
 
 ## Important constraints
 
-- **Do not push brain branches or open PRs** until the owner says so.
+- **`brain/*` branches** are for in-progress brain work not yet on `main`. Ship brain changes via
+  `main` (deploys to prod). Do not push experimental `brain/*` branches or open brain PRs without
+  the owner’s go-ahead; trading-sensitive merges still need owner approval before `main`.
 - Never `ruff format` the whole package (rewrites ~50 v1 files) — format only files you touched.
   No prettier on existing frontend files; check with `npx tsc --noEmit -p .`.
 - Run tests with `backend/.venv/Scripts/python.exe` and

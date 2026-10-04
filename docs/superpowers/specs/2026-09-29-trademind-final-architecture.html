@@ -1,0 +1,481 @@
+<title>TradeMind Final Architecture</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one continuous, print-ready document. Cover with contents, then
+   numbered chapters (each a new page when printed). The architecture is a
+   stack of bands built from data, so the diagram and the layer chapter can't
+   disagree. */
+:root {
+  --bg: #f4f6fb; --paper: #ffffff; --surface-2: #eef2f9; --border: #d6deeb;
+  --text: #0f1a2e; --dim: #56657f; --accent: #2f6fe4; --pos: #15803d; --neg: #c62828;
+  --warn: #b45309; --plan: #7c3aed; --safe: #be185d; --teal: #0f766e;
+  --font-body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0b1120; --paper: #131c31; --surface-2: #1b2540; --border: #2a3858;
+    --text: #e6edf7; --dim: #8b9bb4; --accent: #4f8cff; --pos: #22c55e; --neg: #ef4444;
+    --warn: #f59e0b; --plan: #a78bfa; --safe: #f472b6; --teal: #2dd4bf; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0b1120; --paper: #131c31; --surface-2: #1b2540; --border: #2a3858;
+  --text: #e6edf7; --dim: #8b9bb4; --accent: #4f8cff; --pos: #22c55e; --neg: #ef4444;
+  --warn: #f59e0b; --plan: #a78bfa; --safe: #f472b6; --teal: #2dd4bf; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--text); font-family: var(--font-body); font-size: 14px; line-height: 1.55; -webkit-font-smoothing: antialiased; }
+.doc { max-width: 1000px; margin: 0 auto; padding-inline: 16px; padding-block: 24px 64px; display: flex; flex-direction: column; gap: 22px; }
+h1, h2, h3 { margin: 0; text-wrap: balance; letter-spacing: -0.01em; }
+h1 { font-size: 2rem; } h2 { font-size: 1.35rem; } h3 { font-size: 1rem; }
+p { margin: 0; max-width: 80ch; }
+code, .mono { font-family: var(--font-mono); font-size: 0.84em; }
+.muted { color: var(--dim); } .small { font-size: 0.85rem; }
+.page { background: var(--paper); border: 1px solid var(--border); border-radius: 12px; padding: 26px; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.kicker { font: 600 0.78rem var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); }
+.chapter-head { display: flex; gap: 14px; align-items: baseline; border-bottom: 2px solid var(--accent); padding-bottom: 10px; }
+.chapter-head .no { font: 700 1.5rem var(--font-mono); color: var(--accent); }
+.meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+.meta div { background: var(--surface-2); border-radius: 8px; padding: 10px 12px; }
+.meta b { display: block; font-size: 0.72rem; color: var(--dim); font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; }
+.toc { columns: 2 260px; column-gap: 28px; margin: 0; padding: 0; list-style: none; }
+.toc li { break-inside: avoid; padding: 4px 0; border-bottom: 1px dotted var(--border); display: flex; gap: 10px; }
+.toc .n { font-family: var(--font-mono); color: var(--accent); min-width: 26px; }
+.toc a { color: var(--text); text-decoration: none; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: 0.82rem; color: var(--dim); align-items: center; }
+.dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; vertical-align: 0; flex: 0 0 auto; }
+.d-b { background: var(--pos); } .d-p { background: var(--accent); } .d-n { background: transparent; border: 1.5px solid var(--dim); }
+.chg { color: var(--plan); font-weight: 700; font-size: 0.8em; margin-left: 4px; }
+
+/* architecture bands */
+.arch { display: flex; flex-direction: column; gap: 0; }
+.band { border: 1.5px solid var(--border); border-left: 6px solid var(--accent); border-radius: 10px; padding: 10px 12px; background: var(--paper); display: flex; flex-direction: column; gap: 8px; }
+.band .bh { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+.band .bh b { font-size: 0.92rem; }
+.band .bh .num { font: 700 0.78rem var(--font-mono); color: var(--dim); }
+.band .bh span { font-size: 0.8rem; color: var(--dim); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { display: inline-flex; align-items: center; font-size: 0.8rem; background: var(--surface-2); border: 1px solid var(--border); border-radius: 7px; padding: 3px 8px; }
+.arrow { text-align: center; color: var(--dim); font-size: 1rem; line-height: 1.4; }
+.t-src { border-left-color: var(--teal); } .t-gw { border-left-color: #0891b2; } .t-ct { border-left-color: var(--plan); }
+.t-bus { border-left-color: var(--pos); } .t-brain { border-left-color: var(--accent); border-color: color-mix(in srgb, var(--accent) 60%, var(--border)); }
+.t-safe { border-left-color: var(--safe); border-color: color-mix(in srgb, var(--safe) 50%, var(--border)); }
+.t-dec { border-left-color: var(--warn); } .t-out { border-left-color: var(--pos); } .t-base { border-left-color: var(--dim); }
+.steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(105px, 1fr)); gap: 6px; }
+.step { background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; font-size: 0.78rem; text-align: center; font-weight: 600; }
+.step.gate { border-color: var(--safe); color: var(--safe); }
+.sub { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--dim); }
+.base-grid { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin-top: 8px; }
+.dec3 { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+.dec3 > div { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+.st { display: inline-flex; font-size: 0.74rem; font-weight: 700; border-radius: 999px; padding: 2px 9px; }
+.s-g { color: var(--pos); background: color-mix(in srgb, var(--pos) 13%, transparent); }
+.s-b { color: var(--accent); background: color-mix(in srgb, var(--accent) 13%, transparent); }
+.s-w { color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, transparent); }
+.s-r { color: var(--neg); background: color-mix(in srgb, var(--neg) 12%, transparent); }
+
+.tbl-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; }
+table { border-collapse: collapse; width: 100%; font-size: 0.84rem; }
+th, td { text-align: left; vertical-align: top; padding: 7px 10px; border-bottom: 1px solid var(--border); }
+th { font-size: 0.72rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--dim); background: var(--surface-2); font-weight: 600; }
+tr:last-child td { border-bottom: 0; }
+tr.grp td { background: var(--surface-2); font-weight: 700; font-size: 0.8rem; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.yes { color: var(--pos); font-weight: 600; } .no { color: var(--dim); }
+
+.mock { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--paper); }
+.mock-h { display: flex; justify-content: space-between; gap: 8px; padding: 8px 12px; background: var(--surface-2); border-bottom: 1px solid var(--border); }
+.mock-h b { font-size: 0.88rem; } .mock-h span { font-size: 0.72rem; color: var(--dim); }
+.mock-b { padding: 10px 12px; display: flex; flex-direction: column; gap: 10px; }
+.kv { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; font-size: 0.85rem; }
+.kv > span:nth-child(even) { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+.final { border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; font-weight: 700; display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.btns { display: flex; flex-wrap: wrap; gap: 6px; }
+.btn { font-size: 0.78rem; font-weight: 600; border: 1px solid var(--border); border-radius: 7px; padding: 4px 10px; background: var(--surface-2); }
+.btn.pri { border-color: var(--accent); color: var(--accent); }
+.illus { font-size: 0.74rem; color: var(--dim); font-style: italic; }
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; align-items: start; }
+.note { border-left: 3px solid var(--accent); background: var(--surface-2); padding: 10px 14px; border-radius: 0 8px 8px 0; font-size: 0.86rem; }
+.note.warn { border-left-color: var(--warn); }
+ol.clean { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
+
+@media (max-width: 560px) { .page { padding: 18px; } h1 { font-size: 1.6rem; } }
+@media print {
+  :root, :root[data-theme="dark"], :root:not([data-theme="light"]) {
+    --bg: #fff; --paper: #fff; --surface-2: #eef2f9; --border: #cfd8e6; --text: #0f1a2e; --dim: #4a5870;
+    --accent: #2f6fe4; --pos: #15803d; --neg: #c62828; --warn: #b45309; --plan: #7c3aed; --safe: #be185d; --teal: #0f766e; color-scheme: light;
+  }
+  @page { size: A4 portrait; margin: 12mm; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { font-size: 11px; background: #fff; }
+  .doc { max-width: none; padding: 0; gap: 0; }
+  .page { border: 0; border-radius: 0; padding: 0; break-before: page; }
+  .page.cover { break-before: auto; }
+  .tbl-wrap { overflow: visible; }
+  .band, tr, .mock, .note, .dec3 > div { break-inside: avoid; }
+  h2, h3 { break-after: avoid; }
+  .two { grid-template-columns: 1fr 1fr; }
+}
+</style>
+
+<main class="doc">
+
+<section class="page cover">
+  <span class="kicker">Final architecture · recommended</span>
+  <h1>TradeMind Final Architecture</h1>
+  <p style="font-size:1.08rem">Your latest “Complete Trading Intelligence Platform” picture, with every recommendation from the review applied. It keeps your structure and fixes what was inconsistent, unsafe or not possible. Items changed from your picture are marked <span class="chg">✎</span>.</p>
+  <div class="meta">
+    <div><b>Date</b>29 Sep 2026</div>
+    <div><b>Based on</b>Your platform picture v5</div>
+    <div><b>Status</b>Draft for your approval</div>
+    <div><b>Owner</b>Naresh Gudiganti</div>
+  </div>
+  <div class="legend">
+    <span><span class="dot d-b"></span>Built in code</span>
+    <span><span class="dot d-p"></span>Partly built</span>
+    <span><span class="dot d-n"></span>Planned</span>
+    <span><span class="chg">✎</span> Changed from your picture</span>
+  </div>
+  <h3>Contents</h3>
+  <ol class="toc" id="toc"></ol>
+</section>
+
+<section class="page" data-ch="1" data-title="Principles">
+  <p>Six principles, in priority order. When two conflict, the lower number wins.</p>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>#</th><th>Principle</th><th>What it means in practice</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td><b>Safety rules never change</b> <span class="chg">✎</span></td><td>Stop, risk per trade, position caps, sector cap and the drawdown halt are locked. No plug-in, plan, setting or learning step can change them.</td></tr>
+      <tr><td>2</td><td><b>No uncontrolled changes</b></td><td>Models, rules and playbooks change only through tests, a shadow run and your approval. Nothing changes itself live.</td></tr>
+      <tr><td>3</td><td><b>No silent failures</b></td><td>Detect → report → recover → learn. Missing or stale data lowers quality and can stop a decision; it never passes silently.</td></tr>
+      <tr><td>4</td><td><b>Everything is a plug-in, behind a stable contract</b></td><td>New data, models, strategies and outputs plug in through versioned contracts without touching the core.</td></tr>
+      <tr><td>5</td><td><b>Evidence before claims</b> <span class="chg">✎</span></td><td>Every probability, score and return shows its track record and sample size. Nothing is shown as a promise.</td></tr>
+      <tr><td>6</td><td><b>Replaceable where it pays</b> <span class="chg">✎</span></td><td>Broker, cloud and screens can be swapped through adapters. The database changes only through a planned migration.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="page" data-ch="2" data-title="The architecture">
+  <p>Read top to bottom: data comes in, is checked and put into common formats, the event bus runs the brain, every decision passes the safety layer, and each plan sees its share of the outputs. The foundation underneath keeps it learning, observable and replaceable.</p>
+  <div class="arch" id="arch"></div>
+</section>
+
+<section class="page" data-ch="3" data-title="Layer by layer">
+  <p>Every item in the architecture with its status today. “Changed” marks items that differ from your picture.</p>
+  <div class="tbl-wrap"><table id="layerTbl"></table></div>
+</section>
+
+<section class="page" data-ch="4" data-title="One decision vocabulary">
+  <p>Your picture used two languages (BUY / SELL / HOLD / WAIT / REDUCE / EXIT / NO-TRADE inside the brain, TRADE / WATCH / WAIT / AVOID in the outputs). The final architecture uses three small sets, each for one situation. <span class="chg">✎</span></p>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Situation</th><th>State</th><th>Meaning</th><th>Replaces</th></tr></thead>
+    <tbody>
+      <tr class="grp"><td colspan="4">A stock you don't own</td></tr>
+      <tr><td></td><td><span class="st s-g">TRADE</span></td><td>All gates pass and Expected R is positive; a trigger price is set for the next session</td><td>BUY</td></tr>
+      <tr><td></td><td><span class="st s-b">WATCH</span></td><td>Good stock, entry not right yet (for example 3%+ above the entry zone)</td><td>—</td></tr>
+      <tr><td></td><td><span class="st s-w">WAIT</span></td><td>Uncertain: models disagree, data is poor, the regime is changing or an event is due</td><td>WAIT, NO-TRADE for one stock</td></tr>
+      <tr><td></td><td><span class="st s-r">AVOID</span></td><td>A landmine, negative Expected R or poor risk quality</td><td>NO-TRADE for one stock</td></tr>
+      <tr class="grp"><td colspan="4">A stock you hold</td></tr>
+      <tr><td></td><td><span class="st s-g">HOLD</span></td><td>The entry reason still holds</td><td>HOLD</td></tr>
+      <tr><td></td><td><span class="st s-b">MONITOR</span></td><td>The reason is weakening; watch closely</td><td>—</td></tr>
+      <tr><td></td><td><span class="st s-w">REDUCE</span></td><td>Book part of the position or tighten the stop</td><td>REDUCE</td></tr>
+      <tr><td></td><td><span class="st s-r">EXIT</span></td><td>Leave the position (stop hit, target reached, reason broken or time stop)</td><td>SELL, EXIT</td></tr>
+      <tr class="grp"><td colspan="4">The whole market</td></tr>
+      <tr><td></td><td><span class="st s-g">NORMAL</span></td><td>New trades allowed within the deployable limit</td><td>—</td></tr>
+      <tr><td></td><td><span class="st s-w">DEFENSIVE</span></td><td>Smaller limits, large caps only, tested setups only</td><td>Defensive mode</td></tr>
+      <tr><td></td><td><span class="st s-r">NO NEW TRADES</span></td><td>Entries paused; exits continue normally</td><td>NO-TRADE logic</td></tr>
+    </tbody>
+  </table></div>
+  <p class="small muted">“SELL” is dropped because we trade delivery (CNC) only; there is no short selling, so selling only ever means leaving a holding.</p>
+</section>
+
+<section class="page" data-ch="5" data-title="The five user moments, with corrected examples">
+  <p>Your five user moments, rebuilt so every number follows the engine's real rules today: stop −4% and target +8% from entry, half booked at +5%, a trailing stop on the rest, 1% risk per trade, and position caps from the capital ladder (25% per position at ₹1 lakh, 10% at ₹10 lakh, interpolated in between). Probabilities are illustrative and would come from the score report card. <span class="chg">✎</span></p>
+  <div class="two">
+    <div class="mock">
+      <div class="mock-h"><b>1 · SIGNAL · 15:45</b><span>Illustrative stock “ABC”</span></div>
+      <div class="mock-b">
+        <div class="final"><span>ABC · Large cap · Pullback setup</span><span class="st s-g">TRADE</span></div>
+        <div class="kv">
+          <span>Trigger (next session)</span><span>above ₹1,002.50</span>
+          <span>Stop (−4%) · First target (+5%) · Target (+8%)</span><span>₹963 · ₹1,053 · ₹1,083</span>
+          <span>Holding period</span><span>up to 15 trading days</span>
+          <span>Reached +5% first, in similar past signals</span><span>58% (of 120)</span>
+          <span>Expected R after costs</span><span>+0.3R</span>
+        </div>
+        <div class="kv">
+          <span>Your capital</span><span>₹1,20,000</span>
+          <span>Suggested amount (ladder cap ≈ 24% at your size)</span><span>₹28,500</span>
+          <span>Quantity at ₹1,003</span><span>28 shares (₹28,084)</span>
+          <span>Money at risk if the stop hits</span><span>₹1,120 (0.93%)</span>
+        </div>
+        <div class="btns"><span class="btn pri">Plan this trade</span><span class="btn">Add to watchlist</span><span class="btn">Why this stock?</span></div>
+        <div class="illus">Replaces “Invest today”. The order is placed by you at your broker.</div>
+      </div>
+    </div>
+    <div class="mock">
+      <div class="mock-h"><b>2 · AFTER INVESTING</b><span>Daily</span></div>
+      <div class="mock-b">
+        <div class="kv">
+          <span>Morning brief: market, sector, your holdings</span><span>08:45</span>
+          <span>Live P&amp;L and the day's status</span><span>on track / drift / breakdown</span>
+          <span>Alerts: stop, target, event, regime, shock</span><span>by plan</span>
+          <span>Ask the copilot why something moved</span><span>Pro</span>
+          <span>End-of-day summary and what changed</span><span>16:15</span>
+        </div>
+        <div class="btns"><span class="btn">Set alert</span><span class="btn">Tighten stop</span><span class="btn">Book partial profit</span><span class="btn">Exit at my broker</span></div>
+        <div class="illus">“Modify stop” becomes “Tighten stop”: the app's stop only ever moves up.</div>
+      </div>
+    </div>
+    <div class="mock">
+      <div class="mock-h"><b>3 · DAY-BY-DAY TRACKING</b><span>Illustrative</span></div>
+      <div class="mock-b">
+        <div class="tbl-wrap"><table>
+          <thead><tr><th>Day</th><th class="num">Price</th><th class="num">P&amp;L</th><th class="num">Typical range</th><th>Status</th></tr></thead>
+          <tbody>
+            <tr><td>0</td><td class="num">₹1,003</td><td class="num">0.0%</td><td class="num">—</td><td>Entered</td></tr>
+            <tr><td>1</td><td class="num">₹1,015</td><td class="num">+1.2%</td><td class="num">+0.2 to +1.8%</td><td class="yes">On track</td></tr>
+            <tr><td>2</td><td class="num">₹1,009</td><td class="num">+0.6%</td><td class="num">+0.5 to +2.8%</td><td>Drifting</td></tr>
+            <tr><td>3</td><td class="num">₹1,030</td><td class="num">+2.7%</td><td class="num">+0.9 to +3.6%</td><td class="yes">On track</td></tr>
+          </tbody>
+        </table></div>
+        <div class="illus">“Typical range” = the middle half of similar past trades on that day, shown only with 20+ similar trades. Never called an expected path.</div>
+      </div>
+    </div>
+    <div class="mock">
+      <div class="mock-h"><b>4 · BREAKDOWN · DAY 4</b><span>Illustrative</span></div>
+      <div class="mock-b">
+        <div class="final"><span>ABC at ₹975 (−2.8%) · stop ₹963 not hit</span><span class="st s-w">REDUCE</span></div>
+        <div class="kv">
+          <span>Sector turned weak; NIFTY −1.8%; volume spike on selling</span><span>reasons</span>
+          <span>Similar past situations that went on to hit the stop</span><span>64% (of 45)</span>
+        </div>
+        <div class="btns"><span class="btn pri">Exit now (−2.8%)</span><span class="btn">Tighten stop to ₹968</span><span class="btn">Keep stop at ₹963 (max −4%)</span></div>
+        <div class="illus">If the price reaches ₹963, the stop exits automatically and this card shows “Stop hit: exited at ₹962”. A stop is never loosened.</div>
+      </div>
+    </div>
+    <div class="mock">
+      <div class="mock-h"><b>5 · GOOD PROFIT · DAY 6</b><span>Illustrative</span></div>
+      <div class="mock-b">
+        <div class="final"><span>ABC at ₹1,053 (+5%)</span><span class="st s-g">HOLD rest</span></div>
+        <div class="kv">
+          <span>Half booked automatically at the first target</span><span>14 of 28 shares</span>
+          <span>Trailing stop on the remaining 14 shares</span><span>moves up with the price</span>
+          <span>Similar trades that went on from +5% to +8%</span><span>47% (of 88)</span>
+        </div>
+        <div class="btns"><span class="btn pri">Hold the rest with trailing stop</span><span class="btn">Exit the rest now</span><span class="btn">See exit scenarios</span></div>
+        <div class="illus">Booking half at +5% and trailing the rest already run in the code today.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="page" data-ch="6" data-title="Free, Plus and Pro">
+  <p>One brain decides once for everyone; plans only change what each user sees. The plan gate is already in early form on branch <code>feature/plans-manager</code> (switch off by default, no payments).</p>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Output</th><th>Free</th><th>Plus</th><th>Pro</th></tr></thead>
+    <tbody>
+      <tr><td>Stock signals</td><td>5 large-cap, state and top reason</td><td>All, with trigger, levels, Expected R, amount</td><td>+ setup odds, horizons, model agreement</td></tr>
+      <tr><td>Holding actions</td><td>—</td><td>HOLD / MONITOR / REDUCE / EXIT</td><td>+ exit scenarios, opportunity cost</td></tr>
+      <tr><td>Market banner</td><td class="yes">✓</td><td>+ index and sector trends</td><td>+ closest past episode</td></tr>
+      <tr><td>Alerts</td><td>End of day, in app</td><td>Real time: push, Telegram</td><td>+ WhatsApp, event shocks</td></tr>
+      <tr><td>Day-by-day tracking</td><td>Paper trades</td><td>Your trades</td><td>+ typical range and reasons</td></tr>
+      <tr><td>Reports and scorecards</td><td>Verified summary</td><td>Score report card</td><td>+ filter, factor, model scorecards</td></tr>
+      <tr><td>AI copilot</td><td>—</td><td>—</td><td>Cited answers, daily cap</td></tr>
+      <tr><td>Order handling</td><td>—</td><td>—</td><td>Order-list export; you place orders at your broker</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="page" data-ch="7" data-title="Infrastructure we'll actually use">
+  <p>Your picture listed many technologies. The final architecture uses a small set now and names the rest only as options for later, when measured load demands them. <span class="chg">✎</span></p>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Need</th><th>Now</th><th>Later, only if needed</th><th>Not planned</th></tr></thead>
+    <tbody>
+      <tr><td>Database</td><td>PostgreSQL 17 + TimescaleDB (in use)</td><td>Managed PostgreSQL at the product split</td><td>MongoDB, MySQL, Snowflake</td></tr>
+      <tr><td>Cache and queue</td><td>Redis (in use); Redis-backed job queue</td><td>RabbitMQ</td><td>Kafka, Kinesis</td></tr>
+      <tr><td>Files</td><td>Object storage for backups and filing text</td><td>—</td><td>—</td></tr>
+      <tr><td>Search for the copilot</td><td>—</td><td>pgvector inside PostgreSQL</td><td>A separate vector database</td></tr>
+      <tr><td>Compute</td><td>Docker Compose on DigitalOcean (in use)</td><td>Managed containers for the product stack</td><td>Kubernetes</td></tr>
+      <tr><td>Broker</td><td>Kite through the Broker interface (in use)</td><td>Other brokers as new adapters</td><td>—</td></tr>
+      <tr><td>Market data</td><td>Kite (owner), NSE archive files</td><td>Licensed vendor feed for users</td><td>Web scraping</td></tr>
+      <tr><td>Language model</td><td>—</td><td>Claude API for brief wording, news classification, copilot</td><td>—</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="page" data-ch="8" data-title="What's excluded, and why">
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Removed from your picture</th><th>Why</th><th>Instead</th></tr></thead>
+    <tbody>
+      <tr><td>Web scraper (news, reports)</td><td>Sites block bots and forbid it; stale data risk</td><td>NSE/BSE archive files and licensed APIs</td></tr>
+      <tr><td>Alternative data, social sentiment</td><td>Cost, no point-in-time Indian vendors at our scale, little value for swings</td><td>Research only, if ever</td></tr>
+      <tr><td>Community and expert views, analyst reports</td><td>Would host unregistered advice or unlicensed content</td><td>Anonymous community benchmark only</td></tr>
+      <tr><td>“Invest today” button</td><td>Urgent call to action beside our call (SEBI advertising code)</td><td>“Plan this trade”</td></tr>
+      <tr><td>Expected return as a promise</td><td>SEBI bans assured-return language</td><td>Probability with its track record</td></tr>
+      <tr><td>Broker execution for users (year one)</td><td>Algo-trading rules and broker approval</td><td>Order-list export; user confirms at the broker</td></tr>
+      <tr><td>White-label, B2B, institutional, options module (year one)</td><td>Distribution and licensing rules; scope</td><td>Later, after legal review</td></tr>
+      <tr><td>“Works in any market condition”</td><td>No strategy works in every market</td><td>“Adapts to every market; protects capital in weak ones”</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="page" data-ch="9" data-title="Build order">
+  <p>Brain contracts first, then today's engine moved into that shape with identical results, then one plug-in at a time. Each month ends with a gate.</p>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>When</th><th>Build</th><th>Gate</th></tr></thead>
+    <tbody>
+      <tr><td>Month 1 · Oct 2026</td><td>Brain contracts; wrap today's engine; decision records; safety layer as one module; journal and shadow scoring; edge investigation; episode replay; stock page</td><td>Scan identical to today with flags off; per-episode loss report</td></tr>
+      <tr><td>Month 2 · Nov</td><td>Setup detectors and models; Expected R; sector brain; correlation; scorecards; bear mode; morning brief</td><td>Setups and EV running as a paper shadow</td></tr>
+      <tr><td>Month 3 · Dec</td><td>Meta-model; uncertainty; what changed; lessons loop; accounts and roles; review and merge the plans branch; staging</td><td>Calibration gap ≤ 10 points; isolation tests pass</td></tr>
+      <tr><td>Month 4 · Jan 2027</td><td>Stock DNA; horizons; holding actions; tracking; billing and checkout; admin panel; product stack split</td><td>Free can't read Pro data</td></tr>
+      <tr><td>Month 5 · Feb</td><td>News brain; shock detector; exit model; failure investigator; licensed data</td><td>News ≥ 85% accuracy; exit model beats current exits</td></tr>
+      <tr><td>Month 6 · Mar</td><td>Opportunity cost; model observatory; strategy lab; research lab v1; copilot for the owner</td><td>Launch decision on evidence, registration and licence</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="page" data-ch="10" data-title="Changes from your picture, and decisions for you">
+  <h3>Edits applied to your v5 picture</h3>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>#</th><th>Your picture</th><th>Final architecture</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>Two decision languages</td><td>Three small sets: new ideas, holdings, market</td></tr>
+      <tr><td>2</td><td>Example 5.4 with price below the stop</td><td>Price above the stop; stop-hit card when it's reached</td></tr>
+      <tr><td>3</td><td>“Invest today” button</td><td>“Plan this trade” and “Add to watchlist”</td></tr>
+      <tr><td>4</td><td>Expected return +3% to +7%, score 82</td><td>Probabilities with sample size and Expected R</td></tr>
+      <tr><td>5</td><td>Three holding periods (1–5, 5, 15 days)</td><td>One: up to 15 trading days, with odds by horizon</td></tr>
+      <tr><td>6</td><td>Stop −1.6% in the example</td><td>Engine's locked stop −4%, target +8%, half at +5%</td></tr>
+      <tr><td>7</td><td>Two portfolio plug-ins</td><td>One portfolio brain with optimisation inside</td></tr>
+      <tr><td>8</td><td>Human override labelled “every decision is recorded”</td><td>“Owner can stop or overrule any decision”; recording is audit logs</td></tr>
+      <tr><td>9</td><td>Scraper, alternative data, social and expert views</td><td>Removed</td></tr>
+      <tr><td>10</td><td>Large infrastructure list</td><td>Small set now; others later only if needed</td></tr>
+      <tr><td>11</td><td>Broker execution, white-label, B2B</td><td>Later, after legal review</td></tr>
+      <tr><td>12</td><td>Contracts and rollbacks only hinted at</td><td>Common data contracts as a layer; governance with rollbacks</td></tr>
+      <tr><td>13</td><td>“Adapt rules” in learning</td><td>“Propose changes; owner approves”</td></tr>
+      <tr><td>14</td><td>“Modify stop loss” as a user action</td><td>“Tighten stop”; the app's stop only moves up</td></tr>
+    </tbody>
+  </table></div>
+  <h3>Decisions for you</h3>
+  <ol class="clean small">
+    <li><b>Holding period:</b> keep up to 15 trading days (recommended; it's what the model is trained on), or move to shorter swings?</li>
+    <li><b>Decision vocabulary:</b> approve the three sets in chapter 4?</li>
+    <li><b>Trade levels:</b> keep the locked −4% / +8% until replay tests setup-specific levels?</li>
+    <li><b>Broker execution:</b> keep it out of year one?</li>
+    <li><b>Plans branch:</b> review and merge <code>feature/plans-manager</code> in Month 3 as shown, or earlier?</li>
+    <li><b>Final:</b> once approved, update the requirements document and technical blueprint to match, and make the PDF.</li>
+  </ol>
+  <p class="small muted">A planning document. Illustrative numbers are examples, not model output. Nothing here is a projection or guarantee of returns.</p>
+</section>
+
+</main>
+
+<script>
+(function () {
+  "use strict";
+  // [label, status b|p|n, note, changed]
+  var BANDS = [
+    { no: "1", t: "Data sources", s: "Licensed, stored by date, tested before use", tone: "t-src", items: [
+      ["Market data", "p", "Prices, indices, VIX; F&O and global cues planned"],
+      ["Company and fundamentals", "p", "Corporate actions now; financials via NSE XBRL later"],
+      ["Technical indicators", "b", "53 indicators; patterns next"],
+      ["News and filings (NSE/BSE)", "p", "Results calendar now; filing text next"],
+      ["Macro calendar and FII/DII", "p", "Flows stored; RBI, CPI, budget dates", true],
+      ["Broker and portfolio", "p", "Owner via Kite; users read-only later"],
+      ["User inputs and preferences", "p", "Risk profile, capital, watchlist, goals"],
+      ["New source (plug-in)", "n", "Through a data contract"] ] },
+    { no: "2", t: "Input gateway", s: "Nothing reaches the brain unchecked", tone: "t-gw", items: [
+      ["Connectors: API, WebSocket, file", "p", "No web scraping", true],
+      ["Validation and quality checks", "p", "Feed alerts, spike guard"],
+      ["Normalisation", "p", ""], ["Enrichment", "p", "Sector, cap tier"], ["De-duplication", "p", "Upserts"],
+      ["Versioning by time and source", "p", "Stored dated on fetch", true],
+      ["Security and access", "p", "JWT, owner-only routes"] ] },
+    { no: "3", t: "Common data contracts", s: "Versioned formats every plug-in uses", tone: "t-ct", changed: true, items: [
+      ["Market data", "p", "Candles, quotes"], ["Stock", "p", "Instruments"], ["Event", "p", "Upcoming events"],
+      ["User profile", "p", "Plans branch"], ["Portfolio", "p", "Positions"],
+      ["Signal", "b", "SignalDecision"], ["Execution", "b", "Broker interface"] ] },
+    { no: "4", t: "Event bus and orchestration", s: "Each step starts when its inputs are ready", tone: "t-bus", items: [
+      ["Scheduled jobs", "b", "APScheduler, 20+ jobs"], ["Event queue on Redis", "n", "", true],
+      ["Dependency-driven workflow", "p", "Clock-chained today", true],
+      ["Priority: exits before scans", "n", ""], ["Error handling and retry", "p", "Re-login, retry, alerts"], ["New flows", "p", ""] ] }
+  ];
+  var BRAIN = {
+    steps: ["Perceive", "State engine", "Situation recognition", "Memory and experience", "Reasoning and models", "Risk and safety gate", "Decide", "Learn"],
+    stepStatus: ["p", "p", "p", "p", "p", "p", "p", "p"],
+    plugins: [["Market brain", "p"], ["Sector and theme brain", "p"], ["Stock brain (DNA)", "n"], ["News brain", "n"], ["Portfolio brain, incl. optimisation", "n", true], ["Strategy brain", "p"], ["Risk brain", "b"], ["User brain", "n"], ["New module", "n"]],
+    kb: [["Patterns library", "n"], ["Rules", "p"], ["Playbooks", "n"], ["Trained models", "b"], ["Feature store", "n"], ["Model registry", "b"], ["Experience DB", "p"], ["Version control", "p"]]
+  };
+  var SAFETY = { no: "6", t: "Constitution and safety layer", s: "Non-negotiable; every decision passes it last", tone: "t-safe", items: [
+    ["Risk limits (locked)", "b", "Overrides refused in code"], ["SEBI compliance", "n", "Disclosures, advertising code"],
+    ["Data integrity", "p", ""], ["Bias checks: overconfidence, look-ahead, survivorship", "p", "", true],
+    ["Uncertainty: can say WAIT", "n", ""], ["Human override: owner can stop or overrule", "b", "Kill switch, exits switch", true],
+    ["Audit logs", "p", ""], ["No uncontrolled changes", "p", "Approvals, feature flags"] ] };
+  var OUT = { no: "8", t: "Outputs by plan", s: "Same decisions; each plan sees its share", tone: "t-out", items: [
+    ["Stock signals with trigger, levels, amount", "p", ""], ["Holding actions (reviews)", "n", "", true], ["Market banner", "n", "", true],
+    ["Real-time alerts", "p", "Telegram today"], ["Day-by-day tracking", "p", ""], ["AI copilot (Pro)", "n", ""],
+    ["Reports and scorecards", "p", ""], ["Web, mobile, email, Telegram", "p", ""], ["Order-list export (Pro)", "n", "", true],
+    ["Broker execution, institutional: later", "n", "After legal review", true] ] };
+  var BASE = [
+    { t: "Feedback and learning loop", items: [["Track outcomes", "b"], ["Analyse why", "n"], ["Update memory", "n"], ["Propose changes", "n", true], ["Your approval", "p"], ["Shadow, then promote", "p"]] },
+    { t: "Observability and operations", items: [["System health", "p"], ["Data freshness", "p"], ["Incident log", "n"], ["Self-healing for infrastructure only", "p", true], ["Capacity and scaling", "n"], ["Security and access", "p"]] },
+    { t: "Infrastructure (small set)", items: [["PostgreSQL + TimescaleDB", "b"], ["Redis", "b"], ["Object storage", "n"], ["Docker on DigitalOcean", "b"], ["Kite via Broker interface", "b"], ["Claude API (later)", "n"]], changed: true },
+    { t: "Governance and extensibility", items: [["Versioning", "p"], ["Feature flags", "p"], ["Change registry", "n"], ["Rollbacks", "b"], ["Migrations", "b"], ["Plug-ins: data, indicator, strategy, model, rule, channel, UI", "p"]], changed: true }
+  ];
+
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+  var DOT = { b: "d-b", p: "d-p", n: "d-n" };
+  function chip(it) { return '<span class="chip"><span class="dot ' + DOT[it[1]] + '"></span>' + esc(it[0]) + (it[3] || (it.length === 3 && it[2] === true) ? '<span class="chg">✎</span>' : "") + "</span>"; }
+  function chipsOf(items) { return '<div class="chips">' + items.map(chip).join("") + "</div>"; }
+  function band(b) {
+    return '<div class="band ' + b.tone + '"><div class="bh"><span class="num">' + b.no + '</span><b>' + esc(b.t) + (b.changed ? ' <span class="chg">✎</span>' : "") + "</b><span>" + esc(b.s) + "</span></div>" + chipsOf(b.items) + "</div>";
+  }
+  var ar = '<div class="arrow">↓</div>';
+  var html = BANDS.map(band).join(ar) + ar +
+    '<div class="band t-brain"><div class="bh"><span class="num">5</span><b>Central intelligence brain</b><span>Perceive → understand → recognise → remember → reason → check safety → decide → learn</span></div>' +
+    '<div class="steps">' + BRAIN.steps.map(function (s, i) { return '<div class="step' + (s === "Risk and safety gate" ? " gate" : "") + '"><span class="dot ' + DOT[BRAIN.stepStatus[i]] + '"></span>' + esc(s) + "</div>"; }).join("") + "</div>" +
+    '<div class="sub">Intelligence plug-ins</div>' + chipsOf(BRAIN.plugins) +
+    '<div class="sub">Knowledge base and model store</div>' + chipsOf(BRAIN.kb) + "</div>" + ar + band(SAFETY) + ar +
+    '<div class="band t-dec"><div class="bh"><span class="num">7</span><b>Decisions <span class="chg">✎</span></b><span>One vocabulary, three situations</span></div><div class="dec3">' +
+    '<div><span class="sub">Stock you don\'t own</span><div class="chips"><span class="st s-g">TRADE</span><span class="st s-b">WATCH</span><span class="st s-w">WAIT</span><span class="st s-r">AVOID</span></div></div>' +
+    '<div><span class="sub">Stock you hold</span><div class="chips"><span class="st s-g">HOLD</span><span class="st s-b">MONITOR</span><span class="st s-w">REDUCE</span><span class="st s-r">EXIT</span></div></div>' +
+    '<div><span class="sub">Whole market</span><div class="chips"><span class="st s-g">NORMAL</span><span class="st s-w">DEFENSIVE</span><span class="st s-r">NO NEW TRADES</span></div></div>' +
+    "</div></div>" + ar + band(OUT) + ar +
+    '<div class="band t-base"><div class="bh"><span class="num">9</span><b>Foundation</b><span>Keeps it learning, observable, replaceable and governed</span></div><div class="base-grid">' +
+    BASE.map(function (g) { return '<div><div class="sub">' + esc(g.t) + (g.changed ? ' <span class="chg">✎</span>' : "") + "</div>" + chipsOf(g.items) + "</div>"; }).join("") + "</div></div>";
+  document.getElementById("arch").innerHTML = html;
+
+  // layer table
+  var ST = { b: "Built", p: "Partly built", n: "Planned" };
+  function rows(group, items) {
+    return '<tr class="grp"><td colspan="4">' + esc(group) + "</td></tr>" + items.map(function (it) {
+      var changed = it[3] === true || it[2] === true;
+      var note = typeof it[2] === "string" ? it[2] : "";
+      return "<tr><td>" + esc(it[0]) + '</td><td><span class="dot ' + DOT[it[1]] + '"></span>' + ST[it[1]] + "</td><td>" + (changed ? '<span class="chg">✎ changed</span>' : "") + "</td><td>" + esc(note) + "</td></tr>";
+    }).join("");
+  }
+  var tb = "<thead><tr><th>Item</th><th>Status today</th><th>Change</th><th>Note</th></tr></thead><tbody>";
+  BANDS.forEach(function (b) { tb += rows(b.no + " · " + b.t, b.items); });
+  tb += rows("5 · Brain steps", BRAIN.steps.map(function (s, i) { return [s, BRAIN.stepStatus[i], s === "Learn" ? "Proposes changes; owner approves" : ""]; }));
+  tb += rows("5 · Intelligence plug-ins", BRAIN.plugins.map(function (p) { return [p[0], p[1], "", p[2]]; }));
+  tb += rows("5 · Knowledge base and model store", BRAIN.kb.map(function (k) { return [k[0], k[1], ""]; }));
+  tb += rows("6 · " + SAFETY.t, SAFETY.items);
+  tb += rows("8 · " + OUT.t, OUT.items);
+  BASE.forEach(function (g) { tb += rows("9 · " + g.t, g.items.map(function (i) { return [i[0], i[1], "", i[2]]; })); });
+  document.getElementById("layerTbl").innerHTML = tb + "</tbody>";
+
+  // chapter heads + contents
+  var toc = [];
+  document.querySelectorAll("section[data-ch]").forEach(function (s) {
+    s.id = "ch" + s.dataset.ch;
+    var h = document.createElement("div");
+    h.className = "chapter-head";
+    h.innerHTML = '<span class="no">' + s.dataset.ch.padStart(2, "0") + "</span><h2>" + esc(s.dataset.title) + "</h2>";
+    s.insertBefore(h, s.firstChild);
+    toc.push('<li><span class="n">' + s.dataset.ch.padStart(2, "0") + '</span><a href="#ch' + s.dataset.ch + '">' + esc(s.dataset.title) + "</a></li>");
+  });
+  document.getElementById("toc").innerHTML = toc.join("");
+})();
+</script>

@@ -1,0 +1,779 @@
+<title>SwingTrade Technical Blueprint</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one continuous document for print. A cover, a contents list, then
+   numbered chapters; each chapter starts a new page when printed. Flowcharts
+   are drawn from data by the script at the bottom. */
+:root {
+  --bg: #f4f6fb; --paper: #ffffff; --surface-2: #eef2f9; --border: #d6deeb;
+  --text: #0f1a2e; --dim: #56657f; --accent: #2f6fe4; --pos: #15803d;
+  --neg: #c62828; --warn: #b45309; --plan: #7c3aed; --store: #0f766e;
+  --font-body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0b1120; --paper: #131c31; --surface-2: #1b2540; --border: #2a3858;
+    --text: #e6edf7; --dim: #8b9bb4; --accent: #4f8cff; --pos: #22c55e;
+    --neg: #ef4444; --warn: #f59e0b; --plan: #a78bfa; --store: #2dd4bf; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0b1120; --paper: #131c31; --surface-2: #1b2540; --border: #2a3858;
+  --text: #e6edf7; --dim: #8b9bb4; --accent: #4f8cff; --pos: #22c55e;
+  --neg: #ef4444; --warn: #f59e0b; --plan: #a78bfa; --store: #2dd4bf; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--text); font-family: var(--font-body); font-size: 14px; line-height: 1.55; -webkit-font-smoothing: antialiased; }
+.doc { max-width: 980px; margin: 0 auto; padding-inline: 16px; padding-block: 24px 64px; display: flex; flex-direction: column; gap: 22px; }
+h1, h2, h3 { margin: 0; text-wrap: balance; letter-spacing: -0.01em; }
+h1 { font-size: 2rem; } h2 { font-size: 1.35rem; } h3 { font-size: 1.02rem; }
+p { margin: 0; max-width: 78ch; }
+code, .mono { font-family: var(--font-mono); font-size: 0.84em; }
+.muted { color: var(--dim); } .small { font-size: 0.85rem; }
+a { color: var(--accent); }
+
+.page { background: var(--paper); border: 1px solid var(--border); border-radius: 12px; padding: 28px; display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.cover { gap: 22px; }
+.cover .kicker { font: 600 0.78rem var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); }
+.cover .meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+.cover .meta div { background: var(--surface-2); border-radius: 8px; padding: 10px 12px; }
+.cover .meta b { display: block; font-size: 0.74rem; color: var(--dim); font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+.parts { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.part { border: 1px solid var(--border); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 6px; }
+.part.v1 { border-top: 4px solid var(--pos); } .part.v2 { border-top: 4px solid var(--plan); }
+
+.chapter-head { display: flex; gap: 14px; align-items: baseline; border-bottom: 2px solid var(--accent); padding-bottom: 10px; }
+.chapter-head .no { font: 700 1.6rem var(--font-mono); color: var(--accent); }
+.chapter-head .tag { margin-left: auto; font: 600 0.72rem var(--font-mono); letter-spacing: 0.06em; padding: 3px 8px; border-radius: 999px; white-space: nowrap; }
+.tag.v1 { color: var(--pos); background: color-mix(in srgb, var(--pos) 13%, transparent); }
+.tag.v2 { color: var(--plan); background: color-mix(in srgb, var(--plan) 14%, transparent); }
+.partbar { font: 700 0.8rem var(--font-mono); letter-spacing: 0.12em; text-transform: uppercase; padding: 10px 14px; border-radius: 10px; }
+.partbar.v1 { background: color-mix(in srgb, var(--pos) 12%, transparent); color: var(--pos); }
+.partbar.v2 { background: color-mix(in srgb, var(--plan) 12%, transparent); color: var(--plan); }
+
+.toc { columns: 2 280px; column-gap: 28px; margin: 0; padding: 0; list-style: none; }
+.toc li { break-inside: avoid; padding: 4px 0; border-bottom: 1px dotted var(--border); display: flex; gap: 10px; }
+.toc .n { font-family: var(--font-mono); color: var(--accent); min-width: 26px; }
+.toc a { color: var(--text); text-decoration: none; }
+
+.tbl-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; }
+table { border-collapse: collapse; width: 100%; font-size: 0.84rem; }
+th, td { text-align: left; vertical-align: top; padding: 7px 10px; border-bottom: 1px solid var(--border); }
+th { font-size: 0.72rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--dim); background: var(--surface-2); font-weight: 600; }
+tr:last-child td { border-bottom: 0; }
+td.mono, td code { font-family: var(--font-mono); font-size: 0.8rem; }
+.yes { color: var(--pos); font-weight: 600; } .no { color: var(--dim); }
+
+.fig { display: flex; flex-direction: column; gap: 8px; }
+.fig-title { font-weight: 600; font-size: 0.95rem; }
+.fig-title span { font-family: var(--font-mono); color: var(--dim); font-weight: 400; font-size: 0.8rem; margin-left: 6px; }
+.flow-host { border: 1px solid var(--border); border-radius: 10px; padding: 12px; background: var(--paper); overflow-x: auto; }
+.flow-host svg { display: block; width: 100%; max-width: 760px; height: auto; margin: 0 auto; min-width: 520px; }
+.caption { font-size: 0.82rem; color: var(--dim); }
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; align-items: start; }
+.note { border-left: 3px solid var(--warn); background: var(--surface-2); padding: 10px 14px; border-radius: 0 8px 8px 0; font-size: 0.86rem; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: 0.82rem; color: var(--dim); align-items: center; }
+.sw { display: inline-block; width: 26px; height: 14px; border-radius: 3px; border: 1.6px solid; vertical-align: -2px; margin-right: 6px; }
+.sw.p { border-color: var(--accent); } .sw.d { border-color: var(--warn); transform: skewX(-18deg); } .sw.s { border-color: var(--store); border-radius: 7px / 4px; }
+.sw.e { border-color: var(--dim); border-radius: 999px; } .sw.v2 { border-color: var(--plan); border-style: dashed; } .sw.x { border-color: var(--neg); border-style: dashed; }
+
+/* flowchart */
+.fl .n-proc { fill: var(--paper); stroke: var(--accent); stroke-width: 1.5; }
+.fl .n-dec { fill: var(--paper); stroke: var(--warn); stroke-width: 1.6; }
+.fl .n-data { fill: var(--surface-2); stroke: var(--store); stroke-width: 1.6; }
+.fl .n-term { fill: var(--surface-2); stroke: var(--dim); stroke-width: 1.4; }
+.fl .n-plan { stroke: var(--plan); stroke-dasharray: 6 4; }
+.fl .n-side { fill: var(--surface-2); stroke: var(--neg); stroke-width: 1.2; stroke-dasharray: 4 3; }
+.fl .t { fill: var(--text); font: 600 13px var(--font-body); }
+.fl .d { fill: var(--dim); font: 11px var(--font-mono); }
+.fl .st { fill: var(--text); font: 12px var(--font-body); }
+.fl .lab { fill: var(--dim); font: 600 11px var(--font-body); }
+.fl .ln { stroke: var(--dim); stroke-width: 1.4; fill: none; }
+.fl .hd { fill: var(--dim); }
+.fl .tag { fill: var(--plan); font: 700 11px var(--font-mono); }
+
+.arch .box { fill: var(--surface-2); stroke: var(--accent); stroke-width: 1.4; }
+.arch .ext { fill: var(--paper); stroke: var(--dim); stroke-width: 1.3; }
+.arch .db { fill: var(--surface-2); stroke: var(--store); stroke-width: 1.5; }
+.arch .pl { fill: var(--surface-2); stroke: var(--plan); stroke-width: 1.5; stroke-dasharray: 6 4; }
+.arch .zone { fill: none; stroke: var(--border); stroke-width: 1.3; stroke-dasharray: 5 4; }
+.arch .t { fill: var(--text); font: 600 12.5px var(--font-body); }
+.arch .s { fill: var(--dim); font: 11px var(--font-mono); }
+.arch .zt { fill: var(--dim); font: 700 11px var(--font-body); letter-spacing: 0.06em; }
+.arch .ln { stroke: var(--dim); stroke-width: 1.3; fill: none; }
+.arch .hd { fill: var(--dim); }
+
+pre.algo { margin: 0; font: 0.78rem/1.55 var(--font-mono); background: var(--surface-2); border-left: 3px solid var(--accent); border-radius: 0 8px 8px 0; padding: 12px 14px; white-space: pre-wrap; }
+
+@media (max-width: 560px) { .page { padding: 18px; } h1 { font-size: 1.6rem; } }
+@media print {
+  :root, :root[data-theme="dark"], :root:not([data-theme="light"]) {
+    --bg: #ffffff; --paper: #ffffff; --surface-2: #eef2f9; --border: #cfd8e6; --text: #0f1a2e; --dim: #4a5870;
+    --accent: #2f6fe4; --pos: #15803d; --neg: #c62828; --warn: #b45309; --plan: #7c3aed; --store: #0f766e; color-scheme: light;
+  }
+  @page { size: A4 portrait; margin: 13mm 12mm; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { font-size: 11.5px; background: #fff; }
+  .doc { max-width: none; padding: 0; gap: 0; }
+  .page { border: 0; border-radius: 0; padding: 0; break-before: page; }
+  .page.cover { break-before: auto; }
+  .flow-host { overflow: visible; border: 0; padding: 0; }
+  .flow-host svg { min-width: 0; max-width: 100%; max-height: 232mm; }
+  .two { grid-template-columns: 1fr; }
+  .tbl-wrap { overflow: visible; }
+  .fig, tr, .part, pre.algo, .note { break-inside: avoid; }
+  h2, h3, .fig-title { break-after: avoid; }
+  .toc a { color: var(--text); }
+}
+</style>
+
+<main class="doc">
+
+<!-- ============================================================ COVER -->
+<section class="page cover" id="top">
+  <span class="kicker">Technical blueprint · for print</span>
+  <h1>SwingTrade App</h1>
+  <p style="font-size:1.1rem">How the system works, step by step: <b>V1</b>, the personal trading system as it is built today, and <b>V2</b>, the TradeMind product with Free, Plus and Pro, as designed. Every flowchart shows the real module, function, condition and table involved, not just feature names.</p>
+  <div class="meta">
+    <div><b>Date</b>29 Sep 2026</div>
+    <div><b>Repository</b><span class="mono">swing-trade-bot</span></div>
+    <div><b>Production</b>swingtrademl.com (DigitalOcean)</div>
+    <div><b>Owner</b>Naresh Gudiganti</div>
+  </div>
+  <div class="parts">
+    <div class="part v1"><b>Part A · V1 as built</b><span class="small">Chapters 1–12. Read from the code: <span class="mono">backend/src/swing_trade_ml</span>, <span class="mono">.github/workflows</span>, <span class="mono">infra/deploy</span>. Single user, paper trading by default.</span></div>
+    <div class="part v2"><b>Part B · V2 as designed</b><span class="small">Chapters 13–21. From the requirements document (TradeMind master architecture v3). Multi-user, Free / Plus / Pro. Nothing in Part B is built yet.</span></div>
+  </div>
+  <div class="note"><b>Naming.</b> In this document V1 = today's personal system and V2 = the TradeMind product. The code's own “system versioning” plan also uses v1 / v2, but for trading configurations stored as database rows; that meaning appears only in chapter 12.</div>
+
+  <h3>How to read the flowcharts</h3>
+  <div class="legend">
+    <span><span class="sw e"></span>Start or end</span>
+    <span><span class="sw p"></span>Step: what runs, and where (<span class="mono">module.function</span>)</span>
+    <span><span class="sw d"></span>Decision: the condition checked</span>
+    <span><span class="sw s"></span>Data written or read (table)</span>
+    <span><span class="sw x"></span>Side branch: what happens on “no”</span>
+    <span><span class="sw v2"></span>Dashed purple: V2, planned</span>
+  </div>
+
+  <h3>Contents</h3>
+  <ol class="toc" id="toc"></ol>
+</section>
+
+<!-- ============================================================ PART A -->
+<section class="page" data-ch="1" data-title="Architecture and deployment" data-v="v1">
+  <div class="partbar v1" id="partA">Part A · V1 · the system as built today</div>
+  <p>One DigitalOcean droplet runs five Docker containers. Only the worker runs the scheduler, so two schedulers can never race to place the same trade. Production configuration lives on the droplet at <code>/root/app/.env</code>, not in git.</p>
+  <div class="fig">
+    <div class="fig-title">Figure 1.1 · Containers and outside services<span>docker-compose.yml + docker-compose.prod.yml</span></div>
+    <div class="flow-host">
+      <svg class="arch" viewBox="0 0 760 370" role="img" aria-label="Droplet with nginx, frontend, api, worker, postgres and redis containers, connected to users, Kite Connect, NSE archive, Telegram and GitHub Actions">
+        <defs><marker id="ma" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="hd" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+        <rect class="ext" x="14" y="44" width="150" height="54" rx="8"/><text class="t" x="26" y="67">Browser / PWA</text><text class="s" x="26" y="86">web · Android · iOS</text>
+        <rect class="zone" x="186" y="14" width="380" height="344" rx="12"/><text class="zt" x="198" y="34">DROPLET · static IP 147.182.176.105</text>
+        <rect class="box" x="200" y="48" width="160" height="50" rx="8"/><text class="t" x="212" y="69">nginx (host)</text><text class="s" x="212" y="87">swingtrademl.com</text>
+        <rect class="box" x="384" y="48" width="170" height="50" rx="8"/><text class="t" x="396" y="69">stml-frontend</text><text class="s" x="396" y="87">static Vite build :8080</text>
+        <rect class="box" x="200" y="120" width="160" height="62" rx="8"/><text class="t" x="212" y="142">stml-api</text><text class="s" x="212" y="160">FastAPI :8000</text><text class="s" x="212" y="174">no scheduler</text>
+        <rect class="box" x="384" y="120" width="170" height="62" rx="8"/><text class="t" x="396" y="142">stml-worker</text><text class="s" x="396" y="160">same image</text><text class="s" x="396" y="174">ENABLE_SCHEDULER=true</text>
+        <rect class="db" x="200" y="206" width="160" height="62" rx="8"/><text class="t" x="212" y="228">stml-postgres</text><text class="s" x="212" y="246">PostgreSQL 17</text><text class="s" x="212" y="260">+ TimescaleDB · 5433</text>
+        <rect class="db" x="384" y="206" width="170" height="62" rx="8"/><text class="t" x="396" y="228">stml-redis</text><text class="s" x="396" y="246">Redis 7 · 6379</text><text class="s" x="396" y="260">worker heartbeat</text>
+        <rect class="db" x="200" y="290" width="354" height="50" rx="8"/><text class="t" x="212" y="311">model_data volume</text><text class="s" x="212" y="329">trained model files (MODEL_ARTIFACT_DIR)</text>
+        <rect class="ext" x="596" y="44" width="150" height="54" rx="8"/><text class="t" x="608" y="67">Kite Connect</text><text class="s" x="608" y="86">quotes · orders</text>
+        <rect class="ext" x="596" y="120" width="150" height="54" rx="8"/><text class="t" x="608" y="143">NSE archive</text><text class="s" x="608" y="162">bhavcopy · deals</text>
+        <rect class="ext" x="596" y="196" width="150" height="54" rx="8"/><text class="t" x="608" y="219">Telegram bot</text><text class="s" x="608" y="238">alerts to one chat</text>
+        <rect class="ext" x="596" y="272" width="150" height="54" rx="8"/><text class="t" x="608" y="295">GitHub Actions</text><text class="s" x="608" y="314">test · deploy</text>
+        <line class="ln" x1="164" y1="71" x2="197" y2="71" marker-end="url(#ma)"/>
+        <line class="ln" x1="360" y1="73" x2="381" y2="73" marker-end="url(#ma)"/>
+        <line class="ln" x1="280" y1="98" x2="280" y2="117" marker-end="url(#ma)"/>
+        <line class="ln" x1="280" y1="182" x2="280" y2="203" marker-end="url(#ma)"/>
+        <line class="ln" x1="469" y1="182" x2="469" y2="203" marker-end="url(#ma)"/>
+        <line class="ln" x1="384" y1="160" x2="363" y2="228" marker-end="url(#ma)"/>
+        <line class="ln" x1="554" y1="140" x2="593" y2="76" marker-end="url(#ma)"/>
+        <line class="ln" x1="554" y1="150" x2="593" y2="147" marker-end="url(#ma)"/>
+        <line class="ln" x1="554" y1="165" x2="593" y2="222" marker-end="url(#ma)"/>
+        <line class="ln" x1="596" y1="300" x2="569" y2="300" marker-end="url(#ma)"/>
+      </svg>
+    </div>
+    <p class="caption">The worker talks to Kite, NSE and Telegram; the API serves the dashboard and handles the Kite login callback. GitHub Actions deploys over SSH.</p>
+  </div>
+  <div class="fig">
+    <div class="fig-title">Figure 1.2 · From a push to a verified release<span>.github/workflows · infra/deploy/release.sh</span></div>
+    <div class="flow-host" data-flow="cicd"></div>
+  </div>
+</section>
+
+<section class="page" data-ch="2" data-title="Startup sequence" data-v="v1">
+  <p>The same image starts both the API and the worker. What differs is one setting: whether the scheduler runs. Live trading needs two separate settings to be true.</p>
+  <div class="fig"><div class="fig-title">Figure 2.1 · What happens when a container starts<span>main.py · lifespan()</span></div><div class="flow-host" data-flow="startup"></div></div>
+</section>
+
+<section class="page" data-ch="3" data-title="The daily schedule" data-v="v1">
+  <p>All jobs run in the worker, on weekdays, in IST, from <code>workers/scheduler.py</code>. Each calls a function in <code>workers/jobs.py</code>.</p>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Time (IST)</th><th>Job id</th><th>Function</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td>Every 60 s</td><td class="mono">heartbeat</td><td class="mono">job_heartbeat</td><td>Writes a heartbeat; deploy verification checks it</td></tr>
+      <tr><td>Every 60 s</td><td class="mono">check_kite_login</td><td class="mono">job_check_kite_login</td><td>Detects a Kite session killed during market hours</td></tr>
+      <tr><td>06:10</td><td class="mono">kite_auto_login</td><td class="mono">job_kite_auto_login</td><td>Unattended Kite login; alert if it fails</td></tr>
+      <tr><td>06:15–15:45, :15 and :45</td><td class="mono">nag_missing_session</td><td class="mono">job_nag_missing_session</td><td>Reminds on Telegram while no session exists</td></tr>
+      <tr><td>08:30, 19:20, 22:05</td><td class="mono">daily_market_feeds…</td><td class="mono">job_daily_market_feeds</td><td>NSE archive files: delivery, deals, FII/DII, restriction lists, events</td></tr>
+      <tr><td>Every 60 s</td><td class="mono">refresh_quotes</td><td class="mono">job_refresh_quotes</td><td>Live prices; marks positions to market</td></tr>
+      <tr><td>Every 60 s</td><td class="mono">check_exits</td><td class="mono">job_check_exits</td><td>Stop, target, time stop, scale-out (chapter 8)</td></tr>
+      <tr><td>Every 60 s</td><td class="mono">reconcile_orders</td><td class="mono">job_reconcile_orders</td><td>Polls pending live orders to their final state</td></tr>
+      <tr><td>15:40</td><td class="mono">daily_ingest</td><td class="mono">job_daily_ingest</td><td>Tops up daily candles for the watchlist</td></tr>
+      <tr><td>15:42</td><td class="mono">predict_watchlist</td><td class="mono">job_predict_watchlist</td><td>Stores model predictions for scoring later</td></tr>
+      <tr><td>15:45</td><td class="mono">signal_scan</td><td class="mono">job_signal_scan</td><td>The nightly scan (chapter 6)</td></tr>
+      <tr><td>15:48</td><td class="mono">sync_real_holdings</td><td class="mono">job_sync_real_holdings</td><td>Real Zerodha holdings into My Holdings (chapter 10)</td></tr>
+      <tr><td>15:50, 19:30</td><td class="mono">capture_fills…</td><td class="mono">job_capture_fills</td><td>Real trades into broker_fills</td></tr>
+      <tr><td>16:00</td><td class="mono">daily_summary</td><td class="mono">job_daily_summary</td><td>Portfolio snapshot and Telegram digest</td></tr>
+      <tr><td>16:15</td><td class="mono">evaluate_predictions</td><td class="mono">job_evaluate_predictions</td><td>Scores predictions whose horizon has passed</td></tr>
+      <tr><td>16:17</td><td class="mono">evaluate_signals</td><td class="mono">job_evaluate_signals</td><td>Scores signals against target, stop and horizon (chapter 9)</td></tr>
+      <tr><td>21:30</td><td class="mono">sync_mutual_fund_navs</td><td class="mono">job_sync_mutual_fund_navs</td><td>Mutual fund NAVs (finance module, frozen)</td></tr>
+      <tr><td>Sunday 08:00</td><td class="mono">sync_instruments</td><td class="mono">job_sync_instruments</td><td>Refreshes the Kite instrument master</td></tr>
+    </tbody>
+  </table></div>
+  <p class="caption">The scan runs after the close on purpose: scanning intraday would read a half-formed daily candle.</p>
+</section>
+
+<section class="page" data-ch="4" data-title="Data ingestion" data-v="v1">
+  <div class="two">
+    <div class="fig"><div class="fig-title">Figure 4.1 · Prices<span>services/ingestion.py</span></div><div class="flow-host" data-flow="ingest"></div></div>
+    <div class="fig"><div class="fig-title">Figure 4.2 · NSE feeds<span>services/market_feeds.py</span></div><div class="flow-host" data-flow="feeds"></div></div>
+  </div>
+</section>
+
+<section class="page" data-ch="5" data-title="Model training" data-v="v1">
+  <p>Training is run by hand (CLI or API). A trained model never goes live by itself.</p>
+  <div class="fig"><div class="fig-title">Figure 5.1 · From history to an active model<span>ml/dataset.py · ml/features.py · ml/train.py · ml/registry.py</span></div><div class="flow-host" data-flow="train"></div></div>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Setting</th><th>Value</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td>Label</td><td>+8% before −4% within 15 trading bars</td><td>Matches the trade actually taken</td></tr>
+      <tr><td>Features</td><td>53, all ratios or percentages</td><td>A ₹200 and a ₹3,000 stock look alike to the model</td></tr>
+      <tr><td>Validation</td><td>5 purged walk-forward folds, chronological</td><td>A random split leaks the future through overlapping labels</td></tr>
+      <tr><td>Class weights</td><td>balanced</td><td>Only about 20–30% of bars lead to a win; unweighted fits learn “never buy”</td></tr>
+      <tr><td>Algorithms</td><td>LightGBM (default), random forest, gradient boosting, logistic regression</td><td>Chosen per training run</td></tr>
+      <tr><td>Models live</td><td>One per cap tier: large, mid, small</td><td>Barrier versions run as advisory shadows</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="page" data-ch="6" data-title="The nightly scan" data-v="v1">
+  <div class="fig"><div class="fig-title">Figure 6.1 · 15:45 scan across all strategies<span>workers/jobs.job_signal_scan → services/engine.py</span></div><div class="flow-host" data-flow="scan"></div></div>
+  <div class="fig"><div class="fig-title">Figure 6.2 · How the ML strategy judges one stock<span>strategies/ml_swing.py · evaluate()</span></div><div class="flow-host" data-flow="evaluate"></div></div>
+</section>
+
+<section class="page" data-ch="7" data-title="Entry: risk gate and order" data-v="v1">
+  <p>Every decision is recorded as a <code>signals</code> row, including rejections with the reason. A rejection is as informative as a trade.</p>
+  <div class="fig"><div class="fig-title">Figure 7.1 · From a BUY decision to an open position<span>services/execution.process_decision · services/risk.check_entry · brokers/</span></div><div class="flow-host" data-flow="entry"></div></div>
+  <pre class="algo">Sizing (services/risk.calculate_quantity)
+risk_rupees  = account value × RISK_PER_TRADE_PCT (1%)
+qty_by_risk  = floor(risk_rupees ÷ (entry − stop))        stop = entry × 0.96
+qty          = smallest of qty_by_risk, allocation ÷ entry,
+               single-stock cap (limits_for), cash above the cash floor
+limits_for(account value) interpolates the ₹10K → ₹1Cr capital ladder:
+               max positions, single-stock cap, sector rule, cap tiers,
+               small-cap budget, cash floor, liquidity ceiling</pre>
+</section>
+
+<section class="page" data-ch="8" data-title="Exits every 60 seconds" data-v="v1">
+  <div class="fig"><div class="fig-title">Figure 8.1 · The exit loop<span>services/execution.check_exits · services/exit_policy.py</span></div><div class="flow-host" data-flow="exits"></div></div>
+</section>
+
+<section class="page" data-ch="9" data-title="Scoring and evidence" data-v="v1">
+  <div class="fig"><div class="fig-title">Figure 9.1 · How results are measured<span>ml/predict.py · ml/calibration.py</span></div><div class="flow-host" data-flow="score"></div></div>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Evidence to date</th><th>Result</th><th>Source</th></tr></thead>
+    <tbody>
+      <tr><td>Walk-forward AUC, barrier label</td><td>0.556–0.583 (0.5 is a coin flip)</td><td>docs/ROADMAP_TRACKER.md</td></tr>
+      <tr><td>Top 5% of scores, simplified test</td><td>+0.22 to +0.28R per trade after costs</td><td>research/2026-09-21-volatility-label-experiment.md</td></tr>
+      <tr><td>Full system replay, ₹10 lakh, May 2023–Aug 2026</td><td>−0.1% to −0.4% per 8-month window; NIFTY +6%</td><td>research/2026-09-21-system-replay.md</td></tr>
+      <tr><td>Sector, breadth, VIX, delivery % as features</td><td>No improvement</td><td>research/2026-09-21-delivery-ablation.md</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="page" data-ch="10" data-title="Your real Zerodha account" data-v="v1">
+  <div class="fig"><div class="fig-title">Figure 10.1 · Tracking real holdings and trades<span>jobs · services/holdings_sync.py · services/real_report.py</span></div><div class="flow-host" data-flow="real"></div></div>
+</section>
+
+<section class="page" data-ch="11" data-title="V1 data model" data-v="v1">
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Table</th><th>Holds</th><th>Written by</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">instruments</td><td>Tradable universe; watchlist flag; cap tier and sector</td><td>sync_instruments</td></tr>
+      <tr><td class="mono">candles</td><td>OHLCV bars; TimescaleDB hypertable keyed on (instrument_id, interval, ts)</td><td>daily_ingest, backfill</td></tr>
+      <tr><td class="mono">quotes</td><td>Latest price per instrument, updated in place</td><td>refresh_quotes</td></tr>
+      <tr><td class="mono">strategies</td><td>Configured strategies; params JSON; mode; auto or advisory</td><td>API</td></tr>
+      <tr><td class="mono">signals</td><td>Every decision, rejections included, with reason and later outcome</td><td>process_decision, evaluate_signals</td></tr>
+      <tr><td class="mono">orders</td><td>Order requests and their lifecycle (paper ids PAPER-…)</td><td>open/close_position, reconcile</td></tr>
+      <tr><td class="mono">positions</td><td>Open and closed holdings; stop, target, highest price, scaled-out time</td><td>execution</td></tr>
+      <tr><td class="mono">trades</td><td>Completed round trips, immutable</td><td>close_position</td></tr>
+      <tr><td class="mono">portfolio_snapshots</td><td>Daily equity-curve point</td><td>daily_summary</td></tr>
+      <tr><td class="mono">ml_models, predictions</td><td>Model registry (one ACTIVE per name); every prediction and its outcome</td><td>train, predict, evaluate</td></tr>
+      <tr><td class="mono">broker_sessions, broker_fills</td><td>Daily Kite tokens; real fills</td><td>login, capture_fills</td></tr>
+      <tr><td class="mono">daily_delivery, block_deals, institutional_flows, trading_restrictions, upcoming_events</td><td>NSE feeds, dated on fetch</td><td>daily_market_feeds</td></tr>
+      <tr><td class="mono">system_state, risk events</td><td>Halt, exits switch; every blocked entry</td><td>Safety page, check_entry</td></tr>
+      <tr><td class="mono">users</td><td>Dashboard logins (password, Google); no per-user ownership of trading data</td><td>auth</td></tr>
+    </tbody>
+  </table></div>
+  <p class="caption">Every trading row carries <code>mode</code> (paper or live), so paper and live results never mix.</p>
+</section>
+
+<section class="page" data-ch="12" data-title="V1 safety, status and open items" data-v="v1">
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Safety control</th><th>How it works</th><th>Where</th></tr></thead>
+    <tbody>
+      <tr><td>Two-flag live latch</td><td>Live only when TRADING_MODE=live AND ALLOW_LIVE_TRADING=true; checked when choosing the broker and again inside place_order</td><td class="mono">brokers/__init__.get_broker, brokers/kite.py</td></tr>
+      <tr><td>Kill switch (entries halted)</td><td>First rule in check_entry; exits still run</td><td class="mono">system_state, Safety page</td></tr>
+      <tr><td>Exits switch</td><td>check_exits skips when switched off</td><td class="mono">system_state.exits_enabled</td></tr>
+      <tr><td>Drawdown halt</td><td>No new entries at 15% drawdown; never force-sells</td><td class="mono">risk.check_entry</td></tr>
+      <tr><td>Sell-once latch</td><td>A position is claimed before any sell</td><td class="mono">execution._claim_exit</td></tr>
+      <tr><td>Market protection</td><td>Required by Zerodha on API market orders since 1 Apr 2026</td><td class="mono">brokers/kite.py</td></tr>
+      <tr><td>Verified deploys</td><td>Tests before deploy; backup and rollback images; heartbeat check</td><td class="mono">infra/deploy/release.sh</td></tr>
+    </tbody>
+  </table></div>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Open item</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr><td>After-close entry method (AMO or next-open limit); regular orders are rejected after the close</td><td>Not built · live blocker</td></tr>
+      <tr><td>Approval workflow (approve each live order)</td><td>Not built</td></tr>
+      <tr><td>Stop-loss held at the broker (GTT)</td><td>Columns exist; nothing writes them</td></tr>
+      <tr><td>DDPI and static IP registration with Zerodha</td><td>Owner action</td></tr>
+      <tr><td>Selection layer and regime-based profiles</td><td>Planned (roadmap Track 2)</td></tr>
+      <tr><td>System versioning: trading configurations as rows, one trading and others shadow (code's “v1 / v2”)</td><td>Stage 1 in progress</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- ============================================================ PART B -->
+<section class="page" data-ch="13" data-title="V2 architecture and migration" data-v="v2">
+  <div class="partbar v2" id="partB">Part B · V2 · TradeMind product with Free, Plus and Pro (designed, not built)</div>
+  <p>V2 keeps V1's engine as a private <b>trading core</b> and adds a public <b>product stack</b> for users. The core publishes each day's intelligence one way; the product never holds your Kite trading secrets.</p>
+  <div class="fig">
+    <div class="fig-title">Figure 13.1 · Trading core, product stack and staging<span>deployment design</span></div>
+    <div class="flow-host">
+      <svg class="arch" viewBox="0 0 760 330" role="img" aria-label="Private trading core publishes one way to the public product stack; a staging copy mirrors both">
+        <defs><marker id="mb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="hd" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+        <rect class="zone" x="14" y="14" width="300" height="300" rx="12"/><text class="zt" x="26" y="34">PRIVATE · TRADING CORE (V1 droplet)</text>
+        <rect class="box" x="30" y="50" width="268" height="54" rx="8"/><text class="t" x="42" y="72">Scheduler + scan + models</text><text class="s" x="42" y="90">V1 chapters 3–9, extended</text>
+        <rect class="box" x="30" y="118" width="268" height="54" rx="8"/><text class="t" x="42" y="140">Your Kite session, TOTP, orders</text><text class="s" x="42" y="158">static IP · two-flag latch</text>
+        <rect class="db" x="30" y="186" width="268" height="54" rx="8"/><text class="t" x="42" y="208">Core database</text><text class="s" x="42" y="226">candles · signals · models</text>
+        <rect class="pl" x="30" y="254" width="268" height="46" rx="8"/><text class="t" x="42" y="282">Publish job (16:00)</text>
+        <rect class="zone" x="360" y="14" width="386" height="300" rx="12"/><text class="zt" x="372" y="34">PUBLIC · PRODUCT STACK (new)</text>
+        <rect class="pl" x="376" y="50" width="354" height="54" rx="8"/><text class="t" x="388" y="72">API + web/app + admin panel</text><text class="s" x="388" y="90">plan gate in api/deps.py</text>
+        <rect class="pl" x="376" y="118" width="170" height="54" rx="8"/><text class="t" x="388" y="140">Workers</text><text class="s" x="388" y="158">brief · alerts</text>
+        <rect class="pl" x="560" y="118" width="170" height="54" rx="8"/><text class="t" x="572" y="140">Pro worker queue</text><text class="s" x="572" y="158">copilot · research</text>
+        <rect class="pl" x="376" y="186" width="354" height="54" rx="8"/><text class="t" x="388" y="208">Product database</text><text class="s" x="388" y="226">users · plans · published intelligence</text>
+        <rect class="pl" x="376" y="254" width="354" height="46" rx="8"/><text class="t" x="388" y="282">Billing · licensed data feed · notifications</text>
+        <line class="ln" x1="298" y1="277" x2="373" y2="213" marker-end="url(#mb)"/>
+        <text class="s" x="300" y="318">+ a staging copy of both, deployed from pull requests</text>
+      </svg>
+    </div>
+  </div>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Migration step</th><th>Month</th><th>Technical change</th></tr></thead>
+    <tbody>
+      <tr><td>1 · Measure and log</td><td>1</td><td>Journal and shadow scoring switched on; episode replay; decision_records table</td></tr>
+      <tr><td>2 · Intelligence on paper</td><td>2–3</td><td>Setup detectors, EV, meta-model behind flags; scan byte-identical when off</td></tr>
+      <tr><td>3 · Staging and accounts</td><td>3</td><td>users.role; portfolios, watchlists, broker_connections; owner migrated as user 1</td></tr>
+      <tr><td>4 · Product stack split</td><td>4</td><td>New stack; one-way publish; admin panel; billing in test mode</td></tr>
+      <tr><td>5 · Licensed data, private beta</td><td>5</td><td>Vendor feed for user-facing prices; owner on real holdings</td></tr>
+      <tr><td>6 · Launch decision</td><td>6</td><td>Public Free and Plus only if SEBI registration, data licence and paper evidence are all in place</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="page" data-ch="14" data-title="V2 nightly decision pipeline" data-v="v2">
+  <p>The V1 scan (chapter 6) becomes a pipeline with twelve attach points [1]–[12] where intelligence plugs in. Every new step ships behind a flag; with the flags off, output is byte-identical to V1.</p>
+  <div class="fig"><div class="fig-title">Figure 14.1 · 15:45 decision pipeline<span>trading core</span></div><div class="flow-host" data-flow="v2scan"></div></div>
+  <pre class="algo">decide(p_win, exp_r, agreement, phase, entry_zone):
+  AVOID  if exp_r ≤ 0 or risk quality is poor
+  WAIT   if agreement below 4 of 6, panic phase, event due, or regime changing
+  WATCH  if price is 3%+ above the entry zone ("wait for pullback")
+  TRADE  if p_win ≥ 0.60 (+0.10 in a NIFTY downtrend) and exp_r ≥ min_edge
+  WATCH  otherwise                       (thresholds tuned by walk-forward)</pre>
+</section>
+
+<section class="page" data-ch="15" data-title="V2 plan gating: Free, Plus, Pro" data-v="v2">
+  <div class="fig"><div class="fig-title">Figure 15.1 · Every request through one gate<span>api/deps.py · plan_catalog</span></div><div class="flow-host" data-flow="gate"></div></div>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Area</th><th>Free · Discover</th><th>Plus · Decide</th><th>Pro · TradeMind</th></tr></thead>
+    <tbody>
+      <tr><td>Picks</td><td>5 a day, large cap, label</td><td>Full list, sub-scores, Expected R</td><td>+ EV ranking, setups, horizon odds</td></tr>
+      <tr><td>Alerts</td><td>End of day, in app</td><td>Real time: push, Telegram</td><td>+ WhatsApp, event shocks</td></tr>
+      <tr><td>Market</td><td>Regime label, bear banner</td><td>Index and sector trends, regime alerts</td><td>+ global cues, full memory</td></tr>
+      <tr><td>Why</td><td>Top reason</td><td>Evidence for and against</td><td>+ what would change it</td></tr>
+      <tr><td>Your money</td><td>Paper trading</td><td>Capital, 1% sizing, holding states, health</td><td>Custom risk, portfolio brain, what-if</td></tr>
+      <tr><td>Models, strategies</td><td>Default safety model</td><td>1 model, 1 strategy</td><td>Any; agreement mode; presets</td></tr>
+      <tr><td>Stock page</td><td>Header, label, daily chart</td><td>+ levels, intraday, evidence</td><td>+ DNA, odds, peers, record</td></tr>
+      <tr><td>AI</td><td>Short brief</td><td>Full brief</td><td>Personal brief, copilot, research lab</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="page" data-ch="16" data-title="V2 sign-up, subscription and checkout" data-v="v2">
+  <div class="two">
+    <div class="fig"><div class="fig-title">Figure 16.1 · Sign-up<span>auth · consents</span></div><div class="flow-host" data-flow="signup"></div></div>
+    <div class="fig"><div class="fig-title">Figure 16.2 · Upgrade and payment<span>billing · coupons</span></div><div class="flow-host" data-flow="checkout"></div></div>
+  </div>
+</section>
+
+<section class="page" data-ch="17" data-title="V2 trade lifecycle" data-v="v2">
+  <div class="fig"><div class="fig-title">Figure 17.1 · From TRADE to lesson<span>execution · positions_intel · journal</span></div><div class="flow-host" data-flow="v2trade"></div></div>
+</section>
+
+<section class="page" data-ch="18" data-title="V2 learning loop" data-v="v2">
+  <div class="fig"><div class="fig-title">Figure 18.1 · Scorecards, lessons and promotion<span>scorecards · lessons · approvals</span></div><div class="flow-host" data-flow="learn"></div></div>
+  <pre class="algo">Score band health (daily)          Filter verdict (per filter and regime)
+band has &lt; 30 resolved → building   blocked &lt; 50 resolved → building record
+stated − real hit rate &gt; 10 pts     mean R of blocked ≤ −0.1R → protecting
+   → under review, not shown as BUY mean R of blocked ≥ +0.1R → costing us
+otherwise → delivering              otherwise → neutral; proposal → approvals</pre>
+</section>
+
+<section class="page" data-ch="19" data-title="V2 bear mode" data-v="v2">
+  <div class="fig"><div class="fig-title">Figure 19.1 · Phases and levers<span>market_intel · bear_mode · market_episodes</span></div><div class="flow-host" data-flow="bear"></div></div>
+  <p class="caption">Bear mode changes only selection and deployable capital. Stop, target, risk per trade, sector cap, time stop and the drawdown halt never change.</p>
+</section>
+
+<section class="page" data-ch="20" data-title="V2 data model and APIs" data-v="v2">
+  <div class="two">
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>New shared tables</th><th>For</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">market_state_daily, regime_events</td><td>Market brain</td></tr>
+        <tr><td class="mono">sector_rank_daily, theme_rank_daily</td><td>Sectors, themes</td></tr>
+        <tr><td class="mono">stock_profile_daily, setup_detections</td><td>DNA, setups</td></tr>
+        <tr><td class="mono">decision_records</td><td>Every decision with evidence</td></tr>
+        <tr><td class="mono">event_items, shock_events</td><td>News brain</td></tr>
+        <tr><td class="mono">market_episodes, episode_replays</td><td>Market memory</td></tr>
+        <tr><td class="mono">score_band_stats, filter_scorecard_daily</td><td>Scorecards</td></tr>
+        <tr><td class="mono">signals.is_shadow</td><td>Shadow scoring</td></tr>
+        <tr><td class="mono">model_evaluations, lessons_reports</td><td>Learning</td></tr>
+      </tbody>
+    </table></div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>New per-user tables</th><th>For</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">users.role</td><td>Owner, admin, support, user</td></tr>
+        <tr><td class="mono">portfolios, watchlists</td><td>Each user's books and lists</td></tr>
+        <tr><td class="mono">broker_connections</td><td>Read-only broker links</td></tr>
+        <tr><td class="mono">subscriptions, plan_catalog</td><td>Plans and what they include</td></tr>
+        <tr><td class="mono">coupons, invoices, payments</td><td>Checkout</td></tr>
+        <tr><td class="mono">trade_journal, position_thesis</td><td>Journal, holdings</td></tr>
+        <tr><td class="mono">consents, audit_log, admin_actions</td><td>Compliance</td></tr>
+        <tr><td class="mono">notification_prefs, copilot_sessions</td><td>Alerts, copilot</td></tr>
+      </tbody>
+    </table></div>
+  </div>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>API (under /api/v1)</th><th>Returns</th><th>Gate</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">GET /market/today, /market/memory</td><td>Market state, bear mode</td><td>Plan shapes fields</td></tr>
+      <tr><td class="mono">GET /signals, /stocks/{symbol}/page</td><td>Decisions, stock page</td><td>Plan shapes fields and count</td></tr>
+      <tr><td class="mono">GET /scorecards/scores, /scorecards/filters</td><td>Report cards</td><td>Plus / Pro</td></tr>
+      <tr><td class="mono">GET /me/portfolio/health, /me/positions/intel</td><td>Per-user intelligence</td><td>User-owned rows only</td></tr>
+      <tr><td class="mono">POST /billing/checkout, /billing/coupons/validate</td><td>Payment</td><td>Signed in</td></tr>
+      <tr><td class="mono">/admin/*</td><td>Users, plans, coupons, approvals, audit</td><td>Role, not plan</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="page" data-ch="21" data-title="V2 roadmap and gates" data-v="v2">
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Month</th><th>Intelligence track (owner's paper book)</th><th>Product track</th><th>Gate to pass</th></tr></thead>
+    <tbody>
+      <tr><td>1 · Oct 2026</td><td>Edge investigation; episode replay; market brain; regime change; why / why not; data quality; journal and shadow scoring; trigger-entry test; stock page</td><td>Consultant, data quotes, NISM exam</td><td>Where the edge dies; per-episode loss report</td></tr>
+      <tr><td>2 · Nov</td><td>Bear mode; scorecards; setup detectors and models; EV; sector brain; correlation; morning brief</td><td>RA application; schema design</td><td>Setups + EV running as a paper shadow</td></tr>
+      <tr><td>3 · Dec</td><td>Meta-model; uncertainty; what changed; explainability; lessons loop; themes; deals</td><td>Accounts, roles, sign-up, staging</td><td>Calibration gap ≤ 10 points; isolation tests</td></tr>
+      <tr><td>4 · Jan 2027</td><td>DNA; horizons; portfolio health; factors; position intelligence; screens; tax view</td><td>Billing, checkout, admin panel, compliance, notifications, stack split</td><td>DNA for all stocks; Free can't read Pro data</td></tr>
+      <tr><td>5 · Feb</td><td>News classification; shock detector; exit model; failure investigator</td><td>Licensed data; private beta</td><td>News ≥ 85%; exit model beats current exits</td></tr>
+      <tr><td>6 · Mar</td><td>Opportunity cost; model observatory; strategy lab; research lab v1; copilot for owner</td><td>Launch decision</td><td>3 months of paper: EV ranking beats confidence</td></tr>
+      <tr><td>7–12</td><td>Trading twin, Monte Carlo, what-if, optimisation, event-impact learning, challenger loop, fundamentals</td><td>OTP and Okta at go-live</td><td>Per-feature gates</td></tr>
+    </tbody>
+  </table></div>
+  <p class="caption">Months are planning estimates. A red gate moves the plan, not the gate. Nothing here is a projection or guarantee of returns.</p>
+</section>
+
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  /* Flow node: k = start | end | proc | dec | data ; t = title ; d = detail ;
+     no = side branch text ; nl = side label ; y = label on the down arrow ;
+     v2 = planned (dashed) ; tag = attach point number */
+  var FLOWS = {
+    cicd: [
+      { k: "start", t: "Push to main", d: "git push origin <branch>:main, or merge a pull request" },
+      { k: "proc", t: "Validate: test.yml", d: "ruff check src tests · pytest -q on Postgres + TimescaleDB · npm ci · npm run typecheck · npm run build" },
+      { k: "dec", t: "Every check passes?", no: "Deploy job never runs; production stays as it was" },
+      { k: "proc", t: "Deploy over SSH: deploy.yml", d: "appleboy/ssh-action → cd /root/app → git checkout --detach $RELEASE_SHA" },
+      { k: "proc", t: "release.sh: safety copies first", d: "tag running images as stml-rollback-* · pg_dumpall → database.sql backup" },
+      { k: "proc", t: "Build and restart containers", d: "docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build" },
+      { k: "dec", t: "Heartbeat from the new worker?", d: "infra/deploy/verify.py inside stml-api", no: "rollback(): stop worker, check out previous SHA, restore previous images; database stays migrated" },
+      { k: "end", t: "Verified release", d: "host nginx → frontend :8080 and /api/ → api :8000" }
+    ],
+    startup: [
+      { k: "start", t: "Container starts", d: "uvicorn swing_trade_ml.main:app" },
+      { k: "proc", t: "Create or migrate the database", d: "db.session.init_database() → alembic upgrade head" },
+      { k: "proc", t: "Seed the default watchlist if empty", d: "main._seed_watchlist()" },
+      { k: "proc", t: "Reload today's Kite session", d: "kite_broker.load_session(db) → newest active broker_sessions row" },
+      { k: "dec", t: "Scheduler enabled in this container?", d: "settings.ENABLE_SCHEDULER", no: "API container: serve HTTP only, so two schedulers never race to place the same trade" },
+      { k: "proc", t: "Start the scheduled jobs", d: "workers.scheduler.start_scheduler() · APScheduler · IST · weekdays" },
+      { k: "dec", t: "Live latch open?", d: "TRADING_MODE=live AND ALLOW_LIVE_TRADING=true", no: "Paper mode: every order goes to PaperBroker" },
+      { k: "proc", t: "Log a loud warning", d: "log.warning('app.LIVE_TRADING_ENABLED')" },
+      { k: "end", t: "Serving /api/v1 on port 8000" }
+    ],
+    ingest: [
+      { k: "start", t: "15:40 · job_daily_ingest" },
+      { k: "proc", t: "Find the last stored bar per stock", d: "watchlisted instruments" },
+      { k: "proc", t: "Fetch missing daily bars", d: "Kite historical API, rate-limited (~3 requests/s)" },
+      { k: "data", t: "Upsert into candles", d: "hypertable key (instrument_id, interval, ts)" },
+      { k: "proc", t: "15:42 · predict_watchlist", d: "active model per cap tier → predictions" },
+      { k: "end", t: "Ready for the 15:45 scan" }
+    ],
+    feeds: [
+      { k: "start", t: "08:30, 19:20, 22:05", d: "job_daily_market_feeds" },
+      { k: "proc", t: "Download NSE archive files", d: "bhavcopy + delivery · bulk/block deals · FII/DII · ASM/GSM lists · events" },
+      { k: "dec", t: "File found and parsed?", no: "Report the failure; never fill with stale data" },
+      { k: "data", t: "Store, dated on fetch", d: "daily_delivery · block_deals · institutional_flows · trading_restrictions · upcoming_events" },
+      { k: "end", t: "Read by avoid.py", d: "deals and FII/DII not yet used by any model" }
+    ],
+    train: [
+      { k: "start", t: "swingtrade train --algorithm lightgbm", d: "CLI, or POST /api/v1/ml/train" },
+      { k: "proc", t: "Load history and market context", d: "ml/dataset.load_candles · market_context: NIFTY, sector index, INDIA VIX, breadth" },
+      { k: "proc", t: "Build 53 features per bar", d: "ml/features.build_features() · merge_asof for context frames" },
+      { k: "proc", t: "Label every bar", d: "barrier: +8% before −4% within 15 trading bars" },
+      { k: "proc", t: "Purged walk-forward, 5 folds", d: "ml/train.walk_forward() → fit_and_score() per fold · class_weight=balanced" },
+      { k: "proc", t: "Fit the final model and save it", d: "joblib file in MODEL_ARTIFACT_DIR · n_samples = rows actually fitted" },
+      { k: "data", t: "Register as TRAINED", d: "ml_models row: name, version, metrics, label_kind" },
+      { k: "dec", t: "--activate given?", no: "Stays TRAINED; can run as an advisory shadow strategy" },
+      { k: "proc", t: "Activate", d: "ml/registry: new row ACTIVE; previous ACTIVE of the same name → ARCHIVED (one-call rollback)" },
+      { k: "end", t: "Used from the next scan" }
+    ],
+    scan: [
+      { k: "start", t: "15:45 · job_signal_scan" },
+      { k: "proc", t: "Run every active strategy", d: "engine.run_all_active(): auto strategies of the broker's mode + advisory strategies" },
+      { k: "proc", t: "Pick the universe", d: "engine.eligible_instruments(): the strategy's symbols, or the watchlist" },
+      { k: "proc", t: "Evaluate each stock", d: "load_candles(min bars + 50) → strategy.evaluate(df) → SignalDecision: BUY / HOLD / EXIT, confidence, stop, target, reason" },
+      { k: "proc", t: "Process HOLD and EXIT decisions", d: "EXIT closes the open position (signal exit)" },
+      { k: "proc", t: "Rank BUY candidates", d: "risk.rank_buy_candidates(): highest confidence first" },
+      { k: "proc", t: "Work out today's buy slots", d: "engine._buy_slot_budget(): limits_for(account).max_positions ÷ active strategies − open positions" },
+      { k: "proc", t: "Try candidates strongest first", d: "execution.process_decision() — slots are spent by fills, never by rejections" },
+      { k: "dec", t: "Slots left?", no: "Remaining BUYs recorded with a “ranked out” reason" },
+      { k: "end", t: "Telegram summary and blocked entries", d: "jobs._blocked_entries_message()" }
+    ],
+    evaluate: [
+      { k: "start", t: "ml_swing.evaluate(candles)" },
+      { k: "dec", t: "Enough bars, an active model, no missing features?", no: "HOLD with the reason" },
+      { k: "proc", t: "Predict", d: "probability = model.predict_proba(latest features)" },
+      { k: "dec", t: "Probability above the exit level?", d: "exit_confidence_for(strategy), about 0.35", no: "EXIT: “model confidence fell to …”" },
+      { k: "dec", t: "Probability at or above the threshold?", d: "ML_MIN_CONFIDENCE 0.60, +0.10 when NIFTY is in a downtrend", no: "HOLD: “below threshold”" },
+      { k: "dec", t: "Filters pass?", d: "average volume ≥ minimum · 20-day volatility ≤ 6% · ATR available · 5-day return > −8% (falling knife)", no: "HOLD, listing the blocking filters" },
+      { k: "proc", t: "Set the levels", d: "stop = price × 0.96 · target = price × 1.08 · horizon 15 bars (the label's own levels)" },
+      { k: "end", t: "BUY with confidence, reason and levels" }
+    ],
+    entry: [
+      { k: "start", t: "execution.process_decision(decision)" },
+      { k: "dec", t: "Inside today's buy slots?", no: "Record signal with the “ranked out” reason" },
+      { k: "dec", t: "No position already open?", d: "or pyramiding allowed", no: "Record signal: “Position already open”" },
+      { k: "proc", t: "Risk gate, rules in order", d: "risk.check_entry(): entries halted · already open · stop-out cooldown · landmine (avoid.py) · max positions · strategy share · drawdown ≥ 15% · share-price cap · cap tier · small-cap budget · sector rule or cap · liquidity (ADV) · minimum position" },
+      { k: "dec", t: "All rules pass?", no: "Record signal with the reason + a risk-event row" },
+      { k: "proc", t: "Size the position", d: "risk.calculate_quantity(): 1% risk ÷ (entry − stop), capped" },
+      { k: "dec", t: "Automatic strategy?", no: "Advisory: Telegram suggestion only; no order" },
+      { k: "proc", t: "Place the order", d: "execution.open_position() → brokers.get_broker() → place_order(CNC, MARKET)" },
+      { k: "dec", t: "Live latch open?", d: "re-checked inside KiteBroker.place_order()", no: "PaperBroker: fills at the live price + 5 bps slippage + statutory costs; rejects if cash runs out" },
+      { k: "proc", t: "KiteBroker live order", d: "market protection · status polled by reconcile_orders every 60 s" },
+      { k: "data", t: "Position opened", d: "positions + orders rows · Telegram entry message" },
+      { k: "end", t: "Watched by the exit loop" }
+    ],
+    exits: [
+      { k: "start", t: "Every 60 s · job_check_exits" },
+      { k: "dec", t: "Exits switch on?", d: "system_state.exits_enabled", no: "Skip this tick" },
+      { k: "proc", t: "Get live prices for open positions", d: "broker.get_ltp(keys)" },
+      { k: "proc", t: "Ratchet the trailing stop", d: "new high → trail_stop(position) keeps the original rupee distance" },
+      { k: "dec", t: "Stop, target or time stop hit?", d: "price ≤ stop → STOP_LOSS_HIT · price ≥ target → TARGET_HIT · held ≥ 30 days → TIME_STOP", no: "Scale-out check: at +5% sell half, once (SCALE_OUT)" },
+      { k: "dec", t: "Automatic position?", no: "Advisory: one exit alert; the user closes it by hand" },
+      { k: "proc", t: "Claim the exit", d: "_claim_exit(): the sell-once latch" },
+      { k: "proc", t: "Sell", d: "close_position() → broker order → trades row (immutable), P&L after costs" },
+      { k: "end", t: "Telegram exit message" }
+    ],
+    score: [
+      { k: "start", t: "16:15 and 16:17", d: "job_evaluate_predictions · job_evaluate_signals" },
+      { k: "proc", t: "Score predictions", d: "actual return after the horizon → predictions" },
+      { k: "proc", t: "Score signals, rejected ones too", d: "evaluate_pending_signals(): walk 15 trading bars of high and low → TARGET, STOP or EXPIRED" },
+      { k: "proc", t: "Calibration and evidence", d: "signal_calibration(): buckets 0.55–1.00 · signal_evidence(): resolved count, win rate, enough at 30" },
+      { k: "end", t: "Model Lab and /strategies/performance" }
+    ],
+    real: [
+      { k: "start", t: "06:10 · job_kite_auto_login", d: "TOTP login; reminder every 30 min while missing" },
+      { k: "proc", t: "15:48 · sync real holdings", d: "Kite holdings: quantity + t1_quantity" },
+      { k: "dec", t: "Still held at Zerodha?", no: "holdings_sync closes the row, so no false alerts for sold stocks" },
+      { k: "proc", t: "Daily model read on each holding", d: "attention cards · stop-breach and confidence-decay alerts" },
+      { k: "proc", t: "15:50 and 19:30 · capture fills", d: "broker fills → broker_fills" },
+      { k: "end", t: "Real report", d: "services/real_report.py: FIFO matching, charges from costs.py, profit after costs" }
+    ],
+    v2scan: [
+      { k: "start", t: "15:45 · data ready" },
+      { k: "proc", t: "Market brain", tag: "1", v2: 1, d: "market_intel.py → market_state_daily · regime change after 2 days → regime_events" },
+      { k: "proc", t: "Bear-mode phase", tag: "4", v2: 1, d: "bear_mode.py + market_episodes → phase, closest episode" },
+      { k: "proc", t: "Sector and theme ranks", tag: "2", v2: 1, d: "sectors.py, themes.py → sector_rank_daily, theme_rank_daily" },
+      { k: "dec", t: "Data quality good enough?", tag: "8", v2: 1, no: "WAIT: “data incomplete”" },
+      { k: "dec", t: "No landmine?", tag: "8", d: "avoid.py (V1) + longer blackout if tests prove it", no: "AVOID with reason + shadow signal (signals.is_shadow)" },
+      { k: "proc", t: "Features and Stock DNA", tag: "5", v2: 1, d: "53 features + EMA 20/50, swing points, support/resistance · stock_dna.py" },
+      { k: "dec", t: "Setup detected?", tag: "6", v2: 1, d: "playbooks: pullback · breakout · momentum · reversal", no: "NO SETUP, shadow-scored" },
+      { k: "proc", t: "Setup model and horizon odds", tag: "7", v2: 1, d: "one model per setup · 3/5/10/20-day heads · stop-first" },
+      { k: "proc", t: "Meta-model", tag: "9", v2: 1, d: "meta_model.py → one calibrated P(win)" },
+      { k: "proc", t: "Expected R", tag: "10", v2: 1, d: "P × avg win − (1 − P) × avg loss − costs" },
+      { k: "proc", t: "Uncertainty and agreement", tag: "11", v2: 1, d: "models disagree, regime changing, event due → WAIT" },
+      { k: "data", t: "Save the decision", v2: 1, d: "decision_records: state, evidence for and against, trigger = high × 1.0025" },
+      { k: "proc", t: "Portfolio fit for each book", tag: "12", d: "V1 sizing + correlation + deployable %" },
+      { k: "end", t: "16:00 · publish one way to the product stack" }
+    ],
+    gate: [
+      { k: "start", t: "User opens a screen or calls the API" },
+      { k: "dec", t: "Signed in?", v2: 1, no: "Show the sign-up pop-up" },
+      { k: "dec", t: "Not an admin route?", v2: 1, d: "/admin/*", no: "Role check: owner, admin or support" },
+      { k: "proc", t: "Load the user's plan", v2: 1, d: "active subscription, or “view as” for the owner" },
+      { k: "dec", t: "Feature in this plan?", v2: 1, d: "plan_catalog[plan]", no: "Locked card with the cheapest plan that has it" },
+      { k: "proc", t: "Shape the answer", v2: 1, d: "fields · delay (Free: end of day) · counts (Free: 5 picks)" },
+      { k: "dec", t: "Within rate limit and quota?", v2: 1, no: "“Limit reached” message" },
+      { k: "end", t: "Send answer, disclaimer and audit row" }
+    ],
+    signup: [
+      { k: "start", t: "“Sign up” or a locked feature" },
+      { k: "proc", t: "Pop-up opens", v2: 1, d: "install QR panel + sign-in form" },
+      { k: "dec", t: "Invite valid? (beta)", v2: 1, no: "“Request an invite”" },
+      { k: "proc", t: "Sign in", d: "password or Google now · phone OTP at go-live" },
+      { k: "data", t: "Store consent", v2: 1, d: "consents: Terms, Privacy, RA and AI-use disclosures, version, time" },
+      { k: "proc", t: "Risk profile", v2: 1, d: "5 questions → starting preset" },
+      { k: "end", t: "Free plan Home" }
+    ],
+    checkout: [
+      { k: "start", t: "Upgrade page" },
+      { k: "proc", t: "Choose plan and period", v2: 1, d: "periods within SEBI's advance-fee limit" },
+      { k: "dec", t: "Coupon valid?", v2: 1, d: "server check: dates, uses, plan", no: "Clear message; price unchanged" },
+      { k: "proc", t: "Show final amount", v2: 1, d: "price − discount + GST" },
+      { k: "proc", t: "Pay at the gateway", v2: 1 },
+      { k: "dec", t: "Payment confirmed?", v2: 1, d: "gateway webhook", no: "Stay on current plan" },
+      { k: "data", t: "Activate", v2: 1, d: "subscriptions + invoice + audit" },
+      { k: "end", t: "New features unlock" }
+    ],
+    v2trade: [
+      { k: "start", t: "Decision: TRADE", d: "decision_records" },
+      { k: "dec", t: "Trigger hit next session?", v2: 1, d: "price above trigger, volume pace ≥ 1.5× (test T1)", no: "Trigger expires; still shadow-scored" },
+      { k: "data", t: "Position opened", d: "V1 risk gate and sizing · entry thesis stored (V2)" },
+      { k: "proc", t: "Every 60 s: V1 exit loop", d: "stop · target · half at +5% · trailing · time stop" },
+      { k: "proc", t: "Every evening: position intelligence", v2: 1, d: "HOLD · MONITOR · REDUCE · EXIT, 2-day hysteresis · opportunity cost shown, never auto-sell" },
+      { k: "data", t: "Journal row", v2: 1, d: "trade_journal: context at entry, outcome in R" },
+      { k: "dec", t: "Was it a win?", no: "Failure label: false breakout, late entry, market reversal, news shock, exit timing, execution, model" },
+      { k: "end", t: "Feeds scorecards and lessons" }
+    ],
+    learn: [
+      { k: "start", t: "Every evening after scoring" },
+      { k: "proc", t: "Shadow scoring", v2: 1, d: "every blocked or filtered stock scored like a signal" },
+      { k: "proc", t: "Score band health", v2: 1, d: "flag bands 10+ points short" },
+      { k: "proc", t: "Filter and factor scorecards", v2: 1, d: "verdicts per regime; proposals" },
+      { k: "proc", t: "Lessons when a weak phase ends", v2: 1, d: "lessons_reports → playbook proposals" },
+      { k: "dec", t: "Better out of sample and no worse normally?", v2: 1, no: "Proposal rejected and kept for the record" },
+      { k: "dec", t: "Owner approves?", v2: 1, d: "admin panel approvals inbox", no: "No change" },
+      { k: "proc", t: "Run as a shadow version", d: "advisory strategy row (V1 mechanism)" },
+      { k: "dec", t: "30+ resolved signals beat the champion?", no: "Stays a shadow" },
+      { k: "end", t: "Promoted; old version archived (rollback in one call)" }
+    ],
+    bear: [
+      { k: "start", t: "Regime weak for 2 days", d: "deployable.py (V1) + regime_events" },
+      { k: "proc", t: "Early warning", v2: 1, d: "deploy ≤ 30% (V1) · confidence +0.10 (V1) · small caps paused · shortlist narrowed" },
+      { k: "dec", t: "Stressed: NIFTY 10%+ off high, VIX top 20%?", v2: 1, no: "Stay in early warning" },
+      { k: "proc", t: "Decline", v2: 1, d: "deploy ≤ 10% · large caps only · only setups that held up in past episodes" },
+      { k: "dec", t: "Panic: VIX spike, breadth near lows?", v2: 1, no: "Stay in decline" },
+      { k: "proc", t: "Panic", v2: 1, d: "no new entries unless a tested playbook allows · shock detector on all holdings" },
+      { k: "dec", t: "Regime normal for 2 days, breadth rising?", v2: 1, no: "Stay in the current phase" },
+      { k: "proc", t: "Recovery", v2: 1, d: "deployable steps back up · leading sectors first" },
+      { k: "end", t: "Episode ends → lessons report", d: "market_episodes, lessons_reports" }
+    ]
+  };
+
+  var NS = "http://www.w3.org/2000/svg";
+  function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+  function wrap(text, n) {
+    var words = String(text).split(" "), lines = [], cur = "";
+    words.forEach(function (w) {
+      if ((cur + " " + w).trim().length > n) { if (cur) lines.push(cur); cur = w; }
+      else cur = (cur + " " + w).trim();
+    });
+    if (cur) lines.push(cur);
+    return lines;
+  }
+
+  function render(host, nodes) {
+    var W = 760, MX = 20, MW = 430, SX = 490, SW = 250, GAP = 30;
+    var TW = 50, DW = 62, SWC = 34;
+    var y = 10, out = [], mid = MX + MW / 2;
+    nodes.forEach(function (n, i) {
+      var tl = wrap(n.t, TW), dl = n.d ? wrap(n.d, DW) : [];
+      var h = 16 + tl.length * 17 + dl.length * 15 + (dl.length ? 4 : 0);
+      h = Math.max(h, n.k === "dec" ? 50 : 40);
+      var cls = n.k === "dec" ? "n-dec" : n.k === "data" ? "n-data" : (n.k === "start" || n.k === "end") ? "n-term" : "n-proc";
+      if (n.v2) cls += " n-plan";
+      if (n.k === "dec") {
+        var ind = 16;
+        out.push('<polygon class="' + cls + '" points="' + [MX + ind, y, MX + MW - ind, y, MX + MW, y + h / 2, MX + MW - ind, y + h, MX + ind, y + h, MX, y + h / 2].join(",") + '"/>');
+      } else {
+        var rx = (n.k === "start" || n.k === "end") ? Math.min(h / 2, 22) : n.k === "data" ? 12 : 6;
+        out.push('<rect class="' + cls + '" x="' + MX + '" y="' + y + '" width="' + MW + '" height="' + h + '" rx="' + rx + '"/>');
+      }
+      var ty = y + 22, tx = MX + (n.k === "dec" ? 24 : 14);
+      tl.forEach(function (line, j) { out.push('<text class="t" x="' + tx + '" y="' + (ty + j * 17) + '">' + esc(line) + '</text>'); });
+      var dy = ty + tl.length * 17 + 2;
+      dl.forEach(function (line, j) { out.push('<text class="d" x="' + tx + '" y="' + (dy + j * 15) + '">' + esc(line) + '</text>'); });
+      if (n.tag) out.push('<text class="tag" x="' + (MX + MW - 12) + '" y="' + (y + 18) + '" text-anchor="end">[' + esc(n.tag) + ']</text>');
+      if (n.no) {
+        var sl = wrap(n.no, SWC), sh = 14 + sl.length * 16;
+        var sy = y + h / 2 - sh / 2;
+        out.push('<line class="ln" x1="' + (MX + MW) + '" y1="' + (y + h / 2) + '" x2="' + (SX - 3) + '" y2="' + (y + h / 2) + '" marker-end="url(#fa-' + host.dataset.flow + ')"/>');
+        out.push('<text class="lab" x="' + (MX + MW + 8) + '" y="' + (y + h / 2 - 6) + '">' + esc(n.nl || "no") + '</text>');
+        out.push('<rect class="n-side" x="' + SX + '" y="' + sy + '" width="' + SW + '" height="' + sh + '" rx="6"/>');
+        sl.forEach(function (line, j) { out.push('<text class="st" x="' + (SX + 10) + '" y="' + (sy + 20 + j * 16) + '">' + esc(line) + '</text>'); });
+      }
+      y += h;
+      if (i < nodes.length - 1) {
+        out.push('<line class="ln" x1="' + mid + '" y1="' + y + '" x2="' + mid + '" y2="' + (y + GAP - 3) + '" marker-end="url(#fa-' + host.dataset.flow + ')"/>');
+        var yl = n.k === "dec" ? "yes" : (n.y || "");
+        if (yl) out.push('<text class="lab" x="' + (mid + 8) + '" y="' + (y + GAP / 2 + 4) + '">' + esc(yl) + '</text>');
+        y += GAP;
+      }
+    });
+    var H = y + 12;
+    var anyNo = nodes.some(function (n) { return n.no; });
+    var vbW = anyNo ? W : MX + MW + 20;
+    host.innerHTML = '<svg class="fl" viewBox="0 0 ' + vbW + ' ' + H + '" role="img" aria-label="Flowchart"><defs><marker id="fa-' + host.dataset.flow + '" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="hd" d="M0,0 L10,5 L0,10 z"/></marker></defs>' + out.join("") + "</svg>";
+    if (!anyNo) host.querySelector("svg").style.maxWidth = "470px";
+  }
+
+  document.querySelectorAll("[data-flow]").forEach(function (host) {
+    var nodes = FLOWS[host.dataset.flow];
+    if (nodes) render(host, nodes);
+  });
+
+  /* Chapter headings and contents */
+  var toc = document.getElementById("toc"), items = [];
+  document.querySelectorAll("section[data-ch]").forEach(function (s) {
+    var id = "ch" + s.dataset.ch;
+    s.id = id;
+    var head = document.createElement("div");
+    head.className = "chapter-head";
+    head.innerHTML = '<span class="no">' + s.dataset.ch.padStart(2, "0") + "</span><h2>" + esc(s.dataset.title) + '</h2><span class="tag ' + s.dataset.v + '">' + (s.dataset.v === "v1" ? "V1 · BUILT" : "V2 · DESIGNED") + "</span>";
+    var bar = s.querySelector('.partbar');
+    s.insertBefore(head, bar ? bar.nextSibling : s.firstChild);
+    items.push('<li><span class="n">' + s.dataset.ch.padStart(2, "0") + '</span><a href="#' + id + '">' + esc(s.dataset.title) + '</a><span class="muted small" style="margin-left:auto">' + (s.dataset.v === "v1" ? "V1" : "V2") + "</span></li>");
+  });
+  toc.innerHTML = items.join("");
+})();
+</script>

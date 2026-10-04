@@ -1050,3 +1050,43 @@ export interface BrainCompare {
   brain_finished: number
   needed: number
 }
+
+export type BrainStageName = 'shadow' | 'approval' | 'auto'
+
+export interface BrainStageChange {
+  stage: BrainStageName
+  previous_stage: BrainStageName
+  changed_by: string
+  reason: string
+  changed_at: string
+}
+
+export interface BrainStage {
+  stage: BrainStageName
+  plain: string
+  finished: number
+  needed: number
+  ready: boolean
+  history: BrainStageChange[]
+}
+
+export type BrainApprovalStatus = 'pending' | 'approved' | 'waiting_open' | 'rejected' | 'expired'
+
+export interface BrainApproval {
+  id: number
+  symbol: string
+  decision_day: string
+  price: number
+  stop_loss: number | null
+  take_profit: number | null
+  suggested_qty: number | null
+  reason: string
+  status: BrainApprovalStatus
+  status_plain: string
+  decided_by: string | null
+  decided_at: string | null
+  decided_note: string | null
+  position_id: number | null
+  result_note: string | null
+  created_at: string | null
+}

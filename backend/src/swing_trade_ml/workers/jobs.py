@@ -624,6 +624,19 @@ def job_brain_strategy() -> None:
         _report_error("brain strategy scan", exc)
 
 
+def job_brain_approvals_open() -> None:
+    """M18: at the market open, buy the brain ideas the owner approved while
+    the market was closed — only after every check runs again. Never raised."""
+    from swing_trade_ml.services.brain_golive import approvals
+
+    try:
+        with session_scope() as db:
+            bought = approvals.execute_waiting(db)
+            log.info("job.brain.approvals_open.done", ordered=len(bought))
+    except Exception as exc:  # noqa: BLE001
+        _report_error("brain approvals at the open", exc)
+
+
 def job_brain_nightly() -> None:
     _run_brain_job("nightly")
 

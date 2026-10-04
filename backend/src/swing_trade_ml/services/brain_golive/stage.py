@@ -6,13 +6,24 @@ Only `set_stage` writes a change, and only the owner endpoint calls it
 
 from __future__ import annotations
 
-from sqlalchemy import select
+from datetime import UTC, datetime
+
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
-from swing_trade_ml.db.models.brain_golive import BrainStageChange
+from swing_trade_ml.db.models.brain_golive import BrainApproval, BrainStageChange
 from swing_trade_ml.services.brain_golive.compare import NEEDED_FINISHED, finished_brain_ideas
 
 STAGES = ("shadow", "approval", "auto")
+AUTO_BY = "automatic stage"  # decided_by on an OK the automatic stage gave (approvals.py)
+ROLLBACK_NOTE = (
+    "Switched back to practice mode (shadow), so this idea will not be bought. Nothing was bought. "
+    "Stocks the brain already holds keep version 1's normal stop, target and time-stop exits."
+)
+HANDED_BACK_NOTE = (
+    "The automatic stage approved this, but it was switched off before the market opened, "
+    "so it is waiting for your OK again."
+)
 NAMES = {"shadow": "practice (shadow)", "approval": "approval", "auto": "automatic"}
 PLAIN = {
     "shadow": "Practice: the brain's ideas are recorded and scored next to version 1. Nothing is bought.",
@@ -63,11 +74,38 @@ def set_stage(db: Session, stage: str, by: str, reason: str) -> BrainStageChange
         raise StageRefusedError(
             "Automatic trading can only follow the approval stage: approve the brain's ideas by hand first."
         )
+    _settle_approvals(db, stage, now, by)
     row = BrainStageChange(stage=stage, previous_stage=now, changed_by=by, reason=reason)
     db.add(row)
     db.commit()
     db.refresh(row)
     return row
+
+
+def _settle_approvals(db: Session, stage: str, previous: str, by: str) -> None:
+    """Rollback stops NEW buys only (owner decision 2): ideas waiting for an OK
+    and OKs not yet bought expire; open brain positions are left to v1's exits.
+    Leaving the automatic stage hands its not-yet-bought OKs back to the owner."""
+    if stage == "shadow":
+        db.execute(
+            update(BrainApproval)
+            .where(BrainApproval.status.in_(("pending", "waiting")))
+            .values(status="expired", decided_by=by, decided_at=datetime.now(UTC), decided_note=ROLLBACK_NOTE)
+            .execution_options(synchronize_session="fetch")
+        )
+    elif previous == "auto":
+        db.execute(
+            update(BrainApproval)
+            .where(BrainApproval.status == "waiting", BrainApproval.decided_by == AUTO_BY)
+            .values(
+                status="pending",
+                decided_by=None,
+                decided_at=None,
+                decided_note=None,
+                result_note=HANDED_BACK_NOTE,
+            )
+            .execution_options(synchronize_session="fetch")
+        )
 
 
 def stage_overview(db: Session, history_limit: int = 20) -> dict:

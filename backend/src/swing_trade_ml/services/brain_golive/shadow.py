@@ -16,6 +16,7 @@ from swing_trade_ml.brokers import current_mode
 from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.db.models.trading import Strategy
 from swing_trade_ml.services import engine
+from swing_trade_ml.services.brain_golive import approvals
 from swing_trade_ml.services.engine import ScanResult
 from swing_trade_ml.strategies import brain as brain_strategy
 
@@ -80,5 +81,10 @@ def run_brain_strategy(db: Session, interval: str = "day") -> ScanResult:
             )
             continue
         _merge(combined, engine.run_strategy(db, strategy, interval))
+    if combined.strategies_run:
+        # Practice (shadow) creates nothing; the approval stage asks the owner;
+        # the automatic stage presses Approve through the same checks.
+        outcome = approvals.after_scan(db, today)
+        log.info("brain_golive.approvals.after_scan", **outcome)
     log.info("brain_golive.shadow.done", signals=combined.signals_generated, buys=combined.buys)
     return combined

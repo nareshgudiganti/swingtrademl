@@ -6,7 +6,7 @@ import type { DetailedPosition, RealReport } from '../../api/types'
 import { Confirm } from '../Confirm'
 import { Card, PageHead, Tabs, Tag, inr, signed, toneClass } from '../ui'
 
-const TABS = ['My holdings', 'Real-money report'] as const
+const TABS = ['My holdings', 'Straight from Zerodha', 'Real-money report'] as const
 type TabId = (typeof TABS)[number]
 
 type PeriodKey = 'month' | '30d' | 'fy' | 'all'
@@ -621,6 +621,58 @@ function ReportTab() {
   )
 }
 
+function ZerodhaTab() {
+  const holdings = useQuery({ queryKey: ['holdings'], queryFn: api.holdings, retry: false })
+  return (
+    <Card
+      title="Straight from Zerodha"
+      sub="This is exactly what Zerodha reports for your account right now, unchanged by the bot. Read-only."
+    >
+      {holdings.isLoading && <p className="tm-dim">Loading from Zerodha…</p>}
+      {holdings.isError && (
+        <p className="tm-neg">
+          Could not reach Zerodha: {(holdings.error as Error).message || 'log in to Kite and try again'}.
+        </p>
+      )}
+      {holdings.data && holdings.data.length === 0 && (
+        <p className="tm-dim">No shares in the connected Zerodha account.</p>
+      )}
+      {holdings.data && holdings.data.length > 0 && (
+        <div className="tm-table-wrap">
+          <table className="tm-table">
+            <thead>
+              <tr>
+                <th>Stock</th>
+                <th className="tm-right">Shares</th>
+                <th className="tm-right">You paid (average)</th>
+                <th className="tm-right">Price now</th>
+                <th className="tm-right">Worth now</th>
+                <th className="tm-right">Gain or loss</th>
+                <th className="tm-right">Today</th>
+              </tr>
+            </thead>
+            <tbody>
+              {holdings.data.map((h) => (
+                <tr key={`${h.exchange}:${h.symbol}`}>
+                  <td className="tm-strong">{h.symbol}</td>
+                  <td className="tm-right">{h.quantity}</td>
+                  <td className="tm-right">{rupees(h.average_price)}</td>
+                  <td className="tm-right">{rupees(h.last_price)}</td>
+                  <td className="tm-right">{rupees(h.last_price * h.quantity)}</td>
+                  <td className={`tm-right ${toneClass(h.pnl)}`}>{signedRupees(h.pnl)}</td>
+                  <td className={`tm-right ${h.day_change_percentage != null ? toneClass(h.day_change_percentage) : 'tm-dim'}`}>
+                    {h.day_change_percentage != null ? signed(h.day_change_percentage) : '—'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
+  )
+}
+
 export default function MyHoldings() {
   const [tab, setTab] = useState<TabId>('My holdings')
   return (
@@ -630,7 +682,7 @@ export default function MyHoldings() {
         sub="The shares you bought yourself in Zerodha, kept apart from the bot’s practice trades."
       />
       <Tabs tabs={TABS} active={tab} onChange={setTab} />
-      {tab === 'My holdings' ? <HoldingsTab /> : <ReportTab />}
+      {tab === 'My holdings' ? <HoldingsTab /> : tab === 'Straight from Zerodha' ? <ZerodhaTab /> : <ReportTab />}
     </div>
   )
 }

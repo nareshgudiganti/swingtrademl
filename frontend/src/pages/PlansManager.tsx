@@ -7,11 +7,11 @@ import { ErrorBox, Loading } from '../components/Loading'
 import { formatDate } from '../lib/format'
 import { PLAN_LABELS } from '../lib/plan'
 
-// The owner's control room for Free / Plus / Pro: which features each plan
+// The owner's control room for Free / Pro: which features each plan
 // gets, its limits, who is on which plan, and a way to see the app through a
 // plan's eyes. Only the owner reaches this (the API checks that too).
 
-const PLAN_ORDER: PlanKey[] = ['free', 'plus', 'pro']
+const PLAN_ORDER: PlanKey[] = ['free', 'pro']
 const TIER_LABEL: Record<string, string> = { large: 'Large', midcap: 'Mid', smallcap: 'Small' }
 type Tab = 'features' | 'limits' | 'users' | 'preview'
 type Drafts = Record<PlanKey, PlanConfig>

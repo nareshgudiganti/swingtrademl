@@ -1,13 +1,13 @@
 import { useState } from 'react'
 import { useParams } from 'react-router-dom'
 
+import { usePlan } from '../../lib/plan'
 import { finalWord, ideasFrom, useBrainStatus, useLatestRun, useRunTrace, useWhy } from '../live'
 import { MODULE_PLAIN, STEP_LABEL, moduleName, traceLine, wordClassName, wordTone } from '../vocab'
 import { BrainGate, Card, CheckItem, Icon, NotConnected, Tabs, inr } from '../ui'
 
-const TABS = ['Summary', 'Evidence', 'Similar Cases', 'Model Output', 'Risk Analysis'] as const
-type TabId = (typeof TABS)[number]
-
+const OWNER_TABS = ['Summary', 'Evidence', 'Similar Cases', 'Model Output', 'Risk Analysis'] as const
+const PRO_TABS = ['Summary', 'Risk Analysis'] as const
 const STEP_ICONS = [Icon.Pulse, Icon.Target, Icon.Layers, Icon.Book, Icon.Chart, Icon.Shield, Icon.Bolt]
 
 function money(n: number): string {
@@ -24,6 +24,7 @@ export default function AIDecision() {
 
 function AIDecisionBody() {
   const { symbol: rawSymbol } = useParams()
+  const { seesAll } = usePlan()
   const status = useBrainStatus()
   const latest = useLatestRun()
   const run = latest.data
@@ -36,9 +37,11 @@ function AIDecisionBody() {
   // trace (fast) instead of asking the brain to reason about it again
   // (api.brainWhy triggers a fresh ~15s run). Only fall back to brainWhy
   // when the symbol isn't in the latest run.
-  const runTrace = useRunTrace(fromRun ? run?.run_id : undefined)
+  const runTrace = useRunTrace(seesAll && fromRun ? run?.run_id : undefined)
   const why = useWhy(status === 'live' && !fromRun && symbol ? symbol : undefined)
 
+  const tabs = seesAll ? OWNER_TABS : PRO_TABS
+  type TabId = (typeof tabs)[number]
   const [tab, setTab] = useState<TabId>('Summary')
   const [step, setStep] = useState(0)
 
@@ -76,7 +79,7 @@ function AIDecisionBody() {
     )
   }
 
-  const trace = (fromRun ? runTrace.data?.trace : why.data?.trace) ?? []
+  const trace = seesAll ? ((fromRun ? runTrace.data?.trace : why.data?.trace) ?? []) : []
   const current = trace[step]
   const riskTrace = trace.filter((e) => e.step === 'risk')
 
@@ -87,7 +90,8 @@ function AIDecisionBody() {
 
   return (
     <div className="tm-page">
-      <div className="tm-grid tm-ai-grid">
+      <div className={`tm-grid tm-ai-grid${seesAll ? '' : ' tm-ai-grid-pro'}`}>
+        {seesAll && (
         <Card
           glow
           title="How the brain worked through this run"
@@ -133,9 +137,10 @@ function AIDecisionBody() {
             </div>
           )}
         </Card>
+        )}
 
         <Card glow title="AI Reasoning Details">
-          <Tabs tabs={TABS} active={tab} onChange={setTab} />
+          <Tabs tabs={tabs} active={tab} onChange={setTab} />
 
           {tab === 'Summary' && (
             <>

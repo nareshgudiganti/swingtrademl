@@ -95,10 +95,24 @@ const STATUS_CHIP: Record<ReturnType<typeof useBrainStatus>, { label: string; ti
   error: { label: 'Error', title: 'Could not reach the brain' },
 }
 
-export default function TradeMindApp() {
+type TradeMindAppProps = {
+  /** Owner / full-app account: control room, go-live, Zerodha chip, setup. */
+  ownerConsole?: boolean
+}
+
+export default function TradeMindApp({ ownerConsole = false }: TradeMindAppProps) {
   const status = useBrainStatus()
   const latest = useLatestRun()
-  const broker = useQuery({ queryKey: ['status'], queryFn: api.status })
+  const broker = useQuery({ queryKey: ['status'], queryFn: api.status, enabled: ownerConsole })
+  const visibleSections = SECTIONS.filter((s) => {
+    if (!ownerConsole && s.label === 'Settings') return false
+    return true
+  }).map((s) => {
+    if (!ownerConsole && s.label === 'Portfolio') {
+      return { ...s, pages: s.pages.filter((p) => p.to !== '/trademind/holdings') }
+    }
+    return s
+  })
   const section = sectionFor(useLocation().pathname)
   const market = useMarketSession()
   const chip = STATUS_CHIP[status]
@@ -113,7 +127,7 @@ export default function TradeMindApp() {
           TradeMind
         </Link>
         <nav className="tm-nav" aria-label="Sections">
-          {SECTIONS.map((sec) => (
+          {visibleSections.map((sec) => (
             <Link key={sec.label} to={sec.pages[0]!.to} className={sec === section ? 'active' : ''}>
               {sec.label}
             </Link>
@@ -128,7 +142,12 @@ export default function TradeMindApp() {
               {market.data.plain}
             </span>
           )}
-          {broker.data && (
+          {ownerConsole && (
+            <a href="/plans" className="tm-zchip" title="Free / Pro plans, preview, and users">
+              Plans
+            </a>
+          )}
+          {ownerConsole && broker.data && (
             <Link
               to="/trademind/control"
               className={`tm-zchip ${broker.data.broker_authenticated ? 'tm-zchip-ok' : ''}`}
@@ -140,9 +159,15 @@ export default function TradeMindApp() {
           <span className="tm-status-chip" title={chipTitle}>
             {chip.label}
           </span>
-          <Link to="/trademind/setup" className="tm-avatar" title="Your account and settings">
-            <Icon.User />
-          </Link>
+          {ownerConsole ? (
+            <Link to="/trademind/setup" className="tm-avatar" title="Your account and settings">
+              <Icon.User />
+            </Link>
+          ) : (
+            <span className="tm-avatar" title="TradeMind Pro">
+              <Icon.User />
+            </span>
+          )}
           <button
             className="tm-logout"
             title="Log out of this app"
@@ -175,14 +200,14 @@ export default function TradeMindApp() {
           <Route path="positions/:symbol" element={<Positions />} />
           <Route path="ai" element={<AIDecision />} />
           <Route path="ai/:symbol" element={<AIDecision />} />
-          <Route path="risk" element={<Risk />} />
+          <Route path="risk" element={ownerConsole ? <Risk /> : <Navigate to="/trademind" replace />} />
           <Route path="learn" element={<Learn />} />
-          <Route path="system" element={<System />} />
-          <Route path="control" element={<Control />} />
-          <Route path="golive" element={<GoLive />} />
+          <Route path="system" element={ownerConsole ? <System /> : <Navigate to="/trademind" replace />} />
+          <Route path="control" element={ownerConsole ? <Control /> : <Navigate to="/trademind" replace />} />
+          <Route path="golive" element={ownerConsole ? <GoLive /> : <Navigate to="/trademind" replace />} />
           <Route path="records" element={<Records />} />
-          <Route path="holdings" element={<MyHoldings />} />
-          <Route path="setup" element={<Setup />} />
+          <Route path="holdings" element={ownerConsole ? <MyHoldings /> : <Navigate to="/trademind/portfolio" replace />} />
+          <Route path="setup" element={ownerConsole ? <Setup /> : <Navigate to="/trademind" replace />} />
           <Route path="*" element={<Navigate to="/trademind" replace />} />
         </Route>
       </Routes>

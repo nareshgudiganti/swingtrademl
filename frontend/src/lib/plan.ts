@@ -30,7 +30,6 @@ export function usePlan() {
 
 export const PLAN_LABELS: Record<string, string> = {
   free: 'Free',
-  plus: 'Plus',
   pro: 'Pro',
   owner: 'Owner',
   all: 'Everything',

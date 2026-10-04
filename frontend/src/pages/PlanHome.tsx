@@ -9,7 +9,7 @@ import { formatCurrency, formatDate, formatPercent } from '../lib/format'
 import { PLAN_LABELS, usePlan } from '../lib/plan'
 import { TIERS, tierFor } from '../lib/tiers'
 
-// The home screen for Free / Plus / Pro users. Everything on it is shared
+// The home screen for Free / Pro users. Everything on it is shared
 // market research, never the owner's own account: today's picks, the market
 // mood, and — when the plan includes it — a budget split. Each section shows
 // only if the plan has its feature; the API refuses it otherwise anyway.
@@ -201,6 +201,25 @@ export default function PlanHome() {
       )}
 
       {has('sizing') && <BudgetSplit />}
+
+      {!has('trademind') && plan?.brain_enabled && (
+        <div className="card" style={{ marginTop: '1.5rem', borderStyle: 'dashed' }}>
+          <div className="section-label">TradeMind</div>
+          <h2 style={{ marginTop: 0 }}>Brain-led decisions — Pro</h2>
+          <p className="muted">
+            TradeMind remembers past calls, reads the whole market, and explains each opportunity in plain
+            English — not just today's model picks.
+          </p>
+          <p className="muted" style={{ fontSize: '0.85rem' }}>
+            Example: <strong>BUY</strong> with confidence, setup, risk, what changed, and why — without exposing
+            the internal brain console.
+          </p>
+          <p style={{ marginBottom: 0 }}>
+            <span className="badge badge-warn">Locked on Free</span>
+            <span className="muted" style={{ marginLeft: '0.5rem' }}>Upgrade to Pro to open TradeMind.</span>
+          </p>
+        </div>
+      )}
 
       <h2>How these picks are made</h2>
       <div className="card">

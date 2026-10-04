@@ -1,5 +1,5 @@
-"""Free / Plus / Pro plans: the feature catalogue, the limits, and which
-API routes each feature opens.
+"""Free / Pro plans: the feature catalogue, the limits, and which API routes
+each feature opens.
 
 One catalogue drives three things — the backend gate (`api/deps.py`), the
 owner's Plans Manager screen, and the frontend nav — so a feature can never
@@ -10,13 +10,16 @@ limited by a plan. Everything not listed in ROUTE_RULES is owner-only: the
 real Zerodha holdings, capital, safety switches, orders, finance, settings
 and every write. Those are the owner's personal account, not a product
 feature, so the Plans Manager cannot hand them to a plan.
+
+Pro users get TradeMind (brain *outputs*) via the `trademind` feature and
+`brain_route_access()` — not the M17 `/brain` console machinery.
 """
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
-PLAN_KEYS: tuple[str, ...] = ("free", "plus", "pro")
+PLAN_KEYS: tuple[str, ...] = ("free", "pro")
 DEFAULT_PLAN = "free"
 
 # The one model Free users see. ml_swing strategies with no model_name in
@@ -68,6 +71,11 @@ FEATURES: dict[str, dict[str, str]] = {
         "group": "Models",
         "description": "How accurate each model's confidence really is (Model Lab page).",
     },
+    "trademind": {
+        "label": "TradeMind",
+        "group": "TradeMind",
+        "description": "Brain-led decisions and explanations in the TradeMind app (not the owner brain console).",
+    },
 }
 
 # key -> label, description, kind ("int" | "tiers"), and what "no limit" is.
@@ -95,18 +103,6 @@ DEFAULT_PLANS: dict[str, dict[str, Any]] = {
         "features": {"picks": True, "regime": True, "track_record": True},
         "limits": {"picks_per_day": 5, "allowed_cap_tiers": ["large"], "history_days": 30},
     },
-    "plus": {
-        "name": "Plus",
-        "features": {
-            "picks": True,
-            "all_models": True,
-            "sizing": True,
-            "regime": True,
-            "track_record": True,
-            "bot_performance": True,
-        },
-        "limits": {"picks_per_day": 0, "allowed_cap_tiers": list(CAP_TIERS), "history_days": 365},
-    },
     "pro": {
         "name": "Pro",
         "features": dict.fromkeys(FEATURES, True),
@@ -116,8 +112,9 @@ DEFAULT_PLANS: dict[str, dict[str, Any]] = {
 
 # (method, route path as FastAPI declares it, without the /api/v1 prefix)
 # -> (feature, required query values). A route not listed here is
-# owner-only. Query constraints keep the bot's own book apart from the
-# owner's real one on endpoints that serve both.
+# owner-only unless `brain_route_access` says otherwise. Query constraints
+# keep the bot's own book apart from the owner's real one on endpoints that
+# serve both.
 ROUTE_RULES: dict[tuple[str, str], tuple[str, dict[str, str]]] = {
     ("GET", "/signals/picks"): ("picks", {}),
     ("GET", "/signals/top-picks"): ("sizing", {}),
@@ -130,6 +127,32 @@ ROUTE_RULES: dict[tuple[str, str], tuple[str, dict[str, str]]] = {
     ("GET", "/ml/models"): ("model_lab", {}),
     ("GET", "/ml/calibration"): ("model_lab", {}),
 }
+
+
+def brain_route_access(method: str, path: str) -> Literal["owner", "trademind"] | None:
+    """How a /brain path is gated for plan users. None = not a brain path.
+
+    Owner and API key bypass plan checks in require_auth. Pro with `trademind`
+    may call GET consumer routes only — no module list, trace, or go-live."""
+    if not path.startswith("/brain"):
+        return None
+    if method != "GET":
+        return "owner"
+    if path in {
+        "/brain/runs/latest",
+        "/brain/health",
+        "/brain/learning",
+    }:
+        return "trademind"
+    if path.startswith("/brain/why/"):
+        return "trademind"
+    if path.startswith("/brain/track/"):
+        return "trademind"
+    if path.startswith("/brain/runs/"):
+        if path.endswith("/trace") or path.endswith("/alerts"):
+            return "owner"
+        return "trademind"
+    return "owner"
 
 
 def clean_plan(features: dict[str, Any] | None, limits: dict[str, Any] | None) -> tuple[dict, dict]:

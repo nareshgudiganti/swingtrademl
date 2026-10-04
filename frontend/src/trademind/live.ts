@@ -55,7 +55,9 @@ export function useBrainStatus(): 'live' | 'no-run' | 'off' | 'loading' | 'error
   // A separate query from useModules(): this one exists only to settle the
   // off-vs-no-run question quickly, so unlike the shared useModules() (which
   // keeps Brain.tsx's default retries) it never retries a 404.
-  const modules = useQuery({ queryKey: ['brainModules'], queryFn: api.brainModules, retry: false })
+  // Pro plan users cannot call /brain/modules (owner console). Health is enough
+  // to tell "brain on but no run yet" from "brain switched off".
+  const health = useQuery({ queryKey: ['brainHealth'], queryFn: api.brainHealth, retry: false })
 
   if (latest.isSuccess) return 'live'
 
@@ -65,11 +67,10 @@ export function useBrainStatus(): 'live' | 'no-run' | 'off' | 'loading' | 'error
     return 'loading'
   }
 
-  // latest is a 404 — ambiguous until modules resolves.
-  if (modules.isSuccess) return 'no-run'
-  const modulesIs404 = modules.error instanceof ApiError && modules.error.status === 404
-  if (modulesIs404) return 'off'
-  if (modules.isError) return 'error'
+  if (health.isSuccess) return 'no-run'
+  const healthIs404 = health.error instanceof ApiError && health.error.status === 404
+  if (healthIs404) return 'off'
+  if (health.isError) return 'error'
   return 'loading'
 }
 

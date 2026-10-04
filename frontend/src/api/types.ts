@@ -16,7 +16,7 @@ export interface CurrentUser {
 
 // ------------------------------------------------------------------ plans --
 
-export type PlanKey = 'free' | 'plus' | 'pro'
+export type PlanKey = 'free' | 'pro'
 
 /** GET /me/plan: what the signed-in person may see. `unrestricted` means the
  * whole app: the owner (unless previewing a plan), or anyone while plans are
@@ -26,6 +26,7 @@ export interface MyPlan {
   unrestricted: boolean
   can_manage_plans: boolean
   plans_enabled: boolean
+  brain_enabled: boolean
   previewing: boolean
   features: string[]
   limits: Partial<PlanLimits>

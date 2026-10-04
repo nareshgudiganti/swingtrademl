@@ -1,4 +1,4 @@
-"""Free / Plus / Pro plans — see core/plans.py.
+"""Free / Pro plans — see core/plans.py.
 
 The owner (superuser or X-API-Key) is never limited. With plans switched
 on, everyone else reaches only the routes a feature in their plan opens,
@@ -116,11 +116,28 @@ def test_free_user_reaches_their_features(client, db_session, book, plans_on):
     assert client.get("/api/v1/signals/track-record", headers=headers).status_code == 200
 
 
-def test_plus_cannot_read_the_owners_real_book(client, db_session, plans_on):
-    headers = _user(db_session, "plus1", plan="plus")
+def test_pro_cannot_read_the_owners_real_book(client, db_session, plans_on):
+    headers = _user(db_session, "probot", plan="pro")
     assert client.get("/api/v1/portfolio/trades?book=bot", headers=headers).status_code == 200
     assert client.get("/api/v1/portfolio/trades?book=real", headers=headers).status_code == 403
     assert client.get("/api/v1/portfolio/trades", headers=headers).status_code == 403
+
+
+def test_free_cannot_reach_brain_or_trademind_apis(client, db_session, plans_on):
+    headers = _user(db_session, "freebrain")
+    assert client.get("/api/v1/brain/health", headers=headers).status_code in (403, 404)
+    assert client.get("/api/v1/brain/modules", headers=headers).status_code in (403, 404)
+
+
+def test_pro_reaches_trademind_brain_reads_not_console(client, db_session, plans_on, monkeypatch):
+    from swing_trade_ml.core import config
+
+    monkeypatch.setattr(config.settings, "BRAIN_ENABLED", True)
+    headers = _user(db_session, "probrain", plan="pro")
+    assert client.get("/api/v1/brain/modules", headers=headers).status_code == 403
+    # No run yet — 404 is fine; must not be 403 from plan gate.
+    resp = client.get("/api/v1/brain/runs/latest?kind=nightly", headers=headers)
+    assert resp.status_code != 403
 
 
 def test_owner_and_api_key_see_everything(client, db_session, plans_on):

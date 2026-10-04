@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from swing_trade_ml.core.config import settings
-from swing_trade_ml.core.plans import DEFAULT_PLAN, FEATURES, PLAN_KEYS, ROUTE_RULES
+from swing_trade_ml.core.plans import DEFAULT_PLAN, FEATURES, PLAN_KEYS, ROUTE_RULES, brain_route_access
 from swing_trade_ml.core.security import decode_access_token
 from swing_trade_ml.db.models.session import User
 from swing_trade_ml.db.session import get_db
@@ -164,6 +164,17 @@ async def require_auth(request: Request, access: PlanAccessDep) -> None:
     path = getattr(route, "path", request.url.path)
     if path.startswith(settings.API_V1_PREFIX):
         path = path[len(settings.API_V1_PREFIX):]
+
+    brain_gate = brain_route_access(request.method, path)
+    if brain_gate == "owner":
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "This part of the app isn't included in your plan.")
+    if brain_gate == "trademind":
+        if not access.has("trademind"):
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                f"“{FEATURES['trademind']['label']}” isn't included in the {access.plan} plan.",
+            )
+        return
 
     rule = ROUTE_RULES.get((request.method, path))
     if rule is None:

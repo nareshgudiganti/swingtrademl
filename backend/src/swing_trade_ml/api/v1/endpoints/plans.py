@@ -1,4 +1,4 @@
-"""Free / Plus / Pro plans: what the caller's plan allows, and the owner's
+"""Free / Pro plans: what the caller's plan allows, and the owner's
 Plans Manager (edit plans, assign users). See core/plans.py."""
 
 from __future__ import annotations
@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 
 from swing_trade_ml.api.deps import DbSession, PlanAccessDep, Principal, get_principal, require_owner
+from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.plans import BASE_MODEL, CAP_TIERS, FEATURES, LIMITS, PLAN_KEYS
 from swing_trade_ml.db.models.session import User
 from swing_trade_ml.services import plans as plan_service
@@ -45,6 +46,7 @@ def my_plan(
     common = {
         "can_manage_plans": principal.is_owner,
         "plans_enabled": plan_service.plans_enabled(db),
+        "brain_enabled": settings.BRAIN_ENABLED,
     }
     if access.unrestricted:
         return {

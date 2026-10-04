@@ -36,7 +36,7 @@ class User(Base, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_superuser: Mapped[bool] = mapped_column(Boolean, default=False)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    # "free" | "plus" | "pro" — see core/plans.py. Ignored for superusers,
+    # "free" | "pro" — see core/plans.py. Ignored for superusers,
     # who always see everything.
     plan: Mapped[str] = mapped_column(String(16), default="free", server_default="free")
 

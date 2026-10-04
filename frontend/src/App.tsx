@@ -42,7 +42,7 @@ import {
 //  - `feature` set: anyone whose plan includes that feature (the owner
 //    always does). The API refuses the same data to everyone else, so the
 //    menu is a convenience, not the lock.
-//  - `planHome`: the home screen for Free / Plus / Pro users.
+//  - `planHome`: the home screen for Free / Pro users.
 //  - `manage`: the real owner only, even while previewing (the Plans page).
 //  - none of these: accounts that see the whole app — the owner, or anyone
 //    while plans are switched off (the app as it was before plans).
@@ -239,16 +239,26 @@ export default function App() {
 
   const waiting = statusFailed ? <Navigate to="/dashboard" replace /> : <p className="muted">Loading…</p>
 
+  const brainOn = seesAll ? !!status?.brain_enabled : !!plan?.brain_enabled
+  const canTradeMind = brainOn && (seesAll || has('trademind'))
+
   // One app: when the brain is on, the owner sees TradeMind only. Classic Swing
   // Trade ML tabs stay off the menu; /plans (and /settings by URL) remain for
   // owner admin. Plan-tier users never enter this path.
   if (seesAll && status?.brain_enabled) {
     if (location.pathname.startsWith('/trademind')) {
-      return <TradeMindApp />
+      return <TradeMindApp ownerConsole />
     }
     if (location.pathname === '/plans' && canManage) {
       return (
         <div className="layout">
+          <header className="topbar">
+            <div className="topbar-inner">
+              <a href="/trademind" className="brand" style={{ textDecoration: 'none', color: 'inherit' }}>
+                ← Back to TradeMind
+              </a>
+            </div>
+          </header>
           <main className="content">
             <PlansManager />
           </main>
@@ -268,13 +278,13 @@ export default function App() {
   }
 
   if (location.pathname.startsWith('/trademind')) {
-    if (!seesAll) {
-      return <Navigate to={plan ? '/home' : '/dashboard'} replace />
+    if (!canTradeMind) {
+      return <Navigate to={plan && !seesAll ? '/home' : '/dashboard'} replace />
     }
-    if (!status) {
+    if (seesAll && !status) {
       return planLoading || !plan ? <Loading /> : waiting
     }
-    return status.brain_enabled ? <TradeMindApp /> : <Navigate to="/dashboard" replace />
+    return <TradeMindApp ownerConsole={seesAll} />
   }
 
   if (seesAll && !status && !statusFailed) {
@@ -297,11 +307,21 @@ export default function App() {
       : seesAll
         ? [{ to: '/brain', label: 'Brain', Icon: BrainIcon, element: <Brain />, inNav: true }]
         : []
-  const nav = plan ? [...SCREENS.filter(inMenu), ...brainNav] : []
+  const trademindNav: Screen[] =
+    plan && !seesAll && canTradeMind
+      ? [{ to: '/trademind', label: 'TradeMind', Icon: BrainIcon, element: null, inNav: true }]
+      : []
+  const nav = plan ? [...SCREENS.filter(inMenu), ...trademindNav, ...brainNav] : []
   const tabBar = TAB_BAR.map((to) => nav.find((s) => s.to === to)).filter((s): s is Screen => !!s)
   const moreItems = nav.slice(PRIMARY_NAV_COUNT)
   const moreActive = moreItems.some((s) => location.pathname.startsWith(s.to))
-  const homePath = seesAll ? (status?.brain_enabled ? '/trademind' : '/dashboard') : '/home'
+  const homePath = seesAll
+    ? status?.brain_enabled
+      ? '/trademind'
+      : '/dashboard'
+    : canTradeMind
+      ? '/trademind'
+      : '/home'
   const planKey = plan?.plan ?? 'free'
 
   return (

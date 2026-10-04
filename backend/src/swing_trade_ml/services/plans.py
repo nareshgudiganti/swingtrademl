@@ -1,4 +1,4 @@
-"""Reading and saving Free / Plus / Pro plan settings.
+"""Reading and saving Free / Pro plan settings.
 
 A plan the owner has never edited has no row and uses its defaults from
 core/plans.py, so a fresh database works without seeding.

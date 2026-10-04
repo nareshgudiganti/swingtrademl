@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api } from '../../api/client'
 import type { BrainDecision, DetailedPosition } from '../../api/types'
+import { strategyLabel } from '../../lib/tiers'
 import { formatDate } from '../../lib/format'
 import { finalWord, holdingsFrom, useLatestRun, useTrack } from '../live'
 import { wordTagColor, wordTone } from '../vocab'
@@ -97,6 +98,12 @@ export default function Positions() {
   )
 }
 
+/** Plain-words owner of a position row, for the close buttons and dialog. */
+function ownerOf(strategyName: string | null) {
+  if (strategyName === 'brain') return 'the brain'
+  return strategyName ? `version 1 (${strategyLabel(strategyName)})` : 'version 1'
+}
+
 function PositionsBody() {
   const { symbol: urlSymbol } = useParams()
   const navigate = useNavigate()
@@ -106,6 +113,7 @@ function PositionsBody() {
   const queryClient = useQueryClient()
   const [closing, setClosing] = useState(false)
   const [closedMsg, setClosedMsg] = useState<string | null>(null)
+  const [pickedId, setPickedId] = useState<number | null>(null)
 
   const run = latest.data
   const holdings = run ? holdingsFrom(run) : []
@@ -135,13 +143,18 @@ function PositionsBody() {
     )
   }
 
-  const pos = (positions.data ?? []).find((p) => p.symbol === selected.symbol)
+  // The brain's decision carries no position id or strategy, so match on the
+  // symbol — and when version 1 and the brain both hold it, never guess: the
+  // owner picks which row to close.
+  const matches = (positions.data ?? []).filter((p) => p.symbol === selected.symbol)
+  const pos = matches.find((p) => p.id === pickedId) ?? (matches.length === 1 ? matches[0] : undefined)
   const isReal = status.data?.trading_mode === 'live'
   const moneyKind = status.data ? (isReal ? 'REAL money' : 'practice money (paper trading)') : null
 
   async function closeNow(id: number) {
     const res = await api.closePosition(id)
-    setClosedMsg(res.message || 'Sell order placed.')
+    setClosedMsg([res.message || 'Sell order placed.', res.detail].filter(Boolean).join(' '))
+    setPickedId(null)
     // A close writes a trade and moves cash, so everything that shows them is stale.
     for (const key of ['positions', 'summary', 'trades', 'status', 'holdings', 'brainLatest']) {
       queryClient.invalidateQueries({ queryKey: [key] })
@@ -224,12 +237,26 @@ function PositionsBody() {
         {selected.confidence != null && <Tag tone="violet">{Math.round(selected.confidence * 100)} model score</Tag>}
       </div>
 
+      {matches.length > 1 && !pos && (
+        <div className="tm-action-row" style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
+          <span className="tm-dim">
+            {selected.symbol} is held in {matches.length} places. Choose which one to close:
+          </span>
+          {matches.map((m) => (
+            <button key={m.id} className="tm-btn tm-btn-danger" onClick={() => { setPickedId(m.id); setClosing(true) }}>
+              Close {m.quantity} shares held by {ownerOf(m.strategy_name)}, bought {formatDate(m.entry_at)}
+            </button>
+          ))}
+        </div>
+      )}
       {pos && (
         <div className="tm-action-row">
           <button className="tm-btn tm-btn-danger" onClick={() => setClosing(true)}>
             Close this position
           </button>
-          <span className="tm-dim tm-action-hint">Sells all {pos.quantity} shares now at the current market price.</span>
+          <span className="tm-dim tm-action-hint">
+            Sells all {pos.quantity} shares held by {ownerOf(pos.strategy_name)}, at the market price.
+          </span>
         </div>
       )}
       {closedMsg && <p className="tm-pos tm-action-msg">{closedMsg}</p>}
@@ -239,10 +266,11 @@ function PositionsBody() {
           title={`Sell all of ${pos.symbol}?`}
           confirmLabel={`Sell ${pos.quantity} shares now`}
           onConfirm={() => closeNow(pos.id)}
-          onClose={() => setClosing(false)}
+          onClose={() => { setClosing(false); setPickedId(null) }}
         >
-          This will sell all {pos.quantity} shares of {pos.symbol} right now, at the current market price (about ₹
-          {inr(pos.current_price)} a share).{' '}
+          This sends a sell order now for all {pos.quantity} shares of {pos.symbol} held by {ownerOf(pos.strategy_name)}
+          (bought {formatDate(pos.entry_at)}), at the market price (about ₹{inr(pos.current_price)} a share). Outside market
+          hours it is filled at the next price the broker gives.{' '}
           {moneyKind ? `This uses ${moneyKind}.` : 'Could not check whether this is practice or real money.'} It cannot be undone.
         </Confirm>
       )}

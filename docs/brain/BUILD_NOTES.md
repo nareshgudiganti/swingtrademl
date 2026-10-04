@@ -35,6 +35,7 @@ the short "what we learned" companion: read it before starting a module.
 | M12 stock brain | brain/m12-stock | setups (pullback, breakout, base, breakdown) → situations shown in the why; delivery ≥ 1.2× usual on 3 of 5 days; institutional deals (whitelist, same-day round trips ignored); one-line profile on cards; `setup` modifier weighted by the WEIGHTS table (evidence). SHADOW |
 | M13 news and events | brain/m13-news | results within 5 trading days → `results soon` (AVOID new ideas, line on holdings); split/bonus/rights within 2 trading days → `event blackout`; ex-date ± 2 days → `price reset` (M08 ignores a `breakdown` then); ASM/GSM ≤ 4 days old → `StockState.restrictions` (AVOID); `event` modifier lines. Replays read only rows stored by their date |
 | M06 reasoning | brain/m06-meta | `swingtrade brain meta-train` → `brain_meta_vN` (combiner + honesty map); live module writes a `combined`, `calibrated` opinion; buy level = break-even after costs + 5 points. SHADOW |
+| M18 go-live switch | brain/m18-golive | `BrainStrategy` (type `brain`, always advisory via `STAGED_TYPES`, kept out of v1's 15:45 scan) turns today's live-nightly IDEA+TRADE (owner overrule wins) into BUY signals; `job_brain_strategy` after the nightly run, `swingtrade brain strategy-create` / `shadow-scan`; scored by v1's `evaluate_pending_signals`. `GET /brain/compare` (brain vs v1 on the same days). Owner stage switch shadow → approval → auto in `brain_stage_changes` (migration d2a7c4e9f150; latest row by id, fails closed to shadow; approval needs 30 finished ideas, auto only from approval). `brain_approvals` (migration e8b3f1a6c247): pending → approved/rejected/expired, `waiting` when approved outside market hours → placed by the 09:15–09:20 IST open job after every check is re-run; valid until the next session's close. Before ANY order: live price must be inside the brain's buy range and above its stop, stage re-read; one order call site (`_order` → `open_position`), rows claimed with a conditional UPDATE. Rollback = new buys stop, open positions keep v1's exits, pending/waiting expire. A brain position is only ever sold through its own book's broker (mismatch → alert only). Console cards + `docs/brain/GO_LIVE.md`. Built with subagent-driven development (plan 2026-10-04-brain-m18-golive.md) |
 
 ## How to add a module (checklist)
 
@@ -196,6 +197,14 @@ do not do that by accident.
   `BrainDecision.confidence` holds different kinds of number — `score_source` says which.
 - **Subagents**: implementers must never use `git stash` (shared stack); one full-suite run had
   1 unidentified failure that did not reproduce on two re-runs (960 passed) — watch for a flaky test.
+- **M18 (2026-10-04)**: the review caught that an approval placed at the open was re-checked on
+  YESTERDAY's close while the order is a MARKET order — a gap below the stop would have bought into
+  a stop-out. Any deferred order must re-check against the live price at the moment it is sent.
+  Choose "which stage is in force" by row id, never by clock time (same-second changes). Real check
+  on the check DB: 49 brain signals, 0 TRADE ideas (all WAIT/AVOID), orders 55 → 55; PUT stage
+  approval/auto → 409 "Only 0 of 30…"; console shows no Approve button in practice.
+- **Local API**: a restarted :8001 API needs `CORS_ORIGINS` to include the Vite port (5174/5175),
+  or every call fails in the browser with a CORS error. Settings live in the scratchpad `env_check.sh`.
 
 ## Testing traps (Windows)
 
@@ -230,3 +239,12 @@ do not do that by accident.
 - Task 5: minor (deferred): STEP_LABEL/MODE_LABEL copied from Brain.tsx into System.tsx.
 - BrainGate component to replace the off/loading/error/no-run block copied into 9 pages.
 - Local check DB has the wrong 28 Sep opening equity (₹1,83,647 vs ₹9,79,792) → Portfolio shows +435.6% / Max drawdown −81.6% (v1 data, not a UI bug).
+
+## M18 follow-ups (deferred minors, 2026-10-04)
+
+- `core/holidays.py` has no 2027 dates: fill before 2027, or deadlines land a trading day early.
+- Paper mode without a Kite session: the "live" price at the open is the paper broker's cached
+  price (can be yesterday's close), so the gap guard is not really exercised in paper.
+- `GET /brain/approvals` runs `expire_stale`, so a page load can wait on a Telegram send.
+- One brief live-price failure during an in-session Approve expires the idea (as ruled).
+- `by` on approve/reject/stage is set by the client.

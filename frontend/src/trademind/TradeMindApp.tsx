@@ -44,8 +44,9 @@ const NAV = [
   { to: '/trademind/learn', label: 'Learn' },
   { to: '/trademind/system', label: 'System' },
   { to: '/trademind/setup', label: 'Setup' },
-  { to: '/finance', label: 'Finance ↗' },
-  { to: '/dashboard', label: 'Classic view ↗' },
+  // Also at the top right on wide screens; in the menu only on a phone.
+  { to: '/finance', label: 'Finance ↗', phoneOnly: true },
+  { to: '/dashboard', label: 'Classic view ↗', phoneOnly: true },
 ]
 
 const STATUS_CHIP: Record<ReturnType<typeof useBrainStatus>, { label: string; title: string }> = {
@@ -73,7 +74,12 @@ export default function TradeMindApp() {
         </Link>
         <nav className="tm-nav">
           {NAV.map((n) => (
-            <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => (isActive ? 'active' : '')}>
+            <NavLink
+              key={n.to}
+              to={n.to}
+              end={n.end}
+              className={({ isActive }) => `${isActive ? 'active' : ''} ${n.phoneOnly ? 'tm-nav-phone' : ''}`}
+            >
               {n.label}
             </NavLink>
           ))}
@@ -91,6 +97,12 @@ export default function TradeMindApp() {
           <span className="tm-status-chip" title={chipTitle}>
             {chip.label}
           </span>
+          <Link to="/finance" className="tm-toplink" title="Your personal finance app (separate)">
+            Finance ↗
+          </Link>
+          <Link to="/dashboard" className="tm-toplink" title="The old screens, kept for a short while">
+            Classic view ↗
+          </Link>
           <Link to="/trademind/setup" className="tm-avatar" title="Your account and settings">
             <Icon.User />
           </Link>

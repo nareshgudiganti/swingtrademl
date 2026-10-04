@@ -1403,3 +1403,53 @@
 .tm-logout:hover {
   color: var(--tm-text);
 }
+
+/* menu: never hide an item. Wide screens wrap onto a second line; a phone
+   scrolls sideways with a visible scrollbar. Finance / Classic view / Log out
+   sit at the top right on wide screens and at the end of the menu on a phone. */
+.tm-nav-phone {
+  display: none;
+}
+
+.tm-toplink {
+  color: var(--tm-dim);
+  font-size: 0.75rem;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.tm-toplink:hover {
+  color: var(--tm-text);
+}
+
+@media (min-width: 861px) {
+  .tm-nav {
+    flex-wrap: wrap;
+    overflow-x: visible;
+  }
+}
+
+@media (max-width: 860px) {
+  .tm-nav-phone {
+    display: inline-block;
+  }
+
+  .tm-toplink {
+    display: none;
+  }
+
+  .tm-nav {
+    scrollbar-width: thin;
+    padding-bottom: 4px;
+  }
+
+  .tm-nav::-webkit-scrollbar {
+    display: block;
+    height: 4px;
+  }
+
+  .tm-nav::-webkit-scrollbar-thumb {
+    background: var(--tm-line-strong);
+    border-radius: 4px;
+  }
+}

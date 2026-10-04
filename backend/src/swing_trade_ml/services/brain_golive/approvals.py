@@ -31,13 +31,13 @@ from sqlalchemy.orm import Session
 
 from swing_trade_ml.brokers import current_mode, get_broker
 from swing_trade_ml.core.config import settings
-from swing_trade_ml.core.enums import SignalType
+from swing_trade_ml.core.enums import OrderStatus, SignalType
 from swing_trade_ml.core.holidays import is_trading_holiday
 from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.db.models.brain import BrainDecision, BrainRun
 from swing_trade_ml.db.models.brain_golive import BrainApproval
 from swing_trade_ml.db.models.market import Instrument
-from swing_trade_ml.db.models.trading import Signal, Strategy
+from swing_trade_ml.db.models.trading import Order, Signal, Strategy
 from swing_trade_ml.notifications import notifier
 from swing_trade_ml.services import ingestion, risk
 from swing_trade_ml.services.brain_golive.stage import AUTO_BY, current_stage
@@ -336,6 +336,13 @@ def _check(db: Session, a: BrainApproval, now: datetime, automatic: bool, live: 
     return _Ready(strategy, instrument, signal, verdict.quantity, automatic)
 
 
+def _order_status(db: Session, signal: Signal) -> str | None:
+    """Status of the newest order placed for this signal (open_position writes it)."""
+    return db.execute(
+        select(Order.status).where(Order.signal_id == signal.id).order_by(Order.id.desc()).limit(1)
+    ).scalar_one_or_none()
+
+
 def _order(db: Session, a: BrainApproval, ready: _Ready) -> BrainApproval:
     """Send the order through version 1. The row is already claimed, so this
     runs at most once per idea. Only ever called while the market is open."""
@@ -365,24 +372,29 @@ def _order(db: Session, a: BrainApproval, ready: _Ready) -> BrainApproval:
     try:
         position = open_position(db, ready.strategy, ready.instrument, ready.signal, ready.quantity)
     except Exception as exc:  # recorded and shown, never retried
+        # open_position commits the Order row (and any broker_order_id) as it
+        # goes, so a rollback here can only drop this failed step's unsaved
+        # changes; it is needed only when the session itself is broken.
         if isinstance(exc, SQLAlchemyError):
             db.rollback()
         a = db.get(BrainApproval, a.id)
         a.result_note = (
-            f"The order could not be sent: {exc}. It will not be tried again — check the Orders page."
+            "The order may not have been sent — check the Orders page before doing anything else. "
+            f"It will not be tried again. (Error: {exc})"
         )
         db.commit()
         log.error("brain_golive.approval.order_failed", symbol=a.symbol, error=str(exc))
         raise ApprovalFailed(a.result_note) from exc
     a.position_id = position.id if position is not None else None
-    a.result_note = (
-        f"Bought {position.quantity} shares at ₹{position.entry_price:,.2f}."
-        if position is not None
-        else (
-            "The order was sent but has not filled yet: "
-            f"{ready.signal.rejection_reason or 'the broker gave no reason'}."
+    if position is not None:
+        a.result_note = f"Bought {position.quantity} shares at ₹{position.entry_price:,.2f}."
+    elif _order_status(db, ready.signal) in (OrderStatus.PENDING, OrderStatus.OPEN):
+        a.result_note = "Order sent; it will show as a position once it fills."  # normal for live orders
+    else:
+        a.result_note = (
+            f"The broker did not fill the order: {ready.signal.rejection_reason or 'no reason given'}. "
+            f"{NOTHING_BOUGHT}"
         )
-    )
     db.commit()
     log.info("brain_golive.approval.ordered", symbol=a.symbol, filled=position is not None)
     return a

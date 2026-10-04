@@ -71,6 +71,8 @@ services:
       REDIS_URL: ${REDIS_URL_DOCKER:-redis://redis:6379/0}
       # The worker owns the scheduler; the API must not run a second copy.
       ENABLE_SCHEDULER: "false"
+      # Local develop matches prod: brain API + TradeMind UI (practice mode).
+      BRAIN_ENABLED: "true"
     ports:
       - "8000:8000"
     volumes:
@@ -97,6 +99,7 @@ services:
       # The API already migrated the schema; two processes racing on `alembic
       # upgrade` at boot can deadlock.
       DB_AUTO_MIGRATE: "false"
+      BRAIN_ENABLED: "true"
     volumes:
       - model_data:/app/data/models
     depends_on:

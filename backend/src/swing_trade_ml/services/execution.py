@@ -849,8 +849,12 @@ def process_decision(
     ):
         bullish_confidence = round(1.0 - bullish_confidence, 3)
 
-    for position in existing_positions:
-        _check_confidence_decay(db, position, strategy, instrument, bullish_confidence, mode)
+    # Not for a staged (brain) strategy: its confidence is not always a
+    # probability (BrainDecision.score_source), so the decay alert would
+    # misread it — strategies/brain.py strips it from HOLDs for the same reason.
+    if not is_staged(strategy):
+        for position in existing_positions:
+            _check_confidence_decay(db, position, strategy, instrument, bullish_confidence, mode)
 
     if decision.signal == SignalType.HOLD:
         return record_signal(db, strategy, instrument, decision, mode)

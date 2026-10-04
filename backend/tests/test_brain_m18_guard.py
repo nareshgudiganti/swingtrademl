@@ -13,6 +13,8 @@ import pytest
 from brain_m18_fixtures import brain_strategy, instrument, no_broker, v1_strategy
 from swing_trade_ml.core import strategy_policy as policy
 from swing_trade_ml.core.enums import ExitReason, PositionStatus, SignalType
+from swing_trade_ml.db.models.brain_golive import BrainStageChange
+from swing_trade_ml.db.models.safety import RiskEvent
 from swing_trade_ml.db.models.trading import Order, Position, Strategy
 from swing_trade_ml.services import engine, execution, risk
 from swing_trade_ml.services.risk import RiskDecision
@@ -321,3 +323,57 @@ def test_a_brain_exit_decision_only_alerts_when_the_bot_is_in_the_other_mode(db_
     assert closed == []
     assert len(sent) == 1 and "paper book" in sent[0] and "live mode" in sent[0]
     assert sig.advisory_only is True and sig.was_executed is False
+
+
+def test_a_brain_buy_never_runs_the_confidence_decay_check(db_session, monkeypatch):
+    """The brain's confidence is not always a probability, so version 1's
+    decay alert must not read it (to_signal strips it on a HOLD likewise)."""
+    _allow_everything(monkeypatch)
+    calls: list[int] = []
+    monkeypatch.setattr(execution, "_check_confidence_decay", lambda db, p, *a: calls.append(p.id))
+    strategy = brain_strategy(db_session, name="m18-decay-brain")
+    _hold(db_session, strategy, "M18DCY", 918301)
+    inst = db_session.query(Position).filter_by(strategy_id=strategy.id).one().instrument
+    execution.process_decision(db_session, strategy, inst, BUY)
+    assert calls == []
+    v1 = v1_strategy(db_session, name="m18-decay-v1")
+    _hold(db_session, v1, "M18DCZ", 918302)
+    v1_inst = db_session.query(Position).filter_by(strategy_id=v1.id).one().instrument
+    execution.process_decision(db_session, v1, v1_inst, BUY)
+    assert len(calls) == 1  # version 1 is unchanged
+
+
+def _refuse(monkeypatch) -> None:
+    _allow_everything(monkeypatch)
+    monkeypatch.setattr(
+        execution.risk,
+        "check_entry",
+        lambda **kw: RiskDecision(False, 0, "Sector limit reached", rule="SECTOR_CAP"),
+    )
+
+
+def test_a_practice_brain_idea_refused_by_the_safety_check_writes_no_risk_event(db_session, monkeypatch):
+    _refuse(monkeypatch)
+    strategy = brain_strategy(db_session, name="m18-noise-brain")
+    inst = instrument(db_session, "M18NOI", 918311)
+    sig = execution.process_decision(db_session, strategy, inst, BUY)
+    assert sig.rejection_reason == "Sector limit reached"  # the reason is still on the idea
+    assert db_session.query(RiskEvent).filter_by(strategy_id=strategy.id).count() == 0
+
+
+def test_once_the_brain_can_buy_its_refusals_are_risk_events_again(db_session, monkeypatch):
+    _refuse(monkeypatch)
+    db_session.add(BrainStageChange(stage="approval", previous_stage="shadow", changed_by="t", reason="t"))
+    db_session.flush()
+    strategy = brain_strategy(db_session, name="m18-noise-brain2")
+    inst = instrument(db_session, "M18NOJ", 918312)
+    execution.process_decision(db_session, strategy, inst, BUY)
+    assert db_session.query(RiskEvent).filter_by(strategy_id=strategy.id).count() == 1
+
+
+def test_a_version_1_refusal_is_still_a_risk_event(db_session, monkeypatch):
+    _refuse(monkeypatch)
+    strategy = v1_strategy(db_session, name="m18-noise-v1")
+    inst = instrument(db_session, "M18NOK", 918313)
+    execution.process_decision(db_session, strategy, inst, BUY)
+    assert db_session.query(RiskEvent).filter_by(strategy_id=strategy.id).count() == 1

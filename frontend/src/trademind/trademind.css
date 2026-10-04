@@ -1241,3 +1241,39 @@
       'btn btn';
   }
 }
+
+/* control page */
+.tm-control {
+  max-width: 640px;
+}
+
+.tm-control-row {
+  justify-content: space-between;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.6rem;
+}
+
+.tm-zchip {
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  white-space: nowrap;
+  text-decoration: none;
+  color: var(--tm-amber);
+  border: 1px solid rgba(255, 181, 71, 0.45);
+  background: rgba(255, 181, 71, 0.08);
+}
+
+.tm-zchip-ok {
+  color: #3ddc97;
+  border-color: rgba(61, 220, 151, 0.45);
+  background: rgba(61, 220, 151, 0.08);
+}
+
+@media (max-width: 480px) {
+  .tm-zchip {
+    display: none;
+  }
+}

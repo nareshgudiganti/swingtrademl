@@ -1,9 +1,11 @@
 // The TradeMind area: a full-screen app of its own (own top menu, own dark
 // glowing theme) mounted at /trademind. The classic app is untouched.
 
+import { useQuery } from '@tanstack/react-query'
 import { NavLink, Navigate, Route, Routes, Link } from 'react-router-dom'
 
 import './trademind.css'
+import { api } from '../api/client'
 import { formatDateTime } from '../lib/format'
 import { useBrainStatus, useLatestRun } from './live'
 import { Icon } from './ui'
@@ -17,9 +19,11 @@ import AIDecision from './pages/AIDecision'
 import Risk from './pages/Risk'
 import Learn from './pages/Learn'
 import System from './pages/System'
+import Control from './pages/Control'
 
 const NAV = [
   { to: '/trademind', label: 'Brain', end: true },
+  { to: '/trademind/control', label: 'Control' },
   { to: '/trademind/market', label: 'Market' },
   { to: '/trademind/opportunities', label: 'Opportunities' },
   { to: '/trademind/portfolio', label: 'Portfolio' },
@@ -41,6 +45,7 @@ const STATUS_CHIP: Record<ReturnType<typeof useBrainStatus>, { label: string; ti
 export default function TradeMindApp() {
   const status = useBrainStatus()
   const latest = useLatestRun()
+  const broker = useQuery({ queryKey: ['status'], queryFn: api.status })
   const chip = STATUS_CHIP[status]
   const chipTitle =
     status === 'live' && latest.data ? `From the brain's run on ${formatDateTime(latest.data.started_at)}` : chip.title
@@ -60,6 +65,15 @@ export default function TradeMindApp() {
           ))}
         </nav>
         <div className="tm-topbar-right">
+          {broker.data && (
+            <Link
+              to="/trademind/control"
+              className={`tm-zchip ${broker.data.broker_authenticated ? 'tm-zchip-ok' : ''}`}
+              title="Open the control room"
+            >
+              {broker.data.broker_authenticated ? 'Zerodha connected' : 'Zerodha: not logged in'}
+            </Link>
+          )}
           <span className="tm-status-chip" title={chipTitle}>
             {chip.label}
           </span>
@@ -84,6 +98,7 @@ export default function TradeMindApp() {
           <Route path="risk" element={<Risk />} />
           <Route path="learn" element={<Learn />} />
           <Route path="system" element={<System />} />
+          <Route path="control" element={<Control />} />
           <Route path="*" element={<Navigate to="/trademind" replace />} />
         </Route>
       </Routes>

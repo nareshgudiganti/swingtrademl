@@ -2,7 +2,7 @@
 // glowing theme) mounted at /trademind. The classic app is untouched.
 
 import { useQuery } from '@tanstack/react-query'
-import { NavLink, Navigate, Route, Routes, Link } from 'react-router-dom'
+import { Link, NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 
 import './trademind.css'
 import { api } from '../api/client'
@@ -26,28 +26,66 @@ import Records from './pages/Records'
 import MyHoldings from './pages/MyHoldings'
 import Setup from './pages/Setup'
 
-// One final app: everything the owner uses, most-used first. Finance is a
-// separate app (owner decision) and Classic view is the old screens, kept
-// reachable during the changeover — both leave the TradeMind area.
-const NAV = [
-  { to: '/trademind', label: 'Home', end: true },
-  { to: '/trademind/control', label: 'Control' },
-  { to: '/trademind/opportunities', label: 'Opportunities' },
-  { to: '/trademind/positions', label: 'Positions' },
-  { to: '/trademind/holdings', label: 'My Holdings' },
-  { to: '/trademind/portfolio', label: 'Portfolio' },
-  { to: '/trademind/market', label: 'Market' },
-  { to: '/trademind/ai', label: 'AI' },
-  { to: '/trademind/risk', label: 'Risk' },
-  { to: '/trademind/records', label: 'Records' },
-  { to: '/trademind/golive', label: 'Go-live' },
-  { to: '/trademind/learn', label: 'Learn' },
-  { to: '/trademind/system', label: 'System' },
-  { to: '/trademind/setup', label: 'Setup' },
-  // Also at the top right on wide screens; in the menu only on a phone.
-  { to: '/finance', label: 'Finance ↗', phoneOnly: true },
-  { to: '/dashboard', label: 'Classic view ↗', phoneOnly: true },
+// One final app in five sections (owner-approved design, 2026-10-04): the top
+// row is the section, the row under it the pages of that section. Finance and
+// Classic view are hidden from the menu for now (owner, 2026-10-04); their
+// pages still exist and come back when asked for.
+type Page = { to: string; label: string; end?: boolean }
+type Section = { label: string; pages: Page[]; also?: string[] }
+
+const SECTIONS: Section[] = [
+  {
+    label: 'Decisions',
+    pages: [
+      { to: '/trademind', label: 'Home', end: true },
+      { to: '/trademind/ai', label: 'AI' },
+    ],
+  },
+  {
+    label: 'Discover',
+    pages: [
+      { to: '/trademind/opportunities', label: 'Opportunities' },
+      { to: '/trademind/market', label: 'Market' },
+    ],
+    also: ['/trademind/stock'],
+  },
+  {
+    label: 'Portfolio',
+    pages: [
+      { to: '/trademind/positions', label: 'Positions' },
+      { to: '/trademind/holdings', label: 'My Holdings' },
+      { to: '/trademind/portfolio', label: 'Overview' },
+    ],
+  },
+  {
+    label: 'Performance',
+    pages: [
+      { to: '/trademind/records', label: 'Records' },
+      { to: '/trademind/learn', label: 'Learn' },
+    ],
+  },
+  {
+    label: 'Settings',
+    pages: [
+      { to: '/trademind/control', label: 'Control' },
+      { to: '/trademind/golive', label: 'Go-live' },
+      { to: '/trademind/risk', label: 'Risk' },
+      { to: '/trademind/system', label: 'System' },
+      { to: '/trademind/setup', label: 'Setup' },
+    ],
+  },
 ]
+
+function matches(path: string, to: string, end?: boolean): boolean {
+  return end ? path === to || path === `${to}/` : path === to || path.startsWith(`${to}/`)
+}
+
+function sectionFor(path: string): Section {
+  return (
+    SECTIONS.find((s) => s.pages.some((p) => matches(path, p.to, p.end)) || s.also?.some((a) => matches(path, a))) ??
+    SECTIONS[0]!
+  )
+}
 
 const STATUS_CHIP: Record<ReturnType<typeof useBrainStatus>, { label: string; title: string }> = {
   live: { label: 'Live', title: "Connected to the brain's latest run" },
@@ -61,6 +99,7 @@ export default function TradeMindApp() {
   const status = useBrainStatus()
   const latest = useLatestRun()
   const broker = useQuery({ queryKey: ['status'], queryFn: api.status })
+  const section = sectionFor(useLocation().pathname)
   const chip = STATUS_CHIP[status]
   const chipTitle =
     status === 'live' && latest.data ? `From the brain's run on ${formatDateTime(latest.data.started_at)}` : chip.title
@@ -72,16 +111,11 @@ export default function TradeMindApp() {
           <span className="tm-logo-mark" />
           TradeMind
         </Link>
-        <nav className="tm-nav">
-          {NAV.map((n) => (
-            <NavLink
-              key={n.to}
-              to={n.to}
-              end={n.end}
-              className={({ isActive }) => `${isActive ? 'active' : ''} ${n.phoneOnly ? 'tm-nav-phone' : ''}`}
-            >
-              {n.label}
-            </NavLink>
+        <nav className="tm-nav" aria-label="Sections">
+          {SECTIONS.map((sec) => (
+            <Link key={sec.label} to={sec.pages[0]!.to} className={sec === section ? 'active' : ''}>
+              {sec.label}
+            </Link>
           ))}
         </nav>
         <div className="tm-topbar-right">
@@ -97,12 +131,6 @@ export default function TradeMindApp() {
           <span className="tm-status-chip" title={chipTitle}>
             {chip.label}
           </span>
-          <Link to="/finance" className="tm-toplink" title="Your personal finance app (separate)">
-            Finance ↗
-          </Link>
-          <Link to="/dashboard" className="tm-toplink" title="The old screens, kept for a short while">
-            Classic view ↗
-          </Link>
           <Link to="/trademind/setup" className="tm-avatar" title="Your account and settings">
             <Icon.User />
           </Link>
@@ -118,6 +146,13 @@ export default function TradeMindApp() {
           </button>
         </div>
       </header>
+      <nav className="tm-subnav" aria-label={`${section.label} pages`}>
+        {section.pages.map((pg) => (
+          <NavLink key={pg.to} to={pg.to} end={pg.end} className={({ isActive }) => (isActive ? 'active' : '')}>
+            {pg.label}
+          </NavLink>
+        ))}
+      </nav>
 
       {/* Rendered outside any parent <Route>, so the paths are anchored here. */}
       <Routes>

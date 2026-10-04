@@ -688,3 +688,52 @@ def test_a_pending_idea_expiring_sends_nothing(fx):
     _pending(fx)
     fx.clock["now"] = at(TUE, 15, 31)
     assert approvals.expire_stale(fx.db) == 1 and fx.sent == []
+
+
+# ------------------------------------------------------------ fix round 2 --
+
+
+class _Broker:
+    def __init__(self, result):
+        self.result = result
+
+    def get_ltp(self, keys, db):
+        if isinstance(self.result, Exception):
+            raise self.result
+        return {keys[0]: self.result} if self.result != "missing" else {}
+
+
+@pytest.mark.parametrize(
+    "result",
+    [RuntimeError("no session"), "missing", 0, 0.0, -5.0, float("nan"), None],
+    ids=["raises", "empty", "zero", "zero-float", "negative", "nan", "none"],
+)
+def test_live_price_gives_none_when_there_is_no_usable_price(monkeypatch, result):
+    monkeypatch.setattr(approvals, "get_broker", lambda: _Broker(result))
+    inst = SimpleNamespace(symbol_key="NSE:M18X", tradingsymbol="M18X")
+    assert approvals._live_price(None, inst) is None
+
+
+def test_live_price_gives_the_brokers_price_as_a_float(monkeypatch):
+    monkeypatch.setattr(approvals, "get_broker", lambda: _Broker(101))
+    inst = SimpleNamespace(symbol_key="NSE:M18X", tradingsymbol="M18X")
+    got = approvals._live_price(None, inst)
+    assert got == 101.0 and isinstance(got, float)
+
+
+@pytest.mark.parametrize("price", [98.0, 103.0], ids=["exactly-the-bottom", "exactly-the-top"])
+def test_a_live_price_on_the_edge_of_the_range_still_buys(fx, price):
+    a = _pending(fx)
+    fx.live["price"] = price
+    assert approvals.approve(fx.db, a.id, by="owner").status == "approved"
+    assert fx.opened == [(fx.signal.id, 12)] and fx.risk_calls[-1]["price"] == price
+
+
+def test_a_live_price_exactly_at_the_stop_is_refused(fx):
+    fx.decision.entry_low = 96.0  # the range starts at the stop itself
+    fx.db.flush()
+    a = _pending(fx)
+    fx.live["price"] = 96.0
+    with pytest.raises(approvals.ApprovalExpired, match="at or below the stop"):
+        approvals.approve(fx.db, a.id, by="owner")
+    assert fx.opened == []

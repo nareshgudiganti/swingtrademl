@@ -269,8 +269,10 @@ function PositionsBody() {
           onClose={() => { setClosing(false); setPickedId(null) }}
         >
           This sends a sell order now for all {pos.quantity} shares of {pos.symbol} held by {ownerOf(pos.strategy_name)}
-          (bought {formatDate(pos.entry_at)}), at the market price (about ₹{inr(pos.current_price)} a share). Outside market
-          hours it is filled at the next price the broker gives.{' '}
+          (bought {formatDate(pos.entry_at)}), at the market price (about ₹{inr(pos.current_price)} a share).{' '}
+          {isReal
+            ? 'Do this while the market is open (9:15 am to 3:30 pm on weekdays): outside those hours Zerodha may refuse the order, and nothing is sold.'
+            : 'Outside market hours the practice sale uses the last known price.'}{' '}
           {moneyKind ? `This uses ${moneyKind}.` : 'Could not check whether this is practice or real money.'} It cannot be undone.
         </Confirm>
       )}

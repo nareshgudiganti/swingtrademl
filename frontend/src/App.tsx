@@ -249,18 +249,19 @@ export default function App() {
     if (location.pathname.startsWith('/trademind')) {
       return <TradeMindApp ownerConsole />
     }
-    if (location.pathname === '/plans' && canManage) {
+    if (location.pathname === '/plans' || location.pathname.startsWith('/plans/')) {
+      if (planLoading) return <Loading />
+      const owner = canManage || !!me?.is_superuser
+      if (owner) {
+        return <Navigate to="/trademind/plans" replace />
+      }
       return (
         <div className="layout">
-          <header className="topbar">
-            <div className="topbar-inner">
-              <a href="/trademind" className="brand" style={{ textDecoration: 'none', color: 'inherit' }}>
-                ← Back to TradeMind
-              </a>
-            </div>
-          </header>
           <main className="content">
-            <PlansManager />
+            <div className="card">
+              <h2>Owner only</h2>
+              <p className="muted">Plans are managed by the app owner. Run: swingtrade make-owner your_username</p>
+            </div>
           </main>
         </div>
       )

@@ -353,7 +353,7 @@ export default function PlansManager() {
         <div>
           <h1 style={{ marginBottom: '0.15rem' }}>Plans</h1>
           <div className="muted" style={{ fontSize: '0.82rem' }}>
-            Choose what Free, Plus and Pro users can see. No payments yet: you assign plans by hand.
+            Choose what Free and Pro users can see. No payments yet: you assign plans by hand.
           </div>
         </div>
       </div>

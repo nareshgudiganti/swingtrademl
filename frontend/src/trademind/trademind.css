@@ -172,6 +172,15 @@
   animation: tm-fade 0.25s ease-out;
 }
 
+/* Plans Manager uses v1 light cards — readable inside TradeMind dark chrome */
+.tm-plans-shell {
+  color-scheme: light;
+  background: #f4f5f7;
+  color: #141414;
+  border-radius: 10px;
+  margin: 0 0.5rem 2rem;
+}
+
 @keyframes tm-fade {
   from {
     opacity: 0;

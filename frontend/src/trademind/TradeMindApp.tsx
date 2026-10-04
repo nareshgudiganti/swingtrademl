@@ -25,6 +25,7 @@ import GoLive from './pages/GoLive'
 import Records from './pages/Records'
 import MyHoldings from './pages/MyHoldings'
 import Setup from './pages/Setup'
+import PlansManager from '../pages/PlansManager'
 
 // One final app in five sections (owner-approved design, 2026-10-04): the top
 // row is the section, the row under it the pages of that section. Finance and
@@ -111,6 +112,12 @@ export default function TradeMindApp({ ownerConsole = false }: TradeMindAppProps
     if (!ownerConsole && s.label === 'Portfolio') {
       return { ...s, pages: s.pages.filter((p) => p.to !== '/trademind/holdings') }
     }
+    if (ownerConsole && s.label === 'Settings') {
+      return {
+        ...s,
+        pages: [{ to: '/trademind/plans', label: 'Plans' }, ...s.pages],
+      }
+    }
     return s
   })
   const section = sectionFor(useLocation().pathname)
@@ -143,9 +150,9 @@ export default function TradeMindApp({ ownerConsole = false }: TradeMindAppProps
             </span>
           )}
           {ownerConsole && (
-            <a href="/plans" className="tm-zchip" title="Free / Pro plans, preview, and users">
+            <Link to="/trademind/plans" className="tm-zchip" title="Free / Pro plans, preview, and users">
               Plans
-            </a>
+            </Link>
           )}
           {ownerConsole && broker.data && (
             <Link
@@ -208,6 +215,18 @@ export default function TradeMindApp({ ownerConsole = false }: TradeMindAppProps
           <Route path="records" element={<Records />} />
           <Route path="holdings" element={ownerConsole ? <MyHoldings /> : <Navigate to="/trademind/portfolio" replace />} />
           <Route path="setup" element={ownerConsole ? <Setup /> : <Navigate to="/trademind" replace />} />
+          <Route
+            path="plans"
+            element={
+              ownerConsole ? (
+                <div className="tm-page tm-plans-shell">
+                  <PlansManager />
+                </div>
+              ) : (
+                <Navigate to="/trademind" replace />
+              )
+            }
+          />
           <Route path="*" element={<Navigate to="/trademind" replace />} />
         </Route>
       </Routes>

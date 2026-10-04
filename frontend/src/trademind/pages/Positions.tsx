@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api } from '../../api/client'
 import type { BrainDecision, DetailedPosition } from '../../api/types'
@@ -9,6 +9,7 @@ import { finalWord, holdingsFrom, useLatestRun, useTrack } from '../live'
 import { wordTagColor, wordTone } from '../vocab'
 import { BrainGate, Card, CheckItem, Icon, Seg, Tabs, Tag, inr, signed, toneClass } from '../ui'
 import { PositionBand } from '../PositionBand'
+import { Confirm } from '../Confirm'
 
 const TABS = ['Position Overview', 'Re-evaluation & Exit', 'Notes'] as const
 type TabId = (typeof TABS)[number]
@@ -101,6 +102,10 @@ function PositionsBody() {
   const navigate = useNavigate()
   const latest = useLatestRun()
   const positions = useQuery({ queryKey: ['positions'], queryFn: api.positions })
+  const status = useQuery({ queryKey: ['status'], queryFn: api.status })
+  const queryClient = useQueryClient()
+  const [closing, setClosing] = useState(false)
+  const [closedMsg, setClosedMsg] = useState<string | null>(null)
 
   const run = latest.data
   const holdings = run ? holdingsFrom(run) : []
@@ -131,6 +136,17 @@ function PositionsBody() {
   }
 
   const pos = (positions.data ?? []).find((p) => p.symbol === selected.symbol)
+  const isReal = status.data?.trading_mode === 'live'
+  const moneyKind = status.data ? (isReal ? 'REAL money' : 'practice money (paper trading)') : null
+
+  async function closeNow(id: number) {
+    const res = await api.closePosition(id)
+    setClosedMsg(res.message || 'Sell order placed.')
+    // A close writes a trade and moves cash, so everything that shows them is stale.
+    for (const key of ['positions', 'summary', 'trades', 'status', 'holdings', 'brainLatest']) {
+      queryClient.invalidateQueries({ queryKey: [key] })
+    }
+  }
 
   const details = (
     <Card title="Position Details">
@@ -207,6 +223,29 @@ function PositionsBody() {
         <Tag tone={wordTagColor(finalWord(selected))}>{finalWord(selected)}</Tag>
         {selected.confidence != null && <Tag tone="violet">{Math.round(selected.confidence * 100)} model score</Tag>}
       </div>
+
+      {pos && (
+        <div className="tm-action-row">
+          <button className="tm-btn tm-btn-danger" onClick={() => setClosing(true)}>
+            Close this position
+          </button>
+          <span className="tm-dim tm-action-hint">Sells all {pos.quantity} shares now at the current market price.</span>
+        </div>
+      )}
+      {closedMsg && <p className="tm-pos tm-action-msg">{closedMsg}</p>}
+      {closing && pos && (
+        <Confirm
+          danger
+          title={`Sell all of ${pos.symbol}?`}
+          confirmLabel={`Sell ${pos.quantity} shares now`}
+          onConfirm={() => closeNow(pos.id)}
+          onClose={() => setClosing(false)}
+        >
+          This will sell all {pos.quantity} shares of {pos.symbol} right now, at the current market price (about ₹
+          {inr(pos.current_price)} a share).{' '}
+          {moneyKind ? `This uses ${moneyKind}.` : 'Could not check whether this is practice or real money.'} It cannot be undone.
+        </Confirm>
+      )}
 
       <Tabs tabs={TABS} active={tab} onChange={setTab} />
 

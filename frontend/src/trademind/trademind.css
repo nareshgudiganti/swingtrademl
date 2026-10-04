@@ -1241,3 +1241,43 @@
       'btn btn';
   }
 }
+
+/* actions */
+.tm-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0 0 0.9rem;
+}
+
+.tm-action-row .tm-input {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+
+.tm-action-hint {
+  font-size: 0.8rem;
+  min-width: 0;
+}
+
+.tm-action-msg {
+  margin: 0 0 0.9rem;
+}
+
+.tm-overrule {
+  margin-top: 1rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid var(--tm-line, rgba(255, 255, 255, 0.1));
+  min-width: 0;
+}
+
+.tm-overrule-hint {
+  font-size: 0.78rem;
+  margin: 0.2rem 0 0.5rem;
+}
+
+.tm-overrule-done {
+  margin: 0 0 0.6rem;
+  overflow-wrap: anywhere;
+}

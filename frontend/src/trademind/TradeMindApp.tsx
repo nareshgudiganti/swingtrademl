@@ -20,10 +20,12 @@ import Risk from './pages/Risk'
 import Learn from './pages/Learn'
 import System from './pages/System'
 import Control from './pages/Control'
+import GoLive from './pages/GoLive'
 
 const NAV = [
   { to: '/trademind', label: 'Brain', end: true },
   { to: '/trademind/control', label: 'Control' },
+  { to: '/trademind/golive', label: 'Go-live' },
   { to: '/trademind/market', label: 'Market' },
   { to: '/trademind/opportunities', label: 'Opportunities' },
   { to: '/trademind/portfolio', label: 'Portfolio' },
@@ -99,6 +101,7 @@ export default function TradeMindApp() {
           <Route path="learn" element={<Learn />} />
           <Route path="system" element={<System />} />
           <Route path="control" element={<Control />} />
+          <Route path="golive" element={<GoLive />} />
           <Route path="*" element={<Navigate to="/trademind" replace />} />
         </Route>
       </Routes>

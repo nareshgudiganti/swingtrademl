@@ -1280,6 +1280,15 @@
 
 /* actions */
 .tm-action-row {
+
+/* go-live page */
+.tm-gl-p {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.tm-gl-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -1316,4 +1325,43 @@
 .tm-overrule-done {
   margin: 0 0 0.6rem;
   overflow-wrap: anywhere;
+}
+
+}
+
+.tm-gl-row .tm-seg {
+  flex-wrap: wrap;
+  max-width: 100%;
+}
+
+.tm-gl-row .tm-seg button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.tm-gl-item {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--tm-line);
+  border-radius: 10px;
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+}
+
+.tm-gl-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.tm-gl-modes {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.tm-gl-modes button {
+  padding: 0.2rem 0.5rem;
+  font-size: 0.7rem;
 }

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api } from '../../api/client'
 import type { BrainDecision } from '../../api/types'
@@ -8,6 +8,7 @@ import type { Action } from '../types'
 import { barsFrom } from '../live-stock'
 import { finalWord, stockSituations, useBrainStatus, useLatestRun, useWhy } from '../live'
 import { wordClassName, wordTagColor, wordTone } from '../vocab'
+import { Confirm } from '../Confirm'
 import { ActionPill, BrainGate, Candles, Card, CheckItem, Icon, NotConnected, Seg, Tabs, Tag, inr, signed, toneClass } from '../ui'
 
 const TABS = ['Overview', 'Technical', 'Fundamental', 'AI Analysis', 'Similar Cases', 'News', 'Options'] as const
@@ -16,6 +17,78 @@ type TabId = (typeof TABS)[number]
 const RANGES = ['1M', '3M', '6M', '1Y'] as const
 type Range = (typeof RANGES)[number]
 const RANGE_DAYS: Record<Range, number> = { '1M': 22, '3M': 66, '6M': 132, '1Y': 252 }
+
+// Most careful first — same order as the brain console. The owner may only
+// move a decision toward caution, never toward more risk.
+const IDEA_ORDER = ['AVOID', 'WAIT', 'WATCH', 'TRADE']
+const HOLDING_ORDER = ['EXIT', 'REDUCE', 'MONITOR', 'HOLD']
+
+const WORD_PLAIN: Record<string, string> = {
+  TRADE: 'Buy it',
+  WATCH: 'Not yet, keep an eye on it',
+  WAIT: 'Wait, nothing to do',
+  AVOID: 'Stay away',
+  HOLD: 'Keep it, the plan is working',
+  MONITOR: 'Keep it, but watch closely',
+  REDUCE: 'Sell some',
+  EXIT: 'Sell it all',
+}
+
+function Overrule({ decision }: { decision: BrainDecision }) {
+  const queryClient = useQueryClient()
+  const order = decision.kind === 'idea' ? IDEA_ORDER : HOLDING_ORDER
+  const options = order.slice(0, order.indexOf(finalWord(decision)))
+  const [word, setWord] = useState(options[options.length - 1] ?? '')
+  const [asking, setAsking] = useState(false)
+
+  return (
+    <div className="tm-overrule">
+      {decision.overruled_word && (
+        <p className="tm-note tm-overrule-done">
+          Changed by {decision.overruled_by ?? 'you'}: {decision.word} → {decision.overruled_word}
+          {decision.overrule_reason ? ` — “${decision.overrule_reason}”` : ''}
+        </p>
+      )}
+      {options.length === 0 ? (
+        <p className="tm-dim">This is already the most careful word, so there is nothing to change.</p>
+      ) : (
+        <>
+          <div className="tm-stat-label">Disagree? Make it more careful</div>
+          <p className="tm-dim tm-overrule-hint">You can only make the brain more careful, never less. You must say why.</p>
+          <div className="tm-action-row">
+            <select className="tm-input" value={word} onChange={(e) => setWord(e.target.value)} aria-label="New decision">
+              {options.map((w) => (
+                <option key={w} value={w}>
+                  {w} — {WORD_PLAIN[w]}
+                </option>
+              ))}
+            </select>
+            <button className="tm-btn" onClick={() => setAsking(true)}>
+              Change decision
+            </button>
+          </div>
+        </>
+      )}
+      {asking && (
+        <Confirm
+          title={`Change the decision on ${decision.symbol}?`}
+          confirmLabel="Change decision"
+          reason={{ label: 'Why are you changing it?', placeholder: 'e.g. results are due next week' }}
+          onConfirm={async (reason) => {
+            await api.brainOverrule(decision.id, word, reason)
+            for (const key of ['brainLatest', 'brainWhy', 'brainRuns', 'brainTrack']) {
+              queryClient.invalidateQueries({ queryKey: [key] })
+            }
+          }}
+          onClose={() => setAsking(false)}
+        >
+          The brain said {finalWord(decision)}. You are changing it to {word} ({WORD_PLAIN[word]}). Nothing is bought or sold by
+          this change; it only changes the advice shown.
+        </Confirm>
+      )}
+    </div>
+  )
+}
 
 export default function StockDetail() {
   return (
@@ -152,6 +225,7 @@ function StockDetailBody() {
                 <p className="tm-dim">No reasons recorded for this decision.</p>
               )}
               {decision.evidence_text && <p className="tm-note" style={{ marginTop: '0.7rem' }}>{decision.evidence_text}</p>}
+              <Overrule decision={decision} />
               <div className="tm-grid tm-cols-2" style={{ marginTop: '0.9rem', gap: '0.7rem' }}>
                 {decision.entry_low != null && (
                   <div>

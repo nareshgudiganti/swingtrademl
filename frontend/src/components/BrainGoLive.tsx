@@ -128,7 +128,7 @@ const STAGE_TITLE: Record<BrainStageName, string> = {
 export function BrainStageCard() {
   const queryClient = useQueryClient()
   const stage = useQuery({ queryKey: ['brainStage'], queryFn: api.brainStage })
-  const [target, setTarget] = useState<BrainStageName>('shadow')
+  const [picked, setPicked] = useState<BrainStageName | null>(null)
   const [reason, setReason] = useState('')
   const change = useMutation({
     mutationFn: () => api.brainSetStage(target, reason),
@@ -141,6 +141,8 @@ export function BrainStageCard() {
   const s = stage.data
   const allowed = (name: BrainStageName): boolean =>
     !!s && name !== s.stage && (name === 'shadow' || (s.ready && (name === 'approval' || s.stage === 'approval')))
+  const target: BrainStageName =
+    picked && allowed(picked) ? picked : (['shadow', 'approval', 'auto'] as BrainStageName[]).find(allowed) ?? 'shadow'
   return (
     <div className="card" style={{ marginBottom: '1.25rem' }}>
       <h2>Trading stage</h2>
@@ -159,9 +161,10 @@ export function BrainStageCard() {
             Going back to practice is always allowed and takes effect at once.
           </p>
           <p className="stat-sub">
-            Going back to practice stops new buying only. Shares the brain already bought are not sold: the usual
+            Going back to practice stops new buying. Ideas waiting for your OK, and ideas you approved that are not
+            placed yet, are cancelled and nothing new is bought. Shares the brain already bought are kept: the usual
             stop-loss, target and time limit keep protecting them, or you can sell them yourself on the Positions
-            page. Ideas still waiting for your OK expire.
+            page.
           </p>
           <p className="stat-sub">
             Moving to Automatic is your own call. There is no extra test beyond the {s.needed} finished ideas, and you
@@ -170,7 +173,7 @@ export function BrainStageCard() {
           <div className="brain-overrule">
             <select
               value={target}
-              onChange={(e) => setTarget(e.target.value as BrainStageName)}
+              onChange={(e) => setPicked(e.target.value as BrainStageName)}
               aria-label="New stage"
             >
               {(['shadow', 'approval', 'auto'] as BrainStageName[]).map((name) => (
@@ -294,6 +297,7 @@ export function BrainApprovalsCard() {
   const reject = useMutation({
     mutationFn: ({ id, reason }: { id: number; reason: string }) => api.brainReject(id, reason),
     onSuccess: refresh,
+    onError: refresh,
   })
   return (
     <div className="card" id="approvals" style={{ marginBottom: '1.25rem' }}>

@@ -24,6 +24,7 @@ The brain always starts in Practice. Nothing in the app changes the stage by its
 - Approve checks again that the brain still likes the idea, that you do not already hold the stock through the brain, and that the safety rules allow the purchase. Only then is it bought.
 - An idea stays open until the next trading day's market closes. If you approve while the market is closed, nothing is ordered at that moment. It shows as "Approved — will be placed when the market opens", and the checks run once more at the open before anything is bought. An order is never sent after the market has closed.
 - An idea you do not approve in time expires. Rejecting an idea needs a short reason.
+- In Automatic, ideas that arrive after the market closes also wait for the next open. An order is never sent after the close.
 - While the stage is Practice, Approve is not shown at all.
 
 ## How to go back (rollback)
@@ -32,7 +33,7 @@ There is one switch for this.
 
 1. Brain page, **Trading stage**, choose **Practice (shadow)**, write a reason, press **Change stage**. (For developers: `PUT /api/v1/brain/stage` with `{"stage":"shadow","reason":"..."}`.)
 2. It takes effect at once. Going back to Practice is always allowed.
-3. Ideas still waiting for your OK expire.
+3. Ideas still waiting for your OK, and ideas you approved that are not placed yet (for example approved after the market closed), are cancelled. Nothing new is bought.
 4. **Shares the brain already bought are NOT sold.** Switching back stops new buying only. Version 1's usual stop-loss, target and time limit keep protecting those shares, or you can sell them yourself on the Positions page.
 
 The same applies when you go from Automatic back to "Your OK needed": new buying then waits for you, and shares already bought stay protected as above.

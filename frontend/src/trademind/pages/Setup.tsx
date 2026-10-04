@@ -342,11 +342,29 @@ function StrategiesTab() {
           }}
           onClose={() => setTarget(null)}
         >
-          {target.is_active ? (
-            <>
-              It will stop making new buys. Stocks it already holds keep their stop-loss and target.
-              {target.name === 'brain' && ' Switching the brain off also puts the brain back to practice.'}
-            </>
+          {target.name === 'real_trading' ? (
+            target.is_active ? (
+              <>
+                The bot will stop tracking and sending alerts about the shares you bought yourself in Zerodha. It never buys
+                anything for this one, and your shares are not touched.
+              </>
+            ) : (
+              <>The bot will start tracking and sending alerts about the shares you bought yourself in Zerodha again. It never buys anything for this one.</>
+            )
+          ) : target.name === 'brain' ? (
+            target.is_active ? (
+              <>
+                The brain will stop recording its ideas. Switching it off also puts the brain back to practice. Stocks it
+                already holds keep their stop-loss and target.
+              </>
+            ) : (
+              <>
+                The brain will start recording its ideas again. In practice it only records ideas; it buys only through the
+                Go-live stage rules.
+              </>
+            )
+          ) : target.is_active ? (
+            <>It will stop making new buys. Stocks it already holds keep their stop-loss and target.</>
           ) : (
             <>It will start looking for new stocks to buy again, with {target.mode === 'live' ? 'real money' : 'practice money'}.</>
           )}

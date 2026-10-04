@@ -99,7 +99,7 @@ function SoldDialog({
   onSubmit: (id: number, price: number) => Promise<unknown>
   onClose: () => void
 }) {
-  const [price, setPrice] = useState(String(position.current_price))
+  const [price, setPrice] = useState('')
   return (
     <Confirm
       title={`Mark ${position.symbol} as sold`}
@@ -119,7 +119,8 @@ function SoldDialog({
       </p>
       <label style={{ display: 'block' }}>
         <span className="tm-dim" style={{ fontSize: '0.75rem' }}>
-          The price you sold at, per share (₹)
+          The price you sold at, per share (₹) — type the real price from Zerodha (today’s price: ₹
+          {position.current_price.toLocaleString('en-IN', { maximumFractionDigits: 2 })})
         </span>
         <input
           className="tm-input"

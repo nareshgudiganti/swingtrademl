@@ -90,7 +90,7 @@ export default function App() {
   const location = useLocation()
   const queryClient = useQueryClient()
 
-  const { data: status } = useQuery({
+  const { data: status, isError: statusFailed } = useQuery({
     queryKey: ['status'],
     queryFn: api.status,
     refetchInterval: 30_000,
@@ -134,6 +134,9 @@ export default function App() {
   }
 
   const home = status?.brain_enabled ? '/trademind' : '/dashboard'
+  // Until /status answers: a small loading line, or — if it failed — the
+  // classic screens, so these routes never render blank.
+  const waiting = statusFailed ? <Navigate to="/dashboard" replace /> : <p className="muted">Loading…</p>
 
   if (status?.live_trading_enabled && !liveAcked) {
     return (
@@ -289,11 +292,15 @@ export default function App() {
           </div>
         )}
 
+        {statusFailed && !status && (
+          <p className="muted">Could not reach the server — showing the classic screens.</p>
+        )}
+
         <div key={location.pathname} className="page-transition">
           <Routes>
             {/* One final app: TradeMind is home whenever the brain is on; the
                 classic screens stay reachable ("Classic view") during the changeover. */}
-            <Route path="/" element={!status ? null : <Navigate to={home} replace />} />
+            <Route path="/" element={!status ? waiting : <Navigate to={home} replace />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/holdings" element={<Holdings />} />
             <Route path="/portfolio" element={<Positions />} />
@@ -307,12 +314,12 @@ export default function App() {
             <Route
               path="/brain"
               element={
-                !status ? null : status.brain_enabled ? <Brain /> : <Navigate to="/dashboard" replace />
+                !status ? waiting : status.brain_enabled ? <Brain /> : <Navigate to="/dashboard" replace />
               }
             />
             <Route path="/finance" element={<Finance />} />
             <Route path="/settings" element={<Settings />} />
-            <Route path="*" element={!status ? null : <Navigate to={home} replace />} />
+            <Route path="*" element={!status ? waiting : <Navigate to={home} replace />} />
           </Routes>
         </div>
       </main>

@@ -18,6 +18,7 @@ import Modal from '../components/Modal'
 import { HoldingTracker } from '../components/HoldingTracker'
 import { BrainApprovalsCard, BrainCompareCard, BrainStageCard } from '../components/BrainGoLive'
 import { formatCurrency, formatDateTime } from '../lib/format'
+import { MODULE_PLAIN, moduleName, traceLine } from '../trademind/vocab'
 
 /* The brain console (build book module M17). Everything here is in plain
  * words: the brain only suggests and records; it never places an order. */
@@ -97,22 +98,6 @@ function WordPill({ word }: { word: string }) {
       {word}
     </span>
   )
-}
-
-function traceLine(e: BrainTraceEvent): string {
-  if (e.module_id === 'fallback') return 'Simple built-in answer (no module installed for this step)'
-  switch (e.status) {
-    case 'used':
-      return `${e.module_id} answered`
-    case 'shadow':
-      return `${e.module_id} ran on trial — recorded, not used`
-    case 'skipped':
-      return `${e.module_id} is switched off`
-    case 'rejected':
-      return `${e.module_id}'s answer was refused: ${e.reason}`
-    default:
-      return `${e.module_id} did not answer (${e.reason}); the simple built-in answer was used`
-  }
 }
 
 function HowItDecided({ trace }: { trace: BrainTraceEvent[] }) {
@@ -988,8 +973,9 @@ export default function Brain() {
                         const m = moduleById.get(id)
                         return m ? (
                           <div key={id} className="between brain-module">
-                            <span>
-                              {m.id} · {m.name}
+                            <span title={`${m.id} · ${m.name}`}>
+                              <strong>{moduleName(m.id)}</strong>
+                              <span className="muted"> — {MODULE_PLAIN[m.id]?.does}</span>
                             </span>
                             <ModuleSwitch m={m} onChange={(mode) => setMode.mutate({ id: m.id, mode })} />
                           </div>

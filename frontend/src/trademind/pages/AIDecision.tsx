@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useParams } from 'react-router-dom'
 
 import { finalWord, ideasFrom, useBrainStatus, useLatestRun, useRunTrace, useWhy } from '../live'
-import { STEP_LABEL, traceLine, wordClassName, wordTone } from '../vocab'
+import { MODULE_PLAIN, STEP_LABEL, moduleName, traceLine, wordClassName, wordTone } from '../vocab'
 import { BrainGate, Card, CheckItem, Icon, NotConnected, Tabs, inr } from '../ui'
 
 const TABS = ['Summary', 'Evidence', 'Similar Cases', 'Model Output', 'Risk Analysis'] as const
@@ -118,10 +118,18 @@ function AIDecisionBody() {
           </div>
           {current && (
             <div className="tm-callout" style={{ marginTop: '0.4rem' }}>
-              <div className="tm-strong" style={{ marginBottom: 4 }}>
-                {STEP_LABEL[current.step] ?? current.step}
+              <div className="tm-dim" style={{ fontSize: '0.72rem' }}>
+                Selected: {STEP_LABEL[current.step] ?? current.step}
               </div>
-              {current.reason || traceLine(current)}
+              <div className="tm-strong" style={{ marginBottom: 4 }} title={current.module_id}>
+                {moduleName(current.module_id)}
+              </div>
+              <div>{MODULE_PLAIN[current.module_id]?.does}</div>
+              <div className="tm-dim" style={{ marginTop: 4 }}>
+                {current.reason && current.status !== 'shadow' && current.module_id !== 'fallback'
+                  ? current.reason
+                  : traceLine(current)}
+              </div>
             </div>
           )}
         </Card>

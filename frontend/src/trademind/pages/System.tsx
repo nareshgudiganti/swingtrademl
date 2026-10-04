@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { api } from '../../api/client'
 import type { ModuleMode } from '../../api/types'
 import { useHealth, useModules, useRuns } from '../live'
-import { MARKET_LABEL, STEP_LABEL } from '../vocab'
+import { MARKET_LABEL, MODULE_PLAIN, STEP_LABEL, moduleName } from '../vocab'
 import { BrainGate, Card, NotConnected, Tag } from '../ui'
 import { formatDateTime } from '../../lib/format'
 
@@ -138,7 +138,9 @@ function SystemBody() {
                         const m = moduleById.get(id)
                         return m ? (
                           <div key={id} className="tm-between" style={{ padding: '0.2rem 0' }}>
-                            <span className="tm-dim">{m.id} · {m.name}</span>
+                            <span className="tm-dim" title={`${m.id} · ${m.name}. ${MODULE_PLAIN[m.id]?.does ?? ''}`}>
+                              {moduleName(m.id)}
+                            </span>
                             <Tag tone={MODE_TONE[m.mode]}>{MODE_LABEL[m.mode]}{m.mandatory ? ' · required' : ''}</Tag>
                           </div>
                         ) : null

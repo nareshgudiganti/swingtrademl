@@ -305,11 +305,20 @@ function ApprovalsCard() {
   const queryClient = useQueryClient()
   const stage = useQuery({ queryKey: ['brainStage'], queryFn: api.brainStage })
   const list = useQuery({ queryKey: ['brainApprovals'], queryFn: api.brainApprovals })
+  const status = useQuery({ queryKey: ['status'], queryFn: api.status })
+  const moneyKind = status.data
+    ? status.data.trading_mode === 'live'
+      ? 'REAL money'
+      : 'practice money (paper trading)'
+    : null
   const [dialog, setDialog] = useState<{ kind: 'approve' | 'reject'; a: BrainApproval } | null>(null)
   const canDecide = !!stage.data && stage.data.stage !== 'shadow'
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ['brainApprovals'] })
     void queryClient.invalidateQueries({ queryKey: ['brainCompare'] })
+    for (const key of ['positions', 'status', 'summary']) {
+      void queryClient.invalidateQueries({ queryKey: [key] })
+    }
   }
   const approve = useMutation({
     mutationFn: ({ id, note }: { id: number; note: string }) => api.brainApprove(id, note),
@@ -354,7 +363,8 @@ function ApprovalsCard() {
         >
           The brain and the safety rules check the idea again first. Only if it still passes is it bought
           {dialog.a.suggested_qty !== null ? ` (about ${dialog.a.suggested_qty} shares)` : ''}. If the market is closed,
-          it is placed when the market opens.
+          it is placed when the market opens.{' '}
+          {moneyKind ? `This uses ${moneyKind}.` : 'Could not check whether this is practice or real money.'}
         </Confirm>
       )}
       {dialog?.kind === 'reject' && (

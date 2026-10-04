@@ -342,7 +342,10 @@ function RunControls() {
           }}
           onClose={() => setAsking(false)}
         >
-          This takes a few minutes. The brain only records its decisions — nothing is bought or sold.
+          The brain thinks again about every stock now; this takes a few minutes. Any change you made to a
+          decision today is kept. It records new decisions, and what happens next depends on the stage: in
+          “Practice only” nothing is bought; in “Your OK needed” new buy ideas wait for your OK; in “Automatic”
+          the brain may buy from them at its next scan.
         </Confirm>
       )}
       {asSend && (

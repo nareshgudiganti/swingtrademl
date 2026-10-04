@@ -264,27 +264,28 @@ def _store(db: Session, ctx: BrainContext, registry: ModuleRegistry, modes: dict
         )
     )
     db.flush()
+    carried = _todays_overrules(db, req) if req.live else {}
     for d in ctx.decisions.values():
-        db.add(
-            BrainDecision(
-                run_id=req.run_id,
-                symbol=d.symbol,
-                kind=d.kind,
-                word=d.word.value,
-                entry_low=d.entry_low,
-                entry_high=d.entry_high,
-                target=d.target,
-                stop=d.stop,
-                qty=d.qty,
-                horizon_days=d.horizon_days,
-                confidence=d.confidence,
-                score_source=d.confidence_source,
-                evidence_text=d.evidence_text or None,
-                reasons=list(d.reasons),
-                downgraded_from=d.downgraded_from.value if d.downgraded_from else None,
-                downgrade_reason=d.downgrade_reason,
-            )
+        row = BrainDecision(
+            run_id=req.run_id,
+            symbol=d.symbol,
+            kind=d.kind,
+            word=d.word.value,
+            entry_low=d.entry_low,
+            entry_high=d.entry_high,
+            target=d.target,
+            stop=d.stop,
+            qty=d.qty,
+            horizon_days=d.horizon_days,
+            confidence=d.confidence,
+            score_source=d.confidence_source,
+            evidence_text=d.evidence_text or None,
+            reasons=list(d.reasons),
+            downgraded_from=d.downgraded_from.value if d.downgraded_from else None,
+            downgrade_reason=d.downgrade_reason,
         )
+        _carry_overrule(row, carried.get((d.symbol, d.kind)))
+        db.add(row)
     if req.kind == "nightly":
         _store_snapshots(db, ctx)
     if req.live and req.kind in ("nightly", "intraday") and ctx.tracks:
@@ -292,6 +293,51 @@ def _store(db: Session, ctx: BrainContext, registry: ModuleRegistry, modes: dict
 
         opened = {h.symbol: h.opened_on for h in ctx.holdings if h.opened_on is not None}
         save_points(db, req.book, opened, list(ctx.tracks.values()), req.as_of.astimezone(IST).date())
+
+
+def _todays_overrules(db: Session, req: c.RunRequest) -> dict[tuple[str, str], BrainDecision]:
+    """The owner's overrules on earlier live runs of the same IST day and book,
+    most careful per (symbol, kind). A rerun ("Run the brain now") becomes
+    today's run for buying and approvals, so it must not drop them (C8)."""
+    day = req.as_of.astimezone(IST).date()
+    start = datetime.combine(day, datetime.min.time(), tzinfo=IST)
+    rows = db.execute(
+        select(BrainDecision)
+        .join(BrainRun, BrainRun.id == BrainDecision.run_id)
+        .where(
+            BrainRun.live.is_(True),
+            BrainRun.status == "done",
+            BrainRun.book == req.book,
+            BrainRun.as_of >= start,
+            BrainRun.as_of < start + timedelta(days=1),
+            BrainRun.id != req.run_id,
+            BrainDecision.overruled_word.is_not(None),
+        )
+    ).scalars()
+    best: dict[tuple[str, str], BrainDecision] = {}
+    for row in rows:
+        key = (row.symbol, row.kind)
+        held = best.get(key)
+        if held is None or _caution(row.kind, row.overruled_word) < _caution(row.kind, held.overruled_word):
+            best[key] = row
+    return best
+
+
+def _caution(kind: str, word: str) -> int:
+    """The overrule endpoint's ordering: 0 = most careful."""
+    vocabulary = c.IdeaWord if kind == "idea" else c.HoldingWord
+    return c.rank(vocabulary(word))
+
+
+def _carry_overrule(row: BrainDecision, earlier: BrainDecision | None) -> None:
+    """Copy an earlier same-day overrule only when it is more careful than the
+    new run's own word; a word already as careful stands on its own."""
+    if earlier is None or _caution(row.kind, earlier.overruled_word) >= _caution(row.kind, row.word):
+        return
+    row.overruled_word = earlier.overruled_word
+    row.overrule_reason = earlier.overrule_reason
+    row.overruled_by = earlier.overruled_by
+    row.overruled_at = earlier.overruled_at
 
 
 def _store_snapshots(db: Session, ctx: BrainContext) -> None:

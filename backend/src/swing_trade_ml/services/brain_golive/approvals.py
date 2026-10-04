@@ -343,6 +343,25 @@ def _order(db: Session, a: BrainApproval, ready: _Ready) -> BrainApproval:
         a.result_note = f"The market closed before the order could be sent. {NOTHING_BOUGHT}"
         db.commit()
         raise ApprovalFailed(a.result_note)
+    # Re-read the stage right before the order: a switch back that landed
+    # after the checks (rollback in flight) must still stop this buy.
+    stage_now = current_stage(db)
+    if not (stage_now == "approval" or stage_now == "auto") or (ready.automatic and stage_now != "auto"):
+        note = (
+            "The automatic stage was switched off before the order was sent. Nothing was bought."
+            if stage_now == "approval"
+            else "The brain was switched back to practice mode (shadow) before the order was sent. "
+            "Nothing was bought."
+        )
+        db.execute(
+            update(BrainApproval)
+            .where(BrainApproval.id == a.id, BrainApproval.status == "approved")
+            .values(status="expired", decided_note=note)
+            .execution_options(synchronize_session="fetch")
+        )
+        db.commit()
+        db.refresh(a)
+        raise ApprovalExpired(note)
     try:
         position = open_position(db, ready.strategy, ready.instrument, ready.signal, ready.quantity)
     except Exception as exc:  # recorded and shown, never retried
@@ -521,7 +540,7 @@ def execute_waiting(db: Session) -> list[BrainApproval]:
             continue
         try:
             _order(db, a, ready)
-        except ApprovalFailed as exc:
+        except ApprovalError as exc:
             dropped.append(f"{a.symbol}: {exc}")
             continue
         ordered.append(a)

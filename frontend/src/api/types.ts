@@ -1070,7 +1070,7 @@ export interface BrainStage {
   history: BrainStageChange[]
 }
 
-export type BrainApprovalStatus = 'pending' | 'approved' | 'waiting_open' | 'rejected' | 'expired'
+export type BrainApprovalStatus = 'pending' | 'waiting' | 'approved' | 'rejected' | 'expired'
 
 export interface BrainApproval {
   id: number
@@ -1089,4 +1089,5 @@ export interface BrainApproval {
   position_id: number | null
   result_note: string | null
   created_at: string | null
+  valid_until: string | null
 }

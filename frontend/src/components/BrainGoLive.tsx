@@ -253,6 +253,7 @@ function ApprovalRow({ a, canDecide, busy, onApprove, onReject }: {
       </td>
       <td>
         {a.status_plain}
+        {a.valid_until && <div className="stat-sub">Open until {formatDateTime(a.valid_until)}</div>}
         {a.decided_note && <div className="stat-sub">“{a.decided_note}”</div>}
         {a.result_note && <div className="stat-sub">{a.result_note}</div>}
       </td>

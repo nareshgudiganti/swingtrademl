@@ -21,19 +21,30 @@ import Learn from './pages/Learn'
 import System from './pages/System'
 import Control from './pages/Control'
 import GoLive from './pages/GoLive'
+import Records from './pages/Records'
+import MyHoldings from './pages/MyHoldings'
+import Setup from './pages/Setup'
 
+// One final app: everything the owner uses, most-used first. Finance is a
+// separate app (owner decision) and Classic view is the old screens, kept
+// reachable during the changeover — both leave the TradeMind area.
 const NAV = [
-  { to: '/trademind', label: 'Brain', end: true },
+  { to: '/trademind', label: 'Home', end: true },
   { to: '/trademind/control', label: 'Control' },
-  { to: '/trademind/golive', label: 'Go-live' },
-  { to: '/trademind/market', label: 'Market' },
   { to: '/trademind/opportunities', label: 'Opportunities' },
-  { to: '/trademind/portfolio', label: 'Portfolio' },
   { to: '/trademind/positions', label: 'Positions' },
+  { to: '/trademind/holdings', label: 'My Holdings' },
+  { to: '/trademind/portfolio', label: 'Portfolio' },
+  { to: '/trademind/market', label: 'Market' },
   { to: '/trademind/ai', label: 'AI' },
   { to: '/trademind/risk', label: 'Risk' },
+  { to: '/trademind/records', label: 'Records' },
+  { to: '/trademind/golive', label: 'Go-live' },
   { to: '/trademind/learn', label: 'Learn' },
   { to: '/trademind/system', label: 'System' },
+  { to: '/trademind/setup', label: 'Setup' },
+  { to: '/finance', label: 'Finance ↗' },
+  { to: '/dashboard', label: 'Classic view ↗' },
 ]
 
 const STATUS_CHIP: Record<ReturnType<typeof useBrainStatus>, { label: string; title: string }> = {
@@ -79,7 +90,7 @@ export default function TradeMindApp() {
           <span className="tm-status-chip" title={chipTitle}>
             {chip.label}
           </span>
-          <Link to="/dashboard" className="tm-avatar" title="Back to the classic app">
+          <Link to="/trademind/setup" className="tm-avatar" title="Your account and settings">
             <Icon.User />
           </Link>
         </div>
@@ -102,6 +113,9 @@ export default function TradeMindApp() {
           <Route path="system" element={<System />} />
           <Route path="control" element={<Control />} />
           <Route path="golive" element={<GoLive />} />
+          <Route path="records" element={<Records />} />
+          <Route path="holdings" element={<MyHoldings />} />
+          <Route path="setup" element={<Setup />} />
           <Route path="*" element={<Navigate to="/trademind" replace />} />
         </Route>
       </Routes>

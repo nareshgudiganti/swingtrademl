@@ -631,7 +631,7 @@ function ZerodhaTab() {
       {holdings.isLoading && <p className="tm-dim">Loading from Zerodha…</p>}
       {holdings.isError && (
         <p className="tm-neg">
-          Could not reach Zerodha: {(holdings.error as Error).message || 'log in to Kite and try again'}.
+          Could not reach Zerodha: {((holdings.error as Error).message || 'log in to Zerodha and try again').replace(/\.$/, '')}.
         </p>
       )}
       {holdings.data && holdings.data.length === 0 && (

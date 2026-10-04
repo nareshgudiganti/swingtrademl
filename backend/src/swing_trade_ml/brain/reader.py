@@ -55,12 +55,10 @@ class DatedReader:
         self._buy_level_loaded = False
 
     def universe(self) -> tuple[str, ...]:
-        rows = self.db.execute(
-            select(Instrument.tradingsymbol)
-            .where(Instrument.is_watchlisted.is_(True), Instrument.is_active.is_(True))
-            .order_by(Instrument.tradingsymbol)
-        ).scalars()
-        return tuple(dict.fromkeys(rows))
+        """The watchlist plus version 1's stocks (brain/universe.py)."""
+        from swing_trade_ml.brain.universe import brain_universe
+
+        return brain_universe(self.db)
 
     def _instrument(self, symbol: str) -> Instrument | None:
         return self.db.execute(

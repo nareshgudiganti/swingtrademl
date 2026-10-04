@@ -248,3 +248,12 @@ do not do that by accident.
 - `GET /brain/approvals` runs `expire_stale`, so a page load can wait on a Telegram send.
 - One brief live-price failure during an in-session Approve expires the idea (as ruled).
 - `by` on approve/reject/stage is set by the client.
+
+## Brain stock list (2026-10-04)
+
+The brain looks at the watchlist PLUS every stock an active version 1 auto-trading strategy scans
+(`brain/universe.py`), so the brain and version 1 are compared on the same stocks; the brain
+strategy's scan uses the same list. Advisory trackers (real_trading) and the brain itself add
+nothing. Market breadth (M10) still uses the watchlist only. In production that is 10 → 304
+stocks; a full nightly run takes about 3 minutes (memory rebuild ≈ 312k stock-days). Small caps
+are included but v1's risk check refuses them at the current account size, and the brain says so.

@@ -76,14 +76,19 @@ function Overrule({ decision }: { decision: BrainDecision }) {
           reason={{ label: 'Why are you changing it?', placeholder: 'e.g. results are due next week' }}
           onConfirm={async (reason) => {
             await api.brainOverrule(decision.id, word, reason)
+            // The chosen word is now the final one; the next valid choice is one step more cautious.
+            setWord(order[order.indexOf(word) - 1] ?? '')
             for (const key of ['brainLatest', 'brainWhy', 'brainRuns', 'brainTrack']) {
               queryClient.invalidateQueries({ queryKey: [key] })
             }
           }}
           onClose={() => setAsking(false)}
         >
-          The brain said {finalWord(decision)}. You are changing it to {word} ({WORD_PLAIN[word]}). Nothing is bought or sold by
-          this change; it only changes the advice shown.
+          The brain said {finalWord(decision)}. You are changing it to {word} ({WORD_PLAIN[word]}).{' '}
+          {decision.kind === 'idea'
+            ? 'If a buy of this stock is waiting for your OK, or was approved but not placed yet, it will not happen, and the brain’s buy becomes a hold. '
+            : 'This changes the brain’s advice on a stock you hold. '}
+          Nothing you already own is sold by this change, and it can only ever move toward caution.
         </Confirm>
       )}
     </div>

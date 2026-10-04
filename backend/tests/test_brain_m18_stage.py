@@ -191,3 +191,16 @@ def test_switching_off_the_brain_in_practice_writes_no_extra_stage_row(db_sessio
     before = db_session.query(BrainStageChange).count()
     assert client.post(f"/api/v1/strategies/{s.id}/deactivate", headers=HEADERS).status_code == 200
     assert db_session.query(BrainStageChange).count() == before
+
+
+def test_switching_the_brain_off_still_succeeds_when_the_stage_cannot_be_reset(
+    db_session, client, monkeypatch
+):
+    s = brain_strategy(db_session, name="m18-off-error")
+
+    def broken(db, by="owner"):
+        raise RuntimeError("stage table unavailable")
+
+    monkeypatch.setattr(stage, "brain_strategy_switched_off", broken)
+    r = client.post(f"/api/v1/strategies/{s.id}/deactivate", headers=HEADERS)
+    assert r.status_code == 200 and r.json()["is_active"] is False

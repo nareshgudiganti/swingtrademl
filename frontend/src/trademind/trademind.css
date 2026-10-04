@@ -318,6 +318,39 @@
   color: var(--tm-text);
 }
 
+/* Sells, stops or cannot be undone. */
+.tm-btn-danger {
+  background: linear-gradient(180deg, #ff5c77, #d63a55);
+  box-shadow: 0 0 0 1px rgba(255, 120, 140, 0.45), 0 0 18px rgba(255, 77, 106, 0.4);
+}
+
+.tm-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  filter: none;
+}
+
+/* --------------------------------------------------------------- dialog -- */
+
+.tm-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(3, 5, 16, 0.72);
+}
+
+.tm-dialog {
+  width: min(460px, 100%);
+  padding: 1.1rem 1.2rem;
+  border-radius: var(--tm-radius);
+  background: var(--tm-card-2);
+  box-shadow: 0 0 0 1px var(--tm-line-strong), 0 0 40px rgba(110, 90, 255, 0.35);
+  color: var(--tm-text);
+}
+
 /* ------------------------------------------------------------ text tones -- */
 
 .tm-pos {

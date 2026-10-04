@@ -37,7 +37,7 @@ def test_brain_is_off_by_default():
     assert Settings(API_KEY="x", JWT_SECRET_KEY="x").BRAIN_ENABLED is False
 
 
-def test_brain_jobs_register_nightly_intraday_and_learn():
+def test_brain_jobs_register_nightly_intraday_learn_and_approvals_open():
     s = BackgroundScheduler()
     add_brain_jobs(s)
     assert {j.id for j in s.get_jobs()} == {

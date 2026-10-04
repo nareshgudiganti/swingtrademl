@@ -104,7 +104,7 @@ function OpportunitiesBody() {
                   <td className="tm-dim">{finalWord(i) === 'TRADE' ? entryZone(i) : '—'}</td>
                   <td className="tm-dim">{finalWord(i) === 'TRADE' && i.target != null ? `₹${inr(i.target)}` : '—'}</td>
                   <td className="tm-dim">{finalWord(i) === 'TRADE' && i.stop != null ? `₹${inr(i.stop)}` : '—'}</td>
-                  <td className="tm-dim">{i.reasons[0] ?? '—'}</td>
+                  <td className="tm-dim tm-wrap">{i.reasons[0] ?? '—'}</td>
                 </tr>
               ))}
               {rows.length === 0 && (
@@ -131,6 +131,15 @@ function OpportunitiesBody() {
   )
 }
 
+// The heading says what the brain actually decided — a WATCH idea the risk
+// check refused is not one TradeMind "likes".
+const WHY_HEADING: Record<string, string> = {
+  TRADE: 'Why TradeMind likes this',
+  WATCH: 'Why TradeMind is watching this',
+  WAIT: 'Why TradeMind is waiting',
+  AVOID: 'Why TradeMind avoids this',
+}
+
 function FeaturedCard({ decision }: { decision: BrainDecision }) {
   const candles = useQuery({
     queryKey: ['candles', decision.symbol, 30],
@@ -140,8 +149,10 @@ function FeaturedCard({ decision }: { decision: BrainDecision }) {
 
   return (
     <Card glow className="tm-feature">
-      <StockLogo symbol={decision.symbol} />
-      <div>
+      <div className="tm-feature-logo">
+        <StockLogo symbol={decision.symbol} />
+      </div>
+      <div className="tm-feature-name">
         <div className="tm-strong" style={{ fontSize: '0.95rem' }}>
           {decision.symbol}
         </div>
@@ -149,7 +160,7 @@ function FeaturedCard({ decision }: { decision: BrainDecision }) {
           <ActionPill action={finalWord(decision) as Action} />
         </div>
       </div>
-      <div className="tm-flex" style={{ minWidth: 0 }}>
+      <div className="tm-flex tm-feature-viz">
         <Ring
           value={decision.confidence != null ? Math.round(decision.confidence * 100) : 0}
           empty={decision.confidence == null}
@@ -170,7 +181,7 @@ function FeaturedCard({ decision }: { decision: BrainDecision }) {
           {points.length > 0 && <GlowArea data={points} height={70} formatter={(v) => `₹${inr(v, 0)}`} />}
         </div>
       </div>
-      <div>
+      <div className="tm-feature-why">
         {finalWord(decision) === 'TRADE' && decision.entry_low != null && (
           <p className="tm-note" style={{ marginBottom: '0.5rem' }}>
             Buy around {entryZone(decision)} · target {decision.target != null ? `₹${inr(decision.target)}` : '—'} · stop{' '}
@@ -178,7 +189,7 @@ function FeaturedCard({ decision }: { decision: BrainDecision }) {
           </p>
         )}
         <div className="tm-strong" style={{ marginBottom: 2 }}>
-          Why TradeMind {finalWord(decision) === 'AVOID' ? 'avoids' : 'likes'} this
+          {WHY_HEADING[finalWord(decision)] ?? 'Why TradeMind decided this'}
         </div>
         {decision.reasons.map((w, idx) => (
           <CheckItem key={idx} tone={wordTone(finalWord(decision))}>
@@ -186,7 +197,7 @@ function FeaturedCard({ decision }: { decision: BrainDecision }) {
           </CheckItem>
         ))}
       </div>
-      <Link className="tm-btn" to={`/trademind/stock/${encodeURIComponent(decision.symbol)}`}>
+      <Link className="tm-btn tm-feature-btn" to={`/trademind/stock/${encodeURIComponent(decision.symbol)}`}>
         View Details
       </Link>
     </Card>

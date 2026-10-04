@@ -508,6 +508,27 @@
 
 .tm-table-wrap {
   overflow-x: auto;
+  scrollbar-color: var(--tm-line-strong) transparent;
+  scrollbar-width: thin;
+}
+
+.tm-table-wrap::-webkit-scrollbar {
+  height: 8px;
+}
+
+.tm-table-wrap::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.tm-table-wrap::-webkit-scrollbar-thumb {
+  background: var(--tm-line-strong);
+  border-radius: 8px;
+}
+
+/* A long plain-English reason wraps instead of pushing the table sideways. */
+.tm-table td.tm-wrap {
+  white-space: normal;
+  min-width: 16rem;
 }
 
 .tm-table {
@@ -900,9 +921,35 @@
 
 .tm-feature {
   display: grid;
-  grid-template-columns: auto auto 1fr auto auto;
+  /* The reasons get the flexible column; the score ring and price chart get a
+     fixed one, so long reasons can never squeeze them on top of the text. */
+  grid-template-columns: auto auto minmax(220px, 300px) minmax(0, 1fr) auto;
+  grid-template-areas: 'logo name viz why btn';
   align-items: center;
   gap: 1.25rem;
+}
+
+.tm-feature-logo {
+  grid-area: logo;
+}
+
+.tm-feature-name {
+  grid-area: name;
+}
+
+.tm-feature-viz {
+  grid-area: viz;
+  min-width: 0;
+}
+
+.tm-feature-why {
+  grid-area: why;
+  min-width: 0;
+  white-space: normal;
+}
+
+.tm-feature-btn {
+  grid-area: btn;
 }
 
 .tm-stock-logo {
@@ -1108,7 +1155,11 @@
   }
 
   .tm-feature {
-    grid-template-columns: auto 1fr auto;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      'logo name btn'
+      'viz viz viz'
+      'why why why';
   }
 }
 
@@ -1149,6 +1200,11 @@
   }
 
   .tm-feature {
-    grid-template-columns: auto 1fr;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+      'logo name'
+      'viz viz'
+      'why why'
+      'btn btn';
   }
 }

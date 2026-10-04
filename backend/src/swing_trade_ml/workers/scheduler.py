@@ -235,6 +235,14 @@ def add_brain_jobs(target: BackgroundScheduler) -> None:
         id="brain_intraday",
         replace_existing=True,
     )
+    # Approved-while-closed brain ideas are bought only in the first minutes
+    # of a session (approvals.execute_waiting re-checks the window itself).
+    target.add_job(
+        jobs.job_brain_approvals_open,
+        CronTrigger(day_of_week=WEEKDAYS, hour=9, minute="15-19", timezone=IST),
+        id="brain_approvals_open",
+        replace_existing=True,
+    )
     target.add_job(
         jobs.job_brain_learn,
         CronTrigger(day_of_week="sat", hour=10, minute=0, timezone=IST),

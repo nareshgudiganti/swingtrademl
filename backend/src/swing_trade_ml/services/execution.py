@@ -15,7 +15,12 @@ from sqlalchemy.orm import Session
 
 from swing_trade_ml.brokers import OrderRequest, OrderResult, get_broker
 from swing_trade_ml.core.config import settings
-from swing_trade_ml.core.strategy_policy import is_advisory, require_broker_execution
+from swing_trade_ml.core.strategy_policy import (
+    exits_are_advisory,
+    is_advisory,
+    is_staged,
+    require_broker_execution,
+)
 from swing_trade_ml.core.enums import (
     ExitReason,
     OrderStatus,
@@ -766,6 +771,19 @@ def position_action(
     return "hold", f"Neutral ({last_confidence:.0%} today) — below buy bar, holding steady{horizon_note}"
 
 
+def _is_practice_brain(db: Session, strategy: Strategy) -> bool:
+    """A staged (brain) strategy while the owner's stage is practice (shadow):
+    its refused ideas are not risk events — nothing could have been bought —
+    so they stay off /safety/risk-events; the signal still records why."""
+    if not is_staged(strategy):
+        return False
+    # Imported here: brain_golive.approvals imports this module.
+    from swing_trade_ml.services.brain_golive.stage import current_stage
+
+    stage_now = current_stage(db)
+    return not (stage_now == "approval" or stage_now == "auto")
+
+
 def process_decision(
     db: Session,
     strategy: Strategy,
@@ -844,8 +862,12 @@ def process_decision(
     ):
         bullish_confidence = round(1.0 - bullish_confidence, 3)
 
-    for position in existing_positions:
-        _check_confidence_decay(db, position, strategy, instrument, bullish_confidence, mode)
+    # Not for a staged (brain) strategy: its confidence is not always a
+    # probability (BrainDecision.score_source), so the decay alert would
+    # misread it — strategies/brain.py strips it from HOLDs for the same reason.
+    if not is_staged(strategy):
+        for position in existing_positions:
+            _check_confidence_decay(db, position, strategy, instrument, bullish_confidence, mode)
 
     if decision.signal == SignalType.HOLD:
         return record_signal(db, strategy, instrument, decision, mode)
@@ -856,12 +878,29 @@ def process_decision(
             signal.rejection_reason = "No open position to exit"
             db.commit()
             return signal
-        if is_advisory(strategy):
+        # exits_are_advisory, not is_advisory: a staged (brain) row's positions
+        # exist only because the owner approved the order, so they are sold here.
+        if exits_are_advisory(strategy):
             signal.advisory_only = True
             db.commit()
             for position in existing_positions:
                 notifier.send_sync(
                     _advisory_exit_message(instrument, position, decision.reason, mode), "signal"
+                )
+            return signal
+        if mode != broker.mode:
+            # Only a staged row gets here (the scan refuses an auto row whose
+            # mode differs from the broker's). Selling now would go through
+            # the other book's broker, so the owner is told instead.
+            signal.advisory_only = True
+            db.commit()
+            for position in existing_positions:
+                notifier.send_sync(
+                    _advisory_exit_message(
+                        instrument, position, decision.reason, mode,
+                        note=_other_book_note(position.mode, broker.mode),
+                    ),
+                    "signal",
                 )
             return signal
         # An EXIT decision is strategy-level ("get out of this name"), so
@@ -906,21 +945,22 @@ def process_decision(
 
     if not verdict.allowed:
         signal.rejection_reason = verdict.reason
-        # ---- risk events (portfolio risk layer) ----
-        # Every check_entry rejection is also logged as a RiskEvent, committed
-        # with the signal so the two cannot disagree. check_entry itself stays
-        # write-free. (The two pre-filters above — ranked out, position already
-        # open — are routine scan outcomes, not risk limits, and are not logged.)
-        system_state.record_risk_event(
-            db,
-            mode=mode,
-            rule=verdict.rule or "OTHER",
-            reason=verdict.reason,
-            strategy_id=strategy.id,
-            instrument_id=instrument.id,
-            symbol=instrument.tradingsymbol,
-            amount_inr=verdict.amount_inr,
-        )
+        if not _is_practice_brain(db, strategy):
+            # ---- risk events (portfolio risk layer) ----
+            # Every check_entry rejection is also logged as a RiskEvent, committed
+            # with the signal so the two cannot disagree. check_entry itself stays
+            # write-free. (The two pre-filters above — ranked out, position already
+            # open — are routine scan outcomes, not risk limits, and are not logged.)
+            system_state.record_risk_event(
+                db,
+                mode=mode,
+                rule=verdict.rule or "OTHER",
+                reason=verdict.reason,
+                strategy_id=strategy.id,
+                instrument_id=instrument.id,
+                symbol=instrument.tradingsymbol,
+                amount_inr=verdict.amount_inr,
+            )
         db.commit()
         log.info(
             "execution.entry.blocked",
@@ -933,10 +973,14 @@ def process_decision(
     if is_advisory(strategy):
         signal.advisory_only = True
         db.commit()
-        notifier.send_sync(
-            _advisory_entry_message(instrument, decision, strategy, verdict.quantity, mode),
-            "signal",
-        )
+        # A staged (brain) strategy's ideas are announced by its approvals
+        # service instead; in practice mode they are not announced at all, so
+        # the owner is never nudged to act on a practice idea.
+        if not is_staged(strategy):
+            notifier.send_sync(
+                _advisory_entry_message(instrument, decision, strategy, verdict.quantity, mode),
+                "signal",
+            )
         return signal
 
     notifier.send_sync(
@@ -1142,7 +1186,14 @@ def check_exits(db: Session) -> list[Trade]:
         # was ever misconfigured as execution_mode="auto" — otherwise this
         # one path (the scale-out branch just below) would be the one place
         # that safety rule doesn't hold.
-        position_is_advisory = is_advisory(position.strategy)
+        # A brain position (staged type) is the exception: the owner approved
+        # its order, so v1 protects it with real exits.
+        position_is_advisory = exits_are_advisory(position.strategy)
+        # A position whose exits are real is only ever sold through the broker
+        # of its own book. The query above admits an other-book position only
+        # through its advisory row (in practice a brain position after the bot
+        # switched paper/live); it gets a one-off alert instead of a sale.
+        other_book = not position_is_advisory and position.mode != mode
 
         reason: ExitReason | None = None
         if position.stop_loss and price <= position.stop_loss:
@@ -1155,7 +1206,7 @@ def check_exits(db: Session) -> list[Trade]:
             reason = ExitReason.TIME_STOP
 
         if reason is None:
-            if position_is_advisory:
+            if position_is_advisory or other_book:
                 # Advisory positions are the user's own; only the full-exit
                 # alerts above apply to them.
                 continue
@@ -1178,6 +1229,18 @@ def check_exits(db: Session) -> list[Trade]:
             # user records the exit via manual_close_position().
             if position.advisory_alert_sent_at is None:
                 notifier.send_sync(_advisory_exit_message(instrument, position, reason, mode), "signal")
+                position.advisory_alert_sent_at = datetime.now(UTC)
+            continue
+
+        if other_book:
+            if position.advisory_alert_sent_at is None:
+                notifier.send_sync(
+                    _advisory_exit_message(
+                        instrument, position, reason, position.mode,
+                        note=_other_book_note(position.mode, mode),
+                    ),
+                    "signal",
+                )
                 position.advisory_alert_sent_at = datetime.now(UTC)
             continue
 
@@ -1544,14 +1607,22 @@ def _advisory_entry_message(instrument, decision, strategy, quantity, mode) -> s
     return "\n".join(lines)
 
 
-def _advisory_exit_message(instrument, position, reason, mode) -> str:
+def _advisory_exit_message(instrument, position, reason, mode, note: str | None = None) -> str:
     badge = "📝 PAPER" if mode == "paper" else "💰 <b>LIVE</b>"
     return (
         f"🔔 <b>EXIT RECOMMENDED · {instrument.tradingsymbol}</b>  ({badge})\n\n"
         f"Reason: {reason}\n"
-        f"Entry: ₹{position.entry_price:,.2f}  ·  Current: ₹{position.current_price or 0:,.2f}\n"
+        + (f"{note}\n" if note else "")
+        + f"Entry: ₹{position.entry_price:,.2f}  ·  Current: ₹{position.current_price or 0:,.2f}\n"
         f"Quantity: {position.quantity:,}\n\n"
         f"Sold this? Record it: POST /portfolio/positions/{position.id}/manual-close"
+    )
+
+
+def _other_book_note(position_mode: str, bot_mode: str) -> str:
+    return (
+        f"This position belongs to the {position_mode} book while the bot is in {bot_mode} "
+        "mode, so it is not sold automatically."
     )
 
 

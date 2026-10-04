@@ -3,10 +3,14 @@
 import type {
   BrainAlertPreview,
   BrainAlertSend,
+  BrainApproval,
+  BrainCompare,
   BrainDecision,
   BrainEpisode,
   BrainLearning,
   BrainProposal,
+  BrainStage,
+  BrainStageName,
   BrainTrack,
   BrainWhatIf,
   BrainHealth,
@@ -472,4 +476,12 @@ export const api = {
   brainProposalDecide: (id: number, action: 'accept' | 'reject', note: string) =>
     post<BrainProposal>(`/brain/proposals/${id}/${action}`, { note }),
   brainRevertBuyLevel: () => post<BrainProposal>('/brain/proposals/buy-level/revert', {}),
+
+  // M18 go-live: comparison, the owner's stage, approvals.
+  brainCompare: () => get<BrainCompare>('/brain/compare'),
+  brainStage: () => get<BrainStage>('/brain/stage'),
+  brainSetStage: (stage: BrainStageName, reason: string) => put<BrainStage>('/brain/stage', { stage, reason }),
+  brainApprovals: () => get<BrainApproval[]>('/brain/approvals'),
+  brainApprove: (id: number, note: string) => post<BrainApproval>(`/brain/approvals/${id}/approve`, { note }),
+  brainReject: (id: number, reason: string) => post<BrainApproval>(`/brain/approvals/${id}/reject`, { reason }),
 }

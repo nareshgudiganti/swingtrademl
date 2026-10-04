@@ -1017,3 +1017,77 @@ export interface BrainProposal {
   decided_at: string | null
   decided_note: string | null
 }
+
+// M18 go-live: the brain beside version 1, scored the same way.
+export interface BrainCompareSummary {
+  ideas: number
+  finished: number
+  hit_rate: number | null
+  stopped: number | null
+  avg_outcome_pct: number | null
+}
+
+export interface BrainCompareStrategy extends BrainCompareSummary {
+  name: string
+  is_brain: boolean
+}
+
+export interface BrainCompareWeek {
+  week: string
+  brain: BrainCompareSummary
+  version1: BrainCompareSummary
+}
+
+export interface BrainCompare {
+  days: number
+  first_day: string | null
+  last_day: string | null
+  strategies: BrainCompareStrategy[]
+  brain: BrainCompareSummary
+  version1: BrainCompareSummary
+  by_week: BrainCompareWeek[]
+  note: string
+  brain_finished: number
+  needed: number
+}
+
+export type BrainStageName = 'shadow' | 'approval' | 'auto'
+
+export interface BrainStageChange {
+  stage: BrainStageName
+  previous_stage: BrainStageName
+  changed_by: string
+  reason: string
+  changed_at: string
+}
+
+export interface BrainStage {
+  stage: BrainStageName
+  plain: string
+  finished: number
+  needed: number
+  ready: boolean
+  history: BrainStageChange[]
+}
+
+export type BrainApprovalStatus = 'pending' | 'waiting' | 'approved' | 'rejected' | 'expired'
+
+export interface BrainApproval {
+  id: number
+  symbol: string
+  decision_day: string
+  price: number
+  stop_loss: number | null
+  take_profit: number | null
+  suggested_qty: number | null
+  reason: string
+  status: BrainApprovalStatus
+  status_plain: string
+  decided_by: string | null
+  decided_at: string | null
+  decided_note: string | null
+  position_id: number | null
+  result_note: string | null
+  created_at: string | null
+  valid_until: string | null
+}

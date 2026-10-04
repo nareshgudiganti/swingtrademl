@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.enums import ExitReason, OrderStatus, PositionStatus, TransactionType
 from swing_trade_ml.core.logging import get_logger
+from swing_trade_ml.core.strategy_policy import STAGED_TYPES
 from swing_trade_ml.db.models.market import Candle, Instrument
 from swing_trade_ml.db.models.trading import (
     Order,
@@ -85,11 +86,17 @@ def rank_buy_candidates(candidates: list[tuple[int, float]]) -> list[tuple[int, 
 
 
 def active_strategy_count(db: Session, mode: str) -> int:
-    """How many strategies are competing for this mode's position slots."""
+    """How many strategies are competing for this mode's position slots.
+
+    A staged strategy (the brain, M18) is left out so switching it on never
+    shrinks version 1's own share (P6); its positions still count account-wide.
+    """
     return int(
         db.execute(
             select(func.count(Strategy.id)).where(
-                Strategy.is_active.is_(True), Strategy.mode == mode
+                Strategy.is_active.is_(True),
+                Strategy.mode == mode,
+                Strategy.strategy_type.not_in(sorted(STAGED_TYPES)),
             )
         ).scalar_one()
         or 0
@@ -528,7 +535,15 @@ def check_entry(
         # first takes every slot and the rest are rejected here holding
         # nothing. Sharing the same budget keeps the account-level ceiling
         # intact — this only decides who may claim what is left of it.
-        share = max(1, limits.max_positions // max(active_strategy_count(db, mode), 1))
+        if strategy.strategy_type in STAGED_TYPES:
+            # The brain (M18) is left out of active_strategy_count so version
+            # 1's share never shrinks, but it must not reuse that count as its
+            # own: with one v1 strategy it would get every slot, and its 09:15
+            # buys could fill the account before v1's 15:45 scan. It gets one
+            # share as if it were one more strategy; v1's share is unchanged.
+            share = max(1, limits.max_positions // (active_strategy_count(db, mode) + 1))
+        else:
+            share = max(1, limits.max_positions // max(active_strategy_count(db, mode), 1))
         strategy_count = open_position_count(db, mode, strategy.id)
         if strategy_count >= share:
             return _reject(

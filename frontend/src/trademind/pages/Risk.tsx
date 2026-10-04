@@ -83,11 +83,19 @@ export default function Risk() {
     })
   }
   if (status.data) {
+    // Only real-money trading needs Zerodha to place an order. Practice
+    // (paper) trades still fill at the last known price; without a login the
+    // prices just stop updating — a warning, not a pause.
+    const live = status.data.trading_mode === 'live'
     checks.push({
-      name: 'Broker connected',
+      name: 'Zerodha connected',
       ok: status.data.broker_authenticated,
-      note: status.data.broker_authenticated ? undefined : 'Zerodha is not connected — no trade can be placed.',
-      hard: true,
+      note: status.data.broker_authenticated
+        ? undefined
+        : live
+        ? 'Zerodha is not connected — no real order can be placed until it is.'
+        : 'Zerodha is not logged in, so prices are not updating. Practice trades still use the last known price. The automatic login runs on weekday mornings.',
+      hard: live,
     })
   }
   if (brainStatus === 'live' && latest.data) {

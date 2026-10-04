@@ -1365,3 +1365,27 @@
   padding: 0.2rem 0.5rem;
   font-size: 0.7rem;
 }
+
+/* setup page */
+.tm-picker {
+  --bg: #0a0f26;
+  --surface: #0d122c;
+  --surface-2: rgba(139, 124, 255, 0.18);
+  --border: rgba(118, 110, 255, 0.35);
+  --text: #e8ecff;
+  --text-dim: #8f97c0;
+  --accent: #8b5cf6;
+  --neg: #ff4d6a;
+  --radius: 10px;
+  color: #e8ecff;
+}
+
+.tm-picker input {
+  color: #e8ecff;
+  min-width: 0;
+}
+
+.tm-picker .chip,
+.tm-picker .symbol-picker-option {
+  color: #e8ecff;
+}

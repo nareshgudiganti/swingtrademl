@@ -48,7 +48,10 @@ def fx(db_session, monkeypatch):
     monkeypatch.setattr(approvals, "current_mode", lambda: "paper")
     monkeypatch.setattr(approvals, "portfolio_value_and_cash", lambda db, mode: (1_000_000.0, 1_000_000.0))
     verdict = {"v": RiskDecision(True, 12)}
-    monkeypatch.setattr(approvals.risk, "check_entry", lambda **kw: verdict["v"])
+    risk_calls: list[dict] = []
+    monkeypatch.setattr(approvals.risk, "check_entry", lambda **kw: risk_calls.append(kw) or verdict["v"])
+    live = {"price": 100.0}  # the broker's live price; None = could not get one
+    monkeypatch.setattr(approvals, "_live_price", lambda db, inst: live["price"])
     opened: list[tuple[int, int]] = []
 
     def fake_open(db, strategy, instrument, sig, quantity):
@@ -64,6 +67,8 @@ def fx(db_session, monkeypatch):
     inst = instrument(db_session, "M18APR", 918301)
     run(db_session, "m18-apr")
     dec = decision(db_session, "m18-apr", "M18APR", "TRADE")
+    dec.entry_low, dec.entry_high = 98.0, 103.0  # the brain's buy range; the stop is 96
+    db_session.flush()
     sig = signal(db_session, strategy, inst, DAY)
     return SimpleNamespace(
         db=db_session,
@@ -75,6 +80,8 @@ def fx(db_session, monkeypatch):
         sent=sent,
         verdict=verdict,
         clock=clock,
+        live=live,
+        risk_calls=risk_calls,
     )
 
 
@@ -242,10 +249,11 @@ def test_a_failed_order_is_recorded_and_never_retried(fx, monkeypatch):
         raise RuntimeError("broker down")
 
     monkeypatch.setattr(approvals, "open_position", broken)
-    with pytest.raises(approvals.ApprovalError, match="could not be sent"):
+    with pytest.raises(approvals.ApprovalError, match="may not have been sent"):
         approvals.approve(fx.db, a.id, by="owner")
     row = fx.db.get(BrainApproval, a.id)
     assert row.status == "approved" and "broker down" in row.result_note
+    assert "check the Orders page" in row.result_note
     with pytest.raises(approvals.ApprovalRefused):
         approvals.approve(fx.db, a.id, by="owner")
 
@@ -581,3 +589,102 @@ def test_valid_until_is_the_close_of_the_next_trading_day(monkeypatch):
     monkeypatch.setitem(holidays.NSE_HOLIDAYS, 2031, {TUE})
     assert approvals.valid_until(DAY) == at(WED, 15, 30)
     assert isinstance(approvals.valid_until(DAY), datetime)
+
+
+# ------------------------------------------------- fix round 1: live price --
+
+
+@pytest.mark.parametrize(
+    ("price", "words"),
+    [(97.0, "outside the brain's buy range"), (104.5, "outside the brain's buy range")],
+    ids=["gap-below-the-range", "gap-above-the-range"],
+)
+def test_the_market_open_job_buys_nothing_when_the_open_price_is_outside_the_range(fx, price, words):
+    a = _waiting(fx)
+    fx.live["price"] = price
+    fx.clock["now"] = at(TUE, 9, 15)
+    assert approvals.execute_waiting(fx.db) == [] and fx.opened == []
+    row = fx.db.get(BrainApproval, a.id)
+    assert row.status == "expired" and words in row.decided_note and f"₹{price:,.2f}" in row.decided_note
+    assert "₹98.00 to ₹103.00" in row.decided_note
+    assert row.decided_note.lower().count("nothing was bought") == 1
+
+
+def test_the_market_open_job_buys_inside_the_range_sized_on_the_live_price(fx):
+    a = _waiting(fx)
+    fx.live["price"] = 101.5
+    fx.clock["now"] = at(TUE, 9, 15)
+    assert [x.id for x in approvals.execute_waiting(fx.db)] == [a.id]
+    assert fx.opened == [(fx.signal.id, 12)]
+    assert fx.risk_calls[-1]["price"] == 101.5
+
+
+def test_the_market_open_job_buys_nothing_without_a_live_price(fx):
+    a = _waiting(fx)
+    fx.live["price"] = None
+    fx.clock["now"] = at(TUE, 9, 15)
+    assert approvals.execute_waiting(fx.db) == [] and fx.opened == []
+    row = fx.db.get(BrainApproval, a.id)
+    assert row.status == "expired" and "Could not get a live price" in row.decided_note
+
+
+def test_a_live_price_at_or_below_the_stop_buys_nothing(fx):
+    fx.decision.entry_low = 90.0  # even if the brain's range reached below its stop
+    fx.db.flush()
+    a = _pending(fx)
+    fx.live["price"] = 96.0
+    with pytest.raises(approvals.ApprovalExpired, match="stop"):
+        approvals.approve(fx.db, a.id, by="owner")
+    assert fx.opened == [] and fx.db.get(BrainApproval, a.id).status == "expired"
+
+
+def test_an_in_session_approve_outside_the_range_buys_nothing(fx):
+    a = _pending(fx)
+    fx.live["price"] = 110.0
+    with pytest.raises(approvals.ApprovalExpired, match="outside the brain's buy range"):
+        approvals.approve(fx.db, a.id, by="owner")
+    assert fx.opened == []
+
+
+def test_an_approve_while_closed_does_not_need_a_live_price(fx):
+    fx.live["price"] = None
+    assert _waiting(fx).status == "waiting" and fx.opened == []
+
+
+def test_a_switch_to_practice_while_an_order_is_in_flight_orders_nothing(fx, monkeypatch):
+    a = _pending(fx)
+
+    def rollback_lands(**kw):
+        _stage(fx.db, "shadow")  # lands after the checks, before the order
+        return RiskDecision(True, 12)
+
+    monkeypatch.setattr(approvals.risk, "check_entry", rollback_lands)
+    with pytest.raises(approvals.ApprovalError, match="practice"):
+        approvals.approve(fx.db, a.id, by="owner")
+    assert fx.opened == []
+    row = fx.db.get(BrainApproval, a.id)
+    assert row.status == "expired" and "Nothing was bought" in row.decided_note
+
+
+def test_an_order_still_waiting_to_fill_reads_as_normal(fx, monkeypatch):
+    a = _pending(fx)
+    monkeypatch.setattr(approvals, "open_position", lambda *args, **kw: None)
+    monkeypatch.setattr(approvals, "_order_status", lambda db, sig: "PENDING")
+    done = approvals.approve(fx.db, a.id, by="owner")
+    assert done.result_note == "Order sent; it will show as a position once it fills."
+
+
+def test_a_waiting_approval_expired_by_the_clock_is_reported_on_telegram(fx):
+    _waiting(fx)
+    fx.sent.clear()
+    fx.clock["now"] = at(TUE, 15, 31)
+    assert approvals.expire_stale(fx.db) == 1
+    (text,) = fx.sent
+    assert "M18APR" in text and "Nothing was bought" in text
+    assert approvals.expire_stale(fx.db) == 0 and len(fx.sent) == 1
+
+
+def test_a_pending_idea_expiring_sends_nothing(fx):
+    _pending(fx)
+    fx.clock["now"] = at(TUE, 15, 31)
+    assert approvals.expire_stale(fx.db) == 1 and fx.sent == []

@@ -29,7 +29,7 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from swing_trade_ml.brokers import current_mode
+from swing_trade_ml.brokers import current_mode, get_broker
 from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.enums import SignalType
 from swing_trade_ml.core.holidays import is_trading_holiday
@@ -231,15 +231,40 @@ def _latest_decision(db: Session, a: BrainApproval, book: str) -> BrainDecision 
     return (ideas or found or [None])[0]
 
 
+def _live_price(db: Session, instrument: Instrument) -> float | None:
+    """The broker's last traded price — the same LTP call v1's exit loop uses.
+    None when it cannot be had; then nothing is bought."""
+    key = instrument.symbol_key
+    try:
+        price = get_broker().get_ltp([key], db).get(key)
+    except Exception as exc:  # noqa: BLE001 - no price means no buy, never a crash
+        log.warning("brain_golive.approval.no_live_price", symbol=instrument.tradingsymbol, error=str(exc))
+        return None
+    return float(price) if price is not None and price > 0 else None
+
+
 class _Ready:
-    def __init__(self, strategy: Strategy, instrument: Instrument, signal: Signal, quantity: int) -> None:
-        self.strategy, self.instrument, self.signal, self.quantity = strategy, instrument, signal, quantity
+    def __init__(
+        self,
+        strategy: Strategy,
+        instrument: Instrument,
+        signal: Signal,
+        quantity: int,
+        automatic: bool,
+    ) -> None:
+        self.strategy, self.instrument, self.signal = strategy, instrument, signal
+        self.quantity, self.automatic = quantity, automatic
 
 
-def _check(db: Session, a: BrainApproval, now: datetime, automatic: bool) -> _Ready:
+def _check(db: Session, a: BrainApproval, now: datetime, automatic: bool, live: bool) -> _Ready:
     """Every check an Approve needs, run fresh. Raises ApprovalRefused (nothing
     changed) or ApprovalExpired (the caller marks the idea expired). Writes
-    nothing itself."""
+    nothing itself.
+
+    `live` is True whenever an order would follow (market open): the broker's
+    live price must then sit inside the brain's own buy range and strictly
+    above the stop, and v1's risk check sizes on that live price — a gap
+    below the stop or away from the range never becomes a market order."""
     stage_now = current_stage(db)
     if not (stage_now == "approval" or stage_now == "auto"):
         raise ApprovalRefused(
@@ -276,12 +301,31 @@ def _check(db: Session, a: BrainApproval, now: datetime, automatic: bool) -> _Re
         )
     if risk.has_open_position(db, mode, a.instrument_id, strategy_id=strategy.id):
         raise ApprovalExpired(f"You already hold {a.symbol} through the brain.")
+    price = signal.price
+    if live:
+        label = "at the open" if _in_opening_window(now) else "right now"
+        price = _live_price(db, instrument)
+        if price is None:
+            raise ApprovalExpired(f"Could not get a live price {label}, so nothing was bought.")
+        low, high = d.entry_low, d.entry_high
+        if low is None or high is None:
+            raise ApprovalExpired(f"The brain gave no buy range for {a.symbol}, so nothing was bought.")
+        if not (low <= price <= high):
+            raise ApprovalExpired(
+                f"The price {label} (₹{price:,.2f}) was outside the brain's buy range "
+                f"(₹{low:,.2f} to ₹{high:,.2f}), so nothing was bought."
+            )
+        if signal.stop_loss is not None and price <= signal.stop_loss:
+            raise ApprovalExpired(
+                f"The price {label} (₹{price:,.2f}) was at or below the stop (₹{signal.stop_loss:,.2f}), "
+                "so nothing was bought."
+            )
     total, cash = portfolio_value_and_cash(db, mode)
     verdict = risk.check_entry(
         db=db,
         mode=mode,
         instrument_id=a.instrument_id,
-        price=signal.price,
+        price=price,
         stop_loss=signal.stop_loss,
         portfolio_value=total,
         available_cash=cash,
@@ -289,7 +333,7 @@ def _check(db: Session, a: BrainApproval, now: datetime, automatic: bool) -> _Re
     )
     if not verdict.allowed or verdict.quantity <= 0:
         raise ApprovalRefused(f"The safety check says no right now: {verdict.reason}")
-    return _Ready(strategy, instrument, signal, verdict.quantity)
+    return _Ready(strategy, instrument, signal, verdict.quantity, automatic)
 
 
 def _order(db: Session, a: BrainApproval, ready: _Ready) -> BrainApproval:
@@ -427,13 +471,14 @@ def approve(db: Session, approval_id: int, by: str, note: str = "") -> BrainAppr
     if a.status != "pending":
         raise ApprovalRefused(f"This idea is already {STATUS_PLAIN.get(a.status, a.status).lower()}.")
     now = _now()
+    market_open = _market_open(now)
     try:
-        ready = _check(db, a, now, automatic=by == AUTO_BY)
+        ready = _check(db, a, now, automatic=by == AUTO_BY, live=market_open)
     except ApprovalExpired as exc:
         _expire(db, a, str(exc))
         raise
     decided = {"decided_by": by, "decided_at": now, "decided_note": note.strip() or None}
-    if not _market_open(now):
+    if not market_open:
         if not _claim(db, a, "pending", "waiting", **decided):
             raise ApprovalRefused("This idea was already decided.")
         a.result_note = (
@@ -466,9 +511,10 @@ def execute_waiting(db: Session) -> list[BrainApproval]:
     dropped: list[str] = []
     for a in waiting:
         try:
-            ready = _check(db, a, now, automatic=a.decided_by == AUTO_BY)
+            ready = _check(db, a, now, automatic=a.decided_by == AUTO_BY, live=True)
         except ApprovalError as exc:
-            if _expire(db, a, f"{exc} {NOTHING_BOUGHT}"):
+            note = str(exc) if "nothing was bought" in str(exc).lower() else f"{exc} {NOTHING_BOUGHT}"
+            if _expire(db, a, note):
                 dropped.append(f"{a.symbol}: {exc}")
             continue
         if not _claim(db, a, "waiting", "approved"):

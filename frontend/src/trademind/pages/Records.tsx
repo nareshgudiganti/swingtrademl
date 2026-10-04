@@ -1,9 +1,9 @@
-import { useMemo, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 
 import { api } from '../../api/client'
 import type { Trade, TrackRecordSignal } from '../../api/types'
-import { Card, PageHead, Tabs, Tag, inr, signed, toneClass } from '../ui'
+import { Card, PageHead, Seg, Tabs, Tag, inr, signed, toneClass } from '../ui'
 
 const TABS = ['Trade history', "Version 1's picks", 'Strategy results'] as const
 type TabName = (typeof TABS)[number]
@@ -47,7 +47,17 @@ function Stat({ label, value, tone }: { label: string; value: string; tone?: str
 
 // ---------------------------------------------------------- trade history --
 
+interface PeriodRow {
+  key: string
+  label: string
+  trades: number
+  wins: number
+  net: number
+  charges: number
+}
+
 function TradeHistory() {
+  const [period, setPeriod] = useState<'month' | 'year'>('month')
   // Same call the old Reports page makes: the bot's own book, up to the
   // API's ceiling of 1000, newest first.
   const q = useQuery({ queryKey: ['trades', 1000], queryFn: () => api.trades(1000) })
@@ -69,6 +79,24 @@ function TradeHistory() {
     return [...m.values()].sort((a, b) => b.net - a.net)
   }, [rows])
 
+  const byPeriod = useMemo(() => {
+    const m = new Map<string, PeriodRow>()
+    for (const t of rows) {
+      const d = new Date(t.exit_at)
+      const y = d.getFullYear()
+      const key = period === 'year' ? `${y}` : `${y}-${String(d.getMonth() + 1).padStart(2, '0')}`
+      const label =
+        period === 'year' ? `${y}` : d.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })
+      const r = m.get(key) ?? { key, label, trades: 0, wins: 0, net: 0, charges: 0 }
+      r.trades += 1
+      r.wins += t.is_win ? 1 : 0
+      r.net += t.net_pnl
+      r.charges += t.charges
+      m.set(key, r)
+    }
+    return [...m.values()].sort((a, b) => b.key.localeCompare(a.key))
+  }, [rows, period])
+
   if (q.isLoading) return <Loading />
   if (q.isError) return <Problem what="your trade history" />
   if (!rows.length) {
@@ -82,9 +110,30 @@ function TradeHistory() {
   const wins = rows.filter((t: Trade) => t.is_win).length
   const net = rows.reduce((s, t) => s + t.net_pnl, 0)
   const charges = rows.reduce((s, t) => s + t.charges, 0)
+  // Made money before fees and taxes, but not after.
+  const feesAte = rows.filter((t) => t.gross_pnl > 0 && t.net_pnl <= 0).length
+  // Rose 5% or more in the weeks after we sold.
+  const rose = rows.filter((t) => (t.return_15d_after_exit ?? t.return_5d_after_exit ?? 0) >= 0.05).length
 
   return (
     <div className="tm-grid">
+      {feesAte > 0 && (
+        <Card>
+          <p>
+            <Tag tone="amber">Heads up</Tag> Fees and taxes took all of the profit on {feesAte}{' '}
+            {feesAte === 1 ? 'trade' : 'trades'}. They made money before costs, but ended at zero or a loss.
+          </p>
+        </Card>
+      )}
+      {rose > 0 && (
+        <Card>
+          <p>
+            <Tag tone="amber">Heads up</Tag> {rose} {rose === 1 ? 'stock' : 'stocks'} went up by 5% or more in
+            the weeks after we sold {rose === 1 ? 'it' : 'them'}. Worth checking whether we sold too early. See
+            the "Moved after selling" columns below.
+          </p>
+        </Card>
+      )}
       <Card title="Overall" sub="Every finished trade, after all costs">
         <div className="tm-grid tm-cols-4">
           <Stat label="Finished trades" value={String(rows.length)} />
@@ -95,6 +144,51 @@ function TradeHistory() {
         <p className="tm-dim" style={{ marginTop: '0.6rem' }}>
           Fees and taxes paid on these trades: {money(charges)}.
         </p>
+      </Card>
+
+      <Card
+        title={period === 'month' ? 'By month' : 'By year'}
+        sub="Trades grouped by the date they were sold"
+        action={
+          <Seg
+            small
+            options={[
+              { id: 'month', label: 'By month' },
+              { id: 'year', label: 'By year' },
+            ]}
+            active={period}
+            onChange={setPeriod}
+          />
+        }
+      >
+        <div className="tm-table-wrap">
+          <table className="tm-table">
+            <thead>
+              <tr>
+                <th>{period === 'month' ? 'Month' : 'Year'}</th>
+                <th className="tm-right">Trades</th>
+                <th className="tm-right">Made money</th>
+                <th className="tm-right">Lost money</th>
+                <th className="tm-right">Result</th>
+                <th className="tm-right">Fees and taxes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {byPeriod.map((r) => (
+                <tr key={r.key}>
+                  <td>
+                    <strong>{r.label}</strong>
+                  </td>
+                  <td className="tm-right">{r.trades}</td>
+                  <td className="tm-right">{r.wins}</td>
+                  <td className="tm-right">{r.trades - r.wins}</td>
+                  <td className={`tm-right ${toneClass(r.net)}`}>{money(r.net)}</td>
+                  <td className="tm-right tm-dim">{money(r.charges)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </Card>
 
       {byStrategy.length > 1 && (
@@ -138,6 +232,12 @@ function TradeHistory() {
                 <th className="tm-right">Result</th>
                 <th className="tm-right">Result %</th>
                 <th>Why it was sold</th>
+                <th className="tm-right" title="Price move 5 trading days after we sold">
+                  Moved after selling (5 days)
+                </th>
+                <th className="tm-right" title="Price move 15 trading days after we sold">
+                  Moved after selling (15 days)
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -145,6 +245,9 @@ function TradeHistory() {
                 <tr key={t.id}>
                   <td title={t.strategy_name ?? ''}>
                     <strong>{t.symbol}</strong>
+                    {t.gross_pnl > 0 && t.net_pnl <= 0 && (
+                      <span title="Made money before fees and taxes, but they took all of it"> ⚠</span>
+                    )}
                   </td>
                   <td>{day(t.entry_at)}</td>
                   <td>{day(t.exit_at)}</td>
@@ -155,6 +258,12 @@ function TradeHistory() {
                   <td className={`tm-right ${toneClass(t.net_pnl)}`}>{signed(t.return_pct * 100)}</td>
                   <td className="tm-wrap" title={t.exit_reason ?? ''}>
                     {t.exit_reason_label ?? t.exit_reason ?? '—'}
+                  </td>
+                  <td className="tm-right">
+                    {t.return_5d_after_exit != null ? signed(t.return_5d_after_exit * 100) : '—'}
+                  </td>
+                  <td className="tm-right">
+                    {t.return_15d_after_exit != null ? signed(t.return_15d_after_exit * 100) : '—'}
                   </td>
                 </tr>
               ))}
@@ -175,6 +284,7 @@ const OUTCOME: Record<string, { label: string; tone: 'green' | 'red' | 'amber' }
 }
 
 function ScanTable({ rows }: { rows: TrackRecordSignal[] }) {
+  const [open, setOpen] = useState<number | null>(null)
   return (
     <div className="tm-table-wrap">
       <table className="tm-table">
@@ -189,6 +299,7 @@ function ScanTable({ rows }: { rows: TrackRecordSignal[] }) {
             <th>How it went</th>
             <th className="tm-right">Result</th>
             <th>Why it was picked</th>
+            <th>More</th>
           </tr>
         </thead>
         <tbody>
@@ -196,7 +307,8 @@ function ScanTable({ rows }: { rows: TrackRecordSignal[] }) {
             const o = r.outcome ? OUTCOME[r.outcome] : null
             const pct = r.was_executed && r.trade_return_pct != null ? r.trade_return_pct : r.outcome_pct
             return (
-              <tr key={r.signal_id}>
+              <Fragment key={r.signal_id}>
+              <tr>
                 <td title={r.strategy_name}>
                   <strong>{r.symbol}</strong>
                   {r.name && <div className="tm-dim">{r.name}</div>}
@@ -214,7 +326,30 @@ function ScanTable({ rows }: { rows: TrackRecordSignal[] }) {
                   {pct != null ? signed(pct * 100) : '—'}
                 </td>
                 <td className="tm-wrap">{r.reason ?? '—'}</td>
+                <td>
+                  <button className="tm-btn" onClick={() => setOpen(open === r.signal_id ? null : r.signal_id)}>
+                    {open === r.signal_id ? 'Hide' : 'Details'}
+                  </button>
+                </td>
               </tr>
+              {open === r.signal_id && (
+                <tr>
+                  <td colSpan={10} className="tm-wrap">
+                    <div>Strategy: {strategyPlain(r.strategy_name)}</div>
+                    <div title="A ranking, not a chance">
+                      Model score: {r.confidence != null ? `${(r.confidence * 100).toFixed(0)}%` : '—'}
+                    </div>
+                    <div>
+                      {r.was_executed
+                        ? `We bought this one. Actual result: ${
+                            r.trade_net_pnl != null ? money(r.trade_net_pnl) : 'not finished yet'
+                          }${r.trade_return_pct != null ? ` (${signed(r.trade_return_pct * 100)})` : ''}`
+                        : 'We did not buy this one.'}
+                    </div>
+                  </td>
+                </tr>
+              )}
+              </Fragment>
             )
           })}
         </tbody>
@@ -249,7 +384,9 @@ function Picks() {
                   <th className="tm-right">Price</th>
                   <th className="tm-right">Sell if it falls to</th>
                   <th className="tm-right">Goal price</th>
-                  <th className="tm-right">Confidence</th>
+                  <th className="tm-right" title="A ranking, not a chance">
+                    Model score
+                  </th>
                   <th>Why</th>
                 </tr>
               </thead>

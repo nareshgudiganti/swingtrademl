@@ -182,10 +182,13 @@ export function useBrainRunNow(onFinished?: () => void) {
     queryFn: () => api.brainRunGet(runId!),
     enabled: !!runId,
     refetchInterval: (q) => {
+      // Stop after a few failed checks in a row rather than ask forever.
+      if (q.state.fetchFailureCount >= 3) return false
       const s = q.state.data?.status
       return !s || s === 'queued' || s === 'running' ? 3000 : false
     },
   })
+  const lostTrack = !!runId && run.isError && run.failureCount >= 3
   const status = run.data?.status
   const finished = useRef<string | null>(null)
   useEffect(() => {
@@ -196,11 +199,16 @@ export function useBrainRunNow(onFinished?: () => void) {
   }, [status, runId, onFinished])
   return {
     start: () => start.mutate(),
-    thinking: start.isPending || status === 'queued' || status === 'running',
+    // Also "thinking" between a successful start and the first status check.
+    thinking:
+      start.isPending ||
+      status === 'queued' ||
+      status === 'running' ||
+      (!!runId && !run.data && !lostTrack),
     status,
     run: run.data,
     alreadyRunning: start.data?.already_running ?? false,
-    startError: start.error,
+    startError: start.error ?? (lostTrack ? new Error('Lost touch with the run; refresh the page to check on it.') : null),
   }
 }
 

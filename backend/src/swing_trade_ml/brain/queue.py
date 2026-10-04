@@ -61,8 +61,13 @@ def run_lock(kind: str, book: str, wait_seconds: float = 0) -> Iterator[None]:
         try:
             yield
         finally:
-            conn.execute(text("SELECT pg_advisory_unlock(:k)"), {"k": key})
-            conn.commit()
+            # Never let a failed unlock hide the run's own error: a broken
+            # connection frees the lock anyway when Postgres drops it.
+            try:
+                conn.execute(text("SELECT pg_advisory_unlock(:k)"), {"k": key})
+                conn.commit()
+            except Exception as exc:  # noqa: BLE001
+                log.warning("brain.queue.unlock_failed", kind=kind, book=book, error=str(exc))
 
 
 def request_run(
@@ -78,7 +83,12 @@ def request_run(
     kind and book (True = it was already there; nothing new is queued)."""
     existing = db.execute(
         select(BrainRun)
-        .where(BrainRun.kind == kind, BrainRun.book == book, BrainRun.status.in_(WAITING))
+        .where(
+            BrainRun.kind == kind,
+            BrainRun.book == book,
+            BrainRun.live.is_(as_of is None),  # a waiting replay is not "the brain thinking now"
+            BrainRun.status.in_(WAITING),
+        )
         .order_by(BrainRun.started_at)
         .limit(1)
     ).scalar_one_or_none()

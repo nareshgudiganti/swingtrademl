@@ -106,15 +106,23 @@ def run_brain(
         as_of = as_of.replace(tzinfo=ZoneInfo("Asia/Kolkata"))  # the owner's clock
     as_of = as_of or now
     reader = DatedReader(db, as_of=as_of, live=live)
-    if kind == "intraday":
-        universe: tuple[str, ...] = ()  # holdings only
-    else:
-        universe = tuple(s.upper() for s in symbols) if symbols else reader.universe()
-
     run_id = run_id or new_run_id(kind, now)
-    request = c.RunRequest(run_id=run_id, kind=kind, as_of=as_of, universe=universe, book=book, live=live)
-    modes = load_modes(db)
     started = time.perf_counter()
+    try:
+        if kind == "intraday":
+            universe: tuple[str, ...] = ()  # holdings only
+        else:
+            universe = tuple(s.upper() for s in symbols) if symbols else reader.universe()
+        modes = load_modes(db)
+    except Exception as exc:
+        # Recorded with its real reason, not left for the queue to call it a restart.
+        empty = c.RunRequest(run_id=run_id, kind=kind, as_of=as_of, universe=(), book=book, live=live)
+        _record_failure(db, empty, exc, int((time.perf_counter() - started) * 1000))
+        raise
+    request = c.RunRequest(run_id=run_id, kind=kind, as_of=as_of, universe=universe, book=book, live=live)
+    # Only a run over the whole stock list may replace today's earlier runs; a
+    # run for a few stocks never hides the full nightly run from Performance.
+    full_list = kind != "intraday" and not symbols
     try:
         # A savepoint around the run: if the database fails mid-run (Postgres
         # then refuses every further statement in the transaction), rolling
@@ -123,7 +131,7 @@ def run_brain(
             ctx = execute(request, reader, registry, modes, on_step=on_step)
         elapsed_ms = int((time.perf_counter() - started) * 1000)
         with db.begin_nested():
-            _store(db, ctx, registry, modes, elapsed_ms)
+            _store(db, ctx, registry, modes, elapsed_ms, full_list=full_list)
         db.commit()
     except Exception as exc:
         # Modules cannot break a run, but the database, the reader or the
@@ -257,7 +265,9 @@ def _portfolio_summary(ctx: BrainContext) -> dict:
     }
 
 
-def _store(db: Session, ctx: BrainContext, registry: ModuleRegistry, modes: dict, ms: int) -> None:
+def _store(
+    db: Session, ctx: BrainContext, registry: ModuleRegistry, modes: dict, ms: int, *, full_list: bool = True
+) -> None:
     req = ctx.request
     used_modes = {
         cls.manifest.id: resolve_mode(cls.manifest, modes.get(cls.manifest.id)).value
@@ -275,7 +285,8 @@ def _store(db: Session, ctx: BrainContext, registry: ModuleRegistry, modes: dict
     run.quality = _quality_summary(ctx)
     run.context = _context_summary(ctx)
     db.flush()
-    _supersede_earlier(db, req)
+    if full_list:
+        _supersede_earlier(db, req)
     carried = _todays_overrules(db, req) if req.live else {}
     for d in ctx.decisions.values():
         row = BrainDecision(

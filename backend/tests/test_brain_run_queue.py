@@ -173,8 +173,8 @@ def test_a_running_run_left_by_a_restart_is_marked_failed(db_session):
 
 
 def test_a_newer_live_nightly_run_supersedes_the_earlier_one_of_the_same_day(db_session, stock):
-    _, first = service.run_brain(db_session, symbols=["QUEUEABC"], book="paper")
-    _, second = service.run_brain(db_session, symbols=["QUEUEABC"], book="paper")
+    _, first = service.run_brain(db_session, book="paper")
+    _, second = service.run_brain(db_session, book="paper")
     assert db_session.get(BrainRun, first).status == "superseded"
     assert db_session.get(BrainRun, second).status == "done"
     assert service.latest_run(db_session, "nightly").id == second
@@ -187,14 +187,22 @@ def test_replays_never_supersede_anything(db_session, stock):
 
 
 def test_an_overrule_on_a_superseded_run_still_carries_to_the_newer_run(db_session, stock):
-    _, first = service.run_brain(db_session, symbols=["QUEUEABC"], book="paper")
-    d = db_session.query(BrainDecision).filter(BrainDecision.run_id == first).one()
+    _, first = service.run_brain(db_session, book="paper")
+    d = (
+        db_session.query(BrainDecision)
+        .filter(BrainDecision.run_id == first, BrainDecision.symbol == "QUEUEABC")
+        .one()
+    )
     if d.word == "AVOID":
         pytest.skip("already the most careful word")
     service.overrule(db_session, d.id, "AVOID", "owner says no", by="owner")
-    _, second = service.run_brain(db_session, symbols=["QUEUEABC"], book="paper")
-    _, third = service.run_brain(db_session, symbols=["QUEUEABC"], book="paper")
-    newest = db_session.query(BrainDecision).filter(BrainDecision.run_id == third).one()
+    _, second = service.run_brain(db_session, book="paper")
+    _, third = service.run_brain(db_session, book="paper")
+    newest = (
+        db_session.query(BrainDecision)
+        .filter(BrainDecision.run_id == third, BrainDecision.symbol == "QUEUEABC")
+        .one()
+    )
     assert db_session.get(BrainRun, second).status == "superseded"
     assert newest.overruled_word == "AVOID"
 
@@ -291,3 +299,33 @@ def test_the_learning_report_leaves_out_superseded_runs(db_session):
     runs = set(frame["run_id"]) if "run_id" in frame else None
     assert runs is not None, "the report rows must say which run they came from"
     assert "nightly-keep-2" in runs and "nightly-hide-2" not in runs
+
+
+# --- review fixes --------------------------------------------------------------
+
+
+def test_a_run_for_a_few_stocks_never_supersedes_the_full_run(db_session, stock):
+    _, full = service.run_brain(db_session, book="paper")
+    service.run_brain(db_session, symbols=["QUEUEABC"], book="paper")
+    assert db_session.get(BrainRun, full).status == "done"
+
+
+def test_a_failure_before_the_steps_start_is_recorded_with_its_real_reason(
+    client, db_session, stock, monkeypatch
+):
+    from swing_trade_ml.brain.reader import DatedReader
+
+    def broken(self):
+        raise RuntimeError("watch list unreadable")
+
+    monkeypatch.setattr(DatedReader, "universe", broken)
+    run_id = client.post("/api/v1/brain/runs", json={"kind": "nightly"}, headers=HEADERS).json()["run_id"]
+    assert queue.process_next(db_session) == run_id
+    run = db_session.get(BrainRun, run_id)
+    assert run.status == "failed" and "watch list unreadable" in run.error
+
+
+def test_a_waiting_replay_is_not_mistaken_for_a_live_run(client, stock):
+    replay = _post(client).json()  # has as_of: a replay
+    live = client.post("/api/v1/brain/runs", json={"kind": "nightly"}, headers=HEADERS).json()
+    assert live["run_id"] != replay["run_id"] and live["already_running"] is False

@@ -133,6 +133,8 @@ export default function App() {
     return <AuthScreen />
   }
 
+  const home = status?.brain_enabled ? '/trademind' : '/dashboard'
+
   if (status?.live_trading_enabled && !liveAcked) {
     return (
       <div className="layout" style={{ display: 'grid', placeItems: 'center', minHeight: '100vh' }}>
@@ -289,7 +291,9 @@ export default function App() {
 
         <div key={location.pathname} className="page-transition">
           <Routes>
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            {/* One final app: TradeMind is home whenever the brain is on; the
+                classic screens stay reachable ("Classic view") during the changeover. */}
+            <Route path="/" element={!status ? null : <Navigate to={home} replace />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/holdings" element={<Holdings />} />
             <Route path="/portfolio" element={<Positions />} />
@@ -308,7 +312,7 @@ export default function App() {
             />
             <Route path="/finance" element={<Finance />} />
             <Route path="/settings" element={<Settings />} />
-            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+            <Route path="*" element={!status ? null : <Navigate to={home} replace />} />
           </Routes>
         </div>
       </main>

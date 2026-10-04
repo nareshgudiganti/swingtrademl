@@ -239,6 +239,34 @@ export default function App() {
 
   const waiting = statusFailed ? <Navigate to="/dashboard" replace /> : <p className="muted">Loading…</p>
 
+  // One app: when the brain is on, the owner sees TradeMind only. Classic Swing
+  // Trade ML tabs stay off the menu; /plans (and /settings by URL) remain for
+  // owner admin. Plan-tier users never enter this path.
+  if (seesAll && status?.brain_enabled) {
+    if (location.pathname.startsWith('/trademind')) {
+      return <TradeMindApp />
+    }
+    if (location.pathname === '/plans' && canManage) {
+      return (
+        <div className="layout">
+          <main className="content">
+            <PlansManager />
+          </main>
+        </div>
+      )
+    }
+    if (location.pathname === '/settings') {
+      return (
+        <div className="layout">
+          <main className="content">
+            <Settings />
+          </main>
+        </div>
+      )
+    }
+    return <Navigate to="/trademind" replace />
+  }
+
   if (location.pathname.startsWith('/trademind')) {
     if (!seesAll) {
       return <Navigate to={plan ? '/home' : '/dashboard'} replace />
@@ -247,6 +275,10 @@ export default function App() {
       return planLoading || !plan ? <Loading /> : waiting
     }
     return status.brain_enabled ? <TradeMindApp /> : <Navigate to="/dashboard" replace />
+  }
+
+  if (seesAll && !status && !statusFailed) {
+    return planLoading || !plan ? <Loading /> : <Loading />
   }
 
   const canSee = (s: Screen): boolean => {
@@ -258,13 +290,13 @@ export default function App() {
   // exactly — the preview banner is the way back.
   const inMenu = (s: Screen): boolean =>
     !!s.inNav && canSee(s) && !(seesAll && s.planHome) && !(s.manage && plan?.previewing)
+  // Brain on → TradeMind is the whole app (see above). Brain off → console link only.
   const brainNav: Screen[] =
     seesAll && status?.brain_enabled
-      ? [
-          { to: '/brain', label: 'Brain', Icon: BrainIcon, element: <Brain />, inNav: true },
-          { to: '/trademind', label: 'TradeMind', Icon: BrainIcon, element: null, inNav: true },
-        ]
-      : []
+      ? []
+      : seesAll
+        ? [{ to: '/brain', label: 'Brain', Icon: BrainIcon, element: <Brain />, inNav: true }]
+        : []
   const nav = plan ? [...SCREENS.filter(inMenu), ...brainNav] : []
   const tabBar = TAB_BAR.map((to) => nav.find((s) => s.to === to)).filter((s): s is Screen => !!s)
   const moreItems = nav.slice(PRIMARY_NAV_COUNT)

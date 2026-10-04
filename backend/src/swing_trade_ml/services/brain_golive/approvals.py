@@ -37,7 +37,7 @@ from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.db.models.brain import BrainDecision, BrainRun
 from swing_trade_ml.db.models.brain_golive import BrainApproval
 from swing_trade_ml.db.models.market import Instrument
-from swing_trade_ml.db.models.trading import Order, Signal, Strategy
+from swing_trade_ml.db.models.trading import Order, Position, Signal, Strategy
 from swing_trade_ml.notifications import notifier
 from swing_trade_ml.services import ingestion, risk
 from swing_trade_ml.services.brain_golive.stage import AUTO_BY, current_stage
@@ -62,6 +62,7 @@ __all__ = [
     "create_pending",
     "execute_waiting",
     "expire_stale",
+    "link_filled_orders",
     "list_approvals",
     "reject",
     "valid_until",
@@ -419,10 +420,42 @@ def _order(db: Session, a: BrainApproval, ready: _Ready) -> BrainApproval:
 # ------------------------------------------------------------- lifecycle --
 
 
+def link_filled_orders(db: Session) -> int:
+    """An approved order that filled after the Approve (a live order is
+    PENDING at first; reconciliation opens the position later) gets its
+    position linked, and its note then reads like any other buy."""
+    rows = db.execute(
+        select(BrainApproval, Order.position_id)
+        .join(Order, Order.signal_id == BrainApproval.signal_id)
+        .where(
+            BrainApproval.status == "approved",
+            BrainApproval.position_id.is_(None),
+            Order.transaction_type == "BUY",
+            Order.broker_order_id.is_not(None),
+            Order.position_id.is_not(None),
+        )
+        .order_by(Order.id)
+    ).all()
+    n = 0
+    for a, position_id in rows:
+        if a.position_id is not None:
+            continue
+        position = db.get(Position, position_id)
+        if position is None:
+            continue
+        a.position_id = position.id
+        a.result_note = f"Bought {position.quantity} shares at ₹{position.entry_price:,.2f}."
+        n += 1
+    if n:
+        db.commit()
+    return n
+
+
 def expire_stale(db: Session, now: datetime | None = None) -> int:
     """Expire every live idea past the close of the next trading session.
     An OK the owner gave that was never bought (e.g. the open job did not
     run) is reported on Telegram once, naming the stock and why."""
+    link_filled_orders(db)
     now = now or _now()
     n = 0
     unbought: list[str] = []
@@ -600,6 +633,7 @@ def execute_waiting(db: Session) -> list[BrainApproval]:
         notifier.send_sync(
             "🧠 Approved brain ideas not bought at the market open:\n" + "\n".join(dropped), "signal"
         )
+    link_filled_orders(db)
     return ordered
 
 

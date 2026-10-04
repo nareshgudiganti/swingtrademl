@@ -785,3 +785,59 @@ def test_a_live_price_exactly_at_the_stop_is_refused(fx):
     with pytest.raises(approvals.ApprovalExpired, match="at or below the stop"):
         approvals.approve(fx.db, a.id, by="owner")
     assert fx.opened == []
+
+
+# ------------------------------------------------------ final-review round --
+
+
+def test_an_order_that_fills_later_is_linked_to_its_position(fx, monkeypatch):
+    a = _pending(fx)
+    monkeypatch.setattr(approvals, "open_position", lambda *args, **kw: None)
+    monkeypatch.setattr(approvals, "_order_status", lambda db, sig: "PENDING")
+    done = approvals.approve(fx.db, a.id, by="owner")
+    assert done.position_id is None and done.result_note.startswith("Order sent")
+    _hold(fx)  # reconciliation fills it later: a position, and the order points at it
+    pos = fx.db.query(Position).filter_by(strategy_id=fx.strategy.id).one()
+    fx.db.add(
+        Order(
+            signal_id=fx.signal.id,
+            strategy_id=fx.strategy.id,
+            instrument_id=fx.inst.id,
+            mode="paper",
+            transaction_type="BUY",
+            quantity=5,
+            filled_quantity=5,
+            status="COMPLETE",
+            broker_order_id="M18-KITE-1",
+            position_id=pos.id,
+            placed_at=at(TUE, 10, 0),
+        )
+    )
+    fx.db.flush()
+    approvals.expire_stale(fx.db)
+    row = fx.db.get(BrainApproval, a.id)
+    assert row.position_id == pos.id and row.result_note == "Bought 5 shares at ₹100.00."
+
+
+def test_an_order_with_no_position_yet_stays_unlinked(fx, monkeypatch):
+    a = _pending(fx)
+    monkeypatch.setattr(approvals, "open_position", lambda *args, **kw: None)
+    monkeypatch.setattr(approvals, "_order_status", lambda db, sig: "PENDING")
+    approvals.approve(fx.db, a.id, by="owner")
+    fx.db.add(
+        Order(
+            signal_id=fx.signal.id,
+            strategy_id=fx.strategy.id,
+            instrument_id=fx.inst.id,
+            mode="paper",
+            transaction_type="BUY",
+            quantity=5,
+            status="PENDING",
+            broker_order_id="M18-KITE-2",
+            placed_at=at(TUE, 10, 0),
+        )
+    )
+    fx.db.flush()
+    approvals.expire_stale(fx.db)
+    row = fx.db.get(BrainApproval, a.id)
+    assert row.position_id is None and row.result_note.startswith("Order sent")

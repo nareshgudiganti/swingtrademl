@@ -23,6 +23,7 @@ from swing_trade_ml.db.models.market import Instrument
 from swing_trade_ml.db.models.safety import RiskEvent
 from swing_trade_ml.db.models.trading import Position, Strategy
 from swing_trade_ml.db.session import session_scope
+from swing_trade_ml.ml.backup import backup_model_artifacts
 from swing_trade_ml.notifications import notifier
 from swing_trade_ml.services import engine, ingestion, portfolio
 from swing_trade_ml.workers import heartbeat
@@ -496,6 +497,30 @@ def job_predict_watchlist() -> None:
         _report_error("predict_watchlist", exc)
 
 
+def job_backup_models() -> None:
+    """Copy every trained artifact to the configured backup directory.
+
+    A no-op until MODEL_BACKUP_DIR is set. An artifact that has already gone
+    missing is alerted rather than logged quietly: the MLModel row survives
+    the loss of its file, so nothing else in the system would notice until a
+    scan tried to score with it.
+    """
+    try:
+        with session_scope() as db:
+            result = backup_model_artifacts(db)
+    except Exception as exc:  # noqa: BLE001 - a failed backup must not stop the scheduler
+        log.error("jobs.backup_models.failed", error=str(exc))
+        return
+
+    if result.get("missing"):
+        notifier.send_sync(
+            "\u26a0\ufe0f Model artifacts missing\n\n"
+            + "\n".join(f"\u2022 {m}" for m in result["missing"])
+            + "\n\nThese are registered but their files are gone. "
+            "Retrain or restore before promoting anything."
+        )
+
+
 def job_daily_summary() -> None:
     """Snapshot the equity curve and push the end-of-day Telegram digest."""
     try:
@@ -558,3 +583,141 @@ def job_sync_instruments() -> None:
             log.info("job.instruments.synced", count=count)
     except Exception as exc:  # noqa: BLE001
         _report_error("sync_instruments", exc)
+
+
+# How long a scheduled run waits for a run of the same kind already in
+# progress (a queued "Run the brain now"). The nightly run waits it out — it
+# must still happen after the day's data — the 15-minute holdings check skips.
+BRAIN_LOCK_WAIT_SECONDS = {"nightly": 20 * 60, "intraday": 0}
+
+
+def _run_brain_job(kind: str) -> None:
+    """A failed brain run is logged and reported, never raised: the brain is
+    advisory and must not disturb version 1's jobs. After a nightly run the
+    brain strategy (M18) turns its ideas into version 1 signals. Holds the
+    same single-flight lock as queued runs (brain/queue.py), so the two never
+    overlap."""
+    from swing_trade_ml.brain import queue as brain_queue
+    from swing_trade_ml.brain import service as brain_service
+
+    try:
+        with brain_queue.run_lock(kind, settings.TRADING_MODE, BRAIN_LOCK_WAIT_SECONDS.get(kind, 0)):
+            _run_brain_now(brain_service, kind)
+    except brain_queue.RunBusyError as exc:
+        if BRAIN_LOCK_WAIT_SECONDS.get(kind, 0):
+            _report_error(f"brain {kind} run", exc)
+        else:
+            log.info("job.brain.skipped_busy", kind=kind)
+        return
+    except _BrainRunFailedError:
+        return
+    if kind == "nightly":
+        job_brain_strategy()
+
+
+class _BrainRunFailedError(Exception):
+    """Already reported; stop before the follow-up jobs."""
+
+
+def _run_brain_now(brain_service, kind: str) -> None:
+    try:
+        with session_scope() as db:
+            _, run_id = brain_service.run_brain(db, kind=kind, book=settings.TRADING_MODE)
+            log.info("job.brain.done", kind=kind, run_id=run_id)
+            if settings.BRAIN_ALERTS_ENABLED:
+                from swing_trade_ml.brain.alerts import service as brain_alerts
+
+                brain_alerts.send(db, run_id)
+    except Exception as exc:
+        _report_error(f"brain {kind} run", exc)
+        raise _BrainRunFailedError from exc
+
+
+def job_brain_run_queue() -> None:
+    """Every few seconds: run the oldest queued brain run (a "Run the brain
+    now" from the app). Never raised."""
+    from swing_trade_ml.brain import queue as brain_queue
+
+    try:
+        with session_scope() as db:
+            run_id = brain_queue.process_next(db)
+            if run_id:
+                log.info("job.brain.queue.ran", run_id=run_id)
+    except Exception as exc:  # noqa: BLE001
+        _report_error("brain queued run", exc)
+
+
+def job_brain_strategy() -> None:
+    """M18: record today's brain ideas as the brain strategy's signals, scored
+    like version 1's. The scan path never orders for it. Never raised."""
+    from swing_trade_ml.services.brain_golive import shadow
+
+    try:
+        with session_scope() as db:
+            result = shadow.run_brain_strategy(db)
+            log.info(
+                "job.brain.strategy.done",
+                signals=result.signals_generated,
+                buys=result.buys,
+                errors=len(result.errors),
+            )
+    except Exception as exc:  # noqa: BLE001
+        _report_error("brain strategy scan", exc)
+
+
+def job_brain_approvals_open() -> None:
+    """M18: at the market open, buy the brain ideas the owner approved while
+    the market was closed — only after every check runs again. Never raised."""
+    from swing_trade_ml.services.brain_golive import approvals
+
+    try:
+        with session_scope() as db:
+            bought = approvals.execute_waiting(db)
+            log.info("job.brain.approvals_open.done", ordered=len(bought))
+    except Exception as exc:  # noqa: BLE001
+        _report_error("brain approvals at the open", exc)
+
+
+def job_brain_nightly() -> None:
+    _run_brain_job("nightly")
+
+
+def job_brain_intraday() -> None:
+    """Holdings only; skipped outside 09:30-15:15 so the first and last
+    quarter-hours, when prices are least settled, are left alone."""
+    now = datetime.now(IST)
+    if not ((now.hour, now.minute) >= (9, 30) and (now.hour, now.minute) <= (15, 15)):
+        return
+    _run_brain_job("intraday")
+
+
+def _m09_is_off(db) -> bool:
+    """Whether the owner has switched M09 (the learning loop) off — resolved
+    the same way `service._sync_episodes` decides whether to run its own
+    after-run jobs: the stored mode, or the manifest's own default."""
+    from swing_trade_ml.brain import service as brain_service
+    from swing_trade_ml.brain.module import REGISTRY, Mode, resolve_mode
+
+    modes = brain_service.load_modes(db)
+    cls = REGISTRY.get("M09")
+    return cls is not None and resolve_mode(cls.manifest, modes.get("M09")) is Mode.OFF
+
+
+def job_brain_learn() -> None:
+    """Weekly: score every idea whose outcome is now known, build the
+    learning report, and record any proposal the evidence supports — never
+    raised, like every other brain job (advisory, must not disturb v1).
+    Skipped while the owner has switched M09 off."""
+    from swing_trade_ml.brain.modules.m09_learn.learn import run_learning
+
+    try:
+        with session_scope() as db:
+            if _m09_is_off(db):
+                log.info("job.brain.learn.skipped", reason="M09 is off")
+                return
+            report = run_learning(db)
+            db.commit()
+            n_new = len(report["new_proposals"])
+            log.info("job.brain.learn.done", n_scored=report["n_scored"], new_proposals=n_new)
+    except Exception as exc:  # noqa: BLE001
+        _report_error("brain_learn", exc)

@@ -1,6 +1,26 @@
 // Thin fetch wrapper around the FastAPI backend.
 
 import type {
+  BrainAlertPreview,
+  BrainAlertSend,
+  BrainApproval,
+  BrainCompare,
+  BrainDecision,
+  BrainEpisode,
+  BrainLearning,
+  BrainProposal,
+  BrainStage,
+  BrainStageName,
+  BrainTrack,
+  BrainWhatIf,
+  BrainHealth,
+  BrainModules,
+  BrainRun,
+  BrainRunQueued,
+  MarketSession,
+  BrainRunSummary,
+  BrainTraceEvent,
+  BrainWhy,
   Candle,
   CurrentUser,
   AdminUser,
@@ -479,4 +499,45 @@ export const api = {
   // ----------------------------------------------------------- calibration --
   calibration: (source: 'signals' | 'predictions' = 'signals') =>
     get<CalibrationReport>(`/ml/calibration?source=${source}`),
+
+  // ---------------------------------------------------------------- brain --
+  brainModules: () => get<BrainModules>('/brain/modules'),
+  setBrainModuleMode: (id: string, mode: 'on' | 'shadow' | 'off') =>
+    put<{ module_id: string; mode: string }>(`/brain/modules/${id}`, { mode }),
+  brainHealth: () => get<BrainHealth>('/brain/health'),
+  brainEpisodes: () => get<BrainEpisode[]>('/brain/episodes'),
+  brainTrack: (symbol: string) => get<BrainTrack>(`/brain/track/${encodeURIComponent(symbol)}`),
+  brainWhatIf: (symbol: string, qty: number, price?: number) =>
+    post<BrainWhatIf>('/brain/whatif', { symbol, qty, price }),
+  marketSession: () => get<MarketSession>('/market/session'),
+  brainRuns: (limit = 10) => get<BrainRunSummary[]>(`/brain/runs?limit=${limit}`),
+  brainLatestRun: (kind = 'nightly') => get<BrainRun>(`/brain/runs/latest?kind=${kind}`),
+  // Queues a run and answers at once; poll brainRunGet until done/failed.
+  brainRunNow: () => post<BrainRunQueued>('/brain/runs', { kind: 'nightly' }),
+  brainRunGet: (runId: string) => get<BrainRun>(`/brain/runs/${encodeURIComponent(runId)}`),
+  brainRunTrace: (runId: string) =>
+    get<{ run_id: string; trace: BrainTraceEvent[] }>(`/brain/runs/${encodeURIComponent(runId)}/trace`),
+  brainWhy: (symbol: string) => get<BrainWhy>(`/brain/why/${encodeURIComponent(symbol.trim().toUpperCase())}`),
+  brainAlertPreview: (runId: string) =>
+    get<BrainAlertPreview>(`/brain/runs/${encodeURIComponent(runId)}/alerts`),
+  brainAlertSend: (runId: string) =>
+    post<BrainAlertSend>(`/brain/runs/${encodeURIComponent(runId)}/alerts/send`),
+  brainOverrule: (id: number, word: string, reason: string) =>
+    post<BrainDecision>(`/brain/decisions/${id}/overrule`, { word, reason }),
+  // M09 learning loop: a read-only report plus proposals the owner can
+  // accept or reject — accepting is the only thing that ever changes
+  // behaviour (constitution C9).
+  brainLearning: (since?: string) => get<BrainLearning>(`/brain/learning${since ? `?since=${since}` : ''}`),
+  brainProposals: () => get<BrainProposal[]>('/brain/proposals'),
+  brainProposalDecide: (id: number, action: 'accept' | 'reject', note: string) =>
+    post<BrainProposal>(`/brain/proposals/${id}/${action}`, { note }),
+  brainRevertBuyLevel: () => post<BrainProposal>('/brain/proposals/buy-level/revert', {}),
+
+  // M18 go-live: comparison, the owner's stage, approvals.
+  brainCompare: () => get<BrainCompare>('/brain/compare'),
+  brainStage: () => get<BrainStage>('/brain/stage'),
+  brainSetStage: (stage: BrainStageName, reason: string) => put<BrainStage>('/brain/stage', { stage, reason }),
+  brainApprovals: () => get<BrainApproval[]>('/brain/approvals'),
+  brainApprove: (id: number, note: string) => post<BrainApproval>(`/brain/approvals/${id}/approve`, { note }),
+  brainReject: (id: number, reason: string) => post<BrainApproval>(`/brain/approvals/${id}/reject`, { reason }),
 }

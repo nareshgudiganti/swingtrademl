@@ -19,10 +19,14 @@ import ModelLab from './pages/ModelLab'
 import PlanHome from './pages/PlanHome'
 import PlansManager from './pages/PlansManager'
 import Settings from './pages/Settings'
+import Brain from './pages/Brain'
+import TradeMindApp from './trademind/TradeMindApp'
 import { PLAN_LABELS, usePlan } from './lib/plan'
+import { modelLabel } from './lib/format'
 import {
   AlertTriangleIcon,
   BarChartIcon,
+  BrainIcon,
   BriefcaseIcon,
   ChevronDownIcon,
   GearIcon,
@@ -154,11 +158,18 @@ export default function App() {
 
   // Account status (mode, Kite session, portfolio) is the owner's business;
   // the API refuses it to plan users, so they don't ask.
-  const { data: status } = useQuery({
+  const { data: status, isError: statusFailed } = useQuery({
     queryKey: ['status'],
     queryFn: api.status,
     refetchInterval: 30_000,
     enabled: hasToken && seesAll,
+  })
+  const { data: brainRun } = useQuery({
+    queryKey: ['brainLatest'],
+    queryFn: () => api.brainLatestRun('nightly'),
+    enabled: hasToken && !!status?.brain_enabled,
+    retry: false,
+    refetchInterval: 300_000,
   })
   const { data: me } = useQuery({
     queryKey: ['me'],
@@ -226,6 +237,18 @@ export default function App() {
     )
   }
 
+  const waiting = statusFailed ? <Navigate to="/dashboard" replace /> : <p className="muted">Loading…</p>
+
+  if (location.pathname.startsWith('/trademind')) {
+    if (!seesAll) {
+      return <Navigate to={plan ? '/home' : '/dashboard'} replace />
+    }
+    if (!status) {
+      return planLoading || !plan ? <Loading /> : waiting
+    }
+    return status.brain_enabled ? <TradeMindApp /> : <Navigate to="/dashboard" replace />
+  }
+
   const canSee = (s: Screen): boolean => {
     if (s.manage) return canManage
     return seesAll || !!s.planHome || (!!s.feature && has(s.feature))
@@ -235,11 +258,18 @@ export default function App() {
   // exactly — the preview banner is the way back.
   const inMenu = (s: Screen): boolean =>
     !!s.inNav && canSee(s) && !(seesAll && s.planHome) && !(s.manage && plan?.previewing)
-  const nav = plan ? SCREENS.filter(inMenu) : []
+  const brainNav: Screen[] =
+    seesAll && status?.brain_enabled
+      ? [
+          { to: '/brain', label: 'Brain', Icon: BrainIcon, element: <Brain />, inNav: true },
+          { to: '/trademind', label: 'TradeMind', Icon: BrainIcon, element: null, inNav: true },
+        ]
+      : []
+  const nav = plan ? [...SCREENS.filter(inMenu), ...brainNav] : []
   const tabBar = TAB_BAR.map((to) => nav.find((s) => s.to === to)).filter((s): s is Screen => !!s)
   const moreItems = nav.slice(PRIMARY_NAV_COUNT)
   const moreActive = moreItems.some((s) => location.pathname.startsWith(s.to))
-  const homePath = seesAll ? '/dashboard' : '/home'
+  const homePath = seesAll ? (status?.brain_enabled ? '/trademind' : '/dashboard') : '/home'
   const planKey = plan?.plan ?? 'free'
 
   return (
@@ -298,12 +328,37 @@ export default function App() {
 
           <div className="topbar-right" ref={userMenuRef}>
             {seesAll && (
-              <span
-                className={`badge ${status?.live_trading_enabled ? 'badge-live' : 'badge-paper'}`}
-                title={status?.live_trading_enabled ? 'Real money' : 'Practice money — no real orders'}
-              >
-                {status?.live_trading_enabled ? 'LIVE' : 'PAPER'}
-              </span>
+              <>
+                <span
+                  className={`badge ${status?.live_trading_enabled ? 'badge-live' : 'badge-paper'}`}
+                  title={status?.live_trading_enabled ? 'Real money' : 'Practice money — no real orders'}
+                >
+                  {status?.live_trading_enabled ? 'LIVE' : 'PAPER'}
+                </span>
+                {status?.brain_enabled && brainRun?.banner.mode && (
+                  <NavLink
+                    to="/brain"
+                    className={`badge ${
+                      brainRun.banner.mode === 'NORMAL'
+                        ? 'badge-on'
+                        : brainRun.banner.mode === 'DEFENSIVE'
+                          ? 'badge-warn'
+                          : 'badge-off'
+                    }`}
+                    title={brainRun.banner.headline ?? undefined}
+                  >
+                    Brain: {brainRun.banner.mode === 'NO_NEW_TRADES' ? 'NO NEW TRADES' : brainRun.banner.mode}
+                  </NavLink>
+                )}
+                <span
+                  className="badge badge-off"
+                  title={(status?.active_models ?? []).map(modelLabel).join('\n') || 'Active model'}
+                >
+                  {(status?.active_models ?? []).length > 1
+                    ? `${status!.active_models!.length} models`
+                    : status?.active_model ?? 'no model'}
+                </span>
+              </>
             )}
             <button
               type="button"
@@ -415,6 +470,10 @@ export default function App() {
           </div>
         )}
 
+        {statusFailed && !status && (
+          <p className="muted">Could not reach the server — showing the classic screens.</p>
+        )}
+
         <div key={location.pathname} className="page-transition">
           {planLoading || !plan ? (
             <Loading />
@@ -428,6 +487,20 @@ export default function App() {
                   element={canSee(s) ? s.element : <NotInPlan plan={planKey} />}
                 />
               ))}
+              <Route
+                path="/brain"
+                element={
+                  !seesAll ? (
+                    <NotInPlan plan={planKey} />
+                  ) : !status ? (
+                    waiting
+                  ) : status.brain_enabled ? (
+                    <Brain />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
               <Route path="*" element={<Navigate to={homePath} replace />} />
             </Routes>
           )}

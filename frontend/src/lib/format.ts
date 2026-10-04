@@ -41,3 +41,21 @@ export const formatDateTime = (iso: string): string =>
 /** Tailwind-free colour class for a P&L value. */
 export const pnlClass = (value: number): string =>
   value > 0 ? 'pos' : value < 0 ? 'neg' : 'flat'
+
+/** "swing_classifier_midcap:v2" → "Mid-size companies · v2". Production runs
+ *  one model per company size; the name says which. Unknown names stay as-is. */
+export function modelLabel(nameVersion: string): string {
+  const [full = '', version] = nameVersion.split(':')
+  // "_barrier" models ask the question the bot actually trades: +8% before −4%.
+  const barrier = full.endsWith('_barrier')
+  const name = barrier ? full.slice(0, -'_barrier'.length) : full
+  const size = name.endsWith('_smallcap')
+    ? 'Small companies'
+    : name.endsWith('_midcap')
+    ? 'Mid-size companies'
+    : name === 'swing_classifier'
+    ? 'Large companies'
+    : full
+  const label = barrier && size !== full ? `${size} (+8% before −4% in 15 days model)` : size
+  return version ? `${label} · ${version}` : label
+}

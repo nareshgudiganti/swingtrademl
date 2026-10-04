@@ -47,9 +47,10 @@ COPY alembic.ini ./
 COPY alembic ./alembic
 COPY src ./src
 
-# Model artifacts are written at runtime and must survive as a mounted volume;
-# the directory has to exist and be writable by appuser first.
-RUN mkdir -p /app/data/models && chown -R appuser:appuser /app
+# Model artifacts and their backup copies are written at runtime and must
+# survive as mounted volumes; each directory has to exist and be writable by
+# appuser first, or a fresh named volume mounts there owned by root.
+RUN mkdir -p /app/data/models /app/data/model_backups && chown -R appuser:appuser /app
 
 USER appuser
 

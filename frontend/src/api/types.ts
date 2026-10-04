@@ -91,11 +91,15 @@ export interface SystemStatus {
   environment: string
   trading_mode: TradingMode
   live_trading_enabled: boolean
+  /** The TradeMind brain is switched on (BRAIN_ENABLED); its page shows only then. */
+  brain_enabled?: boolean
   broker_authenticated: boolean
   scheduler_running: boolean
   scheduled_jobs: ScheduledJob[]
   telegram_enabled: boolean
   active_model: string | null
+  /** Every active model, one per company size, as name:version (sorted). */
+  active_models?: string[]
   watchlist_size: number
   active_strategies: number
   open_positions: number
@@ -845,4 +849,352 @@ export interface RealReport {
   fills: RealReportFill[]
   records: { total_fills: number; first_at: string | null; last_at: string | null }
   holdings_note: string | null
+}
+
+// ---------------------------------------------------------------- brain --
+// The TradeMind brain: it only records decisions; it never places orders.
+
+export type IdeaWord = 'TRADE' | 'WATCH' | 'WAIT' | 'AVOID'
+export type HoldingWord = 'HOLD' | 'MONITOR' | 'REDUCE' | 'EXIT'
+export type MarketMode = 'NORMAL' | 'DEFENSIVE' | 'NO_NEW_TRADES'
+export type ModuleMode = 'on' | 'shadow' | 'off'
+
+export interface BrainDecision {
+  id: number
+  run_id: string
+  symbol: string
+  kind: 'idea' | 'holding'
+  word: IdeaWord | HoldingWord
+  reasons: string[]
+  entry_low: number | null
+  entry_high: number | null
+  target: number | null
+  stop: number | null
+  qty: number
+  horizon_days: number
+  confidence: number | null
+  evidence_text: string | null
+  downgraded_from: string | null
+  downgrade_reason: string | null
+  overruled_word: string | null
+  overrule_reason: string | null
+  overruled_by: string | null
+  overruled_at: string | null
+}
+
+export interface BrainBanner {
+  mode: MarketMode | null
+  headline: string | null
+}
+
+export interface BrainQuality {
+  overall: { score: number; fresh: boolean; issues: string[] } | null
+  stale: string[]
+}
+
+/** queued → running → done | failed. `superseded` = an earlier run of the same
+ *  day, replaced by a newer one (kept for history, left out of results). */
+export type BrainRunStatus = 'queued' | 'running' | 'done' | 'failed' | 'superseded'
+
+/** Steps finished so far while a queued run is thinking. */
+export interface BrainRunProgress {
+  done: number
+  total: number | null
+  step: string | null
+}
+
+export interface BrainRunSummary {
+  run_id: string
+  kind: 'nightly' | 'intraday' | 'why'
+  as_of: string
+  live: boolean
+  started_at: string
+  ms: number
+  status: BrainRunStatus
+  error: string | null
+  progress?: BrainRunProgress | null
+  banner: BrainBanner
+  counts: Record<string, number>
+}
+
+/** POST /brain/runs only queues a run (the worker runs it). */
+export interface BrainRunQueued {
+  run_id: string
+  status: BrainRunStatus
+  kind: string
+  book: string
+  requested_at: string | null
+  already_running: boolean
+}
+
+export interface BrainSector {
+  sector: string
+  name: string
+  rank: number
+  of_total: number
+  strength_20d: number | null
+  rotation: 'leading' | 'improving' | 'weakening' | 'lagging' | 'unknown'
+}
+
+export interface BrainSituation {
+  scope: 'market' | 'sector' | 'stock'
+  subject: string
+  label: string
+  confidence: number
+  is_unknown: boolean
+  suggest_defensive: boolean
+  evidence: string[]
+}
+
+export interface BrainEpisode {
+  label: string
+  start_day: string
+  end_day: string | null
+  days: number | null
+  nifty_change: number | null
+}
+
+export interface BrainPortfolioView {
+  largest_position?: [string, number] | null
+  top_sector?: [string, number] | null
+  holdings_moving_together?: [string, string, number][]
+}
+
+export interface BrainWhatIf {
+  symbol: string
+  qty: number
+  price: number
+  value: number
+  cash_after: number
+  stock_share_after: number
+  sector_name: string | null
+  sector_share_after: number | null
+  warnings: string[]
+}
+
+export interface BrainTrack {
+  symbol: string
+  opened_on: string | null
+  points: { day: string; day_n: number; ret: number; status: string; reason: string; stop: number | null }[]
+  band: [number, number, number, number][]
+}
+
+export interface BrainRun extends BrainRunSummary {
+  book: string
+  requested_at?: string | null
+  finished_at?: string | null
+  modules: Record<string, ModuleMode>
+  quality: BrainQuality
+  sectors: BrainSector[]
+  situations: BrainSituation[]
+  portfolio: BrainPortfolioView
+  decisions: BrainDecision[]
+}
+
+export interface BrainTraceEvent {
+  step: string
+  module_id: string
+  status: 'used' | 'shadow' | 'fallback' | 'skipped' | 'rejected'
+  reason: string
+  ms: number
+  version: string
+}
+
+export interface BrainModuleInfo {
+  id: string
+  name: string
+  step: string
+  kind: string
+  version: string
+  mode: ModuleMode
+  mandatory: boolean
+}
+
+export interface BrainModules {
+  steps: { step: string; modules: string[] }[]
+  modules: BrainModuleInfo[]
+}
+
+export interface BrainWhy {
+  run_id: string
+  banner: BrainBanner
+  decision: BrainDecision | null
+  trace: BrainTraceEvent[]
+}
+
+export interface BrainHealth {
+  last_run: {
+    run_id: string
+    kind: string
+    started_at: string
+    status: string
+    ms: number
+    error: string | null
+  } | null
+  last_nightly_ok: string | null
+  failed_runs_7d: number
+  data: { score: number | null; fresh: boolean | null; issues: string[] }
+  stale_count: number
+}
+
+export interface BrainAlertPreview {
+  items: { key: string; kind: string; symbol: string | null; text: string }[]
+  text: string | null
+}
+
+export interface BrainAlertSend {
+  sent: boolean
+  count: number
+  text: string | null
+}
+
+// -------------------------------------------------------- brain: learning --
+// M09 learning loop: a read-only report on how the brain's past ideas
+// actually worked out, plus proposals it wants the owner's permission to
+// act on (constitution C9 — nothing changes until Accept is pressed).
+
+export interface BrainLearningBand {
+  band: string
+  n: number
+  /** Average confidence the brain carried in this band, 0..1. */
+  said: number
+  /** Share that actually hit target, 0..1. */
+  hit: number
+  /** Average outcome in R (return ÷ the 4% risked). */
+  avg_r: number
+}
+
+export interface BrainLearningWord {
+  word: string
+  n: number
+  hit: number
+  avg_r: number
+}
+
+export interface BrainLearningWeek {
+  week: string
+  n: number
+  hit: number
+  avg_r: number
+}
+
+export interface BrainDrift {
+  feature: string
+  psi: number
+  level: 'stable' | 'moderate' | 'major'
+}
+
+export interface BrainLearning {
+  since: string | null
+  n_scored: number
+  by_band: BrainLearningBand[]
+  by_word: BrainLearningWord[]
+  by_week: BrainLearningWeek[]
+  failures: string[]
+  drift: BrainDrift[]
+  drift_lines: string[]
+  drift_note: string | null
+  note: string | null
+}
+
+export type BrainProposalStatus = 'open' | 'accepted' | 'dismissed'
+
+export interface BrainProposal {
+  id: number
+  kind: string
+  title: string
+  evidence: string
+  change: Record<string, unknown>
+  status: BrainProposalStatus
+  created_at: string
+  decided_by: string | null
+  decided_at: string | null
+  decided_note: string | null
+}
+
+// M18 go-live: the brain beside version 1, scored the same way.
+export interface BrainCompareSummary {
+  ideas: number
+  finished: number
+  hit_rate: number | null
+  stopped: number | null
+  avg_outcome_pct: number | null
+}
+
+export interface BrainCompareStrategy extends BrainCompareSummary {
+  name: string
+  is_brain: boolean
+}
+
+export interface BrainCompareWeek {
+  week: string
+  brain: BrainCompareSummary
+  version1: BrainCompareSummary
+}
+
+export interface BrainCompare {
+  days: number
+  first_day: string | null
+  last_day: string | null
+  strategies: BrainCompareStrategy[]
+  brain: BrainCompareSummary
+  version1: BrainCompareSummary
+  by_week: BrainCompareWeek[]
+  note: string
+  brain_finished: number
+  needed: number
+}
+
+export type BrainStageName = 'shadow' | 'approval' | 'auto'
+
+export interface BrainStageChange {
+  stage: BrainStageName
+  previous_stage: BrainStageName
+  changed_by: string
+  reason: string
+  changed_at: string
+}
+
+export interface BrainStage {
+  stage: BrainStageName
+  plain: string
+  finished: number
+  needed: number
+  ready: boolean
+  history: BrainStageChange[]
+}
+
+export type BrainApprovalStatus = 'pending' | 'waiting' | 'approved' | 'rejected' | 'expired'
+
+export interface BrainApproval {
+  id: number
+  symbol: string
+  decision_day: string
+  price: number
+  stop_loss: number | null
+  take_profit: number | null
+  suggested_qty: number | null
+  reason: string
+  status: BrainApprovalStatus
+  status_plain: string
+  decided_by: string | null
+  decided_at: string | null
+  decided_note: string | null
+  position_id: number | null
+  result_note: string | null
+  created_at: string | null
+  valid_until: string | null
+}
+
+/** The app's one market clock (GET /market/session). */
+export interface MarketSession {
+  state: 'pre_open' | 'open' | 'closed' | 'weekend' | 'holiday'
+  plain: string
+  trading_day: boolean
+  opens_at: string | null
+  closes_at: string | null
+  next_open: string
+  next_close: string
+  last_closed_trading_day: string
+  calendar_warning: string | null
 }

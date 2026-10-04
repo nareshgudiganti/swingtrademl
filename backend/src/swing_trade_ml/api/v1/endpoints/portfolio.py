@@ -12,6 +12,7 @@ from sqlalchemy.sql import Select
 
 from swing_trade_ml.api.deps import DbSession, PlanAccessDep
 from swing_trade_ml.brokers import get_broker
+from swing_trade_ml.core import market_session
 from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.enums import ExitReason, PositionStatus, SignalType, TradingMode
 from swing_trade_ml.db.models.market import Candle, Instrument
@@ -616,6 +617,16 @@ def close(position_id: int, payload: ClosePositionRequest, db: DbSession) -> Mes
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Position not found")
     if position.status != PositionStatus.OPEN:
         raise HTTPException(status.HTTP_409_CONFLICT, "Position is already closed")
+    if position.mode == TradingMode.LIVE:
+        # A real-money market order outside the session would be refused by
+        # Zerodha; say so plainly instead (one market clock, design step 2).
+        session = market_session.session()
+        if not market_session.is_open(session.now):
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                f"The market is closed right now, so a real-money sale cannot be sent. "
+                f"It opens {market_session.when(session.next_open)}.",
+            )
 
     try:
         reason = ExitReason(payload.reason)

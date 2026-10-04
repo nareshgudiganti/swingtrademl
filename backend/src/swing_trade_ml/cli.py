@@ -8,6 +8,8 @@ swingtrade backfill --days 1825
 swingtrade train --algorithm lightgbm --activate
 swingtrade scan
 swingtrade status
+swingtrade brain modules | set M02 off | run [--as-of 2026-09-15] | why RELIANCE | learn [--since 2026-09-01]
+swingtrade brain strategy-create | shadow-scan
 """
 
 from __future__ import annotations
@@ -316,6 +318,168 @@ def cmd_status(args: argparse.Namespace) -> int:
     return 0
 
 
+def _print_run(db, run_id: str) -> None:
+    from swing_trade_ml.brain import service
+    from swing_trade_ml.db.models.brain import BrainRun
+
+    run = db.get(BrainRun, run_id)
+    print(f"Run {run.id}  ({run.kind}, {run.ms} ms, as of {run.as_of:%Y-%m-%d %H:%M})")
+    print(f"Market: {run.banner_mode} — {run.banner_headline}")
+    for d in service.decisions_for(db, run_id):
+        print(f"  {d.symbol:<14} {d.word:<8} {d.reasons[0] if d.reasons else ''}")
+    fallbacks = [e["step"] for e in run.trace if e["module_id"] == "fallback"]
+    if fallbacks:
+        print(f"Steps answered by their fallback: {', '.join(fallbacks)}")
+
+
+def cmd_brain(args: argparse.Namespace) -> int:
+    from datetime import UTC, date, datetime, time
+
+    from swing_trade_ml.brain import service
+    from swing_trade_ml.db.session import session_scope
+
+    with session_scope() as db:
+        if args.brain_command == "modules":
+            for step in service.step_overview():
+                mods = ", ".join(step["modules"]) or "— (fallback)"
+                print(f"  {step['step']:<10} {mods}")
+            for m in service.module_overview(db):
+                lock = "  (mandatory)" if m["mandatory"] else ""
+                print(f"  {m['id']}  {m['name']:<32} {m['mode']}{lock}")
+            return 0
+        if args.brain_command == "set":
+            try:
+                service.set_mode(db, args.module_id, args.mode, by="cli")
+            except (service.UnknownModuleError, service.ModeRefusedError) as exc:
+                print(f"❌ {exc}", file=sys.stderr)
+                return 1
+            print(f"✅ {args.module_id.upper()} is now {args.mode}")
+            return 0
+        if args.brain_command == "run":
+            as_of = None
+            if args.as_of:
+                # The end of that day in IST, so the day's own close counts.
+                from zoneinfo import ZoneInfo
+
+                day = datetime.fromisoformat(args.as_of).date()
+                as_of = datetime.combine(day, time(23, 59), tzinfo=ZoneInfo("Asia/Kolkata")).astimezone(UTC)
+            symbols = [s.strip().upper() for s in args.symbols.split(",")] if args.symbols else None
+            from swing_trade_ml.brain import queue as brain_queue
+
+            # Same single-flight lock as the worker: never overlap a run in progress.
+            try:
+                with brain_queue.run_lock(args.kind, args.book, wait_seconds=30):
+                    _, run_id = service.run_brain(
+                        db, kind=args.kind, as_of=as_of, symbols=symbols, book=args.book
+                    )
+            except brain_queue.RunBusyError as exc:
+                print(f"⏳ {exc} Try again when it has finished.")
+                return 1
+            _print_run(db, run_id)
+            return 0
+        if args.brain_command == "meta-train":
+            from swing_trade_ml.brain.modules.m06_reason.training import TrainingError, train_and_save
+
+            try:
+                result = train_and_save(db, args.barrier_model, args.swing_model)
+            except TrainingError as exc:
+                print(f"❌ {exc}", file=sys.stderr)
+                return 1
+            r = result["report"]
+            print(f"Saved {result['path'].name}: {r['n_rows']} unseen stock-days, {r['n_symbols']} stocks, "
+                  f"{r['window_start']} to {r['window_end']}, {r['folds']} monthly tests")
+            print(f"Base rate (reached +8% first): {r['base_rate']:.1%}")
+            for name, m in r["candidates"].items():
+                auc = f"{m['auc']:.3f}" if m["auc"] is not None else "n/a"
+                top = f"{m['top_decile_hit_rate']:.1%}" if m["top_decile_hit_rate"] is not None else "n/a"
+                print(f"  {name:<19} error (Brier) {m['brier']:.4f}  AUC {auc}  top-10% hit rate {top}")
+            print(f"Chosen: {r['chosen']} — {r['why']}")
+            return 0
+        if args.brain_command == "memory-build":
+            from swing_trade_ml.brain.modules.m05_memory import store
+            from swing_trade_ml.brain.reader import DatedReader
+
+            count = store.rebuild_from_reader(db, DatedReader(db, datetime.now(UTC), live=True))
+            db.commit()
+            print(f"Stored {count} past stock-days with what happened next (+8% before -4% in 15 trading days).")
+            return 0
+        if args.brain_command == "episodes-backfill":
+            from swing_trade_ml.brain.modules.m04_situations import store
+            from swing_trade_ml.brain.reader import DatedReader
+
+            count = store.sync_from_reader(db, DatedReader(db, datetime.now(UTC), live=True))
+            db.commit()
+            print(f"Stored {count} market episodes from the whole NIFTY history.")
+            for e in store.market_episodes(db, limit=100):
+                if e.label in ("correction", "bear phase", "crash"):
+                    end = e.end_day.isoformat() if e.end_day else "still going"
+                    change = (e.stats or {}).get("nifty_change")
+                    print(f"  {e.label:<11} {e.start_day} to {end}  NIFTY {change:+.1%}" if change is not None
+                          else f"  {e.label:<11} {e.start_day} to {end}")
+            return 0
+        if args.brain_command == "learn":
+            from swing_trade_ml.brain.modules.m09_learn.learn import run_learning
+
+            since = date.fromisoformat(args.since) if args.since else None
+            report = run_learning(db, since=since)
+            db.commit()
+            scope = f" since {since.isoformat()}" if since else ""
+            print(
+                f"Scored {report['newly_scored']} newly finished ideas "
+                f"({report['n_scored']} in total){scope}."
+            )
+            if report["note"]:
+                print(report["note"])
+            if report["by_band"]:
+                print("By confidence band:")
+                for b in report["by_band"]:
+                    print(
+                        f"  {b['band']:<8} n={b['n']:<4} said {b['said']:.0%}  "
+                        f"hit {b['hit']:.0%}  avg {b['avg_r']:+.2f} R"
+                    )
+            if report["by_word"]:
+                print("By decision word:")
+                for w in report["by_word"]:
+                    print(f"  {w['word']:<6} n={w['n']:<4} hit {w['hit']:.0%}  avg {w['avg_r']:+.2f} R")
+            for line in report["failures"]:
+                print(f"  ! {line}")
+            for line in report["drift_lines"]:
+                print(f"  ~ {line}")
+            for p in report["new_proposals"]:
+                print(f"  New proposal: {p['title']}")
+            return 0
+        if args.brain_command == "strategy-create":
+            from swing_trade_ml.services.brain_golive.shadow import ensure_brain_strategy
+
+            s = ensure_brain_strategy(db)
+            print(
+                f"✅ Brain strategy '{s.name}' (id {s.id}) is active in practice mode: "
+                "its ideas are recorded and scored, nothing is bought."
+            )
+            return 0
+        if args.brain_command == "shadow-scan":
+            from swing_trade_ml.services.brain_golive.shadow import run_brain_strategy
+
+            result = run_brain_strategy(db)
+            print(
+                f"✅ Brain strategy scan: {result.signals_generated} signals "
+                f"({result.buys} ideas to buy, nothing bought)"
+            )
+            for err in result.errors[:10]:
+                print(f"   • {err}")
+            return 0
+        if args.brain_command == "why":
+            _, run_id = service.run_brain(db, kind="why", symbols=[args.symbol], book=args.book)
+            _print_run(db, run_id)
+            from swing_trade_ml.db.models.brain import BrainRun
+
+            print("Trace:")
+            for e in db.get(BrainRun, run_id).trace:
+                print(f"  {e['step']:<10} {e['module_id']:<9} {e['status']:<9} {e['reason']}")
+            return 0
+    return 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="swingtrade", description="Swing Trade ML operations")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -425,6 +589,33 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_backtest)
 
     sub.add_parser("status", help="Show system and portfolio status").set_defaults(func=cmd_status)
+
+    p = sub.add_parser("brain", help="The TradeMind brain: modules, switches, runs, why")
+    brain_sub = p.add_subparsers(dest="brain_command", required=True)
+    brain_sub.add_parser("modules", help="List the eight steps and installed modules")
+    b = brain_sub.add_parser("set", help="Switch a module on, to shadow, or off")
+    b.add_argument("module_id")
+    b.add_argument("mode", choices=["on", "shadow", "off"])
+    b = brain_sub.add_parser("run", help="Run the brain now (or replay a past date)")
+    b.add_argument("--kind", default="nightly", choices=["nightly", "intraday", "why"])
+    b.add_argument("--as-of", default=None, help="YYYY-MM-DD: replay that day (no live-only inputs)")
+    b.add_argument("--symbols", default=None, help="Comma-separated (default: the watchlist)")
+    b.add_argument("--book", default="paper", choices=["paper", "live"])
+    b = brain_sub.add_parser("meta-train", help="Train and test M06's calibrated combiner on unseen months")
+    b.add_argument("--barrier-model", default="swing_classifier_barrier")
+    b.add_argument("--swing-model", default="swing_classifier")
+    brain_sub.add_parser("memory-build", help="Rebuild the memory of past stock-days and their outcomes (M05)")
+    brain_sub.add_parser("episodes-backfill", help="Label the whole NIFTY history into market episodes (M04)")
+    b = brain_sub.add_parser(
+        "learn", help="Score finished ideas and show the weekly learning report (M09)"
+    )
+    b.add_argument("--since", default=None, help="YYYY-MM-DD: only ideas decided on or after this day")
+    brain_sub.add_parser("strategy-create", help="Create the brain strategy in practice mode (M18)")
+    brain_sub.add_parser("shadow-scan", help="Record today's brain ideas as strategy signals (M18)")
+    b = brain_sub.add_parser("why", help="Run the brain for one stock and show its full trace")
+    b.add_argument("symbol")
+    b.add_argument("--book", default="paper", choices=["paper", "live"])
+    p.set_defaults(func=cmd_brain)
 
     return parser
 

@@ -1,0 +1,39 @@
+"""Money helpers for decisions: round-trip cost and expected result in R."""
+
+from __future__ import annotations
+
+from swing_trade_ml.brain.modules.m08_decide.policy import DecidePolicy
+from swing_trade_ml.core.enums import TransactionType
+from swing_trade_ml.services.costs import apply_slippage, compute_charges
+
+
+def cost_pct(price: float, qty: int) -> float:
+    """Round-trip cost (both legs' slippage and charges) as a share of the buy value."""
+    buy_fill = apply_slippage(price, TransactionType.BUY)
+    sell_fill = apply_slippage(price, TransactionType.SELL)
+    charges = sum(compute_charges(buy_fill * qty, TransactionType.BUY)) + sum(
+        compute_charges(sell_fill * qty, TransactionType.SELL)
+    )
+    return ((buy_fill - sell_fill) * qty + charges) / (price * qty)
+
+
+def expected_r(p_win: float, round_trip_cost_pct: float, policy: DecidePolicy) -> float:
+    """Average result per trade in R (1 R = the stop distance): a target hit is
+    worth `reward_r`, a stop costs 1, and costs come off the top."""
+    return p_win * policy.reward_r - (1 - p_win) * 1.0 - round_trip_cost_pct / policy.stop_pct
+
+
+def expected_r_from_mean(mean_exit_return: float, round_trip_cost_pct: float, policy: DecidePolicy) -> float:
+    """Average result per trade in R from the average exit of similar trades
+    (+8%, -4%, or wherever day 15 closed) — unlike `expected_r`, a trade that
+    simply ran out of time is not counted as a full stop-loss."""
+    return (mean_exit_return - round_trip_cost_pct) / policy.stop_pct
+
+
+def cost_qty(verdict, price: float, policy: DecidePolicy) -> int:
+    """The share count to price costs on: the size the risk gate approved, or
+    a typical position when it approved none. Never 1 share — fixed charges
+    on one share would make every refused idea look like a loser."""
+    if verdict is not None and verdict.allowed and verdict.max_qty > 0:
+        return verdict.max_qty
+    return max(1, round(policy.cost_notional_inr / price)) if price > 0 else 1

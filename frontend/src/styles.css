@@ -1606,3 +1606,16 @@ tr.sig-detail-row td {
 /* Amber emphasis for a number that is true but wants attention — e.g. holding
    more stocks than the current account-size rung allows. */
 .warnc { color: var(--warn); }
+
+/* ---------------------------------------------------------------- brain -- */
+.brain-steps { margin: 0.4rem 0 0; padding-left: 1.2rem; display: grid; gap: 0.5rem; }
+.brain-steps ul { margin: 0.2rem 0 0; padding-left: 1rem; }
+.brain-reasons { margin: 0.3rem 0 0; padding-left: 1.2rem; }
+.brain-levels { margin-top: 0.8rem; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); }
+.brain-health { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+.brain-overrule { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.6rem; }
+.brain-overrule input { flex: 1 1 12rem; min-width: 0; }
+.brain-switch { display: inline-flex; gap: 0.25rem; }
+.brain-switch button { padding: 0.2rem 0.6rem; }
+.brain-module { gap: 0.6rem; flex-wrap: wrap; }
+.brain-reason-cell { white-space: normal; overflow-wrap: anywhere; min-width: 12rem; }

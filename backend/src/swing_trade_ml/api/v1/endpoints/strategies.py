@@ -12,7 +12,8 @@ from sqlalchemy import func, select
 from swing_trade_ml.api.deps import DbSession
 from swing_trade_ml.brokers import get_broker
 from swing_trade_ml.core.enums import PositionStatus
-from swing_trade_ml.core.strategy_policy import requires_advisory, validate_execution_mode
+from swing_trade_ml.core.logging import get_logger
+from swing_trade_ml.core.strategy_policy import is_staged, requires_advisory, validate_execution_mode
 from swing_trade_ml.db.models.market import Instrument
 from swing_trade_ml.db.models.trading import Position, Signal, Strategy
 from swing_trade_ml.schemas import (
@@ -28,6 +29,8 @@ from swing_trade_ml.services import engine
 from swing_trade_ml.services import portfolio as portfolio_service
 from swing_trade_ml.strategies import STRATEGY_REGISTRY
 from swing_trade_ml.strategies.tier import cap_tier
+
+log = get_logger(__name__)
 
 router = APIRouter(prefix="/strategies", tags=["strategies"])
 
@@ -210,8 +213,23 @@ def update_strategy(strategy_id: int, payload: StrategyUpdate, db: DbSession) ->
     for field, value in changes.items():
         setattr(strategy, field, value)
     db.commit()
+    if changes.get("is_active") is False:
+        _brain_switched_off(db, strategy)
     db.refresh(strategy)
     return strategy
+
+
+def _brain_switched_off(db: DbSession, strategy: Strategy) -> None:
+    """Switching the brain strategy off also puts its stage back to practice
+    (M18), so switching it on again never resumes buying silently."""
+    if is_staged(strategy):
+        from swing_trade_ml.services.brain_golive import stage
+
+        try:
+            stage.brain_strategy_switched_off(db)
+        except Exception:  # the strategy is already off; never fail the switch-off
+            db.rollback()
+            log.exception("brain_golive.stage.switch_off_reset_failed", strategy_id=strategy.id)
 
 
 @router.delete("/{strategy_id}", response_model=MessageResponse)
@@ -246,6 +264,7 @@ def deactivate(strategy_id: int, db: DbSession) -> Strategy:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Strategy not found")
     strategy.is_active = False
     db.commit()
+    _brain_switched_off(db, strategy)
     db.refresh(strategy)
     return strategy
 

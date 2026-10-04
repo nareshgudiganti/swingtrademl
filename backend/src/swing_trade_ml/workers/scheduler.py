@@ -185,6 +185,14 @@ def start_scheduler() -> None:
         replace_existing=True,
     )
     scheduler.add_job(
+        jobs.job_backup_models,
+        # After evaluation, before the evening feed jobs - by 16:30 any model
+        # trained today is registered, and the run is cheap when nothing changed.
+        CronTrigger(day_of_week=WEEKDAYS, hour=16, minute=30, timezone=IST),
+        id="backup_models",
+        replace_existing=True,
+    )
+    scheduler.add_job(
         jobs.job_sync_mutual_fund_navs,
         CronTrigger(day_of_week=WEEKDAYS, hour=21, minute=30, timezone=IST),
         id="sync_mutual_fund_navs",
@@ -200,11 +208,56 @@ def start_scheduler() -> None:
         replace_existing=True,
     )
 
+    if settings.BRAIN_ENABLED:
+        add_brain_jobs(scheduler)
+
     scheduler.start()
     log.info(
         "scheduler.started",
         jobs=[j.id for j in scheduler.get_jobs()],
         timezone="Asia/Kolkata",
+    )
+
+
+def add_brain_jobs(target: BackgroundScheduler) -> None:
+    """The brain's runs: nightly after version 1's 15:45 scan has the day's
+    data, and a holdings-only check every 15 minutes in market hours. Neither
+    competes with the 60-second exit loop, which never waits for the brain."""
+    target.add_job(
+        jobs.job_brain_nightly,
+        CronTrigger(day_of_week=WEEKDAYS, hour=15, minute=50, timezone=IST),
+        id="brain_nightly",
+        replace_existing=True,
+    )
+    target.add_job(
+        jobs.job_brain_intraday,
+        CronTrigger(day_of_week=WEEKDAYS, hour="9-15", minute="0,15,30,45", timezone=IST),
+        id="brain_intraday",
+        replace_existing=True,
+    )
+    # Approved-while-closed brain ideas are bought only in the first minutes
+    # of a session (approvals.execute_waiting re-checks the window itself).
+    target.add_job(
+        jobs.job_brain_approvals_open,
+        CronTrigger(day_of_week=WEEKDAYS, hour=9, minute="15-19", timezone=IST),
+        id="brain_approvals_open",
+        replace_existing=True,
+    )
+    # Queued runs ("Run the brain now"): the web request only queues, this
+    # runs them — one at a time, never inside a web request (one-app step 1).
+    target.add_job(
+        jobs.job_brain_run_queue,
+        IntervalTrigger(seconds=10),
+        id="brain_run_queue",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+    target.add_job(
+        jobs.job_brain_learn,
+        CronTrigger(day_of_week="sat", hour=10, minute=0, timezone=IST),
+        id="brain_learn",
+        replace_existing=True,
     )
 
 

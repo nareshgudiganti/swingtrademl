@@ -40,7 +40,12 @@ def test_brain_is_off_by_default():
 def test_brain_jobs_register_nightly_intraday_and_learn():
     s = BackgroundScheduler()
     add_brain_jobs(s)
-    assert {j.id for j in s.get_jobs()} == {"brain_nightly", "brain_intraday", "brain_learn"}
+    assert {j.id for j in s.get_jobs()} == {
+        "brain_nightly",
+        "brain_intraday",
+        "brain_learn",
+        "brain_approvals_open",  # M18: buys approved-while-closed ideas at the open
+    }
 
 
 def test_m09_is_off_resolves_the_stored_mode_like_sync_episodes_does(db_session):

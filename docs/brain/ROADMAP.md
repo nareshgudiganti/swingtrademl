@@ -4,6 +4,12 @@ Living tracker for the approved brain/gaps plan (`.cursor/plans/brain_and_gaps_r
 
 **Owner sign-off:** P0 Service 1 build list and M18 gating defaults approved for implementation (2026-10-05).
 
+## Brain validation phase (baseline `0bdaa76`)
+
+**Freeze:** no new trading features; prove the brain, then build only what evidence demands.
+
+Inspection (read-only, sections A–H): [VALIDATION_PHASE_INSPECTION.md](VALIDATION_PHASE_INSPECTION.md). **Await owner approval** before implementing the phased sequence in §F of that doc.
+
 ## Phase 0 — Evidence and ops
 
 - [x] Split-contamination check CLI (`swingtrade brain split-check`)

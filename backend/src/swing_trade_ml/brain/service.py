@@ -283,7 +283,12 @@ def _store(
     run.modules = used_modes
     run.trace = [_jsonable(asdict(e)) for e in ctx.trace]
     run.quality = _quality_summary(ctx)
-    run.context = _context_summary(ctx)
+    from swing_trade_ml.brain.data_manifest import build_data_manifest
+
+    run.context = {
+        **_context_summary(ctx),
+        "data_manifest": build_data_manifest(db, req, ctx),
+    }
     db.flush()
     if full_list:
         _supersede_earlier(db, req)
@@ -518,6 +523,9 @@ def health(db: Session) -> dict:
         db, "nightly"
     )  # live nightly only: a replay or one-stock run says nothing about today
     overall = (latest_done.quality or {}).get("overall") if latest_done else None
+    from swing_trade_ml.brain.connectors import connector_status
+
+    feeds = connector_status(db, datetime.now(IST).date())
     return {
         "last_run": None
         if last is None
@@ -533,4 +541,5 @@ def health(db: Session) -> dict:
         "failed_runs_7d": int(failed),
         "data": overall or {"score": None, "fresh": None, "issues": ["No data check has run yet."]},
         "stale_count": len((latest_done.quality or {}).get("stale", [])) if latest_done else 0,
+        "feeds": feeds,
     }

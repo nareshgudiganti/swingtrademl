@@ -32,3 +32,7 @@ def test_market_is_closed_on_a_holiday_even_during_session_hours():
 def test_market_is_open_on_an_ordinary_trading_day_at_noon():
     ordinary_tuesday_at_noon = datetime(2026, 1, 27, 12, 0, tzinfo=IST)
     assert is_market_open(ordinary_tuesday_at_noon)
+
+
+def test_2027_republic_day_is_a_holiday():
+    assert is_trading_holiday(date(2027, 1, 26))

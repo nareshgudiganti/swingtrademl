@@ -8,7 +8,8 @@ swingtrade backfill --days 1825
 swingtrade train --algorithm lightgbm --activate
 swingtrade scan
 swingtrade status
-swingtrade brain modules | set M02 off | run [--as-of 2026-09-15] | why RELIANCE | learn [--since 2026-09-01]
+swingtrade brain modules | set M02 off | run [--as-of 2026-09-15] | replay-week [--days 5] |
+    rescore-learning [--since 2026-09-01] | why RELIANCE | learn [--since 2026-09-01]
 swingtrade brain strategy-create | shadow-scan
 """
 
@@ -373,6 +374,31 @@ def cmd_status(args: argparse.Namespace) -> int:
     return 0
 
 
+def _print_learning_summary(report: dict, since, heading: str) -> None:
+    scope = f" since {since.isoformat()}" if since else ""
+    print(heading)
+    print(f"Scored {report['newly_scored']} newly finished ideas ({report['n_scored']} in total){scope}.")
+    if report["note"]:
+        print(report["note"])
+    if report["by_band"]:
+        print("By confidence band:")
+        for b in report["by_band"]:
+            print(
+                f"  {b['band']:<8} n={b['n']:<4} said {b['said']:.0%}  "
+                f"hit {b['hit']:.0%}  avg {b['avg_r']:+.2f} R"
+            )
+    if report["by_word"]:
+        print("By decision word:")
+        for w in report["by_word"]:
+            print(f"  {w['word']:<6} n={w['n']:<4} hit {w['hit']:.0%}  avg {w['avg_r']:+.2f} R")
+    for line in report["failures"]:
+        print(f"  ! {line}")
+    for line in report["drift_lines"]:
+        print(f"  ~ {line}")
+    for p in report["new_proposals"]:
+        print(f"  New proposal: {p['title']}")
+
+
 def _print_run(db, run_id: str) -> None:
     from swing_trade_ml.brain import service
     from swing_trade_ml.db.models.brain import BrainRun
@@ -441,8 +467,10 @@ def cmd_brain(args: argparse.Namespace) -> int:
                 print(f"❌ {exc}", file=sys.stderr)
                 return 1
             r = result["report"]
-            print(f"Saved {result['path'].name}: {r['n_rows']} unseen stock-days, {r['n_symbols']} stocks, "
-                  f"{r['window_start']} to {r['window_end']}, {r['folds']} monthly tests")
+            print(
+                f"Saved {result['path'].name}: {r['n_rows']} unseen stock-days, {r['n_symbols']} stocks, "
+                f"{r['window_start']} to {r['window_end']}, {r['folds']} monthly tests"
+            )
             print(f"Base rate (reached +8% first): {r['base_rate']:.1%}")
             for name, m in r["candidates"].items():
                 auc = f"{m['auc']:.3f}" if m["auc"] is not None else "n/a"
@@ -456,7 +484,9 @@ def cmd_brain(args: argparse.Namespace) -> int:
 
             count = store.rebuild_from_reader(db, DatedReader(db, datetime.now(UTC), live=True))
             db.commit()
-            print(f"Stored {count} past stock-days with what happened next (+8% before -4% in 15 trading days).")
+            print(
+                f"Stored {count} past stock-days with what happened next (+8% before -4% in 15 trading days)."
+            )
             return 0
         if args.brain_command == "episodes-backfill":
             from swing_trade_ml.brain.modules.m04_situations import store
@@ -469,39 +499,58 @@ def cmd_brain(args: argparse.Namespace) -> int:
                 if e.label in ("correction", "bear phase", "crash"):
                     end = e.end_day.isoformat() if e.end_day else "still going"
                     change = (e.stats or {}).get("nifty_change")
-                    print(f"  {e.label:<11} {e.start_day} to {end}  NIFTY {change:+.1%}" if change is not None
-                          else f"  {e.label:<11} {e.start_day} to {end}")
+                    print(
+                        f"  {e.label:<11} {e.start_day} to {end}  NIFTY {change:+.1%}"
+                        if change is not None
+                        else f"  {e.label:<11} {e.start_day} to {end}"
+                    )
             return 0
-        if args.brain_command == "learn":
+        if args.brain_command in ("learn", "rescore-learning"):
             from swing_trade_ml.brain.modules.m09_learn.learn import run_learning
 
             since = date.fromisoformat(args.since) if args.since else None
             report = run_learning(db, since=since)
             db.commit()
-            scope = f" since {since.isoformat()}" if since else ""
-            print(
-                f"Scored {report['newly_scored']} newly finished ideas "
-                f"({report['n_scored']} in total){scope}."
+            title = (
+                "M09 rescore-learning" if args.brain_command == "rescore-learning" else "M09 learning report"
             )
-            if report["note"]:
-                print(report["note"])
-            if report["by_band"]:
-                print("By confidence band:")
-                for b in report["by_band"]:
-                    print(
-                        f"  {b['band']:<8} n={b['n']:<4} said {b['said']:.0%}  "
-                        f"hit {b['hit']:.0%}  avg {b['avg_r']:+.2f} R"
-                    )
-            if report["by_word"]:
-                print("By decision word:")
-                for w in report["by_word"]:
-                    print(f"  {w['word']:<6} n={w['n']:<4} hit {w['hit']:.0%}  avg {w['avg_r']:+.2f} R")
-            for line in report["failures"]:
-                print(f"  ! {line}")
-            for line in report["drift_lines"]:
-                print(f"  ~ {line}")
-            for p in report["new_proposals"]:
-                print(f"  New proposal: {p['title']}")
+            _print_learning_summary(report, since, title)
+            return 0
+        if args.brain_command == "replay-week":
+            from swing_trade_ml.brain import queue as brain_queue
+            from swing_trade_ml.brain.replay_week import (
+                format_counts,
+                resolve_replay_range,
+                run_replay_week,
+            )
+
+            from_day = date.fromisoformat(args.from_date) if args.from_date else None
+            to_day = date.fromisoformat(args.to_date) if args.to_date else None
+            try:
+                start, end = resolve_replay_range(from_day=from_day, to_day=to_day, days=args.days)
+            except ValueError as exc:
+                print(f"❌ {exc}", file=sys.stderr)
+                return 1
+            symbols = [s.strip().upper() for s in args.symbols.split(",")] if args.symbols else None
+            print(f"Replay week {start.isoformat()} .. {end.isoformat()} ({args.book})")
+            try:
+                results = run_replay_week(
+                    db,
+                    start=start,
+                    end=end,
+                    book=args.book,
+                    symbols=symbols,
+                    wait_seconds=0,
+                )
+            except brain_queue.RunBusyError as exc:
+                print(f"⏳ {exc} Try again when it has finished.")
+                return 1
+            for row in results:
+                print(
+                    f"  {row.day.isoformat()}  {row.run_id}  {row.banner}  "
+                    f"{format_counts(row.counts)}  universe={row.universe_size}"
+                )
+            print(f"Done — {len(results)} trading day(s) replayed.")
             return 0
         if args.brain_command == "strategy-create":
             from swing_trade_ml.services.brain_golive.shadow import ensure_brain_strategy
@@ -522,6 +571,23 @@ def cmd_brain(args: argparse.Namespace) -> int:
             )
             for err in result.errors[:10]:
                 print(f"   • {err}")
+            return 0
+        if args.brain_command == "split-check":
+            from pathlib import Path
+
+            from swing_trade_ml.core.config import REPO_ROOT
+            from swing_trade_ml.services.split_check import format_report, run_split_contamination_check
+
+            report = run_split_contamination_check(db, threshold=args.threshold)
+            text = format_report(report)
+            print(text)
+            if args.save:
+                out_dir = REPO_ROOT / "docs" / "brain" / "evidence"
+                out_dir.mkdir(parents=True, exist_ok=True)
+                stamp = report.generated_at.strftime("%Y%m%d")
+                path = out_dir / f"split_check_{stamp}.md"
+                path.write_text(text, encoding="utf-8")
+                print(f"Saved summary to {path}")
             return 0
         if args.brain_command == "why":
             _, run_id = service.run_brain(db, kind="why", symbols=[args.symbol], book=args.book)
@@ -572,9 +638,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.set_defaults(func=cmd_kite_login)
 
-    p = sub.add_parser(
-        "sync-index", help="Ingest the benchmark index (settings.BENCHMARK_INDEX_SYMBOL)"
-    )
+    p = sub.add_parser("sync-index", help="Ingest the benchmark index (settings.BENCHMARK_INDEX_SYMBOL)")
     p.add_argument("--interval", default="day")
     p.add_argument("--days", type=int, default=None)
     p.set_defaults(func=cmd_sync_index)
@@ -637,12 +701,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_scan)
 
     p = sub.add_parser("backtest", help="Replay a strategy against stored historical candles")
-    p.add_argument(
-        "--strategy", required=True, choices=["ml_swing", "sma_crossover"], help="Strategy type"
-    )
-    p.add_argument(
-        "--symbols", default=None, help="Comma-separated tradingsymbols (default: the watchlist)"
-    )
+    p.add_argument("--strategy", required=True, choices=["ml_swing", "sma_crossover"], help="Strategy type")
+    p.add_argument("--symbols", default=None, help="Comma-separated tradingsymbols (default: the watchlist)")
     p.add_argument("--start", required=True, help="YYYY-MM-DD")
     p.add_argument("--end", default=None, help="YYYY-MM-DD (default: today)")
     p.add_argument("--interval", default="day")
@@ -664,14 +724,45 @@ def build_parser() -> argparse.ArgumentParser:
     b = brain_sub.add_parser("meta-train", help="Train and test M06's calibrated combiner on unseen months")
     b.add_argument("--barrier-model", default="swing_classifier_barrier")
     b.add_argument("--swing-model", default="swing_classifier")
-    brain_sub.add_parser("memory-build", help="Rebuild the memory of past stock-days and their outcomes (M05)")
+    brain_sub.add_parser(
+        "memory-build", help="Rebuild the memory of past stock-days and their outcomes (M05)"
+    )
     brain_sub.add_parser("episodes-backfill", help="Label the whole NIFTY history into market episodes (M04)")
+    b = brain_sub.add_parser("learn", help="Score finished ideas and show the weekly learning report (M09)")
+    b.add_argument("--since", default=None, help="YYYY-MM-DD: only ideas decided on or after this day")
     b = brain_sub.add_parser(
-        "learn", help="Score finished ideas and show the weekly learning report (M09)"
+        "rescore-learning",
+        help="Rescore finished ideas and print the M09 learning summary (Phase 1 gate)",
     )
     b.add_argument("--since", default=None, help="YYYY-MM-DD: only ideas decided on or after this day")
+    b = brain_sub.add_parser(
+        "replay-week",
+        help="Replay nightly brain runs for each IST trading day in a range (historical gate)",
+    )
+    b.add_argument("--from", dest="from_date", default=None, help="YYYY-MM-DD (inclusive)")
+    b.add_argument("--to", dest="to_date", default=None, help="YYYY-MM-DD (inclusive)")
+    b.add_argument(
+        "--days",
+        type=int,
+        default=None,
+        help="Replay this many trading days ending at the last fully closed day (alternative to --from/--to)",
+    )
+    b.add_argument("--symbols", default=None, help="Comma-separated (default: full universe)")
+    b.add_argument("--book", default="paper", choices=["paper", "live"])
     brain_sub.add_parser("strategy-create", help="Create the brain strategy in practice mode (M18)")
     brain_sub.add_parser("shadow-scan", help="Record today's brain ideas as strategy signals (M18)")
+    b = brain_sub.add_parser(
+        "split-check",
+        help="Flag >30%% one-day moves on split/bonus ex-dates (B0 contamination check)",
+    )
+    b.add_argument(
+        "--threshold", type=float, default=0.30, help="Absolute daily move fraction (default 0.30)"
+    )
+    b.add_argument(
+        "--save",
+        action="store_true",
+        help="Write markdown summary under docs/brain/evidence/",
+    )
     b = brain_sub.add_parser("why", help="Run the brain for one stock and show its full trace")
     b.add_argument("symbol")
     b.add_argument("--book", default="paper", choices=["paper", "live"])

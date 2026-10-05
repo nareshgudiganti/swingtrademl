@@ -173,6 +173,9 @@ class Settings(BaseSettings):
     # Telegram alerts after live brain runs (market mode changed, new TRADE ideas,
     # holdings needing attention). Off by default; needs BRAIN_ENABLED too.
     BRAIN_ALERTS_ENABLED: bool = False
+    # Optional M08 gates (Phase 3 playbook / sector experiments). Off by default.
+    BRAIN_SECTOR_GATE_TOP_N: int = 0  # 0 = off; e.g. 5 = only top 5 sectors by M11 rank
+    BRAIN_PLAYBOOK_GATE: bool = False  # require M12-style setup when on
 
     # --------------------------------------------------------------- risk --
     # MAX_POSITION_PCT and MAX_OPEN_POSITIONS are no longer read by the entry

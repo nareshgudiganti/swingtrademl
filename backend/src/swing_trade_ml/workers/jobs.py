@@ -377,6 +377,10 @@ def job_daily_ingest() -> None:
                     symbols=len(extra_results),
                     bars=sum(extra_results.values()),
                 )
+            from swing_trade_ml.services.watchlist_snapshots import record_watchlist_snapshot
+
+            record_watchlist_snapshot(db)
+            db.commit()
     except Exception as exc:  # noqa: BLE001
         _report_error("daily_ingest", exc)
 
@@ -612,6 +616,14 @@ def _run_brain_job(kind: str) -> None:
     except _BrainRunFailedError:
         return
     if kind == "nightly":
+        try:
+            with session_scope() as db:
+                from swing_trade_ml.services.watchlist_snapshots import record_watchlist_snapshot
+
+                record_watchlist_snapshot(db)
+                db.commit()
+        except Exception as exc:  # noqa: BLE001
+            _report_error("brain nightly watchlist snapshot", exc)
         job_brain_strategy()
 
 

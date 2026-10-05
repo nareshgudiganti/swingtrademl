@@ -113,6 +113,39 @@ class Candle(Base):
         return f"<Candle {self.instrument_id} {self.interval} {self.ts} c={self.close}>"
 
 
+class CandleCorrection(Base):
+    """Log when a daily bar is overwritten on re-ingest (Service 1 gap #13)."""
+
+    __tablename__ = "candle_corrections"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    instrument_id: Mapped[int] = mapped_column(ForeignKey("instruments.id", ondelete="CASCADE"), index=True)
+    interval: Mapped[str] = mapped_column(Text, default="day")
+    ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    old_open: Mapped[float] = mapped_column(Float)
+    old_high: Mapped[float] = mapped_column(Float)
+    old_low: Mapped[float] = mapped_column(Float)
+    old_close: Mapped[float] = mapped_column(Float)
+    old_volume: Mapped[int] = mapped_column(BigInteger)
+    new_open: Mapped[float] = mapped_column(Float)
+    new_high: Mapped[float] = mapped_column(Float)
+    new_low: Mapped[float] = mapped_column(Float)
+    new_close: Mapped[float] = mapped_column(Float)
+    new_volume: Mapped[int] = mapped_column(BigInteger)
+    corrected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class WatchlistSnapshot(Base):
+    """Brain universe membership by IST calendar day (Service 1 gap #4)."""
+
+    __tablename__ = "watchlist_snapshots"
+    __table_args__ = (UniqueConstraint("snapshot_date", "symbol", name="uq_watchlist_snapshot_day_symbol"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    snapshot_date: Mapped[date] = mapped_column(Date, index=True)
+    symbol: Mapped[str] = mapped_column(String(64), index=True)
+
+
 class Quote(Base):
     """Latest polled snapshot per instrument — one row each, updated in place.
 

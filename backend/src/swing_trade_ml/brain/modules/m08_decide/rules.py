@@ -86,6 +86,28 @@ def _negative_expected_result(d, f, p) -> Proposal:
     return None
 
 
+def _sector_gate(d, f, p) -> Proposal:
+    from swing_trade_ml.core.config import settings
+
+    top = settings.BRAIN_SECTOR_GATE_TOP_N
+    if top <= 0 or f.sector_rank is None:
+        return None
+    if f.sector_rank > top:
+        return (
+            IdeaWord.WAIT,
+            f"Its sector ranks {f.sector_rank} of 15 — outside the top {top} for new ideas.",
+        )
+    return None
+
+
+def _playbook_gate(d, f, p) -> Proposal:
+    from swing_trade_ml.core.config import settings
+
+    if not settings.BRAIN_PLAYBOOK_GATE or f.playbook_match:
+        return None
+    return IdeaWord.WAIT, "No classic setup (pullback or breakout on volume) today."
+
+
 def _defensive_needs_uptrend(d, f, p) -> Proposal:
     if f.market_mode in CARE_MODES and f.stock is not None and f.stock.trend == "down":
         return (
@@ -117,6 +139,8 @@ IDEA_RULES: list[Rule] = [
         "idea",
         _defensive_needs_uptrend,
     ),
+    Rule("sector_gate", "Only ideas from the strongest sectors", "idea", _sector_gate),
+    Rule("playbook_gate", "Only ideas with a named setup", "idea", _playbook_gate),
 ]
 
 

@@ -19,7 +19,7 @@ from swing_trade_ml.brokers.kite import kite_broker
 from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.enums import PositionStatus
 from swing_trade_ml.core.logging import get_logger
-from swing_trade_ml.db.models.market import Candle, Instrument, Quote
+from swing_trade_ml.db.models.market import Candle, CandleCorrection, Instrument, Quote
 from swing_trade_ml.db.models.trading import Position
 
 log = get_logger(__name__)
@@ -134,7 +134,9 @@ def set_watchlist(db: Session, symbols: list[str], exchange: str = "NSE") -> lis
     )
     for inst in matched:
         inst.is_watchlisted = True
-    db.commit()
+    from swing_trade_ml.services.watchlist_snapshots import record_watchlist_snapshot
+
+    record_watchlist_snapshot(db)
 
     found = {i.tradingsymbol for i in matched}
     missing = sorted(set(wanted) - found)
@@ -272,6 +274,49 @@ def _upsert_candles(db: Session, instrument_id: int, interval: str, bars: list[d
         }
         for bar in bars
     ]
+
+    ts_keys = [r["ts"] for r in rows]
+    existing = {
+        c.ts: c
+        for c in db.execute(
+            select(Candle).where(
+                Candle.instrument_id == instrument_id,
+                Candle.interval == interval,
+                Candle.ts.in_(ts_keys),
+            )
+        ).scalars()
+    }
+    now = datetime.now(UTC)
+    for row in rows:
+        old = existing.get(row["ts"])
+        if old is None:
+            continue
+        changed = (
+            old.open != row["open"]
+            or old.high != row["high"]
+            or old.low != row["low"]
+            or old.close != row["close"]
+            or int(old.volume or 0) != row["volume"]
+        )
+        if changed:
+            db.add(
+                CandleCorrection(
+                    instrument_id=instrument_id,
+                    interval=interval,
+                    ts=row["ts"],
+                    old_open=old.open,
+                    old_high=old.high,
+                    old_low=old.low,
+                    old_close=old.close,
+                    old_volume=int(old.volume or 0),
+                    new_open=row["open"],
+                    new_high=row["high"],
+                    new_low=row["low"],
+                    new_close=row["close"],
+                    new_volume=row["volume"],
+                    corrected_at=now,
+                )
+            )
 
     stmt = pg_insert(Candle).values(rows)
     stmt = stmt.on_conflict_do_update(

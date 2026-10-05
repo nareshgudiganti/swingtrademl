@@ -294,8 +294,10 @@ def build_features(
     # --- volume --------------------------------------------------------------
     out["volume_ratio_20"] = volume / volume.rolling(20).mean().replace(0, np.nan)
     obv = on_balance_volume(close, volume)
-    # Slope as a fraction of its own level — scale-free across instruments
-    out["obv_slope"] = obv.diff(10) / obv.rolling(20).mean().abs().replace(0, np.nan)
+    # Ten-day signed-volume impulse, scaled by typical daily volume — invariant to
+    # how many prior bars were loaded (obv.diff(10) already is; the old OBV-level
+    # denominator differed between full-history training and M02's 400-bar window).
+    out["obv_slope"] = obv.diff(10) / volume.rolling(20).mean().replace(0, np.nan)
     out["mfi_14"] = money_flow_index(high, low, close, volume, 14)
     out["cmf_20"] = chaikin_money_flow(high, low, close, volume, 20)
 

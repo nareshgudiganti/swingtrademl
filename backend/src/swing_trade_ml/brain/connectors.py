@@ -37,3 +37,19 @@ FEEDS: tuple[FeedSource, ...] = (
     FeedSource("bulk and block deals", _latest(BlockDeal.trade_date)),
     FeedSource("FII/DII flows", _latest(InstitutionalFlow.trade_date)),
 )
+
+
+def connector_status(db: Session, upto: date) -> list[dict]:
+    """Latest day each side feed has data, up to ``upto`` (Service 1 #10 lite)."""
+    out: list[dict] = []
+    for feed in FEEDS:
+        latest = feed.latest(db, upto)
+        out.append({"name": feed.name, "latest": latest.isoformat() if latest else None})
+    return out
+
+
+def feed_readiness(db: Session, symbols: tuple[str, ...], upto: date) -> dict[str, str]:
+    """Per-symbol READY / PARTIAL for brain health (prices assumed if in universe)."""
+    feeds_ok = all(feed.latest(db, upto) is not None for feed in FEEDS)
+    base = "READY" if feeds_ok else "PARTIAL"
+    return dict.fromkeys(symbols, base)

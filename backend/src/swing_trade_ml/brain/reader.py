@@ -55,10 +55,13 @@ class DatedReader:
         self._buy_level_loaded = False
 
     def universe(self) -> tuple[str, ...]:
-        """The watchlist plus version 1's stocks (brain/universe.py)."""
+        """Watchlist + v1 scan symbols; replays use the snapshot for that IST day."""
         from swing_trade_ml.brain.universe import brain_universe
 
-        return brain_universe(self.db)
+        if self.live:
+            return brain_universe(self.db)
+        as_of = self.as_of.astimezone(IST).date()
+        return brain_universe(self.db, as_of=as_of)
 
     def _instrument(self, symbol: str) -> Instrument | None:
         return self.db.execute(

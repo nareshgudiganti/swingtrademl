@@ -34,6 +34,8 @@ class IdeaFacts:
     recall: c.Recall | None
     market_mode: MarketMode
     notes: tuple[str, ...] = ()  # context lines from modifier opinions; never change the word
+    sector_rank: int | None = None  # M11 rank (1 = strongest); for optional sector gate
+    playbook_match: bool = True  # False when playbook gate is on and no setup found
 
 
 @dataclass(frozen=True, slots=True)

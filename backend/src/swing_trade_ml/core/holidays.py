@@ -50,6 +50,28 @@ NSE_HOLIDAYS: dict[int, set[date]] = {
         date(2026, 11, 24),  # Prakash Gurpurb Sri Guru Nanak Dev
         date(2026, 12, 25),  # Christmas
     },
+    # Provisional — verify against NSE's annual circular when published
+    # (https://www.nseindia.com/resources/exchange-communication-holidays).
+    # Lunar festival dates shift; weekend closures are omitted here (NSE is
+    # already shut Sat/Sun).
+    2027: {
+        date(2027, 1, 26),  # Republic Day
+        date(2027, 3, 6),  # Maha Shivaratri (provisional)
+        date(2027, 3, 10),  # Id-ul-Fitr (provisional)
+        date(2027, 3, 22),  # Holi (provisional)
+        date(2027, 3, 26),  # Good Friday
+        date(2027, 4, 14),  # Dr. Baba Saheb Ambedkar Jayanti
+        date(2027, 4, 15),  # Shri Ram Navami (provisional)
+        date(2027, 4, 19),  # Shri Mahavir Jayanti (provisional)
+        date(2027, 5, 1),  # Maharashtra Day
+        date(2027, 5, 17),  # Bakri Id (provisional)
+        date(2027, 6, 15),  # Muharram (provisional)
+        date(2027, 9, 4),  # Ganesh Chaturthi (provisional)
+        date(2027, 10, 9),  # Dussehra (provisional)
+        date(2027, 10, 29),  # Diwali Laxmi Pujan (provisional; Muhurat session separate)
+        date(2027, 11, 14),  # Prakash Gurpurb Sri Guru Nanak Dev (provisional)
+        date(2027, 12, 25),  # Christmas
+    },
 }
 
 

@@ -23,7 +23,10 @@ from swing_trade_ml.brain.modules.m08_decide.engine import (
     opportunity_notes,
 )
 from swing_trade_ml.brain.modules.m08_decide.policy import DEFAULT_POLICY
+from swing_trade_ml.brain.modules.m11_sector.module import sector_index_of
+from swing_trade_ml.brain.modules.m12_stock.setups import find_setups
 from swing_trade_ml.brain.opinions import modifier_notes, pick_opinion
+from swing_trade_ml.core.config import settings
 
 
 @register_module
@@ -64,6 +67,24 @@ class DecisionEngine(BrainModule):
                 situations[s.subject].append(s)
 
         held = {h.symbol for h in view.holdings}
+        sectors = {s.sector: s for s in view.sectors.values()}
+
+        def _sector_rank(symbol: str) -> int | None:
+            idx = sector_index_of(symbol)
+            if idx is None:
+                return None
+            st = sectors.get(idx)
+            return st.rank if st is not None else None
+
+        def _playbook_match(symbol: str) -> bool:
+            if not settings.BRAIN_PLAYBOOK_GATE:
+                return True
+            bars = view.reader.ohlcv(symbol)
+            if bars.empty:
+                return False
+            setups = find_setups(bars)
+            return any(s.label in ("pullback in up-trend", "breakout") for s in setups)
+
         idea_facts = {
             symbol: IdeaFacts(
                 symbol=symbol,
@@ -76,6 +97,8 @@ class DecisionEngine(BrainModule):
                 recall=view.recalls.get(symbol),
                 market_mode=mode,
                 notes=modifier_notes(opinions.get(symbol, [])),
+                sector_rank=_sector_rank(symbol),
+                playbook_match=_playbook_match(symbol),
             )
             for symbol in view.request.universe
             if symbol not in held

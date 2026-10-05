@@ -64,3 +64,16 @@ Avoid deploy between **15:40–15:50 IST** on trading days (scan chain). See DEP
 
 - Do **not** set `TRADING_MODE=live` or `ALLOW_LIVE_TRADING=true`.
 - M18 remains practice/shadow until owner advances stage per [GO_LIVE.md](../GO_LIVE.md).
+
+## Verification (remote, no SSH)
+
+**2026-10-05** — from dev machine (does not prove migrate/rebuild or SHA):
+
+```text
+GET https://swingtrademl.com/api/v1/health
+→ {"status":"ok","app":"Swing Trade ML","environment":"production","version":"0.1.0"}
+```
+
+Confirm GitHub Actions **Deploy to production** succeeded for target SHA (`fcaef35` or later) in the
+repo UI (`gh` auth required locally). Droplet steps in sections 2–4 still required after backend
+changes even when health is `ok`.

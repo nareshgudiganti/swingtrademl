@@ -20,6 +20,7 @@ from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.enums import PositionStatus
 from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.db.models.market import Candle, CandleCorrection, Instrument, Quote
+from swing_trade_ml.services.feature_snapshots import invalidate_snapshots_for_candle_corrections
 from swing_trade_ml.db.models.trading import Position
 
 log = get_logger(__name__)
@@ -287,6 +288,7 @@ def _upsert_candles(db: Session, instrument_id: int, interval: str, bars: list[d
         ).scalars()
     }
     now = datetime.now(UTC)
+    correction_ts: list[datetime] = []
     for row in rows:
         old = existing.get(row["ts"])
         if old is None:
@@ -299,6 +301,7 @@ def _upsert_candles(db: Session, instrument_id: int, interval: str, bars: list[d
             or int(old.volume or 0) != row["volume"]
         )
         if changed:
+            correction_ts.append(row["ts"])
             db.add(
                 CandleCorrection(
                     instrument_id=instrument_id,
@@ -331,6 +334,7 @@ def _upsert_candles(db: Session, instrument_id: int, interval: str, bars: list[d
         },
     )
     db.execute(stmt)
+    invalidate_snapshots_for_candle_corrections(db, instrument_id, interval, correction_ts)
     db.commit()
     return len(rows)
 

@@ -7,16 +7,16 @@ Living tracker for the approved brain/gaps plan (`.cursor/plans/brain_and_gaps_r
 ## Phase 0 — Evidence and ops
 
 - [x] Split-contamination check CLI (`swingtrade brain split-check`)
-- [ ] Weekly brain health per TESTING.md (owner)
+- [ ] Weekly brain health per [weekly_health_checklist.md](weekly_health_checklist.md) / TESTING.md (owner)
 - [ ] Prod ingest freshness on trading days (ops)
-- [ ] Model artifact off-droplet backup (dev)
+- [ ] Model artifact off-droplet backup (dev) — [model_artifact_backup.md](evidence/model_artifact_backup.md)
 - [ ] M18: progress toward 30 finished shadow ideas (owner)
 
 ## Phase 1 — Service 1 P0
 
 - [x] **#11** NSE calendar 2027+ (`core/holidays.py`)
 - [x] **#4** Point-in-time universe (`watchlist_snapshots`, `DatedReader` replay)
-- [x] **#13** Candle correction log (`candle_corrections`, ingest hook)
+- [x] **#13** Candle correction log + M02 snapshot invalidation (`candle_corrections`, `feature_snapshots` hook)
 - [x] **#1 lite** `known_at` via `candle_corrections.corrected_at` (no `candles.ingested_at` yet)
 - [x] **Ops (local Docker, 2026-10-05):** `alembic upgrade head` → `m3r6e5p1s1v1` (needed extra `alembic_version` row `p1a2n3s4f5r6` before merge; [alembic_local_20261005.md](evidence/alembic_local_20261005.md))
 - [x] **Ops (local Docker, 2026-10-05):** initial `watchlist_snapshots` backfill (49 symbols)

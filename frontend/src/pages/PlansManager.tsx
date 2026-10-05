@@ -3,23 +3,49 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api, setPreviewPlan } from '../api/client'
 import type { PlanCatalogue, PlanConfig, PlanKey, PlanLimits } from '../api/types'
-import { ErrorBox, Loading } from '../components/Loading'
+import { Empty, ErrorBox, Loading } from '../components/Loading'
 import { formatDate } from '../lib/format'
-import { PLAN_LABELS } from '../lib/plan'
+import { PLAN_LABELS, useIsOwner } from '../lib/plan'
 
-// The owner's control room for Free / Pro: which features each plan
-// gets, its limits, who is on which plan, and a way to see the app through a
-// plan's eyes. Only the owner reaches this (the API checks that too).
+// Owner control room: Free and Pro only. Admin APIs require is_superuser — not
+// merely "unrestricted" while plans are switched off.
 
 const PLAN_ORDER: PlanKey[] = ['free', 'pro']
 const TIER_LABEL: Record<string, string> = { large: 'Large', midcap: 'Mid', smallcap: 'Small' }
 type Tab = 'features' | 'limits' | 'users' | 'preview'
 type Drafts = Record<PlanKey, PlanConfig>
 
-function PlanEditor({ tab }: { tab: 'features' | 'limits' }) {
+function OwnerGate({ children }: { children: React.ReactNode }) {
+  const { isOwner, username, loading } = useIsOwner()
+  if (loading) return <Loading label="Checking owner access…" />
+  if (!isOwner) {
+    return (
+      <div className="card plans-owner-gate">
+        <h2 style={{ marginTop: 0 }}>Owner access required</h2>
+        <p>
+          The Plans screen changes what <strong>Free</strong> and <strong>Pro</strong> users see. Only the
+          app owner can open it.
+        </p>
+        <p className="muted">
+          Signing up does <em>not</em> make you the owner. Promote your login once (local):
+        </p>
+        <pre className="plans-cli">
+          cd backend{'\n'}
+          .\.venv\Scripts\python.exe -m swing_trade_ml.cli make-owner {username ?? 'YOUR_USERNAME'}
+        </pre>
+        <p className="muted" style={{ marginBottom: 0 }}>
+          Then refresh this page. You are logged in as <strong>{username ?? '…'}</strong>.
+        </p>
+      </div>
+    )
+  }
+  return <>{children}</>
+}
+
+function PlanEditor({ tab, enabled }: { tab: 'features' | 'limits'; enabled: boolean }) {
   const queryClient = useQueryClient()
-  const catalogue = useQuery({ queryKey: ['planCatalogue'], queryFn: api.planCatalogue })
-  const plans = useQuery({ queryKey: ['plans'], queryFn: api.plans })
+  const catalogue = useQuery({ queryKey: ['planCatalogue'], queryFn: api.planCatalogue, enabled })
+  const plans = useQuery({ queryKey: ['plans'], queryFn: api.plans, enabled })
   const [drafts, setDrafts] = useState<Drafts | null>(null)
   const [saved, setSaved] = useState(false)
 
@@ -54,6 +80,7 @@ function PlanEditor({ tab }: { tab: 'features' | 'limits' }) {
     },
   })
 
+  if (!enabled) return null
   if (catalogue.isLoading || plans.isLoading || !drafts) return <Loading />
   if (catalogue.error) return <ErrorBox error={catalogue.error} />
   if (plans.error) return <ErrorBox error={plans.error} />
@@ -68,14 +95,14 @@ function PlanEditor({ tab }: { tab: 'features' | 'limits' }) {
 
   return (
     <>
-      <div className="table-wrap">
+      <div className="table-wrap plans-table">
         <table>
           <thead>
             <tr>
               <th>{tab === 'features' ? 'Feature' : 'Limit'}</th>
               {PLAN_ORDER.map((k) => (
-                <th key={k} style={{ textAlign: 'center' }}>
-                  {PLAN_LABELS[k]}
+                <th key={k} className="plans-tier-col">
+                  <span className={`plans-tier plans-tier-${k}`}>{PLAN_LABELS[k]}</span>
                 </th>
               ))}
             </tr>
@@ -97,37 +124,33 @@ function PlanEditor({ tab }: { tab: 'features' | 'limits' }) {
                   {PLAN_ORDER.map((plan) => {
                     const value = drafts[plan].limits[limit.key]
                     return (
-                      <td key={plan} style={{ textAlign: 'center' }}>
+                      <td key={plan} className="plans-tier-col">
                         {limit.kind === 'int' ? (
                           <input
                             type="number"
                             min={0}
-                            value={Number(value ?? 0)}
+                            value={value as number}
                             onChange={(e) => setLimit(plan, limit.key, Math.max(0, Number(e.target.value)))}
-                            style={{ width: 80 }}
                             aria-label={`${limit.label}, ${PLAN_LABELS[plan]}`}
                           />
                         ) : (
-                          <div className="row" style={{ justifyContent: 'center' }}>
-                            {cat.cap_tiers.map((tier) => {
-                              const tiers = (value as string[]) ?? []
-                              return (
-                                <label key={tier} style={{ fontSize: '0.8rem' }}>
+                          <div className="plans-tier-chips">
+                            {TIER_LABEL &&
+                              (['large', 'midcap', 'smallcap'] as const).map((tier) => (
+                                <label key={tier} className="plans-chip">
                                   <input
                                     type="checkbox"
-                                    checked={tiers.includes(tier)}
-                                    onChange={(e) =>
-                                      setLimit(
-                                        plan,
-                                        limit.key,
-                                        e.target.checked ? [...tiers, tier] : tiers.filter((t) => t !== tier),
-                                      )
-                                    }
-                                  />{' '}
-                                  {TIER_LABEL[tier] ?? tier}
+                                    checked={(value as string[]).includes(tier)}
+                                    onChange={(e) => {
+                                      const tiers = new Set(value as string[])
+                                      if (e.target.checked) tiers.add(tier)
+                                      else tiers.delete(tier)
+                                      setLimit(plan, limit.key, [...tiers])
+                                    }}
+                                  />
+                                  {TIER_LABEL[tier]}
                                 </label>
-                              )
-                            })}
+                              ))}
                           </div>
                         )}
                       </td>
@@ -138,31 +161,23 @@ function PlanEditor({ tab }: { tab: 'features' | 'limits' }) {
           </tbody>
         </table>
       </div>
-
-      <div className="row" style={{ marginTop: '1rem' }}>
+      <div className="row" style={{ marginTop: '1rem', alignItems: 'center', gap: '1rem' }}>
         <button className="primary" disabled={!dirty || save.isPending} onClick={() => save.mutate()}>
           {save.isPending ? 'Saving…' : 'Save changes'}
         </button>
         <button
-          disabled={!dirty || save.isPending}
+          type="button"
+          disabled={!dirty}
           onClick={() =>
             plans.data &&
             setDrafts(Object.fromEntries(plans.data.map((p) => [p.key, structuredClone(p)])) as Drafts)
           }
         >
-          Undo
+          Discard
         </button>
-        {saved && <span className="pos">Saved. It applies to everyone on that plan straight away.</span>}
+        {saved && <span className="pos">Saved. Live for everyone on that plan.</span>}
         {save.isError && <span className="neg">{(save.error as Error).message}</span>}
       </div>
-
-      {tab === 'features' && (
-        <p className="note" style={{ marginTop: '1rem' }}>
-          Never in any plan, only yours: your Zerodha holdings, Capital, Safety switches, Strategies, placing
-          or closing orders, Finance and Settings. With “Picks from every model” off, a plan sees only the
-          base model ({cat.base_model}, Large Cap).
-        </p>
-      )}
     </>
   )
 }
@@ -178,72 +193,69 @@ function FeatureGroup({
   drafts: Drafts
   onChange: (plan: PlanKey, key: string, on: boolean) => void
 }) {
+  const features = catalogue.features.filter((f) => f.group === group)
   return (
     <>
-      <tr className="table-group-row">
-        <td colSpan={4}>{group}</td>
+      <tr className="plans-group-row">
+        <td colSpan={3}>{group}</td>
       </tr>
-      {catalogue.features
-        .filter((f) => f.group === group)
-        .map((f) => (
-          <tr key={f.key}>
-            <td>
-              <strong>{f.label}</strong>
-              <div className="muted" style={{ fontSize: '0.8rem' }}>
-                {f.description}
-              </div>
+      {features.map((f) => (
+        <tr key={f.key}>
+          <td>
+            <strong>{f.label}</strong>
+            <div className="muted" style={{ fontSize: '0.8rem' }}>{f.description}</div>
+          </td>
+          {PLAN_ORDER.map((plan) => (
+            <td key={plan} className="plans-tier-col">
+              <input
+                type="checkbox"
+                checked={!!drafts[plan].features[f.key]}
+                onChange={(e) => onChange(plan, f.key, e.target.checked)}
+                aria-label={`${f.label}, ${PLAN_LABELS[plan]}`}
+              />
             </td>
-            {PLAN_ORDER.map((plan) => (
-              <td key={plan} style={{ textAlign: 'center' }}>
-                <input
-                  type="checkbox"
-                  checked={!!drafts[plan].features[f.key]}
-                  onChange={(e) => onChange(plan, f.key, e.target.checked)}
-                  aria-label={`${f.label}, ${PLAN_LABELS[plan]}`}
-                />
-              </td>
-            ))}
-          </tr>
-        ))}
+          ))}
+        </tr>
+      ))}
     </>
   )
 }
 
-function Users() {
-  const queryClient = useQueryClient()
-  const users = useQuery({ queryKey: ['adminUsers'], queryFn: api.users })
+function Users({ enabled }: { enabled: boolean }) {
+  const users = useQuery({ queryKey: ['adminUsers'], queryFn: api.users, enabled })
   const setPlan = useMutation({
     mutationFn: ({ id, plan }: { id: number; plan: string }) => api.setUserPlan(id, plan),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['adminUsers'] }),
+    onSuccess: () => users.refetch(),
   })
 
+  if (!enabled) return null
   if (users.isLoading) return <Loading />
   if (users.error) return <ErrorBox error={users.error} />
+  const list = users.data ?? []
+  if (list.length === 0) return <Empty label="No other users yet." />
 
   return (
     <>
-      <div className="table-wrap">
+      <div className="table-wrap plans-table">
         <table>
           <thead>
             <tr>
               <th>User</th>
-              <th>Signs in with</th>
-              <th>Last seen</th>
+              <th>Last login</th>
               <th>Plan</th>
             </tr>
           </thead>
           <tbody>
-            {(users.data ?? []).map((u) => (
+            {list.map((u) => (
               <tr key={u.id}>
                 <td>
                   <strong>{u.username}</strong>
-                  {u.email && <div className="muted" style={{ fontSize: '0.8rem' }}>{u.email}</div>}
+                  {u.is_owner && <span className="badge badge-on" style={{ marginLeft: 8 }}>Owner</span>}
                 </td>
-                <td>{u.auth_provider === 'google' ? 'Google' : 'Password'}</td>
-                <td>{u.last_login_at ? formatDate(u.last_login_at) : 'Never'}</td>
+                <td className="muted">{u.last_login_at ? formatDate(u.last_login_at) : '—'}</td>
                 <td>
                   {u.is_owner ? (
-                    <span className="badge badge-on">Owner · sees everything</span>
+                    <span className="muted">Owner (all access)</span>
                   ) : (
                     <select
                       value={u.plan}
@@ -266,16 +278,16 @@ function Users() {
       </div>
       {setPlan.isError && <p className="neg">{(setPlan.error as Error).message}</p>}
       <p className="note" style={{ marginTop: '1rem' }}>
-        A change applies the next time that person opens a page. New accounts start on Free. Sign-up is still
-        closed: people get in only through the Google allow-list or an account you create.
+        New accounts start on <strong>Free</strong>. Assign <strong>Pro</strong> here when someone should get
+        TradeMind and full picks.
       </p>
     </>
   )
 }
 
-function MasterSwitch() {
+function MasterSwitch({ enabled }: { enabled: boolean }) {
   const queryClient = useQueryClient()
-  const current = useQuery({ queryKey: ['planSwitch'], queryFn: api.planSwitch })
+  const current = useQuery({ queryKey: ['planSwitch'], queryFn: api.planSwitch, enabled })
   const flip = useMutation({
     mutationFn: api.setPlanSwitch,
     onSuccess: () => {
@@ -284,30 +296,31 @@ function MasterSwitch() {
     },
   })
 
-  if (current.isLoading) return <Loading />
+  if (!enabled) return null
+  if (current.isLoading) return <Loading label="Loading plan switch…" />
   if (current.error) return <ErrorBox error={current.error} />
   const on = !!current.data?.enabled
 
   return (
-    <div className={`banner ${on ? 'banner-ok' : 'banner-info'}`} style={{ marginBottom: '1rem' }}>
+    <div className={`banner ${on ? 'banner-ok' : 'banner-info'}`} style={{ marginBottom: '1.25rem' }}>
       <div className="between">
         <div>
-          <strong>Plans are {on ? 'ON' : 'OFF'}.</strong>{' '}
+          <strong>Plan gating is {on ? 'ON' : 'OFF'}.</strong>{' '}
           {on
-            ? 'Everyone except you sees only what their plan includes.'
-            : 'Everyone who signs in sees the whole app, exactly as before plans. Set things up and preview them first; nothing changes for anyone until you turn this on.'}
+            ? 'Only Free / Pro rules apply to everyone except you.'
+            : 'Everyone still sees the full app. Turn this on when Free and Pro are ready.'}
         </div>
         <button
           className={on ? '' : 'primary'}
           disabled={flip.isPending}
           onClick={() => {
             const message = on
-              ? 'Turn plans off? Everyone who signs in will see the whole app again, as before plans.'
-              : 'Turn plans on? Everyone except you will immediately see only what their plan includes.'
+              ? 'Turn plan gating off? Everyone will see the full app again.'
+              : 'Turn plan gating on? Non-owners will only see what their plan allows.'
             if (confirm(message)) flip.mutate(!on)
           }}
         >
-          {flip.isPending ? 'Saving…' : on ? 'Turn plans off' : 'Turn plans on'}
+          {flip.isPending ? 'Saving…' : on ? 'Turn off' : 'Turn on'}
         </button>
       </div>
       {flip.isError && <div className="neg">{(flip.error as Error).message}</div>}
@@ -315,31 +328,31 @@ function MasterSwitch() {
   )
 }
 
-function Preview() {
+function Preview({ enabled }: { enabled: boolean }) {
+  if (!enabled) return null
   const start = (plan: PlanKey) => {
     setPreviewPlan(plan)
-    // A full reload drops every cached owner response, so nothing from
-    // your own view can leak into the preview.
     window.location.assign('/home')
   }
   return (
-    <>
-      <p>See the app exactly as someone on a plan sees it: the same menu, the same picks, the same refusals.</p>
+    <div className="card">
+      <p style={{ marginTop: 0 }}>
+        Open the app as a <strong>Free</strong> or <strong>Pro</strong> user (menu, picks, refusals). Your
+        account stays owner; use the banner to exit preview.
+      </p>
       <div className="row">
         {PLAN_ORDER.map((k) => (
-          <button key={k} className="primary" onClick={() => start(k)}>
-            View as {PLAN_LABELS[k]}
+          <button key={k} type="button" className="primary" onClick={() => start(k)}>
+            Preview {PLAN_LABELS[k]}
           </button>
         ))}
       </div>
-      <p className="muted" style={{ fontSize: '0.85rem' }}>
-        A banner at the top lets you leave the preview at any time.
-      </p>
-    </>
+    </div>
   )
 }
 
 export default function PlansManager() {
+  const { isOwner, loading } = useIsOwner()
   const [tab, setTab] = useState<Tab>('features')
   const TABS: { key: Tab; label: string }[] = [
     { key: 'features', label: 'Features' },
@@ -347,33 +360,56 @@ export default function PlansManager() {
     { key: 'users', label: 'Users' },
     { key: 'preview', label: 'Preview' },
   ]
+
+  useEffect(() => {
+    if (isOwner) setPreviewPlan(null)
+  }, [isOwner])
+
   return (
-    <>
-      <div className="page-head">
-        <div>
-          <h1 style={{ marginBottom: '0.15rem' }}>Plans</h1>
-          <div className="muted" style={{ fontSize: '0.82rem' }}>
-            Choose what Free and Pro users can see. No payments yet: you assign plans by hand.
+    <div className="plans-page">
+      <OwnerGate>
+        <div className="page-head">
+          <div>
+            <h1 style={{ marginBottom: '0.15rem' }}>Free &amp; Pro plans</h1>
+            <p className="muted" style={{ margin: 0, maxWidth: 520 }}>
+              Two tiers only. Toggle features and limits, assign users, then turn plan gating on when ready.
+            </p>
+          </div>
+          <div className="plans-tier-legend">
+            {PLAN_ORDER.map((k) => (
+              <span key={k} className={`plans-tier plans-tier-${k}`}>{PLAN_LABELS[k]}</span>
+            ))}
           </div>
         </div>
-      </div>
-      <MasterSwitch />
-      <div className="row" style={{ marginBottom: '1rem' }} role="tablist">
-        {TABS.map((t) => (
-          <button
-            key={t.key}
-            role="tab"
-            aria-selected={tab === t.key}
-            className={tab === t.key ? 'primary' : ''}
-            onClick={() => setTab(t.key)}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
-      {(tab === 'features' || tab === 'limits') && <PlanEditor key={tab} tab={tab} />}
-      {tab === 'users' && <Users />}
-      {tab === 'preview' && <Preview />}
-    </>
+
+        {!loading && isOwner && (
+          <>
+            <MasterSwitch enabled={isOwner} />
+            <div className="plans-tabs" role="tablist">
+              {TABS.map((t) => (
+                <button
+                  key={t.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={tab === t.key}
+                  className={`plans-tab${tab === t.key ? ' active' : ''}`}
+                  onClick={() => setTab(t.key)}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            <div className="plans-panel">
+              {(tab === 'features' || tab === 'limits') && <PlanEditor key={tab} tab={tab} enabled={isOwner} />}
+              {tab === 'users' && <Users enabled={isOwner} />}
+              {tab === 'preview' && <Preview enabled={isOwner} />}
+            </div>
+            <p className="note" style={{ marginTop: '1.5rem' }}>
+              Always owner-only: Zerodha holdings, capital, safety, strategies, orders, brain console, go-live.
+            </p>
+          </>
+        )}
+      </OwnerGate>
+    </div>
   )
 }

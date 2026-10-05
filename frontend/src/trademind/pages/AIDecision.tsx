@@ -24,7 +24,8 @@ export default function AIDecision() {
 
 function AIDecisionBody() {
   const { symbol: rawSymbol } = useParams()
-  const { seesAll } = usePlan()
+  const { canManage } = usePlan()
+  const ownerView = canManage
   const status = useBrainStatus()
   const latest = useLatestRun()
   const run = latest.data
@@ -37,10 +38,10 @@ function AIDecisionBody() {
   // trace (fast) instead of asking the brain to reason about it again
   // (api.brainWhy triggers a fresh ~15s run). Only fall back to brainWhy
   // when the symbol isn't in the latest run.
-  const runTrace = useRunTrace(seesAll && fromRun ? run?.run_id : undefined)
+  const runTrace = useRunTrace(ownerView && fromRun ? run?.run_id : undefined)
   const why = useWhy(status === 'live' && !fromRun && symbol ? symbol : undefined)
 
-  const tabs = seesAll ? OWNER_TABS : PRO_TABS
+  const tabs = ownerView ? OWNER_TABS : PRO_TABS
   type TabId = (typeof tabs)[number]
   const [tab, setTab] = useState<TabId>('Summary')
   const [step, setStep] = useState(0)
@@ -79,7 +80,7 @@ function AIDecisionBody() {
     )
   }
 
-  const trace = seesAll ? ((fromRun ? runTrace.data?.trace : why.data?.trace) ?? []) : []
+  const trace = ownerView ? ((fromRun ? runTrace.data?.trace : why.data?.trace) ?? []) : []
   const current = trace[step]
   const riskTrace = trace.filter((e) => e.step === 'risk')
 
@@ -90,8 +91,8 @@ function AIDecisionBody() {
 
   return (
     <div className="tm-page">
-      <div className={`tm-grid tm-ai-grid${seesAll ? '' : ' tm-ai-grid-pro'}`}>
-        {seesAll && (
+      <div className={`tm-grid tm-ai-grid${ownerView ? '' : ' tm-ai-grid-pro'}`}>
+        {ownerView && (
         <Card
           glow
           title="How the brain worked through this run"

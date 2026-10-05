@@ -162,20 +162,21 @@ export default function App() {
     queryKey: ['status'],
     queryFn: api.status,
     refetchInterval: 30_000,
-    enabled: hasToken && seesAll,
-  })
-  const { data: brainRun } = useQuery({
-    queryKey: ['brainLatest'],
-    queryFn: () => api.brainLatestRun('nightly'),
-    enabled: hasToken && !!status?.brain_enabled,
-    retry: false,
-    refetchInterval: 300_000,
+    enabled: hasToken && (seesAll || canManage),
   })
   const { data: me } = useQuery({
     queryKey: ['me'],
     queryFn: api.me,
     enabled: hasToken,
     retry: false,
+  })
+  const isOwnerEarly = canManage || !!me?.is_superuser
+  const { data: brainRun } = useQuery({
+    queryKey: ['brainLatest'],
+    queryFn: () => api.brainLatestRun('nightly'),
+    enabled: hasToken && (isOwnerEarly ? !!status?.brain_enabled : !!plan?.brain_enabled),
+    retry: false,
+    refetchInterval: 300_000,
   })
   const refresh = useMutation({
     mutationFn: api.refreshData,
@@ -239,32 +240,43 @@ export default function App() {
 
   const waiting = statusFailed ? <Navigate to="/dashboard" replace /> : <p className="muted">Loading…</p>
 
-  const brainOn = seesAll ? !!status?.brain_enabled : !!plan?.brain_enabled
-  const canTradeMind = brainOn && (seesAll || has('trademind'))
+  const isOwner = canManage || !!me?.is_superuser
+  const brainOn = isOwner ? !!status?.brain_enabled : !!plan?.brain_enabled
+  const canTradeMind = brainOn && (isOwner || has('trademind'))
+  const plansPath =
+    location.pathname === '/plans' ||
+    location.pathname.startsWith('/plans/') ||
+    location.pathname === '/trademind/plans'
 
-  // One app: when the brain is on, the owner sees TradeMind only. Classic Swing
-  // Trade ML tabs stay off the menu; /plans (and /settings by URL) remain for
-  // owner admin. Plan-tier users never enter this path.
-  if (seesAll && status?.brain_enabled) {
+  // Plans manager: classic light shell (not inside the dark TradeMind chrome).
+  if (plansPath) {
+    if (planLoading) return <Loading />
+    const backTo = isOwner && status?.brain_enabled ? '/trademind' : '/dashboard'
+    return (
+      <div className="layout">
+        <header className="topbar">
+          <div className="topbar-inner between">
+            <NavLink to={backTo} className="brand" title="Back">
+              <span className="brand-mark">←</span>
+              <span className="brand-label">
+                Swing Trade ML
+                <small>Plans</small>
+              </span>
+            </NavLink>
+          </div>
+        </header>
+        <main className="content">
+          <PlansManager />
+        </main>
+      </div>
+    )
+  }
+
+  // When the brain is on, the owner lives in TradeMind. Classic tabs stay off
+  // the menu; /plans and /settings remain reachable by URL.
+  if (isOwner && status?.brain_enabled) {
     if (location.pathname.startsWith('/trademind')) {
       return <TradeMindApp ownerConsole />
-    }
-    if (location.pathname === '/plans' || location.pathname.startsWith('/plans/')) {
-      if (planLoading) return <Loading />
-      const owner = canManage || !!me?.is_superuser
-      if (owner) {
-        return <Navigate to="/trademind/plans" replace />
-      }
-      return (
-        <div className="layout">
-          <main className="content">
-            <div className="card">
-              <h2>Owner only</h2>
-              <p className="muted">Plans are managed by the app owner. Run: swingtrade make-owner your_username</p>
-            </div>
-          </main>
-        </div>
-      )
     }
     if (location.pathname === '/settings') {
       return (
@@ -282,13 +294,13 @@ export default function App() {
     if (!canTradeMind) {
       return <Navigate to={plan && !seesAll ? '/home' : '/dashboard'} replace />
     }
-    if (seesAll && !status) {
+    if (isOwner && !status) {
       return planLoading || !plan ? <Loading /> : waiting
     }
-    return <TradeMindApp ownerConsole={seesAll} />
+    return <TradeMindApp ownerConsole={isOwner} />
   }
 
-  if (seesAll && !status && !statusFailed) {
+  if (isOwner && !status && !statusFailed) {
     return planLoading || !plan ? <Loading /> : <Loading />
   }
 
@@ -303,9 +315,9 @@ export default function App() {
     !!s.inNav && canSee(s) && !(seesAll && s.planHome) && !(s.manage && plan?.previewing)
   // Brain on → TradeMind is the whole app (see above). Brain off → console link only.
   const brainNav: Screen[] =
-    seesAll && status?.brain_enabled
+    isOwner && status?.brain_enabled
       ? []
-      : seesAll
+      : isOwner
         ? [{ to: '/brain', label: 'Brain', Icon: BrainIcon, element: <Brain />, inNav: true }]
         : []
   const trademindNav: Screen[] =
@@ -316,7 +328,7 @@ export default function App() {
   const tabBar = TAB_BAR.map((to) => nav.find((s) => s.to === to)).filter((s): s is Screen => !!s)
   const moreItems = nav.slice(PRIMARY_NAV_COUNT)
   const moreActive = moreItems.some((s) => location.pathname.startsWith(s.to))
-  const homePath = seesAll
+  const homePath = isOwner
     ? status?.brain_enabled
       ? '/trademind'
       : '/dashboard'

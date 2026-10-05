@@ -28,6 +28,23 @@ export function usePlan() {
   }
 }
 
+/** Real app owner (superuser). Not the same as "unrestricted" when plans are off. */
+export function useIsOwner() {
+  const plan = usePlan()
+  const me = useQuery({
+    queryKey: ['me'],
+    queryFn: api.me,
+    enabled: !!getToken(),
+    retry: false,
+  })
+  const isOwner = plan.canManage || !!me.data?.is_superuser
+  return {
+    isOwner,
+    username: me.data?.username,
+    loading: plan.isLoading || me.isLoading,
+  }
+}
+
 export const PLAN_LABELS: Record<string, string> = {
   free: 'Free',
   pro: 'Pro',

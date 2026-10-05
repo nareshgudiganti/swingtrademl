@@ -81,6 +81,61 @@ def cmd_make_owner(args: argparse.Namespace) -> int:
     return 0
 
 
+def _ensure_brain_enabled_in_env() -> None:
+    """Turn the brain on in `.env` so local matches docker-compose / prod TradeMind."""
+    import re
+
+    from swing_trade_ml.core.config import REPO_ROOT
+
+    env_path = REPO_ROOT / ".env"
+    example = REPO_ROOT / ".env.example"
+    if not env_path.exists():
+        if not example.exists():
+            raise SystemExit("No .env or .env.example at repo root")
+        env_path.write_text(example.read_text(encoding="utf-8"), encoding="utf-8")
+        print("Created .env from .env.example")
+    text = env_path.read_text(encoding="utf-8")
+    if re.search(r"^BRAIN_ENABLED\s*=", text, flags=re.MULTILINE | re.IGNORECASE):
+        new = re.sub(
+            r"^BRAIN_ENABLED\s*=.*",
+            "BRAIN_ENABLED=true",
+            text,
+            flags=re.MULTILINE | re.IGNORECASE,
+        )
+    else:
+        new = text.rstrip() + "\nBRAIN_ENABLED=true\n"
+    env_path.write_text(new, encoding="utf-8")
+    print("✅ BRAIN_ENABLED=true in .env")
+
+
+def cmd_local_dev(args: argparse.Namespace) -> int:
+    """Local only: enable TradeMind in `.env` and make every login an owner."""
+    from sqlalchemy import select
+
+    from swing_trade_ml.core.config import settings
+    from swing_trade_ml.db.models.session import User
+    from swing_trade_ml.db.session import session_scope
+
+    if settings.ENVIRONMENT != "local":
+        print("❌ local-dev only runs when ENVIRONMENT=local")
+        return 1
+    _ensure_brain_enabled_in_env()
+    with session_scope() as db:
+        users = list(db.execute(select(User)).scalars().all())
+        if not users:
+            print("No users yet — sign up once, then run: swingtrade local-dev")
+            return 0
+        promoted = [u.username for u in users if not u.is_superuser]
+        for u in users:
+            u.is_superuser = True
+    if promoted:
+        print(f"✅ Owner: {', '.join(promoted)}")
+    else:
+        print("✅ Owner account(s) already set")
+    print("Restart the API, then open /trademind (or log in — owners land on TradeMind).")
+    return 0
+
+
 def cmd_kite_login(args: argparse.Namespace) -> int:
     """Run the unattended Kite login now, instead of waiting for the 06:10 cron.
 
@@ -495,6 +550,11 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("make-owner", help="Make an existing login the owner (sees everything, manages plans)")
     p.add_argument("username")
     p.set_defaults(func=cmd_make_owner)
+
+    sub.add_parser(
+        "local-dev",
+        help="Local only: BRAIN_ENABLED=true in .env and every login becomes owner",
+    ).set_defaults(func=cmd_local_dev)
 
     p = sub.add_parser("sync-instruments", help="Refresh the instrument master from Kite")
     p.add_argument("--exchange", default="NSE")

@@ -288,7 +288,7 @@ export default function App() {
       )
     }
     if (location.pathname === '/paper-testing') {
-      return <Navigate to="/trademind/positions" replace />
+      return <Navigate to="/trademind/testing" replace />
     }
     return <Navigate to="/trademind" replace />
   }

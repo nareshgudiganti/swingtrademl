@@ -56,6 +56,7 @@ const SECTIONS: Section[] = [
     label: 'Portfolio',
     pages: [
       { to: '/trademind/positions', label: 'Positions' },
+      { to: '/trademind/testing', label: 'Testing' },
       { to: '/trademind/holdings', label: 'My Holdings' },
       { to: '/trademind/portfolio', label: 'Overview' },
     ],
@@ -112,7 +113,10 @@ export default function TradeMindApp({ ownerConsole = false }: TradeMindAppProps
     return true
   }).map((s) => {
     if (!ownerConsole && s.label === 'Portfolio') {
-      return { ...s, pages: s.pages.filter((p) => p.to !== '/trademind/holdings') }
+      return {
+        ...s,
+        pages: s.pages.filter((p) => p.to !== '/trademind/holdings' && p.to !== '/trademind/testing'),
+      }
     }
     if (!ownerConsole && s.label === 'Discover') {
       return { ...s, pages: s.pages.filter((p) => p.to !== '/trademind/watchlist') }
@@ -198,8 +202,9 @@ export default function TradeMindApp({ ownerConsole = false }: TradeMindAppProps
           <Route path="watchlist" element={ownerConsole ? <Watchlist /> : <Navigate to="/trademind/opportunities" replace />} />
           <Route path="stock/:symbol" element={<StockDetail />} />
           <Route path="portfolio" element={<Portfolio />} />
-          <Route path="positions" element={ownerConsole ? <PaperPositions /> : <Positions />} />
-          <Route path="positions/:symbol" element={ownerConsole ? <PaperPositions /> : <Positions />} />
+          <Route path="positions" element={<Positions />} />
+          <Route path="positions/:symbol" element={<Positions />} />
+          <Route path="testing" element={ownerConsole ? <PaperPositions /> : <Navigate to="/trademind/positions" replace />} />
           <Route path="ai" element={<AIDecision />} />
           <Route path="ai/:symbol" element={<AIDecision />} />
           <Route path="risk" element={ownerConsole ? <Risk /> : <Navigate to="/trademind" replace />} />

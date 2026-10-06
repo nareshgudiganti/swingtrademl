@@ -79,7 +79,7 @@ export default function PaperPositions() {
 
   return (
     <div className="tm-page tm-grid">
-      <Card glow title="Positions" sub="Manual paper trades. The bot’s own buys stay on Overview.">
+      <Card glow title="Testing" sub="Manual paper trades. Your existing Positions tab is unchanged.">
         {positions.isLoading && <p className="tm-dim">Loading…</p>}
         {positions.isError && <p className="tm-dim">Could not load positions.</p>}
         {moneyRow && (

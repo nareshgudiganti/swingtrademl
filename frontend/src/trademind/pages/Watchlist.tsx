@@ -48,7 +48,7 @@ function WatchlistBody() {
 
   return (
     <div className="tm-page tm-grid">
-      <Card glow title="Watchlist" sub="Same list as Discover. Buy only from here — it opens a paper position under Portfolio → Positions.">
+      <Card glow title="Watchlist" sub="Buy only from here. The paper position shows under Portfolio → Testing.">
         {watchlist.isLoading && <p className="tm-dim">Loading…</p>}
         {watchlist.isError && <p className="tm-dim">Could not load the watchlist.</p>}
         {symbols.length === 0 && !watchlist.isLoading && (

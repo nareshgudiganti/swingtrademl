@@ -59,7 +59,7 @@ Use main nav after login. Owner account sees all tabs; plan-gated tabs may be hi
 
 ## P — Manual paper positions (TradeMind)
 
-These trades live under **Portfolio → Positions**. They are **not** the bot’s automatic buys (those stay on **Overview**).
+These trades live under **Portfolio → Testing**. The existing **Positions** tab is unchanged. They are **not** the bot’s automatic buys (those stay on **Overview**).
 
 **Buy only from Discover → Watchlist.** There is no separate Paper testing page.
 
@@ -75,18 +75,18 @@ If **Watchlist** is missing under Discover, mark every P case **BLOCKED** and wr
 
 **Rules**
 
-- **Buy** only on Watchlist. **Paper sell** only on Positions. No OTP.
+- **Buy** only on Watchlist. **Paper sell** only on Testing. No OTP.
 - Do **not** expect these stocks on **Overview** (bot/brain book).
 - Company size (Large / Mid / Small) is **your** choice at buy time.
 
 | ID | Steps | Pass criteria |
 |----|--------|----------------|
-| P-01 | TradeMind → **Portfolio → Positions** | Page is Positions (manual paper). Not a separate “Paper testing” tab |
+| P-01 | TradeMind → **Portfolio → Testing** | New tab next to Positions. The old Positions page is still there and unchanged |
 | P-02 | **Discover → Watchlist** | Same style of table as Opportunities. Only watchlist symbols. Each row has **Buy** |
-| P-03 | On one row: **Buy**, quantity 1, **Large**, **Paper buy** | Success. **Portfolio → Positions** shows that stock as Large |
+| P-03 | On one row: **Buy**, quantity 1, **Large**, **Paper buy** | Success. **Portfolio → Testing** shows that stock as Large. **Positions** does not |
 | P-04 | Open **Portfolio → Overview** (and classic `/portfolio` if you use it) | That manual stock is **not** listed as a bot holding |
-| P-05 | On **Positions**, click **Paper sell** and confirm | Position disappears; cash / profit banked updates; no crash |
-| P-06 | On **Positions**, switch Daily, then Weekly, then Monthly | Closed sale shows under Daily (count ≥ 1, net shown). Empty weeks/months are OK |
+| P-05 | On **Testing**, click **Paper sell** and confirm | Position disappears; cash / profit banked updates; no crash |
+| P-06 | On **Testing**, switch Daily, then Weekly, then Monthly | Closed sale shows under Daily (count ≥ 1, net shown). Empty weeks/months are OK |
 | P-07 | Buy two different symbols the same day (different sizes if you want) | Both open; sector list (if shown) lists them; best/worst cards only when one is up and one is down |
 | P-08 | Next calendar day (or later the same week): buy one more, sell one still open | Old open stock still there until you sell; new buy appears; reports still count earlier sales |
 

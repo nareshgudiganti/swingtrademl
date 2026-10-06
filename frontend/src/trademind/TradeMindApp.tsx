@@ -13,6 +13,8 @@ import { Icon } from './ui'
 import Home from './pages/Home'
 import Market from './pages/Market'
 import Opportunities from './pages/Opportunities'
+import Watchlist from './pages/Watchlist'
+import PaperPositions from './pages/PaperPositions'
 import StockDetail from './pages/StockDetail'
 import Portfolio from './pages/Portfolio'
 import Positions from './pages/Positions'
@@ -45,6 +47,7 @@ const SECTIONS: Section[] = [
     label: 'Discover',
     pages: [
       { to: '/trademind/opportunities', label: 'Opportunities' },
+      { to: '/trademind/watchlist', label: 'Watchlist' },
       { to: '/trademind/market', label: 'Market' },
     ],
     also: ['/trademind/stock'],
@@ -111,11 +114,8 @@ export default function TradeMindApp({ ownerConsole = false }: TradeMindAppProps
     if (!ownerConsole && s.label === 'Portfolio') {
       return { ...s, pages: s.pages.filter((p) => p.to !== '/trademind/holdings') }
     }
-    if (ownerConsole && s.label === 'Settings') {
-      return {
-        ...s,
-        pages: [{ to: '/plans', label: 'Plans' }, ...s.pages],
-      }
+    if (!ownerConsole && s.label === 'Discover') {
+      return { ...s, pages: s.pages.filter((p) => p.to !== '/trademind/watchlist') }
     }
     return s
   })
@@ -147,11 +147,6 @@ export default function TradeMindApp({ ownerConsole = false }: TradeMindAppProps
             >
               {market.data.plain}
             </span>
-          )}
-          {ownerConsole && (
-            <Link to="/plans" className="tm-zchip" title="Free / Pro plans, preview, and users">
-              Plans
-            </Link>
           )}
           {ownerConsole && broker.data && (
             <Link
@@ -200,10 +195,11 @@ export default function TradeMindApp({ ownerConsole = false }: TradeMindAppProps
           <Route index element={<Home />} />
           <Route path="market" element={<Market />} />
           <Route path="opportunities" element={<Opportunities />} />
+          <Route path="watchlist" element={ownerConsole ? <Watchlist /> : <Navigate to="/trademind/opportunities" replace />} />
           <Route path="stock/:symbol" element={<StockDetail />} />
           <Route path="portfolio" element={<Portfolio />} />
-          <Route path="positions" element={<Positions />} />
-          <Route path="positions/:symbol" element={<Positions />} />
+          <Route path="positions" element={ownerConsole ? <PaperPositions /> : <Positions />} />
+          <Route path="positions/:symbol" element={ownerConsole ? <PaperPositions /> : <Positions />} />
           <Route path="ai" element={<AIDecision />} />
           <Route path="ai/:symbol" element={<AIDecision />} />
           <Route path="risk" element={ownerConsole ? <Risk /> : <Navigate to="/trademind" replace />} />

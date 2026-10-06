@@ -57,9 +57,11 @@ Use main nav after login. Owner account sees all tabs; plan-gated tabs may be hi
 
 ---
 
-## P — Paper testing (manual book only)
+## P — Manual paper positions (TradeMind)
 
-This tab is **your** practice trades. It is **not** the bot portfolio and **not** the brain’s automatic buys.
+These trades live under **Portfolio → Positions**. They are **not** the bot’s automatic buys (those stay on **Overview**).
+
+**Buy only from Discover → Watchlist.** There is no separate Paper testing page.
 
 **Before you start (owner must set this once):**
 
@@ -67,28 +69,28 @@ This tab is **your** practice trades. It is **not** the bot portfolio and **not*
 - `PAPER_TESTER_ENABLED=true`
 - Restart the API after changing `.env`
 
-If **Paper testing** is missing from the menu, mark every P case **BLOCKED** and write “flag off or API not restarted”. Do not treat that as a product bug.
+If **Watchlist** is missing under Discover, mark every P case **BLOCKED** and write “not an owner login, or API not restarted”. Do not treat that as a product bug.
 
-**Free and Pro plans do not get this tab.** It is owner-only for now. A Free or Pro login that cannot see **Paper testing** is correct — do not file that as a bug.
+**Free and Pro do not get Watchlist or this Positions book.** Owner only.
 
 **Rules**
 
-- Use only **Paper buy** and **Paper sell** on this tab. No OTP.
-- Do **not** expect these stocks to appear under **Portfolio** (that page is the bot/brain book).
-- Company size (Large / Mid / Small) is **your** choice at buy time — not the model’s.
+- **Buy** only on Watchlist. **Paper sell** only on Positions. No OTP.
+- Do **not** expect these stocks on **Overview** (bot/brain book).
+- Company size (Large / Mid / Small) is **your** choice at buy time.
 
 | ID | Steps | Pass criteria |
 |----|--------|----------------|
-| P-01 | Open **Paper testing** in the main nav | Page title says paper testing is manual; badge **MANUAL PAPER** |
-| P-02 | Tab **Buy from list** | Watchlist symbols appear if Settings watchlist has names; you can type a symbol |
-| P-03 | Pick a symbol, quantity (e.g. 1), **Large**, click **Paper buy** | Success (no error). Switch to **Portfolio** tab: stock is open with Large badge |
-| P-04 | Open classic **Portfolio** (`/portfolio`) | That stock is **not** in the bot’s open list |
-| P-05 | On Paper testing portfolio, click **Paper sell** and confirm | Position disappears from open list; cash / “profit banked” updates; no crash |
-| P-06 | Tab **Reports** → Daily, then Weekly, then Monthly | Closed sale shows in at least Daily (count ≥ 1, net P&amp;L shown). Empty weeks/months are OK |
+| P-01 | TradeMind → **Portfolio → Positions** | Page is Positions (manual paper). Not a separate “Paper testing” tab |
+| P-02 | **Discover → Watchlist** | Same style of table as Opportunities. Only watchlist symbols. Each row has **Buy** |
+| P-03 | On one row: **Buy**, quantity 1, **Large**, **Paper buy** | Success. **Portfolio → Positions** shows that stock as Large |
+| P-04 | Open **Portfolio → Overview** (and classic `/portfolio` if you use it) | That manual stock is **not** listed as a bot holding |
+| P-05 | On **Positions**, click **Paper sell** and confirm | Position disappears; cash / profit banked updates; no crash |
+| P-06 | On **Positions**, switch Daily, then Weekly, then Monthly | Closed sale shows under Daily (count ≥ 1, net shown). Empty weeks/months are OK |
 | P-07 | Buy two different symbols the same day (different sizes if you want) | Both open; sector list (if shown) lists them; best/worst cards only when one is up and one is down |
 | P-08 | Next calendar day (or later the same week): buy one more, sell one still open | Old open stock still there until you sell; new buy appears; reports still count earlier sales |
 
-**What to report if it breaks:** button does nothing, buy error text, stock landed on the wrong page (Portfolio vs Paper testing), numbers that jump to zero after refresh.
+**What to report if it breaks:** button does nothing, buy error text, stock showed up on Overview, numbers that jump to zero after refresh.
 
 ---
 

@@ -13,7 +13,7 @@ This folder is the **single place** for human testing of Swing Trade ML / TradeM
 **Rules (non‑negotiable):**
 
 - Test only **`TRADING_MODE=paper`** on local. Never enable live trading.
-- **Paper testing** (manual book) is section **P** in the test plan. It stays separate from **Portfolio** (bot/brain). Needs `PAPER_TESTER_ENABLED=true` and an **owner** login. Free and Pro plans do not show this tab. If the tab is missing on an owner account, mark **BLOCKED**, not FAIL.
+- Manual paper trades are section **P**: **Discover → Watchlist** to buy, **Portfolio → Positions** to see and sell. Owner only. Free and Pro do not see Watchlist. Needs `PAPER_TESTER_ENABLED=true`.
 - Do **not** click **Approve** on brain ideas in production unless the owner asks.
 - Do **not** paste secrets (`.env`, API keys, tokens) into reports or chat.
 - Kite login on local **invalidates** the same API key’s prod session — use owner guidance before Kite tests.

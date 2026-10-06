@@ -8,7 +8,6 @@ import { Loading } from './components/Loading'
 import Dashboard from './pages/Dashboard'
 import Finance from './pages/Finance'
 import Positions from './pages/Positions'
-import PaperTesting from './pages/PaperTesting'
 import Reports from './pages/Reports'
 import ScanResults from './pages/ScanResults'
 import Strategies from './pages/Strategies'
@@ -56,8 +55,6 @@ type Screen = {
   planHome?: boolean
   manage?: boolean
   inNav?: boolean
-  /** Shown only when PAPER_TESTER_ENABLED is on (status.paper_tester_enabled). */
-  paperTester?: boolean
 }
 
 // Settings and ML Models are still routed but deliberately left out of the
@@ -86,14 +83,6 @@ const SCREENS: Screen[] = [
     feature: 'bot_portfolio',
     inNav: true,
   },
-  {
-    to: '/paper-testing',
-    label: 'Paper testing',
-    Icon: LayersIcon,
-    element: <PaperTesting />,
-    paperTester: true,
-    inNav: true,
-  },
   { to: '/capital', label: 'Capital', Icon: SproutIcon, element: <Capital />, inNav: true },
   {
     to: '/reports',
@@ -120,7 +109,7 @@ const SCREENS: Screen[] = [
     inNav: true,
   },
   { to: '/safety', label: 'Safety', Icon: AlertTriangleIcon, element: <Safety />, inNav: true },
-  { to: '/plans', label: 'Plans', Icon: GearIcon, element: <PlansManager />, manage: true, inNav: true },
+  { to: '/plans', label: 'Plans', Icon: GearIcon, element: <PlansManager />, manage: true },
   { to: '/models', label: 'ML Models', Icon: BarChartIcon, element: <Models /> },
   { to: '/finance', label: 'Finance', Icon: WalletIcon, element: <Finance /> },
   { to: '/settings', label: 'Settings', Icon: GearIcon, element: <Settings /> },
@@ -298,6 +287,9 @@ export default function App() {
         </div>
       )
     }
+    if (location.pathname === '/paper-testing') {
+      return <Navigate to="/trademind/positions" replace />
+    }
     return <Navigate to="/trademind" replace />
   }
 
@@ -317,8 +309,6 @@ export default function App() {
 
   const canSee = (s: Screen): boolean => {
     if (s.manage) return canManage
-    // Manual paper testing is not a Free/Pro feature. Owner (and plans-off) only.
-    if (s.paperTester) return seesAll
     return seesAll || !!s.planHome || (!!s.feature && has(s.feature))
   }
   // A full-app account's home is the Dashboard; /home stays reachable by URL.
@@ -328,8 +318,7 @@ export default function App() {
     !!s.inNav &&
     canSee(s) &&
     !(seesAll && s.planHome) &&
-    !(s.manage && plan?.previewing) &&
-    (!s.paperTester || !!status?.paper_tester_enabled)
+    !(s.manage && plan?.previewing)
   // Brain on → TradeMind is the whole app (see above). Brain off → console link only.
   const brainNav: Screen[] =
     isOwner && status?.brain_enabled
@@ -566,19 +555,7 @@ export default function App() {
                 <Route
                   key={s.to}
                   path={s.to}
-                  element={
-                    s.paperTester ? (
-                      seesAll && status?.paper_tester_enabled ? (
-                        s.element
-                      ) : (
-                        <Navigate to={homePath} replace />
-                      )
-                    ) : canSee(s) ? (
-                      s.element
-                    ) : (
-                      <NotInPlan plan={planKey} />
-                    )
-                  }
+                  element={canSee(s) ? s.element : <NotInPlan plan={planKey} />}
                 />
               ))}
               <Route

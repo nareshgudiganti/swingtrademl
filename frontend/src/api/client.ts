@@ -318,6 +318,14 @@ export const api = {
   manualClosePosition: (id: number, exitPrice: number) =>
     post<Trade>(`/portfolio/positions/${id}/manual-close`, { exit_price: exitPrice }),
   trades: (limit = 100) => get<Trade[]>(`/portfolio/trades?limit=${limit}&book=bot`),
+  testerSummary: () => get<PortfolioSummary>('/portfolio/summary?book=tester'),
+  testerPositions: () => get<DetailedPosition[]>('/portfolio/positions/detailed?book=tester'),
+  testerTrades: (limit = 500) => get<Trade[]>(`/portfolio/trades?limit=${limit}&book=tester&all_time=true`),
+  testerPaperBuy: (body: { symbol: string; quantity: number; cap_tier: string; exchange?: string }) =>
+    post<{ position_id: number; symbol: string; quantity: number; entry_price: number; cap_tier: string }>(
+      '/portfolio/tester/buy',
+      body,
+    ),
   equityCurve: (days = 180) => get<EquityPoint[]>(`/portfolio/equity-curve?days=${days}`),
   snapshot: () => post<MessageResponse>('/portfolio/snapshot'),
 

@@ -174,6 +174,7 @@ def _build_status(db: DbSession) -> SystemStatus:
         trading_mode=get_broker().mode,
         live_trading_enabled=settings.is_live_trading,
         brain_enabled=settings.BRAIN_ENABLED,
+        paper_tester_enabled=settings.PAPER_TESTER_ENABLED,
         broker_authenticated=kite_broker.is_authenticated,
         scheduler_running=heartbeat.is_alive(),
         scheduled_jobs=list_jobs(),

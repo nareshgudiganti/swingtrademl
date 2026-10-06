@@ -94,6 +94,7 @@ export interface SystemStatus {
   live_trading_enabled: boolean
   /** The TradeMind brain is switched on (BRAIN_ENABLED); its page shows only then. */
   brain_enabled?: boolean
+  paper_tester_enabled?: boolean
   broker_authenticated: boolean
   scheduler_running: boolean
   scheduled_jobs: ScheduledJob[]
@@ -200,6 +201,7 @@ export interface DetailedPosition {
   strategy_id: number | null
   strategy_name: string | null
   cap_tier: string | null
+  sector?: string | null
   entry_confidence: number | null
   last_confidence: number | null
   horizon_days: number | null

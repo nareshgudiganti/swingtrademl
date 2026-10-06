@@ -5,6 +5,8 @@ MANUAL_ONLY_TYPES = frozenset({"long_term_value"})
 # Ordered ONLY through the owner's go-live stages (brain M18,
 # services/brain_golive/approvals.py) — never by the scan itself.
 STAGED_TYPES = frozenset({"brain"})
+# Never scanned by the daily engine — manual paper validation only.
+NON_SCAN_STRATEGY_TYPES = frozenset({"tester_paper"})
 
 
 def requires_advisory(strategy_type: str) -> bool:

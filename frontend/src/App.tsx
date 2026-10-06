@@ -8,6 +8,7 @@ import { Loading } from './components/Loading'
 import Dashboard from './pages/Dashboard'
 import Finance from './pages/Finance'
 import Positions from './pages/Positions'
+import PaperTesting from './pages/PaperTesting'
 import Reports from './pages/Reports'
 import ScanResults from './pages/ScanResults'
 import Strategies from './pages/Strategies'
@@ -55,6 +56,8 @@ type Screen = {
   planHome?: boolean
   manage?: boolean
   inNav?: boolean
+  /** Shown only when PAPER_TESTER_ENABLED is on (status.paper_tester_enabled). */
+  paperTester?: boolean
 }
 
 // Settings and ML Models are still routed but deliberately left out of the
@@ -81,6 +84,14 @@ const SCREENS: Screen[] = [
     Icon: BriefcaseIcon,
     element: <Positions />,
     feature: 'bot_portfolio',
+    inNav: true,
+  },
+  {
+    to: '/paper-testing',
+    label: 'Paper testing',
+    Icon: LayersIcon,
+    element: <PaperTesting />,
+    paperTester: true,
     inNav: true,
   },
   { to: '/capital', label: 'Capital', Icon: SproutIcon, element: <Capital />, inNav: true },
@@ -306,13 +317,19 @@ export default function App() {
 
   const canSee = (s: Screen): boolean => {
     if (s.manage) return canManage
+    // Manual paper testing is not a Free/Pro feature. Owner (and plans-off) only.
+    if (s.paperTester) return seesAll
     return seesAll || !!s.planHome || (!!s.feature && has(s.feature))
   }
   // A full-app account's home is the Dashboard; /home stays reachable by URL.
   // While previewing, the Plans link is hidden so the menu matches the plan
   // exactly — the preview banner is the way back.
   const inMenu = (s: Screen): boolean =>
-    !!s.inNav && canSee(s) && !(seesAll && s.planHome) && !(s.manage && plan?.previewing)
+    !!s.inNav &&
+    canSee(s) &&
+    !(seesAll && s.planHome) &&
+    !(s.manage && plan?.previewing) &&
+    (!s.paperTester || !!status?.paper_tester_enabled)
   // Brain on → TradeMind is the whole app (see above). Brain off → console link only.
   const brainNav: Screen[] =
     isOwner && status?.brain_enabled
@@ -549,7 +566,19 @@ export default function App() {
                 <Route
                   key={s.to}
                   path={s.to}
-                  element={canSee(s) ? s.element : <NotInPlan plan={planKey} />}
+                  element={
+                    s.paperTester ? (
+                      seesAll && status?.paper_tester_enabled ? (
+                        s.element
+                      ) : (
+                        <Navigate to={homePath} replace />
+                      )
+                    ) : canSee(s) ? (
+                      s.element
+                    ) : (
+                      <NotInPlan plan={planKey} />
+                    )
+                  }
                 />
               ))}
               <Route

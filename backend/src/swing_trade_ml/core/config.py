@@ -83,6 +83,9 @@ class Settings(BaseSettings):
     ALLOW_LIVE_TRADING: bool = False
 
     PAPER_STARTING_CAPITAL: float = 1_000_000.0
+    # Manual paper-testing book (separate positions from the bot portfolio).
+    PAPER_TESTER_ENABLED: bool = False
+    PAPER_TESTER_STARTING_CAPITAL: float = 1_000_000.0
     # The date the current clean paper trial opened. Performance figures are
     # measured from here, so the headline P&L answers "is the bot working
     # now" rather than averaging in a system that has since been replaced.

@@ -40,6 +40,7 @@ class SystemStatus(BaseModel):
     live_trading_enabled: bool
     # Whether the TradeMind brain is switched on; the app shows its page only then.
     brain_enabled: bool = False
+    paper_tester_enabled: bool = False
     broker_authenticated: bool
     scheduler_running: bool
     scheduled_jobs: list[dict[str, Any]]
@@ -409,6 +410,13 @@ class ManualExitRequest(BaseModel):
     exit_reason: str = "MANUAL"
     brokerage: float | None = None
     taxes: float | None = None
+
+
+class TesterPaperBuyRequest(BaseModel):
+    symbol: str = Field(min_length=1, max_length=32)
+    quantity: int = Field(gt=0)
+    cap_tier: str = Field(pattern="^(large|midcap|smallcap)$")
+    exchange: str = "NSE"
 
 
 class EquityPoint(BaseModel):

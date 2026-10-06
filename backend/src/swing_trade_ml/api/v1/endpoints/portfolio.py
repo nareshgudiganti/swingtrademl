@@ -18,6 +18,7 @@ from swing_trade_ml.core.enums import ExitReason, PositionStatus, SignalType, Tr
 from swing_trade_ml.db.models.market import Candle, Instrument
 from swing_trade_ml.db.models.trading import Position, Signal, Strategy, Trade
 from swing_trade_ml.ml.registry import get_active_model
+from swing_trade_ml.ml.sector_map import get_sector_bucket, sector_display_name
 from swing_trade_ml.schemas import (
     ClosePositionRequest,
     EquityPoint,
@@ -25,6 +26,7 @@ from swing_trade_ml.schemas import (
     ManualExitRequest,
     MessageResponse,
     PositionOut,
+    TesterPaperBuyRequest,
     TradeOut,
 )
 from swing_trade_ml.services import portfolio as portfolio_service
@@ -53,7 +55,25 @@ router = APIRouter(prefix="/portfolio", tags=["portfolio"])
 #: "bot" = everything the bot runs itself, in whichever mode it is in.
 #: "real" = the My Holdings book (the `real_trading` advisory strategy).
 #: "all" = both, the historical behaviour, kept for existing callers.
-BookFilter = Literal["all", "bot", "real"]
+BookFilter = Literal["all", "bot", "real", "tester"]
+
+
+def _position_sector(symbol: str) -> str:
+    bucket = get_sector_bucket(symbol)
+    return sector_display_name(bucket) if bucket else "Unclassified"
+
+
+def _position_cap_tier(db: DbSession, position: Position) -> str | None:
+    from swing_trade_ml.services.tester_paper import (
+        TESTER_PAPER_STRATEGY_NAME,
+        entry_signal_cap_tier,
+    )
+
+    if position.strategy and position.strategy.name == TESTER_PAPER_STRATEGY_NAME:
+        return entry_signal_cap_tier(db, position.id)
+    if position.strategy:
+        return cap_tier(position.strategy.params.get("model_name") if position.strategy.params else None)
+    return None
 
 
 def _scope_to_book(stmt: Select[Any], strategy_id_col: Any, book: BookFilter) -> Select[Any]:
@@ -70,7 +90,11 @@ def _scope_to_book(stmt: Select[Any], strategy_id_col: Any, book: BookFilter) ->
                 select(Strategy.id).where(Strategy.name == REAL_TRADING_STRATEGY_NAME)
             )
         )
-    return stmt.where(portfolio_service.exclude_real_trading(strategy_id_col))
+    if book == "tester":
+        from swing_trade_ml.services.tester_paper import only_tester
+
+        return stmt.where(only_tester(strategy_id_col))
+    return stmt.where(portfolio_service.exclude_hand_books(strategy_id_col))
 
 
 @router.get("/summary", response_model=dict)
@@ -90,6 +114,10 @@ def summary(
     the full record including trials that predate the running code. The reply
     names the boundary in `measured_since` either way.
     """
+    if book == "tester":
+        from swing_trade_ml.services import tester_paper as tester_paper_service
+
+        return tester_paper_service.performance_stats(db)
     return portfolio_service.performance_stats(
         db, mode, bot_book_only=book == "bot", all_time=all_time
     )
@@ -253,11 +281,8 @@ def detailed_positions(
                 "holding_days": position.holding_days,
                 "strategy_id": position.strategy_id,
                 "strategy_name": position.strategy.name if position.strategy else None,
-                "cap_tier": (
-                    cap_tier(position.strategy.params.get("model_name") if position.strategy.params else None)
-                    if position.strategy
-                    else None
-                ),
+                "cap_tier": _position_cap_tier(db, position),
+                "sector": _position_sector(symbol),
                 "entry_confidence": position.entry_confidence,
                 "last_confidence": position.last_confidence,
                 "horizon_days": horizon_days,
@@ -559,6 +584,40 @@ def import_real_holdings(db: DbSession, strategy_id: int | None = None) -> list[
     return results
 
 
+@router.post("/tester/buy", status_code=status.HTTP_201_CREATED)
+def tester_paper_buy(payload: TesterPaperBuyRequest, db: DbSession) -> dict[str, Any]:
+    """Manual paper buy for the tester book — never touches live Kite or the bot book."""
+    from swing_trade_ml.services import tester_paper as tester_paper_service
+
+    try:
+        position = tester_paper_service.paper_buy(
+            db,
+            payload.symbol.strip(),
+            payload.quantity,
+            payload.cap_tier,
+            payload.exchange,
+        )
+    except tester_paper_service.PaperTesterDisabled as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+    except tester_paper_service.PaperTesterNotPaperMode as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    except LookupError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+
+    instrument = db.get(Instrument, position.instrument_id)
+    return {
+        "position_id": position.id,
+        "symbol": instrument.tradingsymbol if instrument else payload.symbol.upper(),
+        "quantity": position.quantity,
+        "entry_price": position.entry_price,
+        "cap_tier": payload.cap_tier,
+    }
+
+
 @router.post("/positions/manual", response_model=PositionOut, status_code=status.HTTP_201_CREATED)
 def create_manual_position(payload: ManualEntryRequest, db: DbSession) -> Position:
     """Record a position filled outside the app — the counterpart to
@@ -728,7 +787,7 @@ def list_trades(
     counts /summary reports rather than showing trades those counts exclude.
     `all_time=true` returns every trade ever closed."""
     mode = TradingMode.LIVE if book == "real" else get_broker().mode
-    since = None if all_time else portfolio_service.trial_start(mode)
+    since = None if (all_time or book == "tester") else portfolio_service.trial_start(mode)
     stmt = (
         select(Trade, Position, Strategy)
         .outerjoin(Position, Position.id == Trade.position_id)

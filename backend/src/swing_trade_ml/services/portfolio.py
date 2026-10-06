@@ -32,12 +32,20 @@ IST = ZoneInfo("Asia/Kolkata")
 # than trusting the mode filter, or the two merge the day the bot goes live.
 REAL_TRADING_STRATEGY_NAME = "real_trading"
 
+_HAND_BOOK_STRATEGY_NAMES = (REAL_TRADING_STRATEGY_NAME, "tester_paper")
+
 
 def exclude_real_trading(strategy_id_col: Any) -> Any:
     """A WHERE clause keeping only the bot's own rows. Rows with no strategy
     at all are the bot's: only `real_trading` marks a row as hand-bought."""
     real_ids = select(Strategy.id).where(Strategy.name == REAL_TRADING_STRATEGY_NAME)
     return or_(strategy_id_col.is_(None), strategy_id_col.not_in(real_ids))
+
+
+def exclude_hand_books(strategy_id_col: Any) -> Any:
+    """Bot book only — excludes My Holdings and manual paper testing."""
+    excluded = select(Strategy.id).where(Strategy.name.in_(_HAND_BOOK_STRATEGY_NAMES))
+    return or_(strategy_id_col.is_(None), strategy_id_col.not_in(excluded))
 
 
 def portfolio_value_and_cash(
@@ -57,7 +65,7 @@ def portfolio_value_and_cash(
     """
     stmt = select(Position).where(Position.mode == mode, Position.status == PositionStatus.OPEN)
     if bot_book_only:
-        stmt = stmt.where(exclude_real_trading(Position.strategy_id))
+        stmt = stmt.where(exclude_hand_books(Position.strategy_id))
     open_positions = list(db.execute(stmt).scalars().all())
     holdings_value = sum(
         (p.current_price or p.entry_price) * p.quantity for p in open_positions
@@ -290,8 +298,8 @@ def performance_stats(
     if since is not None:
         trades_stmt = trades_stmt.where(Trade.exit_at >= since)
     if bot_book_only:
-        trades_stmt = trades_stmt.where(exclude_real_trading(Trade.strategy_id))
-        positions_stmt = positions_stmt.where(exclude_real_trading(Position.strategy_id))
+        trades_stmt = trades_stmt.where(exclude_hand_books(Trade.strategy_id))
+        positions_stmt = positions_stmt.where(exclude_hand_books(Position.strategy_id))
 
     trades = list(db.execute(trades_stmt).scalars().all())
     total_value, cash = portfolio_value_and_cash(db, mode, bot_book_only=bot_book_only)

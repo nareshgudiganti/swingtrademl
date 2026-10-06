@@ -19,6 +19,7 @@ from swing_trade_ml.db.models.brain import BrainDecision, BrainRun
 from swing_trade_ml.db.models.market import Candle, Instrument
 from swing_trade_ml.db.models.trading import Position
 from swing_trade_ml.services import system_state
+from swing_trade_ml.services.watchlist_snapshots import record_watchlist_snapshot
 
 AS_OF = datetime(2026, 9, 25, 12, 0, tzinfo=UTC)
 
@@ -71,6 +72,8 @@ def test_reader_never_returns_a_price_from_after_as_of(db_session, market):
 
 
 def test_reader_universe_is_the_active_watchlist(db_session, market):
+    # Replays read the watchlist as it was saved that day, never today's.
+    record_watchlist_snapshot(db_session, on=AS_OF.astimezone(ZoneInfo("Asia/Kolkata")).date())
     universe = DatedReader(db_session, as_of=AS_OF, live=False).universe()
     assert {"BRAINABC", "BRAINXYZ"} <= set(universe)
     assert "BRAINOFF" not in universe

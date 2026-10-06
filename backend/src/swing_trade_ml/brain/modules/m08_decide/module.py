@@ -46,6 +46,7 @@ class DecisionEngine(BrainModule):
             "Situation@1",
             "Recall@1",
             "MarketState@1",
+            "SectorState@1",
             "TrackPoint@1",
         ),
         writes=("Decision@1", "Banner@1"),

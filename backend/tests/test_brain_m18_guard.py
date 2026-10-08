@@ -357,7 +357,8 @@ def test_a_practice_brain_idea_refused_by_the_safety_check_writes_no_risk_event(
     strategy = brain_strategy(db_session, name="m18-noise-brain")
     inst = instrument(db_session, "M18NOI", 918311)
     sig = execution.process_decision(db_session, strategy, inst, BUY)
-    assert sig.rejection_reason == "Sector limit reached"  # the reason is still on the idea
+    # the reason is still on the idea, now labelled as practice evidence blocked by a limit
+    assert sig.rejection_reason == f"{execution.BLOCKED_BY_RISK_PREFIX}: Sector limit reached"
     assert db_session.query(RiskEvent).filter_by(strategy_id=strategy.id).count() == 0
 
 

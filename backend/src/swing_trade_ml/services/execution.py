@@ -840,6 +840,22 @@ def _is_practice_brain(db: Session, strategy: Strategy) -> bool:
     return not (stage_now == "approval" or stage_now == "auto")
 
 
+BLOCKED_BY_RISK_KEY = "blocked_by_risk_limit"
+BLOCKED_BY_RISK_PREFIX = "Blocked by a risk limit (practice evidence only)"
+
+
+def _mark_blocked_by_risk(signal: Signal, rule: str | None, reason: str | None) -> None:
+    """Label a practice-brain idea that version 1's risk limits refused.
+
+    The idea is still scored to its outcome (it has stop/target) but is tagged
+    so it is counted separately from ideas that could really have been placed
+    (services/brain_golive/compare.py). Only called for the practice brain;
+    nothing here loosens a limit or changes an order path.
+    """
+    signal.features = {**(signal.features or {}), BLOCKED_BY_RISK_KEY: rule or "OTHER"}
+    signal.rejection_reason = f"{BLOCKED_BY_RISK_PREFIX}: {reason}" if reason else BLOCKED_BY_RISK_PREFIX
+
+
 def process_decision(
     db: Session,
     strategy: Strategy,
@@ -873,6 +889,8 @@ def process_decision(
     if decision.signal == SignalType.BUY and ranked_out_reason:
         signal = record_signal(db, strategy, instrument, decision, mode)
         signal.rejection_reason = ranked_out_reason
+        if _is_practice_brain(db, strategy):
+            _mark_blocked_by_risk(signal, "SLOTS", ranked_out_reason)
         db.commit()
         return signal
 
@@ -1001,7 +1019,10 @@ def process_decision(
 
     if not verdict.allowed:
         signal.rejection_reason = verdict.reason
-        if not _is_practice_brain(db, strategy):
+        if _is_practice_brain(db, strategy):
+            # Kept as labelled practice evidence, but still not a risk event.
+            _mark_blocked_by_risk(signal, verdict.rule, verdict.reason)
+        else:
             # ---- risk events (portfolio risk layer) ----
             # Every check_entry rejection is also logged as a RiskEvent, committed
             # with the signal so the two cannot disagree. check_entry itself stays

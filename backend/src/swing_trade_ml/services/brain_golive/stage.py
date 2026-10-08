@@ -12,7 +12,11 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from swing_trade_ml.db.models.brain_golive import BrainApproval, BrainStageChange
-from swing_trade_ml.services.brain_golive.compare import NEEDED_FINISHED, finished_brain_ideas
+from swing_trade_ml.services.brain_golive.compare import (
+    NEEDED_FINISHED,
+    finished_blocked_brain_ideas,
+    finished_brain_ideas,
+)
 
 STAGES = ("shadow", "approval", "auto")
 AUTO_BY = "automatic stage"  # decided_by on an OK the automatic stage gave (approvals.py)
@@ -130,6 +134,7 @@ def stage_overview(db: Session, history_limit: int = 20) -> dict:
         "stage": stage,
         "plain": PLAIN[stage],
         "finished": finished,
+        "finished_blocked": finished_blocked_brain_ideas(db),
         "needed": NEEDED_FINISHED,
         "ready": finished >= NEEDED_FINISHED,
         "history": [

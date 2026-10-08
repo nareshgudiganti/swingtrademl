@@ -30,6 +30,7 @@ from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.enums import ModelStatus
 from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.db.models.ml import MLModel
+from swing_trade_ml.ml.calibrated_model import CalibratedEstimator, reliability_table
 from swing_trade_ml.ml.dataset import apply_embargo, build_training_dataset, chronological_split
 from swing_trade_ml.ml.features import FEATURE_COLUMNS
 from swing_trade_ml.ml.registry import next_version, save_artifact
@@ -107,6 +108,7 @@ def fit_and_score(
     test_df: pd.DataFrame,
     algorithm: str = "lightgbm",
     hyperparameters: dict[str, Any] | None = None,
+    calibrate: bool = False,
 ) -> tuple[Any, StandardScaler, dict[str, Any]]:
     """Fit on one window and score on the next — no database, no files.
 
@@ -126,7 +128,30 @@ def fit_and_score(
     x_train_s, x_test_s = scaler.transform(x_train), scaler.transform(x_test)
 
     estimator = _build_estimator(algorithm, hyperparameters)
-    estimator.fit(x_train_s, y_train)
+    cal_info: dict[str, Any] | None = None
+    if calibrate:
+        # Base model on the earlier ~75% of the training dates; the isotonic
+        # map is learned on the LATER 25%, whose labels had resolved before the
+        # test window starts (train_df is already purged against it).
+        dates = train_df["ts"].drop_duplicates().sort_values().to_numpy()
+        cut = dates[int(len(dates) * 0.75)]
+        early = train_df["ts"] < cut
+        if "label_end_ts" in train_df.columns:
+            early &= train_df["label_end_ts"] < cut
+        early_m = early.to_numpy()
+        late_m = (train_df["ts"] >= cut).to_numpy()
+        y_early, y_late = y_train[early_m], y_train[late_m]
+        if len(set(y_early)) < 2 or len(set(y_late)) < 2:
+            raise ValueError("Calibration slices need both classes; add history")
+        estimator.fit(x_train_s[early_m], y_early)
+        estimator = CalibratedEstimator.fit(estimator, x_train_s[late_m], y_late)
+        cal_info = {
+            "method": "isotonic",
+            "base_rows": int(early_m.sum()),
+            "calibration_rows": int(late_m.sum()),
+        }
+    else:
+        estimator.fit(x_train_s, y_train)
 
     y_pred = estimator.predict(x_test_s)
     y_proba = (
@@ -161,6 +186,9 @@ def fit_and_score(
         float(y_test[confident].mean()) if confident.any() else 0.0
     )
     metrics["threshold"] = threshold
+    metrics["reliability"] = reliability_table(y_test, y_proba)
+    if cal_info:
+        metrics["calibration"] = cal_info
     return estimator, scaler, metrics
 
 
@@ -170,6 +198,7 @@ def walk_forward(
     embargo_days: int,
     algorithm: str = "lightgbm",
     hyperparameters: dict[str, Any] | None = None,
+    calibrate: bool = False,
 ) -> list[dict[str, Any]]:
     """Score the same recipe on several successive future windows.
 
@@ -237,7 +266,9 @@ def walk_forward(
             log.info("train.walk_forward.skipped", fold=k, reason=reason)
             continue
 
-        _, _, metrics = fit_and_score(train_df, test_df, algorithm, hyperparameters)
+        _, _, metrics = fit_and_score(
+            train_df, test_df, algorithm, hyperparameters, calibrate
+        )
         folds.append({**fold, "skipped": False, "metrics": metrics})
         log.info(
             "train.walk_forward.fold",
@@ -266,6 +297,7 @@ def train_model(
     hyperparameters: dict[str, Any] | None = None,
     auto_activate: bool = False,
     walk_forward_folds: int = 0,
+    calibrate: bool = False,
 ) -> MLModel:
     """Train, evaluate on a held-out future window, and register the result.
 
@@ -306,7 +338,7 @@ def train_model(
     folds = (
         walk_forward(
             dataset, walk_forward_folds, embargo_days=horizon_days,
-            algorithm=algorithm, hyperparameters=hyperparameters,
+            algorithm=algorithm, hyperparameters=hyperparameters, calibrate=calibrate,
         )
         if walk_forward_folds > 0
         else None
@@ -325,7 +357,9 @@ def train_model(
     if train_df["target"].nunique() < 2:
         raise ValueError("Training data has only one class after purging; add history or revise the label")
 
-    estimator, scaler, metrics = fit_and_score(train_df, test_df, algorithm, hyperparameters)
+    estimator, scaler, metrics = fit_and_score(
+        train_df, test_df, algorithm, hyperparameters, calibrate
+    )
     if "split" in train_df.attrs:
         metrics["split"] = train_df.attrs["split"]
     metrics["embargo_days"] = horizon_days
@@ -346,6 +380,7 @@ def train_model(
             "target_return": target_return,
             "stop_return": stop_return,
             "label_kind": "barrier",
+            "calibrated": calibrate,
         },
     )
 

@@ -258,6 +258,7 @@ def cmd_train(args: argparse.Namespace) -> int:
                 stop_return=args.stop_return,
                 auto_activate=args.activate,
                 walk_forward_folds=args.walk_forward_folds,
+                calibrate=args.calibrate,
             )
         except ValueError as exc:
             print(f"❌ {exc}")
@@ -738,6 +739,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=0,
         help="Also score on this many successive earlier windows and store them "
         "in the model's metrics (default: 0, off)",
+    )
+    p.add_argument(
+        "--calibrate",
+        action="store_true",
+        help="Fit an isotonic map on a later slice so a stated 70%% confidence hits "
+        "near 70%% (default: off)",
     )
     p.add_argument("--activate", action="store_true", help="Promote to ACTIVE after training")
     p.set_defaults(func=cmd_train)

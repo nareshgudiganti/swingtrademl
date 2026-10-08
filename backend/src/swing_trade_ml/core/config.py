@@ -12,6 +12,7 @@ from datetime import date, time
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
+from urllib.parse import urlparse
 
 from pydantic import computed_field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -334,6 +335,23 @@ class Settings(BaseSettings):
     @property
     def kite_configured(self) -> bool:
         return bool(self.KITE_API_KEY and self.KITE_API_SECRET)
+
+    def post_login_url(self) -> str:
+        """Where the browser lands after Google sign-in (no trailing slash).
+
+        FRONTEND_URL when it was set. Left at its localhost default while the
+        Google callback address is a real site, the token would be sent to
+        http://localhost:5173 and the app on that site would never see it, so
+        use the site that handled the callback instead.
+        """
+        default = "http://localhost:5173"
+        explicit = self.FRONTEND_URL.rstrip("/")
+        if explicit != default:
+            return explicit
+        callback = urlparse(self.GOOGLE_REDIRECT_URL)
+        if callback.hostname not in (None, "", "localhost", "127.0.0.1"):
+            return f"{callback.scheme}://{callback.netloc}"
+        return default
 
     @computed_field  # type: ignore[prop-decorator]
     @property

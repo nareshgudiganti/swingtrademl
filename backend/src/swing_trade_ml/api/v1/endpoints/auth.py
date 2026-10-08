@@ -360,7 +360,7 @@ def google_callback(code: str, state: str, db: DbSession) -> HTMLResponse | Redi
     db.refresh(user)
 
     jwt_token = create_access_token(user.username, {"uid": user.id})
-    return RedirectResponse(f"{settings.FRONTEND_URL}/?token={jwt_token}")
+    return RedirectResponse(f"{settings.post_login_url()}/?token={jwt_token}")
 
 
 def _unique_username_from_email(db: Session, email: str) -> str:

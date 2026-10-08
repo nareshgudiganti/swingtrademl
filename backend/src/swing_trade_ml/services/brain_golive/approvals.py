@@ -542,7 +542,7 @@ def announce(created: list[BrainApproval]) -> bool:
         "Nothing is bought until you press Approve. An idea not approved and bought by the close of "
         "the next trading day expires. If you approve while the market is closed, it is bought when "
         "the market opens, after every check runs again.\n"
-        f"Open: {settings.FRONTEND_URL.rstrip('/')}/brain#approvals"
+        f"Open: {settings.post_login_url()}/brain#approvals"
     )
     return notifier.send_sync(text, "signal")
 

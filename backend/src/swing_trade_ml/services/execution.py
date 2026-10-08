@@ -91,7 +91,43 @@ def _finalize_open_position(
 ) -> Position:
     """Shared by the broker-filled path and the manual (self-reported) path —
     both end up with the same fill_price/brokerage/taxes, just sourced
-    differently."""
+    differently.
+
+    Buying a stock this strategy already holds does NOT add a row: the open
+    position grows and its entry price becomes the weighted average. Cash
+    (entry_price * quantity + total_charges) stays exact because
+    avg * total_qty equals the sum of what each buy cost."""
+    existing = db.execute(
+        select(Position)
+        .where(
+            Position.mode == mode,
+            Position.instrument_id == instrument.id,
+            Position.strategy_id == strategy.id,
+            Position.status == PositionStatus.OPEN,
+        )
+        .order_by(Position.entry_at)
+    ).scalars().first()
+    if existing is not None:
+        old_qty = existing.quantity
+        new_qty = old_qty + quantity
+        existing.entry_price = (existing.entry_price * old_qty + fill_price * quantity) / new_qty
+        existing.quantity = new_qty
+        existing.initial_quantity = (existing.initial_quantity or old_qty) + quantity
+        existing.total_charges = (existing.total_charges or 0.0) + brokerage + taxes
+        existing.highest_price = max(existing.highest_price or fill_price, fill_price)
+        existing.current_price = fill_price
+        # Keep the existing stop/target and the original entry date: an add
+        # never loosens protection or restarts the time-stop clock. Only fill
+        # them in if the position had none.
+        if existing.stop_loss is None:
+            existing.stop_loss = stop_loss
+            existing.initial_stop_loss = stop_loss
+        if existing.take_profit is None:
+            existing.take_profit = take_profit
+        db.commit()
+        db.refresh(existing)
+        return existing
+
     position = Position(
         strategy_id=strategy.id,
         instrument_id=instrument.id,

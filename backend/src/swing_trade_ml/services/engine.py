@@ -14,8 +14,9 @@ from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.db.models.market import Instrument
 from swing_trade_ml.db.models.trading import Strategy
 from swing_trade_ml.ml.dataset import load_candles
-from swing_trade_ml.services import risk
+from swing_trade_ml.services import risk, score_history
 from swing_trade_ml.services.execution import process_decision
+from swing_trade_ml.services.exit_policy import exit_confidence_for
 from swing_trade_ml.services.limits import limits_for
 from swing_trade_ml.services.portfolio import portfolio_value_and_cash
 from swing_trade_ml.strategies import get_strategy
@@ -103,6 +104,7 @@ def run_strategy(db: Session, strategy: Strategy, interval: str = "day") -> Scan
     )
 
     pending: list[tuple[Instrument, SignalDecision]] = []
+    day_scores: list[tuple[int, float, str | None]] = []
     for instrument in instruments:
         result.instruments_evaluated += 1
         try:
@@ -115,6 +117,12 @@ def run_strategy(db: Session, strategy: Strategy, interval: str = "day") -> Scan
             decision = impl.evaluate(df, instrument, db)
             if decision is None:
                 continue
+
+            # The model's raw read on the stock (not the EXIT-inverted decision
+            # confidence), kept for the stock page's day-by-day trail.
+            raw = (decision.features or {}).get("probability")
+            if isinstance(raw, (int, float)) and not is_staged(strategy):
+                day_scores.append((instrument.id, float(raw), (decision.features or {}).get("model")))
 
             result.signals_generated += 1
             if decision.signal == SignalType.BUY:
@@ -129,6 +137,15 @@ def run_strategy(db: Session, strategy: Strategy, interval: str = "day") -> Scan
             log.error("engine.instrument.failed", strategy=strategy.name,
                       symbol=instrument.tradingsymbol, error=str(exc))
             result.errors.append(message)
+            db.rollback()
+
+    # Display-only; record_stock_scores never raises, so it cannot affect trading.
+    if day_scores:
+        score_history.record_stock_scores(db, day_scores, exit_confidence_for(strategy))
+        try:
+            db.commit()
+        except Exception as exc:  # noqa: BLE001
+            log.warning("engine.stock_scores.commit_failed", error=str(exc))
             db.rollback()
 
     def attempt(instrument, decision, ranked_out_reason=None) -> bool:

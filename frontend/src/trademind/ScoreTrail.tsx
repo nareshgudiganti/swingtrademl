@@ -26,7 +26,7 @@ function Sparkline({ values, color }: { values: number[]; color: string }) {
   const y = (v: number) => h - 3 - Math.max(0, Math.min(1, v)) * (h - 6)
   const pts = values.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ')
   return (
-    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} role="img" aria-label="Score over the days you have held it">
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} role="img" aria-label="Strength score over the recent days">
       <polyline points={pts} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" />
       <circle cx={x(values.length - 1)} cy={y(values[values.length - 1]!)} r={3} fill={color} />
     </svg>

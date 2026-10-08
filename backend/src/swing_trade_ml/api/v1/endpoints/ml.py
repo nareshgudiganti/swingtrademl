@@ -225,6 +225,34 @@ def run_predictions(
     ]
 
 
+@router.get("/score-trail/{symbol}", response_model=dict)
+def stock_score_trail(
+    db: DbSession, symbol: str, exchange: str = "NSE", limit: int = Query(30, le=120)
+) -> dict:
+    """Day-by-day strength score for any stock, held or not (oldest first).
+
+    Days the model was not run are absent — never filled in from a neighbour.
+    """
+    from swing_trade_ml.services import score_history
+    from swing_trade_ml.services.exit_policy import exit_confidence_for
+
+    instrument = db.execute(
+        select(Instrument).where(
+            Instrument.tradingsymbol == symbol.upper(), Instrument.exchange == exchange
+        )
+    ).scalar_one_or_none()
+    if instrument is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown instrument {exchange}:{symbol.upper()}")
+    trail = score_history.stock_trail(db, instrument.id, limit=limit)
+    return {
+        "symbol": instrument.tradingsymbol,
+        "score_trail": trail,
+        "score_band": trail[-1]["band"] if trail else None,
+        "last_score": trail[-1]["score"] if trail else None,
+        "exit_confidence": exit_confidence_for(None),
+    }
+
+
 @router.get("/predictions", response_model=list[PredictionOut])
 def list_predictions(
     db: DbSession,

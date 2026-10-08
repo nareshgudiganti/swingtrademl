@@ -179,6 +179,14 @@ export interface Holding {
   day_change_percentage: number | null
 }
 
+/** Day-by-day strength score for one stock (held or not). Missing days are absent. */
+export interface StockScoreTrail {
+  symbol: string
+  score_trail: { date: string; score: number; band: 'strong' | 'easing' | 'weak'; model_version: string | null }[]
+  score_band: 'strong' | 'easing' | 'weak' | null
+  last_score: number | null
+}
+
 export interface DetailedPosition {
   id: number
   symbol: string

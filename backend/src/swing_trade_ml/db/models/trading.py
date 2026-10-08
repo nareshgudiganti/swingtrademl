@@ -423,6 +423,28 @@ class PositionScore(Base, TimestampMixin):
     alerted: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
+class StockScore(Base, TimestampMixin):
+    """One day's strength score for one stock, held or not.
+
+    Same idea as PositionScore but per stock, so the stock page can show the
+    trail for anything on the watchlist. One row per stock per IST day (a
+    second scan replaces it); a day with no scan has no row, never a copy.
+    """
+
+    __tablename__ = "stock_score_history"
+    __table_args__ = (UniqueConstraint("instrument_id", "as_of", name="uq_stock_score_day"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    instrument_id: Mapped[int] = mapped_column(
+        ForeignKey("instruments.id", ondelete="CASCADE"), index=True
+    )
+    as_of: Mapped[date] = mapped_column(Date)
+    score: Mapped[float] = mapped_column(Float)
+    # strong | easing | weak — see services/score_history.py
+    band: Mapped[str] = mapped_column(String(8))
+    model_version: Mapped[str | None] = mapped_column(String(64))
+
+
 class PortfolioSnapshot(Base, TimestampMixin):
     """Daily equity-curve point.
 

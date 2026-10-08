@@ -30,6 +30,7 @@ import type {
   PlanPick,
   TopPick,
   DetailedPosition,
+  StockScoreTrail,
   EquityPoint,
   FinanceCalculationSummary,
   FinanceCategorySummary,
@@ -370,6 +371,7 @@ export const api = {
   predict: (persist = true) => post<PredictionRun[]>(`/ml/predict?persist=${persist}`),
   // The history behind the accuracy stat: every prediction the bot has ever
   // made, symbol-resolved, with the outcome once its horizon has elapsed.
+  stockScoreTrail: (symbol: string) => get<StockScoreTrail>(`/ml/score-trail/${encodeURIComponent(symbol)}`),
   predictions: (limit = 100) => get<Prediction[]>(`/ml/predictions?limit=${limit}`),
   // "What if we judged this model on X days instead?" — read-only re-score
   // of every prediction on record against an arbitrary horizon.

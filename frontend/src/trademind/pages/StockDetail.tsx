@@ -8,6 +8,7 @@ import type { Action } from '../types'
 import { barsFrom } from '../live-stock'
 import { finalWord, stockSituations, useBrainStatus, useLatestRun, useWhy } from '../live'
 import { wordClassName, wordTagColor, wordTone } from '../vocab'
+import ScoreTrail from '../ScoreTrail'
 import { Confirm } from '../Confirm'
 import { CapFlag, useSymbolCaps } from '../cap'
 import { ActionPill, BrainGate, Candles, Card, CheckItem, Icon, NotConnected, Seg, Tabs, Tag, inr, signed, toneClass } from '../ui'
@@ -121,6 +122,12 @@ function StockDetailBody() {
     queryKey: ['candles', symbol, RANGE_DAYS[range]],
     queryFn: () => api.candles(symbol, RANGE_DAYS[range]),
     enabled: !!symbol,
+  })
+  const trailQ = useQuery({
+    queryKey: ['stock-score-trail', symbol],
+    queryFn: () => api.stockScoreTrail(symbol),
+    enabled: !!symbol,
+    retry: false,
   })
   const bars = useMemo(() => barsFrom(candlesQ.data ?? []), [candlesQ.data])
 
@@ -275,6 +282,23 @@ function StockDetailBody() {
               </div>
             </Card>
           </div>
+
+          <Card title="Strength score, day by day" sub="How strongly the model liked this stock each day it was checked">
+            {trailQ.isLoading ? (
+              <p className="tm-dim">Loading…</p>
+            ) : !trailQ.data || trailQ.data.score_trail.length === 0 ? (
+              <p className="tm-dim">No daily scores saved for this stock yet. The list starts with the next daily check.</p>
+            ) : (
+              <ScoreTrail
+                p={{
+                  entry_confidence: null,
+                  last_confidence: trailQ.data.last_score,
+                  score_trail: trailQ.data.score_trail,
+                  score_band: trailQ.data.score_band,
+                }}
+              />
+            )}
+          </Card>
 
           <div className="tm-grid tm-cols-2">
             <Card title="Situations recognised for this stock">

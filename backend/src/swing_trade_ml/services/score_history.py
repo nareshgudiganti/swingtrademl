@@ -28,8 +28,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from swing_trade_ml.core.config import settings
+from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.core.market_session import IST
-from swing_trade_ml.db.models.trading import PositionScore
+from swing_trade_ml.db.models.trading import PositionScore, StockScore
+
+log = get_logger(__name__)
 
 BANDS = ("strong", "easing", "weak")
 BAND_LABELS = {"strong": "Strong", "easing": "Easing", "weak": "Weak"}
@@ -147,3 +150,72 @@ def trails_for(db: Session, position_ids: list[int], limit: int = 30) -> dict[in
             {"date": r.as_of.isoformat(), "score": r.score, "band": r.band, "model_version": r.model_version}
         )
     return {pid: trail[-limit:] for pid, trail in out.items()}
+
+
+# --------------------------------------------------------------------------
+# Per stock (held or not), for the stock page.
+# --------------------------------------------------------------------------
+
+
+def record_stock_scores(
+    db: Session,
+    scores: list[tuple[int, float, str | None]],
+    exit_confidence: float,
+    today: date | None = None,
+) -> int:
+    """Store today's score for each (instrument_id, score, model_version).
+
+    A second scan the same day replaces that day's row. Never raises: this is
+    a display feature and must not be able to break scanning or trading, so any
+    failure is logged and rolled back inside a savepoint. Returns rows written.
+    """
+    if not scores:
+        return 0
+    today = today or datetime.now(IST).date()
+    try:
+        with db.begin_nested():
+            latest: dict[int, tuple[float, str | None]] = {i: (s, m) for i, s, m in scores}
+            existing = {
+                r.instrument_id: r
+                for r in db.execute(
+                    select(StockScore).where(
+                        StockScore.as_of == today, StockScore.instrument_id.in_(list(latest))
+                    )
+                ).scalars()
+            }
+            for instrument_id, (score, model_version) in latest.items():
+                version = model_version[:64] if model_version else None
+                band = score_band(score, exit_confidence)
+                row = existing.get(instrument_id)
+                if row is None:
+                    db.add(
+                        StockScore(
+                            instrument_id=instrument_id,
+                            as_of=today,
+                            score=score,
+                            band=band,
+                            model_version=version,
+                        )
+                    )
+                else:
+                    row.score, row.band, row.model_version = score, band, version
+        return len(latest)
+    except Exception as exc:  # noqa: BLE001 - never break a scan over a display feature
+        log.warning("score_history.stock_record_failed", error=str(exc))
+        return 0
+
+
+def stock_trail(db: Session, instrument_id: int, limit: int = 30) -> list[dict[str, Any]]:
+    """Oldest-first {date, score, band, model_version} for one stock; gaps stay gaps."""
+    rows = list(
+        db.execute(
+            select(StockScore)
+            .where(StockScore.instrument_id == instrument_id)
+            .order_by(StockScore.as_of.desc())
+            .limit(limit)
+        ).scalars()
+    )
+    return [
+        {"date": r.as_of.isoformat(), "score": r.score, "band": r.band, "model_version": r.model_version}
+        for r in reversed(rows)
+    ]

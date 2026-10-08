@@ -33,6 +33,7 @@ from swing_trade_ml.core.enums import (
 from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.db.models.market import Instrument
 from swing_trade_ml.db.models.trading import Order, Position, Signal, Strategy, Trade
+from swing_trade_ml.ml import real_question
 from swing_trade_ml.notifications import notifier
 from swing_trade_ml.services import risk, score_history, system_state
 from swing_trade_ml.services.costs import compute_charges
@@ -662,7 +663,7 @@ def confidence_decay_status(
     must never trigger this on its own — only a real decline into genuinely
     weaker territory does.
     """
-    min_confidence = settings.ML_MIN_CONFIDENCE if min_confidence is None else min_confidence
+    min_confidence = real_question.min_confidence() if min_confidence is None else min_confidence
     drop_threshold = settings.CONFIDENCE_DECAY_ALERT_PCT if drop_threshold is None else drop_threshold
 
     if entry_confidence is None:
@@ -778,7 +779,7 @@ def position_action(
     advisory positions can reach that state: an automatic strategy closes at
     its stop rather than alerting.
     """
-    min_confidence = settings.ML_MIN_CONFIDENCE if min_confidence is None else min_confidence
+    min_confidence = real_question.min_confidence() if min_confidence is None else min_confidence
 
     if exit_alert_sent:
         return "exit", "Sell alert already sent — it reached its exit level and is still open"

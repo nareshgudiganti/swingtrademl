@@ -22,6 +22,7 @@ from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.db.models.market import Candle, Instrument
 from swing_trade_ml.db.models.ml import MLModel, Prediction
 from swing_trade_ml.db.models.trading import Signal
+from swing_trade_ml.ml import real_question
 from swing_trade_ml.ml.dataset import load_candles
 from swing_trade_ml.ml.features import build_features
 from swing_trade_ml.ml.market_context import (
@@ -127,7 +128,7 @@ def predict_watchlist(
     incident). Pass model_name=None explicitly if that global-latest lookup
     is ever genuinely wanted.
     """
-    model = get_active_model(db, model_name)
+    model = get_active_model(db, real_question.resolve_model_name(model_name))
     if model is None:
         log.warning("predict.no_active_model")
         return []

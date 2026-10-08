@@ -29,6 +29,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from swing_trade_ml.core.config import settings
+from swing_trade_ml.ml import real_question
 
 DEFAULT_SCALE_OUT_FRACTION = 0.5
 DEFAULT_TIME_STOP_DAYS = 30
@@ -55,13 +56,14 @@ def exit_confidence_for(strategy: Any | None) -> float:
     failing. A malformed override falls back rather than raising — this is
     read inside the 60-second exit loop.
     """
+    default = real_question.exit_confidence()  # = ML_EXIT_CONFIDENCE while the switch is off
     raw = (getattr(strategy, "params", None) or {}).get("exit_confidence")
     if raw is None:
-        return settings.ML_EXIT_CONFIDENCE
+        return default
     try:
         return float(raw)
     except (TypeError, ValueError):
-        return settings.ML_EXIT_CONFIDENCE
+        return default
 
 
 def exit_policy_for_strategy(strategy: Any | None) -> ExitPolicy:

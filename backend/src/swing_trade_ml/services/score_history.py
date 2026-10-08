@@ -31,6 +31,7 @@ from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.core.market_session import IST
 from swing_trade_ml.db.models.trading import PositionScore, StockScore
+from swing_trade_ml.ml import real_question
 
 log = get_logger(__name__)
 
@@ -41,7 +42,7 @@ _RANK = {band: i for i, band in enumerate(BANDS)}
 
 def score_band(score: float, exit_confidence: float, min_confidence: float | None = None) -> str:
     """Pure: which band a score falls in."""
-    min_confidence = settings.ML_MIN_CONFIDENCE if min_confidence is None else min_confidence
+    min_confidence = real_question.min_confidence() if min_confidence is None else min_confidence
     if score >= min_confidence:
         return "strong"
     if score >= (min_confidence + exit_confidence) / 2:

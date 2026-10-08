@@ -250,6 +250,15 @@ class Settings(BaseSettings):
     # position is exited on the score rather than waiting for a hard level.
     ML_EXIT_CONFIDENCE: float = 0.35
     ML_TRAIN_TEST_SPLIT: float = 0.2
+    # "Real question" calibrated models - OFF while the suffix is empty (nothing
+    # changes). Set it to "_barrier_cal" and every ml_swing strategy is scored by
+    # the model named <its model_name>_barrier_cal instead; unset it to roll back.
+    # A calibrated score is a true hit rate (~15% on average, not 60-90%), so the
+    # buy bar and weakness line are separate and only used while the suffix is set.
+    # If the named model does not exist the strategy produces no signal at all.
+    ML_REAL_QUESTION_SUFFIX: str = ""
+    ML_REAL_QUESTION_MIN_CONFIDENCE: float = 0.40
+    ML_REAL_QUESTION_EXIT_CONFIDENCE: float = 0.10
     ML_MIN_CONFIDENCE: float = 0.60
     ML_RANDOM_SEED: int = 42
 

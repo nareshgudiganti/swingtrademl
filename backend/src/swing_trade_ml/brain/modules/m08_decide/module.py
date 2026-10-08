@@ -104,6 +104,15 @@ class DecisionEngine(BrainModule):
             for symbol in view.request.universe
             if symbol not in held
         }
+        def _held_score(symbol: str) -> tuple[float, str] | None:
+            # The same raw model score version 1 reads for a stock; None (a gap,
+            # never a guess) when there is no model, no price data or a replay.
+            try:
+                scored = view.reader.model_probability(symbol)
+            except Exception:  # noqa: BLE001 - a score is a by-product, never a reason to fail
+                return None
+            return None if scored is None else (float(scored[0]), "model")
+
         holding_facts = {
             h.symbol: HoldingFacts(
                 holding=h,
@@ -112,6 +121,7 @@ class DecisionEngine(BrainModule):
                 market_mode=mode,
                 notes=modifier_notes(opinions.get(h.symbol, [])),
                 track=view.tracks.get(h.symbol),
+                score=_held_score(h.symbol),
             )
             for h in view.holdings
         }

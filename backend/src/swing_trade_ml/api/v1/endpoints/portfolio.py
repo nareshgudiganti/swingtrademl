@@ -15,6 +15,7 @@ from swing_trade_ml.brokers import get_broker
 from swing_trade_ml.core import market_session
 from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.enums import ExitReason, PositionStatus, SignalType, TradingMode
+from swing_trade_ml.core.strategy_policy import is_staged
 from swing_trade_ml.db.models.market import Candle, Instrument
 from swing_trade_ml.db.models.trading import Position, Signal, Strategy, Trade
 from swing_trade_ml.ml.registry import get_active_model
@@ -29,8 +30,8 @@ from swing_trade_ml.schemas import (
     TesterPaperBuyRequest,
     TradeOut,
 )
+from swing_trade_ml.services import brain_position_score, score_history
 from swing_trade_ml.services import portfolio as portfolio_service
-from swing_trade_ml.services import score_history
 from swing_trade_ml.services.execution import (
     close_position,
     manual_close_position,
@@ -249,6 +250,10 @@ def detailed_positions(
         # Falls back to ml_swing's own default when the strategy doesn't
         # override it — same lookup _check_confidence_decay() uses.
         exit_confidence = exit_confidence_for(position.strategy)
+        is_brain = is_staged(position.strategy)
+        brain_band = None
+        if is_brain:
+            _, brain_band = brain_position_score.latest_for(trails.get(position.id, []), exit_confidence)
         action_code, action_label = position_action(
             position.entry_confidence,
             position.last_confidence,
@@ -290,11 +295,14 @@ def detailed_positions(
                 "last_confidence": position.last_confidence,
                 # Day-by-day score history (oldest first); days with no scan are absent.
                 "score_trail": trails.get(position.id, []),
-                "score_band": (
+                # A brain position's last_confidence is just its entry number, so its
+                # badge comes from the newest day on the trail (None when there is none).
+                "score_band": brain_band if is_brain else (
                     score_history.score_band(position.last_confidence, exit_confidence)
                     if position.last_confidence is not None
                     else None
                 ),
+                "score_from_trail": is_brain,
                 "horizon_days": horizon_days,
                 "action_code": action_code,
                 "action_label": action_label,

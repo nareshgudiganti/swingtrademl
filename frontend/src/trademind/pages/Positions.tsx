@@ -188,9 +188,12 @@ function PositionsBody() {
           <dd style={{ color: 'var(--tm-violet)' }}>up to {selected.horizon_days} trading days</dd>
         </dl>
       )}
-      {pos && ((pos.score_trail?.length ?? 0) > 0 || pos.last_confidence != null) && (
+      {pos &&
+        ((pos.score_trail?.length ?? 0) > 0 || (!pos.score_from_trail && pos.last_confidence != null)) && (
         <div style={{ marginTop: '0.9rem' }}>
-          <div className="tm-dim" style={{ marginBottom: '0.4rem' }}>Strength score since you bought it</div>
+          <div className="tm-dim" style={{ marginBottom: '0.4rem' }}>
+            {pos.score_from_trail ? 'Strength score, day by day' : 'Strength score since you bought it'}
+          </div>
           <ScoreTrail p={pos} />
         </div>
       )}

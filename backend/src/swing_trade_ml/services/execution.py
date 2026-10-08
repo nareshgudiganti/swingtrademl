@@ -1646,12 +1646,18 @@ def _other_book_note(position_mode: str, bot_mode: str) -> str:
     )
 
 
-def _score_band_message(instrument, position, current_confidence, band, mode) -> str:
+def _score_band_message(
+    instrument, position, current_confidence, band, mode, baseline=None, baseline_label="entered"
+) -> str:
+    """`baseline`/`baseline_label` let the brain path say "first tracked" with
+    its own first score, since a brain position's entry number can be a
+    different kind of score than the daily one."""
     badge = "📝 PAPER" if mode == "paper" else "💰 <b>LIVE</b>"
-    entry = f"{position.entry_confidence:.0%}" if position.entry_confidence is not None else "—"
+    start = baseline if baseline_label != "entered" else position.entry_confidence
+    entry = f"{start:.0%}" if start is not None else "—"
     return (
         f"📉 <b>SCORE SLIPPING · {instrument.tradingsymbol}</b>  ({badge})\n\n"
-        f"Score: entered <b>{entry}</b> → now <b>{current_confidence:.0%}</b> "
+        f"Score: {baseline_label} <b>{entry}</b> → now <b>{current_confidence:.0%}</b> "
         f"({score_history.BAND_LABELS[band]})\n\n"
         f"The score is the model's current read on the stock, not a promise. "
         f"This is a heads-up, not a sell order — open the stock in TradeMind to see "

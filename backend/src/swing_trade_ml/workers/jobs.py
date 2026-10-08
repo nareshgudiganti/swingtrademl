@@ -640,6 +640,10 @@ def _run_brain_now(brain_service, kind: str) -> None:
                 from swing_trade_ml.brain.alerts import service as brain_alerts
 
                 brain_alerts.send(db, run_id)
+            # Day-by-day strength score for brain-owned positions; never raises.
+            from swing_trade_ml.services import brain_position_score
+
+            brain_position_score.after_run(db, run_id)
     except Exception as exc:
         _report_error(f"brain {kind} run", exc)
         raise _BrainRunFailedError from exc

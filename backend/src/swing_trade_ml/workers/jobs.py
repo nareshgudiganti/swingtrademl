@@ -733,3 +733,23 @@ def job_brain_learn() -> None:
             log.info("job.brain.learn.done", n_scored=report["n_scored"], new_proposals=n_new)
     except Exception as exc:  # noqa: BLE001
         _report_error("brain_learn", exc)
+
+
+def job_brain_weekly_health() -> None:
+    """Saturday: run the owner's weekly checklist, store the result and send
+    one Telegram summary. Reads and reports only; never raised, and a
+    disabled Telegram still leaves the stored result (like every brain job)."""
+    from swing_trade_ml.services import brain_weekly_health as weekly
+
+    try:
+        with session_scope() as db:
+            result = weekly.compute_checks(db)
+            weekly.store_result(db, result)
+        log.info(
+            "job.brain.weekly_health.done",
+            status=result["status"],
+            failing=[c["name"] for c in result["checks"] if not c["ok"]],
+        )
+        notifier.send_sync(weekly.format_message(result))
+    except Exception as exc:  # noqa: BLE001
+        _report_error("brain_weekly_health", exc)

@@ -218,6 +218,14 @@ def health(db: DbSession) -> dict:
     return service.health(db)
 
 
+@router.get("/weekly-health")
+def weekly_health(db: DbSession) -> dict:
+    """The last Saturday health check, as stored by the weekly job."""
+    from swing_trade_ml.services import brain_weekly_health
+
+    return brain_weekly_health.latest_result(db)
+
+
 class WhatIfIn(BaseModel):
     symbol: str
     qty: int = Field(gt=0)

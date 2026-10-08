@@ -259,6 +259,13 @@ def add_brain_jobs(target: BackgroundScheduler) -> None:
         id="brain_learn",
         replace_existing=True,
     )
+    # An hour after the learning run, so its drift result is in the report.
+    target.add_job(
+        jobs.job_brain_weekly_health,
+        CronTrigger(day_of_week="sat", hour=11, minute=0, timezone=IST),
+        id="brain_weekly_health",
+        replace_existing=True,
+    )
 
 
 def stop_scheduler() -> None:

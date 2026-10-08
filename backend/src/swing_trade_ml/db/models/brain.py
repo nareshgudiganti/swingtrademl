@@ -139,6 +139,19 @@ class BrainLearningRun(Base):
     drift_note: Mapped[str | None] = mapped_column(Text)
 
 
+class BrainWeeklyHealth(Base):
+    """One run of the Saturday health check (services/brain_weekly_health.py),
+    kept so the last result can be read back without recomputing it. Only the
+    newest row is ever read; older ones are a small history."""
+
+    __tablename__ = "brain_weekly_health"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    status: Mapped[str] = mapped_column(String(8))  # ok | check
+    checks: Mapped[list] = mapped_column(JSONB, default=list)
+
+
 class BrainModuleSetting(Base, TimestampMixin):
     """The owner's switch for one module. No row means the module's default."""
 

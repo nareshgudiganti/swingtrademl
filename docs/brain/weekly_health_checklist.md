@@ -2,6 +2,32 @@
 
 ~15 minutes once per week on a trading day. Full detail: [TESTING.md](TESTING.md).
 
+## Automatic check (runs for you)
+
+A worker job runs **every Saturday at 11:00 IST** (an hour after the weekly learning run). It only
+reads and reports: it places no orders and changes nothing. It stores the result and sends **one**
+Telegram message (if Telegram is on; if not, the result is still stored). Read the last result any
+time with `GET /brain/weekly-health` (needs `X-API-Key`; says "not run yet" before the first run).
+
+Each line starts with **OK** (fine) or **CHECK** (look at this). Lines marked for information
+never fail.
+
+| Line | What it means |
+|------|---------------|
+| Nightly run | The last finished nightly brain run is from the latest trading day (weekends and NSE holidays do not count against it). |
+| Failed runs | No brain runs failed in the last 7 days. |
+| Data freshness | The data check from the last nightly run says prices are fresh. |
+| Feed: delivery / bulk and block deals / FII/DII flows | Each side feed has data from within the last 3 trading days. |
+| Key modules | M01, M02, M07 and M08 are all on. |
+| Trading stage | Still Practice (shadow). CHECK if the stage changed. |
+| Finished ideas | "N of 30" finished brain ideas. Information only. |
+| Banner | The current banner (NORMAL, DEFENSIVE or NO NEW TRADES). Information only. |
+| Learning and drift | This Saturday's learning/drift result, or "Not checked yet". Information only. |
+| Model backup | Date of the newest file in the model backup folder. CHECK (warning) if no backup folder is set up or it is empty: backup runs are not recorded anywhere, so nothing is guessed. |
+
+If the message says all good, you can skip the manual steps below. They stay as a fallback (for
+example if no message arrives, which itself means the worker or Telegram needs a look).
+
 ## Quick UI (Level 1)
 
 - [ ] Brain / TradeMind loads; latest **nightly** is the last trading day.

@@ -44,6 +44,7 @@ def test_brain_jobs_register_nightly_intraday_learn_approvals_open_and_run_queue
         "brain_nightly",
         "brain_intraday",
         "brain_learn",
+        "brain_weekly_health",
         "brain_approvals_open",  # M18: buys approved-while-closed ideas at the open
         "brain_run_queue",  # one-app step 1: runs queued "Run the brain now" requests
     }

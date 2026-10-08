@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import { ApiError, api, googleLoginUrl, setToken } from '../api/client'
 
@@ -11,6 +11,16 @@ export default function AuthScreen() {
   const [email, setEmail] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  // null until the server answers; if it never does, keep the old behaviour
+  // (offer sign-up) rather than hide a link that may work.
+  const [signupAllowed, setSignupAllowed] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    api
+      .authOptions()
+      .then((o) => setSignupAllowed(o.signup_allowed))
+      .catch(() => setSignupAllowed(true))
+  }, [])
 
   async function submit(event: React.FormEvent) {
     event.preventDefault()
@@ -97,12 +107,16 @@ export default function AuthScreen() {
 
         <p className="muted" style={{ fontSize: '0.82rem', marginTop: '1rem', textAlign: 'center' }}>
           {mode === 'login' ? (
-            <>
-              No account?{' '}
-              <a href="#" onClick={(e) => (e.preventDefault(), setMode('signup'))} style={{ textDecoration: 'underline' }}>
-                Sign up
-              </a>
-            </>
+            signupAllowed === false ? (
+              <>Sign-up is closed on this server. To get access, ask the owner.</>
+            ) : (
+              <>
+                No account?{' '}
+                <a href="#" onClick={(e) => (e.preventDefault(), setMode('signup'))} style={{ textDecoration: 'underline' }}>
+                  Sign up
+                </a>
+              </>
+            )
           ) : (
             <>
               Already have an account?{' '}

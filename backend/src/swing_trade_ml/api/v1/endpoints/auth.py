@@ -32,6 +32,12 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 log = get_logger(__name__)
 
 
+@router.get("/options")
+def auth_options() -> dict[str, bool]:
+    """What the login page may offer. Public: it is read before anyone is signed in."""
+    return {"signup_allowed": settings.ALLOW_SIGNUP}
+
+
 @router.post("/login", response_model=TokenResponse)
 def login(payload: LoginRequest, db: DbSession) -> TokenResponse:
     user = db.execute(select(User).where(User.username == payload.username)).scalar_one_or_none()

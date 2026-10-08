@@ -9,7 +9,7 @@ import { api } from '../api/client'
 import { clearToken } from '../api/client'
 import { formatDateTime } from '../lib/format'
 import { useBrainStatus, useLatestRun, useMarketSession } from './live'
-import { Icon } from './ui'
+import { Card, Icon } from './ui'
 import Home from './pages/Home'
 import Market from './pages/Market'
 import Opportunities from './pages/Opportunities'
@@ -204,7 +204,25 @@ export default function TradeMindApp({ ownerConsole = false }: TradeMindAppProps
           <Route path="portfolio" element={<Portfolio />} />
           <Route path="positions" element={<Positions />} />
           <Route path="positions/:symbol" element={<Positions />} />
-          <Route path="testing" element={ownerConsole ? <PaperPositions /> : <Navigate to="/trademind/positions" replace />} />
+          <Route
+            path="testing"
+            element={
+              !ownerConsole ? (
+                <Navigate to="/trademind/positions" replace />
+              ) : broker.data?.paper_tester_enabled === false ? (
+                <div className="tm-page tm-grid">
+                  <Card glow title="Testing is switched off" sub="Paper testing is not turned on for this server.">
+                    <p>
+                      Nothing is broken. The owner switch for manual paper trades (PAPER_TESTER_ENABLED) is off on the
+                      server, so buying here is refused. Your real Positions tab is not affected.
+                    </p>
+                  </Card>
+                </div>
+              ) : (
+                <PaperPositions />
+              )
+            }
+          />
           <Route path="ai" element={<AIDecision />} />
           <Route path="ai/:symbol" element={<AIDecision />} />
           <Route path="risk" element={ownerConsole ? <Risk /> : <Navigate to="/trademind" replace />} />

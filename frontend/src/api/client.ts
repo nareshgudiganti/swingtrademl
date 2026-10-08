@@ -255,6 +255,7 @@ export const api = {
     post<{ access_token: string }>('/auth/login', { username, password }),
   signup: (username: string, password: string, email?: string) =>
     post<{ access_token: string }>('/auth/signup', { username, password, email }),
+  authOptions: () => get<{ signup_allowed: boolean }>('/auth/options'),
   me: () => get<CurrentUser>('/auth/me'),
   kiteLogin: () => get<KiteLoginResponse>('/auth/kite/login'),
 

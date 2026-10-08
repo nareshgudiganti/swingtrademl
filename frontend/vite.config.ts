@@ -12,6 +12,13 @@ export default defineConfig({
       // get the new version next time they open the app, not mid-click.
       registerType: 'prompt',
       includeAssets: ['favicon-32.png', 'apple-touch-icon.png'],
+      workbox: {
+        // The service worker answers every page navigation with the app shell
+        // (index.html). That must not apply to the API: "Sign in with Google"
+        // and the Kite login callback are full-page navigations to /api/...,
+        // and the worker was swallowing them and showing the sign-in page again.
+        navigateFallbackDenylist: [/^\/api\//],
+      },
       manifest: {
         name: 'Swing Trade ML',
         short_name: 'SwingML',

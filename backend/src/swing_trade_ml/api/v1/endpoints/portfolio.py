@@ -30,6 +30,7 @@ from swing_trade_ml.schemas import (
     TradeOut,
 )
 from swing_trade_ml.services import portfolio as portfolio_service
+from swing_trade_ml.services import score_history
 from swing_trade_ml.services.execution import (
     close_position,
     manual_close_position,
@@ -230,6 +231,8 @@ def detailed_positions(
         ):
             prev_close_by_instrument[inst_id] = float(close)
 
+    trails = score_history.trails_for(db, [position.id for position, _, _ in rows])
+
     result = []
     for position, symbol, name in rows:
         current = position.current_price or position.entry_price
@@ -285,6 +288,13 @@ def detailed_positions(
                 "sector": _position_sector(symbol),
                 "entry_confidence": position.entry_confidence,
                 "last_confidence": position.last_confidence,
+                # Day-by-day score history (oldest first); days with no scan are absent.
+                "score_trail": trails.get(position.id, []),
+                "score_band": (
+                    score_history.score_band(position.last_confidence, exit_confidence)
+                    if position.last_confidence is not None
+                    else None
+                ),
                 "horizon_days": horizon_days,
                 "action_code": action_code,
                 "action_label": action_label,

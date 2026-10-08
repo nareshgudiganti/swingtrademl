@@ -204,6 +204,9 @@ export interface DetailedPosition {
   sector?: string | null
   entry_confidence: number | null
   last_confidence: number | null
+  /** One entry per day with a real reading, oldest first. Missing days are absent. */
+  score_trail?: { date: string; score: number; band: 'strong' | 'easing' | 'weak'; model_version: string | null }[]
+  score_band?: 'strong' | 'easing' | 'weak' | null
   horizon_days: number | null
   action_code: 'exit' | 'alert' | 'weak' | 'dip' | 'bullish' | 'hold'
   action_label: string

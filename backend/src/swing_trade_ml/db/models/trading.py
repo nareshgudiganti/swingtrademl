@@ -9,13 +9,14 @@ live P&L, and the paper track record stays queryable afterwards.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 from sqlalchemy import (
     JSON,
     BigInteger,
     Boolean,
+    Date,
     DateTime,
     Float,
     ForeignKey,
@@ -23,6 +24,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -392,6 +394,33 @@ class Trade(Base, TimestampMixin):
 
     def __repr__(self) -> str:
         return f"<Trade {self.symbol} pnl={self.net_pnl:.2f} ({self.return_pct:.2%})>"
+
+
+class PositionScore(Base, TimestampMixin):
+    """One day's strength score for one held position.
+
+    The Positions page used to keep only the entry score and the latest one, so
+    "91 -> 89 -> 80 -> 70 -> 50" could not be shown. One row per position per
+    IST day: a second scan the same day replaces that day's row. A day with no
+    scan simply has no row — the trail shows a gap, never yesterday's number.
+    """
+
+    __tablename__ = "position_score_history"
+    __table_args__ = (UniqueConstraint("position_id", "as_of", name="uq_position_score_day"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    position_id: Mapped[int] = mapped_column(
+        ForeignKey("positions.id", ondelete="CASCADE"), index=True
+    )
+    as_of: Mapped[date] = mapped_column(Date)
+    score: Mapped[float] = mapped_column(Float)
+    # strong | easing | weak — see services/score_history.py
+    band: Mapped[str] = mapped_column(String(8))
+    # Which model produced it, so a retrain shows up as a break in the trail
+    # rather than a fake cliff.
+    model_version: Mapped[str | None] = mapped_column(String(64))
+    # A "score is falling" message already went out for this day.
+    alerted: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class PortfolioSnapshot(Base, TimestampMixin):

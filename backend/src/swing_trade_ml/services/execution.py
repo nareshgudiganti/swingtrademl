@@ -34,7 +34,7 @@ from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.db.models.market import Instrument
 from swing_trade_ml.db.models.trading import Order, Position, Signal, Strategy, Trade
 from swing_trade_ml.notifications import notifier
-from swing_trade_ml.services import risk, system_state
+from swing_trade_ml.services import risk, score_history, system_state
 from swing_trade_ml.services.costs import compute_charges
 from swing_trade_ml.services.exit_policy import (
     exit_confidence_for,
@@ -664,8 +664,21 @@ def _check_confidence_decay(
         already_alerted=position.confidence_alert_sent_at is not None,
     )
 
+    # Keep the day's score for the trail, and learn whether it just slipped
+    # into a worse band (strong -> easing -> weak) versus the last day on file.
+    recorded = score_history.record_score(
+        db,
+        position.id,
+        current_confidence,
+        exit_confidence,
+        model_version=(strategy.params or {}).get("model_name"),
+        entry_score=position.entry_confidence,
+    )
+
     if status == "alert":
         position.confidence_alert_sent_at = datetime.now(UTC)
+        # This message already covers the band change; one per day is enough.
+        score_history.mark_alerted(db, position.id)
         db.commit()
         notifier.send_sync(
             _confidence_decay_message(instrument, position, current_confidence, mode), "signal"
@@ -674,7 +687,14 @@ def _check_confidence_decay(
     if status == "reset":
         position.confidence_alert_sent_at = None
 
+    send_band_alert = recorded.worsened and not recorded.already_alerted
+    if send_band_alert:
+        score_history.mark_alerted(db, position.id)
     db.commit()
+    if send_band_alert:
+        notifier.send_sync(
+            _score_band_message(instrument, position, current_confidence, recorded.band, mode), "signal"
+        )
 
 
 # Smaller than settings.CONFIDENCE_DECAY_ALERT_PCT (0.15) on purpose: this is
@@ -1623,6 +1643,22 @@ def _other_book_note(position_mode: str, bot_mode: str) -> str:
     return (
         f"This position belongs to the {position_mode} book while the bot is in {bot_mode} "
         "mode, so it is not sold automatically."
+    )
+
+
+def _score_band_message(instrument, position, current_confidence, band, mode) -> str:
+    badge = "📝 PAPER" if mode == "paper" else "💰 <b>LIVE</b>"
+    entry = f"{position.entry_confidence:.0%}" if position.entry_confidence is not None else "—"
+    return (
+        f"📉 <b>SCORE SLIPPING · {instrument.tradingsymbol}</b>  ({badge})\n\n"
+        f"Score: entered <b>{entry}</b> → now <b>{current_confidence:.0%}</b> "
+        f"({score_history.BAND_LABELS[band]})\n\n"
+        f"The score is the model's current read on the stock, not a promise. "
+        f"This is a heads-up, not a sell order — open the stock in TradeMind to see "
+        f"the day-by-day trail and the brain's view.\n\n"
+        f"Entry: ₹{position.entry_price:,.2f}  ·  "
+        f"Current: ₹{position.current_price or position.entry_price:,.2f}\n"
+        f"Stop: ₹{position.stop_loss or 0:,.2f}  ·  Target: ₹{position.take_profit or 0:,.2f}"
     )
 
 

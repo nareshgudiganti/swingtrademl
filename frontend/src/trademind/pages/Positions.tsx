@@ -11,6 +11,7 @@ import { wordTagColor, wordTone } from '../vocab'
 import { BrainGate, Card, CheckItem, Icon, Seg, Tabs, Tag, inr, signed, toneClass } from '../ui'
 import { PositionBand } from '../PositionBand'
 import { Confirm } from '../Confirm'
+import ScoreTrail from '../ScoreTrail'
 
 const TABS = ['Position Overview', 'Re-evaluation & Exit', 'Notes'] as const
 type TabId = (typeof TABS)[number]
@@ -186,6 +187,12 @@ function PositionsBody() {
           <dt>Horizon</dt>
           <dd style={{ color: 'var(--tm-violet)' }}>up to {selected.horizon_days} trading days</dd>
         </dl>
+      )}
+      {pos && ((pos.score_trail?.length ?? 0) > 0 || pos.last_confidence != null) && (
+        <div style={{ marginTop: '0.9rem' }}>
+          <div className="tm-dim" style={{ marginBottom: '0.4rem' }}>Strength score since you bought it</div>
+          <ScoreTrail p={pos} />
+        </div>
       )}
     </Card>
   )

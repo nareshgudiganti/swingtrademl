@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../../api/client'
 import type { DetailedPosition, RealReport } from '../../api/types'
 import { Confirm } from '../Confirm'
+import ScoreTrail from '../ScoreTrail'
 import { Card, PageHead, Tabs, Tag, inr, signed, toneClass } from '../ui'
 
 const TABS = ['My holdings', 'Straight from Zerodha', 'Real-money report'] as const
@@ -76,11 +77,6 @@ const VERDICT: Record<DetailedPosition['action_code'], { head: string; tone: 're
   hold: { head: 'Steady, no change.', tone: 'blue' },
   bullish: { head: 'Still looking good.', tone: 'green' },
 }
-
-const confidenceText = (p: DetailedPosition) =>
-  p.entry_confidence != null || p.last_confidence != null
-    ? `${p.entry_confidence != null ? pct(p.entry_confidence) : '—'} → ${p.last_confidence != null ? pct(p.last_confidence) : '—'}`
-    : '—'
 
 function stopText(p: DetailedPosition) {
   if (p.stop_loss == null) return '—'
@@ -241,6 +237,9 @@ function HoldingsTab() {
                 </div>
                 <div className="tm-strong" style={{ marginTop: '0.3rem' }}>{VERDICT[p.action_code].head}</div>
                 <div className="tm-dim" style={{ marginTop: '0.2rem', overflowWrap: 'anywhere' }}>{p.action_label}</div>
+                <div style={{ marginTop: '0.5rem' }}>
+                  <ScoreTrail p={p} />
+                </div>
                 <div className="tm-dim" style={{ marginTop: '0.4rem' }}>
                   {p.quantity} shares · paid {rupees(p.entry_price)} · now {rupees(p.current_price)} ·{' '}
                   <span className={toneClass(p.unrealized_pnl)}>{signedRupees(p.unrealized_pnl)}</span>
@@ -256,7 +255,7 @@ function HoldingsTab() {
       {rows.length > 0 && (
         <Card
           title="Every share you hold"
-          sub="Confidence is how sure the bot was when you bought, then how sure it is now."
+          sub="Score is how strongly the model liked the stock when you bought it, then how strongly it likes it now (out of 100)."
         >
           <div className="tm-table-wrap">
             <table className="tm-table">
@@ -269,7 +268,7 @@ function HoldingsTab() {
                   <th className="tm-right">Gain or loss</th>
                   <th className="tm-right">Stop-loss</th>
                   <th className="tm-right">Target</th>
-                  <th className="tm-right">Confidence</th>
+                  <th className="tm-right">Score (bought → now)</th>
                   <th>The bot says</th>
                   <th />
                 </tr>
@@ -286,7 +285,7 @@ function HoldingsTab() {
                     </td>
                     <td className="tm-right">{p.stop_loss != null ? rupees(p.stop_loss) : '—'}</td>
                     <td className="tm-right">{p.take_profit != null ? rupees(p.take_profit) : '—'}</td>
-                    <td className="tm-right">{confidenceText(p)}</td>
+                    <td className="tm-right"><ScoreTrail p={p} compact /></td>
                     <td className="tm-wrap">
                       <Tag tone={VERDICT[p.action_code].tone}>{VERDICT[p.action_code].head}</Tag>
                     </td>

@@ -139,6 +139,10 @@ const LIVE_ACK_STORAGE = 'stml_live_trading_ack'
 // screen and drop the token.
 captureTokenFromRedirect()
 
+function plansPathEarly(path: string): boolean {
+  return path === '/plans' || path.startsWith('/plans/') || path === '/trademind/plans'
+}
+
 function NotInPlan({ plan }: { plan: string }) {
   return (
     <div className="card" style={{ maxWidth: 520 }}>
@@ -164,7 +168,7 @@ export default function App() {
     refetchInterval: 30_000,
     enabled: hasToken && (seesAll || canManage),
   })
-  const { data: me } = useQuery({
+  const { data: me, isError: meFailed } = useQuery({
     queryKey: ['me'],
     queryFn: api.me,
     enabled: hasToken,
@@ -238,6 +242,10 @@ export default function App() {
     )
   }
 
+  // Wait for who-you-are and the plan before drawing any menu, so the classic
+  // tabs never flash up on the way into TradeMind.
+  if ((!me && !meFailed) || (planLoading && !plansPathEarly(location.pathname))) return <Loading />
+
   const waiting = statusFailed ? <Navigate to="/dashboard" replace /> : <p className="muted">Loading…</p>
 
   const isOwner = canManage || !!me?.is_superuser
@@ -301,6 +309,12 @@ export default function App() {
       return planLoading || !plan ? <Loading /> : waiting
     }
     return <TradeMindApp ownerConsole={isOwner} />
+  }
+
+  // Brain on and TradeMind allowed for this account → TradeMind is the whole
+  // app. The classic screens stay routed (below) for accounts without it.
+  if (canTradeMind) {
+    return <Navigate to="/trademind" replace />
   }
 
   if (isOwner && !status && !statusFailed) {

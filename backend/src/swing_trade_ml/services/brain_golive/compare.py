@@ -20,6 +20,12 @@ TARGET = "TARGET_HIT"
 STOP = "STOP_LOSS_HIT"
 NEEDED_FINISHED = 30
 MIN_FINISHED_TO_COMPARE = 10
+# Practice ideas that version 1's risk limits (market-stress cap, slots, cash...) refused are still
+# recorded and scored, tagged in Signal.features (execution.BLOCKED_BY_RISK_KEY). They are counted
+# SEPARATELY and, conservatively, do NOT count toward the 30-idea gate: only ideas that could really
+# have been placed do. Flip this one switch (owner's call) to count them toward the gate as well.
+COUNT_BLOCKED_TOWARD_GATE = False
+BLOCKED_KEY = "blocked_by_risk_limit"  # == services.execution.BLOCKED_BY_RISK_KEY (not imported: cycle)
 EXCLUDED_TYPES = ("long_term_value",)  # a one-year horizon is not comparable
 
 
@@ -32,6 +38,7 @@ class Row:
     generated_at: datetime
     outcome: str | None
     outcome_pct: float | None
+    blocked: bool = False  # brain idea refused by a v1 risk limit (practice evidence only)
 
 
 def one_per_day(rows: list[Row]) -> list[Row]:
@@ -83,7 +90,8 @@ def _note(n_days: int, brain: dict, v1: dict, min_finished: int) -> str:
 
 def compare(rows: list[Row], brain_days: set[date], min_finished: int = MIN_FINISHED_TO_COMPARE) -> dict:
     rows = [r for r in one_per_day(rows) if r.day in brain_days]
-    brain = [r for r in rows if r.is_brain]
+    brain = [r for r in rows if r.is_brain and not r.blocked]
+    blocked = [r for r in rows if r.is_brain and r.blocked]
     v1 = [r for r in rows if not r.is_brain]
     names = sorted({r.strategy for r in brain}) + sorted({r.strategy for r in v1})
     brain_names = {r.strategy for r in brain}
@@ -98,6 +106,7 @@ def compare(rows: list[Row], brain_days: set[date], min_finished: int = MIN_FINI
             for n in names
         ],
         "brain": b,
+        "brain_blocked": summarise(blocked),
         "version1": v,
         "by_week": [
             {
@@ -118,6 +127,7 @@ def load(db: Session, since: date | None = None) -> tuple[list[Row], set[date]]:
             Signal.generated_at,
             Signal.outcome,
             Signal.outcome_pct,
+            Signal.features,
             Strategy.name,
             Strategy.strategy_type,
             Instrument.tradingsymbol,
@@ -150,17 +160,39 @@ def load(db: Session, since: date | None = None) -> tuple[list[Row], set[date]]:
             generated_at=generated,
             outcome=outcome,
             outcome_pct=pct,
+            blocked=bool(stype in STAGED_TYPES and isinstance(features, dict) and features.get(BLOCKED_KEY)),
         )
-        for generated, outcome, pct, name, stype, symbol in db.execute(stmt)
+        for generated, outcome, pct, features, name, stype, symbol in db.execute(stmt)
     ]
     return rows, {d for (d,) in db.execute(days_stmt)}
 
 
-def finished_brain_ideas(db: Session) -> int:
+def _finished_brain(db: Session, blocked: bool) -> int:
     rows, _ = load(db)
-    return sum(1 for r in one_per_day(rows) if r.is_brain and r.outcome is not None)
+    return sum(
+        1 for r in one_per_day(rows) if r.is_brain and r.outcome is not None and r.blocked == blocked
+    )
+
+
+def finished_placeable_brain_ideas(db: Session) -> int:
+    """Finished brain ideas that could really have been placed (not blocked by a risk limit)."""
+    return _finished_brain(db, False)
+
+
+def finished_blocked_brain_ideas(db: Session) -> int:
+    """Finished practice ideas that a v1 risk limit blocked (shown separately)."""
+    return _finished_brain(db, True)
+
+
+def finished_brain_ideas(db: Session) -> int:
+    """The number the go-live gate uses (see COUNT_BLOCKED_TOWARD_GATE)."""
+    n = finished_placeable_brain_ideas(db)
+    return n + finished_blocked_brain_ideas(db) if COUNT_BLOCKED_TOWARD_GATE else n
 
 
 def report(db: Session, since: date | None = None) -> dict:
     rows, days = load(db, since)
-    return {**compare(rows, days), "brain_finished": finished_brain_ideas(db), "needed": NEEDED_FINISHED}
+    return {**compare(rows, days), "brain_finished": finished_brain_ideas(db),
+        "brain_finished_placeable": finished_placeable_brain_ideas(db),
+        "brain_finished_blocked": finished_blocked_brain_ideas(db),
+        "needed": NEEDED_FINISHED}

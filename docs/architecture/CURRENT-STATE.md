@@ -68,7 +68,18 @@
 - **Brain records no ideas while the market is stressed (diagnosed 2026-10-08)**: the brain reaches TRADE
   for ~119 stocks, then version 1's market-stress rule (`services/risk.py`, max 10% invested) rejects
   108 of them because the two open paper positions already use the cap. So "N of 30" stays 0. Not caused
-  by the DEFENSIVE rule or by M06. Owner to choose how to count blocked ideas.
+  by the DEFENSIVE rule or by M06. **Owner chose option B (2026-10-09); implemented on a worktree branch,
+  not yet on `main`.** In practice mode only, a brain idea refused by a v1 risk limit (market-stress cap,
+  slots, cash, sector...) is tagged `features["blocked_by_risk_limit"]` and its reason is prefixed
+  "Blocked by a risk limit (practice evidence only)". It is scored to outcome like any idea but is NOT a
+  risk event, and no limit or order path changed. **Counting (conservative):** the "N of 30" gate counts
+  only ideas that could really have been placed; blocked ones are reported separately
+  (`finished_blocked` on `/brain/stage`, `brain_finished_blocked` on the compare report) and excluded
+  from the brain-vs-v1 hit rate. One switch, `COUNT_BLOCKED_TOWARD_GATE` in
+  `services/brain_golive/compare.py`, lets the owner count them toward the gate too. Note: rejected brain
+  signals were already being saved and scored before this change (untagged), so those older ones still
+  count as before; a 0 may also simply mean 15-day horizons have not finished yet. The frontend does not
+  show the new blocked number yet.
 
 - **M06 SHADOW**: meta-model below break-even; ideas often **WAIT** — expected until evidence improves.
 - **Gap #3**: no adjusted price layer; B0 clean 2026-10-05 — monitor with periodic `brain split-check`.

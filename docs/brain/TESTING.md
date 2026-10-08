@@ -101,6 +101,26 @@ From `backend/` with `.venv` and Docker Postgres up:
 | `brain run` | Prints `Run <run_id> …` and stock lines; ends without traceback | Exception or hang > 30 min |
 | `brain why` | Full trace for one symbol | Exception |
 
+**Validation week and the learning watchdog:**
+
+```powershell
+.\.venv\Scripts\python.exe -m swing_trade_ml.cli brain validate-week --days 5 [--out path.json]
+.\.venv\Scripts\python.exe -m swing_trade_ml.cli brain rescore-learning
+```
+
+`validate-week` is `replay-week` plus a JSON evidence report (default `docs/brain/evidence/validation_week_<from>_<to>.json`: run ids, data manifest, word counts, safety-rule booleans, decision fingerprint, `/brain/compare` snapshot) and a short plain-English summary. The golden-day and WHY-integrity checks run in the test suite (`tests/test_brain_golden_day.py`, `tests/test_brain_validation.py`).
+
+Exit codes for `rescore-learning`, `learn` and `validate-week` (use them in cron or a watchdog):
+
+| Code | Meaning |
+|------|---------|
+| 0 | Finished. For `validate-week`: every safety rule held on every replayed day. |
+| 1 | Failed (error logged at error level). `rescore-learning` / `learn` also send one Telegram alert through the normal notifier. Also used for bad `--days/--from/--to` and a busy run lock. |
+| 2 | Bad command-line arguments (argparse). |
+| 3 | `validate-week` only: the replay ran and the report was written, but a safety rule was broken on some day. Read the report. |
+
+The weekly scheduled learning job (`brain_learn`) never raises; on failure it logs `job.failed` at error level and sends the same single "Job failed" alert.
+
 **Optional M18:**
 
 ```powershell

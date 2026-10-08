@@ -9,7 +9,8 @@ swingtrade train --algorithm lightgbm --activate
 swingtrade scan
 swingtrade status
 swingtrade brain modules | set M02 off | run [--as-of 2026-09-15] | replay-week [--days 5] |
-    rescore-learning [--since 2026-09-01] | why RELIANCE | learn [--since 2026-09-01]
+    validate-week [--days 5] | rescore-learning [--since 2026-09-01] | why RELIANCE |
+    learn [--since 2026-09-01]
 swingtrade brain strategy-create | shadow-scan
 """
 
@@ -413,6 +414,44 @@ def _print_run(db, run_id: str) -> None:
         print(f"Steps answered by their fallback: {', '.join(fallbacks)}")
 
 
+def _learning_failed(command: str, exc: Exception) -> int:
+    """A failed M09 learning run: error log, one alert on the existing notifier, exit 1."""
+    from swing_trade_ml.notifications import notifier
+
+    log.error("brain.learning_failed", command=command, error=str(exc))
+    print(f"❌ brain {command} failed: {exc}", file=sys.stderr)
+    body = f"<code>{str(exc)[:800]}</code>"
+    notifier.send_sync(f"⚠️ <b>Job failed — brain {command}</b>\n\n{body}", "error")
+    return 1
+
+
+def _write_validation_report(db, args: argparse.Namespace, results, start, end) -> int:
+    from pathlib import Path
+
+    from swing_trade_ml.brain import validation
+    from swing_trade_ml.core.config import REPO_ROOT
+    from swing_trade_ml.services.brain_golive import compare
+
+    report = validation.build_report(
+        db,
+        results,
+        book=args.book,
+        start=start,
+        end=end,
+        compare_snapshot=compare.report(db),
+    )
+    path = (
+        Path(args.out)
+        if args.out
+        else validation.default_report_path(report, REPO_ROOT / "docs" / "brain" / "evidence")
+    )
+    validation.write_report(report, path)
+    print()
+    print(validation.plain_summary(report))
+    print(f"Report written to {path}")
+    return 0 if report.constitution_ok else 3
+
+
 def cmd_brain(args: argparse.Namespace) -> int:
     from datetime import UTC, date, datetime, time
 
@@ -509,14 +548,19 @@ def cmd_brain(args: argparse.Namespace) -> int:
             from swing_trade_ml.brain.modules.m09_learn.learn import run_learning
 
             since = date.fromisoformat(args.since) if args.since else None
-            report = run_learning(db, since=since)
-            db.commit()
+            try:
+                report = run_learning(db, since=since)
+                db.commit()
+            except Exception as exc:  # noqa: BLE001
+                # Watchdog: exit non-zero (see docs/brain/TESTING.md) and tell the owner once.
+                db.rollback()
+                return _learning_failed(args.brain_command, exc)
             title = (
                 "M09 rescore-learning" if args.brain_command == "rescore-learning" else "M09 learning report"
             )
             _print_learning_summary(report, since, title)
             return 0
-        if args.brain_command == "replay-week":
+        if args.brain_command in ("replay-week", "validate-week"):
             from swing_trade_ml.brain import queue as brain_queue
             from swing_trade_ml.brain.replay_week import (
                 format_counts,
@@ -551,6 +595,8 @@ def cmd_brain(args: argparse.Namespace) -> int:
                     f"{format_counts(row.counts)}  universe={row.universe_size}"
                 )
             print(f"Done — {len(results)} trading day(s) replayed.")
+            if args.brain_command == "validate-week":
+                return _write_validation_report(db, args, results, start, end)
             return 0
         if args.brain_command == "strategy-create":
             from swing_trade_ml.services.brain_golive.shadow import ensure_brain_strategy
@@ -749,6 +795,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     b.add_argument("--symbols", default=None, help="Comma-separated (default: full universe)")
     b.add_argument("--book", default="paper", choices=["paper", "live"])
+    b = brain_sub.add_parser(
+        "validate-week",
+        help="replay-week, then write a validation report (JSON) and a plain-English summary",
+    )
+    b.add_argument("--from", dest="from_date", default=None, help="YYYY-MM-DD (inclusive)")
+    b.add_argument("--to", dest="to_date", default=None, help="YYYY-MM-DD (inclusive)")
+    b.add_argument("--days", type=int, default=None, help="Trading days ending at the last closed day")
+    b.add_argument("--symbols", default=None, help="Comma-separated (default: full universe)")
+    b.add_argument("--book", default="paper", choices=["paper", "live"])
+    b.add_argument(
+        "--out", default=None, help="Report path (default: docs/brain/evidence/validation_week_*.json)"
+    )
     brain_sub.add_parser("strategy-create", help="Create the brain strategy in practice mode (M18)")
     brain_sub.add_parser("shadow-scan", help="Record today's brain ideas as strategy signals (M18)")
     b = brain_sub.add_parser(

@@ -2,6 +2,8 @@
 
 Living tracker for the approved brain/gaps plan (`.cursor/plans/brain_and_gaps_roadmap_80009dda.plan.md` on the dev machine). Operational checks: [TESTING.md](TESTING.md).
 
+**Product vision (diagrams, UI map, gap register):** [../architecture/TRADEMIND-SOLUTION-OVERVIEW.md](../architecture/TRADEMIND-SOLUTION-OVERVIEW.md).
+
 **Owner sign-off:** P0 Service 1 build list and M18 gating defaults approved for implementation (2026-10-05).
 
 ## Brain validation phase (baseline `0bdaa76`)

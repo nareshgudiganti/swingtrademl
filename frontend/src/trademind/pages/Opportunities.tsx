@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { Fragment, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from 'react-router-dom'
 
 import { api } from '../../api/client'
@@ -7,13 +7,20 @@ import type { BrainDecision, IdeaWord } from '../../api/types'
 import type { Action } from '../types'
 import { finalWord, ideasFrom, useLatestRun } from '../live'
 import { wordTone } from '../vocab'
+import { CapFlag, useSymbolCaps } from '../cap'
 import { ActionPill, BrainGate, Card, CheckItem, Icon, GlowArea, Ring, Seg, StockLogo, inr } from '../ui'
 
 type Filter = 'ALL' | IdeaWord
 
-function entryZone(d: BrainDecision): string {
-  if (d.entry_low == null || d.entry_high == null) return '—'
-  return `₹${inr(d.entry_low)} – ₹${inr(d.entry_high)}`
+function moneyOrDash(n: number | null): string {
+  return n == null ? '—' : `₹${inr(n)}`
+}
+
+function entryPrice(d: BrainDecision): string {
+  if (d.entry_low != null && d.entry_high != null && d.entry_low !== d.entry_high) {
+    return `₹${inr(d.entry_low)} – ₹${inr(d.entry_high)}`
+  }
+  return moneyOrDash(d.entry_low ?? d.entry_high)
 }
 
 export default function Opportunities() {
@@ -26,9 +33,27 @@ export default function Opportunities() {
 
 function OpportunitiesBody() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const latest = useLatestRun()
   const [filter, setFilter] = useState<Filter>('ALL')
   const [query, setQuery] = useState('')
+  const [buying, setBuying] = useState<string | null>(null)
+  const [qty, setQty] = useState('1')
+  const caps = useSymbolCaps()
+
+  const buy = useMutation({
+    mutationFn: (symbol: string) =>
+      api.testerPaperBuy({
+        symbol,
+        quantity: Number(qty),
+        cap_tier: caps.get(symbol.toUpperCase()) ?? 'large',
+      }),
+    onSuccess: () => {
+      setBuying(null)
+      queryClient.invalidateQueries({ queryKey: ['testerPositions'] })
+      queryClient.invalidateQueries({ queryKey: ['testerSummary'] })
+    },
+  })
 
   const run = latest.data!
   const ideas = ideasFrom(run)
@@ -79,37 +104,86 @@ function OpportunitiesBody() {
             <thead>
               <tr>
                 <th>Stock</th>
+                <th>Size</th>
                 <th>Decision</th>
                 <th className="tm-right" title="A ranking, not a chance">
                   Model score
                 </th>
-                <th>Entry zone</th>
+                <th>Entry</th>
                 <th>Target</th>
-                <th>Stop</th>
+                <th>SL</th>
                 <th>Why</th>
+                <th />
               </tr>
             </thead>
             <tbody>
               {rows.map((i) => (
-                <tr
-                  key={i.id}
-                  className="tm-clickable"
-                  onClick={() => navigate(`/trademind/stock/${encodeURIComponent(i.symbol)}`)}
-                >
-                  <td className="tm-strong">{i.symbol}</td>
-                  <td>
-                    <ActionPill action={finalWord(i) as Action} />
-                  </td>
-                  <td className="tm-right tm-num">{i.confidence != null ? Math.round(i.confidence * 100) : '—'}</td>
-                  <td className="tm-dim">{finalWord(i) === 'TRADE' ? entryZone(i) : '—'}</td>
-                  <td className="tm-dim">{finalWord(i) === 'TRADE' && i.target != null ? `₹${inr(i.target)}` : '—'}</td>
-                  <td className="tm-dim">{finalWord(i) === 'TRADE' && i.stop != null ? `₹${inr(i.stop)}` : '—'}</td>
-                  <td className="tm-dim tm-wrap">{i.reasons[0] ?? '—'}</td>
-                </tr>
+                <Fragment key={i.id}>
+                  <tr
+                    className="tm-clickable"
+                    onClick={() => navigate(`/trademind/stock/${encodeURIComponent(i.symbol)}`)}
+                  >
+                    <td className="tm-strong">{i.symbol}</td>
+                    <td>
+                      <CapFlag tier={caps.get(i.symbol.toUpperCase())} />
+                    </td>
+                    <td>
+                      <ActionPill action={finalWord(i) as Action} />
+                    </td>
+                    <td className="tm-right tm-num">{i.confidence != null ? Math.round(i.confidence * 100) : '—'}</td>
+                    <td className="tm-dim">{entryPrice(i)}</td>
+                    <td className="tm-dim">{moneyOrDash(i.target)}</td>
+                    <td className="tm-dim">{moneyOrDash(i.stop)}</td>
+                    <td className="tm-dim tm-wrap">{i.reasons[0] ?? '—'}</td>
+                    <td onClick={(e) => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        className="tm-btn"
+                        onClick={() => {
+                          setBuying(buying === i.symbol ? null : i.symbol)
+                          setQty('1')
+                        }}
+                      >
+                        {buying === i.symbol ? 'Close' : 'Buy'}
+                      </button>
+                    </td>
+                  </tr>
+                  {buying === i.symbol && (
+                    <tr key={`${i.id}-buy`}>
+                      <td colSpan={9} onClick={(e) => e.stopPropagation()}>
+                        <form
+                          className="tm-flex tm-wrap"
+                          style={{ gap: '0.5rem', alignItems: 'center', padding: '0.35rem 0' }}
+                          onSubmit={(e) => {
+                            e.preventDefault()
+                            buy.mutate(i.symbol)
+                          }}
+                        >
+                          <span className="tm-strong">Paper buy {i.symbol}</span>
+                          <input
+                            className="tm-input"
+                            type="number"
+                            min={1}
+                            value={qty}
+                            onChange={(e) => setQty(e.target.value)}
+                            aria-label="Quantity"
+                            style={{ width: 90 }}
+                          />
+                          <button className="tm-btn" type="submit" disabled={!Number(qty) || buy.isPending}>
+                            {buy.isPending ? 'Buying…' : 'Paper buy'}
+                          </button>
+                          {buy.isError && buying === i.symbol && (
+                            <span className="tm-neg">{(buy.error as Error).message}</span>
+                          )}
+                        </form>
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               ))}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="tm-dim" style={{ textAlign: 'center', padding: '1.5rem' }}>
+                  <td colSpan={9} className="tm-dim" style={{ textAlign: 'center', padding: '1.5rem' }}>
                     No stocks match these filters.
                   </td>
                 </tr>
@@ -117,6 +191,11 @@ function OpportunitiesBody() {
             </tbody>
           </table>
         </div>
+        {buy.isSuccess && (
+          <p className="tm-pos" style={{ marginTop: '0.6rem' }}>
+            Paper buy placed for {String(buy.variables)}. It is under Portfolio → Testing.
+          </p>
+        )}
       </Card>
 
       {/* Featured idea: the top TRADE, or the top WATCH if there is no TRADE */}
@@ -141,6 +220,7 @@ const WHY_HEADING: Record<string, string> = {
 }
 
 function FeaturedCard({ decision }: { decision: BrainDecision }) {
+  const caps = useSymbolCaps()
   const candles = useQuery({
     queryKey: ['candles', decision.symbol, 30],
     queryFn: () => api.candles(decision.symbol, 30),
@@ -155,6 +235,7 @@ function FeaturedCard({ decision }: { decision: BrainDecision }) {
       <div className="tm-feature-name">
         <div className="tm-strong" style={{ fontSize: '0.95rem' }}>
           {decision.symbol}
+          <CapFlag tier={caps.get(decision.symbol.toUpperCase())} gap />
         </div>
         <div className="tm-pos" style={{ fontSize: '0.72rem', marginTop: 4 }}>
           <ActionPill action={finalWord(decision) as Action} />
@@ -182,10 +263,9 @@ function FeaturedCard({ decision }: { decision: BrainDecision }) {
         </div>
       </div>
       <div className="tm-feature-why">
-        {finalWord(decision) === 'TRADE' && decision.entry_low != null && (
+        {(decision.entry_low != null || decision.target != null || decision.stop != null) && (
           <p className="tm-note" style={{ marginBottom: '0.5rem' }}>
-            Buy around {entryZone(decision)} · target {decision.target != null ? `₹${inr(decision.target)}` : '—'} · stop{' '}
-            {decision.stop != null ? `₹${inr(decision.stop)}` : '—'}
+            Entry {entryPrice(decision)} · target {moneyOrDash(decision.target)} · SL {moneyOrDash(decision.stop)}
           </p>
         )}
         <div className="tm-strong" style={{ marginBottom: 2 }}>

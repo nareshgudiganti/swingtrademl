@@ -78,6 +78,7 @@
 
 ## Doc pointers
 
+- **Solution vision (diagram → code → gaps):** `docs/architecture/TRADEMIND-SOLUTION-OVERVIEW.md`
 - Roadmap: `docs/brain/ROADMAP.md`
 - Gaps: `docs/architecture/architecture-gaps.md`
 - Testing: `docs/brain/TESTING.md`

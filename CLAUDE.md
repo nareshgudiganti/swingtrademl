@@ -91,6 +91,7 @@ Read this first in every session. Then read `docs/architecture/CURRENT-STATE.md`
 | What | Where |
 |---|---|
 | Current state, next task | `docs/architecture/CURRENT-STATE.md` |
+| TradeMind solution (vision vs shipped) | `docs/architecture/TRADEMIND-SOLUTION-OVERVIEW.md` |
 | Service 1 architecture | `docs/architecture/service-01-market-data.md` |
 | Gap list + status | `docs/architecture/architecture-gaps.md` |
 | Why Service 1 gaps / Brain split | `docs/decisions/ADR-001-service-01-gaps.md` |

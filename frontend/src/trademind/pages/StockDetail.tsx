@@ -9,6 +9,7 @@ import { barsFrom } from '../live-stock'
 import { finalWord, stockSituations, useBrainStatus, useLatestRun, useWhy } from '../live'
 import { wordClassName, wordTagColor, wordTone } from '../vocab'
 import { Confirm } from '../Confirm'
+import { CapFlag, useSymbolCaps } from '../cap'
 import { ActionPill, BrainGate, Candles, Card, CheckItem, Icon, NotConnected, Seg, Tabs, Tag, inr, signed, toneClass } from '../ui'
 
 const TABS = ['Overview', 'Technical', 'Fundamental', 'AI Analysis', 'Similar Cases', 'News', 'Options'] as const
@@ -106,6 +107,7 @@ export default function StockDetail() {
 function StockDetailBody() {
   const { symbol: rawSymbol } = useParams()
   const symbol = (rawSymbol ?? '').toUpperCase()
+  const caps = useSymbolCaps()
 
   const status = useBrainStatus()
   const latest = useLatestRun()
@@ -190,7 +192,10 @@ function StockDetailBody() {
         <span className="tm-icon-badge" style={{ borderColor: 'rgba(79,140,255,.6)', color: 'var(--tm-blue)' }}>
           <Icon.Target />
         </span>
-        <span style={{ fontSize: '1.25rem', fontWeight: 700 }}>{symbol}</span>
+        <span style={{ fontSize: '1.25rem', fontWeight: 700 }}>
+          {symbol}
+          <CapFlag tier={caps.get(symbol)} gap />
+        </span>
         {currentPrice != null && (
           <span className="tm-num" style={{ fontSize: '1.15rem', fontWeight: 600 }}>
             ₹{inr(currentPrice)}

@@ -6,8 +6,6 @@ import { Card, inr, signed, toneClass } from '../ui'
 
 type Period = 'day' | 'week' | 'month'
 
-const CAP_LABEL: Record<string, string> = { large: 'Large', midcap: 'Mid', smallcap: 'Small' }
-
 function periodKey(exitAt: string, period: Period): string {
   const d = new Date(exitAt)
   if (period === 'month') return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
@@ -151,7 +149,6 @@ export default function PaperPositions() {
               <thead>
                 <tr>
                   <th>Stock</th>
-                  <th>Size</th>
                   <th>Sector</th>
                   <th className="tm-right">Qty</th>
                   <th className="tm-right">Avg</th>
@@ -164,7 +161,6 @@ export default function PaperPositions() {
                 {rows.map((p) => (
                   <tr key={p.id}>
                     <td className="tm-strong">{p.symbol}</td>
-                    <td>{CAP_LABEL[p.cap_tier ?? ''] ?? '—'}</td>
                     <td className="tm-dim">{p.sector || '—'}</td>
                     <td className="tm-right tm-num">{p.quantity}</td>
                     <td className="tm-right tm-num">₹{inr(p.entry_price)}</td>

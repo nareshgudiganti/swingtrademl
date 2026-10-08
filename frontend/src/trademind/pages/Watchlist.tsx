@@ -6,13 +6,15 @@ import { api } from '../../api/client'
 import type { BrainDecision } from '../../api/types'
 import { finalWord, ideasFrom, useLatestRun } from '../live'
 import type { Action } from '../types'
+import { CapFlag, useSymbolCaps } from '../cap'
 import { ActionPill, BrainGate, Card, inr } from '../ui'
 
-type CapTier = 'large' | 'midcap' | 'smallcap'
-
 function entryZone(d: BrainDecision): string {
-  if (d.entry_low == null || d.entry_high == null) return '—'
-  return `₹${inr(d.entry_low)} – ₹${inr(d.entry_high)}`
+  if (d.entry_low != null && d.entry_high != null && d.entry_low !== d.entry_high) {
+    return `₹${inr(d.entry_low)} – ₹${inr(d.entry_high)}`
+  }
+  const one = d.entry_low ?? d.entry_high
+  return one == null ? '—' : `₹${inr(one)}`
 }
 
 export default function Watchlist() {
@@ -30,7 +32,7 @@ function WatchlistBody() {
   const watchlist = useQuery({ queryKey: ['watchlist'], queryFn: api.watchlist })
   const [buying, setBuying] = useState<string | null>(null)
   const [qty, setQty] = useState('1')
-  const [capTier, setCapTier] = useState<CapTier>('large')
+  const caps = useSymbolCaps()
 
   const ideas = latest.data ? ideasFrom(latest.data) : []
   const bySymbol = new Map(ideas.map((d) => [d.symbol.toUpperCase(), d]))
@@ -38,7 +40,11 @@ function WatchlistBody() {
 
   const buy = useMutation({
     mutationFn: (symbol: string) =>
-      api.testerPaperBuy({ symbol, quantity: Number(qty), cap_tier: capTier }),
+      api.testerPaperBuy({
+        symbol,
+        quantity: Number(qty),
+        cap_tier: caps.get(symbol.toUpperCase()) ?? 'large',
+      }),
     onSuccess: () => {
       setBuying(null)
       queryClient.invalidateQueries({ queryKey: ['testerPositions'] })
@@ -61,6 +67,7 @@ function WatchlistBody() {
               <thead>
                 <tr>
                   <th>Stock</th>
+                  <th>Size</th>
                   <th>Decision</th>
                   <th className="tm-right">Model score</th>
                   <th>Entry zone</th>
@@ -81,13 +88,16 @@ function WatchlistBody() {
                       onClick={() => navigate(`/trademind/stock/${encodeURIComponent(inst.tradingsymbol)}`)}
                     >
                       <td className="tm-strong">{inst.tradingsymbol}</td>
+                      <td>
+                        <CapFlag tier={caps.get(inst.tradingsymbol.toUpperCase())} />
+                      </td>
                       <td>{word ? <ActionPill action={word as Action} /> : <span className="tm-dim">—</span>}</td>
                       <td className="tm-right tm-num">
                         {d?.confidence != null ? Math.round(d.confidence * 100) : '—'}
                       </td>
-                      <td className="tm-dim">{d && word === 'TRADE' ? entryZone(d) : '—'}</td>
-                      <td className="tm-dim">{d && word === 'TRADE' && d.target != null ? `₹${inr(d.target)}` : '—'}</td>
-                      <td className="tm-dim">{d && word === 'TRADE' && d.stop != null ? `₹${inr(d.stop)}` : '—'}</td>
+                      <td className="tm-dim">{d ? entryZone(d) : '—'}</td>
+                      <td className="tm-dim">{d?.target != null ? `₹${inr(d.target)}` : '—'}</td>
+                      <td className="tm-dim">{d?.stop != null ? `₹${inr(d.stop)}` : '—'}</td>
                       <td className="tm-dim tm-wrap">{d?.reasons[0] ?? '—'}</td>
                       <td onClick={(e) => e.stopPropagation()}>
                         <button
@@ -129,11 +139,6 @@ function WatchlistBody() {
                 onChange={(e) => setQty(e.target.value)}
                 aria-label="Quantity"
               />
-              <select className="tm-input" value={capTier} onChange={(e) => setCapTier(e.target.value as CapTier)} aria-label="Company size">
-                <option value="large">Large</option>
-                <option value="midcap">Mid</option>
-                <option value="smallcap">Small</option>
-              </select>
               <button className="tm-btn" type="submit" disabled={!Number(qty) || buy.isPending}>
                 {buy.isPending ? 'Buying…' : 'Paper buy'}
               </button>

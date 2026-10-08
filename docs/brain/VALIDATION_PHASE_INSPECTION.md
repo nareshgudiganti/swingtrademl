@@ -137,6 +137,7 @@ Status key: **EXISTS** · **PARTIAL** · **MISSING** (for validation/evidence go
 | Data contamination | **PARTIAL** | `split-check` + deferred gap #3 adjusted prices |
 | Shadow vs v1 gate | **PARTIAL** | `/brain/compare` + tests; no signed-off threshold document |
 | “Fake WHY” guard | **MISSING** as product test | `why` runs full pipeline — validation should compare **trace** to stored nightly decision, not paraphrase engine |
+| WATCH plan levels in UI | **UI gap** (backend OK) | Risk-blocked WATCH keeps levels in DB/API; Opportunities list hides them (TRADE-only columns). See [evidence/watch_levels_display_20261006.md](evidence/watch_levels_display_20261006.md) |
 | Dedicated `validation/` package | **MISSING** | Today logic scattered: CLI, `replay_week.py`, `split_check.py`, evidence markdown |
 
 ---

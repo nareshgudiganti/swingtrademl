@@ -8,6 +8,10 @@ requirement. Each gap is one the brief lists.
 Deferred (recommended to postpone).
 Owner approved **P0 build** on 2026-10-05 (see `docs/brain/ROADMAP.md`). P1/P2 items remain as listed below.
 
+For the full product diagram (Market Intelligence, Opportunity Center, validation layer, UI routes,
+brain steps, and consolidated gap register), see
+[`TRADEMIND-SOLUTION-OVERVIEW.md`](TRADEMIND-SOLUTION-OVERVIEW.md).
+
 | # | Gap | Status | What exists today | What is missing | Recommendation |
 |---|---|---|---|---|---|
 | 1 | Point-in-time / as-of control | Partial | `DatedReader` bounds prices; `candle_corrections.corrected_at` on overwrite | No `ingested_at` on `candles` rows yet; no `source_version` | Partial — lite via correction log |

@@ -5,6 +5,7 @@ import type { IdeaWord } from '../../api/types'
 import { formatDateTime } from '../../lib/format'
 import { finalWord, ideasFrom, holdingsFrom, marketSituation, useLatestRun, useLearning } from '../live'
 import { MARKET_LABEL, MARKET_PLAIN, MARKET_TONE, wordTagColor } from '../vocab'
+import { CapFlag, useSymbolCaps } from '../cap'
 import { ActionPill, BrainArt, BrainGate, Card, CheckItem, Icon, Tag } from '../ui'
 
 const IDEA_WORDS: IdeaWord[] = ['TRADE', 'WATCH', 'WAIT', 'AVOID']
@@ -19,6 +20,7 @@ export default function Home() {
 
 function HomeBody() {
   const navigate = useNavigate()
+  const caps = useSymbolCaps()
   const latest = useLatestRun()
   const learning = useLearning()
 
@@ -152,7 +154,10 @@ function HomeBody() {
                 <tbody>
                   {top.map((i) => (
                     <tr key={i.id} className="tm-clickable" onClick={() => navigate(`/trademind/stock/${encodeURIComponent(i.symbol)}`)}>
-                      <td className="tm-strong">{i.symbol}</td>
+                      <td className="tm-strong">
+                        {i.symbol}
+                        <CapFlag tier={caps.get(i.symbol.toUpperCase())} gap />
+                      </td>
                       <td>
                         <ActionPill action={finalWord(i) as Action} />
                       </td>

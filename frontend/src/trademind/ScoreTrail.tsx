@@ -6,7 +6,7 @@
 import type { DetailedPosition } from '../api/types'
 import { Tag } from './ui'
 
-type Trail = Pick<DetailedPosition, 'entry_confidence' | 'last_confidence' | 'score_trail' | 'score_band'>
+type Trail = Pick<DetailedPosition, 'entry_confidence' | 'last_confidence' | 'score_trail' | 'score_band' | 'score_from_trail'>
 
 const BAND: Record<string, { label: string; tone: 'green' | 'amber' | 'red'; color: string }> = {
   strong: { label: 'Strong', tone: 'green', color: 'var(--tm-green)' },
@@ -36,8 +36,11 @@ function Sparkline({ values, color }: { values: number[]; color: string }) {
 /** Whole trail for one position. `compact` is the one-line version for tables. */
 export default function ScoreTrail({ p, compact = false }: { p: Trail; compact?: boolean }) {
   const trail = p.score_trail ?? []
-  const entry = p.entry_confidence
-  const now = p.last_confidence
+  // A brain position's entry/last numbers are not the same kind of score as the
+  // daily one, so only its own day-by-day readings are shown.
+  const fromTrail = p.score_from_trail === true
+  const entry = fromTrail ? null : p.entry_confidence
+  const now = fromTrail ? (trail[trail.length - 1]?.score ?? null) : p.last_confidence
   if (entry == null && now == null && trail.length === 0) {
     return <span className="tm-dim">No score yet</span>
   }
@@ -52,7 +55,7 @@ export default function ScoreTrail({ p, compact = false }: { p: Trail; compact?:
     return (
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
         <span className="tm-num tm-strong">
-          {entry != null ? score(entry) : '—'} → {latest != null ? score(latest) : '—'}
+          {entry != null ? `${score(entry)} → ` : ''}{latest != null ? score(latest) : '—'}
         </span>
         {band && <Tag tone={band.tone}>{band.label}</Tag>}
       </span>

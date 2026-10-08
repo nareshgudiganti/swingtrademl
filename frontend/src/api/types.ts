@@ -207,6 +207,8 @@ export interface DetailedPosition {
   /** One entry per day with a real reading, oldest first. Missing days are absent. */
   score_trail?: { date: string; score: number; band: 'strong' | 'easing' | 'weak'; model_version: string | null }[]
   score_band?: 'strong' | 'easing' | 'weak' | null
+  /** True for a brain-owned position: the score is the day-by-day trail only (entry/last numbers are not the same kind). */
+  score_from_trail?: boolean
   horizon_days: number | null
   action_code: 'exit' | 'alert' | 'weak' | 'dip' | 'bullish' | 'hold'
   action_label: string

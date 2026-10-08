@@ -46,6 +46,10 @@ class HoldingFacts:
     market_mode: MarketMode
     notes: tuple[str, ...] = ()
     track: c.TrackPoint | None = None  # M15: where the trade stands against similar trades
+    # The active model's raw score for this stock today and its label ("model").
+    # Only shown on the decision so the day-by-day strength trail can use it;
+    # it never changes the word. None when the model could not score it.
+    score: tuple[float, str] | None = None
 
 
 # --- ideas -----------------------------------------------------------------------
@@ -222,6 +226,8 @@ def decide_holding(f: HoldingFacts, policy: DecidePolicy, rules: list[Rule] = HO
         )
         if f.track is not None and f.track.status in ("on track", "past horizon", "no data"):
             draft = replace(draft, reasons=(*draft.reasons, f.track.reason))
+    if f.score is not None:
+        draft = replace(draft, confidence=f.score[0], confidence_source=f.score[1])
     return _apply(draft, f, policy, rules, "holding")
 
 

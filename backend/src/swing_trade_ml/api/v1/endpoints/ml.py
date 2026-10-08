@@ -2,10 +2,17 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-from typing import Literal
+import hashlib
+import json
+import re
+import tempfile
+import zipfile
+from collections.abc import Iterator
+from datetime import UTC, datetime
+from typing import IO, Literal
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import Integer, cast, func, select
 
 from swing_trade_ml.api.deps import DbSession
@@ -16,6 +23,7 @@ from swing_trade_ml.db.session import session_scope
 from swing_trade_ml.ml import calibration as calibration_service
 from swing_trade_ml.ml import predict as predict_service
 from swing_trade_ml.ml import train as train_service
+from swing_trade_ml.ml.backup import registered_artifacts
 from swing_trade_ml.ml.registry import activate_model, get_active_model
 from swing_trade_ml.schemas import (
     CalibrationReport,
@@ -37,6 +45,78 @@ def list_models(db: DbSession, name: str | None = None) -> list[MLModel]:
     if name:
         stmt = stmt.where(MLModel.name == name)
     return list(db.execute(stmt).scalars().all())
+
+
+def _zip_entry_name(model: MLModel, suffix: str) -> str:
+    """A flat, server-independent name: never the artifact's real path."""
+    safe = re.sub(r"[^A-Za-z0-9._-]+", "_", f"{model.name}_{model.version}")
+    return f"models/{safe}{suffix}"
+
+
+def _build_backup_zip(db: DbSession) -> IO[bytes]:
+    """Spool every registered artifact plus manifest.json into a temp file.
+
+    Each artifact is streamed through the zip in chunks (hashing as it goes),
+    so memory stays flat however large the models are; the spool rolls over to
+    disk past 8 MB. A missing file is listed in the manifest, not an error —
+    it is the finding the backup exists to surface.
+    """
+    spool = tempfile.SpooledTemporaryFile(max_size=8 * 1024 * 1024)  # noqa: SIM115
+    entries: list[dict] = []
+    with zipfile.ZipFile(spool, "w", zipfile.ZIP_DEFLATED) as archive:
+        for model, source in registered_artifacts(db):
+            produced = model.trained_at or model.created_at
+            entry = {
+                "model": model.name,
+                "version": model.version,
+                "status": model.status,
+                "produced_at": produced.isoformat() if produced else None,
+                "file": None,
+                "size": None,
+                "sha256": None,
+                "missing": source is None,
+            }
+            if source is not None:
+                name = _zip_entry_name(model, source.suffix)
+                digest = hashlib.sha256()
+                size = 0
+                try:
+                    with source.open("rb") as src, archive.open(name, "w", force_zip64=True) as out:
+                        while chunk := src.read(1024 * 1024):
+                            digest.update(chunk)
+                            size += len(chunk)
+                            out.write(chunk)
+                    entry.update(file=name, size=size, sha256=digest.hexdigest())
+                except OSError:
+                    # Vanished or unreadable mid-copy: report it, keep going.
+                    entry["missing"] = True
+            entries.append(entry)
+        manifest = {"generated_at": datetime.now(UTC).isoformat(), "artifacts": entries}
+        archive.writestr("manifest.json", json.dumps(manifest, indent=2))
+    spool.seek(0)
+    return spool
+
+
+@router.get("/backup/models.zip")
+def download_model_backup(db: DbSession) -> StreamingResponse:
+    """Read-only zip of every registered model artifact (archived versions
+    included) with a manifest of sizes and sha256 digests, for an off-server
+    copy. Paths in the response are zip-relative only."""
+    spool = _build_backup_zip(db)
+
+    def _stream() -> Iterator[bytes]:
+        try:
+            while chunk := spool.read(1024 * 1024):
+                yield chunk
+        finally:
+            spool.close()
+
+    stamp = datetime.now(UTC).strftime("%Y%m%d")
+    return StreamingResponse(
+        _stream(),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="stml-models-{stamp}.zip"'},
+    )
 
 
 @router.get("/models/active", response_model=MLModelDetail)

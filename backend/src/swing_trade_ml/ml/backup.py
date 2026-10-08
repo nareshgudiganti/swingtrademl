@@ -33,6 +33,18 @@ from swing_trade_ml.db.models.ml import MLModel
 log = get_logger(__name__)
 
 
+def registered_artifacts(db: Session) -> list[tuple[MLModel, Path | None]]:
+    """Every registered model with its artifact file, or None when the file is
+    gone. The one place that turns a registry row into a path, shared by the
+    directory backup and the downloadable archive."""
+    models = db.execute(select(MLModel).order_by(MLModel.name, MLModel.version)).scalars().all()
+    found: list[tuple[MLModel, Path | None]] = []
+    for model in models:
+        source = Path(model.artifact_path) if model.artifact_path else None
+        found.append((model, source if source is not None and source.is_file() else None))
+    return found
+
+
 def backup_model_artifacts(
     db: Session, destination: Path | str | None = None
 ) -> dict[str, Any]:
@@ -53,21 +65,12 @@ def backup_model_artifacts(
     target = Path(destination)
     target.mkdir(parents=True, exist_ok=True)
 
-    models = list(
-        db.execute(select(MLModel).order_by(MLModel.name, MLModel.version)).scalars().all()
-    )
-
     copied = already_present = 0
     missing: list[str] = []
     total_bytes = 0
 
-    for model in models:
-        if not model.artifact_path:
-            missing.append(f"{model.name}:{model.version}")
-            continue
-
-        source = Path(model.artifact_path)
-        if not source.is_file():
+    for model, source in registered_artifacts(db):
+        if source is None:
             missing.append(f"{model.name}:{model.version}")
             continue
 

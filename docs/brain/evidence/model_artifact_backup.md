@@ -53,3 +53,31 @@ model train path). If unset, rely on scheduled `rsync` above.
 
 Mark ROADMAP Phase 0 “Model artifact off-droplet backup” done when you have at least one verified
 off-droplet copy and a repeat date on your calendar.
+
+## Where the copies live (read this first)
+
+| Copy | Where | Survives losing the server? |
+|---|---|---|
+| Live models (`MODEL_ARTIFACT_DIR`) | droplet disk | no |
+| Daily server-side copy (`job_backup_models` -> `MODEL_BACKUP_DIR`, second volume) | **same droplet disk** | **no** - protects against a deleted or corrupted file, not a lost server |
+| PC copy (below) | your Windows PC | **yes - this is the only off-server copy** |
+
+## Off-server copy without SSH (route + script)
+
+- **Route:** `GET /api/v1/ml/backup/models.zip` (same API-key protection as the rest of `/ml`; 401/403
+  without it). Read-only. Streams a zip of every registered artifact, archived versions included,
+  plus `manifest.json` (model, version, status, file name in the zip, size, sha256, produced-at, and
+  `missing: true` for registry rows whose file is gone). No server paths, env values or secrets are
+  included. Built from the same registry/path logic as the server-side backup (`ml/backup.py`).
+- **Script:** `scripts/backup-models-from-prod.ps1` reads the key from the user environment variable
+  `STML_API_KEY`, downloads to `%USERPROFILE%\stml-model-backups\stml-models-<date>.zip`, checks every
+  sha256 against the manifest, keeps the newest 8 zips (`-Keep`), and exits non-zero with a plain
+  message on any failure. A "server is missing files" warning is printed (exit 0) when the manifest
+  lists missing artifacts - treat it as a finding. Registering it as a weekly Windows task is shown in
+  the comment at the top of the script.
+
+## Not covered
+
+Database dumps taken at each deploy (`infra/deploy/release.sh`) are also stored only on the server.
+This change does **not** back them up off-server; the registry rows, predictions and trades would still
+be lost with the droplet.

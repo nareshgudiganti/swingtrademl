@@ -1,4 +1,4 @@
-# Current state — 2026-10-05
+# Current state — 2026-10-08
 
 ## Completed
 
@@ -16,13 +16,26 @@
 - **Phase 1 gate (local, 2026-10-05)**: `brain replay-week` + `brain rescore-learning` — evidence in
   `docs/brain/evidence/PHASE2_EVIDENCE_TEMPLATE.md`. B0 split-check clean → **gap #3 adjusted prices
   deferred**.
-- **Plans manager** (Free/Plus/Pro) on a feature branch; off by default in prod.
+- **Plans manager** (Free / Pro) is on `main` and live since the 2026-10-06 deploy; the owner switch is
+  OFF, so the owner sees everything and nobody is limited.
+- **Deploy gate fixed 2026-10-06 (`f69134a`)**: every push to `main` from 2026-10-04 to 2026-10-05 failed
+  the backend test gate (M08 read sector data without declaring `SectorState@1`; one stale replay test)
+  and nothing deployed; then a migration ran in the wrong order on the server and rolled back. Both
+  fixed. A red "Deploy to production" run in GitHub Actions means nothing was deployed.
+- **Login / Testing tab (`19d3cb0`)**: login page hides "Sign up" when sign-up is closed
+  (`GET /auth/options`); the Testing tab explains it is switched off (`PAPER_TESTER_ENABLED=false`).
 
 ## In progress / ops (not new feature code)
 
-- **Production droplet**: after each `main` deploy, run checklist
-  `docs/brain/evidence/prod_deploy_20261005.md` (rebuild api/worker, alembic head `m3r6e5p1s1v1`,
-  snapshot, split-check). SSH is owner-side; CI deploy does not replace rebuild when backend changes.
+- **Production droplet**: the deploy script (`infra/deploy/release.sh`) builds api/worker/frontend,
+  takes a database dump (server-side only), runs alembic, verifies a worker heartbeat and rolls back to
+  the previous images on failure. After a deploy, still do the split-check/snapshot items in
+  `docs/brain/evidence/prod_deploy_20261005.md`. SSH is owner-side.
+- **Built 2026-10-08, ships with the next `main` deploy**: Saturday 11:00 IST brain health report
+  (Telegram + `GET /brain/weekly-health`, alembic head `w7h3a1t5h0c1`); `swingtrade brain validate-week`,
+  golden-day test, WHY integrity check and rescore watchdog (validation steps 1-5); authenticated model
+  zip `GET /ml/backup/models.zip` + `scripts/backup-models-from-prod.ps1` for an off-server copy
+  (database dumps are still only on the server).
 - **M18 evidence**: collect **30 finished shadow ideas** before approval stage opens.
 - **Weekly brain health**: `docs/brain/weekly_health_checklist.md` + `docs/brain/TESTING.md`.
 - **Model artifacts**: primary dir `MODEL_ARTIFACT_DIR` (default `./data/models`); optional
@@ -51,6 +64,11 @@
 - Full brain suite on `main` before deploy: use `backend/.venv` + Docker Postgres per `CLAUDE.md`.
 
 ## Known issues (still true)
+
+- **Brain records no ideas while the market is stressed (diagnosed 2026-10-08)**: the brain reaches TRADE
+  for ~119 stocks, then version 1's market-stress rule (`services/risk.py`, max 10% invested) rejects
+  108 of them because the two open paper positions already use the cap. So "N of 30" stays 0. Not caused
+  by the DEFENSIVE rule or by M06. Owner to choose how to count blocked ideas.
 
 - **M06 SHADOW**: meta-model below break-even; ideas often **WAIT** — expected until evidence improves.
 - **Gap #3**: no adjusted price layer; B0 clean 2026-10-05 — monitor with periodic `brain split-check`.

@@ -20,6 +20,7 @@ from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.enums import SignalType
 from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.db.models.market import Instrument
+from swing_trade_ml.ml import real_question
 from swing_trade_ml.ml.features import atr, build_features
 from swing_trade_ml.ml.market_context import (
     load_index_candles,
@@ -92,7 +93,8 @@ class MLSwingStrategy(BaseStrategy):
         if len(df) < self.min_bars_required():
             return None
 
-        model = get_active_model(db, self.params.get("model_name"))
+        # Unchanged unless the owner set ML_REAL_QUESTION_SUFFIX (off by default).
+        model = get_active_model(db, real_question.resolve_model_name(self.params.get("model_name")))
         if model is None:
             log.warning("ml_swing.no_active_model", strategy=self.config.name)
             return None
@@ -131,7 +133,7 @@ class MLSwingStrategy(BaseStrategy):
         avg_volume = float(d["volume"].rolling(20).mean().iloc[-1])
         daily_vol = float(d["close"].pct_change().rolling(20).std().iloc[-1])
 
-        threshold = self.params.get("min_confidence") or settings.ML_MIN_CONFIDENCE
+        threshold = self.params.get("min_confidence") or real_question.min_confidence()
         # NIFTY's own SMA50/200 cross, from build_features' index context —
         # negative means the broad market itself is in a downtrend.
         nifty_regime = float(row["nifty_trend_regime"].iloc[0])

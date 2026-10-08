@@ -248,9 +248,29 @@ def cmd_train(args: argparse.Namespace) -> int:
 
     with session_scope() as db:
         try:
+            symbols = (
+                [s.strip().upper() for s in args.symbols.split(",") if s.strip()]
+                if args.symbols
+                else None
+            )
+            if args.symbols_from_model:
+                from sqlalchemy import select
+
+                from swing_trade_ml.db.models.ml import MLModel
+
+                src = db.execute(
+                    select(MLModel)
+                    .where(MLModel.name == args.symbols_from_model)
+                    .order_by(MLModel.id.desc())
+                    .limit(1)
+                ).scalar_one_or_none()
+                if src is None or not src.training_symbols:
+                    raise ValueError(f"No trained model named {args.symbols_from_model!r} to copy symbols from")
+                symbols = list(src.training_symbols)
             model = train_model(
                 db,
                 name=args.name,
+                symbols=symbols,
                 algorithm=args.algorithm,
                 interval=args.interval,
                 horizon_days=args.horizon_days,
@@ -745,6 +765,13 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Fit an isotonic map on a later slice so a stated 70%% confidence hits "
         "near 70%% (default: off)",
+    )
+    p.add_argument("--symbols", default=None, help="Comma-separated tradingsymbols (default: the watchlist)")
+    p.add_argument(
+        "--symbols-from-model",
+        default=None,
+        help="Train on the same stocks the newest model with this name was trained on "
+        "(e.g. swing_classifier_midcap) - how the mid/small-cap tier lists are reproduced",
     )
     p.add_argument("--activate", action="store_true", help="Promote to ACTIVE after training")
     p.set_defaults(func=cmd_train)

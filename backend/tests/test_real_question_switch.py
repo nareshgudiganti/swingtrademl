@@ -16,7 +16,6 @@ from types import SimpleNamespace
 import numpy as np
 import pandas as pd
 import pytest
-from tests.test_barrier_aligned_trade import _candles
 
 from swing_trade_ml.core.config import Settings, settings
 from swing_trade_ml.core.enums import SignalType
@@ -28,6 +27,22 @@ from swing_trade_ml.services.exit_policy import exit_confidence_for
 from swing_trade_ml.services.score_history import score_band
 from swing_trade_ml.strategies import ml_swing
 from swing_trade_ml.strategies.ml_swing import MLSwingStrategy
+
+
+def _candles(bars: int = 280, last_close: float = 1_000.0) -> pd.DataFrame:
+    """Same calm, gently rising series as test_barrier_aligned_trade. Copied,
+    not imported: `tests` is not a package, so `from tests...` breaks in CI."""
+    closes = [last_close - (bars - 1 - i) * 0.5 for i in range(bars)]
+    return pd.DataFrame(
+        {
+            "ts": pd.date_range("2025-01-01", periods=bars, freq="D"),
+            "open": closes,
+            "high": [c * 1.02 for c in closes],
+            "low": [c * 0.98 for c in closes],
+            "close": closes,
+            "volume": [500_000] * bars,
+        }
+    )
 
 
 def _on(monkeypatch, suffix="_barrier_cal"):

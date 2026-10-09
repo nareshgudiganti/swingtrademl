@@ -65,21 +65,18 @@
 
 ## Known issues (still true)
 
-- **Brain records no ideas while the market is stressed (diagnosed 2026-10-08)**: the brain reaches TRADE
-  for ~119 stocks, then version 1's market-stress rule (`services/risk.py`, max 10% invested) rejects
-  108 of them because the two open paper positions already use the cap. So "N of 30" stays 0. Not caused
-  by the DEFENSIVE rule or by M06. **Owner chose option B (2026-10-09); implemented on a worktree branch,
-  not yet on `main`.** In practice mode only, a brain idea refused by a v1 risk limit (market-stress cap,
-  slots, cash, sector...) is tagged `features["blocked_by_risk_limit"]` and its reason is prefixed
-  "Blocked by a risk limit (practice evidence only)". It is scored to outcome like any idea but is NOT a
-  risk event, and no limit or order path changed. **Counting (conservative):** the "N of 30" gate counts
-  only ideas that could really have been placed; blocked ones are reported separately
-  (`finished_blocked` on `/brain/stage`, `brain_finished_blocked` on the compare report) and excluded
-  from the brain-vs-v1 hit rate. One switch, `COUNT_BLOCKED_TOWARD_GATE` in
-  `services/brain_golive/compare.py`, lets the owner count them toward the gate too. Note: rejected brain
-  signals were already being saved and scored before this change (untagged), so those older ones still
-  count as before; a 0 may also simply mean 15-day horizons have not finished yet. The frontend does not
-  show the new blocked number yet.
+- **Brain recorded no ideas, 2026-10-04 to 10-09 (root cause found 2026-10-09, fix on `develop`)**: the
+  brain's own risk module (M07) asks version 1's `check_entry`; when it says no, M08 `_risk_check`
+  (`brain/modules/m08_decide/rules.py`) lowers TRADE to WATCH ("Good idea, but the risk check said no").
+  `strategies/brain.py` turned every non-TRADE into a HOLD with no stop/target, and the compare report and
+  the "N of 30" gate only count BUYs with stop and target — so nothing was ever counted (74-108 such ideas
+  a day on prod). The earlier note that "version 1 rejected 108" was wrong: these were brain-side
+  downgrades, and the v1-side tag (`a139d9f`) never fired. **Fix:** in the practice stage only, such a
+  WATCH (downgraded from TRADE purely by the risk check, levels present, no owner overrule) is emitted as
+  a BUY tagged `features["blocked_by_risk_limit"]`, so it is scored to outcome, counted as
+  `finished_blocked` (not toward the gate; switch `COUNT_BLOCKED_TOWARD_GATE` in `compare.py`), kept off
+  `/signals/picks`, `/buy-list`, the suggestion list and the track record, and never made an approval.
+  The brain strategy is advisory, so nothing is bought. Tests: `test_brain_risk_downgrade_evidence.py`.
 
 - **M06 SHADOW**: meta-model below break-even; ideas often **WAIT** — expected until evidence improves.
 - **Gap #3**: no adjusted price layer; B0 clean 2026-10-05 — monitor with periodic `brain split-check`.

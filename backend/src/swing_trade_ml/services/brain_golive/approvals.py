@@ -41,7 +41,7 @@ from swing_trade_ml.db.models.trading import Order, Position, Signal, Strategy
 from swing_trade_ml.notifications import notifier
 from swing_trade_ml.services import risk
 from swing_trade_ml.services.brain_golive.stage import AUTO_BY, current_stage
-from swing_trade_ml.services.execution import open_position
+from swing_trade_ml.services.execution import BLOCKED_BY_RISK_KEY, open_position
 from swing_trade_ml.services.portfolio import portfolio_value_and_cash
 from swing_trade_ml.strategies import brain as brain_strategy
 
@@ -501,6 +501,9 @@ def create_pending(db: Session, today: date) -> list[BrainApproval]:
     seen: set[str] = set()
     created: list[BrainApproval] = []
     for sig, symbol in rows:
+        # Practice-only evidence (a blocked idea) is never something to approve.
+        if (sig.features or {}).get(BLOCKED_BY_RISK_KEY):
+            continue
         if symbol in seen:  # the newest scan's signal wins
             continue
         seen.add(symbol)

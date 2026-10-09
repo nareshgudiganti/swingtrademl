@@ -83,7 +83,28 @@ def why(d: BrainDecision) -> str:
     return d.evidence_text or f"The brain says {d.word}."
 
 
-def to_signal(d: BrainDecision | None, run: BrainRun | None, price: float) -> SignalDecision:
+RISK_SAID_NO = "but the risk check said no"
+# == services.execution.BLOCKED_BY_RISK_KEY (not imported: strategies must not
+# depend on execution).
+BLOCKED_BY_RISK_KEY = "blocked_by_risk_limit"
+
+
+def blocked_by_risk(d: BrainDecision) -> bool:
+    """A TRADE the brain itself lowered to WATCH only because the risk check
+    (version 1's limits, via M07) said no — a good idea nothing could buy.
+    Never true after an owner overrule: that is a judgement, not a limit."""
+    return (
+        d.kind == "idea"
+        and d.overruled_word is None
+        and d.word == "WATCH"
+        and d.downgraded_from == "TRADE"
+        and RISK_SAID_NO in (d.downgrade_reason or "")
+    )
+
+
+def to_signal(
+    d: BrainDecision | None, run: BrainRun | None, price: float, *, practice: bool = False
+) -> SignalDecision:
     if run is None:
         return SignalDecision(SignalType.HOLD, price, reason=NO_RUN_TODAY)
     if d is None:
@@ -110,6 +131,21 @@ def to_signal(d: BrainDecision | None, run: BrainRun | None, price: float) -> Si
             horizon_days=int(d.horizon_days),
             features=features,
         )
+    if practice and blocked_by_risk(d) and d.stop is not None and d.target is not None:
+        # Practice evidence only: recorded as a BUY so it is scored to its
+        # outcome like any idea, and tagged so it never counts as placeable
+        # (services/brain_golive/compare.py). The brain strategy is advisory,
+        # so nothing is bought; outside practice this branch never runs.
+        return SignalDecision(
+            SignalType.BUY,
+            price,
+            d.confidence,
+            why(d),
+            stop_loss=float(d.stop),
+            take_profit=float(d.target),
+            horizon_days=int(d.horizon_days),
+            features={**features, BLOCKED_BY_RISK_KEY: "BRAIN_RISK_CHECK"},
+        )
     # No confidence on a HOLD: the brain's number is not always a probability
     # (BrainDecision.score_source), and v1's decay alert must not read it as one.
     return SignalDecision(SignalType.HOLD, price, reason=why(d), features=features)
@@ -130,6 +166,7 @@ class BrainStrategy(BaseStrategy):
         self._loaded_for: date | None = None
         self._run: BrainRun | None = None
         self._decisions: dict[str, BrainDecision] = {}
+        self._practice = False
 
     def min_bars_required(self) -> int:
         return 1  # it reads stored decisions; one bar gives today's price
@@ -140,6 +177,12 @@ class BrainStrategy(BaseStrategy):
         today = today_ist()
         if self._loaded_for != today:
             self._run, self._decisions = todays_decisions(db, today, self.config.mode)
+            # Imported here: the stage service sits above strategies.
+            from swing_trade_ml.services.brain_golive.stage import current_stage
+
+            self._practice = current_stage(db) not in ("approval", "auto")
             self._loaded_for = today
         price = float(df["close"].iloc[-1])
-        return to_signal(self._decisions.get(instrument.tradingsymbol), self._run, price)
+        return to_signal(
+            self._decisions.get(instrument.tradingsymbol), self._run, price, practice=self._practice
+        )

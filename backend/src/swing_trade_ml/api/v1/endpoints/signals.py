@@ -15,9 +15,16 @@ from swing_trade_ml.db.models.market import Candle, Instrument
 from swing_trade_ml.db.models.trading import Position, Signal, Strategy, Trade
 from swing_trade_ml.schemas import SignalOut
 from swing_trade_ml.services.plans import history_cutoff, strategy_visible
+from swing_trade_ml.strategies.brain import BLOCKED_BY_RISK_KEY
 from swing_trade_ml.strategies.tier import cap_tier
 
 router = APIRouter(prefix="/signals", tags=["signals"])
+
+
+def _practice_evidence(sig: Signal) -> bool:
+    """A practice-brain idea the risk limits blocked: kept only as scored
+    evidence for the Brain page, never shown as something to buy."""
+    return bool((sig.features or {}).get(BLOCKED_BY_RISK_KEY))
 
 
 @router.get("", response_model=list[SignalOut])
@@ -84,7 +91,11 @@ def latest_actionable(
     stmt = (
         select(Signal, Instrument.tradingsymbol, Instrument.name)
         .join(Instrument, Instrument.id == Signal.instrument_id)
-        .where(Signal.mode == get_broker().mode)
+        .where(
+            Signal.mode == get_broker().mode,
+            # In SQL, not after: the limit below must count only real signals.
+            Signal.features[BLOCKED_BY_RISK_KEY].as_string().is_(None),
+        )
         .order_by(Signal.generated_at.desc())
     )
     if symbol:
@@ -152,6 +163,8 @@ def picks(db: DbSession, access: PlanAccessDep) -> list[dict]:
 
     best: dict[str, dict] = {}
     for sig, symbol, name, strategy in rows:
+        if _practice_evidence(sig):
+            continue
         if symbol in best or not strategy_visible(strategy, access):
             continue
         best[symbol] = {
@@ -240,6 +253,8 @@ def top_picks(
 
     candidates: list[dict] = []
     for sig, symbol, name, strategy in rows:
+        if _practice_evidence(sig):
+            continue
         if not strategy_visible(strategy, access):
             continue
         tier = cap_tier(strategy.params.get("model_name") if strategy.params else None)
@@ -360,6 +375,7 @@ def buy_list(db: DbSession) -> list[dict]:
             "generated_at": sig.generated_at,
         }
         for sig, symbol, name, strategy_name in rows
+        if not _practice_evidence(sig)
     ]
 
 
@@ -389,6 +405,8 @@ def track_record(db: DbSession, access: PlanAccessDep) -> list[dict]:
 
     out: list[dict] = []
     for sig, symbol, name, strategy in rows:
+        if _practice_evidence(sig):
+            continue
         trade_row = None
         if sig.was_executed and show_trade:
             trade_row = db.execute(

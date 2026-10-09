@@ -27,12 +27,23 @@ the owner's approval before it changes what is bought. Trading rules stay as set
 | 7 | Reads results and news | Knows results *dates* only (M13) | **Owner decision** — needs a news source (breaks the settled "no outside data" rule). Not planned unless approved | — |
 | 8 | Keeps a diary and changes behaviour from it | M09 report exists; proposals not acted on | Monthly "what worked" card by setup × market state; proposals with ≥ 50 cases go to the owner | M09 |
 
+## Owner decisions (2026-10-09)
+
+- **At most 5 ideas a day** — "top 5 is sufficient". The rest are not shown as ideas.
+- **Strongest sectors by default** — new ideas only from the top-ranked (bullish) sectors.
+  The rule already exists in M08 (`sector_gate`), switched off by `BRAIN_SECTOR_GATE_TOP_N=0`;
+  proposed default 3. In a falling market no sector may qualify — then no ideas, which is fine.
+- The owner only looks at **model score above 80**. Today that score is over-confident (the 70%+
+  group reached +8% only 12.5% of the time), so the score is fixed in the same step, not later.
+
 ## Order of work
 
 1. **Per-stock stops and targets (#1)** — biggest single effect. Test on past data first
    (`brain replay-week` over the last 6 months): compare hit rate and average result with the
    fixed +8/−4 rule. Ship only if the average result per idea is better after costs.
-2. **Top-5 limit + strength gate in falling markets (#2, #3)** — same replay test.
+2. **Top 5 a day from the strongest sectors (#2, #3) + an honest score (#5)** — sector gate on
+   (top 3), rank by score within those sectors, keep 5. Recalibrate the score on finished ideas so a
+   higher score really means a better chance, and the number shown matches what happens. Same replay test.
 3. **"All clear" checklist (#4)** — shown on the banner; changes no trades by itself.
 4. **Entry range (#6)**, **calibration (#5)**, **diary (#8)** — after 30+ finished ideas.
 

@@ -26,7 +26,6 @@ from swing_trade_ml.core.strategy_policy import STAGED_TYPES
 from swing_trade_ml.db.models.market import Candle, Instrument
 from swing_trade_ml.db.models.trading import (
     Order,
-    PortfolioSnapshot,
     Position,
     Signal,
     Strategy,
@@ -35,7 +34,7 @@ from swing_trade_ml.ml.sector_map import get_sector_bucket, sector_display_name
 from swing_trade_ml.services import avoid, deployable, system_state
 from swing_trade_ml.services.costs import apply_slippage, compute_charges
 from swing_trade_ml.services.limits import LARGE, SMALL, Limits, format_inr, limits_for
-from swing_trade_ml.services.portfolio import portfolio_value_and_cash
+from swing_trade_ml.services.portfolio import drawdown_peak, portfolio_value_and_cash
 from swing_trade_ml.strategies.tier import cap_tier
 
 log = get_logger(__name__)
@@ -187,10 +186,9 @@ def current_drawdown(db: Session, mode: str, current_value: float | None = None)
     if current_value is None:
         current_value, _cash = portfolio_value_and_cash(db, mode)
     # No snapshot yet means a fresh account with no known peak, so there is
-    # nothing to have fallen from — and nothing to divide by.
-    peak = db.execute(
-        select(func.max(PortfolioSnapshot.peak_value)).where(PortfolioSnapshot.mode == mode)
-    ).scalar()
+    # nothing to have fallen from — and nothing to divide by. During a paper
+    # trial the peak is the trial's own (see portfolio.drawdown_peak).
+    peak = drawdown_peak(db, mode)
     if not peak:
         return 0.0
     return max(0.0, (peak - current_value) / peak)

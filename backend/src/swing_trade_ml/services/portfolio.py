@@ -183,7 +183,13 @@ def take_snapshot(db: Session, mode: str | None = None) -> PortfolioSnapshot:
 
     starting = settings.PAPER_STARTING_CAPITAL if mode == TradingMode.PAPER else total_value
     day_pnl = total_value - previous.total_value if previous else total_value - starting
-    peak = max(total_value, previous.peak_value if previous else starting)
+    if trial_start(mode) is not None:
+        # The stored peak_value of earlier rows carries the replaced run's high
+        # (see drawdown_peak), so the trial's peak is rebuilt from its values.
+        prior_peak = drawdown_peak(db, mode)
+        peak = max(total_value, prior_peak if prior_peak is not None else starting)
+    else:
+        peak = max(total_value, previous.peak_value if previous else starting)
     drawdown = (peak - total_value) / peak if peak else 0.0
 
     today = now.date()
@@ -258,6 +264,54 @@ def _opening_equity(db: Session, mode: str, since: datetime, fallback: float) ->
         .limit(1)
     ).scalar_one_or_none()
     return float(opening) if opening is not None else fallback
+
+
+def _trial_peak(db: Session, mode: str, since: datetime, until: datetime | None = None) -> float | None:
+    """The high-water mark of a trial: the equity it opened with, or any
+    higher value recorded from `since` (up to `until`, when given). None when
+    there is no snapshot at all to take a peak from."""
+    opening = db.execute(
+        select(PortfolioSnapshot.total_value)
+        .where(PortfolioSnapshot.mode == mode, PortfolioSnapshot.ts < since)
+        .order_by(PortfolioSnapshot.ts.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+    stmt = select(func.max(PortfolioSnapshot.total_value)).where(
+        PortfolioSnapshot.mode == mode, PortfolioSnapshot.ts >= since
+    )
+    if until is not None:
+        stmt = stmt.where(PortfolioSnapshot.ts < until)
+    highest = db.execute(stmt).scalar()
+    values = [float(v) for v in (opening, highest) if v is not None]
+    return max(values) if values else None
+
+
+def drawdown_peak(db: Session, mode: str) -> float | None:
+    """The peak the 15% drawdown halt measures from.
+
+    During a paper trial it is the trial's own high-water mark. Stored
+    `peak_value` cannot be used for that: every row carries forward the
+    highest value ever seen, so a trial opened ₹20K below the old run's
+    ₹10,00,000 high would start life 2% "in drawdown" and halt 2% early.
+    Outside a trial (live, or the setting cleared) it is the stored peak, as
+    before."""
+    since = trial_start(mode)
+    if since is None:
+        peak = db.execute(
+            select(func.max(PortfolioSnapshot.peak_value)).where(PortfolioSnapshot.mode == mode)
+        ).scalar()
+        return float(peak) if peak else None
+    return _trial_peak(db, mode, since)
+
+
+def _running_drawdowns(values: list[float], seed: float | None) -> list[float]:
+    """Drawdown of each value from the running peak, starting from `seed`."""
+    peak = seed or 0.0
+    out = []
+    for v in values:
+        peak = max(peak, v)
+        out.append((peak - v) / peak if peak else 0.0)
+    return out
 
 
 def performance_stats(
@@ -374,8 +428,16 @@ def performance_stats(
     if len(snapshots) > 1:
         values = np.array([s.total_value for s in snapshots], dtype=float)
         daily_returns = np.diff(values) / values[:-1]
-        stats["max_drawdown_pct"] = float(max(s.drawdown_pct for s in snapshots))
-        stats["current_drawdown_pct"] = float(snapshots[-1].drawdown_pct)
+        if since is not None:
+            # Rebuilt from the trial's own values: stored drawdown_pct was
+            # measured against the replaced run's peak.
+            drawdowns = _running_drawdowns(
+                [s.total_value for s in snapshots], _trial_peak(db, mode, since, until=since)
+            )
+        else:
+            drawdowns = [s.drawdown_pct for s in snapshots]
+        stats["max_drawdown_pct"] = float(max(drawdowns))
+        stats["current_drawdown_pct"] = float(drawdowns[-1])
         stats["day_pnl"] = float(snapshots[-1].day_pnl)
         stats["day_pnl_pct"] = (
             float(snapshots[-1].day_pnl / snapshots[-2].total_value)
@@ -542,6 +604,14 @@ def equity_curve(
         .scalars()
         .all()
     )
+    if boundary is not None:
+        # Same rebuild as performance_stats: seed with the trial's peak up to
+        # the first point shown, so a shorter `days` window agrees too.
+        drawdowns = _running_drawdowns(
+            [s.total_value for s in snapshots], _trial_peak(db, mode, boundary, until=since)
+        )
+    else:
+        drawdowns = [s.drawdown_pct for s in snapshots]
     return [
         {
             "date": s.ts.date().isoformat(),
@@ -549,8 +619,8 @@ def equity_curve(
             "cash": s.cash,
             "holdings_value": s.holdings_value,
             "day_pnl": s.day_pnl,
-            "drawdown_pct": s.drawdown_pct,
+            "drawdown_pct": dd,
             "open_positions": s.open_positions,
         }
-        for s in snapshots
+        for s, dd in zip(snapshots, drawdowns, strict=True)
     ]

@@ -189,3 +189,65 @@ def test_equity_curve_starts_at_the_trial(trial, book, client):
     scoped = client.get("/api/v1/portfolio/equity-curve?days=1825", headers=HEADERS)
     assert scoped.status_code == 200
     assert scoped.json() == [every.json()[-1]]
+
+
+# ---- the 15% drawdown halt measures from the trial's own peak -------------
+
+
+def test_halt_does_not_inherit_the_replaced_runs_peak(trial, book, db_session):
+    """Stored peak_value carries the old run's ₹10,00,000 high. Measured from
+    that, the trial opened ~2% "in drawdown" and would halt ~2% early."""
+    from swing_trade_ml.services.risk import current_drawdown
+
+    assert portfolio_service.drawdown_peak(db_session, "paper") == pytest.approx(OPENING_EQUITY + 1_500.0)
+    assert current_drawdown(db_session, "paper", current_value=OPENING_EQUITY + 1_500.0) == 0.0
+
+
+def test_halt_still_fires_on_a_real_fall_inside_the_trial(trial, book, db_session):
+    from swing_trade_ml.services.risk import current_drawdown
+
+    peak = OPENING_EQUITY + 1_500.0
+    assert current_drawdown(db_session, "paper", current_value=peak * 0.84) == pytest.approx(0.16)
+
+
+def test_live_drawdown_still_uses_the_stored_peak(trial, db_session):
+    from swing_trade_ml.services.risk import current_drawdown
+
+    db_session.add(
+        PortfolioSnapshot(
+            mode="live", ts=AFTER, cash=950_000.0, holdings_value=0.0, total_value=950_000.0,
+            peak_value=1_000_000.0, drawdown_pct=0.05,
+        )
+    )
+    db_session.commit()
+    assert current_drawdown(db_session, "live", current_value=900_000.0) == pytest.approx(0.10)
+
+
+def test_snapshot_peak_rebases_to_the_trial(trial, book, monkeypatch, db_session):
+    """A new snapshot's peak must come from the trial, not the stored ₹10L."""
+    monkeypatch.setattr(
+        portfolio_service, "portfolio_value_and_cash", lambda db, mode: (970_000.0, 970_000.0)
+    )
+    snap = portfolio_service.take_snapshot(db_session, "paper")
+    assert snap.peak_value == pytest.approx(OPENING_EQUITY + 1_500.0)
+    assert snap.drawdown_pct == pytest.approx(1 - 970_000.0 / (OPENING_EQUITY + 1_500.0))
+
+
+def test_trial_drawdown_is_rebuilt_from_values_not_stored_column(trial, db_session):
+    """Trial rows written before this fix store a drawdown against the old
+    peak; the report must recompute it from the trial's values."""
+    db_session.add_all(
+        [
+            PortfolioSnapshot(mode="paper", ts=BEFORE, cash=OPENING_EQUITY, holdings_value=0.0,
+                              total_value=OPENING_EQUITY, peak_value=1_000_000.0, drawdown_pct=0.02),
+            PortfolioSnapshot(mode="paper", ts=AFTER, cash=OPENING_EQUITY, holdings_value=0.0,
+                              total_value=OPENING_EQUITY, peak_value=1_000_000.0, drawdown_pct=0.02),
+            PortfolioSnapshot(mode="paper", ts=AFTER + timedelta(days=1), cash=OPENING_EQUITY * 0.95,
+                              holdings_value=0.0, total_value=OPENING_EQUITY * 0.95,
+                              peak_value=1_000_000.0, drawdown_pct=0.0695),
+        ]
+    )
+    db_session.commit()
+    stats = portfolio_service.performance_stats(db_session, "paper")
+    assert stats["max_drawdown_pct"] == pytest.approx(0.05)
+    assert stats["current_drawdown_pct"] == pytest.approx(0.05)

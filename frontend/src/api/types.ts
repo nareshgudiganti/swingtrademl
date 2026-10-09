@@ -1175,6 +1175,9 @@ export interface BrainStage {
   stage: BrainStageName
   plain: string
   finished: number
+  // Finished practice ideas that version 1's safety limits would have stopped.
+  // Scored, but not counted in `finished`. Absent on an older backend.
+  finished_blocked?: number
   needed: number
   ready: boolean
   history: BrainStageChange[]

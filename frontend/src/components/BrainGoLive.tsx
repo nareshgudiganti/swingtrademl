@@ -160,6 +160,13 @@ export function BrainStageCard() {
               : `The brain stays in practice until ${s.needed} have finished.`}{' '}
             Going back to practice is always allowed and takes effect at once.
           </p>
+          {s.finished_blocked !== undefined && (
+            <p className="stat-sub">
+              {s.finished_blocked} more finished {s.finished_blocked === 1 ? 'idea was' : 'ideas were'} stopped by the
+              safety limits (for example, too much money already invested while the market is stressed). They are
+              scored for practice but do not count toward the {s.needed}.
+            </p>
+          )}
           <p className="stat-sub">
             Going back to practice stops new buying. Ideas waiting for your OK, and ideas you approved that are not
             placed yet, are cancelled and nothing new is bought. Shares the brain already bought are kept: the usual

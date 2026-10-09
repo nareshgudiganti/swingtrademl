@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.enums import ExitReason, OrderStatus, PositionStatus, TransactionType
 from swing_trade_ml.core.logging import get_logger
-from swing_trade_ml.core.strategy_policy import STAGED_TYPES
+from swing_trade_ml.core.strategy_policy import STAGED_TYPES, outside_tester_book
 from swing_trade_ml.db.models.market import Candle, Instrument
 from swing_trade_ml.db.models.trading import (
     Order,
@@ -107,7 +107,9 @@ def open_position_count(db: Session, mode: str, strategy_id: int | None = None) 
     so a scan cannot hand out the same slot twice while Kite is still
     reconciling the first one."""
     stmt = select(func.count(Position.id)).where(
-        Position.mode == mode, Position.status == PositionStatus.OPEN
+        Position.mode == mode,
+        Position.status == PositionStatus.OPEN,
+        outside_tester_book(Position.strategy_id),
     )
     if strategy_id is not None:
         stmt = stmt.where(Position.strategy_id == strategy_id)
@@ -239,6 +241,7 @@ def in_flight_buy_holdings(
             # Reconciliation sets position_id when it creates the Position, so
             # this is what stops the same money being counted twice.
             Order.position_id.is_(None),
+            outside_tester_book(Order.strategy_id),
             *([Order.strategy_id == strategy_id] if strategy_id is not None else []),
         )
     ).all()
@@ -251,7 +254,8 @@ def in_flight_buy_holdings(
 
 
 def open_holdings(db: Session, mode: str) -> list[Holding]:
-    """Every open position in this mode, across all strategies, valued at the
+    """Every open position in this mode, across all the bot's strategies (not
+    the manual testing book, which has its own capital), valued at the
     latest marked price where one exists and at entry otherwise.
 
     Across strategies on purpose: a sector shock hits the account, not one
@@ -262,7 +266,11 @@ def open_holdings(db: Session, mode: str) -> list[Holding]:
         select(Position, Instrument.tradingsymbol, Strategy.params)
         .join(Instrument, Instrument.id == Position.instrument_id)
         .join(Strategy, Strategy.id == Position.strategy_id, isouter=True)
-        .where(Position.mode == mode, Position.status == PositionStatus.OPEN)
+        .where(
+            Position.mode == mode,
+            Position.status == PositionStatus.OPEN,
+            outside_tester_book(Position.strategy_id),
+        )
     ).all()
     holdings: list[Holding] = []
     for position, symbol, params in rows:

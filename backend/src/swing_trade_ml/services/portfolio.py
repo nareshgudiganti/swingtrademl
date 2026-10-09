@@ -14,6 +14,7 @@ from swing_trade_ml.brokers import get_broker, paper_broker
 from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.enums import PositionStatus, TradingMode
 from swing_trade_ml.core.logging import get_logger
+from swing_trade_ml.core.strategy_policy import outside_tester_book
 from swing_trade_ml.db.models.market import Instrument, Quote
 from swing_trade_ml.db.models.trading import PortfolioSnapshot, Position, Strategy, Trade
 
@@ -63,7 +64,11 @@ def portfolio_value_and_cash(
     auto-executed) still needs its real cash figure while the app itself is
     still in the paper phase, so this can't wait on that global toggle.
     """
-    stmt = select(Position).where(Position.mode == mode, Position.status == PositionStatus.OPEN)
+    stmt = select(Position).where(
+        Position.mode == mode,
+        Position.status == PositionStatus.OPEN,
+        outside_tester_book(Position.strategy_id),
+    )
     if bot_book_only:
         stmt = stmt.where(exclude_hand_books(Position.strategy_id))
     open_positions = list(db.execute(stmt).scalars().all())
@@ -162,7 +167,11 @@ def take_snapshot(db: Session, mode: str | None = None) -> PortfolioSnapshot:
 
     open_positions = list(
         db.execute(
-            select(Position).where(Position.mode == mode, Position.status == PositionStatus.OPEN)
+            select(Position).where(
+                Position.mode == mode,
+                Position.status == PositionStatus.OPEN,
+                outside_tester_book(Position.strategy_id),
+            )
         )
         .scalars()
         .all()
@@ -345,9 +354,17 @@ def performance_stats(
     mode = mode or get_broker().mode
     since = None if all_time else trial_start(mode)
 
-    trades_stmt = select(Trade).where(Trade.mode == mode).order_by(Trade.exit_at)
+    # The manual testing book has its own capital and its own summary
+    # (book=tester), so it is never part of the account's figures.
+    trades_stmt = (
+        select(Trade)
+        .where(Trade.mode == mode, outside_tester_book(Trade.strategy_id))
+        .order_by(Trade.exit_at)
+    )
     positions_stmt = select(Position).where(
-        Position.mode == mode, Position.status == PositionStatus.OPEN
+        Position.mode == mode,
+        Position.status == PositionStatus.OPEN,
+        outside_tester_book(Position.strategy_id),
     )
     if since is not None:
         trades_stmt = trades_stmt.where(Trade.exit_at >= since)

@@ -81,3 +81,29 @@ def test_tester_buy_rejected_when_disabled(db_session, monkeypatch):
     _price(db_session, inst, 50.0)
     with pytest.raises(tester_paper.PaperTesterDisabled):
         tester_paper.paper_buy(db_session, "PTOFF", 1, "midcap")
+
+
+def test_tester_positions_are_not_the_bots_money(db_session):
+    """Prod 2026-10-08: eight test buys filled all of the bot's position slots
+    (room 0) and spent its paper cash. The testing book has its own capital."""
+    from swing_trade_ml.brokers import paper_broker
+    from swing_trade_ml.services import portfolio, risk
+
+    cash_before = paper_broker.get_available_cash(db_session)
+    value_before, _ = portfolio.portfolio_value_and_cash(db_session, TradingMode.PAPER)
+    count_before = risk.open_position_count(db_session, TradingMode.PAPER)
+    holdings_before = len(risk.open_holdings(db_session, TradingMode.PAPER))
+
+    inst = _instrument(db_session, "PTSLOT", 880003)
+    _price(db_session, inst, 100.0)
+    tester_paper.paper_buy(db_session, "PTSLOT", 50, "large")
+
+    assert paper_broker.get_available_cash(db_session) == pytest.approx(cash_before)
+    value_after, _ = portfolio.portfolio_value_and_cash(db_session, TradingMode.PAPER)
+    assert value_after == pytest.approx(value_before)
+    assert risk.open_position_count(db_session, TradingMode.PAPER) == count_before
+    assert len(risk.open_holdings(db_session, TradingMode.PAPER)) == holdings_before
+    stats = portfolio.performance_stats(db_session, TradingMode.PAPER)
+    assert stats["open_positions"] == 0
+    # ...while the testing book still sees its own position.
+    assert tester_paper.available_cash(db_session) < 1_000_000.0

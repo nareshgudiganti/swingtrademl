@@ -9,6 +9,22 @@ STAGED_TYPES = frozenset({"brain"})
 NON_SCAN_STRATEGY_TYPES = frozenset({"tester_paper"})
 
 
+def outside_tester_book(strategy_id_col):
+    """A WHERE clause dropping the manual paper-testing book's rows.
+
+    That book has its own starting capital (services/tester_paper.py), so its
+    positions, trades and orders are never the bot's money: counting them used
+    to fill the bot's position slots and spend its paper cash. Rows with no
+    strategy at all are the bot's.
+    """
+    from sqlalchemy import or_, select
+
+    from swing_trade_ml.db.models.trading import Strategy
+
+    tester_ids = select(Strategy.id).where(Strategy.strategy_type.in_(sorted(NON_SCAN_STRATEGY_TYPES)))
+    return or_(strategy_id_col.is_(None), strategy_id_col.not_in(tester_ids))
+
+
 def requires_advisory(strategy_type: str) -> bool:
     return strategy_type in MANUAL_ONLY_TYPES or strategy_type in STAGED_TYPES
 

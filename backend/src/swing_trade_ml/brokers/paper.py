@@ -50,6 +50,7 @@ from swing_trade_ml.core.enums import (
     TransactionType,
 )
 from swing_trade_ml.core.logging import get_logger
+from swing_trade_ml.core.strategy_policy import outside_tester_book
 from swing_trade_ml.db.models.market import Candle, Instrument, Quote
 from swing_trade_ml.db.models.trading import Order, Position, Trade
 from swing_trade_ml.services.costs import apply_slippage, compute_charges
@@ -130,7 +131,7 @@ class PaperBroker(Broker):
         realized = float(
             db.execute(
                 select(func.coalesce(func.sum(Trade.net_pnl), 0.0))
-                .where(Trade.mode == TradingMode.PAPER)
+                .where(Trade.mode == TradingMode.PAPER, outside_tester_book(Trade.strategy_id))
             ).scalar_one()
         )
         locked_in_open = float(
@@ -141,7 +142,11 @@ class PaperBroker(Broker):
                         0.0,
                     )
                 )
-                .where(Position.mode == TradingMode.PAPER, Position.status == PositionStatus.OPEN)
+                .where(
+                    Position.mode == TradingMode.PAPER,
+                    Position.status == PositionStatus.OPEN,
+                    outside_tester_book(Position.strategy_id),
+                )
             ).scalar_one()
         )
         return settings.PAPER_STARTING_CAPITAL + realized - locked_in_open

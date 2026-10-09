@@ -18,13 +18,17 @@ services:
   # The TradeMind brain, in practice mode: its ideas are recorded and scored
   # next to version 1, nothing is bought (docs/brain/GO_LIVE.md). Set to
   # "false" here and redeploy to hide it again.
+  # MAX_PORTFOLIO_DRAWDOWN_PCT: the settled 15% halt (CLAUDE.md). The server .env
+  # had 0.20, which outranks the code default; this line outranks the .env.
   api:
     environment:
       BRAIN_ENABLED: "true"
+      MAX_PORTFOLIO_DRAWDOWN_PCT: "0.15"
 
   worker:
     environment:
       BRAIN_ENABLED: "true"
+      MAX_PORTFOLIO_DRAWDOWN_PCT: "0.15"
       # Second copy of every trained model (ml/backup.py, daily at 16:30 IST).
       # Its own volume, so losing or wiping model_data does not take the
       # backup with it. Same disk, though - not a substitute for off-server.

@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from datetime import date, datetime, time
+from zoneinfo import ZoneInfo
+
 import pandas as pd
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -18,6 +21,22 @@ from swing_trade_ml.ml.market_context import (
 from swing_trade_ml.ml.sector_map import get_sector_index
 
 log = get_logger(__name__)
+
+_IST = ZoneInfo("Asia/Kolkata")
+
+
+def cutoff_timestamp(cutoff: date) -> pd.Timestamp:
+    """The end of `cutoff`'s IST day, as a timezone-aware timestamp."""
+    return pd.Timestamp(datetime.combine(cutoff, time(23, 59), tzinfo=_IST))
+
+
+def apply_cutoff(dataset: pd.DataFrame, cutoff: date | None) -> pd.DataFrame:
+    """Keep only rows whose label window ended on or before the cutoff, so no
+    training row's outcome was still unknown on that day."""
+    if cutoff is None or dataset.empty:
+        return dataset
+    ends = pd.to_datetime(dataset["label_end_ts"], utc=True)
+    return dataset[ends <= cutoff_timestamp(cutoff)].reset_index(drop=True)
 
 
 def load_candles(
@@ -58,6 +77,7 @@ def build_training_dataset(
     target_return: float = 0.08,
     stop_return: float = 0.04,
     min_rows: int = 300,
+    cutoff: date | None = None,
 ) -> pd.DataFrame:
     """Pool features and labels across instruments into one training frame.
 
@@ -114,6 +134,10 @@ def build_training_dataset(
         return pd.DataFrame()
 
     dataset = pd.concat(frames, ignore_index=True).sort_values("ts").reset_index(drop=True)
+    dataset = apply_cutoff(dataset, cutoff)
+    if dataset.empty:
+        log.warning("dataset.empty_after_cutoff", cutoff=str(cutoff))
+        return dataset
     log.info(
         "dataset.built",
         rows=len(dataset),

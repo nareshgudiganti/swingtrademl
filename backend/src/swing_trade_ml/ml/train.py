@@ -7,7 +7,7 @@ thresholds on, so calibration matters more than raw accuracy.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 
 import numpy as np
@@ -298,6 +298,7 @@ def train_model(
     auto_activate: bool = False,
     walk_forward_folds: int = 0,
     calibrate: bool = False,
+    cutoff: date | None = None,
 ) -> MLModel:
     """Train, evaluate on a held-out future window, and register the result.
 
@@ -324,6 +325,7 @@ def train_model(
     dataset = build_training_dataset(
         db, symbols=symbols, interval=interval,
         horizon_days=horizon_days, target_return=target_return, stop_return=stop_return,
+        cutoff=cutoff,
     )
     if dataset.empty:
         raise ValueError(
@@ -363,6 +365,8 @@ def train_model(
     if "split" in train_df.attrs:
         metrics["split"] = train_df.attrs["split"]
     metrics["embargo_days"] = horizon_days
+    if cutoff is not None:
+        metrics["asof_cutoff"] = cutoff.isoformat()
     if folds is not None:
         metrics["walk_forward"] = folds
 

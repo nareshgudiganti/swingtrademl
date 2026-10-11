@@ -148,6 +148,19 @@ def plain_summary(report: dict) -> str:
     lines = [
         f"Replay of {w['from']} to {w['to']}: {w['days_replayed']} trading day(s) replayed.",
     ]
+    m = report.get("model")
+    if m:
+        if m["in_sample"]:
+            lines.insert(
+                0,
+                "IN-SAMPLE: the model had already seen some of these days, so the numbers are flattering"
+                " and not evidence.",
+            )
+        gap = m["days_without_score"]
+        lines.append(
+            f"Scored by {m['name']} {m['version']}, trained on data up to {m['cutoff'] or 'an unknown date'}."
+            + (f" {gap} day{'s' if gap != 1 else ''} had no score." if gap else "")
+        )
     if w.get("failed_days"):
         lines.append("Days that failed and are missing from the numbers: " + ", ".join(w["failed_days"]))
     lines += _track_lines("Every idea (before the risk check)", report["track_a"])

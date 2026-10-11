@@ -30,10 +30,41 @@ from swing_trade_ml.brain.replay_week import run_replay_week
 from swing_trade_ml.core.market_session import last_closed_trading_day
 from swing_trade_ml.db.models.market import Candle, Instrument
 from swing_trade_ml.db.models.trading import Signal, Strategy
+from swing_trade_ml.ml.asof import asof_cutoff
 from swing_trade_ml.strategies.brain import blocked_by_risk
 
 IST = ZoneInfo("Asia/Kolkata")
 _BAR_COLUMNS = ["day", "open", "high", "low", "close"]
+
+
+class ReplayWindowError(ValueError):
+    """The requested replay would score days the model had already learned from."""
+
+
+def _check_window(asof_model, start: date, allow_in_sample: bool) -> dict:
+    """Refuse a window that starts on or before the model's cutoff, unless told otherwise."""
+    cutoff = asof_cutoff(asof_model)
+    in_sample = False
+    if cutoff is None:
+        if not allow_in_sample:
+            raise ReplayWindowError(
+                f"{asof_model.name} has no cutoff date, so it has seen recent days. "
+                "Train one with `brain asof-train --cutoff D`, or pass --allow-in-sample."
+            )
+        in_sample = True
+    elif start <= cutoff:
+        if not allow_in_sample:
+            raise ReplayWindowError(
+                f"The window starts {start.isoformat()} but {asof_model.name} was trained on data "
+                f"up to {cutoff.isoformat()}. Start after {cutoff.isoformat()}, or pass --allow-in-sample."
+            )
+        in_sample = True
+    return {
+        "name": asof_model.name,
+        "version": asof_model.version,
+        "cutoff": cutoff.isoformat() if cutoff else None,
+        "in_sample": in_sample,
+    }
 
 
 def collect_ideas(db: Session, run_id: str, day: date) -> tuple[list[dict], list[str]]:
@@ -142,10 +173,14 @@ def run_replay_score(
     replay: Callable = run_replay_week,
     draws: int = 200,
     seed: int = 7,
+    asof_model=None,
+    allow_in_sample: bool = False,
 ) -> dict:
+    model_info = None if asof_model is None else _check_window(asof_model, start, allow_in_sample)
+    extra = {} if asof_model is None else {"asof_model": asof_model}
     failed: list[str] = []
     try:
-        results = list(replay(db, start=start, end=end, book=book, symbols=symbols))
+        results = list(replay(db, start=start, end=end, book=book, symbols=symbols, **extra))
     except Exception as exc:  # noqa: BLE001 - a failed replay is reported, never hidden
         results = []
         failed.append(f"{start.isoformat()}..{end.isoformat()} ({type(exc).__name__}: {exc})")
@@ -153,10 +188,13 @@ def run_replay_score(
     upto = upto or last_closed_trading_day(datetime.now(UTC))
     per_day: dict[date, list[dict]] = {}
     pool: dict[date, list[str]] = {}
+    scored_days = 0
     for r in results:
         rows, judged = collect_ideas(db, r.run_id, r.day)
         per_day[r.day] = rows
         pool[r.day] = judged
+        if any(d.confidence is not None for d in service.decisions_for(db, r.run_id)):
+            scored_days += 1
 
     wanted = sorted({s for syms in pool.values() for s in syms})
     bars = load_bars(db, wanted, upto)
@@ -204,6 +242,9 @@ def run_replay_score(
             "failed_days": failed,
             "scored_up_to": upto.isoformat(),
         },
+        "model": None
+        if model_info is None
+        else {**model_info, "days_scored": scored_days, "days_without_score": len(results) - scored_days},
         "track_a": track_stats(scored),
         "track_b": track_stats([i for i in scored if i.track_b]),
         "baselines": {

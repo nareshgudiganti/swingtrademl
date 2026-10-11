@@ -474,6 +474,16 @@ def _write_validation_report(db, args: argparse.Namespace, results, start, end) 
     return 0 if report.constitution_ok else 3
 
 
+def _load_asof_model(db, name: str):
+    """The newest registered model with this name, or None."""
+    from sqlalchemy import select
+
+    from swing_trade_ml.db.models.ml import MLModel
+
+    stmt = select(MLModel).where(MLModel.name == name).order_by(MLModel.id.desc()).limit(1)
+    return db.execute(stmt).scalar_one_or_none()
+
+
 def cmd_brain(args: argparse.Namespace) -> int:
     from datetime import UTC, date, datetime, time
 
@@ -620,6 +630,16 @@ def cmd_brain(args: argparse.Namespace) -> int:
             if args.brain_command == "validate-week":
                 return _write_validation_report(db, args, results, start, end)
             return 0
+        if args.brain_command == "asof-train":
+            from swing_trade_ml.ml.asof import train_asof_model
+
+            symbols = [s.strip().upper() for s in args.symbols.split(",")] if args.symbols else None
+            model = train_asof_model(db, date.fromisoformat(args.cutoff), symbols)
+            print(
+                f"✅ {model.name} {model.version}: {model.n_samples} rows, ROC AUC {model.roc_auc:.3f}. "
+                "Research only: it is registered TRAINED and is never activated."
+            )
+            return 0
         if args.brain_command == "replay-score":
             import json
             from pathlib import Path
@@ -638,10 +658,29 @@ def cmd_brain(args: argparse.Namespace) -> int:
                 print(f"❌ {exc}", file=sys.stderr)
                 return 1
             symbols = [s.strip().upper() for s in args.symbols.split(",")] if args.symbols else None
+            asof_model = None
+            if args.asof_model:
+                asof_model = _load_asof_model(db, args.asof_model)
+                if asof_model is None:
+                    print(
+                        f"❌ No model named {args.asof_model}. Make one with `brain asof-train --cutoff D`.",
+                        file=sys.stderr,
+                    )
+                    return 1
             try:
                 report = replay_score.run_replay_score(
-                    db, start=start, end=end, book=args.book, symbols=symbols, draws=args.draws
+                    db,
+                    start=start,
+                    end=end,
+                    book=args.book,
+                    symbols=symbols,
+                    draws=args.draws,
+                    asof_model=asof_model,
+                    allow_in_sample=args.allow_in_sample,
                 )
+            except replay_score.ReplayWindowError as exc:
+                print(f"❌ {exc}", file=sys.stderr)
+                return 1
             except brain_queue.RunBusyError as exc:
                 print(f"⏳ {exc} Try again when it has finished.")
                 return 1
@@ -892,6 +931,17 @@ def build_parser() -> argparse.ArgumentParser:
     b.add_argument("--book", default="paper", choices=["paper", "live"])
     b.add_argument("--draws", type=int, default=200, help="Random-baseline repeats")
     b.add_argument("--out", default=None, help="Report path (default: docs/brain/evidence/replay_score_*)")
+    b.add_argument("--asof-model", default=None, help="Name of a model made by `brain asof-train`")
+    b.add_argument(
+        "--allow-in-sample",
+        action="store_true",
+        help="Allow days the model trained on (the report says IN-SAMPLE)",
+    )
+    b = brain_sub.add_parser(
+        "asof-train", help="Train a research model on data known by a cutoff day (never activated)"
+    )
+    b.add_argument("--cutoff", required=True, help="YYYY-MM-DD: the last day whose outcome may be used")
+    b.add_argument("--symbols", default=None, help="Comma-separated (default: the watchlist)")
     brain_sub.add_parser("strategy-create", help="Create the brain strategy in practice mode (M18)")
     brain_sub.add_parser("shadow-scan", help="Record today's brain ideas as strategy signals (M18)")
     b = brain_sub.add_parser(

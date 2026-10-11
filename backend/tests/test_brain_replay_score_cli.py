@@ -89,3 +89,53 @@ def test_replay_score_rejects_a_missing_range(monkeypatch, capsys, db_session):
     args = cli.build_parser().parse_args(["brain", "replay-score"])
     assert cli.cmd_brain(args) == 1
     assert "--from" in capsys.readouterr().err
+
+
+def test_parser_knows_the_asof_flags_and_asof_train():
+    p = cli.build_parser()
+    a = p.parse_args(
+        [
+            "brain",
+            "replay-score",
+            "--from",
+            "2026-07-13",
+            "--to",
+            "2026-08-14",
+            "--asof-model",
+            "m",
+            "--allow-in-sample",
+        ]
+    )
+    assert a.asof_model == "m" and a.allow_in_sample is True
+    t = p.parse_args(["brain", "asof-train", "--cutoff", "2026-07-10", "--symbols", "INFY,TCS"])
+    assert t.brain_command == "asof-train" and t.cutoff == "2026-07-10" and t.symbols == "INFY,TCS"
+
+
+def test_replay_score_with_an_unknown_model_name_stops_clearly(monkeypatch, capsys, db_session):
+    @contextmanager
+    def fake_scope():
+        yield db_session
+
+    monkeypatch.setattr("swing_trade_ml.db.session.session_scope", fake_scope)
+    args = cli.build_parser().parse_args(
+        ["brain", "replay-score", "--from", "2026-07-13", "--to", "2026-07-14", "--asof-model", "nope_asof"]
+    )
+    assert cli.cmd_brain(args) == 1
+    assert "nope_asof" in capsys.readouterr().err
+
+
+def test_replay_score_refuses_a_window_the_model_trained_on(monkeypatch, capsys, db_session):
+    from types import SimpleNamespace
+
+    @contextmanager
+    def fake_scope():
+        yield db_session
+
+    model = SimpleNamespace(id=1, name="m_asof", version="1", metrics={"asof_cutoff": "2026-07-10"})
+    monkeypatch.setattr("swing_trade_ml.db.session.session_scope", fake_scope)
+    monkeypatch.setattr(cli, "_load_asof_model", lambda db, name: model)
+    args = cli.build_parser().parse_args(
+        ["brain", "replay-score", "--from", "2026-07-08", "--to", "2026-07-14", "--asof-model", "m_asof"]
+    )
+    assert cli.cmd_brain(args) == 1
+    assert "2026-07-10" in capsys.readouterr().err

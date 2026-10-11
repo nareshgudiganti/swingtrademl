@@ -82,9 +82,9 @@ def nothing(ctx: BrainContext) -> c.Contribution:
 
 
 def reason(ctx: BrainContext) -> c.Contribution:
-    """The active model's score only. Replays skip it: the model scores the
-    latest bars, which would be look-ahead for a past date."""
-    if not ctx.request.live:
+    """The active model's score only. Replays skip it unless they carry an as-of model:
+    the live model scores the latest bars, which would be look-ahead for a past date."""
+    if not ctx.request.live and getattr(ctx.reader, "asof_model", None) is None:
         return c.Contribution()
     opinions = []
     has_model = {o.symbol for o in ctx.opinions if o.source == "model"}

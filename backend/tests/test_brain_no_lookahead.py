@@ -17,8 +17,10 @@ No production data: every stock and bar is built here, in the test database.
 from __future__ import annotations
 
 from datetime import UTC, date, datetime, time, timedelta
+from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
+import numpy as np
 import pytest
 from sqlalchemy import select
 
@@ -211,3 +213,75 @@ def test_the_reader_never_hands_a_module_a_bar_after_the_day(db_session, market,
         live=False,
     )
     assert later.last_close(symbol) != after["last_close"], "the future bars are not visible to anyone"
+
+
+# --- the as-of model score -----------------------------------------------------------------
+
+
+class _FeatureEstimator:
+    """A probability that really depends on the features, so a leak of future data into a
+    feature changes the score. (A constant estimator would make this test blind.)"""
+
+    def predict_proba(self, x):
+        p = 1.0 / (1.0 + np.exp(-np.nanmean(x[:, :10], axis=1)))
+        return np.column_stack([1 - p, p])
+
+
+class _Identity:
+    def transform(self, x):
+        return x
+
+
+def _long_series(db, symbol, token, start_price, seed, *, watch=True):
+    inst = Instrument(
+        instrument_token=token, tradingsymbol=symbol, exchange="NSE", is_watchlisted=watch, is_active=True
+    )
+    db.add(inst)
+    db.flush()
+    rng = np.random.default_rng(seed)
+    price, day = start_price, DAY - timedelta(days=640)
+    while day <= DAY:
+        if day.weekday() < 5:
+            price *= 1 + rng.normal(0.0005, 0.012)
+            _add_bar(db, inst, day, price, volume=int(100_000 + rng.integers(0, 50_000)))
+        day += timedelta(days=1)
+    db.commit()
+    return inst
+
+
+def test_the_asof_score_for_a_day_does_not_change_when_future_bars_appear(db_session, monkeypatch):
+    from swing_trade_ml.ml import asof, market_context
+    from swing_trade_ml.ml.features import FEATURE_COLUMNS
+
+    market_context.clear_cache()
+    asof.clear_cache()
+    inst = _long_series(db_session, "ASOFLOOK", 994201, 100.0, 11)
+    others = {
+        BENCH[0]: _long_series(db_session, BENCH[0], 994299, 20000.0, 12, watch=False),
+        "INDIA VIX": _long_series(db_session, "INDIA VIX", 994298, 15.0, 13, watch=False),
+        "ASOFLOOK": inst,
+    }
+    monkeypatch.setattr(
+        asof,
+        "_get_bundle",
+        lambda m: {"feature_names": FEATURE_COLUMNS, "scaler": _Identity(), "estimator": _FeatureEstimator()},
+    )
+    model = SimpleNamespace(id=7001, name="m", version="1", metrics={"asof_cutoff": "2026-01-01"})
+
+    before = asof.score_series(db_session, inst, model, after=date(2026, 1, 1))
+    assert DAY in before, "no score for the day, so the check below would prove nothing"
+
+    for offset in range(1, 22):  # wild bars after DAY
+        d = DAY + timedelta(days=offset)
+        if d.weekday() < 5:
+            for symbol, other in others.items():
+                _add_bar(db_session, other, d, 1.0 if symbol != "INDIA VIX" else 90.0, volume=50_000_000)
+    db_session.commit()
+    market_context.clear_cache()
+    asof.clear_cache()
+
+    after = asof.score_series(db_session, inst, model, after=date(2026, 1, 1))
+    assert max(after) > DAY, "the future bars were not scored, so the check proves nothing"
+    assert after[DAY] == pytest.approx(before[DAY]), "the score for DAY changed once later bars existed"
+    market_context.clear_cache()
+    asof.clear_cache()

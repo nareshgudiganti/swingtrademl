@@ -93,6 +93,7 @@ def run_brain(
     registry: ModuleRegistry = REGISTRY,
     run_id: str | None = None,
     on_step=None,
+    asof_model=None,
 ) -> tuple[BrainContext, str]:
     """Run and store. `as_of` in the past makes it a replay: no live-only inputs.
 
@@ -105,7 +106,7 @@ def run_brain(
     if as_of is not None and as_of.tzinfo is None:
         as_of = as_of.replace(tzinfo=ZoneInfo("Asia/Kolkata"))  # the owner's clock
     as_of = as_of or now
-    reader = DatedReader(db, as_of=as_of, live=live)
+    reader = DatedReader(db, as_of=as_of, live=live, asof_model=asof_model)
     run_id = run_id or new_run_id(kind, now)
     started = time.perf_counter()
     try:

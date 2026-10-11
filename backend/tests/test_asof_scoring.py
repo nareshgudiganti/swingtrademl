@@ -116,7 +116,9 @@ def _fake_model(monkeypatch, model_id=991):
         id = model_id
         name = "m"
         version = "1"
-        metrics = {"asof_cutoff": "2026-01-01"}
+
+        def __init__(self):
+            self.metrics = {"asof_cutoff": "2026-01-01"}
 
     monkeypatch.setattr(
         asof,

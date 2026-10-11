@@ -43,10 +43,12 @@ FALLBACK_MODEL_NAME = "swing_classifier"
 
 
 class DatedReader:
-    def __init__(self, db: Session, as_of: datetime, live: bool) -> None:
+    def __init__(self, db: Session, as_of: datetime, live: bool, asof_model=None) -> None:
         self.db = db
         self.as_of = as_of
         self.live = live
+        # A replay may carry a model trained with a cutoff (ml/asof.py); live runs never do.
+        self.asof_model = asof_model
         self._model = None
         self._model_loaded = False
         self._context_checked = False
@@ -432,11 +434,35 @@ class DatedReader:
                 self._bundles[key] = None
         return self._bundles[key]
 
-    def model_probability(self, symbol: str) -> tuple[float, float, str] | None:
-        """The active model's score for the latest bar, or None. Live only:
-        the model always scores the newest bars."""
-        if not self.live:
+    def _asof_probability(self, symbol: str) -> tuple[float, float, str] | None:
+        from swing_trade_ml.ml import asof
+
+        model = self.asof_model
+        cutoff = asof.asof_cutoff(model) if model is not None else None
+        if model is None or cutoff is None:
             return None
+        day = self.as_of.astimezone(IST).date()
+        if day <= cutoff:
+            return None
+        instrument = self._instrument(symbol)
+        if instrument is None:
+            return None
+        try:
+            score = asof.score_series(self.db, instrument, model, after=cutoff).get(day)
+        except OSError as exc:  # the model file is unreachable: no score, never a failed run
+            log.warning("brain.reader.asof_model_unavailable", model=model.name, error=str(exc))
+            return None
+        if score is None:
+            return None
+        # The plain buy level: the accepted one is learned from later outcomes and would leak.
+        return score, settings.ML_MIN_CONFIDENCE, f"{model.name} {model.version}"
+
+    def model_probability(self, symbol: str) -> tuple[float, float, str] | None:
+        """The active model's score for the latest bar, or None. Live only: the model
+        always scores the newest bars. A replay may instead carry an as-of model (trained
+        with a cutoff), which scores a day strictly after its cutoff."""
+        if not self.live:
+            return self._asof_probability(symbol)
         from swing_trade_ml.ml.predict import predict_instrument
         from swing_trade_ml.ml.registry import get_active_model
 

@@ -88,13 +88,16 @@ def run_replay_week(
     kind: str = "nightly",
     symbols: list[str] | None = None,
     wait_seconds: float = 0,
+    asof_model=None,
 ) -> list[ReplayDayResult]:
     """Replay each IST trading day in [start, end]. Raises RunBusyError if the lock is held."""
     results: list[ReplayDayResult] = []
     with brain_queue.run_lock(kind, book, wait_seconds=wait_seconds):
         for day in iter_ist_trading_days(start, end):
             as_of = as_of_end_of_ist_day(day)
-            ctx, run_id = service.run_brain(db, kind=kind, as_of=as_of, symbols=symbols, book=book)
+            ctx, run_id = service.run_brain(
+                db, kind=kind, as_of=as_of, symbols=symbols, book=book, asof_model=asof_model
+            )
             run = db.get(BrainRun, run_id)
             banner = (run.banner_mode if run else None) or ctx.banner.mode.value
             decisions = ctx.decisions.values() if hasattr(ctx.decisions, "values") else ctx.decisions

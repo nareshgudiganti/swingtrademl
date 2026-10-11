@@ -1,6 +1,7 @@
 // The TradeMind area: a full-screen app of its own (own top menu, own dark
 // glowing theme) mounted at /trademind. The classic app is untouched.
 
+import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link, NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 
@@ -36,29 +37,27 @@ import Setup from './pages/Setup'
 type Page = { to: string; label: string; end?: boolean }
 type Section = { label: string; pages: Page[]; also?: string[] }
 
+// The top bar is one flat row (see the TradeMind mockup). A section with several pages shows them in a
+// second row; the owner's own pages live in the avatar menu, not in the bar.
 const SECTIONS: Section[] = [
   {
     label: 'Dashboard',
     pages: [{ to: '/trademind/dashboard', label: 'Swing Picks' }],
   },
   {
-    label: 'Decisions',
-    pages: [
-      { to: '/trademind', label: 'Home', end: true },
-      { to: '/trademind/ai', label: 'AI' },
-    ],
+    label: 'Market',
+    pages: [{ to: '/trademind/market', label: 'Market' }],
   },
   {
-    label: 'Discover',
+    label: 'Swing Picks',
     pages: [
       { to: '/trademind/opportunities', label: 'Opportunities' },
       { to: '/trademind/watchlist', label: 'Watchlist' },
-      { to: '/trademind/market', label: 'Market' },
     ],
     also: ['/trademind/stock'],
   },
   {
-    label: 'Portfolio',
+    label: 'My Portfolio',
     pages: [
       { to: '/trademind/positions', label: 'Positions' },
       { to: '/trademind/testing', label: 'Testing' },
@@ -67,29 +66,39 @@ const SECTIONS: Section[] = [
     ],
   },
   {
-    label: 'Performance',
+    label: 'Analytics',
     pages: [
       { to: '/trademind/records', label: 'Records' },
       { to: '/trademind/learn', label: 'Learn' },
     ],
   },
   {
-    label: 'Settings',
+    label: 'Brain Logs',
     pages: [
-      { to: '/trademind/control', label: 'Control' },
-      { to: '/trademind/golive', label: 'Go-live' },
-      { to: '/trademind/risk', label: 'Risk' },
-      { to: '/trademind/system', label: 'System' },
-      { to: '/trademind/setup', label: 'Setup' },
+      { to: '/trademind', label: 'Decisions', end: true },
+      { to: '/trademind/ai', label: 'AI' },
     ],
   },
 ]
+
+// Owner only. Reached from the avatar; when one is open, the same pages show in the second row.
+const OWNER_SECTION: Section = {
+  label: 'Settings',
+  pages: [
+    { to: '/trademind/control', label: 'Control' },
+    { to: '/trademind/golive', label: 'Go-live' },
+    { to: '/trademind/risk', label: 'Risk' },
+    { to: '/trademind/system', label: 'System' },
+    { to: '/trademind/setup', label: 'Setup' },
+  ],
+}
 
 function matches(path: string, to: string, end?: boolean): boolean {
   return end ? path === to || path === `${to}/` : path === to || path.startsWith(`${to}/`)
 }
 
 function sectionFor(path: string): Section {
+  if (OWNER_SECTION.pages.some((p) => matches(path, p.to))) return OWNER_SECTION
   return (
     SECTIONS.find((s) => s.pages.some((p) => matches(path, p.to, p.end)) || s.also?.some((a) => matches(path, a))) ??
     SECTIONS[0]!
@@ -113,22 +122,37 @@ export default function TradeMindApp({ ownerConsole = false }: TradeMindAppProps
   const status = useBrainStatus()
   const latest = useLatestRun()
   const broker = useQuery({ queryKey: ['status'], queryFn: api.status, enabled: ownerConsole })
-  const visibleSections = SECTIONS.filter((s) => {
-    if (!ownerConsole && s.label === 'Settings') return false
-    return true
-  }).map((s) => {
-    if (!ownerConsole && s.label === 'Portfolio') {
+  const visibleSections = SECTIONS.map((s) => {
+    if (!ownerConsole && s.label === 'My Portfolio') {
       return {
         ...s,
         pages: s.pages.filter((p) => p.to !== '/trademind/holdings' && p.to !== '/trademind/testing'),
       }
     }
-    if (!ownerConsole && s.label === 'Discover') {
+    if (!ownerConsole && s.label === 'Swing Picks') {
       return { ...s, pages: s.pages.filter((p) => p.to !== '/trademind/watchlist') }
     }
     return s
   })
-  const section = sectionFor(useLocation().pathname)
+  const location = useLocation()
+  const found = sectionFor(location.pathname)
+  // The row under the bar lists only pages this account can open.
+  const section = visibleSections.find((s) => s.label === found.label) ?? found
+  const [menuOpen, setMenuOpen] = useState(false)
+  useEffect(() => setMenuOpen(false), [location.pathname])
+  useEffect(() => {
+    if (!menuOpen) return
+    const close = (e: Event) => {
+      if (!(e.target as HTMLElement).closest?.('.tm-menu')) setMenuOpen(false)
+    }
+    const esc = (e: KeyboardEvent) => e.key === 'Escape' && setMenuOpen(false)
+    document.addEventListener('pointerdown', close)
+    document.addEventListener('keydown', esc)
+    return () => {
+      document.removeEventListener('pointerdown', close)
+      document.removeEventListener('keydown', esc)
+    }
+  }, [menuOpen])
   const market = useMarketSession()
   const chip = STATUS_CHIP[status]
   const chipTitle =
@@ -143,7 +167,7 @@ export default function TradeMindApp({ ownerConsole = false }: TradeMindAppProps
         </Link>
         <nav className="tm-nav" aria-label="Sections">
           {visibleSections.map((sec) => (
-            <Link key={sec.label} to={sec.pages[0]!.to} className={sec === section ? 'active' : ''}>
+            <Link key={sec.label} to={sec.pages[0]!.to} className={sec.label === section.label ? 'active' : ''}>
               {sec.label}
             </Link>
           ))}
@@ -170,9 +194,26 @@ export default function TradeMindApp({ ownerConsole = false }: TradeMindAppProps
             {chip.label}
           </span>
           {ownerConsole ? (
-            <Link to="/trademind/setup" className="tm-avatar" title="Your account and settings">
-              <Icon.User />
-            </Link>
+            <div className="tm-menu">
+              <button
+                className="tm-avatar"
+                aria-haspopup="menu"
+                aria-expanded={menuOpen}
+                title="Your account and settings"
+                onClick={() => setMenuOpen((o) => !o)}
+              >
+                <Icon.User />
+              </button>
+              {menuOpen && (
+                <div className="tm-menu-list" role="menu">
+                  {OWNER_SECTION.pages.map((pg) => (
+                    <Link key={pg.to} to={pg.to} role="menuitem">
+                      {pg.label}
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
           ) : (
             <span className="tm-avatar" title="TradeMind Pro">
               <Icon.User />
@@ -190,13 +231,15 @@ export default function TradeMindApp({ ownerConsole = false }: TradeMindAppProps
           </button>
         </div>
       </header>
-      <nav className="tm-subnav" aria-label={`${section.label} pages`}>
-        {section.pages.map((pg) => (
-          <NavLink key={pg.to} to={pg.to} end={pg.end} className={({ isActive }) => (isActive ? 'active' : '')}>
-            {pg.label}
-          </NavLink>
-        ))}
-      </nav>
+      {section.pages.length > 1 && (
+        <nav className="tm-subnav" aria-label={`${section.label} pages`}>
+          {section.pages.map((pg) => (
+            <NavLink key={pg.to} to={pg.to} end={pg.end} className={({ isActive }) => (isActive ? 'active' : '')}>
+              {pg.label}
+            </NavLink>
+          ))}
+        </nav>
+      )}
 
       {/* Rendered outside any parent <Route>, so the paths are anchored here. */}
       <Routes>

@@ -1705,3 +1705,50 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* avatar menu (owner pages) */
+button.tm-avatar {
+  border: 0;
+  cursor: pointer;
+  padding: 0;
+}
+
+.tm-menu {
+  position: relative;
+}
+
+.tm-menu-list {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  min-width: 150px;
+  display: flex;
+  flex-direction: column;
+  padding: 0.35rem;
+  border-radius: 10px;
+  background: var(--tm-bg-2);
+  border: 1px solid var(--tm-line-strong);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  z-index: 30;
+}
+
+.tm-menu-list a {
+  padding: 0.45rem 0.7rem;
+  border-radius: 7px;
+  color: var(--tm-dim);
+  font-size: 0.82rem;
+  text-decoration: none;
+}
+
+.tm-menu-list a:hover,
+.tm-menu-list a:focus-visible {
+  color: var(--tm-text);
+  background: rgba(139, 124, 255, 0.14);
+  outline: none;
+}
+
+/* six sections on the bar: a little tighter than five */
+.tm-nav a {
+  padding-left: 0.7rem;
+  padding-right: 0.7rem;
+}

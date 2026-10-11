@@ -138,10 +138,10 @@ export default function PaperPositions() {
         </Card>
       )}
 
-      <Card title="Open positions" sub="Buy from Discover → Watchlist. Sell here.">
+      <Card title="Open positions" sub="Buy from Swing Picks → Watchlist. Sell here.">
         {close.isError && <p className="tm-dim">Could not sell that position.</p>}
         {rows.length === 0 && !positions.isLoading && (
-          <p className="tm-dim">Nothing held yet. Open Discover → Watchlist and use Buy.</p>
+          <p className="tm-dim">Nothing held yet. Open Swing Picks → Watchlist and use Buy.</p>
         )}
         {rows.length > 0 && (
           <div className="tm-table-wrap">

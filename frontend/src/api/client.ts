@@ -394,6 +394,8 @@ export const api = {
       '/market-data/coverage',
     ),
   marketRegime: () => get<MarketRegime>('/market-data/regime'),
+  sectors: (symbols: string[]) =>
+    get<Record<string, string | null>>(`/market-data/sectors?symbols=${encodeURIComponent(symbols.join(','))}`),
 
   // ------------------------------------------------------ notifications --
   telegramStatus: () =>

@@ -161,6 +161,25 @@ def market_regime(db: DbSession, interval: str = "day") -> dict:
     return current_regime(db, interval)
 
 
+@router.get("/sectors", response_model=dict[str, str | None])
+def sectors(symbols: str = "") -> dict[str, str | None]:
+    """Plain sector name per stock (comma-separated symbols); null if unmapped.
+
+    A pure lookup in ml/sector_map.py, the same map the risk layer groups
+    by. Nothing is read from the database and nothing is guessed.
+    """
+    from swing_trade_ml.ml.sector_map import get_sector_bucket, sector_display_name
+
+    out: dict[str, str | None] = {}
+    for raw in symbols.split(","):
+        symbol = raw.strip().upper()
+        if not symbol:
+            continue
+        bucket = get_sector_bucket(symbol)
+        out[symbol] = sector_display_name(bucket) if bucket else None
+    return out
+
+
 @router.get("/coverage", response_model=list[dict])
 def coverage(db: DbSession, interval: str = "day") -> list[dict]:
     """Per-symbol candle counts and date ranges.

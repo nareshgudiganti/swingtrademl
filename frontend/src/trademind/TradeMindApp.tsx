@@ -11,6 +11,7 @@ import { formatDateTime } from '../lib/format'
 import { useBrainStatus, useLatestRun, useMarketSession } from './live'
 import { Card, Icon } from './ui'
 import Home from './pages/Home'
+import Dashboard from './pages/Dashboard'
 import Market from './pages/Market'
 import Opportunities from './pages/Opportunities'
 import Watchlist from './pages/Watchlist'
@@ -36,6 +37,10 @@ type Page = { to: string; label: string; end?: boolean }
 type Section = { label: string; pages: Page[]; also?: string[] }
 
 const SECTIONS: Section[] = [
+  {
+    label: 'Dashboard',
+    pages: [{ to: '/trademind/dashboard', label: 'Swing Picks' }],
+  },
   {
     label: 'Decisions',
     pages: [
@@ -197,6 +202,7 @@ export default function TradeMindApp({ ownerConsole = false }: TradeMindAppProps
       <Routes>
         <Route path="/trademind">
           <Route index element={<Home />} />
+          <Route path="dashboard" element={<Dashboard />} />
           <Route path="market" element={<Market />} />
           <Route path="opportunities" element={<Opportunities />} />
           <Route path="watchlist" element={ownerConsole ? <Watchlist /> : <Navigate to="/trademind/opportunities" replace />} />

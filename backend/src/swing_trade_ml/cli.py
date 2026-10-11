@@ -9,7 +9,8 @@ swingtrade train --algorithm lightgbm --activate
 swingtrade scan
 swingtrade status
 swingtrade brain modules | set M02 off | run [--as-of 2026-09-15] | replay-week [--days 5] |
-    validate-week [--days 5] | rescore-learning [--since 2026-09-01] | why RELIANCE |
+    validate-week [--days 5] | replay-score [--days 20] | rescore-learning [--since 2026-09-01] |
+    why RELIANCE |
     learn [--since 2026-09-01]
 swingtrade brain strategy-create | shadow-scan
 """
@@ -619,6 +620,45 @@ def cmd_brain(args: argparse.Namespace) -> int:
             if args.brain_command == "validate-week":
                 return _write_validation_report(db, args, results, start, end)
             return 0
+        if args.brain_command == "replay-score":
+            import json
+            from pathlib import Path
+
+            from swing_trade_ml.brain import queue as brain_queue
+            from swing_trade_ml.brain import replay_score
+            from swing_trade_ml.brain.replay_report import plain_summary
+            from swing_trade_ml.brain.replay_week import resolve_replay_range
+            from swing_trade_ml.core.config import REPO_ROOT
+
+            from_day = date.fromisoformat(args.from_date) if args.from_date else None
+            to_day = date.fromisoformat(args.to_date) if args.to_date else None
+            try:
+                start, end = resolve_replay_range(from_day=from_day, to_day=to_day, days=args.days)
+            except ValueError as exc:
+                print(f"❌ {exc}", file=sys.stderr)
+                return 1
+            symbols = [s.strip().upper() for s in args.symbols.split(",")] if args.symbols else None
+            try:
+                report = replay_score.run_replay_score(
+                    db, start=start, end=end, book=args.book, symbols=symbols, draws=args.draws
+                )
+            except brain_queue.RunBusyError as exc:
+                print(f"⏳ {exc} Try again when it has finished.")
+                return 1
+            path = (
+                Path(args.out)
+                if args.out
+                else REPO_ROOT
+                / "docs"
+                / "brain"
+                / "evidence"
+                / f"replay_score_{start.isoformat()}_{end.isoformat()}.json"
+            )
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(report, indent=2, default=str), encoding="utf-8")
+            print(plain_summary(report))
+            print(f"Report written to {path}")
+            return 0
         if args.brain_command == "strategy-create":
             from swing_trade_ml.services.brain_golive.shadow import ensure_brain_strategy
 
@@ -841,6 +881,17 @@ def build_parser() -> argparse.ArgumentParser:
     b.add_argument(
         "--out", default=None, help="Report path (default: docs/brain/evidence/validation_week_*.json)"
     )
+    b = brain_sub.add_parser(
+        "replay-score",
+        help="Replay past days, score every idea against what happened, compare with baselines (read-only)",
+    )
+    b.add_argument("--from", dest="from_date", default=None, help="YYYY-MM-DD (inclusive)")
+    b.add_argument("--to", dest="to_date", default=None, help="YYYY-MM-DD (inclusive)")
+    b.add_argument("--days", type=int, default=None, help="Trading days ending at the last closed day")
+    b.add_argument("--symbols", default=None, help="Comma-separated (default: full universe)")
+    b.add_argument("--book", default="paper", choices=["paper", "live"])
+    b.add_argument("--draws", type=int, default=200, help="Random-baseline repeats")
+    b.add_argument("--out", default=None, help="Report path (default: docs/brain/evidence/replay_score_*)")
     brain_sub.add_parser("strategy-create", help="Create the brain strategy in practice mode (M18)")
     brain_sub.add_parser("shadow-scan", help="Record today's brain ideas as strategy signals (M18)")
     b = brain_sub.add_parser(

@@ -2,8 +2,9 @@
 switched off. It only ever lowers decisions (via `contracts.downgrade`).
 
 C1  no TRADE without an allowed verdict from the mandatory risk gate
-C2  no risk gate, an owner halt, or market-wide data not fresh → banner
-    NO NEW TRADES, every TRADE → WATCH
+C2  no risk gate, an owner halt, market-wide data not fresh, or a module
+    already writing a NO NEW TRADES banner → banner NO NEW TRADES, every
+    TRADE → WATCH
 C3  a defensive suggestion from situation recognition (M04) turns a NORMAL
     banner DEFENSIVE
 C5  data not checked, or stale → TRADE capped at WATCH
@@ -33,6 +34,12 @@ def _no_new_trades_reasons(ctx: BrainContext) -> list[str]:
         reasons.append(f"Market data is not reliable today: {detail}")
     if not ctx.risk_gate_ran:
         reasons.append(NO_RISK_GATE)
+    if ctx.banner is not None and ctx.banner.mode is c.MarketMode.NO_NEW_TRADES:
+        # A module already said no new trades (M10 judge). Hold every TRADE to that here too,
+        # so safety does not depend on M07 having denied each idea as well.
+        headline = ctx.banner.headline or "The market mode says no new trades today."
+        reasons.append(headline)
+        reasons.extend(r for r in ctx.banner.reasons if r != headline)
     return reasons
 
 
@@ -57,7 +64,9 @@ def enforce(ctx: BrainContext) -> None:
     stop_reasons = _no_new_trades_reasons(ctx)
     if stop_reasons:
         ctx.banner = c.Banner(
-            mode=c.MarketMode.NO_NEW_TRADES, headline=stop_reasons[0], reasons=tuple(stop_reasons)
+            mode=c.MarketMode.NO_NEW_TRADES,
+            headline=stop_reasons[0],
+            reasons=tuple(dict.fromkeys(stop_reasons)),
         )
     elif ctx.banner is None:
         ctx.banner = c.Banner(mode=c.MarketMode.DEFENSIVE, headline="Market state is unknown.")

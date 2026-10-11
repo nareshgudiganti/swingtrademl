@@ -216,3 +216,20 @@ This is what a **successful run** looks like when data is **stale** (brain still
 - `GO_LIVE.md` — practice / approval / automatic stages  
 - `BUILD_NOTES.md` — what each module does and SHADOW modules  
 - `docs/architecture/CURRENT-STATE.md` — known issues and next ops tasks  
+
+## Replay and score (does the brain pick well?)
+
+`swingtrade brain replay-score --days 20` replays the last 20 trading days, scores every
+idea against what the stock really did, and compares with random picks, every stock the
+brain looked at, and version 1's buys. Read-only: it never writes the live outcome columns
+and never counts toward the 30-idea gate. Ideas younger than 15 trading days are "still
+open" and are not counted. Read the "limits" lines at the bottom of the summary every time.
+Run it against a database that has the candles for the window (a local copy, not prod).
+
+**Known limit (2026-10-11):** a replay has no ML score (the model scores the newest bars, so
+using it for a past day would look into the future). Until an as-of model path exists, a replay
+finds almost no TRADE ideas, so its brain numbers are not evidence yet. The baselines still work.
+
+Two safety tests run with the normal suite: `test_brain_caution_only.py` (bad or missing inputs
+may never make a decision bolder, over every combination) and `test_brain_no_lookahead.py`
+(adding future prices must not change a past day's answer).

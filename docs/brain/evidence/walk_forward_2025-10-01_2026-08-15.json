@@ -1,0 +1,488 @@
+{
+ "top_k": 5,
+ "rule": {
+  "horizon": 15,
+  "target": 0.08,
+  "stop": 0.04
+ },
+ "stocks": 49,
+ "folds": [
+  {
+   "cutoff": "2025-09-30",
+   "start": "2025-10-01",
+   "end": "2025-10-28",
+   "days": 18,
+   "regime": {
+    "label": "rising",
+    "avg_move": 0.044395600204785696
+   },
+   "model": {
+    "ideas": 90,
+    "days": 18,
+    "hit_rate": 0.1,
+    "avg_net": 0.004232747175564527,
+    "avg_net_by_day": 0.004232747175564527
+   },
+   "momentum": {
+    "ideas": 90,
+    "days": 18,
+    "hit_rate": 0.3111111111111111,
+    "avg_net": 0.011453480850631524,
+    "avg_net_by_day": 0.011453480850631526
+   },
+   "every_stock": {
+    "ideas": 882,
+    "days": 18,
+    "hit_rate": 0.21428571428571427,
+    "avg_net": 0.012014988557171754,
+    "avg_net_by_day": 0.012014988557171754
+   },
+   "model_days_better": {
+    "better": 5,
+    "of": 18
+   },
+   "model_auc": 0.5881756890373647
+  },
+  {
+   "cutoff": "2025-10-28",
+   "start": "2025-10-29",
+   "end": "2025-11-25",
+   "days": 19,
+   "regime": {
+    "label": "sideways",
+    "avg_move": -0.0023166796949694985
+   },
+   "model": {
+    "ideas": 95,
+    "days": 19,
+    "hit_rate": 0.09473684210526316,
+    "avg_net": 0.0023442915067890782,
+    "avg_net_by_day": 0.002344291506789078
+   },
+   "momentum": {
+    "ideas": 95,
+    "days": 19,
+    "hit_rate": 0.12631578947368421,
+    "avg_net": 0.0016732618009854664,
+    "avg_net_by_day": 0.0016732618009854662
+   },
+   "every_stock": {
+    "ideas": 931,
+    "days": 19,
+    "hit_rate": 0.06659505907626208,
+    "avg_net": 0.001883306916033387,
+    "avg_net_by_day": 0.0018833069160333867
+   },
+   "model_days_better": {
+    "better": 10,
+    "of": 19
+   },
+   "model_auc": 0.6004611492001306
+  },
+  {
+   "cutoff": "2025-11-25",
+   "start": "2025-11-26",
+   "end": "2025-12-23",
+   "days": 20,
+   "regime": {
+    "label": "sideways",
+    "avg_move": 0.004329702308368794
+   },
+   "model": {
+    "ideas": 100,
+    "days": 20,
+    "hit_rate": 0.1,
+    "avg_net": 0.0009542090476969645,
+    "avg_net_by_day": 0.0009542090476969642
+   },
+   "momentum": {
+    "ideas": 100,
+    "days": 20,
+    "hit_rate": 0.12,
+    "avg_net": -0.005618102572511107,
+    "avg_net_by_day": -0.005618102572511107
+   },
+   "every_stock": {
+    "ideas": 980,
+    "days": 20,
+    "hit_rate": 0.10306122448979592,
+    "avg_net": 0.0035918574071514353,
+    "avg_net_by_day": 0.0035918574071514353
+   },
+   "model_days_better": {
+    "better": 9,
+    "of": 20
+   },
+   "model_auc": 0.5581615031318747
+  },
+  {
+   "cutoff": "2025-12-23",
+   "start": "2025-12-24",
+   "end": "2026-01-20",
+   "days": 18,
+   "regime": {
+    "label": "sideways",
+    "avg_move": -0.01940308734924182
+   },
+   "model": {
+    "ideas": 90,
+    "days": 18,
+    "hit_rate": 0.14444444444444443,
+    "avg_net": -0.00773046121939463,
+    "avg_net_by_day": -0.007730461219394631
+   },
+   "momentum": {
+    "ideas": 90,
+    "days": 18,
+    "hit_rate": 0.28888888888888886,
+    "avg_net": 0.002139215977116255,
+    "avg_net_by_day": 0.002139215977116255
+   },
+   "every_stock": {
+    "ideas": 882,
+    "days": 18,
+    "hit_rate": 0.12811791383219956,
+    "avg_net": -0.011977547750501435,
+    "avg_net_by_day": -0.011977547750501435
+   },
+   "model_days_better": {
+    "better": 11,
+    "of": 18
+   },
+   "model_auc": 0.5020499556673937
+  },
+  {
+   "cutoff": "2026-01-20",
+   "start": "2026-01-21",
+   "end": "2026-02-17",
+   "days": 20,
+   "regime": {
+    "label": "rising",
+    "avg_move": 0.032355020561479785
+   },
+   "model": {
+    "ideas": 100,
+    "days": 20,
+    "hit_rate": 0.19,
+    "avg_net": 0.00128742575847692,
+    "avg_net_by_day": 0.0012874257584769198
+   },
+   "momentum": {
+    "ideas": 100,
+    "days": 20,
+    "hit_rate": 0.2,
+    "avg_net": -0.0019380085615014852,
+    "avg_net_by_day": -0.0019380085615014852
+   },
+   "every_stock": {
+    "ideas": 980,
+    "days": 20,
+    "hit_rate": 0.16020408163265307,
+    "avg_net": -0.0034461923277354055,
+    "avg_net_by_day": -0.0034461923277354055
+   },
+   "model_days_better": {
+    "better": 11,
+    "of": 20
+   },
+   "model_auc": 0.4696346486202813
+  },
+  {
+   "cutoff": "2026-02-17",
+   "start": "2026-02-18",
+   "end": "2026-03-17",
+   "days": 19,
+   "regime": {
+    "label": "falling",
+    "avg_move": -0.07918374933117674
+   },
+   "model": {
+    "ideas": 95,
+    "days": 19,
+    "hit_rate": 0.07368421052631578,
+    "avg_net": -0.029703812895920254,
+    "avg_net_by_day": -0.02970381289592025
+   },
+   "momentum": {
+    "ideas": 95,
+    "days": 19,
+    "hit_rate": 0.0,
+    "avg_net": -0.04076048888138525,
+    "avg_net_by_day": -0.040760488881385254
+   },
+   "every_stock": {
+    "ideas": 931,
+    "days": 19,
+    "hit_rate": 0.04833512352309345,
+    "avg_net": -0.03389381421265324,
+    "avg_net_by_day": -0.03389381421265324
+   },
+   "model_days_better": {
+    "better": 11,
+    "of": 19
+   },
+   "model_auc": 0.4812837992010691
+  },
+  {
+   "cutoff": "2026-03-17",
+   "start": "2026-03-18",
+   "end": "2026-04-14",
+   "days": 16,
+   "regime": {
+    "label": "sideways",
+    "avg_move": 0.00808480881586406
+   },
+   "model": {
+    "ideas": 80,
+    "days": 16,
+    "hit_rate": 0.5625,
+    "avg_net": 0.02407656935464404,
+    "avg_net_by_day": 0.02407656935464404
+   },
+   "momentum": {
+    "ideas": 80,
+    "days": 16,
+    "hit_rate": 0.125,
+    "avg_net": -0.017216879055405605,
+    "avg_net_by_day": -0.0172168790554056
+   },
+   "every_stock": {
+    "ideas": 784,
+    "days": 16,
+    "hit_rate": 0.40688775510204084,
+    "avg_net": 0.014450245532864515,
+    "avg_net_by_day": 0.014450245532864515
+   },
+   "model_days_better": {
+    "better": 12,
+    "of": 16
+   },
+   "model_auc": 0.4755440115543363
+  },
+  {
+   "cutoff": "2026-04-14",
+   "start": "2026-04-15",
+   "end": "2026-05-12",
+   "days": 19,
+   "regime": {
+    "label": "sideways",
+    "avg_move": -0.008451012964129688
+   },
+   "model": {
+    "ideas": 95,
+    "days": 19,
+    "hit_rate": 0.14736842105263157,
+    "avg_net": -0.013817739490077655,
+    "avg_net_by_day": -0.013817739490077655
+   },
+   "momentum": {
+    "ideas": 95,
+    "days": 19,
+    "hit_rate": 0.25263157894736843,
+    "avg_net": -0.0002542187524481075,
+    "avg_net_by_day": -0.00025421875244810774
+   },
+   "every_stock": {
+    "ideas": 931,
+    "days": 19,
+    "hit_rate": 0.18796992481203006,
+    "avg_net": -0.006995739047401324,
+    "avg_net_by_day": -0.006995739047401323
+   },
+   "model_days_better": {
+    "better": 7,
+    "of": 19
+   },
+   "model_auc": 0.4598059001459457
+  },
+  {
+   "cutoff": "2026-05-12",
+   "start": "2026-05-13",
+   "end": "2026-06-09",
+   "days": 19,
+   "regime": {
+    "label": "sideways",
+    "avg_move": -0.00827816066676228
+   },
+   "model": {
+    "ideas": 95,
+    "days": 19,
+    "hit_rate": 0.28421052631578947,
+    "avg_net": 0.005132321174224688,
+    "avg_net_by_day": 0.005132321174224688
+   },
+   "momentum": {
+    "ideas": 95,
+    "days": 19,
+    "hit_rate": 0.08421052631578947,
+    "avg_net": -0.006392488353921626,
+    "avg_net_by_day": -0.006392488353921627
+   },
+   "every_stock": {
+    "ideas": 931,
+    "days": 19,
+    "hit_rate": 0.14178302900107412,
+    "avg_net": -0.006932841147530493,
+    "avg_net_by_day": -0.006932841147530494
+   },
+   "model_days_better": {
+    "better": 14,
+    "of": 19
+   },
+   "model_auc": 0.545900403892434
+  },
+  {
+   "cutoff": "2026-06-09",
+   "start": "2026-06-10",
+   "end": "2026-07-07",
+   "days": 19,
+   "regime": {
+    "label": "rising",
+    "avg_move": 0.038279481745450455
+   },
+   "model": {
+    "ideas": 95,
+    "days": 19,
+    "hit_rate": 0.1368421052631579,
+    "avg_net": -0.00395993349139198,
+    "avg_net_by_day": -0.00395993349139198
+   },
+   "momentum": {
+    "ideas": 95,
+    "days": 19,
+    "hit_rate": 0.12631578947368421,
+    "avg_net": -6.906256500269887e-05,
+    "avg_net_by_day": -6.906256500269872e-05
+   },
+   "every_stock": {
+    "ideas": 931,
+    "days": 19,
+    "hit_rate": 0.14500537056928034,
+    "avg_net": 0.00018371176232754249,
+    "avg_net_by_day": 0.00018371176232754257
+   },
+   "model_days_better": {
+    "better": 9,
+    "of": 19
+   },
+   "model_auc": 0.5575882171744565
+  },
+  {
+   "cutoff": "2026-07-07",
+   "start": "2026-07-08",
+   "end": "2026-08-04",
+   "days": 20,
+   "regime": {
+    "label": "rising",
+    "avg_move": 0.04688610722933778
+   },
+   "model": {
+    "ideas": 100,
+    "days": 20,
+    "hit_rate": 0.33,
+    "avg_net": 0.012709626545788057,
+    "avg_net_by_day": 0.012709626545788055
+   },
+   "momentum": {
+    "ideas": 100,
+    "days": 20,
+    "hit_rate": 0.22,
+    "avg_net": 0.009030243461818223,
+    "avg_net_by_day": 0.009030243461818223
+   },
+   "every_stock": {
+    "ideas": 980,
+    "days": 20,
+    "hit_rate": 0.19795918367346937,
+    "avg_net": 0.005851258881054549,
+    "avg_net_by_day": 0.0058512588810545494
+   },
+   "model_days_better": {
+    "better": 12,
+    "of": 20
+   },
+   "model_auc": 0.5630480069848017
+  },
+  {
+   "cutoff": "2026-08-04",
+   "start": "2026-08-05",
+   "end": "2026-08-15",
+   "days": 8,
+   "regime": {
+    "label": "sideways",
+    "avg_move": -0.012025183831599439
+   },
+   "model": {
+    "ideas": 40,
+    "days": 8,
+    "hit_rate": 0.05,
+    "avg_net": -0.010540528936019616,
+    "avg_net_by_day": -0.010540528936019616
+   },
+   "momentum": {
+    "ideas": 40,
+    "days": 8,
+    "hit_rate": 0.175,
+    "avg_net": -0.006906205743166744,
+    "avg_net_by_day": -0.006906205743166744
+   },
+   "every_stock": {
+    "ideas": 392,
+    "days": 8,
+    "hit_rate": 0.03571428571428571,
+    "avg_net": -0.02105070391289738,
+    "avg_net_by_day": -0.02105070391289738
+   },
+   "model_days_better": {
+    "better": 6,
+    "of": 8
+   },
+   "model_auc": 0.5650721585299809
+  }
+ ],
+ "pooled": {
+  "model": {
+   "ideas": 1075,
+   "days": 215,
+   "hit_rate": 0.1869767441860465,
+   "avg_net": -0.001037792271138147,
+   "avg_net_by_day": -0.0010377922711381471
+  },
+  "momentum": {
+   "ideas": 1075,
+   "days": 215,
+   "hit_rate": 0.16837209302325581,
+   "avg_net": -0.004310816091441503,
+   "avg_net_by_day": -0.004310816091441503
+  },
+  "every_stock": {
+   "ideas": 10535,
+   "days": 215,
+   "hit_rate": 0.1552918841955387,
+   "avg_net": -0.0031904252460610598,
+   "avg_net_by_day": -0.0031904252460610598
+  },
+  "model_edge_per_day": 0.0021526329749229126,
+  "model_edge_low": 0.00022637398163144546,
+  "momentum_edge_per_day": -0.001120390845380443
+ },
+ "by_regime": {
+  "rising": {
+   "folds": 4,
+   "better": 2
+  },
+  "sideways": {
+   "folds": 7,
+   "better": 5
+  },
+  "falling": {
+   "folds": 1,
+   "better": 1
+  }
+ },
+ "verdict": {
+  "word": "skill",
+  "why": "Beats every-stock by a margin that is unlikely to be luck, in most windows.",
+  "folds_better_share": 0.6666666666666666
+ }
+}

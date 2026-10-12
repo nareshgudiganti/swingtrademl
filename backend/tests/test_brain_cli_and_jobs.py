@@ -33,8 +33,16 @@ def test_brain_learn_command_parses():
     assert args.brain_command == "learn" and args.since == "2026-09-01"
 
 
-def test_brain_is_off_by_default():
-    assert Settings(API_KEY="x", JWT_SECRET_KEY="x").BRAIN_ENABLED is False
+def test_brain_is_off_by_default(monkeypatch):
+    """The code's own default, not a developer's .env or shell."""
+    monkeypatch.delenv("BRAIN_ENABLED", raising=False)
+    assert Settings.model_fields["BRAIN_ENABLED"].default is False
+    assert Settings(_env_file=None, API_KEY="x", JWT_SECRET_KEY="x").BRAIN_ENABLED is False
+
+
+def test_brain_can_be_switched_on(monkeypatch):
+    monkeypatch.setenv("BRAIN_ENABLED", "true")
+    assert Settings(_env_file=None, API_KEY="x", JWT_SECRET_KEY="x").BRAIN_ENABLED is True
 
 
 def test_brain_jobs_register_nightly_intraday_learn_approvals_open_and_run_queue():

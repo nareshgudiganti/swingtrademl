@@ -13,6 +13,8 @@ raw history — and does not steer decisions until it proves an edge.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pandas as pd
 
 from swing_trade_ml.brain import contracts as c
@@ -62,6 +64,9 @@ class Memory(BrainModule):
         if cases.empty:
             return c.Contribution()
         today = view.request.as_of.astimezone(IST).date()
+        # The lookup depends only on the situation key, not the stock, so do it
+        # once per distinct key (a few dozen) instead of once per stock.
+        by_key: dict[tuple, c.Recall] = {}
         recalls = []
         for symbol in dict.fromkeys((*view.request.universe, *(h.symbol for h in view.holdings))):
             bars = reader.dated_bars(symbol).tail(KEY_BARS).reset_index(drop=True)
@@ -71,5 +76,8 @@ class Memory(BrainModule):
             if any(last[p] is None for p in ("stock", "trend", "vol")):
                 continue
             key = {"market": market, "stock": last["stock"], "trend": last["trend"], "vol": last["vol"]}
-            recalls.append(recall(cases, symbol, key, today))
+            shared = by_key.get(tuple(key.values()))
+            if shared is None:
+                shared = by_key[tuple(key.values())] = recall(cases, symbol, key, today)
+            recalls.append(replace(shared, symbol=symbol))
         return c.Contribution(recalls=tuple(recalls))

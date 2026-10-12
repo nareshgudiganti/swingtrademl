@@ -222,6 +222,35 @@ def test_ideas_and_holdings_get_a_recall_keyed_on_todays_situation():
     assert ctx.recalls["HELD"].hit_rate == 0.0  # holdings get one too (M15 needs the path)
 
 
+def test_stocks_in_the_same_situation_share_one_lookup_but_keep_their_own_name(monkeypatch):
+    """The answer depends only on the situation key, so a run over hundreds of
+    stocks does the heavy lookup once per distinct key (it timed out on prod)."""
+    from swing_trade_ml.brain.modules.m05_memory import module as m05
+
+    real, keys_seen = m05.recall, []
+
+    def counting(cases, symbol, key, today):
+        keys_seen.append(dict(key))
+        return real(cases, symbol, key, today)
+
+    monkeypatch.setattr(m05, "recall", counting)
+    rising = _bars(_rate(260, 0.003), start="2025-06-01")
+    falling = _bars(_rate(260, -0.003), start="2025-06-01")
+    reader = MemoryReader(_history_cases(), {"A": rising, "B": rising, "C": rising, "D": falling})
+    market = c.Situation(scope="market", subject="NIFTY 50", label="correction", confidence=0.8)
+    m04 = make_module(
+        "M04", Step.RECOGNISE, writes=("Situation@1",), run=lambda view: c.Contribution(situations=(market,))
+    )
+    universe = ("A", "B", "C", "D")
+    req = c.RunRequest(run_id="t", kind="nightly", as_of=reader.as_of, universe=universe, live=True)
+    ctx = execute(req, reader, registry(m04, Memory), {"M05": Mode.ON})
+
+    assert len(keys_seen) == 2  # one for the rising stocks, one for the falling one
+    assert {s: ctx.recalls[s].symbol for s in "ABCD"} == {s: s for s in "ABCD"}
+    assert ctx.recalls["A"].hit_rate == ctx.recalls["B"].hit_rate == ctx.recalls["C"].hit_rate == 1.0
+    assert ctx.recalls["D"].hit_rate == 0.0
+
+
 def test_a_stock_without_enough_bars_gets_no_recall():
     reader = MemoryReader(_history_cases(), {})
     req = c.RunRequest(run_id="t", kind="nightly", as_of=reader.as_of, universe=("ABC",), live=True)

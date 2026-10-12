@@ -89,3 +89,30 @@ def test_random_baseline_is_repeatable():
     a = random_baseline(pool, {DAYS[0]: 1, DAYS[1]: 1}, bars, DAYS, {}, capital=500_000, draws=5)
     b = random_baseline(pool, {DAYS[0]: 1, DAYS[1]: 1}, bars, DAYS, {}, capital=500_000, draws=5)
     assert a == b and a["return_p5"] <= a["return_p95"]
+
+
+def _slide():
+    """Two stocks gap down 35% on day 2 (stopped out at the open); two stay flat and stay held."""
+    gap = dict.fromkeys(range(2, 30), (65, 65, 65, 65))
+    return {"A": flat(overrides=gap), "B": flat(overrides=gap), "C": flat(), "D": flat()}
+
+
+def test_half_out_proceeds_count_as_cash_straight_away():
+    up = flat(overrides={2: (100, 106, 100, 105)})  # touches +5% (half out) but not +8%
+    r = run([Pick(DAYS[0], "A", 0.9)], {"A": up})
+    day2 = dict(r.curve)[DAYS[2]]
+    assert day2 > 500_000 * 0.995  # equity must not drop when half is sold
+
+
+def test_selling_all_at_a_fall_ends_with_no_positions_and_records_the_cost():
+    picks = [Pick(DAYS[0], s, 1.0) for s in "ABCD"]
+    r = simulate(picks, _slide(), DAYS, capital=100_000, drawdown_policy="liquidate")
+    assert r.forced_exits >= 1 and r.forced_shortfall > 0 and r.triggers >= 1
+
+
+def test_selling_half_keeps_some_exposure_and_the_default_keeps_all():
+    picks = [Pick(DAYS[0], s, 1.0) for s in "ABCD"]
+    halve = simulate(picks, _slide(), DAYS, capital=100_000, drawdown_policy="reduce")
+    keep = simulate(picks, _slide(), DAYS, capital=100_000, drawdown_policy="halt")
+    assert halve.forced_exits >= 1 and keep.forced_exits == 0
+    assert halve.forced_exits == 2  # the two flat stocks are the ones still open

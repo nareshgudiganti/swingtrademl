@@ -7,98 +7,311 @@
   "accounts": [
     {
       "capital": 100000,
+      "policy": "halt",
       "model": {
         "start_equity": 100000.0,
-        "end_equity": 94048.6,
-        "total_return": -0.05951396322428715,
-        "max_drawdown": 0.34821376164880036,
-        "trades": 77,
-        "win_rate": 0.44155844155844154,
-        "avg_trade_return": -0.001892181538003163,
-        "avg_invested_share": 0.735794113151041,
-        "halted_days": 57,
+        "end_equity": 94066.51,
+        "total_return": -0.05933494533539896,
+        "max_drawdown": 0.14286869002093572,
+        "trades": 91,
+        "win_rate": 0.43956043956043955,
+        "avg_trade_return": -0.0022904036523487105,
+        "avg_invested_share": 0.7728246496538961,
+        "halted_days": 0,
         "still_open": 4,
+        "triggers": 0,
+        "forced_exits": 0,
+        "forced_shortfall": 0.0,
+        "longest_underwater_days": 216,
         "skipped": {
-          "too_small_or_no_cash": 2,
-          "no_free_slot": 570,
-          "already_held": 188,
-          "drawdown_halt": 285,
-          "sector_cap": 24
+          "too_small_or_no_cash": 14,
+          "no_free_slot": 765,
+          "already_held": 249,
+          "sector_cap": 27
         }
       },
       "random": {
         "draws": 30,
-        "return_mean": -0.09320467146849357,
-        "return_p5": -0.24507147179259936,
-        "return_p95": -0.002816838934060817,
-        "drawdown_mean": 0.37675731799555895,
-        "drawdown_p95": 0.44521590612182044
+        "return_mean": -0.07740109412666032,
+        "return_p5": -0.160793527278839,
+        "return_p95": -0.006154360105490642,
+        "drawdown_mean": 0.1592715309353038,
+        "drawdown_p95": 0.18496818766448536
+      }
+    },
+    {
+      "capital": 100000,
+      "policy": "reduce",
+      "model": {
+        "start_equity": 100000.0,
+        "end_equity": 94066.51,
+        "total_return": -0.05933494533539896,
+        "max_drawdown": 0.14286869002093572,
+        "trades": 91,
+        "win_rate": 0.43956043956043955,
+        "avg_trade_return": -0.0022904036523487105,
+        "avg_invested_share": 0.7728246496538961,
+        "halted_days": 0,
+        "still_open": 4,
+        "triggers": 0,
+        "forced_exits": 0,
+        "forced_shortfall": 0.0,
+        "longest_underwater_days": 216,
+        "skipped": {
+          "too_small_or_no_cash": 14,
+          "no_free_slot": 765,
+          "already_held": 249,
+          "sector_cap": 27
+        }
+      },
+      "random": {
+        "draws": 30,
+        "return_mean": -0.09696869386531158,
+        "return_p5": -0.22654162000836497,
+        "return_p95": -0.006154360105490642,
+        "drawdown_mean": 0.17683988261717673,
+        "drawdown_p95": 0.25255729522918297
+      }
+    },
+    {
+      "capital": 100000,
+      "policy": "liquidate",
+      "model": {
+        "start_equity": 100000.0,
+        "end_equity": 94066.51,
+        "total_return": -0.05933494533539896,
+        "max_drawdown": 0.14286869002093572,
+        "trades": 91,
+        "win_rate": 0.43956043956043955,
+        "avg_trade_return": -0.0022904036523487105,
+        "avg_invested_share": 0.7728246496538961,
+        "halted_days": 0,
+        "still_open": 4,
+        "triggers": 0,
+        "forced_exits": 0,
+        "forced_shortfall": 0.0,
+        "longest_underwater_days": 216,
+        "skipped": {
+          "too_small_or_no_cash": 14,
+          "no_free_slot": 765,
+          "already_held": 249,
+          "sector_cap": 27
+        }
+      },
+      "random": {
+        "draws": 30,
+        "return_mean": -0.09471477313881001,
+        "return_p5": -0.20007755632912172,
+        "return_p95": -0.006154360105490642,
+        "drawdown_mean": 0.17380106869544668,
+        "drawdown_p95": 0.22711698831247812
       }
     },
     {
       "capital": 500000,
+      "policy": "halt",
       "model": {
         "start_equity": 500000.0,
-        "end_equity": 475360.89,
-        "total_return": -0.04927822177971508,
-        "max_drawdown": 0.24713716001136532,
+        "end_equity": 473566.96,
+        "total_return": -0.05286607948776256,
+        "max_drawdown": 0.11443921995909184,
         "trades": 163,
-        "win_rate": 0.4723926380368098,
-        "avg_trade_return": -0.0017654749409040183,
-        "avg_invested_share": 0.7837199634474931,
-        "halted_days": 2,
+        "win_rate": 0.4601226993865031,
+        "avg_trade_return": -0.0022448197977045473,
+        "avg_invested_share": 0.7656323032466777,
+        "halted_days": 0,
         "still_open": 5,
+        "triggers": 0,
+        "forced_exits": 0,
+        "forced_shortfall": 0.0,
+        "longest_underwater_days": 216,
         "skipped": {
-          "too_small_or_no_cash": 23,
-          "already_held": 422,
-          "no_free_slot": 527,
-          "drawdown_halt": 10
+          "too_small_or_no_cash": 22,
+          "already_held": 424,
+          "no_free_slot": 536
         }
       },
       "random": {
         "draws": 30,
-        "return_mean": -0.09583945689403353,
-        "return_p5": -0.19818060775525026,
-        "return_p95": -0.01168322552106571,
-        "drawdown_mean": 0.3156639899137515,
-        "drawdown_p95": 0.3535453439752118
+        "return_mean": -0.07137767532542418,
+        "return_p5": -0.1457114363885682,
+        "return_p95": -0.00039216289142529615,
+        "drawdown_mean": 0.14353848003492445,
+        "drawdown_p95": 0.17259744820633413
+      }
+    },
+    {
+      "capital": 500000,
+      "policy": "reduce",
+      "model": {
+        "start_equity": 500000.0,
+        "end_equity": 473566.96,
+        "total_return": -0.05286607948776256,
+        "max_drawdown": 0.11443921995909184,
+        "trades": 163,
+        "win_rate": 0.4601226993865031,
+        "avg_trade_return": -0.0022448197977045473,
+        "avg_invested_share": 0.7656323032466777,
+        "halted_days": 0,
+        "still_open": 5,
+        "triggers": 0,
+        "forced_exits": 0,
+        "forced_shortfall": 0.0,
+        "longest_underwater_days": 216,
+        "skipped": {
+          "too_small_or_no_cash": 22,
+          "already_held": 424,
+          "no_free_slot": 536
+        }
+      },
+      "random": {
+        "draws": 30,
+        "return_mean": -0.07241612580950786,
+        "return_p5": -0.14317141348327334,
+        "return_p95": -0.00039216289142529615,
+        "drawdown_mean": 0.1456511922339545,
+        "drawdown_p95": 0.18143683048922288
+      }
+    },
+    {
+      "capital": 500000,
+      "policy": "liquidate",
+      "model": {
+        "start_equity": 500000.0,
+        "end_equity": 473566.96,
+        "total_return": -0.05286607948776256,
+        "max_drawdown": 0.11443921995909184,
+        "trades": 163,
+        "win_rate": 0.4601226993865031,
+        "avg_trade_return": -0.0022448197977045473,
+        "avg_invested_share": 0.7656323032466777,
+        "halted_days": 0,
+        "still_open": 5,
+        "triggers": 0,
+        "forced_exits": 0,
+        "forced_shortfall": 0.0,
+        "longest_underwater_days": 216,
+        "skipped": {
+          "too_small_or_no_cash": 22,
+          "already_held": 424,
+          "no_free_slot": 536
+        }
+      },
+      "random": {
+        "draws": 30,
+        "return_mean": -0.07268725691869075,
+        "return_p5": -0.14716983595473154,
+        "return_p95": -0.00039216289142529615,
+        "drawdown_mean": 0.1453053862038699,
+        "drawdown_p95": 0.18873745387445875
       }
     },
     {
       "capital": 1000000,
+      "policy": "halt",
       "model": {
         "start_equity": 1000000.0,
-        "end_equity": 947954.33,
-        "total_return": -0.0520456739868107,
-        "max_drawdown": 0.24608877347190064,
-        "trades": 183,
-        "win_rate": 0.4426229508196721,
-        "avg_trade_return": -0.002764281003740577,
-        "avg_invested_share": 0.671526689391866,
-        "halted_days": 10,
-        "still_open": 7,
+        "end_equity": 925421.41,
+        "total_return": -0.07457859462677074,
+        "max_drawdown": 0.11178604824732952,
+        "trades": 184,
+        "win_rate": 0.42391304347826086,
+        "avg_trade_return": -0.004664674460147063,
+        "avg_invested_share": 0.64468286675176,
+        "halted_days": 0,
+        "still_open": 8,
+        "triggers": 0,
+        "forced_exits": 0,
+        "forced_shortfall": 0.0,
+        "longest_underwater_days": 216,
         "skipped": {
-          "already_held": 430,
-          "no_free_slot": 470,
-          "too_small_or_no_cash": 10,
-          "drawdown_halt": 50
+          "already_held": 492,
+          "no_free_slot": 457,
+          "too_small_or_no_cash": 9
         }
       },
       "random": {
         "draws": 30,
-        "return_mean": -0.08132478742465989,
-        "return_p5": -0.1770669555458766,
-        "return_p95": -0.0044390131310082515,
-        "drawdown_mean": 0.270368542448361,
-        "drawdown_p95": 0.3193117755091964
+        "return_mean": -0.053130169391819033,
+        "return_p5": -0.12207601565412407,
+        "return_p95": -0.0047890311407977615,
+        "drawdown_mean": 0.1204902955677498,
+        "drawdown_p95": 0.16163644585416725
+      }
+    },
+    {
+      "capital": 1000000,
+      "policy": "reduce",
+      "model": {
+        "start_equity": 1000000.0,
+        "end_equity": 925421.41,
+        "total_return": -0.07457859462677074,
+        "max_drawdown": 0.11178604824732952,
+        "trades": 184,
+        "win_rate": 0.42391304347826086,
+        "avg_trade_return": -0.004664674460147063,
+        "avg_invested_share": 0.64468286675176,
+        "halted_days": 0,
+        "still_open": 8,
+        "triggers": 0,
+        "forced_exits": 0,
+        "forced_shortfall": 0.0,
+        "longest_underwater_days": 216,
+        "skipped": {
+          "already_held": 492,
+          "no_free_slot": 457,
+          "too_small_or_no_cash": 9
+        }
+      },
+      "random": {
+        "draws": 30,
+        "return_mean": -0.05289340881119158,
+        "return_p5": -0.12715472802962624,
+        "return_p95": -0.0047890311407977615,
+        "drawdown_mean": 0.1214765604454822,
+        "drawdown_p95": 0.16778473613852926
+      }
+    },
+    {
+      "capital": 1000000,
+      "policy": "liquidate",
+      "model": {
+        "start_equity": 1000000.0,
+        "end_equity": 925421.41,
+        "total_return": -0.07457859462677074,
+        "max_drawdown": 0.11178604824732952,
+        "trades": 184,
+        "win_rate": 0.42391304347826086,
+        "avg_trade_return": -0.004664674460147063,
+        "avg_invested_share": 0.64468286675176,
+        "halted_days": 0,
+        "still_open": 8,
+        "triggers": 0,
+        "forced_exits": 0,
+        "forced_shortfall": 0.0,
+        "longest_underwater_days": 216,
+        "skipped": {
+          "already_held": 492,
+          "no_free_slot": 457,
+          "too_small_or_no_cash": 9
+        }
+      },
+      "random": {
+        "draws": 30,
+        "return_mean": -0.05311406527188119,
+        "return_p5": -0.12498021933963588,
+        "return_p95": -0.0047890311407977615,
+        "drawdown_mean": 0.12171594690876314,
+        "drawdown_p95": 0.17064664456197734
       }
     }
   ],
   "limits": [
     "Whole shares; cap tiers, liquidity ceiling and the regime ceiling are not applied.",
-    "No market-mode history exists for these days, so every day is NORMAL (top 5 a day, full size). The real brain is DEFENSIVE more often, so this is not more cautious than the real brain.",
-    "Universe is today's watchlist (survivor bias).",
-    "Daily candles: a bar touching both stop and target counts as the stop.",
+    "No market-mode history exists for these days, so every day is NORMAL (top 5 a day, full size). This is NOT the brain's real behaviour and the effect on the results is unknown: DEFENSIVE days would have bought fewer and smaller positions, which changes both losses and gains. Do not read this replay as conservative.",
+    "The drawdown control checks closing equity and sells at the next open, so a gap can carry the loss past 15%. It is a trigger, not a guaranteed ceiling.",
+    "'Reduce' and 'sell all' wait 10 trading days after firing, then take the account's value that day as the new peak; the worst fall shown always uses the true running peak.",
+    "Universe is today's watchlist (survivor bias). Daily candles: a bar touching both stop and target counts as the stop.",
     "Sizing is 1% risk at a 4% stop, capped by the capital ladder (about 25% of the account at most)."
   ]
 }

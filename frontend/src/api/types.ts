@@ -875,6 +875,25 @@ export type HoldingWord = 'HOLD' | 'MONITOR' | 'REDUCE' | 'EXIT'
 export type MarketMode = 'NORMAL' | 'DEFENSIVE' | 'NO_NEW_TRADES'
 export type ModuleMode = 'on' | 'shadow' | 'off'
 
+/** What a score really meant on unseen days (display only; `confidence` stays the raw ranking). */
+export interface BrainHonestScore {
+  status: 'measured' | 'calibrated' | 'not_measured' | 'no_score'
+  honest_chance?: number
+  rule?: string
+  caveat?: string
+  note?: string
+  period?: { from: string; to: string }
+  track_record?: {
+    enough_evidence: boolean
+    hit_rate?: number
+    n?: number
+    windows?: number
+    lowest_window?: number | null
+    highest_window?: number | null
+    text?: string
+  }
+}
+
 export interface BrainDecision {
   id: number
   run_id: string
@@ -889,6 +908,7 @@ export interface BrainDecision {
   qty: number
   horizon_days: number
   confidence: number | null
+  honest_score?: BrainHonestScore | null
   evidence_text: string | null
   downgraded_from: string | null
   downgrade_reason: string | null

@@ -1,5 +1,6 @@
 import { useNavigate, Link } from 'react-router-dom'
 
+import { chanceText, chanceTitle } from '../honest'
 import type { Action } from '../types'
 import type { IdeaWord } from '../../api/types'
 import { formatDateTime } from '../../lib/format'
@@ -161,10 +162,10 @@ function HomeBody() {
                       <td>
                         <ActionPill action={finalWord(i) as Action} />
                       </td>
-                      <td className="tm-num tm-right" title="Model score — a ranking, not a chance">
+                      <td className="tm-num tm-right" title={chanceTitle(i)}>
                         <span style={{ display: 'inline-flex', gap: '0.3rem', alignItems: 'center' }}>
-                          {i.confidence != null ? Math.round(i.confidence * 100) : '—'}
-                          <span className="tm-dim">model score</span>
+                          {chanceText(i)}
+                          <span className="tm-dim">est. chance</span>
                         </span>
                       </td>
                       <td className="tm-dim">{i.reasons[0]}</td>

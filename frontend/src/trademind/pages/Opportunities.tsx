@@ -7,6 +7,7 @@ import type { BrainDecision, IdeaWord } from '../../api/types'
 import type { Action } from '../types'
 import { finalWord, ideasFrom, useLatestRun } from '../live'
 import { wordTone } from '../vocab'
+import { TrackRecord, chancePercent, chanceText, chanceTitle } from '../honest'
 import { CapFlag, useSymbolCaps } from '../cap'
 import { ActionPill, BrainGate, Card, CheckItem, Icon, GlowArea, Ring, Seg, StockLogo, inr } from '../ui'
 
@@ -106,8 +107,8 @@ function OpportunitiesBody() {
                 <th>Stock</th>
                 <th>Size</th>
                 <th>Decision</th>
-                <th className="tm-right" title="A ranking, not a chance">
-                  Model score
+                <th className="tm-right" title="Estimated chance of reaching +8% before −4%, from past results on unseen days">
+                  Est. chance
                 </th>
                 <th>Entry</th>
                 <th>Target</th>
@@ -130,7 +131,9 @@ function OpportunitiesBody() {
                     <td>
                       <ActionPill action={finalWord(i) as Action} />
                     </td>
-                    <td className="tm-right tm-num">{i.confidence != null ? Math.round(i.confidence * 100) : '—'}</td>
+                    <td className="tm-right tm-num" title={chanceTitle(i)}>
+                      {chanceText(i)}
+                    </td>
                     <td className="tm-dim">{entryPrice(i)}</td>
                     <td className="tm-dim">{moneyOrDash(i.target)}</td>
                     <td className="tm-dim">{moneyOrDash(i.stop)}</td>
@@ -243,16 +246,16 @@ function FeaturedCard({ decision }: { decision: BrainDecision }) {
       </div>
       <div className="tm-flex tm-feature-viz">
         <Ring
-          value={decision.confidence != null ? Math.round(decision.confidence * 100) : 0}
-          empty={decision.confidence == null}
+          value={chancePercent(decision) ?? 0}
+          empty={chancePercent(decision) == null}
           size={84}
           stroke={8}
           center={
             <>
               <span className="tm-ring-value" style={{ fontSize: 20 }}>
-                {decision.confidence != null ? Math.round(decision.confidence * 100) : '—'}
+                {chanceText(decision)}
               </span>
-              <span className="tm-ring-label">Model score</span>
+              <span className="tm-ring-label">Est. chance</span>
             </>
           }
         />
@@ -271,6 +274,7 @@ function FeaturedCard({ decision }: { decision: BrainDecision }) {
         <div className="tm-strong" style={{ marginBottom: 2 }}>
           {WHY_HEADING[finalWord(decision)] ?? 'Why TradeMind decided this'}
         </div>
+        <TrackRecord decision={decision} />
         {decision.reasons.map((w, idx) => (
           <CheckItem key={idx} tone={wordTone(finalWord(decision))}>
             {w}

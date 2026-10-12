@@ -141,10 +141,16 @@ class HonestyMap:
 
 
 def fit_honesty(
-    p: np.ndarray, y: np.ndarray, days: np.ndarray, min_days: int = MIN_EVIDENCE_DAYS
+    p: np.ndarray,
+    y: np.ndarray,
+    days: np.ndarray,
+    min_days: int = MIN_EVIDENCE_DAYS,
+    weights: np.ndarray | None = None,
 ) -> HonestyMap:
+    """`weights` (optional) lets the caller count each market period equally, so one
+    hot month cannot decide what a score level means."""
     p, y = np.asarray(p, dtype=float), np.asarray(y, dtype=float)
-    iso = IsotonicRegression(out_of_bounds="clip", y_min=0.0, y_max=1.0).fit(p, y)
+    iso = IsotonicRegression(out_of_bounds="clip", y_min=0.0, y_max=1.0).fit(p, y, sample_weight=weights)
     order = np.argsort(-p, kind="stable")
     seen: set = set()
     cut = p[order[-1]]

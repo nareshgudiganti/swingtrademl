@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
 
 from swing_trade_ml.api.deps import DbSession
-from swing_trade_ml.brain import service
+from swing_trade_ml.brain import score_evidence, service
 from swing_trade_ml.brain.alerts import service as alerts
 from swing_trade_ml.brain.module import Mode
 from swing_trade_ml.core.config import settings
@@ -75,7 +75,28 @@ class BuyLevelRevert(BaseModel):
     by: str = "owner"
 
 
-def _decision_out(d: BrainDecision) -> dict:
+def _score_evidence(db) -> dict | None:
+    """The evidence for the model the brain scores with; None when that model was not trained
+    on the +8% / -4% question (then cards show no chance, only that the score is a ranking)."""
+    from swing_trade_ml.brain.reader import FALLBACK_MODEL_NAME
+    from swing_trade_ml.ml.registry import get_active_model
+
+    return score_evidence.evidence_for(get_active_model(db, FALLBACK_MODEL_NAME))
+
+
+def _honest_score(d: BrainDecision, evidence: dict | None) -> dict | None:
+    """Display-only: what the idea's score really meant on unseen days. The stored `confidence`
+    is untouched, so decisions, the buy level and orders never read this."""
+    if d.kind != "idea" or d.confidence is None:
+        return None
+    if d.score_source == "combined":  # M06 already passes its score through the honesty map
+        return {"status": "calibrated", "honest_chance": d.confidence}
+    if d.score_source == "model":
+        return score_evidence.present(d.confidence, evidence)
+    return None
+
+
+def _decision_out(d: BrainDecision, evidence: dict | None = None) -> dict:
     return {
         "id": d.id,
         "run_id": d.run_id,
@@ -94,6 +115,7 @@ def _decision_out(d: BrainDecision) -> dict:
         "qty": d.qty,
         "horizon_days": d.horizon_days,
         "confidence": d.confidence,
+        "honest_score": _honest_score(d, evidence),
         "evidence_text": d.evidence_text,
         "downgraded_from": d.downgraded_from,
         "downgrade_reason": d.downgrade_reason,
@@ -119,6 +141,7 @@ def _run_summary(db, run: BrainRun) -> dict:
 
 def _run_out(db, run: BrainRun) -> dict:
     decisions = service.decisions_for(db, run.id)
+    evidence = _score_evidence(db)
     return {
         "quality": run.quality,
         "sectors": (run.context or {}).get("sectors", []),
@@ -139,7 +162,7 @@ def _run_out(db, run: BrainRun) -> dict:
         "banner": {"mode": run.banner_mode, "headline": run.banner_headline},
         "modules": run.modules,
         "counts": dict(Counter(d.word for d in decisions)),
-        "decisions": [_decision_out(d) for d in decisions],
+        "decisions": [_decision_out(d, evidence) for d in decisions],
     }
 
 
@@ -210,7 +233,7 @@ def overrule(decision_id: int, payload: OverruleCreate, db: DbSession) -> dict:
         raise HTTPException(404, str(exc)) from exc
     except service.OverruleRefusedError as exc:
         raise HTTPException(409, str(exc)) from exc
-    return _decision_out(d)
+    return _decision_out(d, _score_evidence(db))
 
 
 @router.get("/health")
@@ -345,7 +368,7 @@ def why(symbol: str, db: DbSession, book: str = Query("paper", pattern="^(paper|
     return {
         "run_id": run_id,
         "banner": {"mode": run.banner_mode, "headline": run.banner_headline},
-        "decision": _decision_out(decision) if decision else None,
+        "decision": _decision_out(decision, _score_evidence(db)) if decision else None,
         "trace": run.trace,
     }
 

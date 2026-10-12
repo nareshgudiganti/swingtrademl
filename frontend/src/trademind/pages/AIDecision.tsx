@@ -4,6 +4,7 @@ import { useParams } from 'react-router-dom'
 import { usePlan } from '../../lib/plan'
 import { finalWord, ideasFrom, useBrainStatus, useLatestRun, useRunTrace, useWhy } from '../live'
 import { MODULE_PLAIN, STEP_LABEL, moduleName, traceLine, wordClassName, wordTone } from '../vocab'
+import { TrackRecord, chancePercent, chanceText, chanceTitle } from '../honest'
 import { BrainGate, Card, CheckItem, Icon, NotConnected, Tabs, inr } from '../ui'
 
 const OWNER_TABS = ['Summary', 'Evidence', 'Similar Cases', 'Model Output', 'Risk Analysis'] as const
@@ -148,17 +149,16 @@ function AIDecisionBody() {
               <p className="tm-strong" style={{ marginTop: 0 }}>
                 TradeMind {decision.kind === 'idea' ? 'recommends' : 'currently has'}{' '}
                 <span className={wordClassName(finalWord(decision))}>{finalWord(decision)}</span> for {symbol}
-                {decision.confidence != null && (
+                {chancePercent(decision) != null && (
                   <>
                     {' '}
-                    with{' '}
-                    <span title="A ranking, not a chance — not a probability">
-                      {Math.round(decision.confidence * 100)} model score
-                    </span>
+                    with an estimated{' '}
+                    <span title={chanceTitle(decision)}>{chanceText(decision)} chance</span> of reaching the target first
                   </>
                 )}
                 .
               </p>
+              <TrackRecord decision={decision} />
 
               <div className="tm-card" style={{ marginTop: '1rem' }}>
                 <div className="tm-card-head">

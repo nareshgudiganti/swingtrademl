@@ -9,6 +9,7 @@
 // The score is a ranking between ideas, never shown as a chance of winning.
 
 import { useMemo, useState } from 'react'
+import { chancePercent, chanceText, chanceTitle } from '../honest'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 
@@ -39,10 +40,10 @@ const RANGES = [
 type RangeId = (typeof RANGES)[number]['id']
 
 const MIN_SCORES = [
-  { id: 0, label: 'Any score' },
-  { id: 60, label: 'Score 60+' },
-  { id: 70, label: 'Score 70+' },
-  { id: 80, label: 'Score 80+' },
+  { id: 0, label: 'Any ranking' },
+  { id: 60, label: 'Ranking 60+' },
+  { id: 70, label: 'Ranking 70+' },
+  { id: 80, label: 'Ranking 80+' },
 ]
 
 const FIRST_TARGET = 0.05 // the rule: sell half at +5%
@@ -234,7 +235,7 @@ function DashboardBody() {
                 className="tm-select"
                 value={minScore}
                 onChange={(e) => setMinScore(Number(e.target.value))}
-                aria-label="Minimum score"
+                aria-label="Minimum ranking (a model ranking, not a chance)"
               >
                 {MIN_SCORES.map((m) => (
                   <option key={m.id} value={m.id}>
@@ -272,8 +273,8 @@ function DashboardBody() {
                   <th title="Rule: sell half here">Target 1</th>
                   <th>Target 2</th>
                   <th>Stop loss</th>
-                  <th className="tm-right" title="A ranking between ideas, not a chance of winning">
-                    Score
+                  <th className="tm-right" title="Estimated chance of +8% before −4%, from past results on unseen days">
+                    Est. chance
                   </th>
                   <th>Timeframe</th>
                   <th />
@@ -312,7 +313,9 @@ function DashboardBody() {
                       <td className="tm-neg">
                         {money(d.stop)} <small>{pct(mid, d.stop)}</small>
                       </td>
-                      <td className="tm-right tm-num">{score(d) ?? '—'}</td>
+                      <td className="tm-right tm-num" title={chanceTitle(d)}>
+                        {chanceText(d)}
+                      </td>
                       <td>
                         <span className="tm-dash-badge">{d.horizon_days}D</span>
                       </td>
@@ -369,7 +372,7 @@ function SummaryStrip({ run, picks }: { run: BrainRun; picks: BrainDecision[] })
   const trendWord =
     regime.data?.regime === 'bullish' ? 'Bullish' : regime.data?.regime === 'bearish' ? 'Bearish' : 'Unclear'
 
-  const scores = picks.map(score).filter((s): s is number => s != null)
+  const scores = picks.map(chancePercent).filter((s): s is number => s != null)
   const avgScore = scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : null
   const topSectors = (run.sectors ?? [])
     .filter((s) => s.strength_20d != null)
@@ -422,7 +425,7 @@ function SummaryStrip({ run, picks }: { run: BrainRun; picks: BrainDecision[] })
         )}
       </Card>
 
-      <Card title="Model Score" sub="Average of today's picks">
+      <Card title="Estimated chance" sub="Average of today's picks">
         <div className="tm-flex" style={{ alignItems: 'center', gap: '0.9rem' }}>
           <Ring
             value={avgScore ?? 0}
@@ -431,7 +434,7 @@ function SummaryStrip({ run, picks }: { run: BrainRun; picks: BrainDecision[] })
             stroke={7}
             center={<span className="tm-ring-value">{avgScore ?? '—'}</span>}
           />
-          <p className="tm-note">A ranking between ideas, not a chance of winning.</p>
+          <p className="tm-note">Based on how similar scores did on days the model had not seen. Not a promise.</p>
         </div>
       </Card>
 
@@ -548,7 +551,7 @@ function PickDetail({
           </div>
         </Card>
 
-        <Card title="Why this pick?" sub={`Model score ${score(d) ?? '—'} (a ranking, not a chance)`}>
+        <Card title="Why this pick?" sub={`Estimated chance ${chanceText(d)} of reaching the target first`}>
           {d.reasons.length === 0 && <p className="tm-dim">The brain gave no reasons for this one.</p>}
           {d.reasons.map((r, i) => (
             <CheckItem key={i} tone={wordTone(word)}>

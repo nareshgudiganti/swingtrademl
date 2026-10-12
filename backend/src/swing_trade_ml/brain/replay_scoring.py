@@ -46,38 +46,47 @@ def _done(status, cash_in, cash_out, days, half_done, gap, day) -> StrictOutcome
     return StrictOutcome(status, cash_out / cash_in - 1.0, days, half_done, gap, day)
 
 
-def strict_score(bars: pd.DataFrame) -> StrictOutcome:
+def strict_score(
+    bars: pd.DataFrame,
+    *,
+    horizon: int = HORIZON_BARS,
+    target: float = TARGET,
+    stop: float = STOP,
+    half_out: float | None = HALF_OUT,
+) -> StrictOutcome:
     """`bars`: columns day, open, high, low, close; the first row is the entry day
-    (the day after the decision), ascending."""
+    (the day after the decision), ascending. The keyword options let the horizon grid
+    score other settings with the same costs; the defaults are the settled rule."""
     if bars.empty:
         return StrictOutcome("open", None, None, False, False, None)
     fill = apply_slippage(float(bars.iloc[0]["open"]), "BUY")
     qty = POSITION_INR / fill
     brokerage, taxes = compute_charges(fill * qty, "BUY")
     cash_in = fill * qty + brokerage + taxes
-    stop, half, target = fill * (1 - STOP), fill * (1 + HALF_OUT), fill * (1 + TARGET)
+    stop_px, target_px = fill * (1 - stop), fill * (1 + target)
+    half = None if half_out is None else fill * (1 + half_out)
 
     held, cash_out, half_done, gap = qty, 0.0, False, False
-    n = min(len(bars), HORIZON_BARS)
+    n = min(len(bars), horizon)
     for i in range(n):
         row = bars.iloc[i]
         o, h, lo, day = float(row["open"]), float(row["high"]), float(row["low"]), row["day"]
-        if lo <= stop:  # checked first: a bar touching the stop and anything else is the stop
-            gap = gap or o <= stop
-            cash_out += _sell(o if o <= stop else stop, held)
+        if lo <= stop_px:  # checked first: a bar touching the stop and anything else is the stop
+            gap = gap or o <= stop_px
+            cash_out += _sell(o if o <= stop_px else stop_px, held)
             return _done("stop", cash_in, cash_out, i + 1, half_done, gap, day)
-        if not half_done and h >= half:
+        if half is not None and not half_done and h >= half:
             cash_out += _sell(o if o >= half else half, qty / 2)
             held, half_done = qty / 2, True
-        if h >= target:
-            gap = gap or o >= target
-            cash_out += _sell(o if o >= target else target, held)
+        if h >= target_px:
+            gap = gap or o >= target_px
+            cash_out += _sell(o if o >= target_px else target_px, held)
             return _done("target", cash_in, cash_out, i + 1, half_done, gap, day)
-    if n < HORIZON_BARS:
+    if n < horizon:
         return StrictOutcome("open", None, None, half_done, gap, None)
-    last = bars.iloc[HORIZON_BARS - 1]
+    last = bars.iloc[horizon - 1]
     cash_out += _sell(float(last["close"]), held)
-    return _done("timeout", cash_in, cash_out, HORIZON_BARS, half_done, gap, last["day"])
+    return _done("timeout", cash_in, cash_out, horizon, half_done, gap, last["day"])
 
 
 def after_day(df: pd.DataFrame, day: date) -> pd.DataFrame:

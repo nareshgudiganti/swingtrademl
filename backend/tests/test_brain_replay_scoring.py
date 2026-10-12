@@ -92,3 +92,31 @@ def test_locked_score_is_none_without_a_bar_on_or_before_the_decision_day():
 def test_strict_for_uses_the_bar_after_the_decision_day_as_entry():
     df = bars([FLAT] * 17)
     assert strict_for(df, START).status == "timeout"
+
+
+# --- the same rule at other targets, stops and horizons (horizon grid) ---
+
+
+def test_default_rule_is_unchanged_by_the_new_options():
+    rows = [(100, 101, 99, 100)] * 2 + [(100, 109, 100, 108)]
+    same = strict_score(bars(rows), horizon=15, target=0.08, stop=0.04, half_out=0.05)
+    assert strict_score(bars(rows)) == same
+
+
+def test_a_smaller_target_is_reached_where_the_big_one_is_not():
+    rows = [(100, 103, 99.5, 102)] * 3 + [FLAT] * 12
+    assert strict_score(bars(rows)).status == "timeout"
+    out = strict_score(bars(rows), target=0.02, half_out=None)
+    assert out.status == "target" and out.days == 1 and out.net_return > 0
+
+
+def test_a_shorter_horizon_times_out_sooner():
+    out = strict_score(bars([FLAT] * 7), horizon=5, half_out=None)
+    assert out.status == "timeout" and out.days == 5
+    assert strict_score(bars([FLAT] * 4), horizon=5, half_out=None).status == "open"
+
+
+def test_a_tighter_stop_is_hit_by_a_small_drop():
+    rows = [(100, 100.5, 97.5, 98)] + [FLAT] * 14
+    assert strict_score(bars(rows)).status == "timeout"
+    assert strict_score(bars(rows), stop=0.02, half_out=None).status == "stop"

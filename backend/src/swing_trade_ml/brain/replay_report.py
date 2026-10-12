@@ -71,6 +71,30 @@ def track_stats(ideas: Sequence[ScoredIdea]) -> dict:
     }
 
 
+def apply_market_gate(
+    ideas: Sequence[ScoredIdea],
+    banners: dict[date, str],
+    defensive_max_new: int = 2,
+    normal_max_new: int = 5,
+) -> list[ScoredIdea]:
+    """The ideas the real brain would let through each day, given that day's market mode.
+
+    NO_NEW_TRADES lets none through, DEFENSIVE only the strongest `defensive_max_new`
+    (the same cap as the risk check, M07), NORMAL the strongest `normal_max_new` (the
+    owner's "top 5 a day"). A day with no known mode is treated as DEFENSIVE, as the brain does.
+    """
+    by_day: dict[date, list[ScoredIdea]] = {}
+    for i in ideas:
+        by_day.setdefault(i.day, []).append(i)
+    kept: list[ScoredIdea] = []
+    for day, day_ideas in by_day.items():
+        mode = banners.get(day, "DEFENSIVE")
+        cap = 0 if mode == "NO_NEW_TRADES" else defensive_max_new if mode == "DEFENSIVE" else normal_max_new
+        ranked = sorted(day_ideas, key=lambda i: (-(i.score if i.score is not None else -1), i.symbol))
+        kept.extend(ranked[:cap])
+    return kept
+
+
 def _as_ideas(pool: dict[date, list[str]], outcomes: dict) -> list[ScoredIdea]:
     return [
         ScoredIdea(day, sym, "ANY", False, False, None, (), None, outcomes.get((sym, day)))
@@ -165,6 +189,11 @@ def plain_summary(report: dict) -> str:
         lines.append("Days that failed and are missing from the numbers: " + ", ".join(w["failed_days"]))
     lines += _track_lines("Every idea (before the risk check)", report["track_a"])
     lines += _track_lines("Only ideas the risk check allowed", report["track_b"])
+    if report.get("track_gated"):
+        lines += _track_lines(
+            "Ideas after the market-mode limit (what the brain would really have bought)",
+            report["track_gated"],
+        )
     base = report.get("baselines") or {}
     if base.get("random") and base["random"]["mean"] is not None:
         r = base["random"]

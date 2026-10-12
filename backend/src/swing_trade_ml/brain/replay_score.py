@@ -22,6 +22,7 @@ from swing_trade_ml.brain.replay_report import (
     LIMITATIONS,
     ScoredIdea,
     all_eligible_stats,
+    apply_market_gate,
     random_baseline,
     track_stats,
 )
@@ -189,6 +190,7 @@ def run_replay_score(
     per_day: dict[date, list[dict]] = {}
     pool: dict[date, list[str]] = {}
     scored_days = 0
+    banners = {r.day: r.banner for r in results}
     for r in results:
         rows, judged = collect_ideas(db, r.run_id, r.day)
         per_day[r.day] = rows
@@ -247,6 +249,8 @@ def run_replay_score(
         else {**model_info, "days_scored": scored_days, "days_without_score": len(results) - scored_days},
         "track_a": track_stats(scored),
         "track_b": track_stats([i for i in scored if i.track_b]),
+        "track_gated": track_stats(apply_market_gate(scored, banners)),
+        "banners": {d.isoformat(): b for d, b in sorted(banners.items())},
         "baselines": {
             "all_eligible": all_eligible_stats(pool, outcomes),
             "random": random_baseline(pool, picks_per_day, outcomes, draws=draws, seed=seed),

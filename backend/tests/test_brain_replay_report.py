@@ -9,6 +9,7 @@ from swing_trade_ml.brain.replay_report import (
     LIMITATIONS,
     ScoredIdea,
     all_eligible_stats,
+    apply_market_gate,
     plain_summary,
     random_baseline,
     track_stats,
@@ -132,3 +133,15 @@ def test_summary_lists_failed_days_and_limitations():
     }
     text = plain_summary(report)
     assert "2026-09-03" in text and "limits" in text.lower()
+
+
+def test_market_gate_keeps_only_the_strongest_few_by_mode():
+    ideas = [idea(f"S{n}", "target", 0.07, score=60 + n) for n in range(8)]
+    assert [i.symbol for i in apply_market_gate(ideas, {D: "DEFENSIVE"})] == ["S7", "S6"]
+    assert len(apply_market_gate(ideas, {D: "NORMAL"})) == 5
+    assert apply_market_gate(ideas, {D: "NO_NEW_TRADES"}) == []
+
+
+def test_market_gate_treats_an_unknown_day_as_defensive():
+    ideas = [idea(f"S{n}", "target", 0.07, score=60 + n) for n in range(4)]
+    assert len(apply_market_gate(ideas, {})) == 2

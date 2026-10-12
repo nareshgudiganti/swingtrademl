@@ -99,6 +99,28 @@ def portfolio_value_and_cash(
     return holdings_value + cash, cash
 
 
+# A reading this far above the previous one cannot raise a position's highest
+# price at once (it can still be shown). One wild reading (APOLLOHOSP near 8870
+# on a day that never passed 8100) raised the highest price, which trailed the
+# stop above the market and sold a healthy position. A real jump counts as
+# soon as the next reading holds it, because that reading is compared with
+# this one.
+MAX_TICK_JUMP = 0.10
+
+
+def record_price(position: Position, price: float) -> None:
+    """Store the latest price, the unrealised profit and, when it is a believable
+    new high, the highest price the trailing stop is measured from."""
+    previous = position.current_price or position.entry_price
+    position.current_price = price
+    position.unrealized_pnl = (price - position.entry_price) * position.quantity
+    believable = price <= previous * (1 + MAX_TICK_JUMP)
+    if position.highest_price is None:
+        position.highest_price = price if believable else max(previous, position.entry_price)
+    elif price > position.highest_price and believable:
+        position.highest_price = price
+
+
 def mark_to_market(db: Session, mode: str | None = None) -> int:
     """Refresh `current_price` and unrealised P&L on open positions.
 
@@ -142,10 +164,7 @@ def mark_to_market(db: Session, mode: str | None = None) -> int:
         price = quotes.get(position.instrument_id)
         if price is None:
             continue
-        position.current_price = price
-        position.unrealized_pnl = (price - position.entry_price) * position.quantity
-        if position.highest_price is None or price > position.highest_price:
-            position.highest_price = price
+        record_price(position, price)
         updated += 1
 
     if updated:

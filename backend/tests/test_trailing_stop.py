@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from swing_trade_ml.db.models.trading import Position
 from swing_trade_ml.services.execution import trail_stop
+from swing_trade_ml.services.portfolio import record_price
 
 
 def _position(entry_price, initial_stop_loss, highest_price, stop_loss=None):
@@ -75,3 +76,52 @@ def test_nonpositive_entry_distance_is_a_no_op_guard():
     p = _position(entry_price=100.0, initial_stop_loss=100.0, highest_price=120.0)
     trail_stop(p)
     assert p.stop_loss == 100.0
+
+
+# --- one bad price reading must not drag the stop above the market (APOLLOHOSP, trade 99) ---
+
+
+def _open_position(price=7700.0):
+    p = Position(
+        entry_price=7669.83,
+        quantity=6,
+        initial_stop_loss=7337.28,
+        stop_loss=7337.28,
+        highest_price=price,
+        current_price=price,
+    )
+    return p
+
+
+def test_one_wild_reading_does_not_raise_the_highest_price_or_the_stop():
+    """Prod 2026-10-09: a reading near 8870 (real day high was under 8100) raised the
+    highest price, trailed the stop to 8537 and sold a healthy position at its next
+    normal price. A reading more than 10% above the last one must be ignored."""
+    p = _open_position()
+    record_price(p, 8870.0)
+    trail_stop(p)
+    assert p.highest_price == 7700.0
+    assert p.stop_loss == 7700.0 - (7669.83 - 7337.28)  # trailed from the real high, not from 8870
+    assert p.current_price == 8870.0  # still shown; it just cannot raise the stop
+
+
+def test_the_next_normal_reading_trails_the_stop_from_a_real_high():
+    p = _open_position()
+    record_price(p, 8870.0)
+    record_price(p, 7864.0)
+    trail_stop(p)
+    assert p.highest_price == 7864.0
+    assert p.stop_loss == 7864.0 - (7669.83 - 7337.28) < 7864.0  # a stop below the price, not 8537
+
+
+def test_a_real_gap_up_counts_once_the_price_holds():
+    p = _open_position()
+    record_price(p, 8870.0)  # first reading: unconfirmed
+    record_price(p, 8880.0)  # still there: it is real
+    assert p.highest_price == 8880.0
+
+
+def test_ordinary_moves_still_raise_the_highest_price():
+    p = _open_position()
+    record_price(p, 7800.0)
+    assert p.highest_price == 7800.0 and p.unrealized_pnl == (7800.0 - 7669.83) * 6

@@ -42,7 +42,7 @@ from swing_trade_ml.services.exit_policy import (
     exit_policy_for_strategy,
     scale_out_quantity,
 )
-from swing_trade_ml.services.portfolio import portfolio_value_and_cash
+from swing_trade_ml.services.portfolio import portfolio_value_and_cash, record_price
 
 log = get_logger(__name__)
 
@@ -1251,10 +1251,7 @@ def check_exits(db: Session) -> list[Trade]:
         if price is None:
             continue
 
-        position.current_price = price
-        position.unrealized_pnl = (price - position.entry_price) * position.quantity
-        if position.highest_price is None or price > position.highest_price:
-            position.highest_price = price
+        record_price(position, price)
 
         trail_stop(position)
 

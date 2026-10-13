@@ -13,6 +13,8 @@ ml/predict.py.
 
 from __future__ import annotations
 
+import time
+
 import pandas as pd
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -30,10 +32,25 @@ _symbol_cache: dict[tuple[str, str], pd.DataFrame] = {}
 # the full watchlist.
 _breadth_cache: dict[str, pd.DataFrame] = {}
 
+# Each process keeps its own copy. The worker clears it after its nightly ingest, but the API runs in
+# a separate process and never sees that call, so every entry also expires on its own. Daily data
+# changes once a day, so ten minutes of staleness costs nothing and a restart is never needed.
+CACHE_TTL_SECONDS = 600.0
+_now = time.monotonic
+_loaded_at: dict[tuple, float] = {}
+
+
+def _expired(key: tuple) -> bool:
+    """True when the entry was loaded more than the time limit ago. An entry with no recorded load
+    time (one placed directly, as tests do) counts as fresh."""
+    loaded = _loaded_at.get(key)
+    return loaded is not None and _now() - loaded > CACHE_TTL_SECONDS
+
 
 def clear_cache() -> None:
     _symbol_cache.clear()
     _breadth_cache.clear()
+    _loaded_at.clear()
 
 
 def load_symbol_candles(
@@ -49,7 +66,7 @@ def load_symbol_candles(
     slicing in memory, not by re-querying with a different range each time.
     """
     key = (symbol, interval)
-    if key not in _symbol_cache:
+    if key not in _symbol_cache or _expired(key):
         # Deferred import: ml.dataset also imports this module (to fetch
         # these frames for training), so a module-level import here would be
         # circular.
@@ -65,6 +82,7 @@ def load_symbol_candles(
             )
         else:
             _symbol_cache[key] = load_candles(db, instrument.id, interval)
+        _loaded_at[key] = _now()
 
     full = _symbol_cache[key]
     if upto is None or full.empty:
@@ -133,7 +151,7 @@ def load_market_breadth(
     advance/decline count (Kite exposes no such series directly), so this is
     an approximation scoped to this app's own universe, not the full NSE.
     """
-    if interval not in _breadth_cache:
+    if interval not in _breadth_cache or _expired(("breadth", interval)):
         from swing_trade_ml.ml.dataset import load_candles
 
         instruments = list(
@@ -159,6 +177,7 @@ def load_market_breadth(
             # excluded from that day's mean via skipna, not treated as "below
             # SMA" or "declined".
             _breadth_cache[interval] = compute_breadth(pd.DataFrame(closes).sort_index())
+        _loaded_at[("breadth", interval)] = _now()
 
     full = _breadth_cache[interval]
     if upto is None or full.empty:

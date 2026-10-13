@@ -53,6 +53,7 @@ Prod candles continue to the latest trading day (2026-10-12 when this was writte
 | 2026-09-25 to 2026-10-09 (prod) | **Not clean** | Outcomes reviewed on 2026-10-09. |
 | **2026-10-14 onward (prod)** | **Clean today** | Nothing looked at yet. This is where the forward practice trial and any hold-out should start. |
 
-**Recommendation:** start the forward trial and "Hold-out A" (layer-2 draft, section 4) on **2026-10-14**,
-not 2026-09-09. Anyone who looks at results from that period before the planned evaluation must add a row
+**Decided (owner, 2026-10-13):** the forward trial and "Hold-out A" (layer-2 draft, section 4) start on
+**2026-10-14**, not 2026-09-09. The trial journal is run as
+`python -m swing_trade_ml.brain.trial_journal --from 2026-10-14`. Anyone who looks at results from that period before the planned evaluation must add a row
 here, and that stretch then becomes development data.

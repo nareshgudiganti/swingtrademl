@@ -8,13 +8,14 @@ change.
 
 from __future__ import annotations
 
+import warnings
 from datetime import date, time
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 from urllib.parse import urlparse
 
-from pydantic import computed_field, field_validator
+from pydantic import computed_field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # repo root — backend/src/swing_trade_ml/core/config.py -> up 4 levels
@@ -274,6 +275,32 @@ class Settings(BaseSettings):
     TELEGRAM_NOTIFY_ON: str = "signal,order,fill,error,daily_summary,system"
 
     # ------------------------------------------------------------ derived --
+
+    @model_validator(mode="after")
+    def _production_secrets(self) -> Settings:
+        """In production, refuse the placeholder API key / JWT secret and warn about short ones.
+
+        The defaults exist so a fresh local checkout runs; on a reachable server they would let
+        anyone with the repo's default sign in. Only `production` is checked, so local runs, tests
+        and staging are unaffected. A short secret only warns: a hard failure there could take a
+        working server down for a weak-but-private value.
+        """
+        if self.ENVIRONMENT != "production":
+            return self
+        for name in ("API_KEY", "JWT_SECRET_KEY"):
+            value = getattr(self, name)
+            if value == "change-me":
+                raise ValueError(
+                    f"{name} is still the placeholder 'change-me' while ENVIRONMENT=production. "
+                    "Set a long random value in the server's .env."
+                )
+            if len(value) < 32:
+                warnings.warn(
+                    f"{name} is shorter than 32 characters in production; use a longer random value.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+        return self
 
     @field_validator("MODEL_ARTIFACT_DIR")
     @classmethod

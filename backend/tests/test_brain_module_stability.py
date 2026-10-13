@@ -109,3 +109,11 @@ def test_a_backup_older_than_a_week_is_a_warning(tmp_path):
     assert w.check_backup(str(tmp_path), now=made + timedelta(days=3))["ok"]
     old = w.check_backup(str(tmp_path), now=made + timedelta(days=8))
     assert not old["ok"] and old["level"] == "warn" and "8 days" in old["detail"]
+
+
+def test_intraday_budgets_fit_what_prod_needs():
+    from swing_trade_ml.brain.modules.m08_decide.module import DecisionEngine
+
+    # Measured on prod intraday runs 2026-10-13: M08 1.4-1.7 s, M15 26-28 s.
+    assert DecisionEngine.manifest.budget("intraday") >= 5
+    assert Tracker.manifest.budget("intraday") >= 45

@@ -249,6 +249,24 @@ def weekly_health(db: DbSession) -> dict:
     return brain_weekly_health.latest_result(db)
 
 
+@router.get("/daily-checks")
+def daily_checks(db: DbSession, days: int = Query(30, ge=1, le=366)) -> list[dict]:
+    """Stored daily brain checks, newest first: health, wiring and the trial, one per trading day."""
+    from swing_trade_ml.services import brain_daily_check
+
+    return brain_daily_check.recent(db, days)
+
+
+@router.get("/daily-checks/latest")
+def daily_check_latest(db: DbSession) -> dict:
+    from swing_trade_ml.services import brain_daily_check
+
+    row = brain_daily_check.latest(db)
+    if row is None:
+        raise HTTPException(404, "No daily check stored yet; the first runs at 16:20 IST on a trading day.")
+    return row
+
+
 class WhatIfIn(BaseModel):
     symbol: str
     qty: int = Field(gt=0)

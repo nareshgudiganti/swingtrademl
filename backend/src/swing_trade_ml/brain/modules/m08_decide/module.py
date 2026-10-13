@@ -51,6 +51,9 @@ class DecisionEngine(BrainModule):
         ),
         writes=("Decision@1", "Banner@1"),
         budget_s=10.0,
+        # Intraday (holdings only) needs 1.4-1.7 s on prod; the default tenth of 10 s dropped it every
+        # 15 minutes and holding advice came from the fallback (measured 2026-10-13).
+        intraday_budget_s=5.0,
         default_mode=Mode.ON,
     )
 

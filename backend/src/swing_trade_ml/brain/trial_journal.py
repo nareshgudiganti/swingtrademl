@@ -32,6 +32,7 @@ from swing_trade_ml.brain.replay_scoring import HORIZON_BARS, STOP, TARGET, Stri
 from swing_trade_ml.brain.walk_forward import daily_edge, outcomes_for
 
 IST = ZoneInfo("Asia/Kolkata")
+TRIAL_START = date(2026, 10, 14)  # owner decision 2026-10-13 (docs/brain/EXPOSURE-LEDGER.md)
 MIN_SESSIONS = 15  # fewer sessions than this is "too early"
 GATE_IDEAS = 30  # the M18 gate, shown for reference
 # Forward gate, protocol section 5a (docs/superpowers/specs/2026-10-13-layer2-validation-protocol-DRAFT.md).

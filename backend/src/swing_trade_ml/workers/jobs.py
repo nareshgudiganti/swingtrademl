@@ -756,6 +756,31 @@ def job_brain_learn() -> None:
         _report_error("brain_learn", exc)
 
 
+def _ist_today():
+    return datetime.now(IST).date()
+
+
+def job_brain_daily_check() -> None:
+    """Trading days, after the nightly run: store one record of the brain's health, wiring and the
+    trial so far (services/brain_daily_check.py). Telegram only when something needs a look. Never
+    raises; reads and reports only."""
+    from swing_trade_ml.core.market_session import is_trading_day
+    from swing_trade_ml.services import brain_daily_check as daily
+
+    if not is_trading_day(_ist_today()):
+        return
+    try:
+        with session_scope() as db:
+            result = daily.compute(db)
+            daily.store(db, result)
+        log.info("job.brain.daily_check.done", day=result["day"], status=result["status"])
+        message = daily.message_if_problem(result)
+        if message:
+            notifier.send_sync(message)
+    except Exception as exc:  # noqa: BLE001
+        _report_error("brain_daily_check", exc)
+
+
 def job_brain_weekly_health() -> None:
     """Saturday: run the owner's weekly checklist, store the result and send
     one Telegram summary. Reads and reports only; never raised, and a

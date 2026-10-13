@@ -139,6 +139,23 @@ class BrainLearningRun(Base):
     drift_note: Mapped[str | None] = mapped_column(Text)
 
 
+class BrainDailyCheck(Base):
+    """One trading day's brain check (services/brain_daily_check.py), stored after the nightly run so
+    any day can be looked up later: health checks, the run's wiring (dropped modules, intraday too) and
+    the forward trial's state that day. One row per day; a rerun replaces it."""
+
+    __tablename__ = "brain_daily_checks"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    day: Mapped[date] = mapped_column(Date, unique=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    status: Mapped[str] = mapped_column(String(8))  # ok | check
+    checks: Mapped[list] = mapped_column(JSONB, default=list)
+    run: Mapped[dict] = mapped_column(JSONB, default=dict)
+    intraday: Mapped[dict] = mapped_column(JSONB, default=dict)
+    trial: Mapped[dict] = mapped_column(JSONB, default=dict)
+
+
 class BrainWeeklyHealth(Base):
     """One run of the Saturday health check (services/brain_weekly_health.py),
     kept so the last result can be read back without recomputing it. Only the

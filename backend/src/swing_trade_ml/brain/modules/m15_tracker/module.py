@@ -51,7 +51,8 @@ class Tracker(BrainModule):
         writes=("TrackPoint@1",),
         # Prod nightly needs 16-23 s (measured 2026-10-05..13); at 15 s it was dropped every night.
         budget_s=45.0,
-        intraday_budget_s=10.0,
+        # Intraday needs 26-28 s on prod (measured 2026-10-13); at 10 s it was dropped every run.
+        intraday_budget_s=45.0,
         default_mode=Mode.ON,
     )
 

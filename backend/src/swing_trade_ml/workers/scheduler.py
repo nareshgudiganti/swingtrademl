@@ -259,6 +259,13 @@ def add_brain_jobs(target: BackgroundScheduler) -> None:
         id="brain_learn",
         replace_existing=True,
     )
+    # After the 15:50 nightly run (about 6 minutes) and the shadow strategy scan that follows it.
+    target.add_job(
+        jobs.job_brain_daily_check,
+        CronTrigger(day_of_week=WEEKDAYS, hour=16, minute=20, timezone=IST),
+        id="brain_daily_check",
+        replace_existing=True,
+    )
     # An hour after the learning run, so its drift result is in the report.
     target.add_job(
         jobs.job_brain_weekly_health,

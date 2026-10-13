@@ -188,3 +188,40 @@ def test_scores_beyond_what_testing_covered_are_flagged():
     ctx = _run(Reader(), payload, _perceive(0.6), Reasoning)
     op = next(o for o in ctx.opinions if o.source == "combined")
     assert "beyond" in op.evidence
+
+
+# --- F-16: a replay of a past day must not use a combiner made after that day -----------------------
+
+
+def _replay(payload):
+    from brain_fakes import request as req
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(artifact, "load_latest", lambda: payload)
+        return execute(req(live=False), Reader(), registry(_perceive(), Reasoning), {"M06": Mode.ON})
+
+
+def _combined(ctx):
+    return [o for o in ctx.opinions if o.source == "combined"]
+
+
+def test_a_replay_ignores_a_combiner_made_after_the_replayed_day():
+    from brain_fakes import AS_OF
+
+    later = {**_payload(), "created_at": (AS_OF + pd.Timedelta(days=3)).isoformat()}
+    assert not _combined(_replay(later))
+
+
+def test_a_replay_ignores_a_combiner_with_no_date():
+    assert not _combined(_replay(_payload()))  # the test payload carries no created_at
+
+
+def test_a_replay_uses_a_combiner_made_before_the_replayed_day():
+    from brain_fakes import AS_OF
+
+    earlier = {**_payload(), "created_at": (AS_OF - pd.Timedelta(days=30)).isoformat()}
+    assert _combined(_replay(earlier))
+
+
+def test_a_live_run_is_unchanged_by_the_date_check():
+    assert _combined(_run(Reader(), _payload(), _perceive(), Reasoning))

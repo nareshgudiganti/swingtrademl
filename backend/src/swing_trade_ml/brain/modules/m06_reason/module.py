@@ -15,6 +15,8 @@ opinion for that stock; the active model's fallback speaks instead.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import numpy as np
 import pandas as pd
 
@@ -60,6 +62,17 @@ def _honesty_line(honesty, raw: float, p: float) -> str:
     return line
 
 
+def _existed_by(saved: dict, as_of: datetime) -> bool:
+    """True when the saved combiner was created on or before `as_of`. No usable date counts as no."""
+    try:
+        created = datetime.fromisoformat(str(saved["created_at"]))
+    except (KeyError, ValueError):
+        return False
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=UTC)
+    return created <= as_of
+
+
 def _base(reader, label: str):
     name, _, version = label.rpartition(" ")
     loader = getattr(reader, "model_bundle", None)
@@ -83,6 +96,10 @@ class Reasoning(BrainModule):
     def run(self, view: ContextView) -> c.Contribution:
         saved = artifact.load_latest()
         if saved is None:
+            return c.Contribution()
+        if not view.request.live and not _existed_by(saved, view.request.as_of):
+            # A replay of a past day may only use a combiner that existed then; one made later
+            # (or with no date at all) learnt from outcomes the day could not know (audit F-16).
             return c.Contribution()
         bases = saved.get("base_models", {})
         barrier = _base(view.reader, bases.get("barrier", ""))

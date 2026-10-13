@@ -147,7 +147,14 @@ async def get_plan_access(
 PlanAccessDep = Annotated[PlanAccess, Depends(get_plan_access)]
 
 
-async def require_auth(request: Request, access: PlanAccessDep) -> None:
+READ_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+
+
+async def require_auth(
+    request: Request,
+    access: PlanAccessDep,
+    principal: Annotated[Principal, Depends(get_principal)],
+) -> None:
     """Gate for every route that can read positions or move money.
 
     Authenticates (see `get_principal`), then applies the caller's plan:
@@ -156,7 +163,14 @@ async def require_auth(request: Request, access: PlanAccessDep) -> None:
     core/plans.py::ROUTE_RULES opens with a feature their plan includes.
     Everything else — every write, the real account, safety, finance — is
     owner-only by default, so a new endpoint is never accidentally public.
+
+    Every write needs the owner (or the API key) whatever the plans switch
+    says. "Plans off" means nobody's *view* is limited; it never meant any
+    signed-in account may change the trading stage, approve a buy or pull a
+    safety switch, which it silently allowed before (audit F-17).
     """
+    if request.method not in READ_METHODS and not principal.is_owner:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only the owner can change this.")
     if access.unrestricted:
         return
 
@@ -188,6 +202,16 @@ async def require_auth(request: Request, access: PlanAccessDep) -> None:
     for name, value in required_query.items():
         if request.query_params.get(name) != value:
             raise HTTPException(status.HTTP_403_FORBIDDEN, "This view isn't included in your plan.")
+
+
+PrincipalDep = Annotated[Principal, Depends(get_principal)]
+
+
+def actor_name(principal: Principal) -> str:
+    """Who made a change, from the credential itself: never a name sent in the request body."""
+    if principal.user is not None:
+        return principal.user.username
+    return "api-key"
 
 
 async def require_owner(principal: Annotated[Principal, Depends(get_principal)]) -> Principal:

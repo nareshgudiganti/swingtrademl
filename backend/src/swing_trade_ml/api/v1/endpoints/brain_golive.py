@@ -11,7 +11,7 @@ from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
 
-from swing_trade_ml.api.deps import DbSession
+from swing_trade_ml.api.deps import DbSession, PrincipalDep, actor_name
 from swing_trade_ml.api.v1.endpoints.brain import _brain_switched_on
 from swing_trade_ml.services.brain_golive import approvals, compare, stage
 
@@ -42,10 +42,11 @@ def get_stage(db: DbSession) -> dict:
 
 
 @router.put("/stage")
-def change_stage(payload: StageChange, db: DbSession) -> dict:
-    """The owner's switch. Going back to practice (shadow) is always allowed."""
+def change_stage(payload: StageChange, db: DbSession, principal: PrincipalDep) -> dict:
+    """The owner's switch. Going back to practice (shadow) is always allowed.
+    `payload.by` is accepted for old clients but ignored: the record names the signed-in caller."""
     try:
-        stage.set_stage(db, payload.stage, by=payload.by, reason=payload.reason)
+        stage.set_stage(db, payload.stage, by=actor_name(principal), reason=payload.reason)
     except stage.StageRefusedError as exc:
         raise HTTPException(409, str(exc)) from exc
     return stage.stage_overview(db)
@@ -88,12 +89,14 @@ def _decide(action) -> dict:
 
 
 @router.post("/approvals/{approval_id}/approve")
-def approve(approval_id: int, payload: ApprovalDecision, db: DbSession) -> dict:
+def approve(approval_id: int, payload: ApprovalDecision, db: DbSession, principal: PrincipalDep) -> dict:
     """The owner's OK. Buys at once while the market is open; otherwise waits
     for the next open, where every check runs again (status "waiting")."""
-    return _decide(lambda: approvals.approve(db, approval_id, by=payload.by, note=payload.note))
+    by = actor_name(principal)
+    return _decide(lambda: approvals.approve(db, approval_id, by=by, note=payload.note))
 
 
 @router.post("/approvals/{approval_id}/reject")
-def reject(approval_id: int, payload: ApprovalRejection, db: DbSession) -> dict:
-    return _decide(lambda: approvals.reject(db, approval_id, by=payload.by, reason=payload.reason))
+def reject(approval_id: int, payload: ApprovalRejection, db: DbSession, principal: PrincipalDep) -> dict:
+    by = actor_name(principal)
+    return _decide(lambda: approvals.reject(db, approval_id, by=by, reason=payload.reason))

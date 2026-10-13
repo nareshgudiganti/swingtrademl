@@ -353,6 +353,7 @@ def random_baseline(
     draws: int = 30,
     seed: int = 11,
     drawdown_policy: str = "halt",
+    modes: dict[date, str] | None = None,
 ) -> dict:
     """Total return and worst fall over `draws` random-pick accounts (same count of picks per day)."""
     rets, dds = [], []
@@ -362,6 +363,7 @@ def random_baseline(
             bars,
             days,
             capital=capital,
+            modes=modes,
             drawdown_policy=drawdown_policy,
         )
         rets.append(r.total_return)
@@ -446,12 +448,25 @@ def run_portfolio_walk_forward(
             for sym in top.get(d, []):
                 picks.append(Pick(d, sym, scores[sym][d], buckets.get(sym)))
     # leave room after the last pick for it to finish; the data is cut at last_end + 60 days
+    from swing_trade_ml.brain.market_mode_history import coverage, mode_history
+
+    scored_days = sorted(per_day)
+    modes = mode_history(db)
+    have, total = coverage(modes, scored_days)
     out = []
     for capital in capitals:
         for policy in POLICIES:
-            res = simulate(picks, bars, days, capital=capital, drawdown_policy=policy)
+            res = simulate(picks, bars, days, capital=capital, modes=modes, drawdown_policy=policy)
             base = random_baseline(
-                pool, per_day, bars, days, buckets, capital=capital, draws=draws, drawdown_policy=policy
+                pool,
+                per_day,
+                bars,
+                days,
+                buckets,
+                capital=capital,
+                draws=draws,
+                drawdown_policy=policy,
+                modes=modes,
             )
             out.append({"capital": capital, "policy": policy, "model": res.summary(), "random": base})
     return {
@@ -461,7 +476,8 @@ def run_portfolio_walk_forward(
         "stocks": len(bars),
         "picks": len(picks),
         "accounts": out,
-        "limits": list(LIMITS),
+        "mode_days": {"recorded": have, "scored": total},
+        "limits": limits_for_coverage(have, total),
     }
 
 
@@ -479,6 +495,26 @@ LIMITS: tuple[str, ...] = (
     "counts as the stop.",
     "Sizing is 1% risk at a 4% stop, capped by the capital ladder (about 25% of the account at most).",
 )
+
+
+MODE_LIMIT = (
+    "Market mode comes from the banner the brain recorded on {have} of the {total} scored days. "
+    "{rest}"
+)
+
+
+def limits_for_coverage(have: int, total: int) -> list[str]:
+    """The limits list, with the market-mode line matching how many days had a recorded mode."""
+    if have == 0:
+        return list(LIMITS)
+    rest = (
+        "Every day had a recorded mode."
+        if have == total
+        else "The other days were treated as NORMAL (top 5 a day, full size), which is not the brain's "
+        "real behaviour and the effect on the results is unknown."
+    )
+    mode_line = MODE_LIMIT.format(have=have, total=total, rest=rest)
+    return [mode_line if "No market-mode history" in t else t for t in LIMITS]
 
 
 def plain_report(result: dict) -> str:

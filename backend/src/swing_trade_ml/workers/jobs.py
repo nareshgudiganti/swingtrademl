@@ -677,8 +677,25 @@ def job_brain_strategy() -> None:
                 buys=result.buys,
                 errors=len(result.errors),
             )
+            _warn_if_no_ideas_counted(db)
     except Exception as exc:  # noqa: BLE001
         _report_error("brain strategy scan", exc)
+
+
+def _warn_if_no_ideas_counted(db) -> None:
+    """One Telegram line when the brain ran but no idea reached the practice counter.
+    The 4-9 Oct 2026 failure stayed silent for six days; this makes it a same-day message."""
+    from datetime import UTC
+
+    from swing_trade_ml.services.brain_golive import idea_watch
+
+    try:
+        result = idea_watch.check(db, datetime.now(UTC).astimezone(idea_watch.IST).date())
+        if not result["ok"]:
+            log.warning("job.brain.no_ideas_counted", detail=result["detail"])
+            notifier.send_sync("Brain check: " + result["detail"])
+    except Exception as exc:  # noqa: BLE001 - a watch must never break the scan
+        log.warning("job.brain.idea_watch_failed", error=str(exc))
 
 
 def job_brain_approvals_open() -> None:

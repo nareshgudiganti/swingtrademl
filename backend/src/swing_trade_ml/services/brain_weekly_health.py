@@ -22,7 +22,11 @@ from sqlalchemy.orm import Session
 
 from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.logging import get_logger
-from swing_trade_ml.core.market_session import last_closed_trading_day, trading_days_between
+from swing_trade_ml.core.market_session import (
+    is_trading_day,
+    last_closed_trading_day,
+    trading_days_between,
+)
 from swing_trade_ml.db.models.brain import BrainRun, BrainWeeklyHealth
 
 log = get_logger(__name__)
@@ -139,6 +143,32 @@ def check_banner(db: Session) -> dict:
     return _check("Banner", True, f"Banner is {run.banner_mode.replace('_', ' ')}.", "info")
 
 
+def _counted_ideas(db: Session, today: date) -> dict:
+    from swing_trade_ml.services.brain_golive import idea_watch
+
+    return idea_watch.check(db, today)
+
+
+def check_banner_history(db: Session, today: date, days: int = 20) -> dict:
+    """How many of the last trading days have a recorded market mode. Replays need this history;
+    without it they have to assume every day was NORMAL."""
+    from swing_trade_ml.brain.market_mode_history import coverage, mode_history
+    from swing_trade_ml.core.market_session import previous_trading_day
+
+    day = today if is_trading_day(today) else previous_trading_day(today)
+    window = []
+    for _ in range(days):
+        window.append(day)
+        day = previous_trading_day(day)
+    have, total = coverage(mode_history(db), window)
+    return _check(
+        "Banner history",
+        True,
+        f"A market mode is recorded for {have} of the last {total} trading days.",
+        "info",
+    )
+
+
 def check_learning(db: Session, now: datetime) -> dict:
     from swing_trade_ml.brain.modules.m09_learn import store
 
@@ -206,6 +236,8 @@ def compute_checks(db: Session, now: datetime | None = None, backup_dir: str | N
     run("Key modules", lambda: check_modules(service.module_overview(db)))
     run("Trading stage", _stage_checks, stage_service, db)
     run("Banner", check_banner, db)
+    run("Banner history", check_banner_history, db, today)
+    run("Counted ideas", _counted_ideas, db, today)
     run("Learning and drift", check_learning, db, now)
     run("Model backup", check_backup, backup_dir)
 

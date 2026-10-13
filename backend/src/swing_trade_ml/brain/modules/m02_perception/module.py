@@ -29,7 +29,9 @@ class Perception(BrainModule):
         version="1.0.0",
         reads=(),
         writes=("Snapshot@1",),
-        budget_s=30.0,
+        # Prod nightly needs 44-50 s for the whole universe (measured 2026-10-05..13); at 30 s it was
+        # dropped every night and the brain ran on price-only fallback snapshots.
+        budget_s=90.0,
         default_mode=Mode.ON,
     )
 

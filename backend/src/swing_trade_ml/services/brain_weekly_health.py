@@ -40,6 +40,8 @@ FEED_MAX_AGE_TRADING_DAYS = 3
 # The learning loop runs Saturdays; a result older than this is "not this week".
 LEARNING_MAX_AGE_DAYS = 8
 HISTORY_KEPT = 52
+# Models are backed up daily (16:30 job); a newest copy older than this means the job stopped.
+BACKUP_MAX_AGE_DAYS = 7
 
 FEED_LABELS = {
     "delivery": "delivery",
@@ -115,6 +117,27 @@ def check_modules(modules: list[dict]) -> dict:
     )
 
 
+def check_modules_ran(db: Session) -> dict:
+    """Did every module actually run in the last live nightly run? A run can finish with modules
+    dropped (too slow, an error) and a simpler fallback answering for them; until 2026-10-13 this check
+    did not exist and three modules were dropped every night unnoticed. A dropped module that is on
+    fails the check; a dropped trial (shadow) module is a warning."""
+    from swing_trade_ml.brain import service
+
+    run = service.latest_run(db, "nightly")
+    if run is None:
+        return _check("Modules ran", True, "No finished nightly run yet.", "info")
+    day = _day(_ist_date(run.as_of))
+    dropped = service.modules_dropped(run)
+    if not dropped:
+        return _check("Modules ran", True, f"Every module ran in the {day} nightly run.")
+    listed = "; ".join(f"{d['module']} ({d['mode']}): {d['reason']}" for d in dropped)
+    if any(d["mode"] == "on" for d in dropped):
+        detail = f"Dropped in the {day} nightly run, so a simpler fallback answered: {listed}."
+        return _check("Modules ran", False, detail)
+    return _check("Modules ran", False, f"Trial modules dropped in the {day} nightly run: {listed}.", "warn")
+
+
 def check_stage(stage: dict) -> dict:
     current = stage.get("stage")
     if current == "shadow":
@@ -184,11 +207,12 @@ def check_learning(db: Session, now: datetime) -> dict:
     return _check("Learning and drift", True, f"Checked {when}. No drift noted.", "info")
 
 
-def check_backup(backup_dir: str | None = None) -> dict:
+def check_backup(backup_dir: str | None = None, now: datetime | None = None) -> dict:
     """The newest file's change time in the backup folder. No backup run is
     recorded anywhere, so this is the closest honest answer: on the server the
     change time is when the copy was made. Nothing there is a warning, never a
-    made-up time."""
+    made-up time; a newest copy older than BACKUP_MAX_AGE_DAYS is a warning too
+    (the daily backup job has stopped)."""
     folder = backup_dir if backup_dir is not None else settings.MODEL_BACKUP_DIR
     if not folder:
         return _check(
@@ -206,11 +230,17 @@ def check_backup(backup_dir: str | None = None) -> dict:
         return _check(
             "Model backup", False, "The backup folder is empty or missing; no record of a backup.", "warn"
         )
-    return _check(
-        "Model backup",
-        True,
-        f"Newest backup file is from {_day(_ist_date(datetime.fromtimestamp(newest, UTC)))}.",
-    )
+    made = datetime.fromtimestamp(newest, UTC)
+    age = ((now or datetime.now(UTC)) - made).days
+    if age > BACKUP_MAX_AGE_DAYS:
+        return _check(
+            "Model backup",
+            False,
+            f"Newest backup file is from {_day(_ist_date(made))}, {age} days ago; "
+            "the daily backup may have stopped.",
+            "warn",
+        )
+    return _check("Model backup", True, f"Newest backup file is from {_day(_ist_date(made))}.")
 
 
 def compute_checks(db: Session, now: datetime | None = None, backup_dir: str | None = None) -> dict:
@@ -234,12 +264,13 @@ def compute_checks(db: Session, now: datetime | None = None, backup_dir: str | N
 
     run("Brain health", _health_checks, service, db, expected, today)
     run("Key modules", lambda: check_modules(service.module_overview(db)))
+    run("Modules ran", check_modules_ran, db)
     run("Trading stage", _stage_checks, stage_service, db)
     run("Banner", check_banner, db)
     run("Banner history", check_banner_history, db, today)
     run("Counted ideas", _counted_ideas, db, today)
     run("Learning and drift", check_learning, db, now)
-    run("Model backup", check_backup, backup_dir)
+    run("Model backup", check_backup, backup_dir, now)
 
     return {
         "status": "ok" if all(c["ok"] for c in checks) else "check",

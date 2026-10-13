@@ -543,4 +543,25 @@ def health(db: Session) -> dict:
         "data": overall or {"score": None, "fresh": None, "issues": ["No data check has run yet."]},
         "stale_count": len((latest_done.quality or {}).get("stale", [])) if latest_done else 0,
         "feeds": feeds,
+        "modules_dropped": modules_dropped(latest_done),
     }
+
+
+def modules_dropped(run: BrainRun | None) -> list[dict]:
+    """Modules the run dropped (too slow, an error, bad output, or a refused write), so a simpler
+    fallback answered for them. A run can finish 'done' with several of these; this is how to see it.
+    The step's own "no module answered" line is not counted: it follows from the drops listed here,
+    or from a step whose modules are all switched off or on trial."""
+    if run is None:
+        return []
+    modes = run.modules or {}
+    return [
+        {
+            "module": e["module_id"],
+            "mode": modes.get(e["module_id"], "unknown"),
+            "reason": e.get("reason", ""),
+        }
+        for e in run.trace or []
+        if isinstance(e, dict) and e.get("module_id") not in (None, "fallback")
+        and e.get("status") in ("fallback", "rejected")
+    ]

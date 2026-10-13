@@ -20,6 +20,12 @@ migration), but the defaults are the traded policy:
   is closed regardless of P&L. Default 30: 60 was four times the model's
   15-trading-day horizon, so a position held that long had outlived the
   question the model answered.
+
+  Note on units: 30 CALENDAR days is 16 to 22 trading days (about 20 on average, depending on
+  holidays), longer than the 15-trading-day horizon the labels, M09 and every replay use. That is
+  the owner's settled choice (kept on purpose), not a bug, but live trades can be held about five
+  sessions past what validation simulates. tests/test_time_stop_pin.py pins both numbers so a
+  change is a deliberate decision.
 """
 
 from __future__ import annotations

@@ -91,16 +91,39 @@ def _outcome_row(sym: str, day: date, o: StrictOutcome | None, bars: dict[str, p
     return {"symbol": sym, "status": o.status, "net": o.net_return, "days": o.days, "so_far": so_far}
 
 
+def index_baseline(index_bars: pd.DataFrame | None, days: Sequence[date], horizon: int) -> dict | None:
+    """NIFTY bought at the open after each session and sold at the close of the `horizon`-th session:
+    what simply holding the market would have done over the same days. No costs (an index fund's are
+    small next to a stock trade's). A session without `horizon` later bars is open and not counted."""
+    if index_bars is None or index_bars.empty:
+        return None
+    df = index_bars.sort_values("day").reset_index(drop=True)
+    results, open_n = [], 0
+    for d in days:
+        after = df[df["day"] > d]
+        if len(after) < horizon:
+            open_n += 1
+            continue
+        results.append(float(after.iloc[horizon - 1]["close"]) / float(after.iloc[0]["open"]) - 1.0)
+    return {
+        "finished": len(results),
+        "open": open_n,
+        "avg": sum(results) / len(results) if results else None,
+    }
+
+
 def build_journal(
     sessions: Sequence[Session],
     bars: dict[str, pd.DataFrame],
     v1_by_day: dict[date, Sequence[str]] | None = None,
     *,
+    index_bars: pd.DataFrame | None = None,
     horizon: int = HORIZON_BARS,
     target: float = TARGET,
     stop: float = STOP,
 ) -> dict:
-    """Pure: sessions + price bars in, journal out."""
+    """Pure: sessions + price bars in, journal out. `index_bars` (NIFTY 50) adds the hold-the-market
+    baseline; cash (0%) is always shown."""
     v1_by_day = v1_by_day or {}
     days = [s.day for s in sessions]
     outcomes = outcomes_for(bars, days, horizon, target, stop)
@@ -134,6 +157,7 @@ def build_journal(
     summaries["every_stock"] = summarise(
         {d: [outcomes[(sym, d)] for sym in syms if (sym, d) in outcomes] for d, syms in everyone.items()}
     )
+    summaries["nifty"] = index_baseline(index_bars, days, horizon)
 
     journal_days = []
     for s in sessions:
@@ -279,8 +303,17 @@ def plain_report(j: dict) -> str:
             f"| {SET_NAMES[name]} | {picked} | {row['ideas']} | {open_n} | {_pct(row['hit_rate'], 0)} | "
             f"{_pct(row['avg_net'])} | {edge} |"
         )
+    nifty = s.get("nifty")
+    if nifty is not None:
+        lines.append(
+            f"| NIFTY 50, held 15 sessions (no costs) | {nifty['finished'] + nifty['open']} | {nifty['finished']} | "
+            f"{nifty['open']} | - | {_pct(nifty['avg'])} | - |"
+        )
+    lines.append("| Cash | - | - | - | - | 0.00% | - |")
     brain_finished = s["brain_trade"]["ideas"]
     lines += [
+        "",
+        "Read the bottom two rows as: would simply holding the market, or doing nothing, have done better?",
         "",
         f"Brain TRADE ideas finished: {brain_finished} of {GATE_IDEAS} the go-live gate asks for.",
         "",
@@ -362,7 +395,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         v1 = v1_buys(db, start, end)
         symbols = sorted({i.symbol for s in sessions for i in s.ideas} | {x for v in v1.values() for x in v})
         bars = load_bars(db, symbols, end + timedelta(days=60))
-        journal = build_journal(sessions, bars, v1)
+        from swing_trade_ml.core.config import settings
+
+        index = settings.BENCHMARK_INDEX_SYMBOL
+        index_bars = load_bars(db, [index], end + timedelta(days=60)).get(index)
+        journal = build_journal(sessions, bars, v1, index_bars=index_bars)
         journal["source"] = "replay" if a.replays else "live"
         journal["gate"] = gate(journal)
     print(plain_report(journal))

@@ -144,3 +144,36 @@ def test_report_opens_with_the_gate_answer():
     bars = {"UP": _bars(0.02)}
     j = build_journal([Session(DAY0, "NORMAL", (Idea("UP", "TRADE", 0.9),))], bars)
     assert "Gate answer: too early" in plain_report(j)
+
+
+# --- F-13: NIFTY buy-and-hold and cash baselines -----------------------------------------------------
+
+
+def test_nifty_held_fifteen_sessions_is_a_baseline():
+    bars = {"UP": _bars(0.02)}
+    sessions = [Session(DAY0, "NORMAL", (Idea("UP", "TRADE", 0.9),))]
+    j = build_journal(sessions, bars, index_bars=_bars(0.01))
+    n = j["summaries"]["nifty"]
+    assert n["finished"] == 1 and n["open"] == 0
+    # bought at the next open, sold at the 15th session's close: 15 days of +1% from that open
+    assert abs(n["avg"] - (1.01**15 - 1)) < 1e-9
+
+
+def test_nifty_without_fifteen_later_sessions_is_open_and_not_counted():
+    sessions = [Session(_days(8)[3], "NORMAL", ())]
+    j = build_journal(sessions, {}, index_bars=_bars(0.01, n=8))
+    n = j["summaries"]["nifty"]
+    assert n["finished"] == 0 and n["open"] == 1 and n["avg"] is None
+
+
+def test_report_shows_nifty_and_cash_rows():
+    bars = {"UP": _bars(0.02)}
+    j = build_journal([Session(DAY0, "NORMAL", (Idea("UP", "TRADE", 0.9),))], bars, index_bars=_bars(0.01))
+    text = plain_report(j)
+    assert "NIFTY 50, held 15 sessions" in text and "| Cash |" in text
+
+
+def test_no_index_data_means_no_nifty_row_but_cash_stays():
+    j = build_journal([Session(DAY0, "NORMAL", ())], {})
+    assert j["summaries"]["nifty"] is None
+    assert "| Cash |" in plain_report(j)

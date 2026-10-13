@@ -39,7 +39,7 @@ discipline layer. That is still a valid product, but it must be called that.
 | Sample | Dates | Use |
 |---|---|---|
 | Development | everything used so far, up to 2026-09-08 | build and debug only, never pass or fail |
-| Hold-out A | 2026-09-09 to the latest finished day, from prod | pass or fail, run once |
+| Hold-out A | 2026-09-09 to the latest finished day, from prod | pass or fail, run once. **See `docs/brain/EXPOSURE-LEDGER.md`: prod 09-25 to 10-09 was already reviewed, so the recommended clean start is 2026-10-14 (owner to confirm).** |
 | Forward | practice-mode ideas recorded on prod after sign-off | confirmation, feeds the M18 gate |
 
 Hold-out A has about 5 scoreable days on 13 Oct 2026. Do not run the pass or fail until it has at least 40

@@ -6,7 +6,7 @@ owner's OK). Same gate: hidden while BRAIN_ENABLED is false."""
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
@@ -21,6 +21,30 @@ router = APIRouter(prefix="/brain", tags=["brain"], dependencies=[Depends(_brain
 @router.get("/compare")
 def compare_report(db: DbSession, since: date | None = Query(None)) -> dict:
     return compare.report(db, since)
+
+
+TRIAL_MAX_DAYS = 200  # one trial is weeks long; a cap keeps one request from reading years of prices
+
+
+@router.get("/trial-journal")
+def trial_journal_report(
+    db: DbSession,
+    start: date = Query(..., alias="from"),
+    end: date | None = Query(None, alias="to"),
+) -> dict:
+    """The forward trial's journal (layer-2 draft, section 5a): what the brain signalled each session,
+    what following it would have done after costs, the baselines and the gate answer. Read-only."""
+    from swing_trade_ml.brain.trial_journal import IST, journal_for, plain_report
+
+    if end is None:
+        # Asking before the trial starts is fine: it simply has no sessions yet.
+        end = max(datetime.now(IST).date(), start)
+    if end < start:
+        raise HTTPException(422, "'to' must be on or after 'from'.")
+    if (end - start).days > TRIAL_MAX_DAYS:
+        raise HTTPException(422, f"Ask for at most {TRIAL_MAX_DAYS} days at a time.")
+    journal = journal_for(db, start, end)
+    return {"journal": journal, "report": plain_report(journal)}
 
 
 class StageChange(BaseModel):

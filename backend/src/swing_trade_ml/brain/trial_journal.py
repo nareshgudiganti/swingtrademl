@@ -378,8 +378,26 @@ def write_journal(j: dict, directory: Path) -> tuple[Path, Path]:
     return md, js
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+def journal_for(db, start: date, end: date, *, replays: bool = False) -> dict:
+    """Read sessions, prices, version 1's buys and NIFTY from the database and build the journal, with
+    its gate answer. Read-only: shared by the command line and the API."""
     from swing_trade_ml.brain.replay_score import load_bars, v1_buys
+    from swing_trade_ml.core.config import settings
+
+    sessions = load_sessions(db, start, end, live=not replays)
+    v1 = v1_buys(db, start, end)
+    symbols = sorted({i.symbol for s in sessions for i in s.ideas} | {x for v in v1.values() for x in v})
+    upto = end + timedelta(days=60)  # ideas from the last session need about 15 more sessions to finish
+    bars = load_bars(db, symbols, upto)
+    index = settings.BENCHMARK_INDEX_SYMBOL
+    index_bars = load_bars(db, [index], upto).get(index)
+    journal = build_journal(sessions, bars, v1, index_bars=index_bars)
+    journal["source"] = "replay" if replays else "live"
+    journal["gate"] = gate(journal)
+    return journal
+
+
+def main(argv: Sequence[str] | None = None) -> int:
     from swing_trade_ml.db.session import SessionLocal
 
     p = argparse.ArgumentParser(description="Trial journal: signals, and what following them would have done")
@@ -391,17 +409,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     start = date.fromisoformat(a.start)
     end = date.fromisoformat(a.end) if a.end else datetime.now(IST).date()
     with SessionLocal() as db:
-        sessions = load_sessions(db, start, end, live=not a.replays)
-        v1 = v1_buys(db, start, end)
-        symbols = sorted({i.symbol for s in sessions for i in s.ideas} | {x for v in v1.values() for x in v})
-        bars = load_bars(db, symbols, end + timedelta(days=60))
-        from swing_trade_ml.core.config import settings
-
-        index = settings.BENCHMARK_INDEX_SYMBOL
-        index_bars = load_bars(db, [index], end + timedelta(days=60)).get(index)
-        journal = build_journal(sessions, bars, v1, index_bars=index_bars)
-        journal["source"] = "replay" if a.replays else "live"
-        journal["gate"] = gate(journal)
+        journal = journal_for(db, start, end, replays=a.replays)
     print(plain_report(journal))
     if journal["sessions"]:
         md, js = write_journal(journal, Path(a.out))

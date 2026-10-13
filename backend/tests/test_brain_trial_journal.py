@@ -177,3 +177,22 @@ def test_no_index_data_means_no_nifty_row_but_cash_stays():
     j = build_journal([Session(DAY0, "NORMAL", ())], {})
     assert j["summaries"]["nifty"] is None
     assert "| Cash |" in plain_report(j)
+
+
+# --- ideas the risk check blocked: shown, never counted ---------------------------------------------
+
+
+def test_risk_blocked_ideas_are_their_own_set():
+    s = Session(DAY0, "DEFENSIVE", (Idea("AAA", "WATCH", 0.7, blocked=True), Idea("BBB", "WATCH", 0.6)))
+    p = picks_for(s)
+    assert p["brain_blocked"] == ["AAA"] and p["brain_trade"] == []
+
+
+def test_risk_blocked_ideas_never_count_toward_the_gate():
+    bars = {"UP": _bars(0.02)}
+    sessions = [Session(d, "DEFENSIVE", (Idea("UP", "WATCH", 0.9, blocked=True),)) for d in _days(MIN_SESSIONS)]
+    j = build_journal(sessions, bars)
+    assert j["summaries"]["brain_blocked"]["picked"] == MIN_SESSIONS
+    assert j["summaries"]["brain_trade"]["ideas"] == 0
+    assert gate(j)["word"] == "too early"
+    assert "blocked by the risk check" in plain_report(j)

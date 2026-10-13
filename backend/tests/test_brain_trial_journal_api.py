@@ -86,3 +86,17 @@ def test_it_writes_nothing(client, db_session):
     after = (db_session.query(BrainRun).count(), db_session.query(BrainDecision).count())
     assert before == after
     assert db_session.query(BrainDecision).one().outcome is None  # the journal never grades stored ideas
+
+
+def test_a_risk_blocked_idea_is_read_as_blocked(client, db_session):
+    _seed(db_session)
+    db_session.add(
+        BrainDecision(
+            run_id="tj-run-1", symbol="TJUP", kind="idea", word="WATCH", downgraded_from="TRADE",
+            downgrade_reason="Good idea, but the risk check said no: market stress", confidence=0.6,
+            score_source="model", stop=96.0, target=108.0,
+        )
+    )
+    db_session.flush()
+    r = client.get("/api/v1/brain/trial-journal?from=2026-01-05&to=2026-01-05", headers=API_KEY)
+    assert r.json()["journal"]["summaries"]["brain_blocked"]["picked"] == 1

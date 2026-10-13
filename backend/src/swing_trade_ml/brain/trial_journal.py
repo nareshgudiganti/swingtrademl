@@ -39,9 +39,10 @@ GATE_MIN_IDEAS = GATE_IDEAS
 CLEARLY_WORSE = -0.01  # an average daily gap below every stock beyond this is called out first
 SCORE_LINE = 0.80  # the owner reads scores of 80 and above
 TOP_N = 5  # at most five ideas a day (owner decision 2026-10-09)
-SETS = ("brain_trade", "brain_top5", "brain_over_80", "v1_buys")
+SETS = ("brain_trade", "brain_blocked", "brain_top5", "brain_over_80", "v1_buys")
 SET_NAMES = {
     "brain_trade": "Brain says TRADE",
+    "brain_blocked": "TRADE blocked by the risk check (not counted)",
     "brain_top5": "Brain top 5 by score",
     "brain_over_80": "Score 80 or more (top 5)",
     "v1_buys": "Version 1 buys",
@@ -54,6 +55,9 @@ class Idea:
     symbol: str
     word: str  # the word that counts: the owner's overrule when there is one
     score: float | None
+    # The brain said TRADE but the risk check (version 1's limits) lowered it to WATCH. Reported as
+    # its own set so a stressed market still produces evidence; never counted toward the gate.
+    blocked: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -70,6 +74,7 @@ def picks_for(session: Session, v1: Sequence[str] = ()) -> dict[str, list[str]]:
     )
     return {
         "brain_trade": sorted(i.symbol for i in session.ideas if i.word == "TRADE"),
+        "brain_blocked": sorted(i.symbol for i in session.ideas if i.blocked),
         "brain_top5": [i.symbol for i in scored[:TOP_N]],
         "brain_over_80": [i.symbol for i in scored if i.score >= SCORE_LINE][:TOP_N],
         "v1_buys": sorted(set(v1)),
@@ -220,6 +225,7 @@ def load_sessions(db, start: date, end: date, *, live: bool = True) -> list[Sess
 
     from swing_trade_ml.core.config import settings
     from swing_trade_ml.db.models.brain import BrainDecision, BrainRun
+    from swing_trade_ml.strategies.brain import blocked_by_risk  # the same test the practice stage uses
 
     lo = datetime.combine(start, time(0, 0), tzinfo=IST)
     hi = datetime.combine(end + timedelta(days=1), time(0, 0), tzinfo=IST)
@@ -246,7 +252,12 @@ def load_sessions(db, start: date, end: date, *, live: bool = True) -> list[Sess
         ).scalars()
         ideas = tuple(
             # Only a model score or a calibrated chance ranks stocks; any other number is not a score.
-            Idea(d.symbol, d.overruled_word or d.word, d.confidence if d.score_source else None)
+            Idea(
+                d.symbol,
+                d.overruled_word or d.word,
+                d.confidence if d.score_source else None,
+                blocked=blocked_by_risk(d),
+            )
             for d in rows
         )
         sessions.append(Session(day, run.banner_mode, ideas))

@@ -34,6 +34,9 @@ from swing_trade_ml.brain.walk_forward import daily_edge, outcomes_for
 IST = ZoneInfo("Asia/Kolkata")
 MIN_SESSIONS = 15  # fewer sessions than this is "too early"
 GATE_IDEAS = 30  # the M18 gate, shown for reference
+# Forward gate, protocol section 5a (docs/superpowers/specs/2026-10-13-layer2-validation-protocol-DRAFT.md).
+GATE_MIN_IDEAS = GATE_IDEAS
+CLEARLY_WORSE = -0.01  # an average daily gap below every stock beyond this is called out first
 SCORE_LINE = 0.80  # the owner reads scores of 80 and above
 TOP_N = 5  # at most five ideas a day (owner decision 2026-10-09)
 SETS = ("brain_trade", "brain_top5", "brain_over_80", "v1_buys")
@@ -161,6 +164,28 @@ def build_journal(
     }
 
 
+def gate(journal: dict) -> dict:
+    """The forward-gate answer (protocol section 5a) from a journal: 'too early', 'pass' or 'behind'.
+
+    Only finished brain TRADE ideas count. Safety is not judged here: the journal has no account, so it
+    cannot see a sector cap or drawdown halt being broken; the report says so.
+    """
+    row = journal["summaries"]["brain_trade"]
+    finished, avg, edge = row["ideas"], row["avg_net"], row["edge_vs_every_stock"]
+    out = {
+        "sessions": journal["sessions"],
+        "finished": finished,
+        "profit": avg is not None and avg > 0,
+        "beats_random": edge is not None and edge > 0,
+        "clearly_worse": edge is not None and edge < CLEARLY_WORSE,
+    }
+    if journal["sessions"] < MIN_SESSIONS or finished < GATE_MIN_IDEAS:
+        out["word"] = "too early"
+    else:
+        out["word"] = "pass" if out["profit"] and out["beats_random"] else "behind"
+    return out
+
+
 # --- reading the database -----------------------------------------------------------------------
 
 
@@ -227,8 +252,14 @@ def plain_report(j: dict) -> str:
         f"+{r['target']:.0%} / -{r['stop']:.0%}, half out at +5%, {r['horizon']} trading days, costs and slippage included.",
         "",
     ]
+    g = gate(j)
+    lines.append(f"**Gate answer: {g['word']}.** {_gate_text(g)}")
+    if g["clearly_worse"]:
+        lines.append("")
+        lines.append("**Warning: brain TRADE ideas did more than 1 point worse per day than every stock.**")
+    lines.append("")
     if j["enough_sessions"]:
-        lines.append(f"**{j['sessions']} sessions: the minimum of {MIN_SESSIONS} is met.** Read the table below with its caveats.")
+        lines.append(f"{j['sessions']} sessions: the minimum of {MIN_SESSIONS} is met. Read the table below with its caveats.")
     else:
         lines.append(
             f"**Too early: {j['sessions']} of {MIN_SESSIONS} sessions.** The numbers below are a record, not a result."
@@ -279,6 +310,24 @@ def plain_report(j: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _gate_text(g: dict) -> str:
+    if g["word"] == "too early":
+        return (
+            f"Needs {MIN_SESSIONS} sessions and {GATE_MIN_IDEAS} finished TRADE ideas; "
+            f"has {g['sessions']} and {g['finished']}."
+        )
+    parts = [
+        "profit after costs: " + ("yes" if g["profit"] else "no"),
+        "better than every stock: " + ("yes" if g["beats_random"] else "no"),
+    ]
+    tail = (
+        " You may move to 'Your OK needed'; each buy still needs your Approve."
+        if g["word"] == "pass"
+        else " Stay in Practice and keep recording."
+    )
+    return "; ".join(parts) + "." + tail + " Safety limits are not checked by this report."
+
+
 def _pick_text(p: dict) -> str:
     if p["status"] in ("target", "stop", "timeout"):
         return f"{p['symbol']} {p['status']} {_pct(p['net'], 1)}"
@@ -315,6 +364,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         bars = load_bars(db, symbols, end + timedelta(days=60))
         journal = build_journal(sessions, bars, v1)
         journal["source"] = "replay" if a.replays else "live"
+        journal["gate"] = gate(journal)
     print(plain_report(journal))
     if journal["sessions"]:
         md, js = write_journal(journal, Path(a.out))

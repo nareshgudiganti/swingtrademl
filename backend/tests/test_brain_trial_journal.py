@@ -111,3 +111,36 @@ def test_the_baseline_is_only_the_stocks_the_brain_looked_at_that_day():
     sessions = [Session(DAY0, "NORMAL", (Idea("UP", "TRADE", 0.9), Idea("DOWN", "WAIT", 0.2)))]
     j = build_journal(sessions, bars)
     assert j["summaries"]["every_stock"]["ideas"] == 2
+
+
+# --- the forward gate (protocol section 5a) ---------------------------------------------------------
+
+from swing_trade_ml.brain.trial_journal import GATE_MIN_IDEAS, gate  # noqa: E402
+
+
+def _summary(sessions, ideas, avg, edge):
+    return {"sessions": sessions, "summaries": {"brain_trade": {"ideas": ideas, "avg_net": avg, "edge_vs_every_stock": edge}}}
+
+
+def test_gate_is_too_early_below_either_minimum():
+    assert gate(_summary(MIN_SESSIONS - 1, 50, 0.02, 0.01))["word"] == "too early"
+    assert gate(_summary(MIN_SESSIONS, GATE_MIN_IDEAS - 1, 0.02, 0.01))["word"] == "too early"
+
+
+def test_gate_passes_only_when_profitable_and_better_than_every_stock():
+    assert gate(_summary(MIN_SESSIONS, GATE_MIN_IDEAS, 0.004, 0.002))["word"] == "pass"
+    assert gate(_summary(MIN_SESSIONS, GATE_MIN_IDEAS, -0.001, 0.002))["word"] == "behind"
+    assert gate(_summary(MIN_SESSIONS, GATE_MIN_IDEAS, 0.004, -0.001))["word"] == "behind"
+    assert gate(_summary(MIN_SESSIONS, GATE_MIN_IDEAS, 0.004, None))["word"] == "behind"
+
+
+def test_gate_flags_clearly_worse_than_every_stock():
+    g = gate(_summary(MIN_SESSIONS, GATE_MIN_IDEAS, -0.02, -0.015))
+    assert g["word"] == "behind" and g["clearly_worse"]
+    assert not gate(_summary(MIN_SESSIONS, GATE_MIN_IDEAS, -0.001, -0.005))["clearly_worse"]
+
+
+def test_report_opens_with_the_gate_answer():
+    bars = {"UP": _bars(0.02)}
+    j = build_journal([Session(DAY0, "NORMAL", (Idea("UP", "TRADE", 0.9),))], bars)
+    assert "Gate answer: too early" in plain_report(j)

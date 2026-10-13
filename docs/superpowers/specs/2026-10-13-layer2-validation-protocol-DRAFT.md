@@ -66,6 +66,52 @@ Each answer is separate. Each needs at least 40 trading days and 60 finished bra
 Safety, honesty and caution are checks that must pass with no exceptions. Money and beats-rules-only are the
 evidence answers.
 
+## 5a. Forward gate: leaving Practice (M18), adopted for now
+
+Status: the owner said on 2026-10-13 "go with your recommendation for numbers or days for now, later we can
+change". These numbers are therefore in use for the forward trial but are **not frozen**; change them only
+before looking at a result, and record the change here with a date.
+
+This gate is separate from sections 5 and 10. Those judge a one-time replay of the whole brain. This one
+judges the live practice ideas the brain records on prod, as they finish, using the trial journal
+(`python -m swing_trade_ml.brain.trial_journal --from <trial start>`).
+
+**What counts.** Brain ideas with the word TRADE from live nightly runs, scored by the settled rule (next-day
+open, +8% / -4%, half out at +5%, 15 trading days, costs and slippage). Ideas the risk check blocked are
+reported next to them but do not count, the same as `COUNT_BLOCKED_TOWARD_GATE = False` today.
+
+**Minimum before any answer.** Both must hold, otherwise the answer is "too early":
+
+| Minimum | Value |
+|---|---|
+| Sessions in the trial | 15 |
+| Finished TRADE ideas | 30 |
+
+**The answer.** Once the minimum is met:
+
+| Check | Passes when |
+|---|---|
+| Profit | average result per finished idea, after costs, is above 0 |
+| Beats random | average daily difference against "every stock the brain looked at that day" is above 0 |
+| Safety | no idea broke a settled limit (stop, sector cap, drawdown halt) in the trades recorded |
+
+- **Pass** (all three): the owner may move to "Your OK needed". Each buy still needs the owner's Approve.
+- **Behind** (profit or beats-random fails): stay in Practice and keep recording. Nothing is switched off; practice buys nothing.
+- **Clearly worse**: if, after the minimum, the average per idea is more than 1 percentage point below "every
+  stock", the report says so in its first line, so it cannot be missed.
+
+**What a pass does not mean.** 30 ideas over 15 sessions cannot give a confidence bound; one good or bad
+fortnight can decide it. A pass is permission to try manual approval, never evidence for automatic trading.
+The automatic stage still needs the full layer-2 pass (section 5).
+
+**Why these numbers.** 15 sessions matches the trade's own 15-day horizon, so at least one full holding
+period is seen. 30 is the existing M18 count, kept so nothing about the current gate is loosened; this
+section only adds conditions to it.
+
+**Expected wait.** With prod's 10-stock watchlist and a DEFENSIVE market, most ideas end as WATCH, so 30
+finished TRADE ideas may take well over 15 sessions. "Too early" for a long time is a correct answer, not a
+fault.
+
 ## 6. Report must show
 
 Per window: banner mix, ideas, trades, average per trade, account change, worst fall, days below peak. Overall:
@@ -96,6 +142,7 @@ came first, small sample).
 - [ ] Hold-out A stays sealed until 40 trading days exist.
 - [ ] Pick the prod watchlist size for the practice run.
 - [ ] Confirm that a brain that fails "beats rules only" is relabelled a discipline layer, not a picker.
+- [x] Forward gate numbers in section 5a: adopted for now (owner, 2026-10-13), open to change before a result is seen.
 
 ## 10. Freezing mechanics
 

@@ -9,8 +9,9 @@ invalidates the entry.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, time, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import numpy as np
 import pandas as pd
@@ -18,6 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
+from swing_trade_ml.core import market_session
 from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.db.models.market import Candle, Instrument
 from swing_trade_ml.db.models.ml import MLModel, Prediction
@@ -325,6 +327,22 @@ def evaluate_pending_predictions(db: Session, interval: str = "day") -> int:
     return evaluated
 
 
+_IST = ZoneInfo("Asia/Kolkata")
+
+
+def trading_horizon_end(generated_at: datetime, horizon_days: int) -> datetime:
+    """The end (IST) of the `horizon_days`-th trading day after a signal's own day.
+
+    A signal's horizon is trading sessions, the same unit as the training label
+    (`build_label`) and M09's outcome scorer. Adding calendar days instead ended a
+    15-day idea after about 10 sessions and scored it "expired" too early.
+    """
+    day = generated_at.astimezone(_IST).date()
+    for _ in range(horizon_days):
+        day = market_session.next_trading_day(day)
+    return datetime.combine(day, time(23, 59), tzinfo=_IST)
+
+
 def evaluate_pending_signals(db: Session, interval: str = "day", now: datetime | None = None) -> int:
     """Score every not-yet-scored Signal that has a stop/target against real
     intraday price action — target hit, stop hit, or expired with no hit by
@@ -348,7 +366,7 @@ def evaluate_pending_signals(db: Session, interval: str = "day", now: datetime |
     )
 
     for sig in pending:
-        horizon_end = sig.generated_at + timedelta(days=sig.horizon_days)
+        horizon_end = trading_horizon_end(sig.generated_at, sig.horizon_days)
 
         candles = list(
             db.execute(
@@ -389,6 +407,7 @@ def evaluate_pending_signals(db: Session, interval: str = "day", now: datetime |
 
         actual_return = forward_return_at_horizon(
             db, sig.instrument_id, sig.generated_at, sig.price, sig.horizon_days, interval, now,
+            horizon_end=horizon_end,
         )
         if actual_return is None:
             continue  # no candle data past the horizon yet — stays open
@@ -412,6 +431,7 @@ def forward_return_at_horizon(
     horizon_days: int,
     interval: str = "day",
     now: datetime | None = None,
+    horizon_end: datetime | None = None,
 ) -> float | None:
     """Actual return from ts to ts+horizon_days, or None if that much time
     (plus a trading-day buffer) hasn't elapsed yet, or no candle exists near
@@ -423,7 +443,11 @@ def forward_return_at_horizon(
     read-only, as many times as asked).
     """
     now = now or datetime.now(UTC)
-    horizon_end = ts + timedelta(days=horizon_days)
+    # A caller that counts the horizon in trading days passes the end itself.
+    # The calendar-day path overshoots, so it looks up to 4 days past the end for the nearest bar;
+    # an exact trading-day end needs no such slack and must not read a bar after it.
+    slack = timedelta(days=4) if horizon_end is None else timedelta(0)
+    horizon_end = horizon_end or ts + timedelta(days=horizon_days)
     if now < horizon_end + timedelta(days=2):
         return None
 
@@ -433,7 +457,7 @@ def forward_return_at_horizon(
             Candle.instrument_id == instrument_id,
             Candle.interval == interval,
             Candle.ts > ts,
-            Candle.ts <= horizon_end + timedelta(days=4),
+            Candle.ts <= horizon_end + slack,
         )
         .order_by(Candle.ts.desc())
         .limit(1)

@@ -206,3 +206,63 @@ def test_track_record_endpoint_returns_scored_and_open_signals(client, db_sessio
     assert matching[0]["outcome"] == "TARGET_HIT"
     assert matching[0]["cap_tier"] == "large"
     assert "current_price" in matching[0]
+
+
+# --- the horizon is counted in trading days, like the training labels and M09 -----------------
+# A signal made Mon 2026-01-05 with horizon_days=5 runs through the 5th trading day after it,
+# Mon 2026-01-12. Counting 5 calendar days would end it on Sat 01-10 and miss Jan 12 entirely.
+
+
+def _horizon_signal(db_session):
+    inst = _instrument(db_session)
+    strat = _strategy(db_session)
+    gen_at = datetime(2026, 1, 5, 10, 0, tzinfo=UTC)
+    sig = _signal(
+        db_session, strat.id, inst.id, gen_at, price=100.0, stop_loss=90.0,
+        take_profit=110.0, horizon_days=5,
+    )
+    for day in (6, 7, 8, 9):  # four quiet trading days inside the band
+        _candle(db_session, inst.id, datetime(2026, 1, day, tzinfo=UTC), 100, 102, 98, 101)
+    return inst, sig
+
+
+def test_target_on_the_fifth_trading_day_counts_even_across_a_weekend(db_session):
+    from swing_trade_ml.ml.predict import evaluate_pending_signals
+
+    inst, sig = _horizon_signal(db_session)
+    _candle(db_session, inst.id, datetime(2026, 1, 12, tzinfo=UTC), 101, 112, 100, 111)  # trading day 5
+    db_session.commit()
+
+    evaluate_pending_signals(db_session, now=datetime(2026, 1, 25, tzinfo=UTC))
+
+    db_session.refresh(sig)
+    assert sig.outcome == "TARGET_HIT"
+
+
+def test_target_on_the_sixth_trading_day_is_too_late(db_session):
+    from swing_trade_ml.ml.predict import evaluate_pending_signals
+
+    inst, sig = _horizon_signal(db_session)
+    _candle(db_session, inst.id, datetime(2026, 1, 12, tzinfo=UTC), 101, 103, 100, 102)  # day 5, quiet
+    _candle(db_session, inst.id, datetime(2026, 1, 13, tzinfo=UTC), 101, 112, 100, 111)  # day 6
+    db_session.commit()
+
+    evaluate_pending_signals(db_session, now=datetime(2026, 1, 25, tzinfo=UTC))
+
+    db_session.refresh(sig)
+    assert sig.outcome == "EXPIRED_NO_HIT"
+    assert abs(sig.outcome_pct - 0.02) < 1e-9  # the day-5 close, 102 against 100
+
+
+def test_signal_stays_open_until_its_fifth_trading_day_has_passed(db_session):
+    from swing_trade_ml.ml.predict import evaluate_pending_signals
+
+    _inst, sig = _horizon_signal(db_session)
+    db_session.commit()
+
+    # Sat 01-10 is past 5 calendar days but only 4 trading days have happened.
+    count = evaluate_pending_signals(db_session, now=datetime(2026, 1, 10, 12, 0, tzinfo=UTC))
+
+    assert count == 0
+    db_session.refresh(sig)
+    assert sig.outcome is None

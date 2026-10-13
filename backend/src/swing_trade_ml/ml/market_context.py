@@ -95,6 +95,27 @@ def load_vix_candles(
     return load_symbol_candles(db, "INDIA VIX", interval, upto)
 
 
+def compute_breadth(wide: pd.DataFrame) -> pd.DataFrame:
+    """Breadth from a ts-indexed frame of closes, one column per stock.
+
+    A comparison with NaN is False, not NaN, so a stock with no bar (late
+    listing, warm-up, missing day) would count as "below its average" or "did
+    not advance" and drag breadth down. Those values are masked first, so a
+    stock only counts on days it has a usable value; a day with none is NaN.
+    """
+    sma = wide.rolling(50, min_periods=50).mean()
+    prev = wide.shift(1)
+    above = (wide > sma).where(wide.notna() & sma.notna())
+    advanced = (wide > prev).where(wide.notna() & prev.notna())
+    return pd.DataFrame(
+        {
+            "ts": wide.index,
+            "breadth_pct_above_sma50": above.mean(axis=1, skipna=True).to_numpy(),
+            "breadth_advance_pct": advanced.mean(axis=1, skipna=True).to_numpy(),
+        }
+    ).reset_index(drop=True)
+
+
 def load_market_breadth(
     db: Session, interval: str = "day", upto: pd.Timestamp | None = None
 ) -> pd.DataFrame:
@@ -137,16 +158,7 @@ def load_market_breadth(
             # must not drop that day for every other symbol. NaN entries are
             # excluded from that day's mean via skipna, not treated as "below
             # SMA" or "declined".
-            wide = pd.DataFrame(closes).sort_index()
-            above_sma = wide > wide.rolling(50, min_periods=50).mean()
-            advanced = wide.diff() > 0
-            _breadth_cache[interval] = pd.DataFrame(
-                {
-                    "ts": wide.index,
-                    "breadth_pct_above_sma50": above_sma.mean(axis=1, skipna=True).to_numpy(),
-                    "breadth_advance_pct": advanced.mean(axis=1, skipna=True).to_numpy(),
-                }
-            ).reset_index(drop=True)
+            _breadth_cache[interval] = compute_breadth(pd.DataFrame(closes).sort_index())
 
     full = _breadth_cache[interval]
     if upto is None or full.empty:

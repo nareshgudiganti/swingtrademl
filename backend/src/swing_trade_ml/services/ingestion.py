@@ -19,7 +19,7 @@ from swing_trade_ml.brokers.kite import kite_broker
 from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.enums import PositionStatus
 from swing_trade_ml.core.logging import get_logger
-from swing_trade_ml.db.models.market import Candle, CandleCorrection, Instrument, Quote
+from swing_trade_ml.db.models.market import Candle, CandleArrival, CandleCorrection, Instrument, Quote
 from swing_trade_ml.services.feature_snapshots import invalidate_snapshots_for_candle_corrections
 from swing_trade_ml.db.models.trading import Position
 
@@ -334,6 +334,14 @@ def _upsert_candles(db: Session, instrument_id: int, interval: str, bars: list[d
         },
     )
     db.execute(stmt)
+    # First arrival of each bar; a bar already recorded keeps its original time (audit F-07).
+    arrivals = pg_insert(CandleArrival).values(
+        [
+            {"instrument_id": instrument_id, "interval": interval, "ts": r["ts"], "received_at": now}
+            for r in rows
+        ]
+    )
+    db.execute(arrivals.on_conflict_do_nothing(index_elements=["instrument_id", "interval", "ts"]))
     invalidate_snapshots_for_candle_corrections(db, instrument_id, interval, correction_ts)
     db.commit()
     return len(rows)

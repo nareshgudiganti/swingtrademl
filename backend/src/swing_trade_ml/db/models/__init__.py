@@ -23,7 +23,14 @@ from swing_trade_ml.db.models.feeds import (
     UpcomingEvent,
 )
 from swing_trade_ml.db.models.fills import BrokerFill
-from swing_trade_ml.db.models.market import Candle, CandleCorrection, Instrument, Quote, WatchlistSnapshot
+from swing_trade_ml.db.models.market import (
+    Candle,
+    CandleArrival,
+    CandleCorrection,
+    Instrument,
+    Quote,
+    WatchlistSnapshot,
+)
 from swing_trade_ml.db.models.ml import MLModel, Prediction
 from swing_trade_ml.db.models.mutual_funds import MutualFund, MutualFundHolding, MutualFundNav
 from swing_trade_ml.db.models.safety import RiskEvent, SystemState
@@ -49,6 +56,7 @@ __all__ = [
     "BrokerFill",
     "BrokerSession",
     "Candle",
+    "CandleArrival",
     "CandleCorrection",
     "DailyDelivery",
     "FeatureSnapshot",

@@ -135,6 +135,21 @@ class CandleCorrection(Base):
     corrected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
+class CandleArrival(Base):
+    """When a bar first reached us (audit F-07, gap #1). Kept beside `candles` so the v1 table stays
+    untouched; later overwrites are in `candle_corrections`. A bar ingested before this table existed
+    has no row: its arrival time is unknown, not "always"."""
+
+    __tablename__ = "candle_arrivals"
+
+    instrument_id: Mapped[int] = mapped_column(
+        ForeignKey("instruments.id", ondelete="CASCADE"), primary_key=True
+    )
+    interval: Mapped[str] = mapped_column(Text, primary_key=True)
+    ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), primary_key=True)
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
 class WatchlistSnapshot(Base):
     """Brain universe membership by IST calendar day (Service 1 gap #4)."""
 

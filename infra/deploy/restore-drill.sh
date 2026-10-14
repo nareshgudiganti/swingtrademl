@@ -31,7 +31,16 @@ echo "Backup:  $dump ($(du -h "$dump" | cut -f1), made $(date -r "$dump" '+%Y-%m
 image=$(docker inspect --format '{{.Image}}' "$LIVE_CONTAINER")
 ts_version=$(docker exec "$LIVE_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -tAc \
   "select extversion from pg_extension where extname = 'timescaledb'" | tr -d ' ')
-echo "Image:   $(docker inspect --format '{{index .RepoTags 0}}' "$image" 2>/dev/null || echo "$image"), TimescaleDB $ts_version"
+# The Timescale catalog version written INSIDE the backup (_timescaledb_catalog.metadata,
+# key timescaledb_version, in the app database's section). On prod 2026-10-14 the live extension
+# reported 2.29.2 while the backup's catalog said 2.29.0, so restoring at the live version still failed.
+# Restore at the backup's version, then upgrade to the live version, as a real recovery would.
+dump_ts_version=$(awk -v app="$DB_NAME" '
+    /^\\connect / { in_app = ($2 == app) }
+    in_app && /^timescaledb_version\t/ { split($0, f, "\t"); print f[2]; exit }' "$dump")
+restore_version=${dump_ts_version:-$ts_version}
+echo "Image:   ${image:7:12} (the live database container's own image)"
+echo "TimescaleDB: live database $ts_version, inside the backup ${dump_ts_version:-unknown}; restoring at $restore_version"
 cleanup() { docker rm -f "$DRILL" >/dev/null 2>&1 || true; }
 trap cleanup EXIT
 cleanup
@@ -57,13 +66,25 @@ echo "Restoring into the throwaway container..."
 # restore mode, so hypertables (candles) come back as hypertables. A plain replay of the dump brings the
 # rows back but leaves candles a plain table ("table candles is not a hypertable"), found 2026-10-14.
 in_drill() { docker exec "$DRILL" psql -U "$DB_USER" -v ON_ERROR_STOP=1 -q "$@" >/dev/null; }
-in_drill -d postgres -c "create database $DB_NAME"
-in_drill -d "$DB_NAME" -c "create extension if not exists timescaledb version '$ts_version'" \
+# template0, not the default template1: the Timescale image pre-installs the extension (at the image's
+# newest version) into template1, so every new database would already have it and the pinned
+# "create extension ... version" below would be silently skipped (seen on prod 2026-10-14).
+in_drill -d postgres -c "create database $DB_NAME template template0"
+in_drill -d "$DB_NAME" -c "create extension if not exists timescaledb version '$restore_version'" \
   -c "select timescaledb_pre_restore()"
 errors_file=$(mktemp)
 # "-f -" makes psql prefix each error with its line in the dump ("psql:<stdin>:LINE: ERROR: ...").
 docker exec -i "$DRILL" psql -U "$DB_USER" -d postgres -q -v ON_ERROR_STOP=0 -f - <"$dump" >/dev/null 2>"$errors_file" || true
 in_drill -d "$DB_NAME" -c "select timescaledb_post_restore()"
+if [ -n "$ts_version" ] && [ "$restore_version" != "$ts_version" ]; then
+  # Upgrade must be the first command of a fresh session (-X: no psqlrc), per TimescaleDB.
+  echo "Upgrading the restored copy from TimescaleDB $restore_version to $ts_version..."
+  docker exec "$DRILL" psql -X -U "$DB_USER" -d "$DB_NAME" -v ON_ERROR_STOP=1 -q \
+    -c "alter extension timescaledb update to '$ts_version'" >/dev/null
+fi
+restored_version=$(docker exec "$DRILL" psql -U "$DB_USER" -d "$DB_NAME" -tAc \
+  "select extversion from pg_extension where extname = 'timescaledb'" | tr -d ' ')
+echo "Restored copy is on TimescaleDB $restored_version"
 # Which database each dump line belongs to: pg_dumpall switches with "\connect <db>" lines.
 db_starts=$(mktemp)
 grep -n '^\\connect ' "$dump" | sed -E 's/^([0-9]+):\\connect ([^ ]+).*/\1 \2/' >"$db_starts"

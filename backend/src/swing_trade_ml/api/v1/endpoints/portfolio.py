@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.sql import Select
 
-from swing_trade_ml.api.deps import DbSession, PlanAccessDep
+from swing_trade_ml.api.deps import DbSession, PlanAccessDep, actor_name, require_owner
 from swing_trade_ml.brokers import get_broker
 from swing_trade_ml.core import market_session
 from swing_trade_ml.core.config import settings
@@ -883,3 +884,67 @@ def snapshot(db: DbSession) -> MessageResponse:
         message="Snapshot recorded",
         detail=f"Total value ₹{snap.total_value:,.2f}, drawdown {snap.drawdown_pct:.2%}",
     )
+
+
+# ------------------------------------------------ real orders from My Holdings --
+# The owner's own real buys/sells, by hand, while the bot stays on paper
+# (docs/superpowers/specs/2026-10-14-real-holdings-orders-design.md). Owner only; every check is in
+# services/real_orders.py and a refusal sends nothing to Zerodha.
+
+
+class RealBuyRequest(BaseModel):
+    symbol: str = Field(min_length=1, max_length=32)
+    exchange: Literal["NSE", "BSE"] = "NSE"
+    quantity: int = Field(ge=1, le=100_000)
+
+
+class RealSellRequest(BaseModel):
+    quantity: int | None = Field(default=None, ge=1)  # None = everything held
+
+
+def _real_order_out(order) -> dict[str, Any]:
+    return {
+        "order_id": order.id,
+        "status": order.status,
+        "quantity": order.quantity,
+        "message": order.status_message,
+    }
+
+
+@router.get("/real/orders-status", dependencies=[Depends(require_owner)])
+def real_orders_status(db: DbSession) -> dict[str, Any]:
+    """Whether real orders are on, the market is open, the kill switch is on, and today's buy limit."""
+    from swing_trade_ml.services import real_orders
+
+    return real_orders.status(db)
+
+
+@router.post("/real/buy", status_code=status.HTTP_201_CREATED)
+def real_buy(
+    payload: RealBuyRequest, db: DbSession, principal: Annotated[Any, Depends(require_owner)]
+) -> dict[str, Any]:
+    """Send a REAL market buy (CNC) to Zerodha for the owner's own account."""
+    from swing_trade_ml.services import real_orders
+
+    try:
+        order = real_orders.buy(db, payload.symbol, payload.exchange, payload.quantity, actor_name(principal))
+    except real_orders.RealOrderRefusedError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    return _real_order_out(order)
+
+
+@router.post("/real/positions/{position_id}/sell", status_code=status.HTTP_201_CREATED)
+def real_sell(
+    position_id: int,
+    payload: RealSellRequest,
+    db: DbSession,
+    principal: Annotated[Any, Depends(require_owner)],
+) -> dict[str, Any]:
+    """Send a REAL market sell (CNC) to Zerodha for one My Holdings row. Default: everything held."""
+    from swing_trade_ml.services import real_orders
+
+    try:
+        order = real_orders.sell(db, position_id, payload.quantity, actor_name(principal))
+    except real_orders.RealOrderRefusedError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    return _real_order_out(order)

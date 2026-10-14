@@ -128,6 +128,25 @@ is not closed by mistake (keep that guard; add a test with an app-bought T1 hold
 - Reconcile: live real-holdings buy fill creates a Position; sell fill closes/shrinks it;
   rejection creates nothing; paper bot orders unaffected.
 
+## Review additions (2026-10-14, owner said "go ahead" = yes to both decisions)
+
+1. **Kill switch blocks real buys.** While "stop new trades" is on, a real buy is refused; real sells are
+   always allowed (owner decision).
+2. **Telegram for every real order**: sent, filled, rejected (owner decision). Fill and reject messages
+   come from reconciliation; the "sent" message from the place step names who placed it.
+3. **Sell never exceeds what Zerodha really holds.** Before a sell, the owned quantity is read from
+   Zerodha: holdings `quantity + t1_quantity` plus today's CNC `positions` net quantity (same-day buys
+   are not in holdings yet). Imported rows can be stale (the September "ghost holdings").
+4. **The 15:48 holdings sync must not close a position bought today.** Same-day buys are absent from
+   Zerodha holdings until the next day, so `close_positions_no_longer_held` skips positions whose
+   entry is today (IST). Found in review; it also protects today's hand-recorded rows.
+5. **Order tag** is alphanumeric and short: `stmlhold` + `b`/`s` + order id (≤ 20 characters), since
+   Zerodha's tag is limited to 20 characters; the gate also requires CNC + MARKET on that path.
+6. **The ₹10K check uses Zerodha's live price** (`kite_broker.get_ltp`), not the paper quote.
+
+The paper trial is unaffected: every risk check is scoped to its mode (paper vs live), and nothing on
+the bot, brain or tester path changes broker.
+
 ## Rollout
 
 1. Build on branch `feature/real-holdings-orders` (from `origin/main`), latch default `false`.

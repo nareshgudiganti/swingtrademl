@@ -1,6 +1,6 @@
 # Real buy/sell from My Holdings — design
 
-Date: 2026-10-14 · Status: approved in chat, awaiting spec review · Owner decision required before `main`
+Date: 2026-10-14 · Status: **spec approved by owner 2026-10-14** · Built on branch `feature/real-holdings-orders`, latch OFF. Not merged, not activated, until safety tests pass and the owner reviews.
 
 ## Goal
 
@@ -18,6 +18,15 @@ by hand. Nothing automatic touches real money.
 | Stop/target | Alerts only (−4% / +8%, Telegram + screen). No GTT, no automatic real sells |
 | Order type | MARKET with `KITE_MARKET_PROTECTION`, product CNC |
 | Quantity on sell | Owner chooses; default = all held |
+
+## Scope (owner, 2026-10-14)
+
+In scope, and nothing else: **manual BUY, manual SELL, live holdings synchronisation, order safety,
+reporting.**
+
+Out of scope: any new automated trading or brain logic, any paid backup/infrastructure, any
+redesign of the app. The paper trial stays untouched — its evidence decides whether TradeMind is
+worth scaling.
 
 ## Non-goals
 
@@ -70,6 +79,28 @@ inside `_finish_reconciled_order` must key off the order's mode, not `settings.i
 
 **Import from Kite** already skips stocks already tracked, so an app-bought stock is not duplicated.
 
+## Live holdings synchronisation
+
+Already on `main`: `services/holdings_sync.py::close_positions_no_longer_held`, run by the
+"Import from Kite" button and the daily `sync_real_holdings` job (15:48 IST). It closes a tracked
+holding that has left Zerodha at the last price the app saw.
+
+Race this feature creates: an app sell fills at Zerodha, the holding disappears, and the sync can
+close the position at a *guessed* price before reconciliation records the *real* fill. Fix:
+- the sync skips any position with a PENDING/OPEN real-holdings order; and
+- reconciliation of a sell first finishes the order; if the position was already closed by the
+  sync, it corrects that Trade's exit price to the real fill instead of closing twice.
+
+A fresh app buy reads `quantity: 0` until settlement; the sync already counts `t1_quantity`, so it
+is not closed by mistake (keep that guard; add a test with an app-bought T1 holding).
+
+## Reporting
+
+- My Holdings list and the **Buy and sell report** show app orders like any other real trade.
+- A small **"Real orders today"** line on My Holdings: switch on/off, ₹ spent today / ₹25,000,
+  and any order still waiting at Zerodha (from `GET /portfolio/real/orders-status`).
+- Every placed, filled or rejected real order also goes to Telegram in plain words.
+
 ## Files
 
 | File | Change |
@@ -79,6 +110,7 @@ inside `_finish_reconciled_order` must key off the order's mode, not `settings.i
 | `brokers/kite.py` | narrow gate (Safety 2) |
 | `services/real_orders.py` (new) | checks + calls into execution |
 | `services/execution.py` | `place_real_holding_buy/sell`, second reconcile pass, mode-based charge note |
+| `services/holdings_sync.py` | skip positions with a pending real-holdings order |
 | `api/v1/endpoints/portfolio.py` | two owner-only routes + a `GET /portfolio/real/orders-status` (latch on/off, limits, today's spend) for the screen |
 | `frontend/src/api/client.ts`, `trademind/pages/MyHoldings.tsx` | "Buy real shares" form, "Sell real" per holding, red confirm, disabled while pending / switched off |
 
@@ -91,15 +123,19 @@ inside `_finish_reconciled_order` must key off the order's mode, not `settings.i
 - Sell more than held refused; non-`real_trading` position refused.
 - Market closed refused; second order while one pending refused.
 - Non-owner → 403.
+- Holdings sync skips a position with a pending app sell; a sell reconciled after the sync
+  corrected the exit price rather than closing twice; app-bought T1 holding is not closed.
 - Reconcile: live real-holdings buy fill creates a Position; sell fill closes/shrinks it;
   rejection creates nothing; paper bot orders unaffected.
 
 ## Rollout
 
-1. Tests green, code review.
-2. **Owner approves** before merge to `main` (order-path rule).
-3. Deploy with latch off; screen shows "Real orders are switched off".
-4. Owner registers the prod server's static IP in the Kite developer console (needed for app orders).
-5. Owner sets `ALLOW_REAL_HOLDINGS_ORDERS=true`; first trial: buy 1 share of a cheap stock, sell it
+1. Build on branch `feature/real-holdings-orders` (from `origin/main`), latch default `false`.
+   Not pushed to `main`, not deployed.
+2. Tests green, code review.
+3. **Owner reviews** the safety tests and code, and approves before merge to `main` (order-path rule).
+4. Deploy with latch off; screen shows "Real orders are switched off".
+5. Owner registers the prod server's static IP in the Kite developer console (needed for app orders).
+6. Owner sets `ALLOW_REAL_HOLDINGS_ORDERS=true`; first trial: buy 1 share of a cheap stock, sell it
    the same week, check My Holdings and the report.
-6. Rollback: set the latch to `false` — buttons stop at once; existing holdings unaffected.
+7. Rollback: set the latch to `false` — buttons stop at once; existing holdings unaffected.

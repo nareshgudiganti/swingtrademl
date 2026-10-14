@@ -1,0 +1,104 @@
+name: Uptime alarm
+
+# Checks swingtrademl.com from OUTSIDE the server every ~10 minutes and messages the owner on Telegram
+# when it goes down (and once when it is back). The worker's own checks cannot do this: if the whole
+# droplet stops, nothing on it is left to raise the alarm. Tracker task af3, 2026-10-14.
+#
+# Down = /health or /ready does not answer 200 (each tried twice, 30 s apart). Optional deeper check:
+# with an API_KEY repository secret it also reads /status and calls the site down when the scheduler is
+# not running, or when Zerodha is not connected during market hours. Without that secret it skips it.
+# GitHub's scheduled runs can start 5-20 minutes late; the alarm is a safety net, not a stopwatch.
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+    inputs:
+      test_message:
+        description: "Also send a test Telegram message (proves the alarm can reach you)"
+        type: boolean
+        default: false
+
+permissions:
+  actions: read
+
+concurrency:
+  group: uptime
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check the site
+        id: check
+        env:
+          BASE: https://swingtrademl.com/api/v1
+          API_KEY: ${{ secrets.API_KEY }}
+        run: |
+          problems=()
+          probe() { # url -> http code, tried twice
+            code=$(curl -s -o /dev/null -m 20 -w '%{http_code}' "$1" || echo 000)
+            if [ "$code" != 200 ]; then sleep 30; code=$(curl -s -o /dev/null -m 20 -w '%{http_code}' "$1" || echo 000); fi
+            echo "$code"
+          }
+          health=$(probe "$BASE/health"); [ "$health" = 200 ] || problems+=("the website does not answer (health check gave $health)")
+          ready=$(probe "$BASE/ready");   [ "$ready" = 200 ]  || problems+=("the database does not answer (ready check gave $ready)")
+          if [ -n "$API_KEY" ] && [ "$health" = 200 ]; then
+            status=$(curl -s -m 30 -H "X-API-Key: $API_KEY" "$BASE/status" || true)
+            sched=$(echo "$status" | jq -r '.scheduler_running // empty' 2>/dev/null || true)
+            broker=$(echo "$status" | jq -r '.broker_authenticated // empty' 2>/dev/null || true)
+            [ "$sched" = true ] || problems+=("the scheduler (the part that runs the brain and the exits) is not running")
+            hm=$(TZ=Asia/Kolkata date +%H%M); day=$(TZ=Asia/Kolkata date +%u)
+            if [ "$day" -le 5 ] && [ "$hm" -ge 0915 ] && [ "$hm" -lt 1530 ] && [ "$broker" != true ]; then
+              problems+=("Zerodha is not connected during market hours")
+            fi
+          fi
+          if [ ${#problems[@]} -eq 0 ]; then
+            echo "state=up" >>"$GITHUB_OUTPUT"; echo "All good."
+          else
+            msg=$(printf '• %s\n' "${problems[@]}")
+            { echo "state=down"; echo "problems<<EOF"; echo "$msg"; echo "EOF"; } >>"$GITHUB_OUTPUT"
+            echo "$msg"
+          fi
+
+      - name: Decide whether to message
+        id: decide
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STATE: ${{ steps.check.outputs.state }}
+        run: |
+          # The previous run's result says what the owner was last told: a failed run means "down".
+          prev=$(gh run list -R "$GITHUB_REPOSITORY" --workflow uptime.yml --status completed --limit 1 \
+                   --json conclusion -q '.[0].conclusion' 2>/dev/null || echo unknown)
+          minute=$(date -u +%M)
+          send=no
+          if [ "$STATE" = down ] && [ "$prev" != failure ]; then send=down; fi
+          if [ "$STATE" = down ] && [ "$prev" = failure ] && [ "$minute" -lt 10 ]; then send=still; fi  # hourly reminder
+          if [ "$STATE" = up ] && [ "$prev" = failure ]; then send=up; fi
+          if [ "$send" = no ] && [ "${{ inputs.test_message }}" = true ]; then send=test; fi
+          echo "send=$send" >>"$GITHUB_OUTPUT"; echo "previous=$prev now=$STATE send=$send"
+
+      - name: Message on Telegram
+        if: steps.decide.outputs.send != 'no'
+        env:
+          TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
+          SEND: ${{ steps.decide.outputs.send }}
+          PROBLEMS: ${{ steps.check.outputs.problems }}
+        run: |
+          when=$(TZ=Asia/Kolkata date '+%d %b %H:%M IST')
+          case "$SEND" in
+            down)  text=$(printf '🔴 TradeMind is DOWN (%s)\n%s\nPaper mode: no real money is at risk, but stops and the brain run only while the server is up.' "$when" "$PROBLEMS") ;;
+            still) text=$(printf '🔴 TradeMind is still down (%s)\n%s' "$when" "$PROBLEMS") ;;
+            up)    text=$(printf '🟢 TradeMind is back up (%s).' "$when") ;;
+            test)  text=$(printf '✅ Uptime alarm test (%s): the outside check can reach you. The site is up.' "$when") ;;
+          esac
+          curl -s -m 20 -o /dev/null -w 'telegram %{http_code}\n' "https://api.telegram.org/bot${TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${CHAT}" --data-urlencode "text=${text}"
+
+      - name: Record the state
+        if: steps.check.outputs.state == 'down'
+        run: |
+          echo "Site is down; this failed run is how the next run knows it already told the owner."
+          exit 1

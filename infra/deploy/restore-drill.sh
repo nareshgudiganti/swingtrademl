@@ -18,12 +18,21 @@ DB_NAME=${DB_NAME:-swing_trade_ml}
 DRILL=stml-restore-drill
 TABLES="instruments candles positions trades orders signals brain_runs brain_decisions ml_models users portfolio_snapshots"
 
-dump=${BACKUP_FILE:-$(ls -t "$BACKUP_ROOT"/*/database.sql 2>/dev/null | head -1 || true)}
+# The newest copy: a deploy's plain database.sql or a nightly compressed database.sql.gz (daily-backup.sh).
+dump=${BACKUP_FILE:-$(ls -t "$BACKUP_ROOT"/*/database.sql "$BACKUP_ROOT"/*/database.sql.gz 2>/dev/null | head -1 || true)}
 if [ -z "$dump" ] || [ ! -s "$dump" ]; then
   echo "RESTORE DRILL FAILED: no backup file found under $BACKUP_ROOT" >&2
   exit 1
 fi
 echo "Backup:  $dump ($(du -h "$dump" | cut -f1), made $(date -r "$dump" '+%Y-%m-%d %H:%M'))"
+plain_copy=""
+if [ "${dump%.gz}" != "$dump" ]; then
+  # The steps below read the dump several times; unpack once into a temporary file.
+  plain_copy=$(mktemp)
+  gunzip -c "$dump" >"$plain_copy"
+  backup_label=$dump
+  dump=$plain_copy
+fi
 
 # The live container's exact image (by ID, not by tag: "latest-pg17" may have been pulled again since)
 # and the exact TimescaleDB version installed in the live database. Restoring with a different
@@ -41,7 +50,7 @@ dump_ts_version=$(awk -v app="$DB_NAME" '
 restore_version=${dump_ts_version:-$ts_version}
 echo "Image:   ${image:7:12} (the live database container's own image)"
 echo "TimescaleDB: live database $ts_version, inside the backup ${dump_ts_version:-unknown}; restoring at $restore_version"
-cleanup() { docker rm -f "$DRILL" >/dev/null 2>&1 || true; }
+cleanup() { docker rm -f "$DRILL" >/dev/null 2>&1 || true; [ -z "$plain_copy" ] || rm -f "$plain_copy"; }
 trap cleanup EXIT
 cleanup
 
@@ -145,9 +154,9 @@ rm -f "$errors_file" "$errors_file.real" "$errors_file.all" "$db_starts"
 record=$BACKUP_ROOT/restore-drill-last.txt
 if [ "$failed" -eq 0 ]; then
   echo "RESTORE DRILL PASSED: the backup restores and every key table has its rows."
-  printf 'passed %s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$dump" >"$record" 2>/dev/null || true
+  printf 'passed %s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${backup_label:-$dump}" >"$record" 2>/dev/null || true
   exit 0
 fi
 echo "RESTORE DRILL FAILED: see the table and errors above. The live database was not touched." >&2
-printf 'failed %s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$dump" >"$record" 2>/dev/null || true
+printf 'failed %s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${backup_label:-$dump}" >"$record" 2>/dev/null || true
 exit 1

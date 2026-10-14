@@ -1,0 +1,43 @@
+name: Daily backup
+
+# Every night at 23:00 IST: a compressed copy of the whole database on the droplet (14 days kept) and,
+# once set up (docs/BACKUP-OFFSITE.md), an encrypted copy on the owner's Google Drive. Runs
+# infra/deploy/daily-backup.sh over the deploy's SSH key. Telegram only when it fails. Tracker af4.
+on:
+  schedule:
+    - cron: "30 17 * * *" # 23:00 IST; GitHub may start it late, which is fine at night
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: daily-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Make the copies on the droplet
+        id: backup
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          command_timeout: 35m
+          script: |
+            set -e
+            bash /root/app/infra/deploy/daily-backup.sh
+
+      - name: Message on Telegram when it failed
+        if: failure()
+        env:
+          TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          text=$(printf '🟠 Nightly database backup FAILED (%s).\nThe trading app is not affected. Open the run to see why:\n%s' "$(TZ=Asia/Kolkata date '+%d %b %H:%M IST')" "$RUN")
+          curl -s -m 20 -o /dev/null -w 'telegram %{http_code}\n' "https://api.telegram.org/bot${TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${CHAT}" --data-urlencode "text=${text}"

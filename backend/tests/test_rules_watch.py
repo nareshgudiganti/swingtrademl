@@ -1,0 +1,81 @@
+"""The risk-rules alarm (tracker rs2): the settings, strategies, brain policy and capital ladder the app
+really trades with must match the rules the owner agreed, or the daily check fails and messages."""
+
+from __future__ import annotations
+
+from dataclasses import replace
+
+import pytest
+
+from swing_trade_ml.brain.modules.m08_decide import policy as m08_policy
+from swing_trade_ml.core.config import settings
+from swing_trade_ml.db.models.trading import Strategy
+from swing_trade_ml.services import limits, rules_watch
+
+
+@pytest.fixture(autouse=True)
+def _agreed_settings(monkeypatch):
+    """Start every test from the agreed values: a local .env can carry its own (one sets a 20% halt)."""
+    monkeypatch.setattr(settings, "MAX_PORTFOLIO_DRAWDOWN_PCT", 0.15)
+    monkeypatch.setattr(settings, "TRADING_MODE", "paper")
+    monkeypatch.setattr(settings, "ALLOW_LIVE_TRADING", False)
+
+
+def _strategy(db, name, stype, **kw):
+    s = Strategy(name=name, strategy_type=stype, is_active=True, mode="paper", **kw)
+    db.add(s)
+    db.flush()
+    return s
+
+
+def test_agreed_rules_pass(db_session):
+    _strategy(db_session, "rw_ml", "ml_swing", params={"model_name": "x"})
+    c = rules_watch.check(db_session)
+    assert c["ok"], c["detail"]
+
+
+def test_a_changed_setting_fails(db_session, monkeypatch):
+    monkeypatch.setattr(settings, "MAX_PORTFOLIO_DRAWDOWN_PCT", 0.20)
+    monkeypatch.setattr(settings, "ML_STOP_RETURN_PCT", 0.05)
+    c = rules_watch.check(db_session)
+    assert not c["ok"] and c["level"] == "fail"
+    assert "drawdown halt is 20%, agreed 15%" in c["detail"] and "stop is 5%, agreed 4%" in c["detail"]
+
+
+def test_live_mode_fails(db_session, monkeypatch):
+    monkeypatch.setattr(settings, "ALLOW_LIVE_TRADING", True)
+    assert "live trading is allowed" in rules_watch.check(db_session)["detail"]
+
+
+def test_a_strategy_override_fails(db_session):
+    _strategy(db_session, "rw_short", "ml_swing", params={"time_stop_days": 15, "scale_out_at_pct": 0})
+    detail = rules_watch.check(db_session)["detail"]
+    assert "rw_short uses half-out at off, time stop 15 days" in detail
+
+
+def test_a_strategy_with_its_own_levels_fails(db_session):
+    _strategy(db_session, "rw_sma", "sma_crossover", stop_loss_pct=0.05, take_profit_pct=0.15)
+    assert "rw_sma uses stop 5%, target 15%" in rules_watch.check(db_session)["detail"]
+
+
+def test_inactive_strategies_are_ignored(db_session):
+    s = _strategy(db_session, "rw_off", "sma_crossover", stop_loss_pct=0.05)
+    s.is_active = False
+    db_session.flush()
+    assert "rw_off" not in rules_watch.check(db_session)["detail"]
+
+
+def test_brain_policy_and_ladder_are_checked(db_session, monkeypatch):
+    monkeypatch.setattr(m08_policy, "DEFAULT_POLICY", replace(m08_policy.DEFAULT_POLICY, stop_pct=0.03))
+    rungs = list(limits.RUNGS)
+    rungs[1] = replace(rungs[1], sector_cap_pct=0.40)
+    monkeypatch.setattr(limits, "RUNGS", tuple(rungs))
+    detail = rules_watch.check(db_session)["detail"]
+    assert "brain stop is 3%, agreed 4%" in detail and "₹100,000 rung is 40%" in detail
+
+
+def test_it_is_part_of_the_daily_check(db_session, tmp_path):
+    from swing_trade_ml.services import brain_weekly_health as weekly
+
+    names = [c["name"] for c in weekly.compute_checks(db_session, backup_dir=str(tmp_path))["checks"]]
+    assert "Risk rules" in names

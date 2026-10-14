@@ -297,12 +297,19 @@ def compute_checks(db: Session, now: datetime | None = None, backup_dir: str | N
     run("Counted ideas", _counted_ideas, db, today)
     run("Learning and drift", check_learning, db, now)
     run("Model backup", check_backup, backup_dir, now)
+    run("Risk rules", _risk_rules, db)
 
     return {
         "status": "ok" if all(c["ok"] for c in checks) else "check",
         "generated_at": now.isoformat(),
         "checks": checks,
     }
+
+
+def _risk_rules(db: Session) -> dict:
+    from swing_trade_ml.services import rules_watch
+
+    return rules_watch.check(db)
 
 
 def _health_checks(service, db: Session, expected: date, today: date) -> list[dict]:

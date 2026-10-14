@@ -1,8 +1,10 @@
 """Zerodha Kite Connect broker — the only module that imports `kiteconnect`.
 
 Market data flows through here in both paper and live mode. Order *placement*
-is gated behind `settings.is_live_trading`, so even if this broker is somehow
-constructed while the safety latches are closed, it refuses to transmit.
+is gated behind `settings.is_live_trading`, or — for the owner's My Holdings
+orders only — `ALLOW_REAL_HOLDINGS_ORDERS` plus the reserved tag. So even if
+this broker is somehow constructed while the safety latches are closed, it
+refuses to transmit.
 """
 
 from __future__ import annotations
@@ -16,6 +18,7 @@ from sqlalchemy.orm import Session
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from swing_trade_ml.brokers.base import (
+    REAL_HOLDINGS_TAG_PREFIX,
     Broker,
     BrokerMargins,
     BrokerPosition,
@@ -386,7 +389,12 @@ class KiteBroker(Broker):
         # Belt and braces: the factory should never hand out a live broker while
         # the latches are closed, but an order that reaches the exchange cannot
         # be un-sent, so the check is repeated at the point of no return.
-        if not settings.is_live_trading:
+        # The one narrow exception: the owner's own My Holdings order, tagged
+        # by services/execution.py and only allowed while its latch is on.
+        my_holdings = settings.ALLOW_REAL_HOLDINGS_ORDERS and (request.tag or "").startswith(
+            REAL_HOLDINGS_TAG_PREFIX
+        )
+        if not (settings.is_live_trading or my_holdings):
             raise RuntimeError(
                 "Refusing to place a live order: requires TRADING_MODE=live AND "
                 "ALLOW_LIVE_TRADING=true"

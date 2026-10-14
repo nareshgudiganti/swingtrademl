@@ -17,6 +17,12 @@ from sqlalchemy.orm import Session
 
 from swing_trade_ml.core.enums import OrderStatus, OrderType, ProductType, TransactionType
 
+#: Reserved Kite order tag for the owner's hand-placed My Holdings orders.
+#: KiteBroker lets a request with this prefix through when
+#: ALLOW_REAL_HOLDINGS_ORDERS is on, so nothing else may build one
+#: (test_real_holdings_gate.py checks who uses it). Kite tags are <= 20 chars.
+REAL_HOLDINGS_TAG_PREFIX = "stmlh-"
+
 
 @dataclass(slots=True)
 class OrderRequest:

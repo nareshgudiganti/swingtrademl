@@ -715,7 +715,7 @@ def _place_real_holding_order(
                 quantity=quantity,
                 order_type=OrderType.MARKET,
                 product=ProductType.CNC,
-                tag=f"{REAL_HOLDINGS_TAG_PREFIX}{letter}-{order.id}",
+                tag=f"{REAL_HOLDINGS_TAG_PREFIX}{letter}{order.id}",
             ),
             db,
         )

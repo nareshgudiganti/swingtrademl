@@ -40,7 +40,7 @@ worth scaling.
 1. **New latch `ALLOW_REAL_HOLDINGS_ORDERS: bool = False`** in `core/config.py`, set only in prod `.env`.
 2. **Narrow gate in `KiteBroker.place_order`.** Today it refuses unless `settings.is_live_trading`.
    New rule: allow when `settings.is_live_trading` **or** (`ALLOW_REAL_HOLDINGS_ORDERS` **and**
-   `request.tag` starts with the reserved prefix `stmlh-` (`REAL_HOLDINGS_TAG_PREFIX` in `brokers/base.py`; Kite tags are max 20 chars). Only `services/real_orders.py`
+   `request.tag` starts with the reserved prefix `stmlh` (`REAL_HOLDINGS_TAG_PREFIX` in `brokers/base.py`; Kite tags are alphanumeric, max 20 chars). Only `services/real_orders.py`
    builds requests with that prefix. `get_broker()` is unchanged, so every other path still gets
    `paper_broker`.
 3. **Owner only.** Both routes use `Depends(require_owner)` (`api/deps.py`).
@@ -59,7 +59,7 @@ worth scaling.
 **Buy** — `POST /portfolio/real/buy {symbol, exchange, quantity}`
 1. `real_orders.buy()` runs the checks, then calls a new `execution.place_real_holding_buy()`.
 2. That writes an `Order` (mode=`live`, strategy=`real_trading`, BUY, MARKET, CNC, PENDING) and
-   calls `kite_broker.place_order` directly with tag `stmlh-b-<order_id>`.
+   calls `kite_broker.place_order` directly with tag `stmlhb<order_id>`.
 3. Kite returns PENDING (accepted). Rejection → Order REJECTED, message shown + Telegram.
 4. On fill (reconciliation, below) the `Position` is created in the `real_trading` book at the
    real average price with stop −4% / target +8% of the fill price (fixed, the settled trade rules), so existing alerts apply.
@@ -67,7 +67,7 @@ worth scaling.
 **Sell** — `POST /portfolio/real/positions/{id}/sell {quantity?}`
 1. Checks, then new `execution.place_real_holding_sell()`: `Order` (mode=`live`, SELL, MARKET,
    CNC, `exit_reason=MANUAL`, `position_id`) → `kite_broker.place_order`, tag
-   `stmlh-s-<order_id>`.
+   `stmlhs<order_id>`.
 2. On fill: full close or partial close via the existing finalize helpers; the Trade appears in
    the Buy and sell report. Real charges come in later through the nightly fill capture.
 
@@ -117,7 +117,7 @@ is not closed by mistake (keep that guard; add a test with an app-bought T1 hold
 ## Testing (no real Zerodha calls — Kite replaced by a recording fake)
 
 - Latch on, bot latches off: bot / brain / tester orders still go to paper; `KiteBroker.place_order`
-  refuses a request without the `stmlh-` prefix.
+  refuses a request without the `stmlh` prefix.
 - Latch off: both routes refused, Kite never called.
 - ₹10,001 buy refused; third ₹10K buy in a day refused; sell allowed regardless of money limit.
 - Sell more than held refused; non-`real_trading` position refused.

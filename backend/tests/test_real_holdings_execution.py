@@ -72,7 +72,8 @@ def test_buy_is_sent_tagged_as_live_market_cnc(db_session, kite):
     assert order.status == OrderStatus.PENDING and order.broker_order_id == "501"
     assert order.price == 1000.0
     [req] = kite.placed
-    assert req.tag == f"stmlh-b-{order.id}" and len(req.tag) <= 20
+    assert req.tag == f"stmlhb{order.id}" and len(req.tag) <= 20
+    assert req.tag.isalnum(), "Kite tags are alphanumeric only"
     assert req.price is None and req.quantity == 3
 
 
@@ -122,7 +123,7 @@ def test_a_full_sell_closes_the_holding_at_the_real_fill(db_session, kite):
     position = _holding(db_session, strategy, instrument)
 
     order = execution.place_real_holding_sell(db_session, position, 10)
-    assert kite.placed[0].tag == f"stmlh-s-{order.id}"
+    assert kite.placed[0].tag == f"stmlhs{order.id}"
     assert order.exit_reason == ExitReason.MANUAL and order.position_id == position.id
     _complete(kite, order, 112.0, 10)
 

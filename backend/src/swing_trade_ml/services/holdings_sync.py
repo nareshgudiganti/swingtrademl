@@ -14,10 +14,10 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from swing_trade_ml.core.enums import ExitReason, PositionStatus
+from swing_trade_ml.core.enums import ExitReason, OrderStatus, PositionStatus
 from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.db.models.market import Instrument
-from swing_trade_ml.db.models.trading import Position, Strategy
+from swing_trade_ml.db.models.trading import Order, Position, Strategy
 from swing_trade_ml.services.execution import manual_close_position
 
 log = get_logger(__name__)
@@ -57,6 +57,19 @@ def close_positions_no_longer_held(
     and an empty/failed load can never be mistaken for "everything was sold".
     """
     closed: list[dict[str, Any]] = []
+    # A holding with a real order still waiting at Zerodha is left alone: an
+    # app sell drops the shares from Zerodha before reconciliation records the
+    # real fill, and closing it here would book a guessed price instead.
+    # Reconciliation closes it with the real one, in the same step that marks
+    # the order finished, so there is no gap for this to fall into.
+    waiting = set(
+        db.execute(
+            select(Order.instrument_id).where(
+                Order.strategy_id == strategy.id,
+                Order.status.in_([OrderStatus.PENDING, OrderStatus.OPEN]),
+            )
+        ).scalars()
+    )
     open_positions = db.execute(
         select(Position).where(
             Position.strategy_id == strategy.id, Position.status == PositionStatus.OPEN
@@ -66,6 +79,9 @@ def close_positions_no_longer_held(
     for position in list(open_positions):
         instrument = db.get(Instrument, position.instrument_id)
         if instrument is None or instrument.tradingsymbol in held_symbols:
+            continue
+        if position.instrument_id in waiting:
+            log.info("holdings_sync.skipped_order_waiting", symbol=instrument.tradingsymbol)
             continue
         exit_price = float(position.current_price or position.entry_price)
         manual_close_position(db, position, exit_price, ExitReason.MANUAL)

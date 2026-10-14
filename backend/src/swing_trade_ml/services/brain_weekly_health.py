@@ -28,6 +28,7 @@ from swing_trade_ml.core.market_session import (
     trading_days_between,
 )
 from swing_trade_ml.db.models.brain import BrainRun, BrainWeeklyHealth
+from swing_trade_ml.ml.backup import RUN_RECORD, read_run_record
 
 log = get_logger(__name__)
 
@@ -42,6 +43,8 @@ LEARNING_MAX_AGE_DAYS = 8
 HISTORY_KEPT = 52
 # Models are backed up daily (16:30 job); a newest copy older than this means the job stopped.
 BACKUP_MAX_AGE_DAYS = 7
+# The job runs every weekday; a run record older than this (a long weekend is 3-4 days) means it stopped.
+BACKUP_RUN_MAX_AGE_DAYS = 4
 
 FEED_LABELS = {
     "delivery": "delivery",
@@ -219,8 +222,31 @@ def check_backup(backup_dir: str | None = None, now: datetime | None = None) -> 
             "Model backup", False, "No backup folder is set up, so there is no record of a backup.", "warn"
         )
     path = Path(folder)
+    record = read_run_record(path)
+    if record is not None:
+        ran = record["at"]
+        age = ((now or datetime.now(UTC)) - ran).days
+        if age > BACKUP_RUN_MAX_AGE_DAYS:
+            return _check(
+                "Model backup",
+                False,
+                f"The backup job last ran {_day(_ist_date(ran))}, {age} days ago; it may have stopped.",
+                "warn",
+            )
+        if record["missing"]:
+            return _check(
+                "Model backup",
+                False,
+                f"Backup ran {_day(_ist_date(ran))} but these model files are missing: "
+                + ", ".join(record["missing"]),
+                "warn",
+            )
+        kept = record["already_present"] + record["copied"]
+        return _check(
+            "Model backup", True, f"Backup ran {_day(_ist_date(ran))}; all {kept} model files are copied."
+        )
     try:
-        files = [f for f in path.iterdir() if f.is_file()] if path.is_dir() else []
+        files = [f for f in path.iterdir() if f.is_file() and f.name != RUN_RECORD] if path.is_dir() else []
         newest = max((f.stat().st_ctime for f in files), default=None)
     except OSError as exc:
         return _check(

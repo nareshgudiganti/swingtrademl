@@ -106,3 +106,21 @@ def test_no_destination_configured_is_a_no_op_that_says_so(db_session, tmp_path)
 
     assert result["enabled"] is False
     assert result["copied"] == 0
+
+
+def test_every_run_leaves_a_record_even_when_nothing_new_was_copied(db_session, tmp_path):
+    """Artifacts never change, so most days copy nothing. The record is how the health check
+    knows the job still ran (found on prod 2026-10-14: a false "backup may have stopped")."""
+    from swing_trade_ml.ml.backup import read_run_record
+
+    source, destination = tmp_path / "models", tmp_path / "backup"
+    source.mkdir()
+    (source / "m_v1.joblib").write_bytes(b"ok")
+    _model(db_session, "m", "v1", source / "m_v1.joblib")
+
+    backup_model_artifacts(db_session, destination=destination)
+    backup_model_artifacts(db_session, destination=destination)
+
+    record = read_run_record(destination)
+    assert record is not None
+    assert record["copied"] == 0 and record["already_present"] == 1 and record["missing"] == []

@@ -19,7 +19,9 @@ rollback impossible after exactly the failure it is meant to survive.
 
 from __future__ import annotations
 
+import json
 import shutil
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +33,30 @@ from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.db.models.ml import MLModel
 
 log = get_logger(__name__)
+
+#: Written into the backup folder after every run. Artifacts never change once written, so on a day with no
+#: training nothing is copied and the newest file stays old; this record is how the health check tells
+#: "ran today, nothing new" from "the job stopped".
+RUN_RECORD = "last-run.json"
+
+
+def write_run_record(destination: Path | str, result: dict[str, Any], at: datetime | None = None) -> None:
+    record = {
+        "at": (at or datetime.now(UTC)).isoformat(),
+        "copied": result.get("copied", 0),
+        "already_present": result.get("already_present", 0),
+        "missing": list(result.get("missing", [])),
+    }
+    (Path(destination) / RUN_RECORD).write_text(json.dumps(record), encoding="utf-8")
+
+
+def read_run_record(destination: Path | str) -> dict[str, Any] | None:
+    try:
+        record = json.loads((Path(destination) / RUN_RECORD).read_text(encoding="utf-8"))
+        record["at"] = datetime.fromisoformat(record["at"])
+        return record
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
 
 
 def registered_artifacts(db: Session) -> list[tuple[MLModel, Path | None]]:
@@ -45,9 +71,7 @@ def registered_artifacts(db: Session) -> list[tuple[MLModel, Path | None]]:
     return found
 
 
-def backup_model_artifacts(
-    db: Session, destination: Path | str | None = None
-) -> dict[str, Any]:
+def backup_model_artifacts(db: Session, destination: Path | str | None = None) -> dict[str, Any]:
     """Copy every registered artifact to `destination`, skipping ones already
     there byte-for-byte.
 
@@ -87,6 +111,7 @@ def backup_model_artifacts(
 
     if missing:
         log.error("model.backup.artifact_missing", models=missing, count=len(missing))
+    write_run_record(target, {"copied": copied, "already_present": already_present, "missing": missing})
     log.info(
         "model.backup.done",
         destination=str(target),

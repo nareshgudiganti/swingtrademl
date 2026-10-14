@@ -51,7 +51,9 @@ class Memory(BrainModule):
         version="1.0.0",
         reads=("Situation@1", "StockState@1", "MarketState@1"),
         writes=("Recall@1",),
-        budget_s=20.0,
+        # Prod nightly needs ~50 s for the whole universe (49.8 s on 2026-10-14); at 20 s its shadow
+        # recall was dropped from the trial record. It already ran to the end, so the run is no longer.
+        budget_s=90.0,
         default_mode=Mode.SHADOW,
     )
 

@@ -130,6 +130,17 @@ def test_pending_buys_count_toward_the_daily_cap(db_session, ready):
     assert real_orders.spent_today(db_session, strategy.id) == 10_000
 
 
+def test_an_open_order_with_zero_average_price_still_counts(db_session, ready):
+    """Kite reports average_price = 0 for an OPEN, unfilled order and reconcile
+    copies it; the reference price must still count toward the day."""
+    strategy, instrument = _setup(db_session)
+    order = real_orders.buy(db_session, strategy, instrument, 10)
+    order.status = OrderStatus.OPEN
+    order.average_price = 0.0
+    db_session.flush()
+    assert real_orders.spent_today(db_session, strategy.id) == 10_000
+
+
 def test_rejected_buys_do_not_use_up_the_day(db_session, ready):
     strategy, instrument = _setup(db_session)
     order = real_orders.buy(db_session, strategy, instrument, 10)

@@ -79,12 +79,16 @@ def spent_today(db: Session, strategy_id: int, now: datetime | None = None) -> f
     """Rupees of real buys placed today (IST), waiting or filled.
 
     A waiting market order has no fill price yet, so its reference price
-    counts; a refused or cancelled one does not."""
+    counts (Kite reports average_price 0 until it fills, so 0 means "none
+    yet"); a refused or cancelled one does not."""
     local = (now or datetime.now(UTC)).astimezone(IST)
     start = datetime.combine(local.date(), time(0, 0), tzinfo=IST).astimezone(UTC)
     total = db.execute(
         select(
-            func.coalesce(func.sum(Order.quantity * func.coalesce(Order.average_price, Order.price)), 0.0)
+            func.coalesce(
+                func.sum(Order.quantity * func.coalesce(func.nullif(Order.average_price, 0), Order.price)),
+                0.0,
+            )
         ).where(
             Order.strategy_id == strategy_id,
             Order.mode == TradingMode.LIVE,

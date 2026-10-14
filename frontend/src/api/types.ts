@@ -1199,7 +1199,12 @@ export interface BrainStage {
   // Scored, but not counted in `finished`. Absent on an older backend.
   finished_blocked?: number
   needed: number
+  // True only when `finished` reaches `needed` AND the forward trial's pass rule passes.
   ready: boolean
+  // The forward trial's pass rule ("too early", "pass", "behind", or "error" when it could not be worked
+  // out) and, when not passed, the plain reason. Absent on an older backend.
+  trial?: { word: string; sessions?: number; finished?: number; profit?: boolean; beats_random?: boolean }
+  trial_plain?: string | null
   history: BrainStageChange[]
 }
 

@@ -45,6 +45,46 @@ class StageRefusedError(ValueError):
     """The message is shown to the owner as-is."""
 
 
+def trial_gate(db: Session) -> dict:
+    """The forward trial's agreed pass rule (layer-2 protocol 5a), from the trial journal: sessions and
+    finished brain TRADE ideas counted from the trial's start, profit after costs, and beating every
+    stock. Its "word" is "too early", "pass" or "behind". Before 2026-10-14 the switch only counted 30
+    finished ideas over all history, so ideas from before the trial could have opened it."""
+    from swing_trade_ml.brain.trial_journal import IST, TRIAL_START, journal_for
+
+    today = datetime.now(IST).date()
+    return journal_for(db, TRIAL_START, max(today, TRIAL_START))["gate"]
+
+
+def _trial_gate_or_closed(db: Session) -> dict:
+    """A gate that cannot be worked out is a gate that stays shut."""
+    try:
+        return trial_gate(db)
+    except Exception as exc:  # noqa: BLE001 - fail closed: the switch must never open on an error
+        return {"word": "error", "error": str(exc)}
+
+
+def _trial_refusal(g: dict) -> str:
+    if g["word"] == "error":
+        return (
+            "The trial result could not be checked just now, so the brain stays in practice. "
+            "Try again later; nothing was changed."
+        )
+    yes_no = {True: "yes", False: "no"}
+    facts = (
+        f"{g.get('sessions', 0)} of 15 trial sessions, {g.get('finished', 0)} of {NEEDED_FINISHED} finished "
+        f"brain ideas since the trial started; profit after costs: {yes_no[bool(g.get('profit'))]}; "
+        f"beats buying every stock: {yes_no[bool(g.get('beats_random'))]}."
+    )
+    if g["word"] == "behind":
+        missing = [] if g.get("profit") else ["made no profit after costs"]
+        if not g.get("beats_random"):
+            missing.append("did not beat buying every stock")
+        why = " and ".join(missing) or "is behind"
+        return f"The trial is complete, but the brain {why}. {facts} It stays in practice."
+    return f"The forward trial has not passed yet: {facts} The brain stays in practice until it does."
+
+
 def _latest(db: Session) -> BrainStageChange | None:
     """Newest by insert order (id), never by changed_at: the app clock can step
     back, and an older "auto" row must never outrank a later rollback."""
@@ -74,6 +114,9 @@ def set_stage(db: Session, stage: str, by: str, reason: str) -> BrainStageChange
                 f"Only {finished} of {NEEDED_FINISHED} brain ideas have finished so far. The brain stays in "
                 f"practice until {NEEDED_FINISHED} have, so there is enough evidence to judge it."
             )
+        gate = _trial_gate_or_closed(db)
+        if gate["word"] != "pass":
+            raise StageRefusedError(_trial_refusal(gate))
     if stage == "auto" and now != "approval":
         raise StageRefusedError(
             "Automatic trading can only follow the approval stage: approve the brain's ideas by hand first."
@@ -127,6 +170,7 @@ def _settle_approvals(db: Session, stage: str, previous: str, by: str) -> None:
 def stage_overview(db: Session, history_limit: int = 20) -> dict:
     stage = current_stage(db)
     finished = finished_brain_ideas(db)
+    gate = _trial_gate_or_closed(db)
     history = db.execute(
         select(BrainStageChange).order_by(BrainStageChange.id.desc()).limit(history_limit)
     ).scalars()
@@ -136,7 +180,10 @@ def stage_overview(db: Session, history_limit: int = 20) -> dict:
         "finished": finished,
         "finished_blocked": finished_blocked_brain_ideas(db),
         "needed": NEEDED_FINISHED,
-        "ready": finished >= NEEDED_FINISHED,
+        # Ready only when both hold: the 30 finished ideas and the forward trial's pass rule.
+        "ready": finished >= NEEDED_FINISHED and gate["word"] == "pass",
+        "trial": gate,
+        "trial_plain": None if gate["word"] == "pass" else _trial_refusal(gate),
         "history": [
             {
                 "stage": h.stage,

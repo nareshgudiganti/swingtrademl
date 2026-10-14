@@ -24,6 +24,15 @@ def finished_ideas(db, n: int) -> None:
         signal(db, s, inst, DAY - timedelta(days=60 - i), outcome="TARGET_HIT", outcome_pct=0.08)
 
 
+PASSED = {"word": "pass", "sessions": 15, "finished": 30, "profit": True, "beats_random": True}
+
+
+@pytest.fixture
+def trial_passed(monkeypatch):
+    """The forward trial's pass rule is tested on its own below; these tests are about the switch."""
+    monkeypatch.setattr(stage, "trial_gate", lambda db: PASSED)
+
+
 def test_the_stage_starts_in_shadow(db_session):
     assert stage.current_stage(db_session) == "shadow"
 
@@ -35,7 +44,7 @@ def test_leaving_shadow_needs_30_finished_ideas(db_session):
     assert stage.current_stage(db_session) == "shadow"
 
 
-def test_auto_only_after_the_approval_stage(db_session):
+def test_auto_only_after_the_approval_stage(db_session, trial_passed):
     finished_ideas(db_session, 30)
     with pytest.raises(stage.StageRefusedError, match="approval stage"):
         stage.set_stage(db_session, "auto", by="owner", reason="Skip ahead")
@@ -44,7 +53,7 @@ def test_auto_only_after_the_approval_stage(db_session):
     assert stage.current_stage(db_session) == "auto"
 
 
-def test_every_change_is_recorded_with_who_when_and_why(db_session):
+def test_every_change_is_recorded_with_who_when_and_why(db_session, trial_passed):
     finished_ideas(db_session, 30)
     stage.set_stage(db_session, "approval", by="owner", reason="Enough evidence")
     stage.set_stage(db_session, "shadow", by="owner", reason="Market looks rough")
@@ -54,6 +63,54 @@ def test_every_change_is_recorded_with_who_when_and_why(db_session):
         ("shadow", "approval", "owner", "Enough evidence"),
     ]
     assert all(h["changed_at"] for h in history)
+
+
+# --- the forward-trial gate (found 2026-10-14: 30 ideas over ALL history was the only check) ----------
+
+
+def test_30_finished_ideas_alone_no_longer_leave_practice(db_session):
+    # 30 finished ideas from before the trial, and no trial session yet: the trial rule says "too early".
+    finished_ideas(db_session, 30)
+    with pytest.raises(stage.StageRefusedError, match="has not passed yet"):
+        stage.set_stage(db_session, "approval", by="owner", reason="Looks good")
+    assert stage.current_stage(db_session) == "shadow"
+    assert stage.stage_overview(db_session)["ready"] is False
+
+
+def test_a_finished_trial_that_is_behind_is_refused(db_session, monkeypatch):
+    finished_ideas(db_session, 30)
+    behind = {**PASSED, "word": "behind", "beats_random": False}
+    monkeypatch.setattr(stage, "trial_gate", lambda db: behind)
+    with pytest.raises(stage.StageRefusedError, match="did not beat buying every stock"):
+        stage.set_stage(db_session, "approval", by="owner", reason="Close enough")
+    assert stage.current_stage(db_session) == "shadow"
+
+
+def test_a_passed_trial_with_30_finished_ideas_can_leave_practice(db_session, trial_passed):
+    finished_ideas(db_session, 30)
+    assert stage.stage_overview(db_session)["ready"] is True
+    stage.set_stage(db_session, "approval", by="owner", reason="Trial passed")
+    assert stage.current_stage(db_session) == "approval"
+
+
+def test_a_trial_gate_that_cannot_be_worked_out_refuses(db_session, monkeypatch):
+    finished_ideas(db_session, 30)
+
+    def broken(db):
+        raise RuntimeError("prices missing")
+
+    monkeypatch.setattr(stage, "trial_gate", broken)
+    with pytest.raises(stage.StageRefusedError, match="could not be checked"):
+        stage.set_stage(db_session, "approval", by="owner", reason="Looks good")
+    assert stage.stage_overview(db_session)["ready"] is False
+
+
+def test_going_back_to_practice_never_needs_the_trial(db_session, trial_passed, monkeypatch):
+    finished_ideas(db_session, 30)
+    stage.set_stage(db_session, "approval", by="owner", reason="Trial passed")
+    monkeypatch.setattr(stage, "trial_gate", lambda db: {**PASSED, "word": "behind"})
+    stage.set_stage(db_session, "shadow", by="owner", reason="Back to practice")
+    assert stage.current_stage(db_session) == "shadow"
 
 
 def test_a_reason_is_required_and_the_same_stage_is_refused(db_session):

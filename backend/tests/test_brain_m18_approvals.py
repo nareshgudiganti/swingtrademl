@@ -477,6 +477,7 @@ def test_a_waiting_approval_not_bought_by_the_close_expires_with_a_plain_reason(
 
 def test_switching_back_to_shadow_expires_pending_and_waiting_ideas(fx, monkeypatch):
     monkeypatch.setattr(stage, "finished_brain_ideas", lambda db: 30)
+    monkeypatch.setattr(stage, "trial_gate", lambda db: {"word": "pass"})
     stage.set_stage(fx.db, "approval", by="owner", reason="Enough evidence")
     other = instrument(fx.db, "M18APT", 918303)
     decision(fx.db, "m18-apr", "M18APT", "TRADE")
@@ -517,6 +518,7 @@ def test_the_automatic_stage_skips_an_overruled_idea(fx):
 
 def test_switching_from_automatic_to_approval_hands_automatic_oks_back_to_the_owner(fx, monkeypatch):
     monkeypatch.setattr(stage, "finished_brain_ideas", lambda db: 30)
+    monkeypatch.setattr(stage, "trial_gate", lambda db: {"word": "pass"})
     _stage(fx.db, "approval")
     stage.set_stage(fx.db, "auto", by="owner", reason="Trust it")
     fx.clock["now"] = at(DAY, 16, 0)

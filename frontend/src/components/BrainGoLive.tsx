@@ -156,10 +156,11 @@ export function BrainStageCard() {
           <p className="stat-sub">
             {Math.min(s.finished, s.needed)} of {s.needed} brain ideas have finished.{' '}
             {s.ready
-              ? 'That is enough evidence to move on, if you choose to.'
-              : `The brain stays in practice until ${s.needed} have finished.`}{' '}
+              ? 'The forward trial has passed too. That is enough evidence to move on, if you choose to.'
+              : `The brain stays in practice until ${s.needed} have finished and the forward trial passes.`}{' '}
             Going back to practice is always allowed and takes effect at once.
           </p>
+          {!s.ready && s.trial_plain && <p className="stat-sub">{s.trial_plain}</p>}
           {s.finished_blocked !== undefined && (
             <p className="stat-sub">
               {s.finished_blocked} more finished {s.finished_blocked === 1 ? 'idea was' : 'ideas were'} stopped by the
@@ -174,8 +175,8 @@ export function BrainStageCard() {
             page.
           </p>
           <p className="stat-sub">
-            Moving to Automatic is your own call. There is no extra test beyond the {s.needed} finished ideas, and you
-            can only reach it from “Your OK needed”.
+            Moving to Automatic is your own call. There is no extra test beyond the {s.needed} finished ideas and the
+            forward trial, and you can only reach it from “Your OK needed”.
           </p>
           <div className="brain-overrule">
             <select

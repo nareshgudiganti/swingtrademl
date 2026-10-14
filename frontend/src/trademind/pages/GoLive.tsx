@@ -180,10 +180,11 @@ function StageCard() {
           <p className="tm-dim tm-gl-p">
             {Math.min(s.finished, s.needed)} of {s.needed} brain ideas have finished.{' '}
             {s.ready
-              ? 'That is enough evidence to move on, if you choose to.'
-              : `The brain stays in practice until ${s.needed} have finished.`}{' '}
+              ? 'The forward trial has passed too. That is enough evidence to move on, if you choose to.'
+              : `The brain stays in practice until ${s.needed} have finished and the forward trial passes.`}{' '}
             Going back to practice is always allowed and takes effect at once.
           </p>
+          {!s.ready && s.trial_plain && <p className="tm-dim tm-gl-p">{s.trial_plain}</p>}
           {s.finished_blocked !== undefined && (
             <p className="tm-dim tm-gl-p">
               {s.finished_blocked} more finished {s.finished_blocked === 1 ? 'idea was' : 'ideas were'} stopped by the
@@ -197,8 +198,8 @@ function StageCard() {
             stop-loss, target and time limit keep protecting them, or you can sell them yourself on the Positions page.
           </p>
           <p className="tm-dim tm-gl-p">
-            Moving to Automatic is your own call. There is no extra test beyond the {s.needed} finished ideas, and you
-            can only reach it from “Your OK needed”.
+            Moving to Automatic is your own call. There is no extra test beyond the {s.needed} finished ideas and the
+            forward trial, and you can only reach it from “Your OK needed”.
           </p>
           <div className="tm-gl-row">
             <div className="tm-seg" role="group" aria-label="New stage">

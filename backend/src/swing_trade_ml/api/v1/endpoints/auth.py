@@ -176,7 +176,8 @@ def kite_auto_login(db: DbSession, check_only: bool = False) -> dict[str, object
     }
 
 
-@router.get("/kite/session", response_model=KiteSessionResponse)
+# Needs a login: it names the owner's Zerodha client ID and name, and was public until 2026-10-14.
+@router.get("/kite/session", response_model=KiteSessionResponse, dependencies=[Depends(require_auth)])
 def kite_session(db: DbSession) -> KiteSessionResponse:
     session = db.execute(
         select(BrokerSession)

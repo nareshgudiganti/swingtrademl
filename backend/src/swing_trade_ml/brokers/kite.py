@@ -71,6 +71,19 @@ class KiteBroker(Broker):
         """Exchange a request_token for the day's access token and persist it."""
         data = self._kite.generate_session(request_token, api_secret=settings.KITE_API_SECRET)
 
+        # The callback is public (Zerodha's redirect cannot carry our credentials), so whoever logs in at
+        # Zerodha lands here. Keep only the owner's own account: anyone else's login would retire the
+        # owner's session and, in live mode, point the bot at their account (permissions review 2026-10-14).
+        # Compared without case or stray spaces: a lower-case KITE_USER_ID in .env must never lock the
+        # owner (or the 06:10 auto-login, which comes through here too) out of their own account.
+        owner_id = (settings.KITE_USER_ID or "").strip().upper()
+        if owner_id and str(data.get("user_id") or "").strip().upper() != owner_id:
+            log.warning("kite.login.refused_other_account", user_id=data.get("user_id"))
+            raise PermissionError(
+                "This Zerodha login is not the owner's Zerodha account, so it was not saved. "
+                "The bot's existing Zerodha connection is unchanged."
+            )
+
         # Retire older sessions so "the current token" is never ambiguous.
         db.query(BrokerSession).filter(BrokerSession.is_active.is_(True)).update(
             {"is_active": False}

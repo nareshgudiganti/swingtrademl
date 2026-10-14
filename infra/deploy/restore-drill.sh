@@ -25,7 +25,13 @@ if [ -z "$dump" ] || [ ! -s "$dump" ]; then
 fi
 echo "Backup:  $dump ($(du -h "$dump" | cut -f1), made $(date -r "$dump" '+%Y-%m-%d %H:%M'))"
 
-image=$(docker inspect --format '{{.Config.Image}}' "$LIVE_CONTAINER")
+# The live container's exact image (by ID, not by tag: "latest-pg17" may have been pulled again since)
+# and the exact TimescaleDB version installed in the live database. Restoring with a different
+# Timescale version fails at post_restore ("catalog version mismatch"), found on prod 2026-10-14.
+image=$(docker inspect --format '{{.Image}}' "$LIVE_CONTAINER")
+ts_version=$(docker exec "$LIVE_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -tAc \
+  "select extversion from pg_extension where extname = 'timescaledb'" | tr -d ' ')
+echo "Image:   $(docker inspect --format '{{index .RepoTags 0}}' "$image" 2>/dev/null || echo "$image"), TimescaleDB $ts_version"
 cleanup() { docker rm -f "$DRILL" >/dev/null 2>&1 || true; }
 trap cleanup EXIT
 cleanup
@@ -52,7 +58,8 @@ echo "Restoring into the throwaway container..."
 # rows back but leaves candles a plain table ("table candles is not a hypertable"), found 2026-10-14.
 in_drill() { docker exec "$DRILL" psql -U "$DB_USER" -v ON_ERROR_STOP=1 -q "$@" >/dev/null; }
 in_drill -d postgres -c "create database $DB_NAME"
-in_drill -d "$DB_NAME" -c "create extension if not exists timescaledb" -c "select timescaledb_pre_restore()"
+in_drill -d "$DB_NAME" -c "create extension if not exists timescaledb version '$ts_version'" \
+  -c "select timescaledb_pre_restore()"
 errors_file=$(mktemp)
 # "-f -" makes psql prefix each error with its line in the dump ("psql:<stdin>:LINE: ERROR: ...").
 docker exec -i "$DRILL" psql -U "$DB_USER" -d postgres -q -v ON_ERROR_STOP=0 -f - <"$dump" >/dev/null 2>"$errors_file" || true

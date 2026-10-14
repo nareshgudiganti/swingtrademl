@@ -130,7 +130,11 @@ on the droplet (same server, so it does not survive losing the droplet).
 (2026-10-14): the rows all come back, but `candles` comes back as a plain table instead of a
 TimescaleDB hypertable. Restore with Timescale's procedure instead:
 
-1. Create the database and run `create extension timescaledb; select timescaledb_pre_restore();` in it.
+1. Create the database and run `create extension timescaledb version '<X>'; select timescaledb_pre_restore();`
+   in it, where `<X>` is the TimescaleDB version of the database the dump came from (prod is 2.29.0 as of
+   2026-10-14; `select extversion from pg_extension where extname = 'timescaledb'`). A newer Timescale
+   fails at step 3 with "catalog version mismatch" (found by the first prod drill, 2026-10-14). The
+   `latest-pg17` image tag moves, so a rebuilt server may pull a newer Timescale than the backup's.
 2. Replay the dump (`psql -d postgres -f database.sql`). "role / database / extension already exists"
    errors are expected.
 3. Run `select timescaledb_post_restore();` in the database.

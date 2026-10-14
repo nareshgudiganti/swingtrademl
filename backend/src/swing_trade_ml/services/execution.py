@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
+import requests
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -704,24 +705,48 @@ def _place_real_holding_order(
     db.commit()
 
     letter = "b" if side == TransactionType.BUY else "s"
-    result = kite_broker.place_order(
-        OrderRequest(
-            tradingsymbol=instrument.tradingsymbol,
-            exchange=instrument.exchange,
-            transaction_type=side,
-            quantity=quantity,
-            order_type=OrderType.MARKET,
-            product=ProductType.CNC,
-            tag=f"{REAL_HOLDINGS_TAG_PREFIX}{letter}-{order.id}",
-        ),
-        db,
-    )
+    word = "BUY" if side == TransactionType.BUY else "SELL"
+    try:
+        result = kite_broker.place_order(
+            OrderRequest(
+                tradingsymbol=instrument.tradingsymbol,
+                exchange=instrument.exchange,
+                transaction_type=side,
+                quantity=quantity,
+                order_type=OrderType.MARKET,
+                product=ProductType.CNC,
+                tag=f"{REAL_HOLDINGS_TAG_PREFIX}{letter}-{order.id}",
+            ),
+            db,
+        )
+    except Exception as exc:
+        # place_order raises (not REJECTED) for a closed latch, a missing or
+        # dead session and network trouble. Without this the row would stay
+        # PENDING with no broker id, which reconciliation never looks at.
+        if isinstance(exc, (requests.exceptions.Timeout, requests.exceptions.ConnectionError)):
+            message = (
+                "Zerodha did not answer, so we cannot tell if this order was placed. "
+                "Check the Kite app before trying again."
+            )
+        else:
+            message = f"Not sent to Zerodha: {exc}"
+        order.status = OrderStatus.REJECTED
+        order.status_message = message
+        db.commit()
+        notifier.send_sync(
+            f"⚠️ <b>Real {word} refused · {instrument.tradingsymbol}</b>\n{message}",
+            "error",
+        )
+        log.error(
+            "execution.real_holding.send_failed",
+            symbol=instrument.tradingsymbol, side=word, qty=quantity, error=str(exc),
+        )
+        raise
     order.broker_order_id = result.broker_order_id
     order.status = result.status
     order.status_message = result.message
     db.commit()
 
-    word = "BUY" if side == TransactionType.BUY else "SELL"
     if result.status == OrderStatus.REJECTED:
         notifier.send_sync(
             f"⚠️ <b>Real {word} refused by Zerodha · {instrument.tradingsymbol}</b>\n"

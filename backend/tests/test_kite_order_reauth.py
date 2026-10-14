@@ -153,3 +153,17 @@ def test_limit_orders_carry_no_market_protection(live_broker):
     broker.place_order(request, db=None)
 
     assert broker._kite.kwargs["market_protection"] is None
+
+
+def test_kites_intermediate_order_statuses_count_as_still_open(live_broker):
+    broker, _ = live_broker
+
+    class _History:
+        def order_history(self, order_id):
+            return [{"status": "OPEN PENDING", "filled_quantity": 0}]
+
+    broker._kite = _History()
+
+    result = broker.get_order_status("1", db=None)
+
+    assert result.status == OrderStatus.OPEN

@@ -164,3 +164,47 @@ def test_paper_bot_orders_are_not_sent_to_kite_by_the_second_pass(db_session, ki
     execution.reconcile_pending_orders(db_session)
 
     assert "777" not in asked
+
+
+def test_a_failed_send_ends_rejected_and_still_raises(db_session, kite, monkeypatch):
+    strategy, instrument = _setup(db_session, "ZZRHFAIL", 881_005)
+
+    def boom(request, db):
+        raise RuntimeError("latch is off")
+
+    monkeypatch.setattr(kite_broker, "place_order", boom)
+
+    with pytest.raises(RuntimeError):
+        execution.place_real_holding_buy(db_session, strategy, instrument, 3, 1000.0)
+
+    order = db_session.execute(select(Order).where(Order.strategy_id == strategy.id)).scalar_one()
+    assert order.status == OrderStatus.REJECTED
+    assert "Not sent to Zerodha" in order.status_message
+
+
+def test_a_timeout_says_to_check_the_kite_app(db_session, kite, monkeypatch):
+    import requests
+
+    strategy, instrument = _setup(db_session, "ZZRHTMO", 881_006)
+
+    def slow(request, db):
+        raise requests.exceptions.Timeout("slow")
+
+    monkeypatch.setattr(kite_broker, "place_order", slow)
+
+    with pytest.raises(requests.exceptions.Timeout):
+        execution.place_real_holding_buy(db_session, strategy, instrument, 3, 1000.0)
+
+    order = db_session.execute(select(Order).where(Order.strategy_id == strategy.id)).scalar_one()
+    assert order.status == OrderStatus.REJECTED
+    assert "Check the Kite app" in order.status_message
+
+
+def test_no_kite_session_leaves_real_orders_waiting(db_session, kite, monkeypatch):
+    strategy, instrument = _setup(db_session, "ZZRHNOSES", 881_007)
+    order = execution.place_real_holding_buy(db_session, strategy, instrument, 3, 1000.0)
+    monkeypatch.setattr(kite_broker, "load_session", lambda db: False)
+
+    execution.reconcile_pending_orders(db_session)
+
+    assert db_session.get(Order, order.id).status == OrderStatus.PENDING

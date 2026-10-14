@@ -460,9 +460,16 @@ class KiteBroker(Broker):
             return None
 
         latest = history[-1]
+        # Kite reports intermediate states ("OPEN PENDING", "TRIGGER PENDING",
+        # "VALIDATION PENDING", ...) that are not in OrderStatus. They all mean
+        # "still waiting", so treat them as OPEN rather than crash.
+        try:
+            status = OrderStatus(latest.get("status", "PENDING"))
+        except ValueError:
+            status = OrderStatus.OPEN
         return OrderResult(
             broker_order_id=broker_order_id,
-            status=OrderStatus(latest.get("status", "PENDING")),
+            status=status,
             filled_quantity=latest.get("filled_quantity", 0) or 0,
             average_price=latest.get("average_price"),
             message=latest.get("status_message"),

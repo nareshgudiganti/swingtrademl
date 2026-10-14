@@ -1,0 +1,35 @@
+name: Restore drill
+
+# A button (Actions -> Restore drill -> Run workflow) that proves the newest database backup on the
+# droplet can be restored. Runs infra/deploy/restore-drill.sh over the same SSH key the deploy uses:
+# it restores into a throwaway container, compares row counts with the live database (read-only),
+# and removes the container. It never writes to the live database and never touches trading.
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: restore-drill
+  cancel-in-progress: false
+
+jobs:
+  drill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Run the restore drill on the droplet
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          command_timeout: 35m
+          script: |
+            set -e
+            # Market hours (IST, weekdays 09:00-16:30) are for the trial; the drill uses disk and CPU.
+            now=$(TZ=Asia/Kolkata date +%H%M); day=$(TZ=Asia/Kolkata date +%u)
+            if [ "$day" -le 5 ] && [ "$now" -ge 0900 ] && [ "$now" -lt 1630 ]; then
+              echo "Market hours in India: run the drill after 16:30 IST or before 09:00." >&2
+              exit 1
+            fi
+            df -h /
+            bash /root/app/infra/deploy/restore-drill.sh

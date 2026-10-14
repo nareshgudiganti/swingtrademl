@@ -69,9 +69,7 @@ def _trial(db: Session, day: date) -> dict:
     if day < TRIAL_START:
         return {"start": TRIAL_START.isoformat(), "sessions": 0, "gate": {"word": "not started"}}
     j = journal_for(db, TRIAL_START, day)
-    sets = {
-        name: {f: (j["summaries"].get(name) or {}).get(f) for f in SET_FIELDS} for name in TRIAL_SETS
-    }
+    sets = {name: {f: (j["summaries"].get(name) or {}).get(f) for f in SET_FIELDS} for name in TRIAL_SETS}
     return {
         "start": TRIAL_START.isoformat(),
         "sessions": j["sessions"],
@@ -79,6 +77,79 @@ def _trial(db: Session, day: date) -> dict:
         "sets": sets,
         "nifty": j["summaries"].get("nifty"),
     }
+
+
+def check_ideas_reached_counter(db: Session, day: date) -> dict | None:
+    """Did today's brain ideas land in the practice record (the "N of 30" counter)? Uses the brain
+    strategy's own to_signal, so "expected" is exactly what it turns into a recorded BUY. A day the brain
+    named nothing is shown (info), never a failure on its own: idea_watch fails 3 such days in a row."""
+    from swing_trade_ml.core.config import settings
+    from swing_trade_ml.core.enums import SignalType
+    from swing_trade_ml.services import brain_weekly_health as weekly
+    from swing_trade_ml.services.brain_golive import compare
+    from swing_trade_ml.services.brain_golive.stage import current_stage
+    from swing_trade_ml.strategies import brain as brain_strategy
+
+    run, decisions = brain_strategy.todays_decisions(db, day, settings.TRADING_MODE)
+    if run is None:
+        return None  # no nightly run today: "Nightly run" already fails
+    practice = current_stage(db) not in ("approval", "auto")
+    said = sum(
+        brain_strategy.to_signal(d, run, d.entry_high or 1.0, practice=practice).signal == SignalType.BUY
+        for d in decisions.values()
+    )
+    rows, _ = compare.load(db, since=day)
+    counted = [r for r in compare.one_per_day(rows) if r.is_brain and r.day == day]
+    blocked = sum(r.blocked for r in counted)
+    name = "Ideas reached the counter"
+    if said == 0:
+        return weekly._check(name, True, "Zero-idea day: today's run named no idea to record.", "info")
+    if not counted:
+        detail = (
+            f'Today\'s run named {said} idea(s) but none reached the practice record (the "N of 30" '
+            "counter). The link from the brain to the record is broken; this is how 4-9 Oct went unseen."
+        )
+        return weekly._check(name, False, detail)
+    detail = f"{len(counted)} of {said} idea(s) from today's run were recorded ({blocked} blocked by limits)."
+    if len(counted) < said:
+        detail += " The rest are stocks outside the brain strategy's watchlist."
+    return weekly._check(name, True, detail)
+
+
+# The intraday job fires every 15 minutes from 09:00 to 15:45 IST: 28 runs on a full trading day. Fewer
+# than half means the job was mostly not running (a busy lock skips one now and then, never half).
+INTRADAY_RUNS_FULL_DAY = 28
+INTRADAY_RUNS_MIN = INTRADAY_RUNS_FULL_DAY // 2
+
+
+def check_intraday_runs(intraday: dict) -> dict:
+    from swing_trade_ml.services import brain_weekly_health as weekly
+
+    runs, failed = intraday.get("runs", 0), intraday.get("failed", 0)
+    name = "Intraday runs"
+    if runs == 0:
+        return weekly._check(name, False, "No intraday brain run today; the 15-minute job did not run.")
+    if failed:
+        return weekly._check(name, False, f"{failed} of {runs} intraday brain runs failed today.")
+    if runs < INTRADAY_RUNS_MIN:
+        detail = f"Only {runs} of about {INTRADAY_RUNS_FULL_DAY} intraday brain runs today."
+        return weekly._check(name, False, detail, "warn")
+    return weekly._check(name, True, f"{runs} intraday brain runs today, none failed.")
+
+
+def check_stale_stocks(run: BrainRun | None) -> dict | None:
+    """Stocks behind on prices. The market can still count as fresh with up to a fifth of them stale
+    (M01), so "Data freshness" stays green; this names them so a quiet gap is seen the same day."""
+    from swing_trade_ml.services import brain_weekly_health as weekly
+
+    if run is None:
+        return None
+    stale = list((run.quality or {}).get("stale") or [])
+    if not stale:
+        return weekly._check("Stale stocks", True, "Every stock's prices are up to date.")
+    shown = ", ".join(stale[:5]) + (f" and {len(stale) - 5} more" if len(stale) > 5 else "")
+    detail = f"{len(stale)} stock(s) behind on prices; the brain treats their data as unreliable: {shown}."
+    return weekly._check("Stale stocks", False, detail, "warn")
 
 
 def compute(db: Session, now: datetime | None = None, backup_dir: str | None = None) -> dict:
@@ -98,6 +169,18 @@ def compute(db: Session, now: datetime | None = None, backup_dir: str | None = N
         except Exception as exc:  # noqa: BLE001 - one bad part must not hide the rest
             why = f"Could not check ({exc.__class__.__name__})."
             checks.append(weekly._check(key.capitalize(), False, why))
+    if out["intraday"]:
+        checks.append(check_intraday_runs(out["intraday"]))
+    for label, fn in (
+        ("Ideas reached the counter", lambda: check_ideas_reached_counter(db, day)),
+        ("Stale stocks", lambda: check_stale_stocks(run)),
+    ):
+        try:
+            found = fn()
+        except Exception as exc:  # noqa: BLE001 - one bad part must not hide the rest
+            found = weekly._check(label, False, f"Could not check ({exc.__class__.__name__}).")
+        if found is not None:
+            checks.append(found)
     dropped = out["intraday"].get("dropped")
     if dropped:
         listed = "; ".join(f"{d['module']}: {d['reason']} ({d['runs']} runs)" for d in dropped)

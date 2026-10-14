@@ -1,0 +1,54 @@
+name: Daily check watch
+
+# The brain's 16:20 IST daily check (services/brain_daily_check.py) messages the owner on Telegram when
+# something fails. If the check itself never runs (worker stuck, job crashed before storing), nothing on the
+# server speaks. This runs once on weekday evenings from OUTSIDE the server and messages when no daily-check
+# record exists for today's trading day. Holidays are skipped by asking the app's own market calendar.
+# Tracker task tv3, 2026-10-14. Needs TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID; without an API_KEY
+# repository secret (the owner adds it) it does nothing.
+on:
+  schedule:
+    - cron: "45 11 * * 1-5" # 17:15 IST; GitHub may start it 5-20 minutes late, which is fine here
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Look for today's daily check
+        id: check
+        env:
+          BASE: https://swingtrademl.com/api/v1
+          API_KEY: ${{ secrets.API_KEY }}
+        run: |
+          if [ -z "$API_KEY" ]; then echo "::notice::No API_KEY repository secret; add it to turn this watch on."; exit 0; fi
+          today=$(TZ=Asia/Kolkata date +%F)
+          session=$(curl -s -m 30 -H "X-API-Key: $API_KEY" "$BASE/market/session" || true)
+          closed=$(echo "$session" | jq -r '.last_closed_trading_day // empty' 2>/dev/null || true)
+          if [ -z "$closed" ]; then
+            echo "problem=The app did not answer, so today's daily brain check could not be confirmed (the uptime alarm covers a site that is down)." >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "$closed" != "$today" ]; then echo "Not a trading day ($today); nothing to check."; exit 0; fi
+          latest=$(curl -s -m 30 -H "X-API-Key: $API_KEY" "$BASE/brain/daily-checks/latest" || true)
+          day=$(echo "$latest" | jq -r '.day // empty' 2>/dev/null || true)
+          if [ "$day" = "$today" ]; then
+            echo "Daily check stored for $today (status $(echo "$latest" | jq -r .status))."
+          else
+            echo "problem=No daily brain check was stored for today (latest is ${day:-none}). The 16:20 job did not run or crashed, so nothing on the server could tell you about other problems today." >>"$GITHUB_OUTPUT"
+          fi
+
+      - name: Message on Telegram
+        if: steps.check.outputs.problem != ''
+        env:
+          TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
+          PROBLEM: ${{ steps.check.outputs.problem }}
+        run: |
+          text=$(printf '🟠 Brain daily check missing (%s)\n%s' "$(TZ=Asia/Kolkata date '+%d %b')" "$PROBLEM")
+          curl -s -m 20 -o /dev/null -w 'telegram %{http_code}\n' "https://api.telegram.org/bot${TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${CHAT}" --data-urlencode "text=${text}"
+          exit 1

@@ -120,3 +120,22 @@ git push origin HEAD:main
 
 Do not force-push `main`. It would skip the tested path and can silently drop
 whatever else landed since.
+
+## Database backups and restoring
+
+Every deploy saves `pg_dumpall` output to `/root/backups/release-<time>-<sha>/database.sql`
+on the droplet (same server, so it does not survive losing the droplet).
+
+**A plain replay of that file is not a correct restore.** Found in the first restore drill
+(2026-10-14): the rows all come back, but `candles` comes back as a plain table instead of a
+TimescaleDB hypertable. Restore with Timescale's procedure instead:
+
+1. Create the database and run `create extension timescaledb; select timescaledb_pre_restore();` in it.
+2. Replay the dump (`psql -d postgres -f database.sql`). "role / database / extension already exists"
+   errors are expected.
+3. Run `select timescaledb_post_restore();` in the database.
+
+`infra/deploy/restore-drill.sh` does exactly this in a throwaway container and compares row counts
+with the live database (read-only), then removes the container. Run it on the droplet outside market
+hours: `bash /root/app/infra/deploy/restore-drill.sh`. It needs free disk space of about twice the
+database size. The last result is written to `/root/backups/restore-drill-last.txt`.

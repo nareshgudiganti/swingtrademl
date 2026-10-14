@@ -1242,3 +1242,22 @@ export interface MarketSession {
   last_closed_trading_day: string
   calendar_warning: string | null
 }
+
+export interface RealOrdersStatus {
+  enabled: boolean
+  max_order_inr: number
+  max_day_inr: number
+  spent_today_inr: number
+  market_open: boolean
+  market_text: string
+  waiting: { symbol: string; side: 'BUY' | 'SELL'; quantity: number; placed_at: string | null }[]
+}
+
+export interface RealOrder {
+  order_id: number
+  symbol: string
+  side: 'BUY' | 'SELL'
+  quantity: number
+  status: string
+  message: string | null
+}

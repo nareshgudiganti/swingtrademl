@@ -315,7 +315,10 @@ function HoldingsTab() {
       queryClient.invalidateQueries({ queryKey: ['strategies'] })
       queryClient.invalidateQueries({ queryKey: ['holdings'] })
       const n = (s: string) => data.filter((r) => r.status === s).length
-      setNotice(`Copied ${n('imported')} new · already in the list ${n('already_tracked')} · skipped ${n('skipped')}`)
+      setNotice(
+        `Copied ${n('imported')} new · already in the list ${n('already_tracked')} · skipped ${n('skipped')}` +
+          (n('order_waiting') > 0 ? ` · waiting at Zerodha ${n('order_waiting')}` : ''),
+      )
     },
   })
 
@@ -488,7 +491,12 @@ function HoldingsTab() {
                             Sell real
                           </button>
                         )}
-                        <button className="tm-btn tm-btn-ghost" onClick={() => setSold(p)} disabled={manualClose.isPending}>
+                        <button
+                          className="tm-btn tm-btn-ghost"
+                          onClick={() => setSold(p)}
+                          disabled={manualClose.isPending || waitingSymbols.has(p.symbol)}
+                          title={waitingSymbols.has(p.symbol) ? 'An order is still waiting at Zerodha' : undefined}
+                        >
                           I sold this
                         </button>
                       </div>

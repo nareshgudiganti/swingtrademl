@@ -133,3 +133,33 @@ def test_failed_send_is_a_502_and_the_order_is_rejected(client, ready, monkeypat
     db_session.expire_all()
     orders = db_session.execute(select(Order)).scalars().all()
     assert len(orders) == 1 and orders[0].status == OrderStatus.REJECTED
+
+
+def test_import_skips_a_stock_with_a_real_order_still_waiting(client, ready, db_session, monkeypatch):
+    """An app buy that filled at Zerodha but is not reconciled yet already shows
+    in Kite holdings. Importing it would create a holding for N, and the later
+    reconcile would add the fill on top — 2N."""
+    from swing_trade_ml.api.v1.endpoints import portfolio as portfolio_api
+
+    r = client.post("/api/v1/portfolio/real/buy", json={"symbol": "ZZAPI", "quantity": 4}, headers=HEADERS)
+    assert r.status_code == 201, r.text
+    monkeypatch.setattr(
+        portfolio_api,
+        "_load_kite_holdings",
+        lambda db: [
+            {
+                "tradingsymbol": "ZZAPI",
+                "exchange": "NSE",
+                "quantity": 0,
+                "t1_quantity": 4,
+                "average_price": 500.0,
+                "last_price": 500.0,
+            }
+        ],
+    )
+    rows = client.post("/api/v1/portfolio/positions/import-holdings", headers=HEADERS).json()
+    zz = [row for row in rows if row["symbol"] == "ZZAPI"]
+    assert zz and zz[0]["status"] == "order_waiting", rows
+    assert "still waiting at Zerodha" in zz[0]["reason"]
+    db_session.expire_all()
+    assert db_session.execute(select(Position)).scalars().all() == []

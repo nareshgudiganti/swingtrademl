@@ -15,7 +15,13 @@ from swing_trade_ml.api.deps import DbSession, PlanAccessDep, require_owner
 from swing_trade_ml.brokers import get_broker
 from swing_trade_ml.core import market_session
 from swing_trade_ml.core.config import settings
-from swing_trade_ml.core.enums import ExitReason, PositionStatus, SignalType, TradingMode
+from swing_trade_ml.core.enums import (
+    ExitReason,
+    OrderStatus,
+    PositionStatus,
+    SignalType,
+    TradingMode,
+)
 from swing_trade_ml.core.strategy_policy import is_staged
 from swing_trade_ml.db.models.market import Candle, Instrument
 from swing_trade_ml.db.models.trading import Order, Position, Signal, Strategy, Trade
@@ -503,6 +509,17 @@ def import_real_holdings(db: DbSession, strategy_id: int | None = None) -> list[
             )
         ).scalars()
     }
+    # A real app order still waiting on a stock (e.g. a buy that filled after
+    # 15:29 and is reconciled next morning) already shows in Kite holdings.
+    # Importing it would track N shares, then reconcile adds the fill: 2N.
+    order_waiting = set(
+        db.execute(
+            select(Order.instrument_id).where(
+                Order.strategy_id == strategy.id,
+                Order.status.in_([OrderStatus.PENDING, OrderStatus.OPEN]),
+            )
+        ).scalars()
+    )
     for h in kite_holdings:
         held_quantity = _held_quantity(h)
         if held_quantity == 0:
@@ -546,6 +563,15 @@ def import_real_holdings(db: DbSession, strategy_id: int | None = None) -> list[
             continue
         if instrument.id in already_tracked:
             results.append({"symbol": h["tradingsymbol"], "status": "already_tracked"})
+            continue
+        if instrument.id in order_waiting:
+            results.append(
+                {
+                    "symbol": h["tradingsymbol"],
+                    "status": "order_waiting",
+                    "reason": "a real order for this stock is still waiting at Zerodha",
+                }
+            )
             continue
 
         # Anchor risk levels to what the stock trades at now, not to what it

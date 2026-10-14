@@ -1496,18 +1496,26 @@ def reconcile_pending_orders(db: Session) -> dict[str, int]:
     broker = get_broker()
     counts = {"checked": 0, "filled": 0, "failed": 0, "unchanged": 0}
     _reconcile_orders(db, broker, _waiting_orders(db, broker.mode), counts)
+    # The bot's own pass is kept even if the real-holdings pass below fails.
+    db.commit()
 
     if broker.mode != TradingMode.LIVE:
-        real = _waiting_real_holding_orders(db)
-        if real:
-            from swing_trade_ml.brokers.kite import kite_broker
+        try:
+            real = _waiting_real_holding_orders(db)
+            if real:
+                from swing_trade_ml.brokers.kite import kite_broker
 
-            if kite_broker.load_session(db):
-                _reconcile_orders(db, kite_broker, real, counts)
-            else:
-                log.warning("execution.reconcile.real_holdings_no_session", waiting=len(real))
+                if kite_broker.load_session(db):
+                    _reconcile_orders(db, kite_broker, real, counts)
+                else:
+                    log.warning("execution.reconcile.real_holdings_no_session", waiting=len(real))
+            db.commit()
+        except Exception:
+            # Drop only this pass's unsaved half-done work; an order it did not
+            # finish stays waiting and is checked again next tick.
+            log.exception("execution.reconcile.real_holdings_failed")
+            db.rollback()
 
-    db.commit()
     log.info("execution.reconcile.done", **counts)
     return counts
 
@@ -1566,8 +1574,25 @@ def _reconcile_orders(db: Session, broker, orders: list[Order], counts: dict[str
             _finish_reconciled_order(db, order, result)
             counts["filled"] += 1
         elif result.status in (OrderStatus.REJECTED, OrderStatus.CANCELLED):
-            _fail_reconciled_order(db, order, result)
-            counts["failed"] += 1
+            if result.filled_quantity and result.average_price:
+                # Some shares went through before the rest were cancelled:
+                # those are real and must be recorded, not dropped.
+                order.filled_at = order.filled_at or datetime.now(UTC)
+                _finish_reconciled_order(db, order, result)
+                notifier.send_sync(
+                    f"{_symbol_for(db, order)}: {result.filled_quantity} of {order.quantity} "
+                    "shares went through; the rest were cancelled.",
+                    "fill",
+                )
+                counts["filled"] += 1
+            else:
+                _fail_reconciled_order(db, order, result)
+                counts["failed"] += 1
+
+
+def _symbol_for(db: Session, order: Order) -> str:
+    instrument = db.get(Instrument, order.instrument_id)
+    return instrument.tradingsymbol if instrument is not None else f"instrument {order.instrument_id}"
 
 
 def _finish_reconciled_order(db: Session, order: Order, result: OrderResult) -> None:
@@ -1743,7 +1768,7 @@ def _fail_reconciled_order(db: Session, order: Order, result: OrderResult) -> No
         order_id=order.id, status=str(result.status), message=result.message,
     )
     notifier.send_sync(
-        f"⚠️ <b>Order {result.status}</b> — instrument {order.instrument_id}, "
+        f"⚠️ <b>Order {result.status}</b> — {_symbol_for(db, order)}, "
         f"order {order.id}\n{result.message or 'No reason given.'}",
         "error",
     )

@@ -208,3 +208,108 @@ def test_no_kite_session_leaves_real_orders_waiting(db_session, kite, monkeypatc
     execution.reconcile_pending_orders(db_session)
 
     assert db_session.get(Order, order.id).status == OrderStatus.PENDING
+
+
+def _cancelled_after(kite, order, filled, price):
+    kite.status[order.broker_order_id] = OrderResult(
+        broker_order_id=order.broker_order_id, status=OrderStatus.CANCELLED,
+        filled_quantity=filled, average_price=price, message="Cancelled by exchange",
+    )
+
+
+def _record_messages(monkeypatch) -> list[str]:
+    sent: list[str] = []
+    monkeypatch.setattr(execution.notifier, "send_sync", lambda text, *a, **k: sent.append(text) or True)
+    return sent
+
+
+def test_a_partly_filled_then_cancelled_buy_keeps_the_filled_shares(db_session, kite, monkeypatch):
+    messages = _record_messages(monkeypatch)
+    strategy, instrument = _setup(db_session, "ZZRHPBUY", 881_010)
+    order = execution.place_real_holding_buy(db_session, strategy, instrument, 5, 1000.0)
+    _cancelled_after(kite, order, 2, 995.0)
+
+    counts = execution.reconcile_pending_orders(db_session)
+
+    position = db_session.execute(
+        select(Position).where(Position.strategy_id == strategy.id)
+    ).scalar_one()
+    assert position.status == PositionStatus.OPEN and position.quantity == 2
+    assert position.entry_price == 995.0
+    assert counts["filled"] == 1 and counts["failed"] == 0
+    assert any("ZZRHPBUY: 2 of 5 shares went through; the rest were cancelled." in m for m in messages)
+
+
+def test_a_partly_filled_then_cancelled_sell_shrinks_the_holding(db_session, kite, monkeypatch):
+    messages = _record_messages(monkeypatch)
+    strategy, instrument = _setup(db_session, "ZZRHPSELL", 881_011)
+    position = _holding(db_session, strategy, instrument, qty=10)
+    order = execution.place_real_holding_sell(db_session, position, 6)
+    _cancelled_after(kite, order, 4, 111.0)
+
+    execution.reconcile_pending_orders(db_session)
+
+    db_session.refresh(position)
+    assert position.status == PositionStatus.OPEN and position.quantity == 6
+    assert position.exit_in_progress_at is None
+    trade = db_session.execute(select(Trade).where(Trade.position_id == position.id)).scalar_one()
+    assert trade.quantity == 4 and trade.exit_price == 111.0
+    assert any("ZZRHPSELL: 4 of 6 shares went through; the rest were cancelled." in m for m in messages)
+
+
+def test_a_failed_order_alert_names_the_stock(db_session, kite, monkeypatch):
+    messages = _record_messages(monkeypatch)
+    strategy, instrument = _setup(db_session, "ZZRHNAME", 881_012)
+    order = execution.place_real_holding_buy(db_session, strategy, instrument, 3, 1000.0)
+    kite.status[order.broker_order_id] = OrderResult(
+        broker_order_id=order.broker_order_id, status=OrderStatus.REJECTED, message="Insufficient funds"
+    )
+
+    execution.reconcile_pending_orders(db_session)
+
+    assert any("ZZRHNAME" in m and "Insufficient funds" in m for m in messages)
+    assert not any("instrument " in m for m in messages)
+
+
+def test_a_crash_in_the_real_holdings_pass_keeps_the_first_pass(db_session, kite, monkeypatch):
+    """The bot's own pass is committed before the real-holdings pass runs, and
+    a failure in the second pass is logged, not raised."""
+    strategy, instrument = _setup(db_session, "ZZRHCRASH", 881_013)
+    bot = Strategy(
+        name="zz_bot2", strategy_type="ml_swing", mode="paper", execution_mode="auto", is_active=True
+    )
+    db_session.add(bot)
+    db_session.flush()
+    paper_order = Order(
+        strategy_id=bot.id, instrument_id=instrument.id, mode="paper", transaction_type="BUY",
+        quantity=1, status=OrderStatus.PENDING, broker_order_id="P-1", placed_at=datetime.now(UTC),
+    )
+    db_session.add(paper_order)
+    db_session.flush()
+    execution.place_real_holding_buy(db_session, strategy, instrument, 3, 1000.0)
+
+    class FakePaper:
+        mode = "paper"
+
+        def get_order_status(self, oid, db):
+            return OrderResult(broker_order_id=oid, status=OrderStatus.REJECTED, message="nope")
+
+    monkeypatch.setattr(execution, "get_broker", lambda: FakePaper())
+    commits: list[int] = []
+    real_commit = db_session.commit
+    monkeypatch.setattr(db_session, "commit", lambda: (commits.append(1), real_commit())[1])
+    # The test's whole transaction would go with a real rollback; record it instead.
+    rollbacks: list[int] = []
+    monkeypatch.setattr(db_session, "rollback", lambda: rollbacks.append(1))
+
+    def boom(oid, db):
+        raise RuntimeError("kite exploded")
+
+    monkeypatch.setattr(kite_broker, "get_order_status", boom)
+
+    counts = execution.reconcile_pending_orders(db_session)
+
+    assert counts["failed"] == 1
+    assert commits and rollbacks == [1], "first pass committed, the failed second pass rolled back"
+    db_session.expire_all()
+    assert db_session.get(Order, paper_order.id).status == OrderStatus.REJECTED

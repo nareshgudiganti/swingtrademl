@@ -1,6 +1,7 @@
 // Thin fetch wrapper around the FastAPI backend.
 
 import type {
+  RealAccount,
   RealOrder,
   RealOrdersStatus,
   BrainAlertPreview,
@@ -323,6 +324,8 @@ export const api = {
     post<Trade>(`/portfolio/positions/${id}/manual-close`, { exit_price: exitPrice }),
   // REAL orders to Zerodha for My Holdings — owner only, refused by the
   // server unless the real-orders switch is on and the limits allow it.
+  // Whole Zerodha account at a glance — live, read-only.
+  realAccount: () => get<RealAccount>('/portfolio/real/account'),
   realOrdersStatus: () => get<RealOrdersStatus>('/portfolio/real/orders-status'),
   realQuote: (symbol: string) =>
     get<{ symbol: string; exchange: string; price: number }>(

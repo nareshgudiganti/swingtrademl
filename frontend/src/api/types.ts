@@ -1253,6 +1253,17 @@ export interface RealOrdersStatus {
   waiting: { symbol: string; side: 'BUY' | 'SELL'; quantity: number; placed_at: string | null }[]
 }
 
+export interface RealAccount {
+  cash_available: number
+  invested: number
+  current_value: number
+  total_pnl: number
+  total_pnl_pct: number | null
+  day_pnl: number
+  account_value: number
+  stocks: number
+}
+
 export interface RealOrder {
   order_id: number
   symbol: string

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api } from '../../api/client'
-import type { DetailedPosition, RealOrder, RealOrdersStatus, RealReport } from '../../api/types'
+import type { DetailedPosition, RealAccount, RealOrder, RealOrdersStatus, RealReport } from '../../api/types'
 import { Confirm } from '../Confirm'
 import ScoreTrail from '../ScoreTrail'
 import { Card, PageHead, Tabs, Tag, inr, signed, toneClass } from '../ui'
@@ -257,6 +257,52 @@ function SellRealDialog({
   )
 }
 
+// Zerodha's own dashboard numbers for the whole account: cash, what the
+// shares cost and are worth, today's move, and the total. Read-only.
+function AccountCard() {
+  const account = useQuery({ queryKey: ['realAccount'], queryFn: api.realAccount, retry: false, refetchInterval: 60_000 })
+  const a: RealAccount | undefined = account.data
+  return (
+    <Card title="Your Zerodha account" sub="Live from Zerodha, for every share in your account. Read-only.">
+      {account.isLoading && <p className="tm-dim">Asking Zerodha…</p>}
+      {account.isError && (
+        <p className="tm-dim">Could not reach Zerodha just now ({(account.error as Error).message}).</p>
+      )}
+      {a && (
+        <div className="tm-rows">
+          <div className="tm-row">
+            <span className="tm-dim">Cash available</span>
+            <span className="tm-strong">{rupees(a.cash_available)}</span>
+          </div>
+          <div className="tm-row">
+            <span className="tm-dim">Invested ({a.stocks} {a.stocks === 1 ? 'stock' : 'stocks'})</span>
+            <span className="tm-strong">{rupees(a.invested)}</span>
+          </div>
+          <div className="tm-row">
+            <span className="tm-dim">Current value</span>
+            <span className="tm-strong">{rupees(a.current_value)}</span>
+          </div>
+          <div className="tm-row">
+            <span className="tm-dim">Total gain or loss</span>
+            <span className={`tm-strong ${toneClass(a.total_pnl)}`}>
+              {signedRupees(a.total_pnl)}
+              {a.total_pnl_pct != null ? ` (${signed(a.total_pnl_pct * 100)})` : ''}
+            </span>
+          </div>
+          <div className="tm-row">
+            <span className="tm-dim">Today's gain or loss</span>
+            <span className={`tm-strong ${toneClass(a.day_pnl)}`}>{signedRupees(a.day_pnl)}</span>
+          </div>
+          <div className="tm-row">
+            <span className="tm-dim">Total account value (cash + shares)</span>
+            <span className="tm-strong">{rupees(a.account_value)}</span>
+          </div>
+        </div>
+      )}
+    </Card>
+  )
+}
+
 function HoldingsTab() {
   const queryClient = useQueryClient()
   const [sold, setSold] = useState<DetailedPosition | null>(null)
@@ -346,6 +392,8 @@ function HoldingsTab() {
 
   return (
     <>
+      <AccountCard />
+
       <Card
         title="Shares you bought yourself"
         sub={

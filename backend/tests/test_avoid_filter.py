@@ -61,10 +61,10 @@ def test_check_entry_refuses_a_stock_reporting_results(db_session, monkeypatch):
     db_session.flush()
     db_session.add(
         UpcomingEvent(
-            # India's date, the one check_entry uses: date.today() is UTC on CI, so between 00:00 and 05:30
-            # IST it named yesterday and this failed (it stopped the 2026-10-15 00:00 IST deploy).
-            symbol="RESULTSCO", kind="results", event_date=datetime.now(ZoneInfo("Asia/Kolkata")).date(),
-            detail="Financial Results",
+            # The IST date, as risk.check_entry uses: date.today() is the machine's
+            # clock, which on a UTC CI runner is a day behind IST from 18:30 UTC.
+            symbol="RESULTSCO", kind="results",
+            event_date=datetime.now(ZoneInfo("Asia/Kolkata")).date(), detail="Financial Results",
         )
     )
     db_session.flush()

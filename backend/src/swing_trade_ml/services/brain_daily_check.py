@@ -152,6 +152,54 @@ def check_stale_stocks(run: BrainRun | None) -> dict | None:
     return weekly._check("Stale stocks", False, detail, "warn")
 
 
+def _live_models(db: Session) -> list:
+    from swing_trade_ml.core.enums import ModelStatus
+    from swing_trade_ml.db.models.ml import MLModel
+
+    return list(db.execute(select(MLModel).where(MLModel.status == ModelStatus.ACTIVE)).scalars())
+
+
+def _question(m) -> str:
+    """A model's own question in plain words, from its stored label definition."""
+    days, target = m.prediction_horizon_days, f"+{m.target_return_pct:.0%}"
+    if m.label_kind == "barrier" and m.stop_return_pct:
+        return f"{target} before -{m.stop_return_pct:.0%} within {days} days"
+    if m.label_kind == "endpoint":
+        return f"closes {target} or more after {days} days"
+    return f"{target} in {days} days"
+
+
+def check_model_question(models: list) -> dict:
+    """Does each live model's question match the trade plan? A model scores "+2% in 5 days" yet the plan
+    trades +8% before -4% in 15 days: the score is then not evidence for that trade. Shown, never a
+    failure (level info): it is a known gap until the 15-day models are live (Atlas tv23/tv24), and a
+    daily alarm would only be noise. Reads the stored label fields; changes no decision."""
+    from swing_trade_ml.brain.modules.m08_decide.policy import DEFAULT_POLICY
+    from swing_trade_ml.services import brain_weekly_health as weekly
+
+    plan = DEFAULT_POLICY
+    name = "Score matches the trade plan"
+    want = f"+{plan.target_pct:.0%} before -{plan.stop_pct:.0%} within {plan.horizon_days} days"
+    if not models:
+        return weekly._check(name, False, f"No live model found. The plan trades {want}.", "info")
+
+    def matches(m) -> bool:
+        return (
+            m.label_kind == "barrier"
+            and m.prediction_horizon_days == plan.horizon_days
+            and abs(m.target_return_pct - plan.target_pct) < 1e-9
+            and m.stop_return_pct is not None
+            and abs(m.stop_return_pct - plan.stop_pct) < 1e-9
+        )
+
+    off = [m for m in models if not matches(m)]
+    if not off:
+        return weekly._check(name, True, f"Every live model asks the plan's question: {want}.")
+    listed = "; ".join(f"{m.name} asks '{_question(m)}'" for m in sorted(off, key=lambda m: m.name))
+    detail = f"NOT matched. The plan trades {want}, but {listed}. Such a score does not prove that trade."
+    return weekly._check(name, False, detail, "info")
+
+
 def compute(db: Session, now: datetime | None = None, backup_dir: str | None = None) -> dict:
     """Never raises for one bad part: a part that fails is recorded as a failed check."""
     from swing_trade_ml.brain import service
@@ -174,6 +222,7 @@ def compute(db: Session, now: datetime | None = None, backup_dir: str | None = N
     for label, fn in (
         ("Ideas reached the counter", lambda: check_ideas_reached_counter(db, day)),
         ("Stale stocks", lambda: check_stale_stocks(run)),
+        ("Score matches the trade plan", lambda: check_model_question(_live_models(db))),
     ):
         try:
             found = fn()

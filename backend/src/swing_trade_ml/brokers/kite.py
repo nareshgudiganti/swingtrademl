@@ -494,6 +494,24 @@ class KiteBroker(Broker):
             if p["quantity"] != 0
         ]
 
+    def owned_quantity(self, tradingsymbol: str, db: Session) -> int:
+        """Shares of one stock really owned at Zerodha now: settled + settling holdings
+        (`quantity + t1_quantity`) plus today's delivery (CNC) buys, which sit in `positions` until the
+        next day. A real sell is checked against this, never the app's own row, which can be stale
+        (the September "ghost holdings"; safety review 2026-10-15)."""
+        self._require_auth()
+        held = sum(
+            int(h.get("quantity", 0) or 0) + int(h.get("t1_quantity", 0) or 0)
+            for h in self.reauth_and_retry(db, self._kite.holdings)
+            if h.get("tradingsymbol") == tradingsymbol
+        )
+        today = sum(
+            int(p.get("quantity", 0) or 0)
+            for p in self.reauth_and_retry(db, self._kite.positions).get("net", [])
+            if p.get("tradingsymbol") == tradingsymbol and p.get("product") == "CNC"
+        )
+        return max(held + today, 0)
+
     def get_holdings(self, db: Session) -> list[dict]:
         self._require_auth()
         return self.reauth_and_retry(db, self._kite.holdings)

@@ -12,7 +12,7 @@ app was asking the owner to act on.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from swing_trade_ml.api.v1.endpoints import portfolio as portfolio_api
 from swing_trade_ml.core.enums import PositionStatus
@@ -41,7 +41,8 @@ def _tracked(db, strategy, symbol: str, token: int) -> Position:
     position = Position(
         strategy_id=strategy.id, instrument_id=instrument.id, mode="live",
         quantity=10, entry_price=100.0, current_price=90.0, stop_loss=95.0,
-        entry_at=datetime.now(UTC), status=PositionStatus.OPEN,
+        # Bought days ago: the sync never closes a same-day buy (absent from Zerodha holdings until T+1).
+        entry_at=datetime.now(UTC) - timedelta(days=3), status=PositionStatus.OPEN,
     )
     db.add(position)
     db.flush()

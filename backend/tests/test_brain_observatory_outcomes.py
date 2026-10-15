@@ -207,7 +207,10 @@ def test_outcomes_processing_is_bounded(db_session, realistic_cohort):
     o.official_forward_gate(db_session, realistic_cohort.today)
     assert counter.n <= 12, counter.n
     assert counter.control <= 6, counter.control
-    assert _time.perf_counter() - t0 < 4.0
+    # Wall-clock is only a guard against a real blow-up (per-day queries would take minutes). The 1,000 random
+    # draws of evidence-defs-v1 are CPU work (about 5 s on a busy dev machine), so the deterministic bound is
+    # the statement count above, not this.
+    assert _time.perf_counter() - t0 < 12.0
 
 
 def test_the_computed_shape_is_what_the_page_reads():

@@ -1,6 +1,8 @@
 // Thin fetch wrapper around the FastAPI backend.
 
 import type {
+  RealOrder,
+  RealOrdersStatus,
   BrainAlertPreview,
   BrainAlertSend,
   BrainApproval,
@@ -319,6 +321,17 @@ export const api = {
   // real/paper order through whichever broker the app is currently in).
   manualClosePosition: (id: number, exitPrice: number) =>
     post<Trade>(`/portfolio/positions/${id}/manual-close`, { exit_price: exitPrice }),
+  // REAL orders to Zerodha for My Holdings — owner only, refused by the
+  // server unless the real-orders switch is on and the limits allow it.
+  realOrdersStatus: () => get<RealOrdersStatus>('/portfolio/real/orders-status'),
+  realQuote: (symbol: string) =>
+    get<{ symbol: string; exchange: string; price: number }>(
+      `/portfolio/real/quote?symbol=${encodeURIComponent(symbol)}`,
+    ),
+  realBuy: (symbol: string, quantity: number) =>
+    post<RealOrder>('/portfolio/real/buy', { symbol, quantity }),
+  realSell: (id: number, quantity?: number) =>
+    post<RealOrder>(`/portfolio/real/positions/${id}/sell`, quantity ? { quantity } : {}),
   trades: (limit = 100) => get<Trade[]>(`/portfolio/trades?limit=${limit}&book=bot`),
   testerSummary: () => get<PortfolioSummary>('/portfolio/summary?book=tester'),
   testerPositions: () => get<DetailedPosition[]>('/portfolio/positions/detailed?book=tester'),

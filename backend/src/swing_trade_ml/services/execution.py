@@ -10,10 +10,12 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
+import requests
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from swing_trade_ml.brokers import OrderRequest, OrderResult, get_broker
+from swing_trade_ml.brokers.base import REAL_HOLDINGS_TAG_PREFIX
 from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.strategy_policy import (
     exits_are_advisory,
@@ -28,6 +30,7 @@ from swing_trade_ml.core.enums import (
     PositionStatus,
     ProductType,
     SignalType,
+    TradingMode,
     TransactionType,
 )
 from swing_trade_ml.core.logging import get_logger
@@ -42,7 +45,11 @@ from swing_trade_ml.services.exit_policy import (
     exit_policy_for_strategy,
     scale_out_quantity,
 )
-from swing_trade_ml.services.portfolio import portfolio_value_and_cash, record_price
+from swing_trade_ml.services.portfolio import (
+    REAL_TRADING_STRATEGY_NAME,
+    portfolio_value_and_cash,
+    record_price,
+)
 
 log = get_logger(__name__)
 
@@ -644,6 +651,140 @@ def manual_close_position(
 
     notifier.send_sync(_exit_message(instrument, trade, reason, position.mode), "fill")
     return trade
+
+
+# ------------------------------------------------- real My Holdings orders --
+
+#: The settled per-trade rules (CLAUDE.md "Risk rules"): -4% stop, +8% target,
+#: measured from the real fill of an app-placed My Holdings buy.
+REAL_HOLDING_STOP_PCT = 0.04
+REAL_HOLDING_TARGET_PCT = 0.08
+
+
+def _place_real_holding_order(
+    db: Session,
+    *,
+    strategy_id: int,
+    instrument: Instrument,
+    side: TransactionType,
+    quantity: int,
+    reference_price: float | None,
+    position_id: int | None = None,
+    exit_reason: ExitReason | None = None,
+) -> Order:
+    """Send one owner-placed My Holdings order to Zerodha.
+
+    Always the Kite broker, never get_broker(): the bot is on paper, these are
+    the owner's real shares. KiteBroker only lets it through while
+    ALLOW_REAL_HOLDINGS_ORDERS is on, because of the reserved tag. Every check
+    (limits, market clock, owned quantity) is done before this, in
+    services/real_orders.py.
+
+    `price` stores the price seen when the order was placed. It is a reference
+    for the daily limit and the screen only — a MARKET order is sent without
+    a price. Like every live order, the Position/Trade is finished later by
+    reconcile_pending_orders once Zerodha reports the fill.
+    """
+    from swing_trade_ml.brokers.kite import kite_broker
+
+    order = Order(
+        strategy_id=strategy_id,
+        position_id=position_id,
+        instrument_id=instrument.id,
+        mode=TradingMode.LIVE,
+        transaction_type=side,
+        order_type=OrderType.MARKET,
+        product=ProductType.CNC,
+        quantity=quantity,
+        price=reference_price,
+        status=OrderStatus.PENDING,
+        exit_reason=exit_reason,
+        placed_at=datetime.now(UTC),
+    )
+    db.add(order)
+    db.commit()
+
+    letter = "b" if side == TransactionType.BUY else "s"
+    word = "BUY" if side == TransactionType.BUY else "SELL"
+    try:
+        result = kite_broker.place_order(
+            OrderRequest(
+                tradingsymbol=instrument.tradingsymbol,
+                exchange=instrument.exchange,
+                transaction_type=side,
+                quantity=quantity,
+                order_type=OrderType.MARKET,
+                product=ProductType.CNC,
+                tag=f"{REAL_HOLDINGS_TAG_PREFIX}{letter}{order.id}",
+            ),
+            db,
+        )
+    except Exception as exc:
+        # place_order raises (not REJECTED) for a closed latch, a missing or
+        # dead session and network trouble. Without this the row would stay
+        # PENDING with no broker id, which reconciliation never looks at.
+        if isinstance(exc, (requests.exceptions.Timeout, requests.exceptions.ConnectionError)):
+            message = (
+                "Zerodha did not answer, so we cannot tell if this order was placed. "
+                "Check the Kite app before trying again."
+            )
+        else:
+            message = f"Not sent to Zerodha: {exc}"
+        order.status = OrderStatus.REJECTED
+        order.status_message = message
+        db.commit()
+        notifier.send_sync(
+            f"⚠️ <b>Real {word} refused · {instrument.tradingsymbol}</b>\n{message}",
+            "error",
+        )
+        log.error(
+            "execution.real_holding.send_failed",
+            symbol=instrument.tradingsymbol, side=word, qty=quantity, error=str(exc),
+        )
+        raise
+    order.broker_order_id = result.broker_order_id
+    order.status = result.status
+    order.status_message = result.message
+    db.commit()
+
+    if result.status == OrderStatus.REJECTED:
+        notifier.send_sync(
+            f"⚠️ <b>Real {word} refused by Zerodha · {instrument.tradingsymbol}</b>\n"
+            f"{result.message or 'No reason given.'}",
+            "error",
+        )
+    else:
+        about = f" (about ₹{reference_price * quantity:,.0f})" if reference_price else ""
+        notifier.send_sync(
+            f"💰 <b>Real {word} sent · {instrument.tradingsymbol}</b>\n"
+            f"{quantity:,} shares at market price{about}. Waiting for Zerodha to confirm.",
+            "fill",
+        )
+    log.info(
+        "execution.real_holding.sent",
+        symbol=instrument.tradingsymbol, side=word, qty=quantity, status=str(result.status),
+    )
+    return order
+
+
+def place_real_holding_buy(
+    db: Session, strategy: Strategy, instrument: Instrument, quantity: int, reference_price: float
+) -> Order:
+    return _place_real_holding_order(
+        db, strategy_id=strategy.id, instrument=instrument, side=TransactionType.BUY,
+        quantity=quantity, reference_price=reference_price,
+    )
+
+
+def place_real_holding_sell(db: Session, position: Position, quantity: int) -> Order:
+    instrument = db.get(Instrument, position.instrument_id)
+    if instrument is None:
+        raise ValueError(f"Instrument {position.instrument_id} not found for position {position.id}")
+    return _place_real_holding_order(
+        db, strategy_id=position.strategy_id, instrument=instrument, side=TransactionType.SELL,
+        quantity=quantity, reference_price=position.current_price, position_id=position.id,
+        exit_reason=ExitReason.MANUAL,
+    )
 
 
 def confidence_decay_status(
@@ -1347,13 +1488,47 @@ def reconcile_pending_orders(db: Session) -> dict[str, int]:
 
     A no-op for paper mode, since PaperBroker fills synchronously and never
     leaves an order non-terminal in the first place.
+
+    The owner's real My Holdings orders are live while the bot is on paper,
+    so the pass over the bot's own mode never sees them. A second pass checks
+    those with the Kite broker directly.
     """
     broker = get_broker()
-    pending = list(
+    counts = {"checked": 0, "filled": 0, "failed": 0, "unchanged": 0}
+    _reconcile_orders(db, broker, _waiting_orders(db, broker.mode), counts)
+    # The bot's own pass is kept even if the real-holdings pass below fails.
+    db.commit()
+
+    if broker.mode != TradingMode.LIVE:
+        try:
+            real = _waiting_real_holding_orders(db)
+            if real:
+                from swing_trade_ml.brokers.kite import kite_broker
+
+                if kite_broker.load_session(db):
+                    _reconcile_orders(db, kite_broker, real, counts)
+                else:
+                    log.warning("execution.reconcile.real_holdings_no_session", waiting=len(real))
+            db.commit()
+        except Exception:
+            # Drop only this pass's unsaved half-done work; an order it did not
+            # finish stays waiting and is checked again next tick.
+            log.exception("execution.reconcile.real_holdings_failed")
+            db.rollback()
+
+    log.info("execution.reconcile.done", **counts)
+    return counts
+
+
+_WAITING = (OrderStatus.PENDING, OrderStatus.OPEN)
+
+
+def _waiting_orders(db: Session, mode: str) -> list[Order]:
+    return list(
         db.execute(
             select(Order).where(
-                Order.mode == broker.mode,
-                Order.status.in_([OrderStatus.PENDING, OrderStatus.OPEN]),
+                Order.mode == mode,
+                Order.status.in_(_WAITING),
                 Order.broker_order_id.isnot(None),
                 Order.broker_order_id != "",
             )
@@ -1362,9 +1537,28 @@ def reconcile_pending_orders(db: Session) -> dict[str, int]:
         .all()
     )
 
-    counts = {"checked": len(pending), "filled": 0, "failed": 0, "unchanged": 0}
 
-    for order in pending:
+def _waiting_real_holding_orders(db: Session) -> list[Order]:
+    return list(
+        db.execute(
+            select(Order)
+            .join(Strategy, Strategy.id == Order.strategy_id)
+            .where(
+                Strategy.name == REAL_TRADING_STRATEGY_NAME,
+                Order.mode == TradingMode.LIVE,
+                Order.status.in_(_WAITING),
+                Order.broker_order_id.isnot(None),
+                Order.broker_order_id != "",
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+
+def _reconcile_orders(db: Session, broker, orders: list[Order], counts: dict[str, int]) -> None:
+    for order in orders:
+        counts["checked"] += 1
         result = broker.get_order_status(order.broker_order_id, db)
         if result is None or result.status == order.status:
             counts["unchanged"] += 1
@@ -1380,12 +1574,25 @@ def reconcile_pending_orders(db: Session) -> dict[str, int]:
             _finish_reconciled_order(db, order, result)
             counts["filled"] += 1
         elif result.status in (OrderStatus.REJECTED, OrderStatus.CANCELLED):
-            _fail_reconciled_order(db, order, result)
-            counts["failed"] += 1
+            if result.filled_quantity and result.average_price:
+                # Some shares went through before the rest were cancelled:
+                # those are real and must be recorded, not dropped.
+                order.filled_at = order.filled_at or datetime.now(UTC)
+                _finish_reconciled_order(db, order, result)
+                notifier.send_sync(
+                    f"{_symbol_for(db, order)}: {result.filled_quantity} of {order.quantity} "
+                    "shares went through; the rest were cancelled.",
+                    "fill",
+                )
+                counts["filled"] += 1
+            else:
+                _fail_reconciled_order(db, order, result)
+                counts["failed"] += 1
 
-    db.commit()
-    log.info("execution.reconcile.done", **counts)
-    return counts
+
+def _symbol_for(db: Session, order: Order) -> str:
+    instrument = db.get(Instrument, order.instrument_id)
+    return instrument.tradingsymbol if instrument is not None else f"instrument {order.instrument_id}"
 
 
 def _finish_reconciled_order(db: Session, order: Order, result: OrderResult) -> None:
@@ -1414,7 +1621,7 @@ def _finish_reconciled_order(db: Session, order: Order, result: OrderResult) -> 
         brokerage, taxes = result.brokerage, result.taxes
     else:
         brokerage, taxes = compute_charges(fill_price * filled_qty, order.transaction_type)
-        if settings.is_live_trading:
+        if order.mode == TradingMode.LIVE:
             # Kite's order API does not return the charge breakdown, so a live
             # fill genuinely has to be estimated. Say so, rather than letting
             # an estimate masquerade as a settled figure in the P&L.
@@ -1439,14 +1646,25 @@ def _finish_reconciled_order(db: Session, order: Order, result: OrderResult) -> 
             log.error("execution.reconcile.strategy_missing", order_id=order.id)
             return
 
+        stop_loss = signal.stop_loss if signal else None
+        take_profit = signal.take_profit if signal else None
+        is_my_holdings = signal is None and strategy.name == REAL_TRADING_STRATEGY_NAME
+        if is_my_holdings:
+            stop_loss = round(fill_price * (1 - REAL_HOLDING_STOP_PCT), 2)
+            take_profit = round(fill_price * (1 + REAL_HOLDING_TARGET_PCT), 2)
+
         position = _finalize_open_position(
             db, strategy, instrument, order.mode, filled_qty, fill_price, brokerage, taxes,
-            signal.stop_loss if signal else None,
-            signal.take_profit if signal else None,
+            stop_loss,
+            take_profit,
             order.filled_at or datetime.now(UTC),
             signal.confidence if signal else None,
         )
         order.position_id = position.id
+        if is_my_holdings and instrument.tradingsymbol not in (strategy.symbols or []):
+            # Same as Import from Kite: the strategy's universe is what the
+            # model reads daily, and a hand-bought stock is rarely watchlisted.
+            strategy.symbols = sorted({*(strategy.symbols or []), instrument.tradingsymbol})
         if signal is not None:
             signal.was_executed = True
 
@@ -1550,7 +1768,7 @@ def _fail_reconciled_order(db: Session, order: Order, result: OrderResult) -> No
         order_id=order.id, status=str(result.status), message=result.message,
     )
     notifier.send_sync(
-        f"⚠️ <b>Order {result.status}</b> — instrument {order.instrument_id}, "
+        f"⚠️ <b>Order {result.status}</b> — {_symbol_for(db, order)}, "
         f"order {order.id}\n{result.message or 'No reason given.'}",
         "error",
     )

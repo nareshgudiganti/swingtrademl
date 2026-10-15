@@ -40,7 +40,7 @@ worth scaling.
 1. **New latch `ALLOW_REAL_HOLDINGS_ORDERS: bool = False`** in `core/config.py`, set only in prod `.env`.
 2. **Narrow gate in `KiteBroker.place_order`.** Today it refuses unless `settings.is_live_trading`.
    New rule: allow when `settings.is_live_trading` **or** (`ALLOW_REAL_HOLDINGS_ORDERS` **and**
-   `request.tag` starts with the reserved prefix `stml-hold-`). Only `services/real_orders.py`
+   `request.tag` starts with the reserved prefix `stmlh` (`REAL_HOLDINGS_TAG_PREFIX` in `brokers/base.py`; Kite tags are alphanumeric, max 20 chars). Only `services/real_orders.py`
    builds requests with that prefix. `get_broker()` is unchanged, so every other path still gets
    `paper_broker`.
 3. **Owner only.** Both routes use `Depends(require_owner)` (`api/deps.py`).
@@ -59,15 +59,15 @@ worth scaling.
 **Buy** — `POST /portfolio/real/buy {symbol, exchange, quantity}`
 1. `real_orders.buy()` runs the checks, then calls a new `execution.place_real_holding_buy()`.
 2. That writes an `Order` (mode=`live`, strategy=`real_trading`, BUY, MARKET, CNC, PENDING) and
-   calls `kite_broker.place_order` directly with tag `stml-hold-buy-<order_id>`.
+   calls `kite_broker.place_order` directly with tag `stmlhb<order_id>`.
 3. Kite returns PENDING (accepted). Rejection → Order REJECTED, message shown + Telegram.
 4. On fill (reconciliation, below) the `Position` is created in the `real_trading` book at the
-   real average price with stop −4% / target +8%, so existing alerts apply.
+   real average price with stop −4% / target +8% of the fill price (fixed, the settled trade rules), so existing alerts apply.
 
 **Sell** — `POST /portfolio/real/positions/{id}/sell {quantity?}`
 1. Checks, then new `execution.place_real_holding_sell()`: `Order` (mode=`live`, SELL, MARKET,
    CNC, `exit_reason=MANUAL`, `position_id`) → `kite_broker.place_order`, tag
-   `stml-hold-sell-<order_id>`.
+   `stmlhs<order_id>`.
 2. On fill: full close or partial close via the existing finalize helpers; the Trade appears in
    the Buy and sell report. Real charges come in later through the nightly fill capture.
 
@@ -86,10 +86,10 @@ Already on `main`: `services/holdings_sync.py::close_positions_no_longer_held`, 
 holding that has left Zerodha at the last price the app saw.
 
 Race this feature creates: an app sell fills at Zerodha, the holding disappears, and the sync can
-close the position at a *guessed* price before reconciliation records the *real* fill. Fix:
-- the sync skips any position with a PENDING/OPEN real-holdings order; and
-- reconciliation of a sell first finishes the order; if the position was already closed by the
-  sync, it corrects that Trade's exit price to the real fill instead of closing twice.
+close the position at a *guessed* price before reconciliation records the *real* fill. Fix: the sync skips any holding whose instrument has a PENDING/OPEN real-holdings order. That is
+enough: reconciliation marks the order COMPLETE and closes the position in the same transaction,
+so there is no moment where the order is finished but the position is still open for the sync to
+guess at. (Reconciliation already returns early if a position is no longer open.)
 
 A fresh app buy reads `quantity: 0` until settlement; the sync already counts `t1_quantity`, so it
 is not closed by mistake (keep that guard; add a test with an app-bought T1 holding).
@@ -117,14 +117,13 @@ is not closed by mistake (keep that guard; add a test with an app-bought T1 hold
 ## Testing (no real Zerodha calls — Kite replaced by a recording fake)
 
 - Latch on, bot latches off: bot / brain / tester orders still go to paper; `KiteBroker.place_order`
-  refuses a request without the `stml-hold-` prefix.
+  refuses a request without the `stmlh` prefix.
 - Latch off: both routes refused, Kite never called.
 - ₹10,001 buy refused; third ₹10K buy in a day refused; sell allowed regardless of money limit.
 - Sell more than held refused; non-`real_trading` position refused.
 - Market closed refused; second order while one pending refused.
 - Non-owner → 403.
-- Holdings sync skips a position with a pending app sell; a sell reconciled after the sync
-  corrected the exit price rather than closing twice; app-bought T1 holding is not closed.
+- Holdings sync skips a position with a pending app order; app-bought T1 holding is not closed.
 - Reconcile: live real-holdings buy fill creates a Position; sell fill closes/shrinks it;
   rejection creates nothing; paper bot orders unaffected.
 

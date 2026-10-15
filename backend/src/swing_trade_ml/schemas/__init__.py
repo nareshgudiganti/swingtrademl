@@ -419,6 +419,16 @@ class TesterPaperBuyRequest(BaseModel):
     exchange: str = "NSE"
 
 
+class RealBuyRequest(BaseModel):
+    symbol: str = Field(min_length=1, max_length=32)
+    quantity: int = Field(gt=0)
+    exchange: str = "NSE"
+
+
+class RealSellRequest(BaseModel):
+    quantity: int | None = Field(default=None, gt=0)
+
+
 class EquityPoint(BaseModel):
     date: str
     total_value: float

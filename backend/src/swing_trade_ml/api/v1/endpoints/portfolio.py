@@ -2,22 +2,29 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
 from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.sql import Select
 
-from swing_trade_ml.api.deps import DbSession, PlanAccessDep
+from swing_trade_ml.api.deps import DbSession, PlanAccessDep, require_owner
 from swing_trade_ml.brokers import get_broker
 from swing_trade_ml.core import market_session
 from swing_trade_ml.core.config import settings
-from swing_trade_ml.core.enums import ExitReason, PositionStatus, SignalType, TradingMode
+from swing_trade_ml.core.enums import (
+    ExitReason,
+    OrderStatus,
+    PositionStatus,
+    SignalType,
+    TradingMode,
+)
 from swing_trade_ml.core.strategy_policy import is_staged
 from swing_trade_ml.db.models.market import Candle, Instrument
-from swing_trade_ml.db.models.trading import Position, Signal, Strategy, Trade
+from swing_trade_ml.db.models.trading import Order, Position, Signal, Strategy, Trade
 from swing_trade_ml.ml.registry import get_active_model
 from swing_trade_ml.ml.sector_map import get_sector_bucket, sector_display_name
 from swing_trade_ml.schemas import (
@@ -27,10 +34,12 @@ from swing_trade_ml.schemas import (
     ManualExitRequest,
     MessageResponse,
     PositionOut,
+    RealBuyRequest,
+    RealSellRequest,
     TesterPaperBuyRequest,
     TradeOut,
 )
-from swing_trade_ml.services import brain_position_score, score_history
+from swing_trade_ml.services import brain_position_score, real_orders, score_history
 from swing_trade_ml.services import portfolio as portfolio_service
 from swing_trade_ml.services.execution import (
     close_position,
@@ -48,6 +57,8 @@ from swing_trade_ml.services.holdings_sync import (
 from swing_trade_ml.services.plans import history_cutoff, strategy_visible
 from swing_trade_ml.services.portfolio import REAL_TRADING_STRATEGY_NAME
 from swing_trade_ml.strategies.tier import cap_tier
+
+logger = logging.getLogger(__name__)
 
 IST = ZoneInfo("Asia/Kolkata")
 
@@ -498,6 +509,17 @@ def import_real_holdings(db: DbSession, strategy_id: int | None = None) -> list[
             )
         ).scalars()
     }
+    # A real app order still waiting on a stock (e.g. a buy that filled after
+    # 15:29 and is reconciled next morning) already shows in Kite holdings.
+    # Importing it would track N shares, then reconcile adds the fill: 2N.
+    order_waiting = set(
+        db.execute(
+            select(Order.instrument_id).where(
+                Order.strategy_id == strategy.id,
+                Order.status.in_([OrderStatus.PENDING, OrderStatus.OPEN]),
+            )
+        ).scalars()
+    )
     for h in kite_holdings:
         held_quantity = _held_quantity(h)
         if held_quantity == 0:
@@ -541,6 +563,15 @@ def import_real_holdings(db: DbSession, strategy_id: int | None = None) -> list[
             continue
         if instrument.id in already_tracked:
             results.append({"symbol": h["tradingsymbol"], "status": "already_tracked"})
+            continue
+        if instrument.id in order_waiting:
+            results.append(
+                {
+                    "symbol": h["tradingsymbol"],
+                    "status": "order_waiting",
+                    "reason": "a real order for this stock is still waiting at Zerodha",
+                }
+            )
             continue
 
         # Anchor risk levels to what the stock trades at now, not to what it
@@ -684,6 +715,97 @@ def close_manual_position(position_id: int, payload: ManualExitRequest, db: DbSe
     return manual_close_position(
         db, position, payload.exit_price, reason, payload.brokerage, payload.taxes
     )
+
+
+# ---------------------------------------- real orders from My Holdings --
+# The owner's own hand-placed Zerodha orders while the bot stays on paper.
+# Every check lives in services/real_orders.py; these only translate.
+
+_OWNER = [Depends(require_owner)]
+_SEND_FAILED = "The order could not be sent to Zerodha. Check the Kite app before trying again."
+
+
+def _real_order_out(order: Order, instrument: Instrument) -> dict[str, Any]:
+    return {
+        "order_id": order.id,
+        "symbol": instrument.tradingsymbol,
+        "side": str(order.transaction_type),
+        "quantity": order.quantity,
+        "status": str(order.status),
+        "message": order.status_message,
+    }
+
+
+def _instrument_or_404(db: DbSession, symbol: str, exchange: str) -> Instrument:
+    instrument = db.execute(
+        select(Instrument).where(
+            Instrument.tradingsymbol == symbol.strip().upper(), Instrument.exchange == exchange
+        )
+    ).scalar_one_or_none()
+    if instrument is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown stock {symbol.strip().upper()}.")
+    return instrument
+
+
+def _lock_strategy(db: DbSession, strategy_id: int) -> None:
+    # Serialise double-clicks: a second request waits here until the first has
+    # committed, so it sees the first order in the waiting/daily-limit checks.
+    db.execute(select(Strategy).where(Strategy.id == strategy_id).with_for_update()).scalar_one()
+
+
+@router.get("/real/orders-status", dependencies=_OWNER)
+def real_orders_status(db: DbSession) -> dict[str, Any]:
+    strategy = db.execute(
+        select(Strategy).where(Strategy.name == REAL_TRADING_STRATEGY_NAME)
+    ).scalar_one_or_none()
+    return real_orders.status(db, strategy)
+
+
+@router.get("/real/quote", dependencies=_OWNER)
+def real_quote(db: DbSession, symbol: str, exchange: str = "NSE") -> dict[str, Any]:
+    instrument = _instrument_or_404(db, symbol, exchange)
+    try:
+        price = real_orders.quote(db, instrument)
+    except real_orders.RealOrderRefused as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Real-holdings quote failed for %s", instrument.tradingsymbol)
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY, "Could not get a live price from Zerodha just now."
+        ) from exc
+    return {"symbol": instrument.tradingsymbol, "exchange": instrument.exchange, "price": price}
+
+
+@router.post("/real/buy", status_code=status.HTTP_201_CREATED, dependencies=_OWNER)
+def real_buy(payload: RealBuyRequest, db: DbSession) -> dict[str, Any]:
+    instrument = _instrument_or_404(db, payload.symbol, payload.exchange)
+    strategy = _get_or_create_real_trading_strategy(db)
+    _lock_strategy(db, strategy.id)
+    try:
+        order = real_orders.buy(db, strategy, instrument, payload.quantity)
+    except real_orders.RealOrderRefused as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Real-holdings buy failed for %s", instrument.tradingsymbol)
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, _SEND_FAILED) from exc
+    return _real_order_out(order, instrument)
+
+
+@router.post("/real/positions/{position_id}/sell", status_code=status.HTTP_201_CREATED, dependencies=_OWNER)
+def real_sell(position_id: int, payload: RealSellRequest, db: DbSession) -> dict[str, Any]:
+    position = db.get(Position, position_id)
+    if position is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Holding not found.")
+    if position.strategy_id is not None:
+        _lock_strategy(db, position.strategy_id)
+    try:
+        order = real_orders.sell(db, position, payload.quantity)
+    except real_orders.RealOrderRefused as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Real-holdings sell failed for position %s", position_id)
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, _SEND_FAILED) from exc
+    return _real_order_out(order, db.get(Instrument, position.instrument_id))
 
 
 @router.post("/positions/{position_id}/close", response_model=MessageResponse)

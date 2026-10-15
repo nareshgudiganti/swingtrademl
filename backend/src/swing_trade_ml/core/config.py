@@ -83,6 +83,15 @@ class Settings(BaseSettings):
     # ------------------------------------------------------- trading mode --
     TRADING_MODE: Literal["paper", "live"] = "paper"
     ALLOW_LIVE_TRADING: bool = False
+    # Real orders the OWNER places by hand from My Holdings, while the bot
+    # itself stays on paper. A third, separate latch: it never opens the bot's
+    # path (get_broker() still reads only the two above), and KiteBroker only
+    # honours it for requests carrying the reserved My Holdings order tag
+    # (brokers/base.py). Off unless the owner turns it on in prod.
+    ALLOW_REAL_HOLDINGS_ORDERS: bool = False
+    # Hard money limits on those buys (sells are never blocked by money).
+    REAL_HOLDINGS_MAX_ORDER_INR: float = 10_000.0
+    REAL_HOLDINGS_MAX_DAY_INR: float = 25_000.0
 
     PAPER_STARTING_CAPITAL: float = 1_000_000.0
     # Manual paper-testing book (separate positions from the bot portfolio).

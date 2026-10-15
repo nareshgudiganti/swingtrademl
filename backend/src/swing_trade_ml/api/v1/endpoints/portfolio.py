@@ -761,6 +761,42 @@ def real_orders_status(db: DbSession) -> dict[str, Any]:
     return real_orders.status(db, strategy)
 
 
+@router.get("/real/account", dependencies=_OWNER)
+def real_account(db: DbSession) -> dict[str, Any]:
+    """The whole Zerodha account at a glance, like Zerodha's own dashboard:
+    cash still available, what every held share cost and is worth, today's
+    move, and the total. Live from Zerodha and read-only — every share in the
+    account counts, tracked in My Holdings or not."""
+    from kiteconnect.exceptions import KiteException
+
+    from swing_trade_ml.brokers.kite import kite_broker
+
+    held = [(h, _held_quantity(h)) for h in _load_kite_holdings(db)]
+    held = [(h, qty) for h, qty in held if qty > 0]
+    try:
+        cash = kite_broker.get_margins(db).available_cash
+    except KiteException as exc:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"Zerodha did not return your cash balance. Log in to Kite again and retry. ({exc})",
+        ) from exc
+
+    invested = sum(h["average_price"] * qty for h, qty in held)
+    current = sum(h["last_price"] * qty for h, qty in held)
+    # Kite's day_change is per share: today's price minus yesterday's close.
+    day_pnl = sum((h.get("day_change") or 0.0) * qty for h, qty in held)
+    return {
+        "cash_available": cash,
+        "invested": invested,
+        "current_value": current,
+        "total_pnl": current - invested,
+        "total_pnl_pct": (current - invested) / invested if invested else None,
+        "day_pnl": day_pnl,
+        "account_value": cash + current,
+        "stocks": len(held),
+    }
+
+
 @router.get("/real/quote", dependencies=_OWNER)
 def real_quote(db: DbSession, symbol: str, exchange: str = "NSE") -> dict[str, Any]:
     instrument = _instrument_or_404(db, symbol, exchange)

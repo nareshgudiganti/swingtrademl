@@ -1,4 +1,5 @@
-"""Spec 3.3 / 3.5 / R3, C3, C5, C6, C7: the Observatory API: owner-only, GET-only, bounded, read-only, honest."""
+# ruff: noqa: F811
+"""Spec 3.3, 3.5, R3, C3, C5-C7: the Observatory API: owner-only, GET-only, bounded, read-only, honest."""
 
 from __future__ import annotations
 

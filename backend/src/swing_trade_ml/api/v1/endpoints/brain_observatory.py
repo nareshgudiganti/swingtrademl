@@ -293,7 +293,8 @@ def stock_detail(run_id: str, decision_id: int, db: ReadOnlyDb) -> dict:
             else {"state": "not_observed"},
             "tracker": {
                 "book": r.book,
-                "label": "tracker records for this stock on this day: day-level context, not linked to this run",
+                "label": "tracker records for this stock on this day: day-level context, "
+                "not linked to this run",
                 "rows": [
                     {
                         "day": t.day.isoformat(),
@@ -340,7 +341,8 @@ def learning(
         {
             **queries.learning_summary(db, start, end),
             "proven_improvement": claims["learning_changes"],
-            "note": "Only M09 activity counts as learning: results collected, changes proposed, changes accepted.",
+            "note": "Only M09 activity counts as learning: results collected, changes proposed, "
+            "changes accepted.",
         }
     )
 

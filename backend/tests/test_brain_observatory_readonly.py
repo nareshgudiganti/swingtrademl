@@ -15,13 +15,15 @@ from swing_trade_ml.db.models.brain import BrainModuleSetting
 from swing_trade_ml.db.session import engine
 from swing_trade_ml.services.brain_observatory.db import STATEMENT_TIMEOUT, get_readonly_db
 
+pytestmark = pytest.mark.usefixtures("obs_ns")
+
 
 def _open():
     gen = get_readonly_db()
     return gen, next(gen)
 
 
-def test_the_transaction_is_read_only_and_time_limited(obs_ns):
+def test_the_transaction_is_read_only_and_time_limited():
     gen, s = _open()
     try:
         assert s.execute(text("SHOW transaction_read_only")).scalar() == "on"
@@ -30,7 +32,7 @@ def test_the_transaction_is_read_only_and_time_limited(obs_ns):
         gen.close()
 
 
-def test_a_write_in_the_session_is_refused_by_postgres(obs_ns):
+def test_a_write_in_the_session_is_refused_by_postgres():
     gen, s = _open()
     try:
         with pytest.raises(DBAPIError) as exc:
@@ -42,7 +44,7 @@ def test_a_write_in_the_session_is_refused_by_postgres(obs_ns):
         assert check.get(BrainModuleSetting, "OBSW") is None
 
 
-def test_the_session_is_rolled_back_and_closed_never_committed(obs_ns, monkeypatch):
+def test_the_session_is_rolled_back_and_closed_never_committed(monkeypatch):
     calls = []
     gen, s = _open()
     monkeypatch.setattr(s, "commit", lambda: calls.append("commit"))

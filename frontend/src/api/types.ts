@@ -25,6 +25,8 @@ export interface MyPlan {
   plan: PlanKey | 'owner' | 'all'
   unrestricted: boolean
   can_manage_plans: boolean
+  /** The real Zerodha account (My Holdings) is private to named people. */
+  can_see_real_account: boolean
   plans_enabled: boolean
   brain_enabled: boolean
   previewing: boolean

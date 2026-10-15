@@ -45,6 +45,7 @@ def my_plan(
     """
     common = {
         "can_manage_plans": principal.is_owner,
+        "can_see_real_account": principal.can_see_real_account,
         "plans_enabled": plan_service.plans_enabled(db),
         "brain_enabled": settings.BRAIN_ENABLED,
     }

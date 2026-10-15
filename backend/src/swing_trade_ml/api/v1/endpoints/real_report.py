@@ -8,15 +8,15 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
-from fastapi import APIRouter, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 
-from swing_trade_ml.api.deps import DbSession
+from swing_trade_ml.api.deps import DbSession, require_real_account
 from swing_trade_ml.api.v1.endpoints.portfolio import _held_quantity, _load_kite_holdings
 from swing_trade_ml.schemas import MessageResponse
 from swing_trade_ml.services import fills as fills_service
 from swing_trade_ml.services.real_report import build_report
 
-router = APIRouter(prefix="/real-report", tags=["real-report"])
+router = APIRouter(prefix="/real-report", tags=["real-report"], dependencies=[Depends(require_real_account)])
 
 MAX_TRADEBOOK_BYTES = 5 * 1024 * 1024
 

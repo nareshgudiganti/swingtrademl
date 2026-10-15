@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link, NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { usePlan } from '../lib/plan'
 
 import './trademind.css'
 import { api } from '../api/client'
@@ -122,7 +123,11 @@ export default function TradeMindApp({ ownerConsole = false }: TradeMindAppProps
   const status = useBrainStatus()
   const latest = useLatestRun()
   const broker = useQuery({ queryKey: ['status'], queryFn: api.status, enabled: ownerConsole })
+  const { canSeeRealAccount } = usePlan()
   const visibleSections = SECTIONS.map((s) => {
+    if (ownerConsole && !canSeeRealAccount && s.label === 'My Portfolio') {
+      return { ...s, pages: s.pages.filter((p) => p.to !== '/trademind/holdings') }
+    }
     if (!ownerConsole && s.label === 'My Portfolio') {
       return {
         ...s,
@@ -280,7 +285,7 @@ export default function TradeMindApp({ ownerConsole = false }: TradeMindAppProps
           <Route path="control" element={ownerConsole ? <Control /> : <Navigate to="/trademind" replace />} />
           <Route path="golive" element={ownerConsole ? <GoLive /> : <Navigate to="/trademind" replace />} />
           <Route path="records" element={<Records />} />
-          <Route path="holdings" element={ownerConsole ? <MyHoldings /> : <Navigate to="/trademind/portfolio" replace />} />
+          <Route path="holdings" element={ownerConsole && canSeeRealAccount ? <MyHoldings /> : <Navigate to="/trademind/portfolio" replace />} />
           <Route path="setup" element={ownerConsole ? <Setup /> : <Navigate to="/trademind" replace />} />
           <Route path="*" element={<Navigate to="/trademind" replace />} />
         </Route>

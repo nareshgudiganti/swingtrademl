@@ -11,7 +11,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.sql import Select
 
-from swing_trade_ml.api.deps import DbSession, PlanAccessDep, require_owner
+from swing_trade_ml.api.deps import (
+    DbSession,
+    PlanAccessDep,
+    PrincipalDep,
+    book_for,
+    require_real_account,
+)
 from swing_trade_ml.brokers import get_broker
 from swing_trade_ml.core import market_session
 from swing_trade_ml.core.config import settings
@@ -113,6 +119,7 @@ def _scope_to_book(stmt: Select[Any], strategy_id_col: Any, book: BookFilter) ->
 @router.get("/summary", response_model=dict)
 def summary(
     db: DbSession,
+    principal: PrincipalDep,
     mode: str | None = None,
     book: BookFilter = "all",
     all_time: bool = False,
@@ -127,6 +134,7 @@ def summary(
     the full record including trials that predate the running code. The reply
     names the boundary in `measured_since` either way.
     """
+    book = book_for(principal, book)
     if book == "tester":
         from swing_trade_ml.services import tester_paper as tester_paper_service
 
@@ -139,6 +147,7 @@ def summary(
 @router.get("/positions", response_model=list[PositionOut])
 def list_positions(
     db: DbSession,
+    principal: PrincipalDep,
     open_only: bool = True,
     limit: int = Query(100, le=1000),
     mode: str | None = None,
@@ -153,12 +162,14 @@ def list_positions(
     )
     if open_only:
         stmt = stmt.where(Position.status == PositionStatus.OPEN)
+    stmt = _scope_to_book(stmt, Position.strategy_id, book_for(principal, "all"))
     return list(db.execute(stmt).scalars().all())
 
 
 @router.get("/positions/detailed", response_model=list[dict])
 def detailed_positions(
     db: DbSession,
+    principal: PrincipalDep,
     mode: str | None = None,
     book: BookFilter = "all",
 ) -> list[dict[str, Any]]:
@@ -176,6 +187,7 @@ def detailed_positions(
     TRADING_MODE flips to live. `mode` is ignored for `book=real`, which is
     live by construction.
     """
+    book = book_for(principal, book)
     effective_mode = TradingMode.LIVE if book == "real" else (mode or get_broker().mode)
     stmt = (
         select(Position, Instrument.tradingsymbol, Instrument.name)
@@ -365,7 +377,7 @@ def _held_quantity(h: dict[str, Any]) -> int:
     return h["quantity"] + h.get("t1_quantity", 0)
 
 
-@router.get("/holdings", response_model=list[dict])
+@router.get("/holdings", response_model=list[dict], dependencies=[Depends(require_real_account)])
 def holdings(db: DbSession) -> list[dict[str, Any]]:
     """Real Zerodha equity holdings — actual shares sitting in the connected
     account, as opposed to the Position rows below (which track the bot's
@@ -468,7 +480,9 @@ def _derive_stop_target(
     return round(stop, 2), round(target, 2), "2x/4x ATR from current price"
 
 
-@router.post("/positions/import-holdings", response_model=list[dict])
+@router.post(
+    "/positions/import-holdings", response_model=list[dict], dependencies=[Depends(require_real_account)]
+)
 def import_real_holdings(db: DbSession, strategy_id: int | None = None) -> list[dict[str, Any]]:
     """Pull real Zerodha holdings and record each one as a tracked position
     under the given (advisory, live-mode) strategy — see
@@ -699,11 +713,14 @@ def create_manual_position(payload: ManualEntryRequest, db: DbSession) -> Positi
 
 
 @router.post("/positions/{position_id}/manual-close", response_model=TradeOut)
-def close_manual_position(position_id: int, payload: ManualExitRequest, db: DbSession) -> Trade:
+def close_manual_position(
+    position_id: int, payload: ManualExitRequest, db: DbSession, principal: PrincipalDep
+) -> Trade:
     """Record the exit fill for a position closed outside the app."""
     position = db.get(Position, position_id)
     if position is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Position not found")
+    _refuse_other_peoples_real_position(principal, position)
     if position.status != PositionStatus.OPEN:
         raise HTTPException(status.HTTP_409_CONFLICT, "Position is already closed")
 
@@ -721,7 +738,7 @@ def close_manual_position(position_id: int, payload: ManualExitRequest, db: DbSe
 # The owner's own hand-placed Zerodha orders while the bot stays on paper.
 # Every check lives in services/real_orders.py; these only translate.
 
-_OWNER = [Depends(require_owner)]
+_OWNER = [Depends(require_real_account)]  # the real Zerodha account: named owners only
 _SEND_FAILED = "The order could not be sent to Zerodha. Check the Kite app before trying again."
 
 
@@ -745,6 +762,16 @@ def _instrument_or_404(db: DbSession, symbol: str, exchange: str) -> Instrument:
     if instrument is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown stock {symbol.strip().upper()}.")
     return instrument
+
+
+def _refuse_other_peoples_real_position(principal: Any, position: Position) -> None:
+    """A My Holdings row (hand-bought, real money) may only be closed by the
+    named owner. Same answer as a missing row, so its existence isn't revealed."""
+    is_real = position.mode == TradingMode.LIVE or (
+        position.strategy is not None and position.strategy.name == REAL_TRADING_STRATEGY_NAME
+    )
+    if is_real and not principal.can_see_real_account:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Position not found")
 
 
 def _lock_strategy(db: DbSession, strategy_id: int) -> None:
@@ -845,11 +872,14 @@ def real_sell(position_id: int, payload: RealSellRequest, db: DbSession) -> dict
 
 
 @router.post("/positions/{position_id}/close", response_model=MessageResponse)
-def close(position_id: int, payload: ClosePositionRequest, db: DbSession) -> MessageResponse:
+def close(
+    position_id: int, payload: ClosePositionRequest, db: DbSession, principal: PrincipalDep
+) -> MessageResponse:
     """Manually exit a position at the current market price."""
     position = db.get(Position, position_id)
     if position is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Position not found")
+    _refuse_other_peoples_real_position(principal, position)
     if position.status != PositionStatus.OPEN:
         raise HTTPException(status.HTTP_409_CONFLICT, "Position is already closed")
     if position.mode == TradingMode.LIVE:
@@ -949,6 +979,7 @@ def _post_exit_moves(db: DbSession, trades: list[Trade]) -> dict[int, dict[str, 
 def list_trades(
     db: DbSession,
     access: PlanAccessDep,
+    principal: PrincipalDep,
     wins_only: bool | None = None,
     limit: int = Query(100, le=1000),
     book: BookFilter = "all",
@@ -962,6 +993,7 @@ def list_trades(
     Scoped to the current paper trial by default, so the list agrees with the
     counts /summary reports rather than showing trades those counts exclude.
     `all_time=true` returns every trade ever closed."""
+    book = book_for(principal, book)
     mode = TradingMode.LIVE if book == "real" else get_broker().mode
     since = None if (all_time or book == "tester") else portfolio_service.trial_start(mode)
     stmt = (

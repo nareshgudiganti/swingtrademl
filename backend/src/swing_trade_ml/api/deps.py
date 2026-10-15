@@ -60,6 +60,18 @@ class Principal:
     def is_owner(self) -> bool:
         return self.via_api_key or bool(self.user and self.user.is_superuser)
 
+    @property
+    def can_see_real_account(self) -> bool:
+        """The real Zerodha account (My Holdings, real orders): signed-in owner
+        accounts named in REAL_ACCOUNT_USERS, and the shared API key (the owner's
+        own scripts). Not every owner account: testers hold those too."""
+        if self.via_api_key:
+            return True
+        if self.user is None or not self.user.is_superuser:
+            return False
+        allowed = {n.strip().lower() for n in settings.REAL_ACCOUNT_USERS.split(",") if n.strip()}
+        return self.user.username.lower() in allowed
+
 
 async def get_principal(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
@@ -212,6 +224,24 @@ def actor_name(principal: Principal) -> str:
     if principal.user is not None:
         return principal.user.username
     return "api-key"
+
+
+async def require_real_account(principal: Annotated[Principal, Depends(get_principal)]) -> Principal:
+    """Guards everything that reads or moves the real Zerodha account."""
+    if not principal.can_see_real_account:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "This is a private account. You don't have access.")
+    return principal
+
+
+def book_for(principal: Principal, book: str) -> str:
+    """The book a caller may ask for. The real (My Holdings) book is hidden from
+    everyone else: asking for it is refused, and "all" quietly becomes the bot's
+    own book, so hand-bought shares never leak into a total."""
+    if principal.can_see_real_account:
+        return book
+    if book == "real":
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "This is a private account. You don't have access.")
+    return "bot" if book == "all" else book
 
 
 async def require_owner(principal: Annotated[Principal, Depends(get_principal)]) -> Principal:

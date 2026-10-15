@@ -44,6 +44,11 @@ class Settings(BaseSettings):
     API_V1_PREFIX: str = "/api/v1"
     CORS_ORIGINS: str = "http://localhost:5173"
 
+    # Who may see and trade the real Zerodha account (My Holdings): signed-in
+    # owner accounts whose username is listed here, comma separated, plus the
+    # shared API key (the owner's own scripts). Nobody else: real money is personal.
+    REAL_ACCOUNT_USERS: str = "sudeeksha"
+
     API_KEY: str = "change-me"
     JWT_SECRET_KEY: str = "change-me"
     JWT_ALGORITHM: str = "HS256"

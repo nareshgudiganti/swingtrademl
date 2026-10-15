@@ -54,6 +54,7 @@ type Screen = {
   feature?: string
   planHome?: boolean
   manage?: boolean
+  realAccount?: boolean
   inNav?: boolean
 }
 
@@ -74,7 +75,7 @@ const SCREENS: Screen[] = [
   { to: '/home', label: "Today's picks", Icon: HomeIcon, element: <PlanHome />, planHome: true, inNav: true },
   { to: '/dashboard', label: 'Dashboard', Icon: HomeIcon, element: <Dashboard />, inNav: true },
   { to: '/strategies', label: 'Strategies', Icon: ScaleIcon, element: <Strategies />, inNav: true },
-  { to: '/holdings', label: 'My Holdings', Icon: WalletIcon, element: <Holdings />, inNav: true },
+  { to: '/holdings', label: 'My Holdings', Icon: WalletIcon, element: <Holdings />, realAccount: true, inNav: true },
   {
     to: '/portfolio',
     label: 'Portfolio',
@@ -158,7 +159,7 @@ export default function App() {
   const hasToken = !!getToken()
   const location = useLocation()
   const queryClient = useQueryClient()
-  const { plan, seesAll, canManage, has, isLoading: planLoading } = usePlan()
+  const { plan, seesAll, canManage, canSeeRealAccount, has, isLoading: planLoading } = usePlan()
 
   // Account status (mode, Kite session, portfolio) is the owner's business;
   // the API refuses it to plan users, so they don't ask.
@@ -323,6 +324,7 @@ export default function App() {
 
   const canSee = (s: Screen): boolean => {
     if (s.manage) return canManage
+    if (s.realAccount) return canSeeRealAccount
     return seesAll || !!s.planHome || (!!s.feature && has(s.feature))
   }
   // A full-app account's home is the Dashboard; /home stays reachable by URL.

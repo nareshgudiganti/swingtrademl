@@ -163,7 +163,7 @@ def test_m00_follows_the_run_status(status, state):
 def test_alerting_kinds_mirror_the_alert_service():
     from swing_trade_ml.brain.alerts.service import ALERTING_KINDS
 
-    assert health.ALERTING_KINDS == frozenset(ALERTING_KINDS)
+    assert frozenset(ALERTING_KINDS) == health.ALERTING_KINDS
 
 
 def test_current_step_map_reads_the_registry():

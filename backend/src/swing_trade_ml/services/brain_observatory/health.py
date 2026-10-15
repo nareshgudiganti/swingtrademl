@@ -121,7 +121,7 @@ def module_rows(kind: str, modules: dict | None, trace: list | None, step_map: d
                 "mode_recorded": mode,
                 "statuses": statuses,
                 "flags": flags,
-                "inferred": {k: inferred_step for k in ("expected", "not_observed", "not_applicable")},
+                "inferred": dict.fromkeys(("expected", "not_observed", "not_applicable"), inferred_step),
                 "corroboration": corroboration,
                 "conflicts": conflicts,
                 "failure_messages": [

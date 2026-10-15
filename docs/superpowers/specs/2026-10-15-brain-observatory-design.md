@@ -896,3 +896,23 @@ The momentum baseline is added to `/outcomes`; it is computed from stored daily 
 decision day, read-only, and labelled "Observed, not proof" like the rest of `/outcomes`.
 
 **Phase 1A scope (section 10) is otherwise unchanged.**
+
+## 14. Rev 4b and plan revision 2 (owner review of the plan, 2026-10-15)
+
+Requirements R1–R9 and corrections C1–C10 in `docs/superpowers/plans/2026-10-15-brain-observatory-phase-1a.md`
+are part of this spec: independent health flags and counts; single-source vs conflicting records; the
+recording card "Existing records only — partial visibility."; sourced outcome, cost and benchmark figures
+with honest unavailable states; numerical verdict separate from independence with fixed precedence; claims
+and minimums bound by code; CI integrity checks against git objects; missing-run checks using holidays and
+deadlines; database-enforced read-only transactions with isolated write tests; redaction that never alters
+ids or cursors; book and category separation; no silent truncation; committed test rows only in the
+dedicated test database.
+
+Owner approved on 2026-10-15: scope additions S1 (view-time outcome calculations, using the locked
+evidence-defs-v1 trade-level baselines) and S2 (CI checkout `fetch-depth: 0`); publishing tags
+`wf-protocol-v1` and `evidence-defs-v1`.
+
+Two corrections to earlier sections:
+- 3.3 `/outcomes`: the figures are computed at view time from stored prices (section 13's one function,
+  category required) and labelled so; only the M09 grades are stored records.
+- 6.3 learning changes: "No frozen protocol yet", by the precedence rule, since no protocol exists for them.

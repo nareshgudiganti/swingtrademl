@@ -3,18 +3,47 @@ name: Deploy to production
 on:
   push:
     branches: [main]
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Deploy even between 09:00 and 16:30 IST on a weekday (emergency fix only)"
+        type: boolean
+        default: false
 
 concurrency:
   group: production-deployment
   cancel-in-progress: false
 
 jobs:
+  # A deploy restarts the worker. Between 09:00 and 16:30 IST on weekdays that can cut off exits, the
+  # 09:15 approvals, the 15:50 brain run (a lost trial night) or the 16:20 daily check. On 2026-10-15 a
+  # deploy started at 16:00, minutes after the brain run. Tracker tv20. Checked first, so a refused
+  # deploy does not spend a test run.
+  window:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Refuse during market hours and the nightly brain run (IST)
+        env:
+          FORCE: ${{ inputs.force }}
+        run: |
+          now=$(TZ=Asia/Kolkata date '+%a %d %b %H:%M IST')
+          hm=$(TZ=Asia/Kolkata date +%H%M); day=$(TZ=Asia/Kolkata date +%u)
+          if [ "$day" -le 5 ] && [ "$hm" -ge 0900 ] && [ "$hm" -lt 1630 ]; then
+            if [ "$FORCE" = "true" ]; then
+              echo "::warning::Forced deploy at $now, inside 09:00-16:30 IST. The worker restarts now."
+              exit 0
+            fi
+            echo "::error::Not deploying at $now: 09:00-16:30 IST on weekdays is market hours and the nightly brain run, and a deploy restarts the worker. Re-run this workflow after 16:30 IST (open this run, then Re-run all jobs). For an emergency fix: Actions, Deploy to production, Run workflow with force ticked."
+            exit 1
+          fi
+          echo "OK to deploy at $now."
+
   validate:
+    needs: window
     uses: ./.github/workflows/test.yml
 
   deploy:
-    needs: validate
+    needs: [window, validate]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:

@@ -1,4 +1,5 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 
@@ -60,7 +61,10 @@ def test_check_entry_refuses_a_stock_reporting_results(db_session, monkeypatch):
     db_session.flush()
     db_session.add(
         UpcomingEvent(
-            symbol="RESULTSCO", kind="results", event_date=date.today(), detail="Financial Results"
+            # India's date, the one check_entry uses: date.today() is UTC on CI, so between 00:00 and 05:30
+            # IST it named yesterday and this failed (it stopped the 2026-10-15 00:00 IST deploy).
+            symbol="RESULTSCO", kind="results", event_date=datetime.now(ZoneInfo("Asia/Kolkata")).date(),
+            detail="Financial Results",
         )
     )
     db_session.flush()

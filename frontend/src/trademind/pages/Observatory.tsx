@@ -9,6 +9,14 @@ import type { ObsByKey, ObsDay, ObsModuleRow, ObsRunsCursor } from '../../api/ty
 import { Card, Tabs } from '../ui'
 
 const TABS = ['Decision flow', 'Module activity', 'Results & proof'] as const
+const FIGURES = [
+  ['candidate', 'Brain TRADE ideas'],
+  ['every_stock', 'Every stock (random baseline)'],
+  ['random_5', 'Random 5 a day'],
+  ['momentum_5', 'Momentum 5 a day'],
+  ['nifty_matched', "NIFTY over each idea's own holding days"],
+  ['cash', 'Cash'],
+] as const
 type Tab = (typeof TABS)[number]
 
 // One column per flag; the last two are the states a run can have for a module that is simply not there.
@@ -387,15 +395,35 @@ export default function Observatory() {
                     Excluded, not mixed in: {results.data.excluded.other_stage_days} day(s) in another stage, {results.data.excluded.other_book_runs} run(s) in another book.
                   </p>
                 )}
-                {(['brain_trade', 'every_stock', 'momentum', 'nifty', 'cash'] as const).map((k) => {
+                {FIGURES.map(([k, label]) => {
                   const f = results.data.computed[k]
+                  if (!f) {
+                    return (
+                      <p key={k} data-testid="obs-figure" data-figure={k}>
+                        <b>{label}</b>: Not available — this figure was not returned.
+                      </p>
+                    )
+                  }
+                  const value = k === 'random_5' ? f.avg_net_mean : f.avg_net
                   return (
                     <p key={k} data-testid="obs-figure" data-figure={k}>
-                      <b>{k.replace('_', ' ')}</b>: {f.available ? pct(f.avg_net ?? f.avg) : `Not available — ${f.why ?? ''}`}
+                      <b>{label}</b>: {f.available ? pct(value) : `Not available — ${f.why ?? ''}`}
+                      {f.available && k === 'random_5' && f.beaten_share != null && (
+                        <> · beaten by the brain in {Math.round(f.beaten_share * 100)}% of {f.draws} draws</>
+                      )}
                       <br /><span className="tm-dim">{f.source}</span>
                     </p>
                   )
                 })}
+                {results.data.computed.edge && (
+                  <p data-testid="obs-figure" data-figure="edge">
+                    <b>Brain minus every stock, per day</b>:{' '}
+                    {results.data.computed.edge.available
+                      ? `${pct(results.data.computed.edge.mean)} (lower bound ${pct(results.data.computed.edge.lower_bound)}; ${results.data.computed.edge.word})`
+                      : `Not available — ${results.data.computed.edge.why ?? ''}`}
+                    <br /><span className="tm-dim">{results.data.computed.edge.source}</span>
+                  </p>
+                )}
                 <p className="tm-dim">Costs: {results.data.computed.costs}</p>
               </div>
             )}

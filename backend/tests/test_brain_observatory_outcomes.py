@@ -207,3 +207,30 @@ def test_outcomes_processing_is_bounded(db_session, realistic_cohort):
     o.official_forward_gate(db_session, realistic_cohort.today)
     assert counter.n <= 12, counter.n
     assert _time.perf_counter() - t0 < 4.0
+
+
+def test_the_computed_shape_is_what_the_page_reads():
+    """The page (frontend/src/trademind/pages/Observatory.tsx, FIGURES + edge) reads exactly these keys; a
+    mismatch once blanked the whole page, so the contract is pinned here."""
+    from pathlib import Path
+
+    from swing_trade_ml.services.brain_observatory import outcomes as o
+
+    shape = o._unavailable_all("pinned")
+    for key in (
+        "candidate",
+        "every_stock",
+        "random_5",
+        "momentum_5",
+        "nifty_matched",
+        "cash",
+        "edge",
+        "costs",
+    ):
+        assert key in shape, key
+    page = (
+        Path(__file__).resolve().parents[2] / "frontend" / "src" / "trademind" / "pages" / "Observatory.tsx"
+    ).read_text(encoding="utf-8")
+    for key in ("candidate", "every_stock", "random_5", "momentum_5", "nifty_matched", "cash"):
+        assert f"['{key}'," in page, f"the page does not read '{key}'"
+    assert "brain_trade" not in page and "'nifty'" not in page

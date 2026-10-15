@@ -1335,12 +1335,19 @@ export interface ObsClaim {
   independence_note: string; protocol_id: string | null; tested_subject: string | null
   numbers: Record<string, number | string> | null; problems: string[]
 }
-export interface ObsFigure { available: boolean; why?: string; source: string; ideas?: number; avg_net?: number | null; avg?: number | null }
+export interface ObsEdge { available: boolean; why?: string; source: string; days?: number; mean?: number | null; lower_bound?: number | null; word?: string }
+export interface ObsFigure {
+  available: boolean; why?: string; source: string
+  picked?: number; finished?: number; open?: number; no_data?: number
+  avg_net?: number | null; hit_rate?: number | null
+  draws?: number; avg_net_mean?: number | null; p5?: number | null; p95?: number | null; beaten_share?: number | null
+}
 export interface ObsOutcomes {
   category: 'practice' | 'backtest' | 'paper'
   stored_grades: { available: boolean; why?: string; count: number; avg_gross_return: number | null; source: string }
   computed: {
-    brain_trade: ObsFigure; every_stock: ObsFigure; momentum: ObsFigure; nifty: ObsFigure; cash: ObsFigure; costs: string
+    candidate: ObsFigure; every_stock: ObsFigure; random_5: ObsFigure; momentum_5: ObsFigure
+    nifty_matched: ObsFigure; cash: ObsFigure; edge?: ObsEdge; costs: string; defs?: string; label?: string
   }
   excluded?: { other_stage_days: number; other_book_runs: number }
   label: string

@@ -1272,3 +1272,96 @@ export interface RealOrder {
   status: string
   message: string | null
 }
+
+// ---- Brain Observatory (Phase 1A, read-only) ----
+export type ObsFlags = Record<
+  | 'expected' | 'executed' | 'valid_output' | 'used' | 'shadow' | 'switched_off' | 'failed' | 'not_observed'
+  | 'not_applicable' | 'not_installed_then' | 'unknown' | 'unknown_module' | 'duplicate' | 'conflicting',
+  boolean
+>
+export interface ObsModuleRow {
+  module_id: string
+  step: string | null
+  step_source: string | null
+  mode_recorded: string | null
+  statuses: string[]
+  flags: ObsFlags
+  inferred: Record<string, boolean>
+  corroboration: 'corroborated' | 'single_source' | 'no_record' | 'conflicting' | 'not_installed'
+  conflicts: string[]
+  failure_messages: string[]
+}
+export interface ObsRunSummary {
+  id: string; kind: string; live: boolean; status: string; book: string; as_of: string; day: string
+  started_at: string | null; finished_at: string | null; ms: number; error: string | null
+}
+export interface ObsNightly { state: string; run_id?: string; run_ids?: string[]; expectation: string }
+export interface ObsRunsCursor { after_started_at: string; after_id: string }
+export interface ObsRuns {
+  date: string; nightly: ObsNightly; intraday: Record<string, number | boolean>; items: ObsRunSummary[]
+  next_cursor: ObsRunsCursor | null; redacted_fields: string[]
+}
+export interface ObsRunDetail {
+  run: ObsRunSummary; headline: string; banner: { mode: string | null; headline: string | null }
+  modules: ObsModuleRow[]; counts: Record<string, number | Record<string, number> | string[]>
+  step_fallbacks: { step: string; reason: string }[]
+  outside_steps: { module_id: string; state: string; detail: string }[]
+  stage_that_day: { stage: string | null; label: string }
+  words: { idea: Record<string, number>; holding: Record<string, number>; ideas_total: number; holdings_total: number }
+  universe_relation: { state: string; universe?: number; ideas: number; holdings: number; allowed?: number[]; why?: string }
+  recording: { card: string; phase: string; not_recorded: string[]; versions: string }
+  redacted_fields: string[]
+}
+export interface ObsStockBrief { id: number; symbol: string; kind: string; word: string; confidence: number | null; score_source: string | null }
+export interface ObsStocks { items: ObsStockBrief[]; next_cursor: { after_id: number } | null }
+export interface ObsStockDetail {
+  decision: ObsStockBrief & {
+    entry_low: number | null; entry_high: number | null; target: number | null; stop: number | null; qty: number
+    horizon_days: number; reasons: string[]; evidence_text: string | null; downgraded_from: string | null
+    downgrade_reason: string | null; downgrade_label: string
+    overrule: { word: string; overrule_reason: string | null; at: string | null; by: string } | null
+    outcome: { outcome: string; gross_return: number | null; days: number | null; resolved_on: string | null; source: string } | null
+  }
+  features: { state: string; why?: string; close?: number; atr_14?: number | null; bar_date?: string }
+  stale: { listed_stale?: boolean; note?: string; state?: string }
+  tracker: { book?: string; label: string; rows: { day: string; day_n: number; ret: number; status: string; reason: string }[] }
+  instrument: { label: string; current: { exchange: string; instrument_token: number }[] }
+  influence: { state: string; text: string }
+  not_recorded: Record<string, string>
+  redacted_fields: string[]
+}
+export interface ObsClaim {
+  claim: string; label: string; word: string; numeric: string | null; independence: string | null
+  independence_note: string; protocol_id: string | null; tested_subject: string | null
+  numbers: Record<string, number | string> | null; problems: string[]
+}
+export interface ObsFigure { available: boolean; why?: string; source: string; ideas?: number; avg_net?: number | null; avg?: number | null }
+export interface ObsOutcomes {
+  category: 'practice' | 'backtest' | 'paper'
+  stored_grades: { available: boolean; why?: string; count: number; avg_gross_return: number | null; source: string }
+  computed: {
+    brain_trade: ObsFigure; every_stock: ObsFigure; momentum: ObsFigure; nifty: ObsFigure; cash: ObsFigure; costs: string
+  }
+  excluded?: { other_stage_days: number; other_book_runs: number }
+  label: string
+}
+export interface ObsByKey { [key: string]: number }
+export interface ObsDay {
+  day: string; nightly: ObsNightly
+  counts: { idea: ObsByKey; holding: ObsByKey; ideas_total: number; holdings_total: number } | null
+  universe: number | null
+  intraday: Record<string, number | boolean>
+  tracked: { by_book: ObsByKey; label: string }
+  signals: { by_mode: ObsByKey; label: string }
+  paper_orders: { by_mode: ObsByKey; label: string }
+  other_runs: { id: string; kind: string; live: boolean; status: string }[]
+}
+export interface ObsDays { days: ObsDay[]; redacted_fields: string[] }
+export interface ObsLearning {
+  results_collected: number; changes_proposed: ObsByKey; learning_checks: number
+  proven_improvement: ObsClaim; note: string; redacted_fields: string[]
+}
+export interface ObsForwardGate {
+  word: string; why: string; cohort_from: string; cohort_to: string; cohort: string
+  gate?: { sessions: number; finished: number; word: string }
+}

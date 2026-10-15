@@ -107,7 +107,9 @@ def committed(*rows) -> Iterator[None]:
     cleanup()
     try:
         with Session(engine) as s:
-            s.add_all(rows)
+            for row in rows:  # one flush per row: these models have no relationships to order the inserts
+                s.add(row)
+                s.flush()
             s.commit()
         yield
     finally:

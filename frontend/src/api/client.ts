@@ -66,8 +66,6 @@ import type {
   PortfolioSummary,
   Prediction,
   PredictionRun,
-  RealOrderResult,
-  RealOrdersStatus,
   RealReport,
   ScanResult,
   Strategy,
@@ -321,13 +319,6 @@ export const api = {
   // real/paper order through whichever broker the app is currently in).
   manualClosePosition: (id: number, exitPrice: number) =>
     post<Trade>(`/portfolio/positions/${id}/manual-close`, { exit_price: exitPrice }),
-  // REAL orders for the owner's own Zerodha account, from My Holdings (spec 2026-10-14). Owner only;
-  // the server checks the switch, market hours, the kill switch, limits and Zerodha's own share count.
-  realOrdersStatus: () => get<RealOrdersStatus>('/portfolio/real/orders-status'),
-  realBuy: (body: { symbol: string; quantity: number; exchange?: 'NSE' | 'BSE' }) =>
-    post<RealOrderResult>('/portfolio/real/buy', body),
-  realSell: (positionId: number, quantity?: number) =>
-    post<RealOrderResult>(`/portfolio/real/positions/${positionId}/sell`, { quantity: quantity ?? null }),
   trades: (limit = 100) => get<Trade[]>(`/portfolio/trades?limit=${limit}&book=bot`),
   testerSummary: () => get<PortfolioSummary>('/portfolio/summary?book=tester'),
   testerPositions: () => get<DetailedPosition[]>('/portfolio/positions/detailed?book=tester'),

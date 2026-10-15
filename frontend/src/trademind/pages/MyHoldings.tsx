@@ -134,139 +134,9 @@ function SoldDialog({
   )
 }
 
-/** Sends a REAL market sell to Zerodha for one holding. The server re-checks everything. */
-function RealSellDialog({
-  position,
-  onSubmit,
-  onClose,
-}: {
-  position: DetailedPosition
-  onSubmit: (id: number, quantity: number) => Promise<unknown>
-  onClose: () => void
-}) {
-  const [qty, setQty] = useState(String(position.quantity))
-  return (
-    <Confirm
-      title={`Sell real ${position.symbol} shares`}
-      confirmLabel="Send real sell to Zerodha"
-      danger
-      onClose={onClose}
-      onConfirm={async () => {
-        const n = Number(qty)
-        if (!Number.isInteger(n) || n < 1 || n > position.quantity) {
-          throw new Error(`Type a whole number of shares from 1 to ${position.quantity}.`)
-        }
-        await onSubmit(position.id, n)
-      }}
-    >
-      <p style={{ margin: '0 0 0.6rem' }}>
-        This sends a <strong>real market order</strong> to your Zerodha account. It sells at the market price, which
-        can differ a little from today’s price ({rupees(position.current_price)}). It cannot be undone.
-      </p>
-      <label style={{ display: 'block' }}>
-        <span className="tm-dim" style={{ fontSize: '0.75rem' }}>Shares to sell (you hold {position.quantity})</span>
-        <input
-          className="tm-input"
-          style={{ width: '100%', marginTop: 4 }}
-          type="number"
-          inputMode="numeric"
-          min="1"
-          max={position.quantity}
-          step="1"
-          value={qty}
-          onChange={(e) => setQty(e.target.value)}
-        />
-      </label>
-    </Confirm>
-  )
-}
-
-/** Status, limits and the buy form for REAL orders. Only the owner ever gets this data. */
-function RealOrdersCard({ onSent }: { onSent: (text: string) => void }) {
-  const queryClient = useQueryClient()
-  const status = useQuery({ queryKey: ['realOrdersStatus'], queryFn: api.realOrdersStatus, retry: false })
-  const [symbol, setSymbol] = useState('')
-  const [qty, setQty] = useState('')
-  const [ask, setAsk] = useState(false)
-  const buy = useMutation({
-    mutationFn: () => api.realBuy({ symbol: symbol.trim().toUpperCase(), quantity: Number(qty) }),
-    onSuccess: (r) => {
-      queryClient.invalidateQueries({ queryKey: ['realOrdersStatus'] })
-      queryClient.invalidateQueries({ queryKey: ['realPositions'] })
-      onSent(
-        r.status === 'REJECTED'
-          ? `Zerodha refused the buy: ${r.message ?? 'no reason given'}. Nothing was bought.`
-          : `Real buy of ${r.quantity} ${symbol.trim().toUpperCase()} sent to Zerodha. It appears in the list once it fills (usually within a minute).`,
-      )
-      setSymbol('')
-      setQty('')
-    },
-  })
-  if (status.isError || !status.data) return null // not the owner, or the server is older
-  const s = status.data
-  const canBuy = s.enabled && s.market_open && !s.halted
-  return (
-    <Card
-      title="Real orders (your own money)"
-      sub={`Buy or sell your own Zerodha shares from here. Buys: up to ${rupees(s.max_order_inr)} per order and ${rupees(s.max_day_inr)} a day. Sells are never limited. The bot itself stays on paper.`}
-    >
-      <div className={s.enabled ? 'tm-callout' : 'tm-dim'} style={{ marginBottom: '0.6rem' }}>
-        {s.plain}
-        {s.enabled && ` Left to buy today: ${rupees(s.left_today_inr)}.`}
-      </div>
-      {s.enabled && (
-        <div className="tm-flex tm-wrap" style={{ gap: '0.5rem', alignItems: 'flex-end' }}>
-          <label>
-            <span className="tm-dim" style={{ fontSize: '0.75rem', display: 'block' }}>Stock (NSE symbol)</span>
-            <input className="tm-input" value={symbol} onChange={(e) => setSymbol(e.target.value)} placeholder="e.g. ITC" />
-          </label>
-          <label>
-            <span className="tm-dim" style={{ fontSize: '0.75rem', display: 'block' }}>Shares</span>
-            <input
-              className="tm-input"
-              type="number"
-              inputMode="numeric"
-              min="1"
-              step="1"
-              value={qty}
-              onChange={(e) => setQty(e.target.value)}
-              style={{ width: '7rem' }}
-            />
-          </label>
-          <button
-            className="tm-btn"
-            disabled={!canBuy || buy.isPending || !symbol.trim() || !(Number(qty) >= 1)}
-            onClick={() => setAsk(true)}
-          >
-            Buy real shares
-          </button>
-        </div>
-      )}
-      {ask && (
-        <Confirm
-          title={`Buy real ${symbol.trim().toUpperCase()} shares`}
-          confirmLabel="Send real buy to Zerodha"
-          danger
-          onClose={() => setAsk(false)}
-          onConfirm={async () => {
-            await buy.mutateAsync()
-          }}
-        >
-          This sends a <strong>real market order</strong> for {qty} {symbol.trim().toUpperCase()} shares to your Zerodha
-          account, paid from your own money. The price is the market price when it fills. It cannot be undone. Alerts
-          (not automatic sells) are set at −4% and +8%.
-        </Confirm>
-      )}
-    </Card>
-  )
-}
-
 function HoldingsTab() {
   const queryClient = useQueryClient()
   const [sold, setSold] = useState<DetailedPosition | null>(null)
-  const [sellReal, setSellReal] = useState<DetailedPosition | null>(null)
-  const realStatus = useQuery({ queryKey: ['realOrdersStatus'], queryFn: api.realOrdersStatus, retry: false })
-  const realOn = !!realStatus.data?.enabled
   const [askImport, setAskImport] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
 
@@ -296,19 +166,6 @@ function HoldingsTab() {
     },
   })
 
-  const realSell = useMutation({
-    mutationFn: ({ id, quantity }: { id: number; quantity: number }) => api.realSell(id, quantity),
-    onSuccess: (r) => {
-      queryClient.invalidateQueries({ queryKey: ['realPositions'] })
-      queryClient.invalidateQueries({ queryKey: ['realOrdersStatus'] })
-      setNotice(
-        r.status === 'REJECTED'
-          ? `Zerodha refused the sell: ${r.message ?? 'no reason given'}. Nothing was sold.`
-          : `Real sell of ${r.quantity} shares sent to Zerodha. The list updates once it fills.`,
-      )
-    },
-  })
-
   const rows = tracked.data ?? []
   const totals = useMemo(() => {
     const invested = rows.reduce((s, p) => s + p.invested, 0)
@@ -323,14 +180,9 @@ function HoldingsTab() {
 
   return (
     <>
-      <RealOrdersCard onSent={setNotice} />
       <Card
         title="Shares you bought yourself"
-        sub={
-          realOn
-            ? 'Your real Zerodha shares, read by the bot each day. Only the “Real orders” buttons place orders.'
-            : 'Your real Zerodha shares, read by the bot each day. Nothing here buys or sells anything.'
-        }
+        sub="Your real Zerodha shares, read by the bot each day. Nothing here buys or sells anything."
         action={
           <button className="tm-btn" onClick={() => setAskImport(true)} disabled={importHoldings.isPending}>
             {untracked > 0 ? `Import ${untracked} new from Zerodha` : 'Import from Zerodha'}
@@ -438,21 +290,9 @@ function HoldingsTab() {
                       <Tag tone={VERDICT[p.action_code].tone}>{VERDICT[p.action_code].head}</Tag>
                     </td>
                     <td>
-                      <div className="tm-flex" style={{ gap: '0.4rem' }}>
-                        {realOn && (
-                          <button
-                            className="tm-btn"
-                            onClick={() => setSellReal(p)}
-                            disabled={realSell.isPending || !realStatus.data?.market_open}
-                            title={realStatus.data?.market_open ? undefined : realStatus.data?.plain}
-                          >
-                            Sell real
-                          </button>
-                        )}
-                        <button className="tm-btn tm-btn-ghost" onClick={() => setSold(p)} disabled={manualClose.isPending}>
-                          I sold this
-                        </button>
-                      </div>
+                      <button className="tm-btn tm-btn-ghost" onClick={() => setSold(p)} disabled={manualClose.isPending}>
+                        I sold this
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -480,13 +320,6 @@ function HoldingsTab() {
           position={sold}
           onClose={() => setSold(null)}
           onSubmit={(id, exitPrice) => manualClose.mutateAsync({ id, exitPrice })}
-        />
-      )}
-      {sellReal && (
-        <RealSellDialog
-          position={sellReal}
-          onClose={() => setSellReal(null)}
-          onSubmit={(id, quantity) => realSell.mutateAsync({ id, quantity })}
         />
       )}
     </>

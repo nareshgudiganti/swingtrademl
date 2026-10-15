@@ -83,13 +83,6 @@ class Settings(BaseSettings):
     # ------------------------------------------------------- trading mode --
     TRADING_MODE: Literal["paper", "live"] = "paper"
     ALLOW_LIVE_TRADING: bool = False
-    # Real buy/sell of the owner's own shares from My Holdings, by hand, while the bot stays on paper
-    # (docs/superpowers/specs/2026-10-14-real-holdings-orders-design.md). Off unless set in prod .env.
-    # Opens ONLY the My Holdings order path (orders tagged REAL_HOLDINGS_TAG_PREFIX); every other path
-    # still needs both latches above.
-    ALLOW_REAL_HOLDINGS_ORDERS: bool = False
-    REAL_HOLDINGS_MAX_ORDER_INR: float = 10_000.0  # per real BUY order; sells are never money-limited
-    REAL_HOLDINGS_MAX_DAY_INR: float = 25_000.0  # all real BUY orders in one IST day, pending included
 
     PAPER_STARTING_CAPITAL: float = 1_000_000.0
     # Manual paper-testing book (separate positions from the bot portfolio).

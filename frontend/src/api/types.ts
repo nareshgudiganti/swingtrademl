@@ -1242,23 +1242,3 @@ export interface MarketSession {
   last_closed_trading_day: string
   calendar_warning: string | null
 }
-
-/** GET /portfolio/real/orders-status: may real orders be placed from My Holdings right now. */
-export interface RealOrdersStatus {
-  enabled: boolean
-  market_open: boolean
-  halted: boolean
-  max_order_inr: number
-  max_day_inr: number
-  spent_today_inr: number
-  left_today_inr: number
-  plain: string
-}
-
-/** A real buy or sell just sent to Zerodha (or refused by it). */
-export interface RealOrderResult {
-  order_id: number
-  status: string
-  quantity: number
-  message: string | null
-}

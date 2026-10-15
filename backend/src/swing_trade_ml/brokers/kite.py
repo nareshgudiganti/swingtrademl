@@ -23,29 +23,11 @@ from swing_trade_ml.brokers.base import (
     OrderResult,
 )
 from swing_trade_ml.core.config import settings
-from swing_trade_ml.core.enums import OrderStatus, OrderType, ProductType, TradingMode
+from swing_trade_ml.core.enums import OrderStatus, OrderType, TradingMode
 from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.db.models.session import BrokerSession
 
 log = get_logger(__name__)
-
-#: Reserved for the owner's own real buys/sells from My Holdings (services/real_orders.py builds them;
-#: nothing else may). Alphanumeric and short: Zerodha's order tag allows 20 characters.
-REAL_HOLDINGS_TAG_PREFIX = "stmlhold"
-
-
-def is_real_holdings_order(request: OrderRequest) -> bool:
-    """The one narrow door to a real order while the bot stays on paper: the My Holdings latch is on,
-    and the request is a plain CNC market order carrying the reserved tag. Everything else still needs
-    both live-trading latches (spec 2026-10-14-real-holdings-orders-design.md, Safety 2)."""
-    return bool(
-        settings.ALLOW_REAL_HOLDINGS_ORDERS
-        and request.tag
-        and request.tag.startswith(REAL_HOLDINGS_TAG_PREFIX)
-        and len(request.tag) <= 20
-        and request.product == ProductType.CNC
-        and request.order_type == OrderType.MARKET
-    )
 
 
 class KiteAuthError(RuntimeError):
@@ -404,7 +386,7 @@ class KiteBroker(Broker):
         # Belt and braces: the factory should never hand out a live broker while
         # the latches are closed, but an order that reaches the exchange cannot
         # be un-sent, so the check is repeated at the point of no return.
-        if not (settings.is_live_trading or is_real_holdings_order(request)):
+        if not settings.is_live_trading:
             raise RuntimeError(
                 "Refusing to place a live order: requires TRADING_MODE=live AND "
                 "ALLOW_LIVE_TRADING=true"
@@ -496,24 +478,6 @@ class KiteBroker(Broker):
             for p in data.get("net", [])
             if p["quantity"] != 0
         ]
-
-    def owned_quantity(self, tradingsymbol: str, db: Session) -> int:
-        """Shares of one stock really owned at Zerodha right now: settled + settling holdings
-        (`quantity + t1_quantity`) plus today's delivery (CNC) buys, which are only in `positions` until
-        the next day. A real sell is checked against this, never against the app's own rows, which can be
-        stale (spec review 2026-10-14)."""
-        self._require_auth()
-        held = sum(
-            int(h.get("quantity", 0) or 0) + int(h.get("t1_quantity", 0) or 0)
-            for h in self.reauth_and_retry(db, self._kite.holdings)
-            if h.get("tradingsymbol") == tradingsymbol
-        )
-        today = sum(
-            int(p.get("quantity", 0) or 0)
-            for p in self.reauth_and_retry(db, self._kite.positions).get("net", [])
-            if p.get("tradingsymbol") == tradingsymbol and p.get("product") == ProductType.CNC.value
-        )
-        return max(held + today, 0)
 
     def get_holdings(self, db: Session) -> list[dict]:
         self._require_auth()

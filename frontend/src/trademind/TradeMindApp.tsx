@@ -30,6 +30,7 @@ import GoLive from './pages/GoLive'
 import Records from './pages/Records'
 import MyHoldings from './pages/MyHoldings'
 import Setup from './pages/Setup'
+import Observatory from './pages/Observatory'
 
 // One final app in five sections (owner-approved design, 2026-10-04): the top
 // row is the section, the row under it the pages of that section. Finance and
@@ -78,6 +79,7 @@ const SECTIONS: Section[] = [
     pages: [
       { to: '/trademind', label: 'Decisions', end: true },
       { to: '/trademind/ai', label: 'AI' },
+      { to: '/trademind/observatory', label: 'Observatory' },
     ],
   },
 ]
@@ -136,6 +138,9 @@ export default function TradeMindApp({ ownerConsole = false }: TradeMindAppProps
     }
     if (!ownerConsole && s.label === 'Swing Picks') {
       return { ...s, pages: s.pages.filter((p) => p.to !== '/trademind/watchlist') }
+    }
+    if (!ownerConsole && s.label === 'Brain Logs') {
+      return { ...s, pages: s.pages.filter((p) => p.to !== '/trademind/observatory') }
     }
     return s
   })
@@ -279,6 +284,7 @@ export default function TradeMindApp({ ownerConsole = false }: TradeMindAppProps
           />
           <Route path="ai" element={<AIDecision />} />
           <Route path="ai/:symbol" element={<AIDecision />} />
+          <Route path="observatory" element={ownerConsole ? <Observatory /> : <Navigate to="/trademind" replace />} />
           <Route path="risk" element={ownerConsole ? <Risk /> : <Navigate to="/trademind" replace />} />
           <Route path="learn" element={<Learn />} />
           <Route path="system" element={ownerConsole ? <System /> : <Navigate to="/trademind" replace />} />

@@ -1,6 +1,15 @@
 // Thin fetch wrapper around the FastAPI backend.
 
 import type {
+  ObsDays,
+  ObsForwardGate,
+  ObsLearning,
+  ObsOutcomes,
+  ObsClaim,
+  ObsRunDetail,
+  ObsRuns,
+  ObsStockDetail,
+  ObsStocks,
   RealAccount,
   RealOrder,
   RealOrdersStatus,
@@ -569,4 +578,28 @@ export const api = {
   brainApprovals: () => get<BrainApproval[]>('/brain/approvals'),
   brainApprove: (id: number, note: string) => post<BrainApproval>(`/brain/approvals/${id}/approve`, { note }),
   brainReject: (id: number, reason: string) => post<BrainApproval>(`/brain/approvals/${id}/reject`, { reason }),
+
+  // ---------------------------------------------- brain observatory (owner, read-only) --
+  obsDays: (from: string, to: string) => get<ObsDays>(`/brain/observatory/days?from=${from}&to=${to}`),
+  obsLearning: (from: string, to: string) => get<ObsLearning>(`/brain/observatory/learning?from=${from}&to=${to}`),
+  obsForwardGate: () => get<ObsForwardGate>('/brain/observatory/forward-gate'),
+  obsRunsPage: (date: string, afterStartedAt?: string, afterId?: string) =>
+    get<ObsRuns>(
+      `/brain/observatory/runs?date=${date}` +
+        (afterStartedAt && afterId
+          ? `&after_started_at=${encodeURIComponent(afterStartedAt)}&after_id=${encodeURIComponent(afterId)}`
+          : ''),
+    ),
+  obsRun: (runId: string) => get<ObsRunDetail>(`/brain/observatory/runs/${encodeURIComponent(runId)}`),
+  obsStocks: (runId: string, symbol?: string, afterId?: number) =>
+    get<ObsStocks>(
+      `/brain/observatory/runs/${encodeURIComponent(runId)}/stocks?limit=500` +
+        (symbol ? `&symbol=${encodeURIComponent(symbol.trim().toUpperCase())}` : '') +
+        (afterId !== undefined ? `&after_id=${afterId}` : ''),
+    ),
+  obsStock: (runId: string, decisionId: number) =>
+    get<ObsStockDetail>(`/brain/observatory/runs/${encodeURIComponent(runId)}/stocks/${decisionId}`),
+  obsOutcomes: (from: string, to: string, category: 'practice' | 'backtest') =>
+    get<ObsOutcomes>(`/brain/observatory/outcomes?from=${from}&to=${to}&category=${category}`),
+  obsEffectiveness: () => get<{ claims: ObsClaim[] }>('/brain/observatory/effectiveness'),
 }

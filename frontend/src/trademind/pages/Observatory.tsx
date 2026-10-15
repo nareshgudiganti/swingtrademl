@@ -31,7 +31,7 @@ const FLAG_LABEL: Record<string, string> = {
 }
 const NIGHTLY_WORD: Record<string, string> = {
   observed: 'Ran', not_observed: 'Not observed', not_due: 'Not due yet', not_applicable: 'Not applicable (no trading)',
-  conflicting: 'Conflicting records',
+  conflicting: 'Conflicting records', failed: 'Started and failed', in_progress: 'Not finished yet',
 }
 const IDEA_WORDS = ['TRADE', 'WATCH', 'WAIT', 'AVOID'] as const
 const DEFERRED = 'Not recorded — decision-path recording deferred during trial'
@@ -385,10 +385,20 @@ export default function Observatory() {
             {results.data && (
               <div data-testid="obs-results">
                 <p className="tm-dim" data-testid="obs-observed-not-proof">{PROOF_LABEL}{results.data.label ? ` — ${results.data.label}` : ''}</p>
-                <p>Stored grades (gross): {results.data.stored_grades.available
-                  ? `${results.data.stored_grades.count} ideas, average ${pct(results.data.stored_grades.avg_gross_return)} gross`
-                  : `Not available — ${results.data.stored_grades.why ?? ''}`}
-                  <br /><span className="tm-dim">{results.data.stored_grades.source}</span></p>
+                <div data-testid="obs-stored-grades">
+                  <p>
+                    Stored grades, all ideas of every word (gross): {results.data.stored_grades.available
+                      ? `${results.data.stored_grades.count} ideas, average ${pct(results.data.stored_grades.avg_gross_return)} gross`
+                      : `Not available — ${results.data.stored_grades.why ?? ''}`}
+                  </p>
+                  <p data-testid="obs-stored-grades-trade">
+                    Of those, ideas the brain said TRADE: {results.data.stored_grades.trade?.available
+                      ? `${results.data.stored_grades.trade.count} ideas, average ${pct(results.data.stored_grades.trade.avg_gross_return)} gross`
+                      : `Not available — ${results.data.stored_grades.trade?.why ?? 'no graded TRADE ideas'}`}
+                  </p>
+                  <p className="tm-dim">{results.data.stored_grades.all_words_note}</p>
+                  <p className="tm-dim">{results.data.stored_grades.source}</p>
+                </div>
                 <p className="tm-dim">Category: {results.data.category} (live practice-stage ideas only; never mixed with backtests or v1 paper trades)</p>
                 {results.data.excluded && (
                   <p className="tm-dim" data-testid="obs-excluded">
@@ -448,7 +458,7 @@ export default function Observatory() {
               <QueryState q={learning} id="learning" />
               {learning.data && (
                 <>
-                  <p>Results collected: <b>{learning.data.results_collected}</b></p>
+                  <p>Results collected: <b>{learning.data.results_collected}</b> <span className="tm-dim">({learning.data.results_collected_label})</span></p>
                   <p>Changes proposed (by status): {keyed(learning.data.changes_proposed)}</p>
                   <p>Learning checks: <b>{learning.data.learning_checks}</b></p>
                   <p><b>{learning.data.proven_improvement.word}</b> — {learning.data.proven_improvement.label}</p>

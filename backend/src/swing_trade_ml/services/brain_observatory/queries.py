@@ -195,17 +195,23 @@ def stage_history(db: Session) -> list[tuple[datetime, str]]:
 # --- learning and outcomes --------------------------------------------------------------------------
 
 
-def learning_summary(db: Session, start: date, end: date) -> dict:
+def learning_summary(db: Session, start: date, end: date, book: str) -> dict:
+    """Results collected = graded ideas from LIVE, finished nightly runs of one book (never a replay or
+    another book); changes proposed and learning checks are the learning loop's own records."""
     lo, hi = _range(start, end)
     graded = (
         db.scalar(
             select(func.count())
             .select_from(BrainDecision)
+            .join(BrainRun, BrainRun.id == BrainDecision.run_id)
             .where(
                 BrainDecision.resolved_on >= start,
                 BrainDecision.resolved_on <= end,
                 BrainDecision.outcome.is_not(None),
                 BrainDecision.outcome != "noscore",
+                BrainRun.live.is_(True),
+                BrainRun.status == "done",
+                BrainRun.book == book,
             )
         )
         or 0
@@ -225,16 +231,27 @@ def learning_summary(db: Session, start: date, end: date) -> dict:
         )
         or 0
     )
-    return {"results_collected": graded, "changes_proposed": proposals, "learning_checks": learning_runs}
+    return {
+        "results_collected": graded,
+        "results_collected_label": f"graded ideas from live runs of the {book} book",
+        "changes_proposed": proposals,
+        "learning_checks": learning_runs,
+    }
 
 
 def stored_grade_rows(
     db: Session, start: date, end: date, live: bool
-) -> list[tuple[str, float | None, datetime, str]]:
+) -> list[tuple[str, float | None, datetime, str, str]]:
     lo, hi = _range(start, end)
     return list(
         db.execute(
-            select(BrainDecision.outcome, BrainDecision.outcome_return, BrainRun.as_of, BrainRun.book)
+            select(
+                BrainDecision.outcome,
+                BrainDecision.outcome_return,
+                BrainRun.as_of,
+                BrainRun.book,
+                func.coalesce(BrainDecision.overruled_word, BrainDecision.word),
+            )
             .join(BrainRun, BrainRun.id == BrainDecision.run_id)
             .where(
                 BrainDecision.kind == "idea",

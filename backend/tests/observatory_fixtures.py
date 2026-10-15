@@ -164,12 +164,23 @@ class Cohort:
         db.flush()
 
 
+_CONTROL = ("SAVEPOINT", "RELEASE SAVEPOINT", "ROLLBACK TO SAVEPOINT")
+
+
 def count_statements(session):
+    """Counts SQL statements run on the session's connection. Savepoint control statements are counted
+    apart (`.control`): they read nothing, and the journal runs inside one so a database error cannot
+    poison the request."""
+
     class Counter:
         n = 0
+        control = 0
 
-    def bump(*_a, **_k):
-        Counter.n += 1
+    def bump(_conn, _cursor, statement, *_a):
+        if statement.lstrip().upper().startswith(_CONTROL):
+            Counter.control += 1
+        else:
+            Counter.n += 1
 
     event.listen(session.connection(), "before_cursor_execute", bump)
     return Counter

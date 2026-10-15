@@ -75,10 +75,32 @@ NOTE = (
 # --- stored grades ----------------------------------------------------------------------------------
 
 
+def _grade_group(items: list[tuple[str, float | None]]) -> dict:
+    if not items:
+        return {"available": False, "count": 0, "by_outcome": {}, "avg_gross_return": None}
+    by: dict[str, int] = {}
+    for outcome, _ in items:
+        by[outcome] = by.get(outcome, 0) + 1
+    returns = [r for _, r in items if r is not None]
+    return {
+        "available": True,
+        "count": len(items),
+        "by_outcome": by,
+        "avg_gross_return": sum(returns) / len(returns) if returns else None,
+    }
+
+
+ALL_WORDS_NOTE = (
+    "M09 grades every idea whatever its word (TRADE, WATCH, WAIT, AVOID). The total below mixes all of them; "
+    "the 'TRADE' line is the ideas the brain actually said to trade."
+)
+
+
 def stored_grades(rows) -> dict:
-    """Stored M09 grades. Rows are (outcome, return, ...); only the first two items are read."""
-    graded = [(r[0], r[1]) for r in rows if r[0] and r[0] != "noscore"]
-    base = {"source": SOURCES["stored_grade"], "gross": True}
+    """Stored M09 grades. Rows are (outcome, return, as_of, book, word); the word is the owner's overrule
+    when there is one. Only the first two items are required; the fifth gives the breakdown."""
+    graded = [(r[0], r[1], r[4] if len(r) > 4 else None) for r in rows if r[0] and r[0] != "noscore"]
+    base = {"source": SOURCES["stored_grade"], "gross": True, "all_words_note": ALL_WORDS_NOTE}
     if not graded:
         return {
             **base,
@@ -87,18 +109,17 @@ def stored_grades(rows) -> dict:
             "count": 0,
             "by_outcome": {},
             "avg_gross_return": None,
+            "by_word": {},
+            "trade": {**_grade_group([]), "why": "No finished, graded TRADE ideas in these days."},
         }
-    by: dict[str, int] = {}
-    for outcome, _ in graded:
-        by[outcome] = by.get(outcome, 0) + 1
-    returns = [r for _, r in graded if r is not None]
-    return {
-        **base,
-        "available": True,
-        "count": len(graded),
-        "by_outcome": by,
-        "avg_gross_return": sum(returns) / len(returns) if returns else None,
+    total = _grade_group([(o, r) for o, r, _ in graded])
+    words = sorted({w for _, _, w in graded if w})
+    by_word = {w: _grade_group([(o, r) for o, r, x in graded if x == w]) for w in words}
+    trade = by_word.get("TRADE") or {
+        **_grade_group([]),
+        "why": "No finished, graded TRADE ideas in these days.",
     }
+    return {**base, **total, "by_word": by_word, "trade": trade}
 
 
 # --- stage rule -------------------------------------------------------------------------------------
@@ -128,24 +149,27 @@ def _journal(
 
     ctx: dict = {"sessions": [], "bars": {}, "index_bars": None, "excluded_days": None}
     try:
-        sessions = queries.nightly_sessions(db, start, end, live=live, book=book)
-        ctx["excluded_days"] = 0
-        if stage_filter is not None:
-            history = queries.stage_history(db)
-            kept = [s for s in sessions if stage_on_day(history, s.day) == stage_filter]
-            ctx["excluded_days"], sessions = len(sessions) - len(kept), kept
-        ctx["sessions"] = sessions
-        symbols = sorted({i.symbol for s in sessions for i in s.ideas})
-        lo, hi = start - timedelta(days=BARS_BEFORE_DAYS), end + timedelta(days=BARS_AFTER_DAYS)
-        bars = queries.daily_bars(db, symbols, lo, hi)
-        index = settings.BENCHMARK_INDEX_SYMBOL
-        index_bars = queries.daily_bars(db, [index], lo, hi).get(index)
-        ctx["bars"], ctx["index_bars"] = bars, index_bars
-        if not with_journal:
-            return {}, ctx, None
-        journal = build_journal(sessions, bars, {}, index_bars=index_bars)
-        journal["gate"] = gate(journal)
-        return journal, ctx, None
+        # A SAVEPOINT (allowed in a read-only transaction): a real database error inside the journal rolls
+        # back to here and leaves the rest of the request usable, instead of aborting the whole transaction.
+        with db.begin_nested():
+            sessions = queries.nightly_sessions(db, start, end, live=live, book=book)
+            ctx["excluded_days"] = 0
+            if stage_filter is not None:
+                history = queries.stage_history(db)
+                kept = [s for s in sessions if stage_on_day(history, s.day) == stage_filter]
+                ctx["excluded_days"], sessions = len(sessions) - len(kept), kept
+            ctx["sessions"] = sessions
+            symbols = sorted({i.symbol for s in sessions for i in s.ideas})
+            lo, hi = start - timedelta(days=BARS_BEFORE_DAYS), end + timedelta(days=BARS_AFTER_DAYS)
+            bars = queries.daily_bars(db, symbols, lo, hi)
+            index = settings.BENCHMARK_INDEX_SYMBOL
+            index_bars = queries.daily_bars(db, [index], lo, hi).get(index)
+            ctx["bars"], ctx["index_bars"] = bars, index_bars
+            if not with_journal:
+                return {}, ctx, None
+            journal = build_journal(sessions, bars, {}, index_bars=index_bars)
+            journal["gate"] = gate(journal)
+            return journal, ctx, None
     except Exception as exc:  # noqa: BLE001 — shown to the owner as 'not available', never hidden
         return None, ctx, redact_text(f"{type(exc).__name__}: {exc}")
 

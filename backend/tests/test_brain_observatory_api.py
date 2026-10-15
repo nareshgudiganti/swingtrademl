@@ -379,3 +379,47 @@ def test_a_write_attempt_through_a_route_is_refused(client, monkeypatch):
         client.get(f"{BASE}/runs?date=2026-10-15", headers=OWNER)
     with Session(engine) as check:
         assert check.get(BrainModuleSetting, "OBSR") is None
+
+
+# --- review finding 1 through the API: no counts for a run that did not finish ----------------------
+
+
+def test_a_failed_nightly_shows_failed_and_no_zero_counts(client, now_after_deadline):
+    with committed(make_run("fl", as_of=AS_OF, status="failed", error="boom")):
+        day = client.get(f"{BASE}/days?from=2026-10-15&to=2026-10-15", headers=OWNER).json()["days"][0]
+        page = client.get(f"{BASE}/runs?date=2026-10-15", headers=OWNER).json()
+    assert day["nightly"]["state"] == "failed"
+    assert day["counts"] is None and day["universe"] is None  # missing is not zero
+    assert page["nightly"]["state"] == "failed"
+
+
+def test_a_done_run_beside_a_failed_one_keeps_its_counts(client, now_after_deadline):
+    failed = make_run("fl2", as_of=AS_OF, status="failed", started_at=AS_OF - timedelta(minutes=30))
+    with committed(*seed(), failed):
+        day = client.get(f"{BASE}/days?from=2026-10-15&to=2026-10-15", headers=OWNER).json()["days"][0]
+    assert day["nightly"]["state"] == "observed" and day["counts"]["ideas_total"] == 2
+    assert [r["id"] for r in day["other_runs"]] == [f"{RUN_PREFIX}fl2"]
+
+
+# --- review finding 4: the learning count is one book, live runs only -------------------------------
+
+
+def test_learning_counts_only_live_runs_of_the_paper_book(client):
+    from swing_trade_ml.db.models.brain import BrainRun  # noqa: F401
+
+    live_paper = make_run("lp", as_of=AS_OF)
+    replay = make_run("rp", as_of=AS_OF, live=False)
+    live_book = make_run("lb", as_of=AS_OF, book="live")
+    graded = {"outcome": "target", "outcome_return": 0.08, "resolved_on": THU}
+    rows = (
+        live_paper,
+        make_decision("lp", f"{SYM_PREFIX}L1", **graded),
+        replay,
+        make_decision("rp", f"{SYM_PREFIX}L2", **graded),
+        live_book,
+        make_decision("lb", f"{SYM_PREFIX}L3", **graded),
+    )
+    with committed(*rows):
+        body = client.get(f"{BASE}/learning?from=2026-10-15&to=2026-10-15", headers=OWNER).json()
+    assert body["results_collected"] == 1
+    assert "live runs of the paper book" in body["results_collected_label"]

@@ -339,7 +339,7 @@ def learning(
     claims = {c["claim"]: c for c in verdicts.evaluate(verdicts.load_registry())}
     return redact_response(
         {
-            **queries.learning_summary(db, start, end),
+            **queries.learning_summary(db, start, end, settings.TRADING_MODE),
             "proven_improvement": claims["learning_changes"],
             "note": "Only M09 activity counts as learning: results collected, changes proposed, "
             "changes accepted.",

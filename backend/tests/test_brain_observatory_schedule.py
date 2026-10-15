@@ -69,3 +69,31 @@ def test_schedule_constants_match_the_scheduler_source():
     src = (Path(sch.__file__).resolve().parents[2] / "workers" / "scheduler.py").read_text(encoding="utf-8")
     assert "jobs.job_brain_nightly,\n        CronTrigger(day_of_week=WEEKDAYS, hour=15, minute=50" in src
     assert 'hour="9-15", minute="0,15,30,45"' in src
+
+
+# --- review finding 1: an unfinished or failed nightly is not "Ran" ---------------------------------
+
+
+def _run(rid, status):
+    return {"id": rid, "kind": "nightly", "live": True, "status": status}
+
+
+def test_a_failed_nightly_is_failed_not_observed():
+    s = sch.nightly_state(THU, at(THU, 17, 0), [_run("f", "failed")])
+    assert s["state"] == "failed" and s["run_ids"] == ["f"] and "run_id" not in s
+
+
+def test_a_queued_or_running_nightly_is_in_progress_not_observed():
+    for status in ("queued", "running"):
+        assert sch.nightly_state(THU, at(THU, 17, 0), [_run("q", status)])["state"] == "in_progress"
+
+
+def test_one_done_run_wins_over_a_failed_or_queued_rerun():
+    runs = [_run("f", "failed"), _run("d", "done"), _run("q", "queued")]
+    s = sch.nightly_state(THU, at(THU, 17, 0), runs)
+    assert s["state"] == "observed" and s["run_id"] == "d"
+
+
+def test_two_done_runs_are_still_a_conflict():
+    s = sch.nightly_state(THU, at(THU, 17, 0), [_run("a", "done"), _run("b", "done")])
+    assert s["state"] == "conflicting"

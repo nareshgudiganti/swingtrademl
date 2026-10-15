@@ -53,13 +53,24 @@ def intraday_expectation(day: date, now: datetime) -> dict:
 
 
 def nightly_state(day: date, now: datetime, runs: list[dict]) -> dict:
-    """The day's live nightly run, from all of that day's runs (never one results page)."""
+    """The day's live nightly run, from all of that day's runs (never one results page).
+
+    Only a `done` run counts as having run. Exactly one done run is the day's nightly even if a failed or
+    queued rerun sits beside it; two done runs are a real conflict. With no done run, a queued or running
+    run is 'in_progress' and a failed one is 'failed'; neither is ever shown as having run."""
     expectation = nightly_expectation(day, now)
     live = [r for r in runs if r["kind"] == "nightly" and r["live"] and r["status"] != "superseded"]
-    if len(live) > 1:
-        return {"state": "conflicting", "run_ids": [r["id"] for r in live], "expectation": expectation}
-    if live:
-        return {"state": "observed", "run_id": live[0]["id"], "expectation": expectation}
+    done = [r for r in live if r["status"] == "done"]
+    if len(done) > 1:
+        return {"state": "conflicting", "run_ids": [r["id"] for r in done], "expectation": expectation}
+    if done:
+        return {"state": "observed", "run_id": done[0]["id"], "expectation": expectation}
+    unfinished = [r for r in live if r["status"] in ("queued", "running")]
+    if unfinished:
+        return {"state": "in_progress", "run_ids": [r["id"] for r in unfinished], "expectation": expectation}
+    failed = [r for r in live if r["status"] == "failed"]
+    if failed:
+        return {"state": "failed", "run_ids": [r["id"] for r in failed], "expectation": expectation}
     if expectation == "due":
         return {"state": "not_observed", "expectation": expectation}
     return {"state": expectation, "expectation": expectation}

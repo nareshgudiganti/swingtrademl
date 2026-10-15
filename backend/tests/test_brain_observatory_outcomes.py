@@ -206,6 +206,7 @@ def test_outcomes_processing_is_bounded(db_session, realistic_cohort):
     o.build(db_session, realistic_cohort.start, realistic_cohort.today, "practice")
     o.official_forward_gate(db_session, realistic_cohort.today)
     assert counter.n <= 12, counter.n
+    assert counter.control <= 6, counter.control
     assert _time.perf_counter() - t0 < 4.0
 
 
@@ -234,3 +235,43 @@ def test_the_computed_shape_is_what_the_page_reads():
     for key in ("candidate", "every_stock", "random_5", "momentum_5", "nifty_matched", "cash"):
         assert f"['{key}'," in page, f"the page does not read '{key}'"
     assert "brain_trade" not in page and "'nifty'" not in page
+
+
+# --- review finding 2: a real database error must not poison the rest of the request ---------------
+
+
+def test_a_real_sql_error_inside_the_journal_is_not_a_500(db_session, monkeypatch):
+    from sqlalchemy import text
+
+    def bad_bars(db, *_a, **_k):
+        db.execute(text("SELECT 1 / 0"))  # a real Postgres error, which aborts the transaction
+
+    monkeypatch.setattr(o.queries, "daily_bars", bad_bars)
+    out = o.build(db_session, date(2026, 10, 1), date(2026, 10, 15), "practice")
+    assert out["computed"]["candidate"]["available"] is False
+    assert "division by zero" in out["computed"]["candidate"]["why"].lower()
+    assert isinstance(out["excluded"]["other_book_runs"], int)  # a later statement still ran
+    assert out["stored_grades"]["available"] is False  # and the stored grades were still read
+
+
+# --- review finding 3: stored grades are shown by word, TRADE apart ---------------------------------
+
+
+def test_stored_grades_are_broken_down_by_word_with_trade_apart():
+    rows = [
+        ("target", 0.08, None, "paper", "TRADE"),
+        ("stop", -0.04, None, "paper", "TRADE"),
+        ("timeout", 0.01, None, "paper", "AVOID"),
+        ("timeout", 0.02, None, "paper", "WAIT"),
+    ]
+    g = o.stored_grades(rows)
+    assert g["count"] == 4 and g["all_words_note"]
+    assert g["by_word"]["TRADE"]["count"] == 2
+    assert g["by_word"]["TRADE"]["avg_gross_return"] == pytest.approx(0.02)
+    assert g["by_word"]["AVOID"]["count"] == 1
+    assert g["trade"]["count"] == 2 and g["trade"]["avg_gross_return"] == pytest.approx(0.02)
+
+
+def test_no_trade_grades_is_unavailable_not_zero():
+    g = o.stored_grades([("timeout", 0.01, None, "paper", "AVOID")])
+    assert g["trade"]["available"] is False and g["trade"]["avg_gross_return"] is None

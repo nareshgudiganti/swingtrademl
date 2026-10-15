@@ -1335,6 +1335,7 @@ export interface ObsClaim {
   independence_note: string; protocol_id: string | null; tested_subject: string | null
   numbers: Record<string, number | string> | null; problems: string[]
 }
+export interface ObsGradeGroup { available: boolean; why?: string; count: number; avg_gross_return: number | null; by_outcome: Record<string, number> }
 export interface ObsEdge { available: boolean; why?: string; source: string; days?: number; mean?: number | null; lower_bound?: number | null; word?: string }
 export interface ObsFigure {
   available: boolean; why?: string; source: string
@@ -1344,7 +1345,10 @@ export interface ObsFigure {
 }
 export interface ObsOutcomes {
   category: 'practice' | 'backtest' | 'paper'
-  stored_grades: { available: boolean; why?: string; count: number; avg_gross_return: number | null; source: string }
+  stored_grades: {
+    available: boolean; why?: string; count: number; avg_gross_return: number | null; source: string
+    all_words_note?: string; by_word?: Record<string, ObsGradeGroup>; trade?: ObsGradeGroup
+  }
   computed: {
     candidate: ObsFigure; every_stock: ObsFigure; random_5: ObsFigure; momentum_5: ObsFigure
     nifty_matched: ObsFigure; cash: ObsFigure; edge?: ObsEdge; costs: string; defs?: string; label?: string
@@ -1365,7 +1369,7 @@ export interface ObsDay {
 }
 export interface ObsDays { days: ObsDay[]; redacted_fields: string[] }
 export interface ObsLearning {
-  results_collected: number; changes_proposed: ObsByKey; learning_checks: number
+  results_collected: number; results_collected_label: string; changes_proposed: ObsByKey; learning_checks: number
   proven_improvement: ObsClaim; note: string; redacted_fields: string[]
 }
 export interface ObsForwardGate {

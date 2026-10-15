@@ -26,6 +26,7 @@ def ready(monkeypatch, db_session):
     monkeypatch.setattr(market_session, "is_open", lambda *a, **k: True)
     monkeypatch.setattr(kite_broker, "load_session", lambda db: True)
     monkeypatch.setattr(kite_broker, "get_ltp", lambda symbols, db: dict.fromkeys(symbols, 500.0))
+    monkeypatch.setattr(kite_broker, "owned_quantity", lambda symbol, db: 1_000_000)
 
     def place(request, db):
         sent.append(request)

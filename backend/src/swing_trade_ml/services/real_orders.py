@@ -22,7 +22,7 @@ from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.enums import OrderStatus, PositionStatus, TradingMode, TransactionType
 from swing_trade_ml.db.models.market import Instrument
 from swing_trade_ml.db.models.trading import Order, Position, Strategy
-from swing_trade_ml.services import execution
+from swing_trade_ml.services import execution, system_state
 from swing_trade_ml.services.portfolio import REAL_TRADING_STRATEGY_NAME
 
 IST = ZoneInfo("Asia/Kolkata")
@@ -104,6 +104,11 @@ def buy(db: Session, strategy: Strategy, instrument: Instrument, quantity: int) 
     if quantity < 1:
         raise RealOrderRefused("Choose at least 1 share.")
     _require_switch_and_market()
+    if system_state.is_entries_halted(db):
+        # Owner decision 2026-10-14: the kill switch stops ALL new buying, real ones too. Sells still work.
+        raise RealOrderRefused(
+            "New trades are stopped (kill switch), so real buys are paused. Sells still work."
+        )
     if _waiting(db, strategy.id, instrument.id):
         raise RealOrderRefused(
             f"An order for {instrument.tradingsymbol} is still waiting at Zerodha. Wait for it to finish."
@@ -135,7 +140,17 @@ def sell(db: Session, position: Position, quantity: int | None) -> Order:
     _require_switch_and_market()
     if _waiting(db, position.strategy_id, position.instrument_id):
         raise RealOrderRefused("An order for this stock is still waiting at Zerodha. Wait for it to finish.")
-    _kite_ready(db)
+    kite = _kite_ready(db)
+    instrument = db.get(Instrument, position.instrument_id)
+    try:
+        owned = kite.owned_quantity(instrument.tradingsymbol, db)
+    except KiteException as exc:
+        raise RealOrderRefused("Could not read your Zerodha holdings, so nothing was sent.") from exc
+    if owned < qty:
+        raise RealOrderRefused(
+            f"Zerodha shows you own {owned} {instrument.tradingsymbol} shares, fewer than the {qty} to sell. "
+            "Nothing was sent. If you sold some in the Kite app, use “I sold this” to update My Holdings."
+        )
     return execution.place_real_holding_sell(db, position, qty)
 
 
@@ -166,6 +181,7 @@ def status(db: Session, strategy: Strategy | None) -> dict[str, Any]:
         "max_day_inr": settings.REAL_HOLDINGS_MAX_DAY_INR,
         "spent_today_inr": spent,
         "market_open": market_session.is_open(),
+        "halted": system_state.is_entries_halted(db),
         "market_text": session.plain,
         "waiting": waiting,
     }

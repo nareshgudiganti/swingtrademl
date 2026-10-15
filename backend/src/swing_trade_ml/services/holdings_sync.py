@@ -9,7 +9,9 @@ nine rows the app was asking the owner to act on had already been sold.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -21,6 +23,7 @@ from swing_trade_ml.db.models.trading import Order, Position, Strategy
 from swing_trade_ml.services.execution import manual_close_position
 
 log = get_logger(__name__)
+IST = ZoneInfo("Asia/Kolkata")
 
 
 def held_quantity(holding: dict[str, Any]) -> int:
@@ -76,12 +79,18 @@ def close_positions_no_longer_held(
         )
     ).scalars()
 
+    today = datetime.now(UTC).astimezone(IST).date()
     for position in list(open_positions):
         instrument = db.get(Instrument, position.instrument_id)
         if instrument is None or instrument.tradingsymbol in held_symbols:
             continue
         if position.instrument_id in waiting:
             log.info("holdings_sync.skipped_order_waiting", symbol=instrument.tradingsymbol)
+            continue
+        if position.entry_at is not None and position.entry_at.astimezone(IST).date() == today:
+            # Bought today: Zerodha lists it under positions, not holdings, until the next day, so its
+            # absence from holdings says nothing about whether it is owned (safety review 2026-10-15).
+            log.info("holdings_sync.skipped_bought_today", symbol=instrument.tradingsymbol)
             continue
         exit_price = float(position.current_price or position.entry_price)
         manual_close_position(db, position, exit_price, ExitReason.MANUAL)

@@ -21,12 +21,14 @@ from swing_trade_ml.services.real_orders import RealOrderRefused
 def ready(monkeypatch):
     """Latch on, market open, Zerodha logged in, price 1000, orders recorded."""
     sent: list = []
-    state = {"price": 1000.0, "session": True}
+    state = {"price": 1000.0, "session": True, "owned": 1_000_000}
     monkeypatch.setattr(config.settings, "ALLOW_REAL_HOLDINGS_ORDERS", True, raising=False)
     monkeypatch.setattr(market_session, "is_open", lambda *a, **k: True)
     monkeypatch.setattr(kite_broker, "load_session", lambda db: state["session"])
     monkeypatch.setattr(kite_broker, "_token_loaded", True, raising=False)
     monkeypatch.setattr(kite_broker, "get_ltp", lambda symbols, db: dict.fromkeys(symbols, state["price"]))
+    # Shares Zerodha itself says are owned (holdings + t1 + today's CNC buys).
+    monkeypatch.setattr(kite_broker, "owned_quantity", lambda symbol, db: state["owned"])
 
     def place(request, db):
         sent.append(request)
@@ -223,3 +225,53 @@ def test_sync_still_closes_a_holding_sold_outside_the_app(db_session, ready):
     _holding(db_session, strategy, instrument)
     closed = holdings_sync.close_positions_no_longer_held(db_session, strategy, held_symbols=set())
     assert [c["symbol"] for c in closed] == ["ZZRO"]
+
+
+# --- safety review 2026-10-15 (real money is on) ----------------------------------------------------
+
+
+def test_the_kill_switch_pauses_real_buys(db_session, ready):
+    from swing_trade_ml.services import system_state
+
+    sent, _ = ready
+    strategy, instrument = _setup(db_session)
+    system_state.halt(db_session, reason="drill", by="test")
+    with pytest.raises(RealOrderRefused, match="kill switch"):
+        real_orders.buy(db_session, strategy, instrument, 1)
+    assert sent == []
+    assert real_orders.status(db_session, strategy)["halted"] is True
+
+
+def test_the_kill_switch_never_blocks_a_real_sell(db_session, ready):
+    from swing_trade_ml.services import system_state
+
+    sent, _ = ready
+    strategy, instrument = _setup(db_session)
+    position = _holding(db_session, strategy, instrument, qty=5)
+    system_state.halt(db_session, reason="drill", by="test")
+    real_orders.sell(db_session, position, None)
+    assert len(sent) == 1
+
+
+def test_a_sell_is_checked_against_what_zerodha_really_holds(db_session, ready):
+    # The app's row says 10, but 7 were sold in the Kite app: a stale "ghost" row must not sell 10.
+    sent, state = ready
+    strategy, instrument = _setup(db_session)
+    position = _holding(db_session, strategy, instrument, qty=10)
+    state["owned"] = 3
+    with pytest.raises(RealOrderRefused, match="Zerodha shows you own 3"):
+        real_orders.sell(db_session, position, None)
+    assert sent == []
+    real_orders.sell(db_session, position, 3)  # what is really owned can still be sold
+    assert len(sent) == 1
+
+
+def test_the_sync_never_closes_a_holding_bought_today(db_session, ready):
+    # Today's buys reach Zerodha's holdings list only tomorrow, so their absence says nothing.
+    strategy, instrument = _setup(db_session)
+    position = _holding(db_session, strategy, instrument)
+    position.entry_at = datetime.now(UTC)
+    db_session.flush()
+    assert holdings_sync.close_positions_no_longer_held(db_session, strategy, set()) == []
+    db_session.refresh(position)
+    assert position.status == PositionStatus.OPEN

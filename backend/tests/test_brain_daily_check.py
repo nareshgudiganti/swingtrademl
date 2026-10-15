@@ -190,3 +190,39 @@ def test_a_full_day_with_no_intraday_runs_is_a_check_with_a_message(db_session, 
     names = {c["name"]: c for c in r["checks"]}
     assert not names["Intraday runs"]["ok"]
     assert r["status"] == "check" and "Intraday runs" in daily.message_if_problem(r)
+
+
+def _model(name, kind, target, days, stop=None):
+    from types import SimpleNamespace
+
+    return SimpleNamespace(
+        name=name,
+        label_kind=kind,
+        target_return_pct=target,
+        prediction_horizon_days=days,
+        stop_return_pct=stop,
+    )
+
+
+def test_endpoint_models_do_not_match_the_plan_and_are_named():
+    c = daily.check_model_question([_model("swing_classifier", "endpoint", 0.02, 5)])
+    assert not c["ok"] and c["level"] == "info"
+    assert "NOT matched" in c["detail"] and "swing_classifier" in c["detail"] and "+2%" in c["detail"]
+
+
+def test_barrier_models_with_the_plan_numbers_match():
+    c = daily.check_model_question([_model("swing_classifier_barrier", "barrier", 0.08, 15, 0.04)])
+    assert c["ok"]
+    assert not daily.check_model_question([_model("x", "barrier", 0.08, 15, 0.05)])["ok"]
+
+
+def test_no_live_model_is_shown_not_failed():
+    c = daily.check_model_question([])
+    assert not c["ok"] and c["level"] == "info"
+
+
+def test_the_model_check_never_makes_the_day_a_problem(db_session, tmp_path):
+    r = daily.compute(db_session, NOW, backup_dir=str(tmp_path))
+    names = {c["name"]: c for c in r["checks"]}
+    assert names["Score matches the trade plan"]["level"] == "info"
+    assert "Score matches the trade plan" not in (daily.message_if_problem(r) or "")

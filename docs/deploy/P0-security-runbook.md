@@ -1,6 +1,12 @@
 # P0 security release: deploy and rollback runbook
 
-Owner approval needed for every step marked (LOCK). Nothing here changes trading.
+Owner approval needed for every step marked (LOCK) 🔒. Nothing here changes trading.
+
+Every `swingtrade ...` command below runs on the droplet as `docker compose exec api swingtrade ...`.
+
+**This merge also ships `9a95a8b` ("Real Zerodha account is private to sudeeksha") to prod for the first
+time.** Prod `main` today is `9531be3`, which does not contain it. So this deploy is the first one where
+My Holdings, real orders, the real report and real-book totals refuse every account except `sudeeksha`.
 
 ## Before deploy
 1. Role table approved (spec section 6.5): `sudeeksha` only owner (owner decision 2026-10-16).
@@ -12,7 +18,12 @@ Owner approval needed for every step marked (LOCK). Nothing here changes trading
    (LOCK) Owner still confirms both are real values on the droplet (names only, never values).
    If unsure, run the startup guard on the droplet: `docker compose exec api python -c "from swing_trade_ml.core.config import settings; from swing_trade_ml.core.security import assert_secrets_safe; assert_secrets_safe(settings); print('ok')"`.
 5. Database backup taken on the droplet (`pg_dump`), file name noted: ___.
-6. Tell Vijay and other users: everyone signs in again once after deploy.
+6. Tell Vijay and other users: everyone signs in again once after deploy. This is guaranteed: the
+   migration sets every account's `token_version` to 1, and tokens issued before P0 count as 0, so every
+   old session (including any token leaked by the old `?token=` Google redirect) stops working at once.
+   Anyone with the old app cached (installed PWA, or an open tab) must accept the "update available"
+   prompt or reload the page after deploy; otherwise Google sign-in lands back on the login screen,
+   because the cached old app doesn't know how to swap the new one-time `login_code`.
 
 ## Deploy
 7. (LOCK) Owner merges to `main` (push to main = deploy).
@@ -21,32 +32,54 @@ Owner approval needed for every step marked (LOCK). Nothing here changes trading
 10. Vijay buys and closes one practice position in his testing book. Works.
 
 ## Apply roles (after deploy, one at a time, each audited)
-11. `swingtrade audit-roles`: matches spec section 6.5, no warning lines.
+11. Confirm the migration ran before touching roles:
+    `docker compose exec postgres psql -U swingtrade -d swing_trade_ml -c "SELECT version_num FROM alembic_version"`
+    (the compose defaults; use prod's own `POSTGRES_USER` / `POSTGRES_DB` names if they differ, names only)
+    must show **`e1p0s2e3c4u5`**. If it shows anything else, stop: `set-role` needs the new columns.
+    Then `docker compose exec api swingtrade audit-roles`: matches spec section 6.5, no warning lines.
 12. (LOCK) Owner decision 2026-10-16: **`sudeeksha` is the only owner**; everyone else is secondary
     (no owner powers, no My Holdings). `REAL_ACCOUNT_USERS` stays `sudeeksha`. Run, in this order:
-    `swingtrade set-role --username naresh --role member --reason "owner decision 2026-10-16: sudeeksha only owner"`
-    `swingtrade set-role --username vijay --role tester --reason "owner decision 2026-10-16: secondary; testing book only"`
-    `swingtrade disable-user --username admin --reason "unknown holder"`
-    `swingtrade disable-user --username claude_verify_tmp --reason "leftover test account"`
-    `swingtrade disable-user --username claudecheck1787413845531 --reason "leftover test account"`
+    `docker compose exec api swingtrade set-role --username naresh --role member --reason "owner decision 2026-10-16: sudeeksha only owner"`
+    `docker compose exec api swingtrade set-role --username vijay --role tester --reason "owner decision 2026-10-16: secondary; testing book only"`
+    `docker compose exec api swingtrade disable-user --username admin --reason "unknown holder"`
+    `docker compose exec api swingtrade disable-user --username claude_verify_tmp --reason "leftover test account"`
+    `docker compose exec api swingtrade disable-user --username claudecheck1787413845531 --reason "leftover test account"`
     (`naresh.gudiganti23` is already a member, no command needed.)
     Then sign in as `sudeeksha` and confirm My Holdings still opens; sign in as `naresh` and confirm
     My Holdings and owner screens are refused.
-13. `swingtrade audit-roles` again; `GET /admin/users` shows the same.
+13. `docker compose exec api swingtrade audit-roles` again: only `sudeeksha` shows `role=owner`, the three
+    leftover accounts show `DISABLED`, no warning lines. (Use `audit-roles`, not `GET /admin/users`:
+    that list shows only `is_owner`, not the role or whether an account is disabled.)
 
-Other owner commands: `swingtrade unlock-user --username U`, `swingtrade revoke-sessions --username U`.
-`swingtrade create-user` now requires `--role`.
+Other owner commands: `docker compose exec api swingtrade unlock-user --username U`,
+`docker compose exec api swingtrade revoke-sessions --username U`.
+`docker compose exec api swingtrade create-user` now requires `--role`.
 
 ## Rollback
-- **Code:** revert the merge on `main` (deploys the previous build). Rehearsed: the old code boots
+- **Rollback target:** reverting the merge on `main` deploys origin/main **`9531be3`**. That build does
+  **not** contain `require_real_account` (commit `9a95a8b`): on it, the real account is protected only by
+  plans, and with plans **off** every signed-in account sees everything, including My Holdings.
+- 🔒 (LOCK) **Before reverting**, close the real account to everyone but the owner, one of:
+  - switch plans **ON**: `PUT /api/v1/admin/switch` with body `{"enabled": true}` and the `X-API-Key`
+    header (or the Plans Manager screen as `sudeeksha`). On `9531be3` the real-account routes are not in
+    `ROUTE_RULES`, so with plans on every non-owner is refused them (members and testers keep only what
+    their plan allows, e.g. `book=bot`); or
+  - `docker compose exec api swingtrade disable-user --username U --reason "rollback window"` for every
+    secondary account (this needs the new CLI, so run it **before** the revert; old code still honours
+    `is_active`). Re-enable them after roll-forward.
+  Check one non-owner gets 403 on `/api/v1/portfolio/summary?book=real` before going on.
+- 🔒 (LOCK) **Code:** revert the merge on `main` (push = deploy of `9531be3`). Rehearsed: the old code boots
   on the new schema (its migration step fails on the unknown revision, then it falls back to
   `create_all`) and logins work. See the evidence below.
 - **Roles after rollback:** old code reads only `is_superuser`, which mirrors `role`. A tester stays
-  non-owner, so Vijay's testing writes are refused on old code. If needed, temporarily
-  `swingtrade make-owner vijay` (username is positional; fixed on the next roll-forward via `audit-roles`).
+  non-owner, so Vijay's testing writes are refused on old code.
+  🔒 (LOCK, owner's call only) `docker compose exec api swingtrade make-owner vijay` (username is positional)
+  would let him test again, **but it gives Vijay full owner powers again (including My Holdings on old
+  code), against the owner decision of 2026-10-16**. Don't run it unless the owner says so; undo it on the
+  next roll-forward via `audit-roles` + `set-role`.
 - **Schema (only if required):** `alembic downgrade d8a1y2c3h4k5` drops the new columns and
   tables. The audit trail is lost, so export `audit_log` first.
-- **Roll-forward after a rollback:** run `swingtrade audit-roles`. Any warning (accounts created by old
+- **Roll-forward after a rollback:** run `docker compose exec api swingtrade audit-roles`. Any warning (accounts created by old
   code get `role=member` with `is_superuser=true`) is fixed with `set-role`.
 
 ## Acceptance (release A done when all true)
@@ -69,6 +102,11 @@ INFO  [alembic.runtime.migration] Running upgrade d8a1y2c3h4k5 -> e1p0s2e3c4u5, 
 INFO  [alembic.runtime.migration] Running downgrade e1p0s2e3c4u5 -> d8a1y2c3h4k5, P0 security: roles, session versions, sign-in lockout, audit log, login codes
 INFO  [alembic.runtime.migration] Running upgrade d8a1y2c3h4k5 -> e1p0s2e3c4u5, P0 security: roles, session versions, sign-in lockout, audit log, login codes
 OK P0 migration: upgrade, backfill, downgrade, re-upgrade all as expected
+```
+Re-run 2026-10-16 after adding the session end (`token_version = 1` for every account), same script, which
+now also asserts it:
+```
+OK P0 migration: upgrade, backfill, sessions ended (token_version=1), downgrade, re-upgrade all as expected
 ```
 Backfill: exactly `naresh`, `sudeeksha`, `vijay` (the three superusers) became `owner`; everyone else `member`.
 

@@ -44,6 +44,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Full history and tags: the Observatory's verdict tests check that a frozen protocol's tag
+          # still points at the recorded commit (tests/test_brain_observatory_verdicts_ci.py, E1).
+          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:

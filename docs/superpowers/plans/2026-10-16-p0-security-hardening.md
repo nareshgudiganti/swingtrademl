@@ -14,7 +14,7 @@
 
 - Work on a new local branch `feature/p0-security` cut from `develop`. **No push, merge, deploy, or prod permission change** without the owner's separate approval.
 - Do not touch: order placement, sizing, stops, limits, `services/risk.py`, `services/execution.py` trading logic, brain modules, `TRADING_MODE`, `ALLOW_LIVE_TRADING`, `REAL_ACCOUNT_USERS` value.
-- **No role is changed on prod by this plan.** The migration reproduces today's powers exactly (`is_superuser → owner`). Role changes are applied later, one by one, by the owner via the CLI from Task 9, after approving the table in spec §6.5.
+- **No role is changed on prod by this plan's code.** The migration reproduces today's powers exactly (`is_superuser → owner`). The owner's decision (2026-10-16: `sudeeksha` only owner, all others secondary with no owner powers and no My Holdings) is applied after deploy, one command at a time, via the Task 9 CLI (runbook step 12). `REAL_ACCOUNT_USERS` stays `sudeeksha`.
 - No new paid infrastructure. No Redis use. Postgres only.
 - Run tests with `cd backend && env -u API_KEY -u DATABASE_URL -u JWT_SECRET_KEY -u TRADING_MODE .venv/Scripts/python.exe -m pytest …`. Docker Postgres must be up (port 5433 test DB). DB tests hang silently otherwise.
 - `ruff format` only files you touched. Never the whole package. No prettier on existing frontend files.
@@ -2203,7 +2203,7 @@ Stop the server, then `git worktree remove ../stb-p0-oldcode`, and drop the scra
 Owner approval needed for every step marked 🔒. Nothing here changes trading.
 
 ## Before deploy
-1. 🔒 Owner approves the role table (spec §6.5) and names the primary owner account.
+1. Role table approved (spec §6.5): `sudeeksha` only owner (owner decision 2026-10-16).
 2. All tests green on `feature/p0-security` (pass count: ___).
 3. Migration rehearsal printed ✅ (Task 11 Step 2); old-code rehearsal evidence pasted below.
 4. Placeholder-secret check: the API refuses to start in production if `JWT_SECRET_KEY` or `API_KEY`
@@ -2220,12 +2220,16 @@ Owner approval needed for every step marked 🔒. Nothing here changes trading.
 
 ## Apply roles (after deploy, one at a time, each audited)
 11. `swingtrade audit-roles`: matches spec §6.5, no ⚠ lines.
-12. 🔒 Per the owner's approved table, e.g.:
-    `swingtrade set-role --username vijay --role tester --reason "spec 6.5, owner approved 2026-10-__"`
+12. 🔒 Owner decision 2026-10-16: **`sudeeksha` is the only owner**; everyone else is secondary
+    (no owner powers, no My Holdings). `REAL_ACCOUNT_USERS` stays `sudeeksha`. Run, in this order:
+    `swingtrade set-role --username naresh --role member --reason "owner decision 2026-10-16: sudeeksha only owner"`
+    `swingtrade set-role --username vijay --role tester --reason "owner decision 2026-10-16: secondary; testing book only"`
     `swingtrade disable-user --username admin --reason "unknown holder"`
     `swingtrade disable-user --username claude_verify_tmp --reason "leftover test account"`
     `swingtrade disable-user --username claudecheck1787413845531 --reason "leftover test account"`
-    The second owner account → `member` or `disable-user`, as the owner chose.
+    (`naresh.gudiganti23` is already a member — no command needed.)
+    Then sign in as `sudeeksha` and confirm My Holdings still opens; sign in as `naresh` and confirm
+    My Holdings and owner screens are refused.
 13. `swingtrade audit-roles` again; `GET /admin/users` shows the same.
 
 ## Rollback
@@ -2240,7 +2244,7 @@ Owner approval needed for every step marked 🔒. Nothing here changes trading.
   code get `role=member` with `is_superuser=true`) is fixed with `set-role`.
 
 ## Acceptance (release A done when all true)
-- [ ] Only the approved owner account(s) have `role=owner`; `audit-roles` shows no ⚠.
+- [ ] Only `sudeeksha` has `role=owner`; `audit-roles` shows no ⚠; only `sudeeksha` opens My Holdings.
 - [ ] 5 wrong passwords pause sign-in for 15 minutes; message identical for every failure.
 - [ ] Password change / sign out everywhere end old sessions.
 - [ ] Google sign-in URL never contains a session token.

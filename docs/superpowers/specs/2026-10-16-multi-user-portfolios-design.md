@@ -346,18 +346,20 @@ One bot; per-user chat id linked by a one-time `/start CODE`. No cross-portfolio
 
 | id | username | sign-in | today | last login | **proposed role** | why |
 |---|---|---|---|---|---|---|
-| 1 | naresh | password | OWNER | 2026-08-28 | **owner OR member: owner to choose** | candidate primary account |
-| 48 | sudeeksha | password | OWNER | 2026-10-16 | **owner OR member: owner to choose** | candidate primary; in `REAL_ACCOUNT_USERS` (real Zerodha) |
-| 51 | vijay | password | OWNER | 2026-10-16 | **tester** (→ member in C, D6) | keeps his 4-week test working, loses owner powers |
-| 50 | naresh.gudiganti23 | Google | user | 2026-09-10 | member | Google login; owner to confirm whose |
+| 48 | sudeeksha | password | OWNER | 2026-10-16 | **owner (the only one)** | owner's verified primary account (decided 2026-10-16); stays the only name in `REAL_ACCOUNT_USERS` |
+| 1 | naresh | password | OWNER | 2026-08-28 | **member** | secondary account: no owner powers, no My Holdings |
+| 51 | vijay | password | OWNER | 2026-10-16 | **tester** (→ member in C, D6) | secondary: no owner powers, no My Holdings; keeps only his testing-book buy/close so his 4-week test keeps working |
+| 50 | naresh.gudiganti23 | Google | user | 2026-09-10 | **member** | secondary account |
 | 44 | admin | password | user | 2026-09-09 | **disable** | generic name, unknown holder |
 | 2 | claude_verify_tmp | password | user | 2026-08-10 | **disable** | leftover test account |
 | 4 | claudecheck1787413845531 | password | user | 2026-08-22 | **disable** | leftover test account |
 
-**Nothing has been changed.** The owner must name the one verified primary account. Changes
-are applied by the owner-run CLI (`swingtrade set-role` / `disable-user`), each one audited. Note:
-`REAL_ACCOUNT_USERS=sudeeksha`. If the primary owner is `naresh`, real-account access needs that
-setting changed too. That is a real-money access decision for the owner.
+**Owner decision (2026-10-16): `sudeeksha` is the only owner; every other account is secondary,
+with no owner privileges and no My Holdings / real-account access.** `REAL_ACCOUNT_USERS` stays
+`sudeeksha` (unchanged). Since P0 real-account access needs `role = owner` **and** a name in
+`REAL_ACCOUNT_USERS`, no secondary account can reach My Holdings even if listed by mistake.
+**Nothing has been changed on prod yet.** The changes are applied after the P0 deploy by the
+owner-run CLI (`swingtrade set-role` / `disable-user`), each one audited (runbook step 12).
 
 ---
 
@@ -449,7 +451,5 @@ deploy or permission change without the owner's separate approval.
 ## 12. Open questions
 
 1. **Regulation**: SEBI research-analyst rules if this grows beyond friends/testers or is ever paid.
-2. **Primary owner account**: `naresh` (id 1) or `sudeeksha` (id 48)? And if `naresh`, should
-   `REAL_ACCOUNT_USERS` change? (real-money access, owner's call)
+2. ~~Primary owner account~~: **decided 2026-10-16: `sudeeksha` only; all others secondary.**
 3. **Prod snapshot for release B**: can the owner run `pg_dump` on the droplet for a local rehearsal copy?
-4. Whose is `naresh.gudiganti23` (Google): the owner's second login or someone else's?

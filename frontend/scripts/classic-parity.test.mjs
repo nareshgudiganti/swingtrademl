@@ -35,6 +35,70 @@ describe('computeParity', () => {
   })
 })
 
+describe('computeParity: what it must not get wrong (independent review, 2026-10-16)', () => {
+  it('does not count a call that a TradeMind file only mentions in a comment', () => {
+    const src = tree({
+      'pages/A.tsx': 'api.riskEvents()',
+      'trademind/live.ts': '// uses api.riskEvents later\n/* api.riskEvents */\nconst x = 1',
+    })
+    expect(computeParity(src)[0].gaps).toEqual(['riskEvents'])
+  })
+
+  it('still counts a real call on a line that also holds a URL', () => {
+    const src = tree({
+      'pages/A.tsx': 'api.x()',
+      'trademind/live.ts': "const u = 'http://host/y'; api.x()",
+    })
+    expect(computeParity(src)[0].gaps).toEqual([])
+  })
+
+  it('attributes calls made inside a shared component to the classic page that imports it', () => {
+    const src = tree({
+      'pages/A.tsx': "import Modal from '../components/Modal'\nexport default () => Modal",
+      'components/Modal.tsx': 'api.candles()',
+      'trademind/live.ts': 'api.status()',
+    })
+    const row = computeParity(src)[0]
+    expect(row.calls).toEqual(['candles'])
+    expect(row.gaps).toEqual(['candles'])
+  })
+
+  it('credits TradeMind for calls made in a shared component its files import', () => {
+    const src = tree({
+      'pages/A.tsx': 'api.candles()',
+      'components/Chart.tsx': 'api.candles()',
+      'trademind/pages/Stock.tsx': "import Chart from '../../components/Chart'\nChart",
+    })
+    expect(computeParity(src)[0].gaps).toEqual([])
+  })
+
+  it('resolves a lib import with and without a file extension, one level only', () => {
+    const src = tree({
+      'pages/A.tsx': "import { me } from '../lib/plan'",
+      'lib/plan.ts': "import { deep } from './deep'\napi.me()",
+      'lib/deep.ts': 'api.tooDeep()',
+    })
+    expect(computeParity(src)[0].calls).toEqual(['me'])
+  })
+
+  it('flags api access it cannot read (destructuring, brackets, aliasing) instead of ignoring it', () => {
+    const src = tree({
+      'pages/A.tsx': "const { riskEvents } = api\napi['other']()\nconst a = api;",
+      'trademind/live.ts': 'api.status()',
+    })
+    const row = computeParity(src)[0]
+    expect(row.dynamic.length).toBeGreaterThanOrEqual(3)
+    const r = checkAllowlist([row], {}, { strict: false })
+    expect(r.unexplained).toContainEqual({ page: 'A', call: '<dynamic api access>' })
+    expect(r.ok).toBe(false)
+  })
+
+  it('does not flag ordinary words that merely contain "api"', () => {
+    const src = tree({ 'pages/A.tsx': 'const rapid = 1; const capital = rapid; // api = x', 'trademind/live.ts': '' })
+    expect(computeParity(src)[0].dynamic).toEqual([])
+  })
+})
+
 describe('checkAllowlist', () => {
   const parity = [
     { page: 'Capital', lines: 1, calls: ['riskEvents'], gaps: ['riskEvents'] },

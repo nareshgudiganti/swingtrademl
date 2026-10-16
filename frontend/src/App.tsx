@@ -139,6 +139,18 @@ const LIVE_ACK_STORAGE = 'stml_live_trading_ack'
 // and must be read (and stripped from the address bar) before that check runs.
 const pendingLoginCode = takeLoginCodeFromRedirect()
 
+// The code works once, so swap it once per page load. React StrictMode runs
+// effects twice in development; the second run reuses this same promise
+// instead of spending the code again and showing "expired".
+let loginCodeExchange: Promise<{ access_token: string }> | null = null
+function exchangePendingLoginCode(code: string): Promise<{ access_token: string }> {
+  if (!loginCodeExchange) {
+    clearToken() // a stale session from before must not outlive this sign-in
+    loginCodeExchange = api.exchangeLoginCode(code)
+  }
+  return loginCodeExchange
+}
+
 function plansPathEarly(path: string): boolean {
   return path === '/plans' || path.startsWith('/plans/') || path === '/trademind/plans'
 }
@@ -159,8 +171,7 @@ export default function App() {
   const [exchanging, setExchanging] = useState(!!pendingLoginCode)
   useEffect(() => {
     if (!pendingLoginCode) return
-    api
-      .exchangeLoginCode(pendingLoginCode)
+    exchangePendingLoginCode(pendingLoginCode)
       .then((r) => {
         setToken(r.access_token)
         window.location.reload()

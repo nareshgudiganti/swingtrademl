@@ -44,30 +44,40 @@ function SignInCard() {
       window.location.reload()
     },
   })
+  // A Google-only account has no password here to change; it signs in through Google.
+  const me = useQuery({ queryKey: ['me'], queryFn: api.me })
+  const hasPassword = !!me.data && me.data.auth_provider !== 'google'
   return (
     <div className="card" style={{ marginBottom: '1.5rem' }}>
       <h2>Sign-in</h2>
       {note && <p className="muted">{note}</p>}
-      <label>
-        <div className="stat-label">Current password</div>
-        <input type="password" value={current} onChange={(e) => setCurrent(e.target.value)} />
-      </label>
-      <label>
-        <div className="stat-label">New password (8 or more characters)</div>
-        <input
-          type="password"
-          value={next}
-          minLength={8}
-          onChange={(e) => setNext(e.target.value)}
-        />
-      </label>
-      <button
-        className="primary"
-        disabled={change.isPending || next.length < 8}
-        onClick={() => change.mutate()}
-      >
-        Change password
-      </button>{' '}
+      {me.data?.auth_provider === 'google' && (
+        <p className="muted">You sign in with Google, so there is no password to change here.</p>
+      )}
+      {hasPassword && (
+        <>
+          <label>
+            <div className="stat-label">Current password</div>
+            <input type="password" value={current} onChange={(e) => setCurrent(e.target.value)} />
+          </label>
+          <label>
+            <div className="stat-label">New password (8 or more characters)</div>
+            <input
+              type="password"
+              value={next}
+              minLength={8}
+              onChange={(e) => setNext(e.target.value)}
+            />
+          </label>
+          <button
+            className="primary"
+            disabled={change.isPending || next.length < 8}
+            onClick={() => change.mutate()}
+          >
+            Change password
+          </button>{' '}
+        </>
+      )}
       <button disabled={out.isPending} onClick={() => out.mutate()}>
         Sign out on every device
       </button>

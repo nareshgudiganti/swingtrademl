@@ -104,6 +104,7 @@ class CurrentUserOut(BaseModel):
     email: str | None
     auth_provider: str
     is_superuser: bool
+    role: str
     plan: str
 
 

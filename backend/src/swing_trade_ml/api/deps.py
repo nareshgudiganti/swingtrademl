@@ -57,17 +57,27 @@ class Principal:
     via_api_key: bool = False
 
     @property
+    def role(self) -> str:
+        if self.via_api_key:
+            return "owner"
+        return self.user.role if self.user is not None else "member"
+
+    @property
     def is_owner(self) -> bool:
-        return self.via_api_key or bool(self.user and self.user.is_superuser)
+        return self.via_api_key or bool(self.user and self.user.role == "owner")
+
+    @property
+    def is_tester(self) -> bool:
+        return bool(self.user and self.user.role == "tester")
 
     @property
     def can_see_real_account(self) -> bool:
         """The real Zerodha account (My Holdings, real orders): signed-in owner
         accounts named in REAL_ACCOUNT_USERS, and the shared API key (the owner's
-        own scripts). Not every owner account: testers hold those too."""
+        own scripts). Testers and members never."""
         if self.via_api_key:
             return True
-        if self.user is None or not self.user.is_superuser:
+        if self.user is None or self.user.role != "owner":
             return False
         allowed = {n.strip().lower() for n in settings.REAL_ACCOUNT_USERS.split(",") if n.strip()}
         return self.user.username.lower() in allowed
@@ -102,8 +112,8 @@ async def get_principal(
 @dataclass(frozen=True)
 class PlanAccess:
     """What the caller may see. `unrestricted` callers see everything: the
-    owner always, and every signed-in account while plans are switched off
-    (the app as it was before plans). The owner can still preview a plan
+    owner always, and a tester while plans are switched off. Members always get
+    their plan's rules. The owner can still preview a plan
     (X-Preview-Plan) and then gets exactly what that plan's users get."""
 
     unrestricted: bool
@@ -133,7 +143,10 @@ def plan_access_for(db: Session, principal: Principal, preview: str | None = Non
 
     if principal.is_owner and preview in PLAN_KEYS:
         key, previewing = preview, True
-    elif principal.is_owner or not plans_enabled(db):
+    elif principal.is_owner or (principal.is_tester and not plans_enabled(db)):
+        # Owners see everything. A tester keeps today's view (the whole app
+        # while plans are off) until their own member account exists (release C).
+        # A member never: "plans off" no longer means "everyone sees the house book" (S1).
         return PlanAccess(unrestricted=True, plan=None)
     else:
         user_plan = principal.user.plan if principal.user else None
@@ -189,7 +202,7 @@ async def require_auth(
     route = request.scope.get("route")
     path = getattr(route, "path", request.url.path)
     if path.startswith(settings.API_V1_PREFIX):
-        path = path[len(settings.API_V1_PREFIX):]
+        path = path[len(settings.API_V1_PREFIX) :]
 
     brain_gate = brain_route_access(request.method, path)
     if brain_gate == "owner":

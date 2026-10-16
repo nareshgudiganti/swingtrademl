@@ -11,6 +11,7 @@ export interface CurrentUser {
   email: string | null
   auth_provider: 'local' | 'google'
   is_superuser: boolean
+  role: 'owner' | 'tester' | 'member'
   plan: PlanKey
 }
 

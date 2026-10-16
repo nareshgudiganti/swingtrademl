@@ -1,0 +1,7 @@
+.bx-card { display: flex; flex-direction: column; gap: 0.6rem; }
+.bx-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.bx-sym { font-weight: 700; font-size: 1.05rem; }
+.bx-plan, .bx-money { margin: 0; padding: 0; list-style: none; display: grid; gap: 0.2rem; }
+.bx-money-title { font-weight: 600; }
+.bx-small { font-size: 0.8rem; opacity: 0.75; }
+.bx-card details summary { cursor: pointer; }

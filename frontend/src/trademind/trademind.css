@@ -1492,6 +1492,75 @@
   }
 }
 
+/* Paper / Real indicator under the Portfolio tabs: one strip per screen */
+.tm-bookstrip {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  padding: 0.45rem 1.25rem;
+  font-size: 0.78rem;
+  color: var(--tm-dim);
+  border-bottom: 1px solid var(--tm-line);
+}
+
+.tm-bookstrip strong {
+  color: var(--tm-text);
+  font-weight: 600;
+}
+
+.tm-booktag {
+  flex: none;
+  padding: 0.05rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.tm-bookstrip-paper .tm-booktag {
+  color: var(--tm-cyan);
+}
+
+.tm-bookstrip-real {
+  background: rgba(255, 181, 71, 0.06);
+}
+
+.tm-bookstrip-real .tm-booktag {
+  color: var(--tm-amber);
+}
+
+.tm-tabtag i {
+  font-style: normal;
+}
+
+/* phone: the tab name is shortened to "My Zerodha" and the Real/Paper tag stays visible as a small pill */
+@media (max-width: 600px) {
+  .tm-bookstrip {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .tm-tabtag {
+    margin-left: 0.3rem;
+    padding: 0 0.35rem;
+    border-radius: 999px;
+    border: 1px solid currentColor;
+    font-size: 0.62rem;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+
+  .tm-tabtag i {
+    display: none;
+  }
+
+  .tm-tabtag-real {
+    color: var(--tm-amber);
+  }
+}
+
 /* phone: all five sections fit on one line */
 @media (max-width: 480px) {
   .tm-nav {

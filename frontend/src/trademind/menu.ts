@@ -3,7 +3,7 @@
 // The route table in TradeMindApp.tsx is separate and unchanged: this only decides where a page appears
 // in the menu and which section is highlighted.
 
-export type Page = { to: string; label: string; end?: boolean; ownerOnly?: boolean }
+export type Page = { to: string; label: string; end?: boolean; ownerOnly?: boolean; needsTesting?: boolean }
 export type SectionId = 'today' | 'discover' | 'portfolio' | 'insights' | 'admin'
 export type Section = { id: SectionId; label: string; pages: Page[]; also?: string[]; ownerOnly?: boolean }
 
@@ -31,10 +31,10 @@ export const SECTIONS: Section[] = [
     id: 'portfolio',
     label: 'Portfolio',
     pages: [
-      { to: '/trademind/positions', label: 'Positions' },
-      { to: '/trademind/testing', label: 'Testing', ownerOnly: true },
-      { to: '/trademind/holdings', label: 'My Holdings', ownerOnly: true },
-      { to: '/trademind/portfolio', label: 'Overview' },
+      { to: '/trademind/positions', label: 'Bot (Paper)' },
+      { to: '/trademind/testing', label: 'Testing (Paper)', ownerOnly: true, needsTesting: true },
+      { to: '/trademind/holdings', label: 'My Zerodha (Real)', ownerOnly: true },
+      { to: '/trademind/portfolio', label: 'Paper Overview' },
     ],
   },
   {
@@ -84,6 +84,17 @@ export function visibleSections(owner: boolean): Section[] {
   return SECTIONS.filter((s) => owner || !s.ownerOnly)
 }
 
-export function visiblePages(section: Section, owner: boolean): Page[] {
-  return section.pages.filter((p) => owner || !p.ownerOnly)
+/**
+ * The pages this viewer sees in the menu. `testingOn: false` (paper testing switched off on the server) hides the
+ * Testing tab from the menu only; its URL is still routed and still shows its own "switched off" card.
+ */
+export function visiblePages(section: Section, owner: boolean, opts: { testingOn?: boolean } = {}): Page[] {
+  const testingOn = opts.testingOn ?? true
+  return section.pages.filter((p) => (owner || !p.ownerOnly) && (testingOn || !p.needsTesting))
+}
+
+/** "My Zerodha (Real)" -> the text and its Paper/Real tag, so the tag can be styled and kept visible on a phone. */
+export function splitLabel(label: string): { text: string; tag: 'Paper' | 'Real' | undefined } {
+  const m = /^(.*?)\s*\((Paper|Real)\)$/.exec(label)
+  return m ? { text: m[1]!, tag: m[2] as 'Paper' | 'Real' } : { text: label, tag: undefined }
 }

@@ -30,7 +30,8 @@ import Records from './pages/Records'
 import MyHoldings from './pages/MyHoldings'
 import Setup from './pages/Setup'
 import Observatory from './pages/Observatory'
-import { ADMIN_SECTION, resolveSection, visiblePages, visibleSections } from './menu'
+import { bookOf } from './books'
+import { ADMIN_SECTION, resolveSection, splitLabel, visiblePages, visibleSections } from './menu'
 
 // The menu lives in ./menu.ts (five sections: Today, Discover, Portfolio, Insights, Admin).
 
@@ -47,6 +48,22 @@ type TradeMindAppProps = {
   ownerConsole?: boolean
 }
 
+// A tab name with its Paper/Real tag kept visible (as a small pill on a phone, where the text is shortened).
+function TabLabel({ label }: { label: string }) {
+  const { text, tag } = splitLabel(label)
+  if (!tag) return <>{label}</>
+  return (
+    <>
+      {text}{' '}
+      <span className={`tm-tabtag tm-tabtag-${tag.toLowerCase()}`}>
+        <i>(</i>
+        {tag}
+        <i>)</i>
+      </span>
+    </>
+  )
+}
+
 export default function TradeMindApp({ ownerConsole = false }: TradeMindAppProps) {
   const status = useBrainStatus()
   const latest = useLatestRun()
@@ -55,7 +72,11 @@ export default function TradeMindApp({ ownerConsole = false }: TradeMindAppProps
   const sections = visibleSections(ownerConsole)
   const section = resolveSection(location.pathname, ownerConsole)
   // The row under the bar lists only pages this account can open.
-  const pages = visiblePages(section, ownerConsole)
+  // Testing is left out of the row while paper testing is off; its URL is still routed (see the testing Route).
+  const testingOn = broker.data?.paper_tester_enabled !== false
+  const pages = visiblePages(section, ownerConsole, { testingOn })
+  const book = bookOf(location.pathname)
+  const paperButNotPaper = book?.kind === 'paper' && broker.data != null && broker.data.trading_mode !== 'paper'
   const [menuOpen, setMenuOpen] = useState(false)
   useEffect(() => setMenuOpen(false), [location.pathname])
   useEffect(() => {
@@ -158,10 +179,21 @@ export default function TradeMindApp({ ownerConsole = false }: TradeMindAppProps
         <nav className="tm-subnav" aria-label={`${section.label} pages`} data-testid="subnav">
           {pages.map((pg) => (
             <NavLink key={pg.to} to={pg.to} end={pg.end} className={({ isActive }) => (isActive ? 'active' : '')}>
-              {pg.label}
+              <TabLabel label={pg.label} />
             </NavLink>
           ))}
         </nav>
+      )}
+      {book && (
+        <div className={`tm-bookstrip tm-bookstrip-${book.kind}`} data-testid="book-strip" data-book={book.kind}>
+          <span className="tm-booktag">{book.kind === 'real' ? 'Real' : 'Paper'}</span>
+          <span>
+            <strong>{book.name}.</strong> {book.note}
+            {paperButNotPaper && (
+              <strong className="tm-neg"> Warning: the server is not in paper mode, so these figures may be real money.</strong>
+            )}
+          </span>
+        </div>
       )}
 
       {/* Rendered outside any parent <Route>, so the paths are anchored here. */}

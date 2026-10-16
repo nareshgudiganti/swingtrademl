@@ -54,11 +54,8 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_MINUTES: int = 720
 
-    # Self-registration. Fine to leave on for local development; turn off
-    # before this is reachable from anywhere but your own machine — an open
-    # signup endpoint on a system that can place real trades is a genuine
-    # account-takeover surface, not just a nuisance.
-    ALLOW_SIGNUP: bool = True
+    # Self-registration. Off by default; invitations replace it (release C). Turn on in .env only for local development.
+    ALLOW_SIGNUP: bool = False
 
     # Google "Sign in with Google" — from console.cloud.google.com, an OAuth
     # 2.0 Client ID (type: Web application) with this exact redirect URI added.

@@ -11,6 +11,29 @@ import jwt
 from fastapi import Header, HTTPException, status
 
 from swing_trade_ml.core.config import settings
+from swing_trade_ml.core.logging import get_logger
+
+log = get_logger(__name__)
+
+_DEFAULT_SECRETS = frozenset({"", "change-me", "changeme", "secret"})
+
+
+def assert_secrets_safe(cfg) -> None:
+    """Refuse to serve outside local development while a signing secret is
+    still a placeholder: anyone could mint an owner session (spec finding S6).
+    Names the setting, never its value."""
+    if cfg.ENVIRONMENT == "local":
+        return
+    names = ("JWT_SECRET_KEY", "API_KEY")
+    bad = [n for n in names if getattr(cfg, n).strip() in _DEFAULT_SECRETS]
+    if bad:
+        raise RuntimeError(
+            f"Refusing to start: {', '.join(bad)} still has a placeholder value. Set a real value in .env."
+        )
+    for n in names:
+        if len(getattr(cfg, n)) < 32:
+            log.warning("security.short_secret", setting=n)
+
 
 # bcrypt directly, not passlib's CryptContext wrapper: passlib has been
 # unmaintained since 2020 and its bcrypt handler breaks against bcrypt>=4.0's

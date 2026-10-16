@@ -10,7 +10,33 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-16-multi-user-portfolios-design.md` (rev 2): §1.2, §2.1 `portfolios`, §2.2, §2.4, §8, §9, §10 release B.
 
-**Status:** revision 2 after the owner review of 2026-10-16. **Not approved for execution yet.**
+**Status:** revision 3: targeted corrections from the owner's second review (2026-10-16). Revision 2 is otherwise unchanged. **Not approved for execution yet.**
+
+## Changes in revision 3 (owner's 7 targeted corrections)
+
+| # | Correction | Where |
+|---|---|---|
+| 1 | `brain_approvals` follows the same position-then-strategy rule everywhere. The "approval must be house" check is removed; approvals are covered by V2 and V7 | §D1, `VERIFY`, Task 2 tests |
+| 2 | UPDATE paths audited: only `orders.position_id` and `brain_approvals.position_id` are set after insert, both to a position from the same strategy. `portfolio_id` becomes immutable once set (a BEFORE UPDATE trigger no current code fires). Changed ownership columns are detected by V2, V3 and V7 at each rollout check | §D8, Task 4 |
+| 3 | Privacy: the dump never contains user personal data. `users` is exported as a sanitized CSV (no email, hash or Google id); secret and finance tables are excluded; the files are AES-256 encrypted before they leave the droplet, checksummed, kept only under `.local/` and deleted after | Task 1, Task 5 |
+| 4 | V9 checks the exact 12 triggers: table, name, function, BEFORE timing, event, row level and enabled status. Any missing, disabled, wrong-function or extra trigger fails | Task 4 |
+| 5 | Constraint tests use savepoints (`db.begin_nested()`), so a refusal never rolls back the session the test keeps using | Task 2 |
+| 6 | `starting_capital >= 0` CHECK. Generations: unique `(owner, generation)` for members; archived rows and their money rows are never deleted (FK RESTRICT) | §D2, Task 2 |
+| 7 | Every census and verify column was checked against the models and the live local schema (table below). `CENSUS_COLUMNS` is now explicit and tested against both | §D6, Task 2, Task 5 |
+
+### Column check (models = SQLAlchemy metadata; DB = local Postgres `swing_trade_ml`, 2026-10-16)
+
+| Table | Columns used | Model | DB | Absent (and therefore never used) |
+|---|---|---|---|---|
+| positions | mode, status, strategy_id, quantity, entry_price, total_charges, realized_pnl (nullable), unrealized_pnl | ✓ (FLOAT/INTEGER/VARCHAR) | ✓ (double precision/integer/varchar) | position_id |
+| trades | mode, strategy_id, position_id, quantity, gross_pnl, charges, net_pnl | ✓ | ✓ | – |
+| orders | mode, strategy_id, position_id, quantity, filled_quantity, brokerage, taxes | ✓ | ✓ | – |
+| risk_events | mode, strategy_id, amount_inr (nullable) | ✓ | ✓ | position_id |
+| brain_approvals | strategy_id (NOT NULL), position_id, price | ✓ | ✓ | mode |
+| portfolio_snapshots | mode, cash, holdings_value, total_value | ✓ | ✓ | strategy_id, position_id |
+| strategies / users | id, name / id, username | ✓ | ✓ | – |
+
+Ids of all six money tables are `bigint`, and `portfolios.id` is `integer`, so `portfolio_id` is `integer`.
 
 ---
 
@@ -60,6 +86,12 @@
 - `kind <> 'member' OR owner_user_id IS NOT NULL`.
 - Partial unique index: one row each of house/tester/real.
 - Partial unique index: one non-archived member portfolio per owner.
+- `starting_capital IS NULL OR starting_capital >= 0` (rev 3).
+- **Generations preserve history** (rev 3):
+  - A reset (release C) archives the current row, which sets `status='archived'` and `archived_at`, and creates a new row with `generation + 1`.
+  - Unique `(owner_user_id, generation)` for members.
+  - Money rows keep the old row's `portfolio_id`, and FK `ON DELETE RESTRICT` means an archived portfolio with any money row can never be deleted.
+  - `portfolio_id` is immutable once set (§D8), so history can't be moved into the new generation.
 - `owner_user_id` FK **ON DELETE RESTRICT**: a user who owns a portfolio cannot be deleted. Users are disabled (`swingtrade disable-user`), never deleted, so history keeps its owner.
 - House has no owner. A missing `vijay` or `sudeeksha` leaves that book's owner NULL. Verification V4 reports it, and the prod-copy rehearsal requires both to be linked.
 
@@ -69,6 +101,8 @@
 - `pf_stamp_snapshot()`: portfolio_snapshots.
 
 Each one sets `NEW.portfolio_id` only when it is NULL, using D1, and **never raises**. They use only `SELECT … INTO` (no row gives NULL, not an error) and no `RAISE`. If the books haven't been seeded (a fresh DB), the row stays NULL.
+
+Rev 3 adds a fourth function, `pf_keep_portfolio()` (`BEFORE UPDATE OF portfolio_id`). It is the **only** one that raises, and only when an already-set `portfolio_id` would change without the explicit move flag. No current code path does that (§D8).
 
 **D4. Postgres failure behaviour:** any error inside a transaction aborts the whole transaction, and nothing in Python can rescue it afterwards. A trigger that errors would therefore fail the trade insert it fires on. That is why the triggers reference only objects the B1 migration creates and are written so they cannot raise. The downgrade drops the triggers **before** the column and table, and the rehearsal (Task 5) exercises inserts after the upgrade, after the downgrade and after the re-upgrade.
 
@@ -82,6 +116,19 @@ Each one sets `NEW.portfolio_id` only when it is NULL, using D1, and **never rai
 - `brain_approvals` has no `mode`, and its `strategy_id` is NOT NULL.
 - `risk_events` and `portfolio_snapshots` have no `position_id`. `portfolio_snapshots` has no `strategy_id`.
 - `orders.strategy_id` and `orders.position_id` are nullable.
+
+**D8. UPDATE paths (rev 3).** The insert triggers don't cover updates, so updates were audited by `grep`ing for assignments and `update(<model>)` on the six models in `backend/src`:
+
+| Path | Column changed after insert | Why ownership stays right |
+|---|---|---|
+| `services/execution.py:249` (`open_position`) and `:1663` (reconcile of a resting buy) | `orders.position_id` | The order was inserted with the strategy's book, and the position is created by `_finalize_open_position(db, strategy, …)` for that same strategy, so both are in one book |
+| `services/brain_golive/approvals.py:397`, `:438` | `brain_approvals.position_id` | The approval's strategy is the brain (house), and the position is bought by that brain strategy (house) |
+| `brain_golive/stage.py:150,157`; `approvals.py:164,178,373,643` (bulk `update(BrainApproval)`) | status, decided_* and result_note only | No ownership column |
+| anywhere | `strategy_id`, `mode`, `portfolio_id` | Never assigned on an existing row (no match) |
+
+**Prevention, without changing trading behaviour:** a `BEFORE UPDATE OF portfolio_id` trigger on the six tables refuses to change a portfolio_id once it is set. It allows NULL → value, so `portfolios-backfill` keeps working. Release B2/C tools may set the session flag `SET LOCAL app.allow_portfolio_move = 'on'` to move a row deliberately. No current code updates `portfolio_id`, so this trigger never fires in today's code paths. The full suite, run with triggers on, proves it.
+
+**Detection:** a changed `position_id`, `strategy_id` or `mode` that broke agreement shows up as V2, V3 or V7 in `swingtrade portfolios-check`. That check is a rollout gate right after deploy and again the next morning, after the 09:15 and 15:45 jobs. The two linking paths above are pinned by tests that run the real `open_position` path, the resting-buy reconcile path and the approval buy path, then assert V2.
 
 **D7. What B1 guarantees not to change:**
 - No API route, schema field or screen reads or shows `portfolio_id` or `portfolios`, so nothing new is exposed to anyone.
@@ -163,13 +210,15 @@ Each one sets `NEW.portfolio_id` only when it is NULL, using D1, and **never rai
   - (d) `users` id/username for `vijay` and `sudeeksha` only.
 
   Wrap the whole file in `BEGIN READ ONLY;` … `ROLLBACK;`.
-- [ ] **Step 2: Write `export_prod_copy.sh`** (bash, `set -euo pipefail`):
-  1. Run `prod_census.sql` with `docker compose exec -T postgres psql -U swingtrade -d swing_trade_ml -f -` and save the output to `b1_census.txt`.
-  2. Write `b1_counts.json` with a row count for every table in the public schema, using `psql -At` and a `json_object_agg` query.
-  3. Run `pg_dump -Fc --no-owner` and exclude the **data** of these tables: `broker_sessions`, `login_codes`, `audit_log`, `fills`, and every table defined in `db/models/finance.py` and `db/models/mutual_funds.py`. List their `__tablename__` values explicitly in the script, taken from those files.
-  4. Print the three file names and the exact `scp` command to copy them to `D:\machine learning\swing-trade-bot\.local\`. Then say to delete them from the droplet.
+- [ ] **Step 2: Write `export_prod_copy.sh`** (bash, `set -euo pipefail`, `umask 077`, working dir `$(mktemp -d)`, with a `trap` that shreds and removes it on exit). Sanitize **before** anything leaves the database:
+  1. **Census:** run `prod_census.sql` and write `b1_census.txt` (aggregates only; the only user rows printed are the ids of `vijay` and `sudeeksha`).
+  2. **Counts:** write `b1_counts.json` with row counts for every public table.
+  3. **Users, sanitized at source:** `COPY (SELECT id, username, role, is_active, is_superuser, auth_provider, plan, NULL::text AS email, 'x'::text AS hashed_password, NULL::text AS google_id, token_version, created_at, updated_at FROM users) TO STDOUT WITH CSV HEADER` → `b1_users.csv`. Use the columns that exist on prod: read them from `information_schema` first, and stop with an error if the P0 columns are absent and that wasn't expected.
+  4. **Dump:** `pg_dump -Fc --no-owner` with `--exclude-table-data` for `users`, `broker_sessions`, `login_codes`, `audit_log`, `fills`, and every table in `db/models/finance.py` and `db/models/mutual_funds.py` (their `__tablename__` values listed explicitly in the script). So the dump holds no emails, password hashes, Google ids, Kite tokens, audit trail or personal finance data.
+  5. **Encrypt:** `tar` the four files, then `gpg --symmetric --cipher-algo AES256 --pinentry-mode loopback`. The owner types a passphrase and never stores it in the script or shell history. Write `b1_copy.tar.gpg` plus its `sha256sum` to `b1_copy.sha256`. Shred the plaintext files.
+  6. **Hand-off:** print the `scp` command into `D:\machine learning\swing-trade-bot\.local\` (git-ignored, on the owner's own disk), and the command to delete both files from the droplet afterwards.
 
-  The script never prints row contents.
+  The script never prints row contents. If `gpg` is missing on the droplet, it stops and says so, and **nothing unencrypted is left behind**.
 - [ ] **Step 3:** Add `.local/` to `.gitignore`. Commit both scripts plus `.gitignore` with the message `B1: owner-run export (sanitized) and read-only census for the production copy` and the trailer.
 - [ ] **Step 4: Gate.** 🔒 The owner runs the export and shares `b1_census.txt`. If list (a), (b) or (c) is non-empty, **stop**: the owner decides those rows' book before Task 2 runs. Record the decision as an explicit SQL override in Task 2's migration, with the row ids, and test it. If all three are empty, record "census clean" in the ledger and continue. **Without the census, Task 2 must not start.**
 
@@ -231,10 +280,12 @@ def _owner(db, name="b1-owner"):
 
 
 def _refused(db, **kw):
-    db.add(Portfolio(**kw))
+    """The database refuses this row. A savepoint keeps the test's own
+    session usable afterwards: only the refused insert is undone."""
     with pytest.raises(IntegrityError):
-        db.flush()
-    db.rollback()
+        with db.begin_nested():
+            db.add(Portfolio(**kw))
+            db.flush()
 
 
 def test_kinds_and_money_columns():
@@ -292,12 +343,45 @@ def test_a_user_who_owns_a_portfolio_cannot_be_deleted(db_session):
     db_session.add(Portfolio(kind="member", name="Mine", mode="paper", owner_user_id=owner.id))
     db_session.flush()
     with pytest.raises(IntegrityError):
-        db_session.execute(text("DELETE FROM users WHERE id = :i"), {"i": owner.id})
-        db_session.flush()
-    db_session.rollback()
+        with db_session.begin_nested():
+            db_session.execute(text("DELETE FROM users WHERE id = :i"), {"i": owner.id})
+    assert db_session.get(User, owner.id) is not None  # session still usable, user kept
+
+
+@pytest.mark.parametrize("capital", [-1, -0.01])
+def test_starting_capital_cannot_be_negative(db_session, capital):
+    _refused(db_session, kind="member", name="Neg", mode="paper", starting_capital=capital,
+             owner_user_id=_owner(db_session, f"b1-neg{capital}").id)
+
+
+def test_zero_or_positive_starting_capital_is_fine(db_session):
+    owner = _owner(db_session, "b1-cap")
+    db_session.add(Portfolio(kind="member", name="Zero", mode="paper", starting_capital=0, owner_user_id=owner.id))
+    db_session.flush()
+
+
+def test_generations_keep_history(db_session):
+    """Release C resets archive the run and start generation+1; the old run and
+    its money rows stay. One generation number per owner; an archived run that
+    has money rows can never be deleted."""
+    owner = _owner(db_session, "b1-gen")
+    run1 = Portfolio(kind="member", name="Run 1", mode="paper", owner_user_id=owner.id)
+    db_session.add(run1)
+    db_session.flush()
+    db_session.add(Order(instrument_id=_instrument(db_session, "B1GEN").id, mode="paper", transaction_type="BUY",
+                         quantity=1, placed_at=datetime.now(UTC), portfolio_id=run1.id))
+    run1.status, run1.archived_at = "archived", datetime.now(UTC)
+    db_session.add(Portfolio(kind="member", name="Run 2", mode="paper", owner_user_id=owner.id, generation=2))
+    db_session.flush()
+    _refused(db_session, kind="member", name="Dup gen", mode="paper", owner_user_id=owner.id, generation=2,
+             status="archived", archived_at=datetime.now(UTC))
+    with pytest.raises(IntegrityError):
+        with db_session.begin_nested():
+            db_session.execute(text("DELETE FROM portfolios WHERE id = :i"), {"i": run1.id})
+    assert db_session.get(Portfolio, run1.id).status == "archived"
 ```
 
-(Because of the per-test transaction, any helper that calls `db.rollback()` must be the last DB action in that test. `_refused` is always called last, or followed only by new adds after a fresh flush. Where a test needs two refusals, split it.)
+Add the helper `_instrument(db, sym)`, which creates and flushes an `Instrument`, and the imports `from swing_trade_ml.db.models.market import Instrument`. Each refusal runs inside a savepoint, so a test can make several refusals and keep using its session. **No test calls `db_session.rollback()` and then continues.**
 
 - [ ] **Step 3: Run it and confirm it fails.** Expect `ModuleNotFoundError: swing_trade_ml.db.models.portfolio`.
 
@@ -332,10 +416,13 @@ class Portfolio(Base, TimestampMixin):
         CheckConstraint("length(trim(name)) > 0", name="name_present"),
         CheckConstraint("auto_follow = false", name="auto_follow_off"),
         CheckConstraint("kind <> 'member' OR owner_user_id IS NOT NULL", name="member_has_owner"),
+        CheckConstraint("starting_capital IS NULL OR starting_capital >= 0", name="capital_not_negative"),
         Index("uq_portfolios_one_per_book", "kind", unique=True,
               postgresql_where=text("kind IN ('house','tester','real')")),
         Index("uq_portfolios_one_live_member_run", "owner_user_id", unique=True,
               postgresql_where=text("kind = 'member' AND status <> 'archived'")),
+        Index("uq_portfolios_member_generation", "owner_user_id", "generation", unique=True,
+              postgresql_where=text("kind = 'member'")),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -365,7 +452,7 @@ Register the model in `db/models/__init__.py` (`from swing_trade_ml.db.models.po
 - [ ] **Step 5: Migration file.** Write the self-contained module. Its upgrade order:
   1. `SET LOCAL lock_timeout = '5s'`, `SET LOCAL statement_timeout = '120s'`.
   2. `legacy_only` census.
-  3. Create `portfolios` with the D2 constraints (named exactly as the model's convention renders them: `ck_portfolios_<name>`, `uq_portfolios_one_per_book`, `uq_portfolios_one_live_member_run`, `ix_portfolios_owner_user_id`, `fk_portfolios_owner_user_id_users`).
+  3. Create `portfolios` with the D2 constraints (named exactly as the model's convention renders them: `ck_portfolios_<name>` for all nine checks, including `ck_portfolios_capital_not_negative`; `uq_portfolios_one_per_book`; `uq_portfolios_one_live_member_run`; `uq_portfolios_member_generation`; `ix_portfolios_owner_user_id`; and `fk_portfolios_owner_user_id_users`).
   4. For each money table: add the column, add `fk_<t>_portfolio_id_portfolios` (ON DELETE RESTRICT), and add `ix_<t>_portfolio_id`.
   5. `seed`.
   6. `backfill`.
@@ -450,14 +537,32 @@ VERIFY = (
      "SELECT COUNT(*) FROM {t} c JOIN positions p ON p.id = c.position_id WHERE c.portfolio_id <> p.portfolio_id"),
     ("V3 row mode differs from its portfolio", "orders,positions,trades,risk_events,portfolio_snapshots",
      "SELECT COUNT(*) FROM {t} r JOIN portfolios p ON p.id = r.portfolio_id WHERE r.mode <> p.mode"),
-    ("V3 approval outside house", "brain_approvals",
-     "SELECT COUNT(*) FROM {t} r JOIN portfolios p ON p.id = r.portfolio_id WHERE p.kind <> 'house'"),
+    # brain_approvals has no mode: like orders and trades it is checked by V2
+    # (agrees with its position) and V7 (agrees with its strategy) — the same
+    # position-then-strategy rule as D1 and the backfill (rev 3).
     ("V6 snapshot outside house/real", "portfolio_snapshots",
      "SELECT COUNT(*) FROM {t} r JOIN portfolios p ON p.id = r.portfolio_id WHERE p.kind NOT IN ('house','real')"),
-    ("V7 strategy in the wrong book", "orders,positions,trades,risk_events",
+    ("V7 strategy in the wrong book", "orders,trades,brain_approvals",
      f"SELECT COUNT(*) FROM {{t}} r JOIN strategies s ON s.id = r.strategy_id JOIN portfolios p ON p.id = r.portfolio_id "
      f"WHERE r.position_id IS NULL AND p.kind <> {BOOK_OF_STRATEGY}"),
+    ("V7 strategy in the wrong book", "positions,risk_events",
+     f"SELECT COUNT(*) FROM {{t}} r JOIN strategies s ON s.id = r.strategy_id JOIN portfolios p ON p.id = r.portfolio_id "
+     f"WHERE p.kind <> {BOOK_OF_STRATEGY}"),
 )
+
+# Every column census()/verify() reads, checked against the models and the
+# database in tests and in the rehearsal (rev 3). Keep in step with CENSUS/VERIFY.
+CENSUS_COLUMNS = {
+    "positions": {"portfolio_id", "mode", "status", "strategy_id", "quantity", "entry_price", "total_charges",
+                  "realized_pnl", "unrealized_pnl"},
+    "trades": {"portfolio_id", "mode", "strategy_id", "position_id", "quantity", "gross_pnl", "charges", "net_pnl"},
+    "orders": {"portfolio_id", "mode", "strategy_id", "position_id", "quantity", "filled_quantity", "brokerage", "taxes"},
+    "risk_events": {"portfolio_id", "mode", "strategy_id", "amount_inr"},
+    "brain_approvals": {"portfolio_id", "strategy_id", "position_id", "price"},
+    "portfolio_snapshots": {"portfolio_id", "mode", "cash", "holdings_value", "total_value"},
+    "strategies": {"id", "name"},
+    "users": {"id", "username"},
+}
 
 
 def verify(conn):
@@ -467,10 +572,7 @@ def verify(conn):
         raise RuntimeError(f"V5 expected one house, tester and real book, found {books}")
     for check, tables, sql in VERIFY:
         for t in (MONEY_TABLES if tables == "{t}" else tables.split(",")):
-            q = sql.format(t=t)
-            if t in ("positions", "risk_events") and "position_id" in q:
-                q = q.replace("r.position_id IS NULL AND ", "")
-            n = conn.execute(sa.text(q)).scalar_one()
+            n = conn.execute(sa.text(sql.format(t=t))).scalar_one()
             if n:
                 raise RuntimeError(f"{check}: {t} has {n} row(s)")
     owners = dict(conn.execute(sa.text(
@@ -490,9 +592,9 @@ def verify(conn):
     return counts
 ```
 
-  V7 does not apply to `positions` and `risk_events` in the `position_id` form, because those tables have no `position_id`. The `replace` above handles that; write it more plainly if you prefer, but keep the behaviour.
+  V7 has two rows: one with `position_id IS NULL` for the tables that have `position_id`, and one without it for `positions` and `risk_events`, which don't.
 
-  V8 (exact totals) is the `census before == after` comparison in `upgrade()`. V9 (triggers present) is added in Task 4.
+  V8 (exact totals) is the `census before == after` comparison in `upgrade()`. V9 (exact triggers) is added in Task 4.
 
   `downgrade()`: drop the triggers and functions (Task 4), then for each table drop the index, FK and column, then drop `portfolios`. Census `legacy_only` before and after the downgrade must be equal. Raise otherwise.
 
@@ -526,14 +628,22 @@ def load() -> ModuleType:
   Check what `_find_alembic_dir()` returns (the `backend` dir or the `alembic` dir) and adjust the join.
 
 - [ ] **Step 7: Backfill tests** `tests/test_b1_backfill.py`:
-  - Fixture `books`: the same multi-book dataset as revision 1, plus a live-mode `risk_event` under `real_trading`, a live snapshot, and a trade whose `strategy_id` is NULL on a tester position. Then NULL every `portfolio_id` (`UPDATE … SET portfolio_id = NULL`), delete the book rows, and **disable triggers** for the fixture's inserts. Do this by inserting before the conftest triggers are installed, or with `ALTER TABLE … DISABLE TRIGGER USER` inside the test transaction, restoring it afterwards.
+  - Fixture `books`: the same multi-book dataset as revision 1, plus a live-mode `risk_event` under `real_trading`, a live snapshot, and a trade whose `strategy_id` is NULL on a tester position. Then simulate pre-B1 rows:
+    1. `SET LOCAL app.allow_portfolio_move = 'on'`. This is required, because clearing a set `portfolio_id` is exactly what `pf_keep_portfolio` blocks.
+    2. `UPDATE … SET portfolio_id = NULL` on every money table.
+    3. `RESET app.allow_portfolio_move`.
+    4. Delete the book rows.
+
+    Everything stays inside the test transaction. No `ALTER TABLE … DISABLE TRIGGER` is needed.
   - Tests:
     - each row lands in the D1 book (assert by kind);
     - `census(legacy_only=True)` before == `census()` after, including exact string sums with values like `0.1`, `0.2`;
     - idempotent (a second `backfill` updates 0 rows and leaves deliberately set rows alone);
     - `verify` passes;
     - each verify failure: one test per check V1–V7 + V4 + V5 builds the bad state and asserts `RuntimeError` naming that check and table;
-    - **V3 abort:** a live order under `b1_house_ml` makes `verify` raise "V3 … orders".
+    - **V3 abort:** a live order under `b1_house_ml` makes `verify` raise "V3 … orders";
+    - **Approvals follow D1 (rev 3):** an approval linked to a tester position is stamped and backfilled as `tester`, and `verify` **passes**. An approval with no position whose strategy is `tester_paper` gets `tester`, and `verify` passes. Moving that approval to house fails V7 naming `brain_approvals`. An approval whose position is in another book fails V2 naming `brain_approvals`.
+    - **Columns exist (rev 3):** for every table in `CENSUS_COLUMNS`, every column is in `Base.metadata.tables[t].c` and in `information_schema.columns` of the test DB. Also, every money table's real column set includes the ones that `CENSUS` and `VERIFY` SQL reference. Parse the SQL for `\b<col>\b` against a whitelist, or simpler, run every census/verify query once on an empty schema and assert it doesn't raise.
 - [ ] **Step 8: CLI.** `portfolios-check` prints the census, then runs `verify`: ✅, or ❌ with the message and exit 1. `portfolios-backfill` runs `seed`, `backfill`, `verify` and prints rows updated. Both use `portfolio_records.load()` and `session_scope()`.
 - [ ] **Step 9: Run** both test files, then the full suite. Everything must be green.
 - [ ] **Step 10: Commit**: `B1: self-contained migration — books, constraints, backfill by today's rule, exact census and checks V1–V7` plus the trailer.
@@ -547,7 +657,7 @@ def load() -> ModuleType:
 **Interfaces:** Consumes Task 2. Uses the API `client` with the API key, plus services, read-only.
 
 - [ ] **Step 1: Write the test.**
-  - Fixture `world`, a realistic dataset with the triggers **disabled** for setup and all `portfolio_id` NULL:
+  - Fixture `world`, a realistic dataset. After inserting it, set every `portfolio_id` to NULL with the same move-flag step as Task 2's fixture, and delete the book rows, so it looks like pre-B1 data:
     - house: 2 open positions (one scaled out with a partial-exit trade), 3 closed with trades;
     - tester: 2 open, 2 closed;
     - real (`real_trading`, live): 1 open, 1 closed;
@@ -634,7 +744,42 @@ DROP_TRIGGER_DDL = [f"DROP TRIGGER IF EXISTS trg_{t}_pf_stamp ON {t}" for t in _
     "DROP FUNCTION IF EXISTS pf_stamp_snapshot()"]
 ```
 
-  Add check V9 to `verify`: `SELECT COUNT(*) FROM pg_trigger WHERE tgname LIKE 'trg_%_pf_stamp' AND NOT tgisinternal` must equal 6, else `RuntimeError("V9 …")`.
+  **Immutability trigger (rev 3, §D8).** One more function, `pf_keep_portfolio()`, and trigger `trg_<table>_pf_keep` (`BEFORE UPDATE OF portfolio_id … FOR EACH ROW`) on all six tables:
+
+```python
+TRIGGER_DDL.append("""CREATE OR REPLACE FUNCTION pf_keep_portfolio() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF OLD.portfolio_id IS NOT NULL AND NEW.portfolio_id IS DISTINCT FROM OLD.portfolio_id
+     AND coalesce(current_setting('app.allow_portfolio_move', true), '') <> 'on' THEN
+    RAISE EXCEPTION 'portfolio_id of %.% cannot change once set', TG_TABLE_NAME, OLD.id
+      USING ERRCODE = 'check_violation';
+  END IF;
+  RETURN NEW;
+END $$""")
+for _t in _TRIGGER_FN:
+    TRIGGER_DDL.append(f"DROP TRIGGER IF EXISTS trg_{_t}_pf_keep ON {_t}")
+    TRIGGER_DDL.append(f"CREATE TRIGGER trg_{_t}_pf_keep BEFORE UPDATE OF portfolio_id ON {_t} FOR EACH ROW EXECUTE FUNCTION pf_keep_portfolio()")
+DROP_TRIGGER_DDL = ([f"DROP TRIGGER IF EXISTS trg_{t}_pf_keep ON {t}" for t in _TRIGGER_FN]
+                    + DROP_TRIGGER_DDL + ["DROP FUNCTION IF EXISTS pf_keep_portfolio()"])
+```
+
+  This is the one trigger that raises, deliberately, and only on an update of `portfolio_id` that no current code makes. **Exact V9 (rev 3).** Add to `verify`:
+
+```python
+# (table, trigger, function, pg tgtype = timing+event+level bits, enabled)
+EXPECTED_TRIGGERS = (
+    {(t, f"trg_{t}_pf_stamp", fn, 7, "O") for t, fn in _TRIGGER_FN.items()}  # ROW|BEFORE|INSERT
+    | {(t, f"trg_{t}_pf_keep", "pf_keep_portfolio", 19, "O") for t in _TRIGGER_FN}  # ROW|BEFORE|UPDATE
+)
+
+def _triggers(conn):
+    return set(conn.execute(sa.text(
+        "SELECT c.relname, t.tgname, p.proname, t.tgtype::int, t.tgenabled "
+        "FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid JOIN pg_proc p ON p.oid = t.tgfoid "
+        "WHERE NOT t.tgisinternal AND (t.tgname LIKE 'trg\\_%\\_pf\\_%' OR p.proname LIKE 'pf\\_%')")).all())
+```
+
+  `verify` raises `V9 triggers differ: missing=…, unexpected=…` unless `_triggers(conn) == EXPECTED_TRIGGERS`. That catches a missing trigger, a disabled one (`tgenabled` `D`), one pointing at the wrong function, the wrong timing or event, and an extra one. For `pf_keep`, also check that `pg_trigger.tgattr` names only `portfolio_id`. `tgtype` bits: 1 = ROW, 2 = BEFORE, 4 = INSERT, 16 = UPDATE. Confirm the 7 and 19 values on the PG image and adjust if needed, with a comment.
 
   Also verify on PG16 that `SELECT … INTO NEW.portfolio_id` works. If it doesn't, use a local variable and assign it.
 
@@ -648,7 +793,9 @@ DROP_TRIGGER_DDL = [f"DROP TRIGGER IF EXISTS trg_{t}_pf_stamp ON {t}" for t in _
   - (g) a trade on a tester position with NULL strategy → tester;
   - (h) a live snapshot → real, a paper snapshot → house;
   - (i) **no books seeded** (delete the portfolios in the test): the insert succeeds with NULL, and the trigger never raises;
-  - (j) V9 passes with triggers present and fails naming V9 after `DROP TRIGGER` on one table.
+  - (j) **exact V9 (rev 3)**: V9 passes as installed and fails, naming V9, for each of these, each inside a savepoint so the session survives: `DROP TRIGGER` on one table; `ALTER TABLE orders DISABLE TRIGGER trg_orders_pf_stamp`; re-pointing one trigger at another `pf_` function; adding an extra `trg_x_pf_stamp` on a seventh table; replacing `pf_keep` with an `AFTER UPDATE` version;
+  - (k) **immutability (rev 3)**: setting `portfolio_id` from NULL to a value succeeds; changing a set value through the ORM, through Core `update()` and through raw SQL each raises (`IntegrityError`/`DBAPIError` with `check_violation`); with `SET LOCAL app.allow_portfolio_move = 'on'` in a savepoint, the change succeeds; updating any other column (status, quantity, stop) never fires it;
+  - (l) **real linking paths keep ownership (rev 3, §D8)**: run the actual `execution.open_position` path for a house signal, the resting-buy reconcile path in `reconcile_pending_orders` (with a stub broker returning a fill), a tester-book buy through `tester_paper.paper_buy`, and a brain approval buy through the existing `brain_m18_fixtures`. After each, `verify` passes V2, V3 and V7 and the order, approval and position share one portfolio. Reuse the existing test helpers for those flows (`grep -l "open_position\|reconcile_pending_orders\|paper_buy\|approve" backend/tests`).
 - [ ] **Step 3: conftest.** In `db_engine`, after `create_all`, load the migration via `portfolio_records.load()`. Execute `TRIGGER_DDL` and `seed()` in one committed transaction. Comment that this makes the whole suite run with production-equal stamping.
 - [ ] **Step 4: Run** the trigger tests, then the **full suite**. Every existing trading test (execution, exits, tester buys, brain go-live) must pass with the triggers live. Any failure is a real finding: report it, and don't skip it.
 - [ ] **Step 5: Commit**: `B1: database triggers stamp every insert path (ORM, Core, bulk, raw SQL, old code); check V9` plus the trailer.
@@ -662,17 +809,24 @@ DROP_TRIGGER_DDL = [f"DROP TRIGGER IF EXISTS trg_{t}_pf_stamp ON {t}" for t in _
 **Interfaces:** The script takes `--dump`, `--counts`, `[--delete-dump]` and works only on DB `swing_trade_ml_b1_rehearsal` (assert the name ends with `_rehearsal`; `os.environ["DATABASE_URL"]` is overwritten before any app import).
 
 - [ ] **Step 1: Script behaviour** (each step prints a ✅ or stops with ❌ and a reason):
+  0. **Decrypt (rev 3):** verify `sha256sum -c b1_copy.sha256`, then `gpg --decrypt` into a fresh `tempfile.mkdtemp()` directory with owner-only permissions, prompting for the passphrase interactively. The `finally:` block shreds and removes that directory whatever happens.
   1. Drop and create the scratch DB. If the dump contains TimescaleDB objects, `CREATE EXTENSION IF NOT EXISTS timescaledb` and `SELECT timescaledb_pre_restore()` before the restore, and `timescaledb_post_restore()` after.
-  2. `docker cp` the dump into the container, then `pg_restore --no-owner -d <db>`, capturing stderr. Accept exit code 0. Accept a non-zero code **only if every error line matches** an allowlist written in the script (`must be owner of extension`, `extension "timescaledb" already exists`, `schema "public" already exists`, `comment on extension`). Anything else is ❌, and the stderr is printed with row data redacted.
+  2. `docker cp` the dump into the container, then `pg_restore --no-owner -d <db>`, capturing stderr. After the restore, load `b1_users.csv` into `users` with `COPY … FROM STDIN` (it is already sanitized: no email, hash or Google id). Accept exit code 0. Accept a non-zero code **only if every error line matches** an allowlist written in the script (`must be owner of extension`, `extension "timescaledb" already exists`, `schema "public" already exists`, `comment on extension`). Anything else is ❌, and the stderr is printed with row data redacted.
   3. **Counts:** compare the row count of every table with `b1_counts.json`. Excluded-data tables must be 0. Any other mismatch is ❌.
-  4. **Sanitize** (immediately after the restore): `UPDATE users SET hashed_password = 'x', email = NULL, google_id = NULL`; `TRUNCATE broker_sessions, login_codes, audit_log` (if present). Assert the excluded tables are empty.
+  4. **Assert sanitized (rev 3).** Sanitizing happened at the source, so this step only checks:
+     - every `users.email` and `users.google_id` is NULL;
+     - every `hashed_password` is `'x'`;
+     - `broker_sessions`, `login_codes`, `audit_log`, `fills` and the finance and mutual-fund tables are empty.
+
+     Any violation stops the run immediately, drops the DB and deletes the decrypted files.
+  4b. **Columns (rev 3):** every column in `CENSUS_COLUMNS` exists in the restored DB's `information_schema.columns` (before the upgrade, excluding `portfolio_id`; after it, including `portfolio_id`). Anything missing stops the run.
   5. **Revision:** read `alembic_version`. Upgrade to `e1p0s2e3c4u5` first if P0 isn't there yet (and say so). Take the `before` census (`legacy_only=True`).
   6. `alembic upgrade f2b1p0r7f0l1`. Then `verify` (V1–V9), and print the census by book with exact sums plus the owner linkage. **Require** `tester → vijay` and `real → sudeeksha`, else ❌.
   7. **Inserts after upgrade:** in a transaction that is rolled back, insert one order per book through raw SQL with `portfolio_id` NULL and assert the trigger stamped it.
   8. **Schema vs model:** use `alembic.autogenerate.compare_metadata` against the app metadata, filtered to `portfolios` and every `portfolio_id` column, index, FK and check. Expect no differences. Print any found and ❌.
   9. `alembic downgrade e1p0s2e3c4u5`. Assert there is no `portfolios` table, no `portfolio_id` columns, no `pf_stamp` functions or triggers, and `census(legacy_only=True) == before`.
   10. Re-upgrade, and `verify` again.
-  11. `finally:` always drop the scratch DB and remove the temp file in the container. With `--delete-dump`, delete the local dump and counts. Otherwise print the exact delete command.
+  11. `finally:` always drop the scratch DB, remove the temp file in the container, and shred the decrypted temp directory. With `--delete-dump`, delete the encrypted `.tar.gpg` and the `.sha256` as well. Otherwise print the exact delete command.
 - [ ] **Step 2: Old code on the new schema.** Upgrade a second scratch DB built from the prod copy. Start the **pre-B1** `develop` build from a `git worktree add --detach` temp dir on port 8077 with `ENVIRONMENT=local ENABLE_SCHEDULER=false DB_AUTO_MIGRATE=true`. Check:
   - `/health` is ok;
   - login works (create a user with the old CLI);
@@ -705,7 +859,8 @@ DROP_TRIGGER_DDL = [f"DROP TRIGGER IF EXISTS trg_{t}_pf_stamp ON {t}" for t in _
 ## Acceptance criteria (B1 is done only when every line holds)
 
 1. Prod-copy census (Task 1) reviewed by the owner. No live-mode row maps to house, unless the owner made a recorded override.
-2. Every row in the six money tables has a portfolio (V1). Child rows agree with their position (V2). Row mode equals portfolio mode (V3). Owners are linked (`tester→vijay`, `real→sudeeksha`) (V4). There is exactly one of each book (V5). Snapshots are only house or real (V6). Strategy and book agree (V7). Totals are exactly equal before and after (V8). The six triggers are present (V9).
+2. Every row in the six money tables has a portfolio (V1). Child rows, approvals included, agree with their position (V2). Row mode equals portfolio mode (V3). Owners are linked (`tester→vijay`, `real→sudeeksha`) (V4). There is exactly one of each book (V5). Snapshots are only house or real (V6). Strategy and book agree, approvals included (V7). Totals are exactly equal before and after (V8). Exactly the 12 expected triggers exist, enabled, with the right tables, functions, timing and events (V9).
+2b. `portfolio_id` can't change once set, except under the explicit move flag. The real order, approval and tester linking paths keep child and position in one portfolio. The production copy contained no user personal data and was encrypted in transit and at rest. `starting_capital` can't be negative. Archived generations and their rows can't be deleted.
 3. The golden test is byte-identical for house, testing book and My Holdings, covering cash, holdings, P&L, drawdown, peak, slot count, holdings, a sample risk decision, and every historical row.
 4. Every insert path is stamped by the trigger, the trigger never raises, and the whole existing suite passes with triggers live.
 5. The rehearsal on the sanitized prod copy passes every step, including downgrade → schema gone → re-upgrade, and the schema-vs-model check.
@@ -725,7 +880,9 @@ DROP_TRIGGER_DDL = [f"DROP TRIGGER IF EXISTS trg_{t}_pf_stamp ON {t}" for t in _
 | Logic in triggers is less visible than Python for a single developer | Three short functions, documented in the code map. B2 can move stamping into the executor and drop the triggers once every write goes through it |
 | `SELECT … INTO NEW.col` behaviour or Timescale restore quirks on the prod image | Verified on the same Postgres image in Task 4/5 before anything ships |
 | Deploy window: the worker writes while the migration holds locks | Worker stopped; off-hours window; `lock_timeout` 5 s fails fast and the deploy is retried |
-| Prod copy holds personal data on a laptop | Secrets and finance data excluded at export; hashes and emails scrubbed on restore; deleted after |
+| Prod copy on a laptop | Users are exported sanitized at source; secrets and finance data are excluded; AES-256 encrypted before leaving the droplet; checksummed; decrypted only into a temp dir that is always shredded; deleted after (rev 3) |
+| The immutability trigger raises inside a trading transaction | It fires only on a change to an already-set `portfolio_id`, which no current code makes (§D8 audit). The full suite runs with it on; B2/C use the explicit move flag |
+| The two post-insert `position_id` links could one day point across books | V2 detects it at every `portfolios-check`; tests pin today's three real linking paths |
 | Old code after rollback writes rows the new code later needs to read by portfolio | The trigger stamps them; `portfolios-backfill` covers a downgraded window |
 
 ## Rollout gates (🔒 = owner)

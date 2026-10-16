@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ComponentType, type ReactNode } from 
 import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
-import { api, captureTokenFromRedirect, clearToken, getToken, setPreviewPlan } from './api/client'
+import { ApiError, api, clearToken, getToken, setPreviewPlan, setToken, takeLoginCodeFromRedirect } from './api/client'
 import AuthScreen from './components/AuthScreen'
 import { Loading } from './components/Loading'
 import Dashboard from './pages/Dashboard'
@@ -135,10 +135,9 @@ const PRIMARY_NAV_COUNT = 6
 const LIVE_ACK_STORAGE = 'stml_live_trading_ack'
 
 // Runs once at module load, before the first render decides whether to show
-// the auth screen — a Google login redirect lands here with ?token=... and
-// must be captured before that check runs, or it would flash the login
-// screen and drop the token.
-captureTokenFromRedirect()
+// the auth screen — a Google login redirect lands here with ?login_code=...
+// and must be read (and stripped from the address bar) before that check runs.
+const pendingLoginCode = takeLoginCodeFromRedirect()
 
 function plansPathEarly(path: string): boolean {
   return path === '/plans' || path.startsWith('/plans/') || path === '/trademind/plans'
@@ -156,6 +155,21 @@ function NotInPlan({ plan }: { plan: string }) {
 }
 
 export default function App() {
+  const [loginError, setLoginError] = useState<string | null>(null)
+  const [exchanging, setExchanging] = useState(!!pendingLoginCode)
+  useEffect(() => {
+    if (!pendingLoginCode) return
+    api
+      .exchangeLoginCode(pendingLoginCode)
+      .then((r) => {
+        setToken(r.access_token)
+        window.location.reload()
+      })
+      .catch((e) => {
+        setExchanging(false)
+        setLoginError(e instanceof ApiError ? e.message : 'Google sign-in did not finish. Please try again.')
+      })
+  }, [])
   const hasToken = !!getToken()
   const location = useLocation()
   const queryClient = useQueryClient()
@@ -215,8 +229,10 @@ export default function App() {
     () => localStorage.getItem(LIVE_ACK_STORAGE) === 'true',
   )
 
+  if (exchanging) return <div style={{ padding: '2rem' }}>Signing you in…</div>
+
   if (!hasToken) {
-    return <AuthScreen />
+    return <AuthScreen initialError={loginError} />
   }
 
   if (status?.live_trading_enabled && !liveAcked) {

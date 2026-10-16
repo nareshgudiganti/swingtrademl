@@ -23,13 +23,14 @@ from swing_trade_ml.schemas import (
     CurrentUserOut,
     KiteLoginResponse,
     KiteSessionResponse,
+    LoginCodeExchange,
     LoginRequest,
     MessageResponse,
     PasswordChangeRequest,
     SignupRequest,
     TokenResponse,
 )
-from swing_trade_ml.services import audit
+from swing_trade_ml.services import audit, login_codes
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 log = get_logger(__name__)
@@ -329,7 +330,7 @@ def google_callback(code: str, state: str, db: DbSession) -> HTMLResponse | Redi
 
     Errors render an HTML page (this is loaded by a browser via redirect, the
     same reason /kite/callback does); success redirects on to the SPA with a
-    JWT in the query string for it to pick up and store.
+    one-time login code in the query string for the app to swap for a session.
     """
     if not _consume_state(state):
         return HTMLResponse(
@@ -427,8 +428,34 @@ def google_callback(code: str, state: str, db: DbSession) -> HTMLResponse | Redi
     db.commit()
     db.refresh(user)
 
-    jwt_token = create_access_token(user.username, {"uid": user.id})
-    return RedirectResponse(f"{settings.post_login_url()}/?token={jwt_token}")
+    code = login_codes.issue(db, user)
+    db.commit()
+    # A one-time code, not the session token: the address bar ends up in
+    # browser history, server logs and Referer headers (spec finding S5).
+    return RedirectResponse(f"{settings.post_login_url()}/?login_code={code}")
+
+
+@router.post("/google/exchange", response_model=TokenResponse)
+def google_exchange(payload: LoginCodeExchange, db: DbSession, request: Request) -> TokenResponse:
+    """Swap the one-time code from the Google redirect for a session. Works once, within 60 seconds."""
+    user = login_codes.redeem(db, payload.code)
+    if user is None:
+        db.commit()  # keep the code marked used even when the account is disabled
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED, "This sign-in link has expired. Please sign in again."
+        )
+    user.last_login_at = datetime.now(UTC)
+    audit.record(
+        db,
+        "auth.login",
+        actor=user,
+        target_type="user",
+        target_id=user.id,
+        after={"via": "google"},
+        request=request,
+    )
+    db.commit()
+    return issue_token(user)
 
 
 def _unique_username_from_email(db: Session, email: str) -> str:

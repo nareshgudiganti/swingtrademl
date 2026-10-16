@@ -141,20 +141,18 @@ function authHeaders(token: string): Record<string, string> {
 }
 
 /**
- * Google sign-in redirects the whole browser back to this app's own URL with
- * `?token=...` attached (see the backend's /auth/google/callback). Called
- * once on startup, before anything renders, so a fresh Google login is picked
- * up and the token never lingers visibly in the address bar.
+ * Google sign-in comes back with `?login_code=...` (one use, 60 seconds).
+ * Read it and strip it from the address bar before anything renders. An old
+ * `?token=` link is stripped and never honoured.
  */
-export function captureTokenFromRedirect(): boolean {
+export function takeLoginCodeFromRedirect(): string | null {
   const url = new URL(window.location.href)
-  const token = url.searchParams.get('token')
-  if (!token) return false
-
-  setToken(token)
+  if (!url.searchParams.has('login_code') && !url.searchParams.has('token')) return null
+  const code = url.searchParams.get('login_code')
+  url.searchParams.delete('login_code')
   url.searchParams.delete('token')
   window.history.replaceState({}, '', url.toString())
-  return true
+  return code
 }
 
 export class ApiError extends Error {
@@ -266,6 +264,7 @@ export const api = {
   // -------------------------------------------------------------- auth --
   login: (username: string, password: string) =>
     post<{ access_token: string }>('/auth/login', { username, password }),
+  exchangeLoginCode: (code: string) => post<{ access_token: string }>('/auth/google/exchange', { code }),
   changePassword: (current_password: string, new_password: string) =>
     post<{ access_token: string }>('/auth/password', { current_password, new_password }),
   logoutEverywhere: () => post<{ message: string }>('/auth/logout-all'),

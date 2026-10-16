@@ -102,6 +102,10 @@ class TokenResponse(BaseModel):
     expires_in_minutes: int
 
 
+class LoginCodeExchange(BaseModel):
+    code: str = Field(..., min_length=10, max_length=128)
+
+
 class CurrentUserOut(BaseModel):
     model_config = ORM
     id: int

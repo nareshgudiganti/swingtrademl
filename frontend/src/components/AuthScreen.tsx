@@ -4,12 +4,12 @@ import { ApiError, api, googleLoginUrl, setToken } from '../api/client'
 
 /** Shown whenever there is no valid token: first run, after logout, or after
  * a 401 clears an expired one. Handles both login and self-registration. */
-export default function AuthScreen() {
+export default function AuthScreen({ initialError = null }: { initialError?: string | null } = {}) {
   const [mode, setMode] = useState<'login' | 'signup'>('login')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [email, setEmail] = useState('')
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(initialError)
   const [busy, setBusy] = useState(false)
   // null until the server answers; if it never does, keep the old behaviour
   // (offer sign-up) rather than hide a link that may work.

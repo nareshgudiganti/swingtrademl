@@ -631,7 +631,7 @@ describe('checkAllowlist', () => {
   it('passes when every gap is explained, treating planned as acceptable', () => {
     const ok = checkAllowlist(parity, { ...allow, Models: { train: { status: 'v2', decision: 'owner 2026-10-04' }, mystery: { status: 'deferred', decision: 'oa4' } } }, { strict: false })
     expect(ok.unexplained).toEqual([])
-    expect(ok.planned).toEqual([{ page: 'Capital', call: 'riskEvents', task: 'oa2' }])
+    expect(ok.planned).toEqual([{ page: 'Capital', call: 'riskEvents', task: 'oa2', status: 'planned' }])
     expect(ok.ok).toBe(true)
   })
 

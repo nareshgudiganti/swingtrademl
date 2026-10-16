@@ -31,7 +31,7 @@ import MyHoldings from './pages/MyHoldings'
 import Setup from './pages/Setup'
 import Observatory from './pages/Observatory'
 import { bookOf } from './books'
-import { ADMIN_SECTION, resolveSection, splitLabel, visiblePages, visibleSections } from './menu'
+import { ADMIN_SECTION, matches, resolveSection, splitLabel, visiblePages, visibleSections } from './menu'
 
 // The menu lives in ./menu.ts (five sections: Today, Discover, Portfolio, Insights, Admin).
 
@@ -67,16 +67,25 @@ function TabLabel({ label }: { label: string }) {
 export default function TradeMindApp({ ownerConsole = false }: TradeMindAppProps) {
   const status = useBrainStatus()
   const latest = useLatestRun()
-  const broker = useQuery({ queryKey: ['status'], queryFn: api.status, enabled: ownerConsole })
   const location = useLocation()
+  const book = bookOf(location.pathname)
+  // Also read for everyone on a Portfolio screen, so the Paper strip can warn a non-owner if the server is ever not
+  // in paper mode. Everything else that uses it stays owner-only (each use checks ownerConsole).
+  const broker = useQuery({ queryKey: ['status'], queryFn: api.status, enabled: ownerConsole || book != null })
   const sections = visibleSections(ownerConsole)
   const section = resolveSection(location.pathname, ownerConsole)
   // The row under the bar lists only pages this account can open.
   // Testing is left out of the row while paper testing is off; its URL is still routed (see the testing Route).
   const testingOn = broker.data?.paper_tester_enabled !== false
   const pages = visiblePages(section, ownerConsole, { testingOn })
-  const book = bookOf(location.pathname)
-  const paperButNotPaper = book?.kind === 'paper' && broker.data != null && broker.data.trading_mode !== 'paper'
+  // One strip per Portfolio screen this viewer may open (a non-owner on an owner-only URL is being redirected, so
+  // no Real strip flashes first). Testing is always paper money, so it never gets the real-money warning.
+  const showBook = book != null && visiblePages(section, ownerConsole).some((p) => matches(location.pathname, p.to))
+  const paperButNotPaper =
+    book?.kind === 'paper' &&
+    !matches(location.pathname, '/trademind/testing') &&
+    broker.data != null &&
+    broker.data.trading_mode !== 'paper'
   const [menuOpen, setMenuOpen] = useState(false)
   useEffect(() => setMenuOpen(false), [location.pathname])
   useEffect(() => {
@@ -184,7 +193,7 @@ export default function TradeMindApp({ ownerConsole = false }: TradeMindAppProps
           ))}
         </nav>
       )}
-      {book && (
+      {book && showBook && (
         <div className={`tm-bookstrip tm-bookstrip-${book.kind}`} data-testid="book-strip" data-book={book.kind}>
           <span className="tm-booktag">{book.kind === 'real' ? 'Real' : 'Paper'}</span>
           <span>

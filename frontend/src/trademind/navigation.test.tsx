@@ -98,4 +98,17 @@ describe('Phase 2: Portfolio tabs and the Paper/Real strip', () => {
   it('the Overview headline figure names its source', () => {
     expect(render('/trademind/portfolio', true)).toContain('Paper figures')
   })
+
+  it('a non-owner opening My Zerodha or Testing never sees their strip (no Real flash before the redirect)', () => {
+    expect(strips(render('/trademind/holdings', false))).toEqual([])
+    expect(strips(render('/trademind/testing', false))).toEqual([])
+  })
+
+  it('never warns about real money on Testing, which is always paper', () => {
+    expect(render('/trademind/testing', true, { paper_tester_enabled: true, trading_mode: 'live' })).not.toContain('not in paper mode')
+  })
+
+  it('also warns a non-owner when a Paper screen sees a server not in paper mode', () => {
+    expect(render('/trademind/portfolio', false, { trading_mode: 'live' })).toContain('not in paper mode')
+  })
 })

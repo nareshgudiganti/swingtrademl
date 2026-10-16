@@ -100,8 +100,9 @@ test -z "$(git diff --name-only origin/main docs/one-trademind-design | grep -v 
 git worktree add .claude/worktrees/one-app-p1 -b feature/one-trademind-phase-1 docs/one-trademind-design
 ```
 
-Expected: the OK line, then the worktree is created. The check is also pinned by a test in Task 2 that fails if
-`menu.ts` and the route table disagree, which is what the Observatory edit would break.
+Expected: the OK line, then the worktree is created. The prerequisite itself is enforced only by this script (it exits
+non-zero). Separately, a Task 2 test fails if `menu.ts` and the route table disagree, which would also catch a missing
+Observatory edit.
 
 - [ ] **Step 2: Install dependencies inside the new worktree (isolated)**
 

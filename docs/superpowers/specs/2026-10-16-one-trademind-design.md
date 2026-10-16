@@ -117,6 +117,9 @@ still lose a button, a filter, a permission rule, a report or a navigation path.
 **Part A: API-call comparison** (reproducible; run 2026-10-16 against `origin/main`). For each classic page, list
 the backend calls it makes and check whether any file under `frontend/src/trademind/` makes the same call.
 Script: `frontend/scripts/classic-parity.mjs` (Phase 1, Task 4), with an allow-list that explains every gap.
+Known blind spots: it reads `api.x` in the page and in local modules the page imports directly (one level), ignores
+comments, and reports `api['x']`, `const { x } = api` and passing `api` as a value as an unreadable-access gap that
+must be explained. It cannot see calls made through code more than one import away.
 
 **Part B: browser-level verification** (Phase 6, per screen, signed off by the owner). For each classic screen, a
 written inventory of every control and path, each linked to its new location and **clicked through in a real

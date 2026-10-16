@@ -128,6 +128,10 @@ Rev 3 adds a fourth function, `pf_keep_portfolio()` (`BEFORE UPDATE OF portfolio
 
 **Prevention, without changing trading behaviour:** a `BEFORE UPDATE OF portfolio_id` trigger on the six tables refuses to change a portfolio_id once it is set. It allows NULL → value, so `portfolios-backfill` keeps working. Release B2/C tools may set the session flag `SET LOCAL app.allow_portfolio_move = 'on'` to move a row deliberately. No current code updates `portfolio_id`, so this trigger never fires in today's code paths. The full suite, run with triggers on, proves it.
 
+**Owner requirements (approval of 2026-10-16, binding for Tasks 2 and 4):**
+- **R1. Cross-portfolio linking is rejected**, even when `portfolio_id` itself doesn't change. A `BEFORE INSERT OR UPDATE OF position_id` check on `orders`, `trades` and `brain_approvals` raises when `NEW.position_id` points at a position whose `portfolio_id` differs from `NEW.portfolio_id` (both non-NULL). It is tested on the three real linking paths, which must keep passing, and on a forced cross-book link, which must be refused.
+- **R2. Ownership overrides are restricted and audited.** `app.allow_portfolio_move` is honoured only inside `swingtrade portfolios-move --table T --id N --to KIND --reason "…"`, an owner-run CLI. That command writes an `audit_log` row (`portfolio.move`, before/after, reason) in the **same transaction**. The trigger also requires `app.portfolio_move_audit_id` to name an `audit_log` row created in the current transaction (`xmin = txid_current()`), so setting the flag by hand without an audit row is still refused. Test fixtures use the CLI helper, not the raw flag. No API route can set it.
+
 **Detection:** a changed `position_id`, `strategy_id` or `mode` that broke agreement shows up as V2, V3 or V7 in `swingtrade portfolios-check`. That check is a rollout gate right after deploy and again the next morning, after the 09:15 and 15:45 jobs. The two linking paths above are pinned by tests that run the real `open_position` path, the resting-buy reconcile path and the approval buy path, then assert V2.
 
 **D7. What B1 guarantees not to change:**

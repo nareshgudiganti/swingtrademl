@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from datetime import UTC, datetime, timedelta
 from urllib.parse import parse_qs, urlparse
 
@@ -19,7 +20,9 @@ def _user(db, name="g1", active=True) -> User:
 def test_code_is_stored_hashed_and_redeems_once(db_session):
     user = _user(db_session)
     code = login_codes.issue(db_session, user)
-    assert db_session.query(LoginCode).filter_by(code_hash=code).count() == 0  # raw code never stored
+    row = db_session.query(LoginCode).filter_by(user_id=user.id).one()
+    assert row.code_hash == hashlib.sha256(code.encode()).hexdigest()
+    assert row.code_hash != code  # raw code never stored
     assert login_codes.redeem(db_session, code).id == user.id
     assert login_codes.redeem(db_session, code) is None
 

@@ -113,3 +113,27 @@ describe('what a non-owner can see', () => {
     }
   })
 })
+
+describe('owner-only pages are guarded by their route, not only hidden from the menu', () => {
+  // The text of each <Route path="..."> element, up to the next <Route path=.
+  const blocks = new Map<string, string>()
+  const parts = appSource.split(/<Route\s+path="/).slice(1)
+  for (const part of parts) blocks.set(part.slice(0, part.indexOf('"')), part)
+
+  const ownerPaths = [...SECTIONS.flatMap((s) => s.pages.map((p) => ({ section: s, page: p })))]
+    .filter(({ section, page }) => section.ownerOnly || page.ownerOnly)
+    .map(({ page }) => page.to)
+
+  it('read the route table', () => {
+    expect(ownerPaths.length).toBeGreaterThanOrEqual(9)
+    expect(blocks.size).toBeGreaterThan(15)
+  })
+
+  it.each(ownerPaths)('%s redirects a non-owner away', (to) => {
+    const key = to.replace('/trademind/', '')
+    const block = blocks.get(key)
+    expect(block, `no <Route path="${key}"> in TradeMindApp.tsx`).toBeDefined()
+    expect(block).toMatch(/ownerConsole/)
+    expect(block).toMatch(/<Navigate /)
+  })
+})

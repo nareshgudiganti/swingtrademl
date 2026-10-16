@@ -27,6 +27,8 @@ _SIGN_IN = "signing in cannot require being signed in"
 OPEN_WRITES: dict[tuple[str, str], str] = {
     ("POST", "/auth/login"): _SIGN_IN,
     ("POST", "/auth/signup"): "creates an ordinary account only when sign-up is open; never an owner",
+    ("POST", "/auth/password"): "a signed-in person changes their own password, nobody else's",
+    ("POST", "/auth/logout-all"): "a signed-in person ends their own sessions, nobody else's",
 }
 
 # Routes anyone may call without credentials, and why. Everything else must answer 401/403.

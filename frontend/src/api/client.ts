@@ -266,6 +266,9 @@ export const api = {
   // -------------------------------------------------------------- auth --
   login: (username: string, password: string) =>
     post<{ access_token: string }>('/auth/login', { username, password }),
+  changePassword: (current_password: string, new_password: string) =>
+    post<{ access_token: string }>('/auth/password', { current_password, new_password }),
+  logoutEverywhere: () => post<{ message: string }>('/auth/logout-all'),
   signup: (username: string, password: string, email?: string) =>
     post<{ access_token: string }>('/auth/signup', { username, password, email }),
   authOptions: () => get<{ signup_allowed: boolean }>('/auth/options'),

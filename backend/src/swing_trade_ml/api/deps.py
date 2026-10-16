@@ -28,9 +28,19 @@ def _user_from_bearer(credentials: HTTPAuthorizationCredentials, db: Session) ->
     if not username:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Malformed token")
 
-    user = db.execute(select(User).where(User.username == username)).scalar_one_or_none()
+    uid = payload.get("uid")
+    if isinstance(uid, int):
+        user = db.get(User, uid)
+        if user is not None and user.username != username:
+            user = None
+    else:
+        user = db.execute(select(User).where(User.username == username)).scalar_one_or_none()
     if user is None or not user.is_active:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "User not found or inactive")
+    # Tokens issued before P0 carry no "tv"; they count as version 0 and stop
+    # working the first time this account's sessions are ended.
+    if int(payload.get("tv", 0)) != (user.token_version or 0):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Your session has ended. Please sign in again.")
     return user
 
 

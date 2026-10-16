@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 
-import { api, clearToken } from '../api/client'
+import { ApiError, api, clearToken, setToken } from '../api/client'
 import { ErrorBox, Loading } from '../components/Loading'
 import SymbolPicker from '../components/SymbolPicker'
 import { ClockIcon, PlugIcon, SendIcon, WarningIcon } from '../components/icons'
@@ -21,6 +21,58 @@ const JOB_DESCRIPTIONS: Record<string, string> = {
   daily_summary: 'Posts the end-of-day portfolio summary',
   evaluate_predictions: "Scores yesterday's predictions once their horizon has elapsed",
   sync_instruments: "Refreshes Kite's instrument list (weekly — nothing trades on Sunday)",
+}
+
+function SignInCard() {
+  const [current, setCurrent] = useState('')
+  const [next, setNext] = useState('')
+  const [note, setNote] = useState<string | null>(null)
+  const change = useMutation({
+    mutationFn: () => api.changePassword(current, next),
+    onSuccess: (r) => {
+      setToken(r.access_token)
+      setCurrent('')
+      setNext('')
+      setNote('Password changed. Other devices are signed out.')
+    },
+    onError: (e) => setNote(e instanceof ApiError ? e.message : 'Could not change the password.'),
+  })
+  const out = useMutation({
+    mutationFn: api.logoutEverywhere,
+    onSuccess: () => {
+      clearToken()
+      window.location.reload()
+    },
+  })
+  return (
+    <div className="card" style={{ marginBottom: '1.5rem' }}>
+      <h2>Sign-in</h2>
+      {note && <p className="muted">{note}</p>}
+      <label>
+        <div className="stat-label">Current password</div>
+        <input type="password" value={current} onChange={(e) => setCurrent(e.target.value)} />
+      </label>
+      <label>
+        <div className="stat-label">New password (8 or more characters)</div>
+        <input
+          type="password"
+          value={next}
+          minLength={8}
+          onChange={(e) => setNext(e.target.value)}
+        />
+      </label>
+      <button
+        className="primary"
+        disabled={change.isPending || next.length < 8}
+        onClick={() => change.mutate()}
+      >
+        Change password
+      </button>{' '}
+      <button disabled={out.isPending} onClick={() => out.mutate()}>
+        Sign out on every device
+      </button>
+    </div>
+  )
 }
 
 export default function Settings() {
@@ -64,6 +116,8 @@ export default function Settings() {
       <div className="page-head">
         <h1>Settings</h1>
       </div>
+
+      <SignInCard />
 
       {!me.data?.is_superuser && (
         <div className="card" style={{ marginBottom: '1.5rem' }}>

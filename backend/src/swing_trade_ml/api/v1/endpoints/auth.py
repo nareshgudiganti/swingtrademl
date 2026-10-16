@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from urllib.parse import urlencode
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -24,18 +24,54 @@ from swing_trade_ml.schemas import (
     KiteLoginResponse,
     KiteSessionResponse,
     LoginRequest,
+    MessageResponse,
+    PasswordChangeRequest,
     SignupRequest,
     TokenResponse,
 )
+from swing_trade_ml.services import audit
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 log = get_logger(__name__)
+
+
+def issue_token(user: User) -> TokenResponse:
+    """A session token naming the account by id and by its current session version."""
+    return TokenResponse(
+        access_token=create_access_token(user.username, {"uid": user.id, "tv": user.token_version or 0}),
+        expires_in_minutes=settings.JWT_EXPIRE_MINUTES,
+    )
 
 
 @router.get("/options")
 def auth_options() -> dict[str, bool]:
     """What the login page may offer. Public: it is read before anyone is signed in."""
     return {"signup_allowed": settings.ALLOW_SIGNUP}
+
+
+@router.post("/password", response_model=TokenResponse)
+def change_password(
+    payload: PasswordChangeRequest, user: CurrentUser, db: DbSession, request: Request
+) -> TokenResponse:
+    """Change your own password. Every other session of this account ends; this one gets a fresh token."""
+    if not user.hashed_password or not verify_password(payload.current_password, user.hashed_password):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Your current password is not right.")
+    user.hashed_password = hash_password(payload.new_password)
+    user.token_version = (user.token_version or 0) + 1
+    audit.record(
+        db, "auth.password_change", actor=user, target_type="user", target_id=user.id, request=request
+    )
+    db.commit()
+    return issue_token(user)
+
+
+@router.post("/logout-all", response_model=MessageResponse)
+def logout_everywhere(user: CurrentUser, db: DbSession, request: Request) -> MessageResponse:
+    """End every session of this account, on every device."""
+    user.token_version = (user.token_version or 0) + 1
+    audit.record(db, "auth.logout_all", actor=user, target_type="user", target_id=user.id, request=request)
+    db.commit()
+    return MessageResponse(message="Signed out on every device.")
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -56,10 +92,7 @@ def login(payload: LoginRequest, db: DbSession) -> TokenResponse:
     user.last_login_at = datetime.now(UTC)
     db.commit()
 
-    return TokenResponse(
-        access_token=create_access_token(user.username, {"uid": user.id}),
-        expires_in_minutes=settings.JWT_EXPIRE_MINUTES,
-    )
+    return issue_token(user)
 
 
 @router.post("/signup", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
@@ -91,10 +124,7 @@ def signup(payload: SignupRequest, db: DbSession) -> TokenResponse:
     db.refresh(user)
 
     log.info("auth.signup", username=user.username)
-    return TokenResponse(
-        access_token=create_access_token(user.username, {"uid": user.id}),
-        expires_in_minutes=settings.JWT_EXPIRE_MINUTES,
-    )
+    return issue_token(user)
 
 
 @router.get("/me", response_model=CurrentUserOut)

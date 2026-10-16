@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from swing_trade_ml.brain.modules.m13_news.calendar import trading_days_until
@@ -17,7 +17,7 @@ from swing_trade_ml.core.enums import PositionStatus, TradingMode
 from swing_trade_ml.core.market_session import IST
 from swing_trade_ml.db.models.feeds import UpcomingEvent
 from swing_trade_ml.db.models.market import Candle, Instrument
-from swing_trade_ml.db.models.trading import Position
+from swing_trade_ml.db.models.trading import PortfolioSnapshot, Position
 from swing_trade_ml.services.brain_golive.compare import NEEDED_FINISHED, finished_brain_ideas
 from swing_trade_ml.services.costs import compute_charges
 from swing_trade_ml.services.portfolio import (
@@ -199,6 +199,19 @@ def evidence_summary(db: Session) -> dict:
     finished = int(stats["total_trades"])
     enough = finished >= ENOUGH_TRADES
 
+    # Account-wide even with bot_book_only: snapshots hold one total per mode (portfolio.py).
+    # Fewer than 2 trial snapshots means no fall can be measured: None, never 0.
+    n_snaps = (
+        db.scalar(
+            select(func.count())
+            .select_from(PortfolioSnapshot)
+            .where(PortfolioSnapshot.mode == TradingMode.PAPER, PortfolioSnapshot.ts >= since)
+        )
+        if since is not None
+        else 0
+    )
+    worst_fall = round(stats["max_drawdown_pct"] * 100, 2) if n_snaps > 1 else None
+
     nifty = every = None
     if since is not None:
         nifty_ids = list(
@@ -217,7 +230,7 @@ def evidence_summary(db: Session) -> dict:
             "profit_booked": stats["realized_pnl"],
             "profit_open": stats["unrealized_pnl"],
             "costs_paid": stats["total_charges"],
-            "worst_fall_from_peak_pct": round(stats["max_drawdown_pct"] * 100, 2),
+            "worst_fall_from_peak_pct": worst_fall,
             "finished_trades": finished,
             "win_rate_pct": round(stats["win_rate"] * 100, 1) if finished else None,
             "nifty_same_period_pct": nifty,

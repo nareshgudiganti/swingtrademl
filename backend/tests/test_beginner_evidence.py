@@ -4,14 +4,14 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime, time, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 
 from swing_trade_ml.api.v1.endpoints import beginner
 from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.enums import PositionStatus
 from swing_trade_ml.core.market_session import IST
 from swing_trade_ml.db.models.market import Candle, Instrument
-from swing_trade_ml.db.models.trading import Position, Strategy, Trade
+from swing_trade_ml.db.models.trading import PortfolioSnapshot, Position, Strategy, Trade
 from swing_trade_ml.services import beginner_views
 from swing_trade_ml.services.beginner_views import evidence_summary
 
@@ -99,6 +99,20 @@ def test_counts_only_paper_bot_trades_and_sums_charges(db_session, monkeypatch):
             status=PositionStatus.OPEN,
         )
     )
+    for strat, sym in ((real, "BX4R"), (tester, "BX4T")):
+        db_session.add(
+            Position(
+                strategy_id=strat.id,
+                instrument_id=inst.id,
+                mode="paper",
+                quantity=10,
+                entry_price=100.0,
+                current_price=150.0,
+                unrealized_pnl=500.0,
+                entry_at=datetime.now(UTC),
+                status=PositionStatus.OPEN,
+            )
+        )
     db_session.flush()
 
     b = evidence_summary(db_session)["bot"]
@@ -108,10 +122,19 @@ def test_counts_only_paper_bot_trades_and_sums_charges(db_session, monkeypatch):
     assert round(b["profit_booked"] - base["profit_booked"], 6) == 60.0
     assert round(b["costs_paid"] - base["costs_paid"], 6) == 8.0
     assert round(b["profit_open"] - base["profit_open"], 6) == 30.0
-    if base["finished_trades"] == 0:
-        assert b["win_rate_pct"] == 50.0
-        assert b["enough_trades"] is False
-        assert b["note"] == "Too few finished trades to judge — this could be luck."
+
+
+def test_few_trades_note_and_win_rate_unconditionally(db_session, monkeypatch):
+    real_stats = beginner_views.performance_stats
+
+    def fake(db, **kw):
+        return {**real_stats(db, **kw), "total_trades": 2, "win_rate": 0.5}
+
+    monkeypatch.setattr(beginner_views, "performance_stats", fake)
+    b = evidence_summary(db_session)["bot"]
+    assert b["win_rate_pct"] == 50.0
+    assert b["enough_trades"] is False
+    assert b["note"] == "Too few finished trades to judge — this could be luck."
 
 
 def test_enough_trades_clears_note(db_session):
@@ -126,12 +149,32 @@ def test_enough_trades_clears_note(db_session):
     assert b["note"] == ""
 
 
-def test_worst_fall_matches_stats_logic(db_session):
-    from swing_trade_ml.services.portfolio import performance_stats
+def _snap(db, day, value):
+    ts = datetime.combine(day, time.min, tzinfo=IST)
+    db.add(
+        PortfolioSnapshot(
+            mode="paper",
+            ts=ts,
+            cash=value,
+            holdings_value=0.0,
+            total_value=value,
+            peak_value=value,
+            drawdown_pct=0.0,
+        )
+    )
 
-    b = evidence_summary(db_session)["bot"]
-    stats = performance_stats(db_session, mode="paper", bot_book_only=True)
-    assert b["worst_fall_from_peak_pct"] == round(stats["max_drawdown_pct"] * 100, 2)
+
+def test_worst_fall_concrete_and_null_without_snapshots(db_session):
+    db_session.execute(delete(PortfolioSnapshot))  # rolled back with the test
+    db_session.flush()
+    assert evidence_summary(db_session)["bot"]["worst_fall_from_peak_pct"] is None
+    d = settings.PAPER_TRIAL_START_DATE
+    _snap(db_session, d + timedelta(days=1), 100000.0)
+    db_session.flush()
+    assert evidence_summary(db_session)["bot"]["worst_fall_from_peak_pct"] is None  # one point
+    _snap(db_session, d + timedelta(days=2), 90000.0)
+    db_session.flush()
+    assert evidence_summary(db_session)["bot"]["worst_fall_from_peak_pct"] == 10.0
 
 
 def test_benchmarks_from_candles_and_null_when_missing(db_session):

@@ -50,13 +50,65 @@ def auth_options() -> dict[str, bool]:
     return {"signup_allowed": settings.ALLOW_SIGNUP}
 
 
+LOCKOUT_THRESHOLD = 5
+LOCKOUT_MINUTES = 15
+LOGIN_FAILED = "Incorrect username or password. After several wrong tries, sign-in pauses for 15 minutes."
+CURRENT_PASSWORD_WRONG = "Your current password is not right."
+PASSWORD_CHANGE_LOCKED = "Too many wrong tries. Please wait 15 minutes and try again."
+# Compared against when there is no real hash, so an unknown username takes as
+# long to refuse as a wrong password (no timing hint that the account exists).
+_DUMMY_HASH = hash_password("timing-equaliser-not-a-real-password")
+
+
+def _is_locked(user: User, now: datetime) -> bool:
+    return user.locked_until is not None and user.locked_until > now
+
+
+def _count_wrong_password(user: User, now: datetime) -> bool:
+    """One more wrong password for this account. True when it has just been locked."""
+    user.failed_login_count = (user.failed_login_count or 0) + 1
+    if user.failed_login_count >= LOCKOUT_THRESHOLD:
+        user.failed_login_count = 0
+        user.locked_until = now + timedelta(minutes=LOCKOUT_MINUTES)
+        return True
+    return False
+
+
 @router.post("/password", response_model=TokenResponse)
 def change_password(
     payload: PasswordChangeRequest, user: CurrentUser, db: DbSession, request: Request
 ) -> TokenResponse:
-    """Change your own password. Every other session of this account ends; this one gets a fresh token."""
+    """Change your own password. Every other session of this account ends; this one gets a fresh token.
+    Wrong current passwords count toward the same lock as sign-in, so a stolen session can't be used
+    to guess the password."""
+    db.refresh(user, with_for_update=True)
+    now = datetime.now(UTC)
+    if _is_locked(user, now):
+        verify_password(payload.current_password, _DUMMY_HASH)
+        audit.record(
+            db,
+            "auth.password_change_locked",
+            actor=user,
+            target_type="user",
+            target_id=user.id,
+            request=request,
+        )
+        db.commit()
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, PASSWORD_CHANGE_LOCKED)
     if not user.hashed_password or not verify_password(payload.current_password, user.hashed_password):
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Your current password is not right.")
+        locked = bool(user.hashed_password) and _count_wrong_password(user, now)
+        audit.record(
+            db,
+            "auth.password_change_failed",
+            actor=user,
+            target_type="user",
+            target_id=user.id,
+            after={"locked_minutes": LOCKOUT_MINUTES} if locked else None,
+            request=request,
+        )
+        db.commit()
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, CURRENT_PASSWORD_WRONG)
+    user.failed_login_count = 0
     user.hashed_password = hash_password(payload.new_password)
     user.token_version = (user.token_version or 0) + 1
     audit.record(
@@ -73,14 +125,6 @@ def logout_everywhere(user: CurrentUser, db: DbSession, request: Request) -> Mes
     audit.record(db, "auth.logout_all", actor=user, target_type="user", target_id=user.id, request=request)
     db.commit()
     return MessageResponse(message="Signed out on every device.")
-
-
-LOCKOUT_THRESHOLD = 5
-LOCKOUT_MINUTES = 15
-LOGIN_FAILED = "Incorrect username or password. After several wrong tries, sign-in pauses for 15 minutes."
-# Compared against when there is no real hash, so an unknown username takes as
-# long to refuse as a wrong password (no timing hint that the account exists).
-_DUMMY_HASH = hash_password("timing-equaliser-not-a-real-password")
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -110,18 +154,16 @@ def login(payload: LoginRequest, db: DbSession, request: Request) -> TokenRespon
     if user is None or not user.hashed_password:
         verify_password(payload.password, _DUMMY_HASH)
         raise refuse("auth.login_failed", why="unknown_or_no_password")
-    if user.locked_until is not None and user.locked_until > now:
+    if _is_locked(user, now):
         verify_password(payload.password, _DUMMY_HASH)
         raise refuse("auth.login_while_locked")
     if not verify_password(payload.password, user.hashed_password):
-        user.failed_login_count = (user.failed_login_count or 0) + 1
-        if user.failed_login_count >= LOCKOUT_THRESHOLD:
-            user.failed_login_count = 0
-            user.locked_until = now + timedelta(minutes=LOCKOUT_MINUTES)
+        if _count_wrong_password(user, now):
             raise refuse("auth.locked", minutes=LOCKOUT_MINUTES)
         raise refuse("auth.login_failed", failed_count=user.failed_login_count)
     if not user.is_active:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Account is disabled")
+        # Same answer as a wrong password: a disabled account doesn't confirm the password was right.
+        raise refuse("auth.login_disabled")
 
     user.failed_login_count = 0
     user.locked_until = None

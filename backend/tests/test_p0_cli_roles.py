@@ -82,3 +82,20 @@ def test_disable_unlock_revoke(db_session, prod_users):
     apply_unlock(db_session, "p0-sudeeksha")
     actions = {a.action for a in db_session.query(AuditLog)}
     assert {"user.disable", "user.revoke_sessions", "user.unlock"} <= actions
+
+
+def test_cannot_disable_the_last_owner(db_session):
+    for u in db_session.query(User).filter(User.role == "owner"):
+        u.role = "member"
+    db_session.add(
+        User(username="p0-last-owner", hashed_password="x", role="owner", is_active=True, plan="free")
+    )
+    db_session.flush()
+    with pytest.raises(ValueError, match="last owner"):
+        apply_disable(db_session, "p0-last-owner", "x")
+    assert db_session.query(User).filter_by(username="p0-last-owner").one().is_active is True
+
+
+def test_an_owner_can_be_disabled_while_another_owner_remains(db_session, prod_users):
+    apply_disable(db_session, "p0-vijay", "secondary account")
+    assert db_session.query(User).filter_by(username="p0-vijay").one().is_active is False

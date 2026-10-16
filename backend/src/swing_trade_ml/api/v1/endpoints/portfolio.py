@@ -162,7 +162,10 @@ def list_positions(
     )
     if open_only:
         stmt = stmt.where(Position.status == PositionStatus.OPEN)
-    stmt = _scope_to_book(stmt, Position.strategy_id, book_for(principal, "all"))
+    # No `book` parameter here: a tester gets the tester book, everyone else the visible books.
+    stmt = _scope_to_book(
+        stmt, Position.strategy_id, book_for(principal, "tester" if principal.is_tester else "all")
+    )
     return list(db.execute(stmt).scalars().all())
 
 

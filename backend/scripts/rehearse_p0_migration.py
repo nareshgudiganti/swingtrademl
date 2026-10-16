@@ -51,13 +51,15 @@ def main() -> None:
             assert {u for u, r in rows.items() if r == "owner"} == {"naresh", "sudeeksha", "vijay"}, rows
             assert c.execute(text("SELECT count(*) FROM users WHERE is_superuser <> (role = 'owner')")).scalar_one() == 0
             assert c.execute(text("SELECT count(*) FROM users")).scalar_one() == len(USERS)
+            # Every pre-P0 session ends at deploy: old tokens carry no tv (= 0).
+            assert c.execute(text("SELECT count(*) FROM users WHERE token_version <> 1")).scalar_one() == 0
         command.downgrade(_cfg(), BEFORE)
         with eng.connect() as c:
             cols = {r[0] for r in c.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='users'"))}
             assert "role" not in cols and "token_version" not in cols
             assert c.execute(text("SELECT count(*) FROM users WHERE is_superuser")).scalar_one() == 3
         command.upgrade(_cfg(), AFTER)  # and forward again
-        print("OK P0 migration: upgrade, backfill, downgrade, re-upgrade all as expected")
+        print("OK P0 migration: upgrade, backfill, sessions ended (token_version=1), downgrade, re-upgrade all as expected")
         print(f"Scratch DB {NAME} left at {AFTER} for the old-code rehearsal (Step 3). Drop it afterwards.")
     finally:
         eng.dispose()

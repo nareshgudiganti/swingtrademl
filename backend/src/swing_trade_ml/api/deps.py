@@ -190,6 +190,38 @@ TESTER_WRITES: frozenset[tuple[str, str]] = frozenset(
     {("POST", "/portfolio/tester/buy"), ("POST", "/portfolio/positions/{position_id}/close")}
 )
 
+#: Owner-private areas a tester may not even read while plans are off: the
+#: owner's money, the Zerodha session, the safety switches, alerts and the
+#: brain's go-live controls. `/admin` already answers only the owner itself.
+#: `/brain/compare` and `/brain/trial-journal` are the rest of the go-live
+#: router (endpoints/brain_golive.py), which has no `/brain/golive` prefix.
+TESTER_PRIVATE_PREFIXES: tuple[str, ...] = (
+    "/finance",
+    "/mutual-funds",
+    "/auth/kite",
+    "/safety",
+    "/notifications",
+    "/brain/approvals",
+    "/brain/stage",
+    "/brain/compare",
+    "/brain/trial-journal",
+    "/admin",
+)
+PRIVATE_AREA = "This is a private part of the app. You don't have access."
+
+
+def _route_path(request: Request) -> str:
+    """The matched route's template (e.g. /portfolio/positions/{position_id}/close), minus the API prefix."""
+    route = request.scope.get("route")
+    path = getattr(route, "path", request.url.path)
+    if path.startswith(settings.API_V1_PREFIX):
+        path = path[len(settings.API_V1_PREFIX) :]
+    return path
+
+
+def _is_private_area(path: str) -> bool:
+    return any(path == p or path.startswith(p + "/") for p in TESTER_PRIVATE_PREFIXES)
+
 
 async def require_auth(
     request: Request,
@@ -210,20 +242,18 @@ async def require_auth(
     signed-in account may change the trading stage, approve a buy or pull a
     safety switch, which it silently allowed before (audit F-17).
     """
-    if request.method not in READ_METHODS and not principal.is_owner:
-        write_route = request.scope.get("route")
-        write_path = getattr(write_route, "path", request.url.path)
-        if write_path.startswith(settings.API_V1_PREFIX):
-            write_path = write_path[len(settings.API_V1_PREFIX) :]
-        if not (principal.is_tester and (request.method, write_path) in TESTER_WRITES):
-            raise HTTPException(status.HTTP_403_FORBIDDEN, "Only the owner can change this.")
+    path = _route_path(request)
+    if (
+        request.method not in READ_METHODS
+        and not principal.is_owner
+        and not (principal.is_tester and (request.method, path) in TESTER_WRITES)
+    ):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only the owner can change this.")
+    # A tester sees the shared app while plans are off, never the owner's private areas.
+    if principal.is_tester and _is_private_area(path):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, PRIVATE_AREA)
     if access.unrestricted:
         return
-
-    route = request.scope.get("route")
-    path = getattr(route, "path", request.url.path)
-    if path.startswith(settings.API_V1_PREFIX):
-        path = path[len(settings.API_V1_PREFIX) :]
 
     brain_gate = brain_route_access(request.method, path)
     if brain_gate == "owner":
@@ -270,9 +300,12 @@ async def require_real_account(principal: Annotated[Principal, Depends(get_princ
 def book_for(principal: Principal, book: str) -> str:
     """The book a caller may ask for. The real (My Holdings) book is hidden from
     everyone else: asking for it is refused, and "all" quietly becomes the bot's
-    own book, so hand-bought shares never leak into a total."""
+    own book, so hand-bought shares never leak into a total. A tester may only
+    read the tester book: the house (bot) book is the owner's."""
     if principal.can_see_real_account:
         return book
+    if principal.is_tester and book != "tester":
+        raise HTTPException(status.HTTP_403_FORBIDDEN, PRIVATE_AREA)
     if book == "real":
         raise HTTPException(status.HTTP_403_FORBIDDEN, "This is a private account. You don't have access.")
     return "bot" if book == "all" else book

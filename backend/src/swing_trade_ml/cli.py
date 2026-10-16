@@ -105,9 +105,18 @@ def apply_role(db, username: str, role: str, reason: str) -> str:
 
 
 def apply_disable(db, username: str, reason: str) -> str:
+    from sqlalchemy import func, select
+
+    from swing_trade_ml.db.models.session import User
     from swing_trade_ml.services import audit
 
     user = _find_user(db, username)
+    if user.role == "owner" and user.is_active:
+        owners = db.execute(
+            select(func.count()).select_from(User).where(User.role == "owner", User.is_active)
+        ).scalar_one()
+        if owners <= 1:
+            raise ValueError("Refusing: this is the last owner account")
     user.is_active = False
     user.token_version = (user.token_version or 0) + 1
     audit.record(

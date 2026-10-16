@@ -28,6 +28,9 @@ def upgrade() -> None:
     op.add_column("users", sa.Column("failed_login_count", sa.Integer(), nullable=False, server_default="0"))
     op.add_column("users", sa.Column("locked_until", sa.DateTime(timezone=True), nullable=True))
     op.execute("UPDATE users SET role = 'owner' WHERE is_superuser")
+    # Pre-P0 tokens carry no "tv" and count as 0, so this ends them all once, including any
+    # JWT leaked by the old ?token= Google redirect.
+    op.execute("UPDATE users SET token_version = 1")
 
     op.create_table(
         "audit_log",

@@ -48,8 +48,10 @@ def test_a_non_owner_cannot_use_the_safety_switches_or_strategies(client, db_ses
 
 def test_a_tester_can_still_read_while_plans_are_off(client, db_session):
     tester = _login(db_session, "guest4", role="tester")
-    assert client.get("/api/v1/brain/stage", headers=tester).status_code == 200
+    assert client.get("/api/v1/brain/health", headers=tester).status_code == 200
     assert client.get("/api/v1/strategies", headers=tester).status_code == 200
+    # The go-live controls are the owner's private area, even to read.
+    assert client.get("/api/v1/brain/stage", headers=tester).status_code == 403
 
 
 def test_a_member_cannot_read_owner_screens_while_plans_are_off(client, db_session):

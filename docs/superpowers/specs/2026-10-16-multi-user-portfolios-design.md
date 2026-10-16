@@ -177,6 +177,14 @@ expires_at (60 s), used_at.
 | `signals`, `strategies`, market/feeds/ml/brain tables | unchanged; shared | – |
 | `system_state` | unchanged (global owner kill switch, applies to every portfolio) | – |
 
+**Release B1 refinements (owner review 2026-10-16, plan rev 2):**
+- New rows get their `portfolio_id` from Postgres `BEFORE INSERT` triggers, which cover every write path, including old code after a rollback. They don't come from application code.
+- `portfolios.owner_user_id` is `ON DELETE RESTRICT`, because users are disabled, never deleted.
+- Kind and mode are fixed per kind (real = live, all others paper), and a member always has an owner.
+- Migrations are self-contained SQL.
+
+See `docs/superpowers/plans/2026-10-16-b1-portfolio-records.md` §D.
+
 ### 2.3 Relationships
 
 ```text

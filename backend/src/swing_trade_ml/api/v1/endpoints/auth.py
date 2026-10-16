@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import secrets
 import time
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from urllib.parse import urlencode
 
 import httpx
@@ -74,24 +74,61 @@ def logout_everywhere(user: CurrentUser, db: DbSession, request: Request) -> Mes
     return MessageResponse(message="Signed out on every device.")
 
 
+LOCKOUT_THRESHOLD = 5
+LOCKOUT_MINUTES = 15
+LOGIN_FAILED = "Incorrect username or password. After several wrong tries, sign-in pauses for 15 minutes."
+# Compared against when there is no real hash, so an unknown username takes as
+# long to refuse as a wrong password (no timing hint that the account exists).
+_DUMMY_HASH = hash_password("timing-equaliser-not-a-real-password")
+
+
 @router.post("/login", response_model=TokenResponse)
-def login(payload: LoginRequest, db: DbSession) -> TokenResponse:
-    user = db.execute(select(User).where(User.username == payload.username)).scalar_one_or_none()
-    # One generic message for both branches — distinguishing "no such user" from
-    # "wrong password" would let an attacker enumerate valid usernames. Also
-    # covers Google-only accounts, whose hashed_password is None.
-    if (
-        user is None
-        or not user.hashed_password
-        or not verify_password(payload.password, user.hashed_password)
-    ):
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Incorrect username or password")
+def login(payload: LoginRequest, db: DbSession, request: Request) -> TokenResponse:
+    """One message for every failure (unknown user, wrong password, locked,
+    Google-only account) so the answer never tells whether an account exists."""
+    user = db.execute(
+        select(User).where(User.username == payload.username).with_for_update()
+    ).scalar_one_or_none()
+    now = datetime.now(UTC)
+    who = payload.username[:128]
+
+    def refuse(action: str, **after: object) -> HTTPException:
+        audit.record(
+            db,
+            action,
+            actor=user,
+            actor_label=who,
+            target_type="user",
+            target_id=who,
+            after=after or None,
+            request=request,
+        )
+        db.commit()
+        return HTTPException(status.HTTP_401_UNAUTHORIZED, LOGIN_FAILED)
+
+    if user is None or not user.hashed_password:
+        verify_password(payload.password, _DUMMY_HASH)
+        raise refuse("auth.login_failed", why="unknown_or_no_password")
+    if user.locked_until is not None and user.locked_until > now:
+        verify_password(payload.password, _DUMMY_HASH)
+        raise refuse("auth.login_while_locked")
+    if not verify_password(payload.password, user.hashed_password):
+        user.failed_login_count = (user.failed_login_count or 0) + 1
+        if user.failed_login_count >= LOCKOUT_THRESHOLD:
+            user.failed_login_count = 0
+            user.locked_until = now + timedelta(minutes=LOCKOUT_MINUTES)
+            raise refuse("auth.locked", minutes=LOCKOUT_MINUTES)
+        raise refuse("auth.login_failed", failed_count=user.failed_login_count)
     if not user.is_active:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Account is disabled")
 
-    user.last_login_at = datetime.now(UTC)
+    user.failed_login_count = 0
+    user.locked_until = None
+    user.last_login_at = now
+    audit.record(
+        db, "auth.login", actor=user, actor_label=who, target_type="user", target_id=user.id, request=request
+    )
     db.commit()
-
     return issue_token(user)
 
 

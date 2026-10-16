@@ -5,19 +5,27 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from swing_trade_ml.brain.modules.m13_news.calendar import trading_days_until
+from swing_trade_ml.brain.trial_journal import TRIAL_START as BRAIN_TRIAL_START
 from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.enums import PositionStatus, TradingMode
+from swing_trade_ml.core.market_session import IST
 from swing_trade_ml.db.models.feeds import UpcomingEvent
-from swing_trade_ml.db.models.market import Instrument
+from swing_trade_ml.db.models.market import Candle, Instrument
 from swing_trade_ml.db.models.trading import Position
+from swing_trade_ml.services.brain_golive.compare import NEEDED_FINISHED, finished_brain_ideas
 from swing_trade_ml.services.costs import compute_charges
-from swing_trade_ml.services.portfolio import exclude_hand_books, exclude_real_trading
+from swing_trade_ml.services.portfolio import (
+    exclude_hand_books,
+    exclude_real_trading,
+    performance_stats,
+    trial_start,
+)
 
 
 def _charges(turnover: float, side: str) -> float:
@@ -147,3 +155,81 @@ def upcoming_events(
         )
     out.sort(key=lambda r: (r["date"], r["symbol"]))
     return out
+
+
+# ---- bx4: evidence summary -------------------------------------------------
+
+PAPER_LABEL = "Practice money (paper)"
+ENOUGH_TRADES = 30
+FEW_TRADES_NOTE = "Too few finished trades to judge — this could be luck."
+SEALED_NOTE = "Results stay hidden until the planned review so the test stays fair."
+
+
+def period_change_pct(db: Session, instrument_ids: list[int], since: datetime) -> float | None:
+    """Equal-weight mean % change of daily closes, from the first stored day on/after `since`
+    to the latest stored day. Only instruments with a candle on BOTH of those days count.
+    None when there is no data or the period is a single day, never 0 as a guess."""
+    if not instrument_ids:
+        return None
+    rows = db.execute(
+        select(Candle.instrument_id, Candle.ts, Candle.close).where(
+            Candle.instrument_id.in_(instrument_ids), Candle.interval == "day", Candle.ts >= since
+        )
+    ).all()
+    closes: dict[int, dict[date, float]] = {}
+    for iid, ts, close in rows:
+        closes.setdefault(iid, {})[ts.astimezone(IST).date()] = close
+    days = {d for per in closes.values() for d in per}
+    if len(days) < 2:
+        return None
+    first, last = min(days), max(days)
+    changes = [
+        (per[last] / per[first] - 1) * 100
+        for per in closes.values()
+        if first in per and last in per and per[first]
+    ]
+    return round(sum(changes) / len(changes), 2) if changes else None
+
+
+def evidence_summary(db: Session) -> dict:
+    """Plain-figure summary of the v1 paper bot since the trial began, plus a SEALED brain-trial
+    count. No brain win rate, profit or comparison is ever returned here."""
+    stats = performance_stats(db, mode=TradingMode.PAPER, bot_book_only=True)
+    since = trial_start(TradingMode.PAPER)
+    finished = int(stats["total_trades"])
+    enough = finished >= ENOUGH_TRADES
+
+    nifty = every = None
+    if since is not None:
+        nifty_ids = list(
+            db.scalars(
+                select(Instrument.id).where(Instrument.tradingsymbol == settings.BENCHMARK_INDEX_SYMBOL)
+            )
+        )
+        watch_ids = list(db.scalars(select(Instrument.id).where(Instrument.is_watchlisted.is_(True))))
+        nifty = period_change_pct(db, nifty_ids, since)
+        every = period_change_pct(db, watch_ids, since)
+
+    return {
+        "paper_label": PAPER_LABEL,
+        "bot": {
+            "since": since.date().isoformat() if since else None,
+            "profit_booked": stats["realized_pnl"],
+            "profit_open": stats["unrealized_pnl"],
+            "costs_paid": stats["total_charges"],
+            "worst_fall_from_peak_pct": round(stats["max_drawdown_pct"] * 100, 2),
+            "finished_trades": finished,
+            "win_rate_pct": round(stats["win_rate"] * 100, 1) if finished else None,
+            "nifty_same_period_pct": nifty,
+            "every_stock_same_period_pct": every,
+            "enough_trades": enough,
+            "note": "" if enough else FEW_TRADES_NOTE,
+        },
+        "brain_trial": {
+            "since": BRAIN_TRIAL_START.isoformat(),
+            "finished": finished_brain_ideas(db),
+            "needed": NEEDED_FINISHED,
+            "sealed": True,
+            "sealed_note": SEALED_NOTE,
+        },
+    }

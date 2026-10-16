@@ -31,3 +31,9 @@ def events(
     else:
         symbols = None
     return beginner_views.upcoming_events(db, symbols, datetime.now(IST).date())
+
+
+@router.get("/evidence")
+def evidence(db: Session = Depends(get_db)) -> dict:
+    """How the practice-money bot is doing, in plain figures. Brain trial shows a count only."""
+    return beginner_views.evidence_summary(db)

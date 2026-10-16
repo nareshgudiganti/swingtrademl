@@ -2,7 +2,10 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Status: for review. Not approved to build or deploy.** Deployment is a separate approval and a separate owner push.
+**Status: revision 2. Phase 1 approved for implementation on the feature branch; production deployment, push and merge are NOT approved.**
+Revision 2 applies the owner's corrections: a hard-failing Observatory prerequisite, isolated dependencies in the
+new worktree (the main checkout's `node_modules` is never touched), classic-parity statuses that cite an owner
+decision, and the browser-level parity requirement (a Phase 6 gate; Phase 1 only lays its groundwork).
 
 **Goal:** replace TradeMind's six flat menu sections with the five approved sections (**Today · Discover ·
 Portfolio · Insights · Admin**), and add the two safety nets later phases depend on: menu tests and a
@@ -13,8 +16,8 @@ classic-feature parity check. **No page changes. No URL changes. No backend chan
 renders from it. The route table is untouched, so every existing URL keeps working. A dependency-free script
 lists which backend calls each classic screen makes that no TradeMind page makes.
 
-**Tech stack:** TypeScript, React 19, react-router-dom 7, Vite 6. New dev-only dependency: `vitest` (needs
-your yes, Task 1).
+**Tech stack:** TypeScript, React 19, react-router-dom 7, Vite 6. New dev-only dependency: `vitest` (approved
+2026-10-16), installed only in the new worktree's own `node_modules`.
 
 **Spec:** `docs/superpowers/specs/2026-10-16-one-trademind-design.md` (sections 1, 6, 8, 9).
 
@@ -32,8 +35,11 @@ your yes, Task 1).
 - Plain English in every label; no new jargon.
 - Run frontend checks from `frontend/`: `npm run typecheck`, `npm run build`, and (after Task 1) `npm test`.
   Do not run prettier on existing files. Match the surrounding code style.
-- **Git:** branch `feature/one-trademind-phase-1` off `origin/main`, in its own worktree. Do not push, merge or
-  deploy without the owner. Commits end with the attribution line in force for the session.
+- **Dependencies are isolated:** run `npm ci` **inside the new worktree's `frontend/`**. Never link to, install
+  into or edit the main checkout's `node_modules`.
+- **Git:** branch `feature/one-trademind-phase-1` in its own worktree, based on the docs branch
+  `docs/one-trademind-design` (which is `origin/main` plus the two design documents only). **Do not push, merge,
+  deploy or modify the trading engine without separate approval.** Commits end with the attribution line in force for the session.
 - Deploys only after 16:30 IST on weekdays (or at weekends), by the owner's push.
 
 ## Review Focus
@@ -68,35 +74,45 @@ The input classes and failure modes most likely to bite a real user, with the te
 
 ---
 
-### Task 0: Branch and base
+### Task 0: Branch, prerequisite (fails hard) and isolated dependencies
 
 **Files:** none.
 
-- [ ] **Step 1: Confirm the Observatory is on `main`, then create the worktree**
+- [ ] **Step 1: Prerequisite check that stops everything on failure**
+
+Run this as one script. It must exit non-zero before any worktree is created if the Observatory commit is not
+in `main`. If it exits non-zero, **stop the whole plan and report**; do not create the worktree, do not
+continue to Step 2.
 
 ```bash
+set -e
 cd "D:/machine learning/swing-trade-bot"
 git fetch origin
-git merge-base --is-ancestor a7adcaa origin/main && echo "Observatory is in main" || echo "STOP: deploy/merge the Observatory first"
-git worktree add .claude/worktrees/one-app-p1 -b feature/one-trademind-phase-1 origin/main
+if git merge-base --is-ancestor a7adcaa origin/main; then
+  echo "PREREQUISITE OK: the Observatory (a7adcaa) is in origin/main"
+else
+  echo "PREREQUISITE FAILED: the Observatory is not in origin/main. STOP." >&2
+  exit 1
+fi
+# the docs branch must be origin/main plus docs only
+test -z "$(git diff --name-only origin/main docs/one-trademind-design | grep -v '^docs/')" \
+  || { echo "docs branch changes more than docs. STOP." >&2; exit 1; }
+git worktree add .claude/worktrees/one-app-p1 -b feature/one-trademind-phase-1 docs/one-trademind-design
 ```
 
-Expected: "Observatory is in main". If not, stop: this plan edits `TradeMindApp.tsx`, which the Observatory also
-edits, and must start from a `main` that already contains it.
+Expected: the OK line, then the worktree is created. The check is also pinned by a test in Task 2 that fails if
+`menu.ts` and the route table disagree, which is what the Observatory edit would break.
 
-- [ ] **Step 2: Record the baseline**
+- [ ] **Step 2: Install dependencies inside the new worktree (isolated)**
 
 ```bash
 cd .claude/worktrees/one-app-p1/frontend
-# node_modules is not in a new worktree: link the main checkout's, and remove the link at the end of the task.
-powershell -NoProfile -Command "New-Item -ItemType Junction -Path 'node_modules' -Target 'D:\machine learning\swing-trade-bot\frontend\node_modules' | Out-Null"
+npm ci
 node node_modules/typescript/bin/tsc --noEmit -p . ; echo "baseline typecheck exit=$?"
 ```
 
-Expected: exit 0. Keep the junction for Tasks 1-5; delete it only with
-`powershell -NoProfile -Command "(Get-Item 'node_modules').Delete()"` (never `rm -rf`, which would follow the
-link and delete the main checkout's modules). Task 1 installs into the main checkout's `node_modules` through
-this link, so it needs your approval first.
+Expected: `npm ci` installs into **this worktree's** `node_modules`; baseline typecheck exit 0. The main checkout's
+`node_modules` is not read, linked or modified. `node_modules` is git-ignored, so it never appears in a commit.
 
 ---
 
@@ -109,15 +125,16 @@ this link, so it needs your approval first.
 
 **Why:** the frontend has no unit-test tooling. The menu is the thing every later phase edits, so it needs a
 test that fails when a page loses its menu entry. `vitest` is dev-only and has no effect on the shipped app.
-**If you decline it,** Tasks 2 and 4 keep their tests as Node scripts run by hand and by the browser checks, and
-nothing guards the menu in CI. I'd rather not.
+**Approved by the owner 2026-10-16**, including the CI step in Step 4.
 
-- [ ] **Step 1: Install**
+- [ ] **Step 1: Install (into this worktree only)**
 
 ```bash
-cd frontend
+cd frontend   # the new worktree's frontend/, never the main checkout
 npm install --save-dev vitest@^3.0.0
 ```
+
+This edits only this worktree's `package.json`, `package-lock.json` and `node_modules`.
 
 - [ ] **Step 2: Add the script and a minimal config**
 
@@ -544,9 +561,12 @@ git commit -m "TradeMind: top bar and sub-row rendered from the five-section men
   - `checkAllowlist(parity, allowlist, { strict }): { unexplained: {page, call}[]; planned: {page, call, task}[]; ok: boolean }`
   - CLI: `node scripts/classic-parity.mjs [--check] [--strict] [--json]`
 
-Allow-list statuses: `v2` (not built until v2), `deferred` (waits for a stated event), `separate_app` (Finance),
-`planned` (to be built; names the task). `--check` fails on any **unexplained** gap. `--strict` also fails on any
-**planned** entry: that is the Phase 6 deletion gate.
+Allow-list statuses: `v2` (not built until v2) and `deferred` (waits for a stated event) **must cite the owner's
+written decision in `decision`**, otherwise they count as unexplained; `separate_app` (Finance); `planned` (to be
+built; names the task); `keep` (kept as is, e.g. PlanHome while plans are enabled); `decide` (a capability the owner
+has today with no TradeMind equivalent: the classic screen stays until the owner decides). `--check` fails on any
+**unexplained** gap. `--strict` also fails on any `planned`, `keep` or `decide` entry: that is **Part A** of the
+Phase 6 deletion gate (Part B, browser-level verification, is in the spec).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -598,7 +618,7 @@ describe('checkAllowlist', () => {
   ]
   const allow = {
     Capital: { riskEvents: { status: 'planned', task: 'oa2' } },
-    Models: { train: { status: 'v2' } },
+    Models: { train: { status: 'v2', decision: 'owner 2026-10-04' } },
     Finance: { '*': { status: 'separate_app' } },
   }
 
@@ -609,21 +629,37 @@ describe('checkAllowlist', () => {
   })
 
   it('passes when every gap is explained, treating planned as acceptable', () => {
-    const ok = checkAllowlist(parity, { ...allow, Models: { train: { status: 'v2' }, mystery: { status: 'deferred' } } }, { strict: false })
+    const ok = checkAllowlist(parity, { ...allow, Models: { train: { status: 'v2', decision: 'owner 2026-10-04' }, mystery: { status: 'deferred', decision: 'oa4' } } }, { strict: false })
     expect(ok.unexplained).toEqual([])
     expect(ok.planned).toEqual([{ page: 'Capital', call: 'riskEvents', task: 'oa2' }])
     expect(ok.ok).toBe(true)
   })
 
   it('strict mode (the deletion gate) fails while anything is still only planned', () => {
-    const a = { ...allow, Models: { train: { status: 'v2' }, mystery: { status: 'deferred' } } }
+    const a = { ...allow, Models: { train: { status: 'v2', decision: 'owner 2026-10-04' }, mystery: { status: 'deferred', decision: 'oa4' } } }
     expect(checkAllowlist(parity, a, { strict: true }).ok).toBe(false)
-    const done = { ...a, Capital: { riskEvents: { status: 'v2' } } }
+    const done = { ...a, Capital: { riskEvents: { status: 'v2', decision: 'owner' } } }
     expect(checkAllowlist(parity, done, { strict: true }).ok).toBe(true)
   })
 
   it('a "*" entry explains every call of a page (the separate Finance app)', () => {
     expect(checkAllowlist(parity.slice(2), allow, { strict: true }).ok).toBe(true)
+  })
+
+  it('v2 and deferred only count when they cite an owner decision', () => {
+    const p = [{ page: 'Models', lines: 1, calls: ['train'], gaps: ['train'] }]
+    expect(checkAllowlist(p, { Models: { train: { status: 'v2' } } }, { strict: false }).unexplained).toEqual([{ page: 'Models', call: 'train' }])
+    const cited = { Models: { train: { status: 'v2', decision: 'owner 2026-10-04: no create/delete/train until v2' } } }
+    expect(checkAllowlist(p, cited, { strict: true }).ok).toBe(true)
+  })
+
+  it('decide and keep are acceptable now but fail the strict deletion gate', () => {
+    const p = [{ page: 'Models', lines: 1, calls: ['activateModel'], gaps: ['activateModel'] }]
+    const decide = { Models: { activateModel: { status: 'decide', task: 'oa15' } } }
+    expect(checkAllowlist(p, decide, { strict: false }).ok).toBe(true)
+    expect(checkAllowlist(p, decide, { strict: true }).ok).toBe(false)
+    const keep = { Models: { activateModel: { status: 'keep', task: 'oa10' } } }
+    expect(checkAllowlist(p, keep, { strict: true }).ok).toBe(false)
   })
 
   it('rejects an unknown status, so a typo cannot hide a gap', () => {
@@ -664,7 +700,9 @@ import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const CALL = /\bapi\.([A-Za-z0-9_]+)/g
-const EXPLAINED = new Set(['v2', 'deferred', 'separate_app', 'planned'])
+const EXPLAINED = new Set(['v2', 'deferred', 'separate_app', 'planned', 'keep', 'decide'])
+// Statuses that are not final: the deletion gate (--strict) refuses them.
+const NOT_FINAL = new Set(['planned', 'decide', 'keep'])
 
 function walk(dir) {
   if (!fs.existsSync(dir)) return []
@@ -708,7 +746,8 @@ export function checkAllowlist(parity, allowlist, { strict = false } = {}) {
     for (const call of row.gaps) {
       const e = entries[call] ?? entries['*']
       if (!e || !EXPLAINED.has(e.status)) unexplained.push({ page: row.page, call })
-      else if (e.status === 'planned') planned.push({ page: row.page, call, task: e.task ?? '' })
+      else if (NOT_FINAL.has(e.status)) planned.push({ page: row.page, call, task: e.task ?? '', status: e.status })
+      else if ((e.status === 'v2' || e.status === 'deferred') && !e.decision) unexplained.push({ page: row.page, call })
     }
   }
   return { unexplained, planned, ok: unexplained.length === 0 && !(strict && planned.length > 0) }
@@ -735,32 +774,33 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
 
 - [ ] **Step 4: Create the allow-list from the 2026-10-16 run (spec section 6)**
 
-`frontend/scripts/classic-parity-allowlist.json`:
+`frontend/scripts/classic-parity-allowlist.json`. Every `v2` / `deferred` cites the owner's decision; anything that
+would remove a capability the owner has today is `decide`, never `v2`:
 
 ```json
 {
-  "Finance": { "*": { "status": "separate_app", "note": "Personal Finance stays its own app (owner, 2026-10-04)" } },
+  "Finance": { "*": { "status": "separate_app", "decision": "owner 2026-10-04: Personal Finance stays a separate app" } },
   "Capital": { "riskEvents": { "status": "planned", "task": "oa2" } },
   "Safety": { "riskEvents": { "status": "planned", "task": "oa2" } },
   "Dashboard": {
-    "predict": { "status": "v2", "note": "'Score now' is dropped until v2" },
-    "strategySignals": { "status": "planned", "task": "oa5", "note": "read-only per-strategy signal list in Discover" }
+    "predict": { "status": "decide", "task": "oa15", "note": "POST /ml/predict?persist=true behind the 'full model-ranked watchlist' (Advanced). It generates and stores predictions. Owner decides whether the classic ranked list is needed beyond Opportunities." },
+    "strategySignals": { "status": "planned", "task": "oa5", "note": "read-only per-strategy signal list in Discover (owner 2026-10-16)" }
   },
   "Models": {
-    "activateModel": { "status": "v2" },
-    "train": { "status": "v2" },
-    "predictions": { "status": "planned", "task": "oa11", "note": "model accuracy history, Insights" }
+    "activateModel": { "status": "decide", "task": "oa15", "note": "chooses which trained model the live system uses; TradeMind Setup is view-only. NOT assumed v2: the classic Models page stays until the owner decides." },
+    "train": { "status": "v2", "decision": "owner 2026-10-04: no create/delete/train until v2" },
+    "predictions": { "status": "planned", "task": "oa11", "note": "model prediction history moves to Insights (owner 2026-10-16)" }
   },
   "PlanHome": {
-    "picks": { "status": "planned", "task": "oa10", "note": "only used when the plans switch is on (off on prod)" },
-    "topPicks": { "status": "planned", "task": "oa10" }
+    "picks": { "status": "keep", "task": "oa10", "note": "kept while plans are enabled; /home redirects to Today only while plans are disabled" },
+    "topPicks": { "status": "keep", "task": "oa10" }
   },
   "PlansManager": { "*": { "status": "planned", "task": "oa3", "note": "Admin > Plans" } },
   "Strategies": {
-    "createStrategy": { "status": "v2" },
-    "deleteStrategy": { "status": "v2" },
-    "strategyTypes": { "status": "v2" },
-    "scanAll": { "status": "deferred", "task": "oa4", "note": "after the trial; never creates trades on its own" },
+    "createStrategy": { "status": "v2", "decision": "owner 2026-10-04: no create/delete/train until v2" },
+    "deleteStrategy": { "status": "v2", "decision": "owner 2026-10-04: no create/delete/train until v2" },
+    "strategyTypes": { "status": "v2", "decision": "only feeds the create-strategy form (owner 2026-10-04)" },
+    "scanAll": { "status": "deferred", "decision": "oa4: deferred after the trial; scanning never creates trades automatically (owner 2026-10-16)" },
     "positionsAllBooks": { "status": "planned", "task": "oa6", "note": "Portfolio > Overview, books labelled, never summed" }
   }
 }
@@ -769,7 +809,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
 - [ ] **Step 5: Run, expect PASS**
 
 Run: `npm test` then `node scripts/classic-parity.mjs --check` (exit 0) and `node scripts/classic-parity.mjs --strict`
-(**exit 1**, listing what is still planned: that is correct today and becomes the Phase 6 gate).
+(**exit 1**, listing what is still `planned`, `keep` or `decide`: that is correct today and is Part A of the Phase 6 gate).
 
 - [ ] **Step 6: Commit**
 
@@ -785,10 +825,11 @@ git commit -m "Classic feature parity script and allow-list (reproduces the 2026
 **Files:** none committed (scripts live in the scratchpad). Use the `browser-automation` skill against a local
 API and Vite dev server, as in the Observatory run. Local only: paper mode, Telegram off, no Kite login.
 
-Local setup (do not print secrets): start the API from this worktree with explicit environment variables and the
-local development database (as the Observatory run did), and Vite on port **5173** (the API's CORS allows only
-5173). Mint a local owner token for an existing superuser and, for B3, create then delete a throwaway non-owner
-user in the local development database. Stop both servers and remove the `node_modules` link afterwards.
+Local setup (do not print secrets): start the API from the main-branch code with explicit environment variables
+and the local development database (as the Observatory run did), and Vite from **this worktree** on port **5173**
+(the API's CORS allows only 5173). Mint a local owner token for an existing superuser and, for B3, create then
+delete a throwaway non-owner user in the local development database. Stop both servers afterwards. No link to
+the main checkout's `node_modules` is used anywhere.
 
 - [ ] **Step 1: DOM checks (each is an assertion, not a screenshot)**
 
@@ -801,6 +842,7 @@ user in the local development database. Stop both servers and remove the `node_m
 | B5 | On each of those pages the highlighted top-bar section equals the expected one (the `EXPECTED` table in `menu.test.ts`) |
 | B6 | At 390 px width: no horizontal page scroll; all five section links visible or reachable; chips do not overlap the nav |
 | B7 | Console: no errors and no failed requests on the pages above (except deliberate ones) |
+| B9 | No model-status or horizon wording changes in Phase 1: the Today and Discover pages are byte-for-byte the same pages (compare page text before and after); no "validated", "proven" or "profitable" word is added anywhere |
 | B8 | Classic URLs unchanged: `/dashboard`, `/strategies`, `/safety` still load for the owner when the brain is off, or redirect exactly as on `main` (compare with a run of the baseline build) |
 
 - [ ] **Step 2: Baseline equivalence**
@@ -831,7 +873,7 @@ with this plan's Review Focus verbatim. Fix Critical and Important findings test
 - [ ] **Step 2:** Final gates: `npm run typecheck`, `npm run build`, `npm test`,
 `node scripts/classic-parity.mjs --check`, the full backend suite unchanged and green, the scope guard.
 - [ ] **Step 3:** Report to the owner: test results, the B1-B8 results, the screenshots, rulings, deferred
-minors. **Do not push to `main`, merge or deploy.** Ask for deployment approval separately.
+minors. **Do not push (any branch), merge or deploy.** Ask for deployment approval separately.
 
 ---
 
@@ -845,5 +887,5 @@ minors. **Do not push to `main`, merge or deploy.** Ask for deployment approval 
 - **Type consistency:** `Section`, `Page`, `SectionId`, `findSection`, `resolveSection`, `visibleSections`,
   `visiblePages` and `ADMIN_SECTION` are defined in Task 2 and used with the same names in Task 3; `computeParity`
   and `checkAllowlist` are defined in Task 4 and used with the same shapes in its tests and CLI.
-- **Open items needing the owner before building:** the `vitest` dev dependency and the one-line CI step (Task 1);
-  whether the avatar menu keeps its shortcuts (this plan keeps them, unchanged).
+- **Owner decisions applied:** vitest and the CI step approved; `/home` redirect only while plans are disabled
+  (Phase 6); the avatar menu keeps its shortcuts, unchanged.

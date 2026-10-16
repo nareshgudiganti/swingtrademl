@@ -174,6 +174,12 @@ PlanAccessDep = Annotated[PlanAccess, Depends(get_plan_access)]
 
 READ_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
+#: The only writes a tester may make: the manual paper-testing book. The close
+#: handler also checks the position really is in that book.
+TESTER_WRITES: frozenset[tuple[str, str]] = frozenset(
+    {("POST", "/portfolio/tester/buy"), ("POST", "/portfolio/positions/{position_id}/close")}
+)
+
 
 async def require_auth(
     request: Request,
@@ -195,7 +201,12 @@ async def require_auth(
     safety switch, which it silently allowed before (audit F-17).
     """
     if request.method not in READ_METHODS and not principal.is_owner:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only the owner can change this.")
+        write_route = request.scope.get("route")
+        write_path = getattr(write_route, "path", request.url.path)
+        if write_path.startswith(settings.API_V1_PREFIX):
+            write_path = write_path[len(settings.API_V1_PREFIX) :]
+        if not (principal.is_tester and (request.method, write_path) in TESTER_WRITES):
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Only the owner can change this.")
     if access.unrestricted:
         return
 

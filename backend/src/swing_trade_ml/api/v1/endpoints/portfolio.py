@@ -774,6 +774,16 @@ def _refuse_other_peoples_real_position(principal: Any, position: Position) -> N
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Position not found")
 
 
+def _refuse_tester_outside_tester_book(principal: Any, position: Position, db: DbSession) -> None:
+    """A tester may only close positions in the manual paper-testing book."""
+    if principal.is_owner or not principal.is_tester:
+        return
+    from swing_trade_ml.services.tester_paper import get_or_create_strategy
+
+    if position.strategy_id != get_or_create_strategy(db).id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "You can only close positions in your testing book.")
+
+
 def _lock_strategy(db: DbSession, strategy_id: int) -> None:
     # Serialise double-clicks: a second request waits here until the first has
     # committed, so it sees the first order in the waiting/daily-limit checks.
@@ -880,6 +890,7 @@ def close(
     if position is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Position not found")
     _refuse_other_peoples_real_position(principal, position)
+    _refuse_tester_outside_tester_book(principal, position, db)
     if position.status != PositionStatus.OPEN:
         raise HTTPException(status.HTTP_409_CONFLICT, "Position is already closed")
     if position.mode == TradingMode.LIVE:

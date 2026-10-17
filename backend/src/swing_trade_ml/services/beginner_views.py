@@ -246,3 +246,190 @@ def evidence_summary(db: Session) -> dict:
             "sealed_note": SEALED_NOTE,
         },
     }
+
+
+# ---- bx1: stock brief (six plain questions) --------------------------------
+
+EVIDENCE_CLAIM = "model_ranking_predictive"
+
+
+def _day_text(d: date) -> str:
+    return f"{d.day} {d:%b %Y}"
+
+
+def _gap(answer: str, why: str, **extra) -> dict:
+    return {"answer": answer, "available": False, "why": why, **extra}
+
+
+def _company(db: Session, inst: Instrument) -> dict:
+    from swing_trade_ml.db.models.ml import MLModel, ModelStatus
+    from swing_trade_ml.ml.sector_map import get_sector_bucket, sector_display_name
+    from swing_trade_ml.strategies.tier import cap_tier
+
+    sym = inst.tradingsymbol
+    bucket = get_sector_bucket(sym)
+    sector = sector_display_name(bucket) if bucket else None
+    size = None
+    for m in db.scalars(select(MLModel).where(MLModel.status == ModelStatus.ACTIVE)):
+        if sym in (m.training_symbols or []):
+            size = {"large": "Large", "midcap": "Mid", "smallcap": "Small"}[cap_tier(m.name)]
+            break
+    if not inst.name:
+        return _gap(
+            "Company details not available",
+            "No company name is stored for this stock",
+            sector=sector,
+            size=size,
+        )
+    parts = [inst.name, f"{sector} sector" if sector else "sector not available"]
+    parts.append(f"{size} size" if size else "size not available")
+    return {
+        "answer": " · ".join(parts),
+        "available": True,
+        "why": None,
+        "name": inst.name,
+        "sector": sector,
+        "size": size,
+    }
+
+
+def _latest_nightly(db: Session):
+    from swing_trade_ml.db.models.brain import BrainRun
+
+    return db.scalars(
+        select(BrainRun)
+        .where(BrainRun.kind == "nightly", BrainRun.status == "done")
+        .order_by(BrainRun.as_of.desc())
+        .limit(1)
+    ).first()
+
+
+def _evidence_answer() -> dict:
+    from swing_trade_ml.services.brain_observatory import verdicts
+
+    claims = {c["claim"]: c for c in verdicts.evaluate(verdicts.load_registry())}
+    c = claims[EVIDENCE_CLAIM]
+    return {
+        "answer": c["word"],
+        "available": True,
+        "why": None,
+        "claim": EVIDENCE_CLAIM,
+        "claim_label": c["label"],
+    }
+
+
+def stock_brief(db: Session, symbol: str, today: date) -> dict:
+    """Six plain answers about one stock, from stored data only (never runs the brain).
+
+    Raises LookupError for a symbol that is not an instrument we hold.
+    """
+    from swing_trade_ml.core.market_session import next_trading_day
+    from swing_trade_ml.db.models.brain import BrainDecision
+
+    symbol = symbol.upper()
+    inst = db.scalars(select(Instrument).where(Instrument.tradingsymbol == symbol).limit(1)).first()
+    if inst is None:
+        raise LookupError(symbol)
+
+    run = _latest_nightly(db)
+    dec = None
+    if run is not None:
+        dec = db.scalars(
+            select(BrainDecision)
+            .where(BrainDecision.run_id == run.id, BrainDecision.symbol == symbol)
+            .order_by(BrainDecision.id.desc())
+            .limit(1)
+        ).first()
+
+    events = upcoming_events(db, [symbol], today)
+    if events:
+        q5 = {"answer": events[0]["plain"], "available": True, "why": None, "events": events}
+    else:
+        q5 = {
+            "answer": "Nothing scheduled in the next 15 trading days",
+            "available": True,
+            "why": None,
+            "events": [],
+        }
+
+    out = {
+        "symbol": symbol,
+        "as_of": run.as_of.isoformat() if run else None,
+        "q1_company": _company(db, inst),
+    }
+    if dec is None:
+        if run is None:
+            why = "There is no brain run on record yet"
+        else:
+            why = f"The brain's last run was on {_day_text(run.as_of.astimezone(IST).date())}"
+        no = "The brain has not looked at this stock today"
+        out["q2_brain"] = _gap(no, why)
+        out["q3_plan"] = _gap("No plan without a brain decision", why)
+        out["q4_money"] = _gap("No figures without a plan", why)
+    else:
+        out["q2_brain"] = {
+            "answer": f"{dec.word}: " + ("; ".join(dec.reasons or []) or "no reasons recorded"),
+            "available": True,
+            "why": None,
+            "decision": {
+                "id": dec.id,
+                "run_id": dec.run_id,
+                "symbol": dec.symbol,
+                "kind": dec.kind,
+                "word": dec.word,
+                "reasons": list(dec.reasons or []),
+                "entry_low": dec.entry_low,
+                "entry_high": dec.entry_high,
+                "target": dec.target,
+                "stop": dec.stop,
+                "qty": dec.qty,
+                "horizon_days": dec.horizon_days,
+                "confidence": dec.confidence,
+                "honest_score": None,
+                "evidence_text": dec.evidence_text,
+                "downgraded_from": dec.downgraded_from,
+                "downgrade_reason": dec.downgrade_reason,
+                "overruled_word": dec.overruled_word,
+                "overrule_reason": dec.overrule_reason,
+                "overruled_by": dec.overruled_by,
+                "overruled_at": dec.overruled_at,
+            },
+        }
+        have_zone = dec.entry_low is not None and dec.entry_high is not None
+        entry = (dec.entry_low + dec.entry_high) / 2 if have_zone else None
+        if dec.target is None or dec.stop is None or not have_zone:
+            out["q3_plan"] = _gap(
+                "The plan is incomplete", "The brain did not give a full buy zone, target and stop"
+            )
+        else:
+            day = run.as_of.astimezone(IST).date()
+            for _ in range(dec.horizon_days):
+                day = next_trading_day(day)
+            out["q3_plan"] = {
+                "answer": f"Buy between {dec.entry_low:g} and {dec.entry_high:g}, sell half at +"
+                f"{settings.ML_FIRST_TARGET_PCT:.0%}, target {dec.target:g}, stop {dec.stop:g}, "
+                f"out by {_day_text(day)}",
+                "available": True,
+                "why": None,
+                "buy_zone": [dec.entry_low, dec.entry_high],
+                "sell_half_price": round(entry * (1 + settings.ML_FIRST_TARGET_PCT), 2),
+                "sell_half_pct": settings.ML_FIRST_TARGET_PCT,
+                "target": dec.target,
+                "target_pct": settings.ML_TARGET_RETURN_PCT,
+                "stop": dec.stop,
+                "stop_pct": settings.ML_STOP_RETURN_PCT,
+                "last_exit_day": day.isoformat(),
+            }
+        money = money_at_stake(entry, dec.stop, dec.target, dec.qty or 0)
+        if money["available"]:
+            money = {
+                "answer": f"About ₹{money['invested']:,.0f} in; ₹{money['loss_if_stop']:,.0f} lost "
+                f"if the stop hits; ₹{money['gain_if_target']:,.0f} gained at the target (after charges)",
+                **money,
+            }
+        else:
+            money = {"answer": "Money figures not available", **money}
+        out["q4_money"] = money
+    out["q5_events"] = q5
+    out["q6_evidence"] = _evidence_answer()
+    return out

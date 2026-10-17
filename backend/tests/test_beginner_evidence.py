@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime, time, timedelta
 
+import pytest
 from sqlalchemy import delete, func, select
 
 from swing_trade_ml.api.v1.endpoints import beginner
@@ -16,6 +17,17 @@ from swing_trade_ml.services import beginner_views
 from swing_trade_ml.services.beginner_views import evidence_summary
 
 HEADERS = {"X-API-Key": "test-api-key"}
+
+
+@pytest.fixture(autouse=True)
+def _read_only_db_is_the_test_session(db_session):
+    """/beginner reads through the read-only dependency; point it at the rolled-back test session."""
+    from swing_trade_ml.main import app
+    from swing_trade_ml.services.brain_observatory.db import get_readonly_db
+
+    app.dependency_overrides[get_readonly_db] = lambda: db_session
+    yield
+    app.dependency_overrides.pop(get_readonly_db, None)
 
 
 def _since() -> datetime:

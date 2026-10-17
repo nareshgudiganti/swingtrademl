@@ -23,3 +23,27 @@ export interface EventItem {
   detail: string
   plain: string
 }
+
+/** One answer in the stock brief. Unavailable answers always carry a `why`. */
+export interface BriefAnswer {
+  answer: string
+  available: boolean
+  why: string | null
+}
+
+export interface StockBriefData {
+  symbol: string
+  as_of: string | null
+  q1_company: BriefAnswer & { name?: string; sector?: string | null; size?: string | null }
+  q2_brain: BriefAnswer & { decision?: BeginnerDecision }
+  q3_plan: BriefAnswer & {
+    buy_zone?: [number, number]
+    sell_half_price?: number
+    target?: number
+    stop?: number
+    last_exit_day?: string
+  }
+  q4_money: BriefAnswer & MoneyAtStakeData
+  q5_events: BriefAnswer & { events?: EventItem[] }
+  q6_evidence: BriefAnswer & { claim?: string; claim_label?: string }
+}

@@ -55,7 +55,9 @@ PROTOCOL_V1 = Protocol(
     dedupe_sessions=30,
     big_gap=0.30,
     costs=Costs(
-        brokerage_per_order=settings.PAPER_BROKERAGE_PER_ORDER,
+        # Owner decision 17 Oct: Zerodha charges no brokerage on delivery trades. Taxes and the depository fee
+        # still come from the app's paper cost settings.
+        brokerage_per_order=0.0,
         tax_bps_buy=settings.PAPER_TAX_BPS_BUY,
         tax_bps_sell=settings.PAPER_TAX_BPS_SELL,
         dp_charge_per_sell=settings.PAPER_DP_CHARGE_PER_SELL,

@@ -94,12 +94,29 @@ def test_protocol_v1_is_the_approved_one():
     assert p.dedupe_sessions == 30
 
 
-def test_frozen_charges_match_todays_cost_model():
+def test_protocol_v1_charges_no_brokerage_whatever_the_app_setting(monkeypatch):
+    # Owner decision 17 Oct: Zerodha delivery brokerage is Rs 0, so the experiment charges none, even on a
+    # server whose paper settings still charge brokerage (prod charges Rs 20 per order).
+    import importlib
+
+    from swing_trade_ml.core.config import settings
+    from swing_trade_ml.services.experiments import protocol as protocol_module
+
+    monkeypatch.setattr(settings, "PAPER_BROKERAGE_PER_ORDER", 20.0)
+    try:
+        reloaded = importlib.reload(protocol_module)
+        assert reloaded.PROTOCOL_V1.costs.brokerage_per_order == 0.0
+    finally:
+        monkeypatch.undo()
+        importlib.reload(protocol_module)
+
+
+def test_frozen_charges_are_the_cost_model_without_brokerage():
+    # Taxes and the depository fee on sells stay exactly as the app's paper cost model charges them.
     for turnover in (10_000.0, 99_950.5):
         for side in ("BUY", "SELL"):
-            assert frozen_charges(PROTOCOL_V1.costs, turnover, side) == pytest.approx(
-                sum(compute_charges(turnover, side))
-            )
+            _, taxes = compute_charges(turnover, side)
+            assert frozen_charges(PROTOCOL_V1.costs, turnover, side) == pytest.approx(taxes)
 
 
 def test_fill_whole_shares_slippage_and_costs():

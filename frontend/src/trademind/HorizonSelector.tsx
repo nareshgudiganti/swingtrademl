@@ -22,7 +22,7 @@ export function HorizonSelector({
 }) {
   if (variant === 'pills') {
     return (
-      <div className="tm-dash-pilltabs" role="tablist" aria-label="Trading horizon">
+      <div className="tm-dash-pilltabs" role="tablist" aria-label="Trading horizon (list)">
         {HORIZONS.map((h) => (
           <button
             key={h.id}
@@ -53,7 +53,7 @@ export function HorizonSelector({
           onClick={() => onChange(h.id)}
         >
           <strong>{h.title}</strong>
-          <span>{h.kind}</span>
+          <span>{h.available ? `${h.kind}, ${h.span}` : h.kind}</span>
           <small className={h.validation ? 'tm-horizon-experimental' : undefined}>{statusText(h)}</small>
         </button>
       ))}

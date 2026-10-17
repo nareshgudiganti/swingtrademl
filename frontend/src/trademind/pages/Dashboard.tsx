@@ -24,7 +24,6 @@ import { DEFAULT_HORIZON, HORIZONS, horizonById, type HorizonId } from '../horiz
 import { MARKET_LABEL, MARKET_PLAIN, MARKET_TONE, wordTone } from '../vocab'
 import { ActionPill, BrainArt, BrainGate, Card, CheckItem, GlowArea, Meter, Ring, StockLogo, Tag, inr } from '../ui'
 
-
 const RANGES = [
   { id: '1W', bars: 5 },
   { id: '1M', bars: 22 },
@@ -89,18 +88,19 @@ function compact(n: number | null): string {
   return inr(n, 0)
 }
 
-export default function Dashboard() {
+// `initialHorizon` exists for tests (the page opens on 15 days otherwise).
+export default function Dashboard({ initialHorizon = DEFAULT_HORIZON }: { initialHorizon?: HorizonId } = {}) {
   return (
     <BrainGate>
-      <DashboardBody />
+      <DashboardBody initialHorizon={initialHorizon} />
     </BrainGate>
   )
 }
 
-function DashboardBody() {
+function DashboardBody({ initialHorizon }: { initialHorizon: HorizonId }) {
   const latest = useLatestRun()
   const run = latest.data!
-  const [win, setWin] = useState<HorizonId>(DEFAULT_HORIZON)
+  const [win, setWin] = useState<HorizonId>(initialHorizon)
   const [picked, setPicked] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [sector, setSector] = useState('ALL')
@@ -170,7 +170,7 @@ function DashboardBody() {
         <Card title="How it works?">
           <ol className="tm-dash-how">
             <li>The brain studies the market and looks for opportunities.</li>
-            <li>Picks are grouped by time window.</li>
+            <li>Picks are shown for the 15-day window only; other windows have no supported strategy yet.</li>
             <li>Each pick has an entry, targets, a stop loss and its reasons.</li>
             <li>You review and decide. Nothing here places an order.</li>
           </ol>
@@ -387,7 +387,7 @@ function SummaryStrip({ run, picks }: { run: BrainRun; picks: BrainDecision[] })
         )}
       </Card>
 
-      <Card title="Estimated chance" sub="Average of today's picks">
+      <Card title="Estimated chance" sub="Average of today's 15-day picks">
         <div className="tm-flex" style={{ alignItems: 'center', gap: '0.9rem' }}>
           <Ring
             value={avgScore ?? 0}
@@ -400,7 +400,7 @@ function SummaryStrip({ run, picks }: { run: BrainRun; picks: BrainDecision[] })
         </div>
       </Card>
 
-      <Card title="Total Picks" sub="By window">
+      <Card title="Total Picks" sub="15-day window; other windows have none">
         <div className="tm-big tm-num" style={{ fontSize: '1.9rem' }}>
           {picks.length}
         </div>

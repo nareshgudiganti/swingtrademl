@@ -5,12 +5,12 @@ Owner approval needed for every step marked (LOCK) 🔒. Nothing here changes tr
 Every `swingtrade ...` command below runs on the droplet as `docker compose exec api swingtrade ...`.
 
 **This merge also ships `9a95a8b` ("Real Zerodha account is private to sudeeksha") to prod for the first
-time.** Prod `main` today is `9531be3`, which does not contain it. So this deploy is the first one where
+time.** Prod `main` today is `4f3cc19` (One TradeMind Phase 2, PR #6), which does not contain it. So this deploy is the first one where
 My Holdings, real orders, the real report and real-book totals refuse every account except `sudeeksha`.
 
 ## Before deploy
 1. Role table approved (spec section 6.5): `sudeeksha` only owner (owner decision 2026-10-16).
-2. All tests green on `feature/p0-security` (pass count: ___).
+2. All tests green on `release/p0-merge` (develop + origin/main 4f3cc19, 2026-10-17): backend 2305 passed, 23 skipped; frontend vitest 132 passed; tsc, build and `classic-parity --check` OK.
 3. Migration rehearsal printed OK (Task 11 Step 2); old-code rehearsal evidence pasted below.
 4. Placeholder-secret check: the API refuses to start outside local if `JWT_SECRET_KEY` or `API_KEY`
    is a placeholder. Production already runs with `ENVIRONMENT=production`, and an existing settings
@@ -56,19 +56,19 @@ Other owner commands: `docker compose exec api swingtrade unlock-user --username
 `docker compose exec api swingtrade create-user` now requires `--role`.
 
 ## Rollback
-- **Rollback target:** reverting the merge on `main` deploys origin/main **`9531be3`**. That build does
+- **Rollback target:** reverting the merge on `main` deploys origin/main **`4f3cc19`** (One TradeMind Phase 2). That build does
   **not** contain `require_real_account` (commit `9a95a8b`): on it, the real account is protected only by
   plans, and with plans **off** every signed-in account sees everything, including My Holdings.
 - 🔒 (LOCK) **Before reverting**, close the real account to everyone but the owner, one of:
   - switch plans **ON**: `PUT /api/v1/admin/switch` with body `{"enabled": true}` and the `X-API-Key`
-    header (or the Plans Manager screen as `sudeeksha`). On `9531be3` the real-account routes are not in
+    header (or the Plans Manager screen as `sudeeksha`). On `4f3cc19` the real-account routes are not in
     `ROUTE_RULES`, so with plans on every non-owner is refused them (members and testers keep only what
     their plan allows, e.g. `book=bot`); or
   - `docker compose exec api swingtrade disable-user --username U --reason "rollback window"` for every
     secondary account (this needs the new CLI, so run it **before** the revert; old code still honours
     `is_active`). Re-enable them after roll-forward.
   Check one non-owner gets 403 on `/api/v1/portfolio/summary?book=real` before going on.
-- 🔒 (LOCK) **Code:** revert the merge on `main` (push = deploy of `9531be3`). Rehearsed: the old code boots
+- 🔒 (LOCK) **Code:** revert the merge on `main` (push = deploy of `4f3cc19`). Rehearsed: the old code boots
   on the new schema (its migration step fails on the unknown revision, then it falls back to
   `create_all`) and logins work. See the evidence below.
 - **Roles after rollback:** old code reads only `is_superuser`, which mirrors `role`. A tester stays
@@ -110,7 +110,10 @@ OK P0 migration: upgrade, backfill, sessions ended (token_version=1), downgrade,
 ```
 Backfill: exactly `naresh`, `sudeeksha`, `vijay` (the three superusers) became `owner`; everyone else `member`.
 
-**Old code (`develop`, pre-P0) on the upgraded schema**, uvicorn on port 8077, `DB_AUTO_MIGRATE=true`:
+**Old code (`develop`, pre-P0) on the upgraded schema**, uvicorn on port 8077, `DB_AUTO_MIGRATE=true`.
+(The rollback target `4f3cc19` has the same backend code and the same alembic head `d8a1y2c3h4k5` as that
+rehearsed build, minus the `require_real_account` guard; One TradeMind Phase 1 and 2 changed only the frontend
+and backend tests, so the rehearsal still holds.)
 
 - Server booted; `curl localhost:8077/api/v1/health` returned
   `{"status":"ok","app":"Swing Trade ML","environment":"local","version":"0.1.0"}`.

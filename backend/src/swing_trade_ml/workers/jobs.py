@@ -10,6 +10,7 @@ close" means anything.
 
 from __future__ import annotations
 
+import contextlib
 from datetime import datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -572,6 +573,32 @@ def job_sync_mutual_fund_navs() -> None:
             mutual_funds.sync_nav_snapshot(db)
     except Exception as exc:  # noqa: BLE001
         _report_error("sync_mutual_fund_navs", exc)
+
+
+def _record_experiment_failure(error: str) -> None:
+    """A failed scorer run is written on its own, so it stays visible although its transaction rolled back."""
+    from swing_trade_ml.db.base import utcnow
+    from swing_trade_ml.db.models.experiments import ExperimentJobRun
+
+    with session_scope() as db:
+        db.add(ExperimentJobRun(status="failed", finished_at=utcnow(), error=error[:2000]))
+
+
+def job_score_experiments() -> None:
+    """Weekdays, evening: score the 5- and 30-day research picks from today's candles
+    (services/experiments/scorer.py). Research only: it reads candles and writes its own tables, never orders,
+    positions or the brain. Never raises into the worker; a failure is recorded and reported."""
+    from swing_trade_ml.services.experiments import scorer
+
+    try:
+        with session_scope() as db:
+            result = scorer.run(db, now=datetime.now(IST))
+        log.info("job.experiments.done", status=result.status, scored=result.scored, flagged=result.flagged)
+    except Exception as exc:  # noqa: BLE001
+        with contextlib.suppress(Exception):
+            _record_experiment_failure(str(exc))
+        with contextlib.suppress(Exception):
+            _report_error("score_experiments", exc)
 
 
 def job_sync_instruments() -> None:

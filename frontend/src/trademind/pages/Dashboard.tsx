@@ -3,9 +3,10 @@
 // brain's latest run and the market data the other TradeMind screens read.
 // It adds nothing to the brain.
 //
-// Only the 15-day window is real today (the brain plans +8% / -4% over up to
-// 15 trading days, selling half at +5%). The other windows have no model and
-// no track record, so their tabs say so instead of showing made-up picks.
+// Only the 15-day window has a trading strategy today (the brain plans +8% / -4% over up to
+// 15 trading days, selling half at +5%), and it is experimental and unproven. The windows and
+// their labels come from ../horizons.ts; a window with no strategy shows HorizonUnavailable,
+// never another window's picks.
 // The score is a ranking between ideas, never shown as a chance of winning.
 
 import { useMemo, useState } from 'react'
@@ -18,17 +19,10 @@ import type { BrainDecision, BrainRun, Candle } from '../../api/types'
 import { formatDateTime } from '../../lib/format'
 import type { Action } from '../types'
 import { finalWord, ideasFrom, stockSituations, useLatestRun } from '../live'
+import { HorizonSelector, HorizonUnavailable } from '../HorizonSelector'
+import { DEFAULT_HORIZON, HORIZONS, horizonById, type HorizonId } from '../horizons'
 import { MARKET_LABEL, MARKET_PLAIN, MARKET_TONE, wordTone } from '../vocab'
 import { ActionPill, BrainArt, BrainGate, Card, CheckItem, GlowArea, Meter, Ring, StockLogo, Tag, inr } from '../ui'
-
-type Window = '5d' | '15d' | '30d' | '90d'
-
-const WINDOWS: { id: Window; title: string; kind: string; span: string; live: boolean }[] = [
-  { id: '5d', title: '5 Days', kind: 'Short swing', span: '3 - 7 trading days', live: false },
-  { id: '15d', title: '15 Days', kind: 'Medium swing', span: 'up to 15 trading days', live: true },
-  { id: '30d', title: '30 Days', kind: 'Positional swing', span: '3 - 6 weeks', live: false },
-  { id: '90d', title: '3 Months', kind: 'Long swing', span: '6 - 12 weeks', live: false },
-]
 
 const RANGES = [
   { id: '1W', bars: 5 },
@@ -94,18 +88,19 @@ function compact(n: number | null): string {
   return inr(n, 0)
 }
 
-export default function Dashboard() {
+// `initialHorizon` exists for tests (the page opens on 15 days otherwise).
+export default function Dashboard({ initialHorizon = DEFAULT_HORIZON }: { initialHorizon?: HorizonId } = {}) {
   return (
     <BrainGate>
-      <DashboardBody />
+      <DashboardBody initialHorizon={initialHorizon} />
     </BrainGate>
   )
 }
 
-function DashboardBody() {
+function DashboardBody({ initialHorizon }: { initialHorizon: HorizonId }) {
   const latest = useLatestRun()
   const run = latest.data!
-  const [win, setWin] = useState<Window>('15d')
+  const [win, setWin] = useState<HorizonId>(initialHorizon)
   const [picked, setPicked] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [sector, setSector] = useState('ALL')
@@ -151,7 +146,7 @@ function DashboardBody() {
     setMinScore(0)
   }
 
-  const active = WINDOWS.find((w) => w.id === win)!
+  const active = horizonById(win)
   const selected = rows.find((d) => d.symbol === picked) ?? rows[0]
 
   return (
@@ -169,27 +164,13 @@ function DashboardBody() {
                 From the run on {formatDateTime(run.started_at)}.
               </p>
             </div>
-            <div className="tm-dash-tabs" role="tablist">
-              {WINDOWS.map((w) => (
-                <button
-                  key={w.id}
-                  role="tab"
-                  aria-selected={w.id === win}
-                  className={`tm-dash-tab tm-dash-tab-${w.id} ${w.id === win ? 'active' : ''}`}
-                  onClick={() => setWin(w.id)}
-                >
-                  <strong>{w.title}</strong>
-                  <span>{w.kind}</span>
-                  <small>{w.live ? w.span : 'Not available yet'}</small>
-                </button>
-              ))}
-            </div>
+            <HorizonSelector value={win} onChange={setWin} />
           </div>
         </Card>
         <Card title="How it works?">
           <ol className="tm-dash-how">
             <li>The brain studies the market and looks for opportunities.</li>
-            <li>Picks are grouped by time window.</li>
+            <li>Picks are shown for the 15-day window only; other windows have no supported strategy yet.</li>
             <li>Each pick has an entry, targets, a stop loss and its reasons.</li>
             <li>You review and decide. Nothing here places an order.</li>
           </ol>
@@ -200,21 +181,9 @@ function DashboardBody() {
 
       <Card>
         <div className="tm-toolbar tm-dash-filters">
-          <div className="tm-dash-pilltabs" role="tablist">
-            {WINDOWS.map((w) => (
-              <button
-                key={w.id}
-                role="tab"
-                aria-selected={w.id === win}
-                className={w.id === win ? 'active' : ''}
-                onClick={() => setWin(w.id)}
-              >
-                {w.title} ({w.live ? picks.length : '—'})
-              </button>
-            ))}
-          </div>
+          <HorizonSelector value={win} onChange={setWin} variant="pills" count={picks.length} />
           <span className="tm-spacer" />
-          {active.live && (
+          {active.available && (
             <>
               <input
                 className="tm-input"
@@ -250,15 +219,8 @@ function DashboardBody() {
           )}
         </div>
 
-        {!active.live ? (
-          <div style={{ padding: '0.6rem 0.2rem' }}>
-            <p>
-              <strong>{active.title} picks are not available yet.</strong> The brain plans for a window of up to
-              15 trading days. It has not been trained or tested for the {active.title.toLowerCase()} window, so
-              there is no honest pick to show here, and TradeMind will not invent one.
-            </p>
-            <p className="tm-dim">Use the 15 Days tab for the brain&apos;s real picks.</p>
-          </div>
+        {!active.available ? (
+          <HorizonUnavailable horizon={active} />
         ) : (
           <div className="tm-table-wrap">
             <table className="tm-table">
@@ -346,7 +308,7 @@ function DashboardBody() {
         )}
       </Card>
 
-      {active.live && selected && (
+      {active.available && selected && (
         <PickDetail
           decision={selected}
           company={nameOf(selected.symbol)}
@@ -425,7 +387,7 @@ function SummaryStrip({ run, picks }: { run: BrainRun; picks: BrainDecision[] })
         )}
       </Card>
 
-      <Card title="Estimated chance" sub="Average of today's picks">
+      <Card title="Estimated chance" sub="Average of today's 15-day picks">
         <div className="tm-flex" style={{ alignItems: 'center', gap: '0.9rem' }}>
           <Ring
             value={avgScore ?? 0}
@@ -438,15 +400,16 @@ function SummaryStrip({ run, picks }: { run: BrainRun; picks: BrainDecision[] })
         </div>
       </Card>
 
-      <Card title="Total Picks" sub="By window">
+      <Card title="Total Picks" sub="15-day window; other windows have none">
         <div className="tm-big tm-num" style={{ fontSize: '1.9rem' }}>
           {picks.length}
         </div>
         <div className="tm-dash-counts">
-          <span>5D: —</span>
-          <span>15D: {picks.length}</span>
-          <span>30D: —</span>
-          <span>3M: —</span>
+          {HORIZONS.map((h) => (
+            <span key={h.id}>
+              {h.days === 90 ? '3M' : `${h.days}D`}: {h.available ? picks.length : '—'}
+            </span>
+          ))}
         </div>
       </Card>
     </div>

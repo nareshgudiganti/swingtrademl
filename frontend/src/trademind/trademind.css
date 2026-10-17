@@ -1622,6 +1622,10 @@
   font-size: 0.72rem;
   opacity: 0.7;
 }
+.tm-dash-tab small.tm-horizon-experimental {
+  color: var(--tm-amber);
+  opacity: 1;
+}
 .tm-dash-tab.active {
   border-color: var(--tm-green);
   box-shadow: 0 0 14px rgba(46, 230, 138, 0.25);

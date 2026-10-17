@@ -10,11 +10,15 @@ const NA = 'Not available'
 const price = (n: number | null) => (n == null ? NA : `₹${inr(n)}`)
 const RISK_RULE = /risk|limit|cap\b|drawdown|sector|blocked|no new trades/i
 
+/** The owner's overrule (always more careful) wins — same rule as strategies/brain.py effective_word. */
+export const effectiveWord = (d: BeginnerDecision) => d.overruled_word ?? d.word
+
 function Word({ d }: { d: BeginnerDecision }) {
+  const word = effectiveWord(d)
   return d.kind === 'idea' ? (
-    <ActionPill action={d.word as Action} />
+    <ActionPill action={word as Action} />
   ) : (
-    <Tag tone="blue">{d.word as HoldingWord}</Tag>
+    <Tag tone="blue">{word as HoldingWord}</Tag>
   )
 }
 
@@ -32,6 +36,10 @@ export default function IdeaCard({
   const entry =
     d.entry_low == null || d.entry_high == null ? NA : `${price(d.entry_low)} to ${price(d.entry_high)}`
   const rule = d.reasons.find((r) => RISK_RULE.test(r))
+  const word = effectiveWord(d)
+  // Only a TRADE idea comes with a buy plan and rupees at stake; WATCH/WAIT/AVOID, holdings
+  // and an owner overrule away from TRADE never show a buy zone (a beginner reads it as advice).
+  const isTrade = d.kind === 'idea' && word === 'TRADE'
   return (
     <div className="tm-card bx-card">
       <div className="bx-row">
@@ -51,23 +59,33 @@ export default function IdeaCard({
         {chancePercent(d) != null && <div className="bx-small">{`Estimated chance: ${chanceText(d)}`}</div>}
       </div>
 
-      <ul className="bx-plan">
-        <li>{`Buy zone: ${entry}`}</li>
-        <li>{`Target: ${price(d.target)}`}</li>
-        <li>{`Stop: ${d.stop == null ? `${NA} — plan incomplete` : price(d.stop)}`}</li>
-        <li>{`Sell by: within ${d.horizon_days} trading days`}</li>
-      </ul>
+      {d.overruled_word && (
+        <p className="tm-note">{`You overruled the brain to ${d.overruled_word}: ${d.overrule_reason ?? 'no reason given'} (the brain itself said ${d.word})`}</p>
+      )}
 
-      <div>
-        {d.qty > 0 ? (
-          <>
-            <div>{`Shares allowed: ${d.qty}`}</div>
-            <MoneyAtStake value={money ?? { available: false, why: 'figures not loaded' }} />
-          </>
-        ) : (
-          <div>{rule ? `No shares allowed: ${rule}` : 'No shares allowed'}</div>
-        )}
-      </div>
+      {isTrade ? (
+        <>
+          <ul className="bx-plan">
+            <li>{`Buy zone: ${entry}`}</li>
+            <li>{`Target: ${price(d.target)}`}</li>
+            <li>{`Stop: ${d.stop == null ? `${NA} — plan incomplete` : price(d.stop)}`}</li>
+            <li>{`Sell by: within ${d.horizon_days} trading days`}</li>
+          </ul>
+
+          <div>
+            {d.qty > 0 ? (
+              <>
+                <div>{`Shares allowed: ${d.qty}`}</div>
+                <MoneyAtStake value={money ?? { available: false, why: 'figures not loaded' }} />
+              </>
+            ) : (
+              <div>{rule ? `No shares allowed: ${rule}` : 'No shares allowed'}</div>
+            )}
+          </div>
+        </>
+      ) : (
+        <div>{`No buy plan — the brain says ${word}`}</div>
+      )}
 
       {events && events.length > 0 && (
         <ul className="bx-plan">

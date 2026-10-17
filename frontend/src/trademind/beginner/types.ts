@@ -35,7 +35,7 @@ export interface StockBriefData {
   symbol: string
   as_of: string | null
   q1_company: BriefAnswer & { name?: string; sector?: string | null; size?: string | null }
-  q2_brain: BriefAnswer & { decision?: BeginnerDecision }
+  q2_brain: BriefAnswer & { word?: string; decision?: BeginnerDecision }
   q3_plan: BriefAnswer & {
     buy_zone?: [number, number]
     sell_half_price?: number

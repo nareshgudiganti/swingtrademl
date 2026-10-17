@@ -49,11 +49,29 @@ describe('IdeaCard', () => {
     expect(out).toContain('₹ at stake')
     expect(out).toContain('If the stop is hit you lose about ₹612.50')
   })
-  it('WATCH with 0 shares shows no rupee line', () => {
+  it('WATCH with 0 shares shows no rupee line and no buy zone', () => {
     const out = html(decision({ word: 'WATCH', qty: 0 }), money)
     expect(out).not.toContain('₹ at stake')
     expect(out).not.toContain('If the stop is hit')
-    expect(out).toContain('No shares allowed')
+    expect(out).not.toContain('Buy zone')
+    expect(out).toContain('No buy plan — the brain says WATCH')
+  })
+  it('an owner overrule wins: no TRADE pill, no buy zone, no rupees', () => {
+    const out = html(
+      decision({ overruled_word: 'AVOID', overrule_reason: 'Too risky this week' }),
+      money,
+    )
+    expect(out).toContain('AVOID')
+    expect(out).toContain('You overruled the brain to AVOID: Too risky this week')
+    expect(out).toContain('No buy plan — the brain says AVOID')
+    expect(out).not.toContain('Buy zone')
+    expect(out).not.toContain('₹ at stake')
+    expect(out).not.toContain('Shares allowed')
+  })
+  it('AVOID with shares still shows no buy zone or rupees', () => {
+    const out = html(decision({ word: 'AVOID' }), money)
+    expect(out).not.toContain('Buy zone')
+    expect(out).not.toContain('₹ at stake')
   })
   it('names the risk rule when the reasons contain one', () => {
     const out = html(decision({ qty: 0, reasons: ['Risk rule: sector limit reached', 'x'] }))

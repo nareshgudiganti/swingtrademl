@@ -46,8 +46,8 @@ def _inst(db, symbol=SYM, name="Bx Stock Ltd"):
     db.flush()
 
 
-def _run(db, rid, as_of=AS_OF, kind="nightly"):
-    db.add(BrainRun(id=rid, kind=kind, as_of=as_of, book="paper", live=True, status="done"))
+def _run(db, rid, as_of=AS_OF, kind="nightly", book="paper", live=True):
+    db.add(BrainRun(id=rid, kind=kind, as_of=as_of, book=book, live=live, status="done"))
     db.flush()
 
 
@@ -176,7 +176,117 @@ def test_real_read_only_session_serves_the_brief(client, obs_ns):
     app.dependency_overrides.pop(get_readonly_db, None)  # use the real READ ONLY session
     sym = f"{SYM_PREFIX}Z"
     inst = Instrument(instrument_token=TOKEN_BASE + 7, tradingsymbol=sym, name="Real Ro Ltd")
-    with committed(inst, make_run("ro1", as_of=AS_OF), make_decision("ro1", sym, word="WAIT")):
+    now = datetime.now(UTC)  # the endpoint uses the real clock, so the run must be current
+    with committed(inst, make_run("ro1", as_of=now), make_decision("ro1", sym, word="WAIT")):
         r = client.get(f"/api/v1/beginner/stock/{sym}", headers=HEADERS)
     assert r.status_code == 200, r.text
     assert r.json()["q2_brain"]["decision"]["word"] == "WAIT"
+
+
+# ---- final-review fixes -----------------------------------------------------
+
+
+def test_owner_overrule_wins_and_hides_plan_and_money(db_session):
+    """F1: a TRADE the owner overruled to AVOID must never read as TRADE or show money figures."""
+    _inst(db_session)
+    _run(db_session, "bx-new")
+    _dec(db_session, "bx-new", overruled_word="AVOID", overrule_reason="Too risky this week")
+    out = stock_brief(db_session, SYM, TODAY)
+    q2 = out["q2_brain"]
+    assert q2["word"] == "AVOID"
+    assert q2["answer"].startswith("AVOID")
+    assert "You overruled the brain to AVOID: Too risky this week" in q2["answer"]
+    for k in ("q3_plan", "q4_money"):
+        assert out[k]["available"] is False
+        assert out[k]["why"] == "The brain says AVOID, so there is no buy plan"
+    assert "buy_zone" not in out["q3_plan"]
+    assert out["q4_money"].get("invested") is None
+
+
+@pytest.mark.parametrize("word", ["WATCH", "WAIT", "AVOID"])
+def test_non_trade_word_has_no_buy_plan(db_session, word):
+    """F2: a WATCH/WAIT/AVOID with a full zone must not say "Buy between ..."."""
+    _inst(db_session)
+    _run(db_session, "bx-new")
+    _dec(db_session, "bx-new", word=word)
+    out = stock_brief(db_session, SYM, TODAY)
+    assert out["q3_plan"]["available"] is False
+    assert out["q3_plan"]["answer"] == f"No buy plan — the brain says {word}"
+    assert out["q4_money"]["available"] is False
+    assert out["q4_money"].get("invested") is None
+
+
+def test_holding_has_no_buy_plan_and_idea_is_preferred(db_session):
+    _inst(db_session)
+    _run(db_session, "bx-new")
+    _dec(db_session, "bx-new", kind="idea", word="TRADE")
+    _dec(db_session, "bx-new", kind="holding", word="HOLD")  # newer id, but the idea wins
+    assert stock_brief(db_session, SYM, TODAY)["q2_brain"]["word"] == "TRADE"
+
+    _run(db_session, "bx-hold", as_of=datetime(2026, 10, 16, 10, 30, tzinfo=UTC))
+    _dec(db_session, "bx-hold", kind="holding", word="HOLD")
+    out = stock_brief(db_session, SYM, TODAY)
+    assert out["q2_brain"]["word"] == "HOLD"
+    assert out["q3_plan"]["available"] is False
+    assert out["q4_money"]["available"] is False
+
+
+@pytest.mark.parametrize(
+    "levels",
+    [
+        {"stop": 103.0},  # stop above the buy zone
+        {"target": 101.0},  # target inside the buy zone
+        {"entry_low": 103.0, "entry_high": 101.0},  # zone upside down
+        {"target": None},
+    ],
+)
+def test_trade_with_levels_out_of_order_is_plan_incomplete(db_session, levels):
+    """F2: bad data never yields an "available" plan."""
+    _inst(db_session)
+    _run(db_session, "bx-new")
+    _dec(db_session, "bx-new", **levels)
+    out = stock_brief(db_session, SYM, TODAY)
+    assert out["q3_plan"]["available"] is False
+    assert out["q3_plan"]["why"].startswith("Plan incomplete")
+    assert out["q4_money"]["available"] is False
+    assert out["q4_money"].get("loss_if_stop") is None
+
+
+def test_stale_run_is_not_today(db_session):
+    """F3: a days-old TRADE (nightly stopped) is not today's: no card, no figures, last run date."""
+    _inst(db_session)
+    _run(db_session, "bx-stale", as_of=datetime(2026, 10, 13, 10, 20, tzinfo=UTC))
+    _dec(db_session, "bx-stale")
+    out = stock_brief(db_session, SYM, TODAY)  # Fri 16 Oct; expected run day is Thu 15 Oct or later
+    assert out["as_of"].startswith("2026-10-13")
+    assert out["q2_brain"]["available"] is False
+    assert out["q2_brain"]["answer"] == "The brain has not looked at this stock today"
+    assert "13 Oct 2026" in out["q2_brain"]["why"]
+    assert "decision" not in out["q2_brain"]
+    for k in ("q3_plan", "q4_money"):
+        assert out[k]["available"] is False
+    assert out["q4_money"].get("invested") is None
+
+
+def test_previous_trading_day_run_counts_before_tonights_nightly(db_session):
+    _inst(db_session)
+    _run(db_session, "bx-thu", as_of=datetime(2026, 10, 15, 10, 20, tzinfo=UTC))
+    _dec(db_session, "bx-thu")
+    assert stock_brief(db_session, SYM, TODAY)["q2_brain"]["available"] is True
+    # Monday 19 Oct morning: Friday's run is still the latest expected one.
+    _run(db_session, "bx-fri")
+    _dec(db_session, "bx-fri", word="WAIT")
+    assert stock_brief(db_session, SYM, date(2026, 10, 19))["q2_brain"]["word"] == "WAIT"
+
+
+@pytest.mark.parametrize("other", [{"live": False}, {"book": "live"}])
+def test_replay_or_live_book_runs_are_never_read(db_session, other):
+    """F3: a replay (live=False) or a real-money book run is never the stock brief's source."""
+    _inst(db_session)
+    _run(db_session, "bx-paper", as_of=datetime(2026, 10, 16, 9, 0, tzinfo=UTC))
+    _dec(db_session, "bx-paper", word="WAIT")
+    _run(db_session, "bx-other", **other)  # newer
+    _dec(db_session, "bx-other", word="TRADE")
+    out = stock_brief(db_session, SYM, TODAY)
+    assert out["q2_brain"]["word"] == "WAIT"
+    assert out["as_of"].startswith("2026-10-16T09:00")

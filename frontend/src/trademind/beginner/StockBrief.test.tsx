@@ -39,6 +39,11 @@ describe('StockBrief', () => {
     for (const why of ['No company name is stored', '15 Oct 2026', 'plan why', 'money why'])
       expect(out).toContain(why.replace("'", '&#x27;'))
   })
+  it("shows the date of the brain's view, in India time", () => {
+    const out = renderToString(<StockBrief data={{ ...empty, as_of: '2026-10-16T10:20:00+00:00' }} />)
+    expect(out).toContain('Brain&#x27;s view from 16 Oct 2026')
+    expect(renderToString(<StockBrief data={empty} />)).toContain('no brain run on record yet')
+  })
   it('shows the evidence wording and the money block when available', () => {
     const data: StockBriefData = {
       ...empty,
@@ -75,12 +80,12 @@ describe('UpcomingEvents', () => {
             date: '2026-10-19',
             trading_days_away: 1,
             detail: '',
-            plain: 'Results tomorrow — prices can jump either way',
+            plain: 'Results on Mon 19 Oct (1 trading day away) — prices can jump either way',
           },
         ]}
       />,
     )
     expect(out).toContain('INFY')
-    expect(out).toContain('Results tomorrow')
+    expect(out).toContain('Results on Mon 19 Oct (1 trading day away)')
   })
 })

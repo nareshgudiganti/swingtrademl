@@ -5,9 +5,9 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, time
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session
 
 from swing_trade_ml.brain.modules.m13_news.calendar import trading_days_until
@@ -15,9 +15,10 @@ from swing_trade_ml.brain.trial_journal import TRIAL_START as BRAIN_TRIAL_START
 from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.enums import PositionStatus, TradingMode
 from swing_trade_ml.core.market_session import IST
+from swing_trade_ml.core.strategy_policy import outside_tester_book
 from swing_trade_ml.db.models.feeds import UpcomingEvent
 from swing_trade_ml.db.models.market import Candle, Instrument
-from swing_trade_ml.db.models.trading import PortfolioSnapshot, Position
+from swing_trade_ml.db.models.trading import PortfolioSnapshot, Position, Strategy, Trade
 from swing_trade_ml.services.brain_golive.compare import NEEDED_FINISHED, finished_brain_ideas
 from swing_trade_ml.services.costs import compute_charges
 from swing_trade_ml.services.portfolio import (
@@ -96,12 +97,23 @@ def money_at_stake(
 # ---------------------------------------------------------------------------
 
 
-def _event_plain(kind: str, detail: str, day: date, days_away: int) -> str:
+def _event_when(day: date, today: date, days_away: int) -> str:
+    """Calendar facts only: "today" means the calendar day, never a trading-day count."""
+    if day == today:
+        return "today"
+    on = f"on {day:%a} {day.day} {day:%b}"
+    if days_away == 0:  # a weekend or holiday before the next market day
+        return f"{on} (before the next market day)"
+    unit = "trading day" if days_away == 1 else "trading days"
+    return f"{on} ({days_away} {unit} away)"
+
+
+def _event_plain(kind: str, detail: str, day: date, today: date, days_away: int) -> str:
     """One plain-English line for an upcoming event."""
+    when = _event_when(day, today, days_away)
     if kind == "results":
-        when = "today" if days_away == 0 else "tomorrow" if days_away == 1 else f"in {days_away} trading days"
         return f"Results {when} — prices can jump either way"
-    return f"{detail or 'Corporate action'} on {day.day} {day:%b}"
+    return f"{detail or 'Corporate action'} {when}"
 
 
 def watchlist_symbols(db: Session) -> list[str]:
@@ -150,7 +162,7 @@ def upcoming_events(
                 "date": ev.event_date.isoformat(),
                 "trading_days_away": away,
                 "detail": ev.detail or "",
-                "plain": _event_plain(ev.kind, ev.detail or "", ev.event_date, away),
+                "plain": _event_plain(ev.kind, ev.detail or "", ev.event_date, today, away),
             }
         )
     out.sort(key=lambda r: (r["date"], r["symbol"]))
@@ -191,12 +203,58 @@ def period_change_pct(db: Session, instrument_ids: list[int], since: datetime) -
     return round(sum(changes) / len(changes), 2) if changes else None
 
 
+def _not_brain(strategy_id_col):
+    """Rows that are not the TradeMind brain's own (its trial is sealed). Rows with no strategy
+    are version 1's. Matched by name and by type, like `ensure_brain_strategy` finds it."""
+    from swing_trade_ml.services.brain_golive.shadow import BRAIN_STRATEGY_NAME
+
+    brain_ids = select(Strategy.id).where(
+        or_(Strategy.name == BRAIN_STRATEGY_NAME, Strategy.strategy_type == "brain")
+    )
+    return or_(strategy_id_col.is_(None), strategy_id_col.not_in(brain_ids))
+
+
+def bot_paper_figures(db: Session, since: datetime | None) -> dict:
+    """Version 1's practice-money trades: the same filters as
+    `performance_stats(mode=PAPER, bot_book_only=True)` (paper, no tester book, no hand books,
+    closed on/after the trial start) PLUS the brain strategy excluded, so the sealed brain trial
+    can never reach these figures — whatever stage the brain is in."""
+    trades_stmt = select(Trade).where(
+        Trade.mode == TradingMode.PAPER,
+        outside_tester_book(Trade.strategy_id),
+        exclude_hand_books(Trade.strategy_id),
+        _not_brain(Trade.strategy_id),
+    )
+    if since is not None:
+        trades_stmt = trades_stmt.where(Trade.exit_at >= since)
+    trades = list(db.scalars(trades_stmt))
+    open_positions = db.scalars(
+        select(Position).where(
+            Position.mode == TradingMode.PAPER,
+            Position.status == PositionStatus.OPEN,
+            outside_tester_book(Position.strategy_id),
+            exclude_hand_books(Position.strategy_id),
+            _not_brain(Position.strategy_id),
+        )
+    )
+    return {
+        "finished": len(trades),
+        "wins": sum(1 for t in trades if t.is_win),
+        "realized": sum(t.net_pnl for t in trades),
+        "charges": sum(t.charges for t in trades),
+        "unrealized": sum(p.unrealized_pnl for p in open_positions),
+    }
+
+
 def evidence_summary(db: Session) -> dict:
-    """Plain-figure summary of the v1 paper bot since the trial began, plus a SEALED brain-trial
-    count. No brain win rate, profit or comparison is ever returned here."""
+    """Plain-figure summary of the version 1 paper bot since the trial began, plus a SEALED
+    brain-trial count. No brain win rate, profit or comparison is ever returned here: the trade
+    figures exclude the brain strategy (`bot_paper_figures`)."""
+    # Used only for the snapshot-based worst fall (account-wide by design, see portfolio.py).
     stats = performance_stats(db, mode=TradingMode.PAPER, bot_book_only=True)
     since = trial_start(TradingMode.PAPER)
-    finished = int(stats["total_trades"])
+    fig = bot_paper_figures(db, since)
+    finished = fig["finished"]
     enough = finished >= ENOUGH_TRADES
 
     # Account-wide even with bot_book_only: snapshots hold one total per mode (portfolio.py).
@@ -227,12 +285,12 @@ def evidence_summary(db: Session) -> dict:
         "paper_label": PAPER_LABEL,
         "bot": {
             "since": since.date().isoformat() if since else None,
-            "profit_booked": stats["realized_pnl"],
-            "profit_open": stats["unrealized_pnl"],
-            "costs_paid": stats["total_charges"],
+            "profit_booked": fig["realized"],
+            "profit_open": fig["unrealized"],
+            "costs_paid": fig["charges"],
             "worst_fall_from_peak_pct": worst_fall,
             "finished_trades": finished,
-            "win_rate_pct": round(stats["win_rate"] * 100, 1) if finished else None,
+            "win_rate_pct": round(fig["wins"] / finished * 100, 1) if finished else None,
             "nifty_same_period_pct": nifty,
             "every_stock_same_period_pct": every,
             "enough_trades": enough,
@@ -294,14 +352,31 @@ def _company(db: Session, inst: Instrument) -> dict:
 
 
 def _latest_nightly(db: Session):
+    """The latest finished LIVE nightly run of the PAPER book (any date). Replays, why-runs,
+    intraday runs, failed runs and any other book never count (as `strategies.brain.todays_run`)."""
     from swing_trade_ml.db.models.brain import BrainRun
 
     return db.scalars(
         select(BrainRun)
-        .where(BrainRun.kind == "nightly", BrainRun.status == "done")
-        .order_by(BrainRun.as_of.desc())
+        .where(
+            BrainRun.kind == "nightly",
+            BrainRun.status == "done",
+            BrainRun.live.is_(True),
+            BrainRun.book == TradingMode.PAPER,
+        )
+        .order_by(BrainRun.as_of.desc(), BrainRun.started_at.desc())
         .limit(1)
     ).first()
+
+
+def _run_is_current(run, today: date) -> bool:
+    """A run counts as "today's" view only if it was made on the latest expected trading day
+    (system._expected_latest_trading_day: the previous trading day, all day) or later — i.e.
+    yesterday's nightly before today's 15:50 run, or today's once it has run. Older is stale."""
+    from swing_trade_ml.api.v1.endpoints.system import _expected_latest_trading_day
+
+    expected = _expected_latest_trading_day(datetime.combine(today, time(12, 0), tzinfo=IST))
+    return run.as_of.astimezone(IST).date() >= expected
 
 
 def _evidence_answer() -> dict:
@@ -318,6 +393,14 @@ def _evidence_answer() -> dict:
     }
 
 
+def _plan_in_order(dec) -> bool:
+    """stop < buy zone low <= buy zone high < target, all present (bad data never gives a plan)."""
+    lo, hi, stop, target = dec.entry_low, dec.entry_high, dec.stop, dec.target
+    if None in (lo, hi, stop, target):
+        return False
+    return stop < lo <= hi < target
+
+
 def stock_brief(db: Session, symbol: str, today: date) -> dict:
     """Six plain answers about one stock, from stored data only (never runs the brain).
 
@@ -325,6 +408,7 @@ def stock_brief(db: Session, symbol: str, today: date) -> dict:
     """
     from swing_trade_ml.core.market_session import next_trading_day
     from swing_trade_ml.db.models.brain import BrainDecision
+    from swing_trade_ml.strategies.brain import effective_word, why
 
     symbol = symbol.upper()
     inst = db.scalars(select(Instrument).where(Instrument.tradingsymbol == symbol).limit(1)).first()
@@ -332,12 +416,14 @@ def stock_brief(db: Session, symbol: str, today: date) -> dict:
         raise LookupError(symbol)
 
     run = _latest_nightly(db)
+    current = run is not None and _run_is_current(run, today)
     dec = None
-    if run is not None:
+    if current:
+        # Prefer the idea over a holding row, like strategies.brain.todays_decisions.
         dec = db.scalars(
             select(BrainDecision)
             .where(BrainDecision.run_id == run.id, BrainDecision.symbol == symbol)
-            .order_by(BrainDecision.id.desc())
+            .order_by(case((BrainDecision.kind == "idea", 0), else_=1), BrainDecision.id.desc())
             .limit(1)
         ).first()
 
@@ -359,18 +445,25 @@ def stock_brief(db: Session, symbol: str, today: date) -> dict:
     }
     if dec is None:
         if run is None:
-            why = "There is no brain run on record yet"
+            why_text = "There is no brain run on record yet"
         else:
-            why = f"The brain's last run was on {_day_text(run.as_of.astimezone(IST).date())}"
+            why_text = f"The brain's last run was on {_day_text(run.as_of.astimezone(IST).date())}"
         no = "The brain has not looked at this stock today"
-        out["q2_brain"] = _gap(no, why)
-        out["q3_plan"] = _gap("No plan without a brain decision", why)
-        out["q4_money"] = _gap("No figures without a plan", why)
+        out["q2_brain"] = _gap(no, why_text)
+        out["q3_plan"] = _gap("No plan without a brain decision", why_text)
+        out["q4_money"] = _gap("No figures without a plan", why_text)
     else:
+        # The owner's overrule (always more careful) wins over the brain's own word.
+        word = effective_word(dec)
+        if dec.overruled_word:
+            said = f"{word} — {why(dec)} (the brain itself said {dec.word})"
+        else:
+            said = f"{word}: " + ("; ".join(dec.reasons or []) or "no reasons recorded")
         out["q2_brain"] = {
-            "answer": f"{dec.word}: " + ("; ".join(dec.reasons or []) or "no reasons recorded"),
+            "answer": said,
             "available": True,
             "why": None,
+            "word": word,
             "decision": {
                 "id": dec.id,
                 "run_id": dec.run_id,
@@ -395,13 +488,16 @@ def stock_brief(db: Session, symbol: str, today: date) -> dict:
                 "overruled_at": dec.overruled_at,
             },
         }
-        have_zone = dec.entry_low is not None and dec.entry_high is not None
-        entry = (dec.entry_low + dec.entry_high) / 2 if have_zone else None
-        if dec.target is None or dec.stop is None or not have_zone:
-            out["q3_plan"] = _gap(
-                "The plan is incomplete", "The brain did not give a full buy zone, target and stop"
-            )
+        if dec.kind != "idea" or word != "TRADE":
+            no_plan = f"The brain says {word}, so there is no buy plan"
+            out["q3_plan"] = _gap(f"No buy plan — the brain says {word}", no_plan)
+            out["q4_money"] = _gap("No money figures — there is no buy plan", no_plan)
+        elif not _plan_in_order(dec):
+            bad = "Plan incomplete — the buy zone, target and stop are missing or not in order"
+            out["q3_plan"] = _gap("The plan is incomplete", bad)
+            out["q4_money"] = _gap("Money figures not available", bad)
         else:
+            entry = (dec.entry_low + dec.entry_high) / 2
             day = run.as_of.astimezone(IST).date()
             for _ in range(dec.horizon_days):
                 day = next_trading_day(day)
@@ -420,16 +516,16 @@ def stock_brief(db: Session, symbol: str, today: date) -> dict:
                 "stop_pct": settings.ML_STOP_RETURN_PCT,
                 "last_exit_day": day.isoformat(),
             }
-        money = money_at_stake(entry, dec.stop, dec.target, dec.qty or 0)
-        if money["available"]:
-            money = {
-                "answer": f"About ₹{money['invested']:,.0f} in; ₹{money['loss_if_stop']:,.0f} lost "
-                f"if the stop hits; ₹{money['gain_if_target']:,.0f} gained at the target (after charges)",
-                **money,
-            }
-        else:
-            money = {"answer": "Money figures not available", **money}
-        out["q4_money"] = money
+            money = money_at_stake(entry, dec.stop, dec.target, dec.qty or 0)
+            if money["available"]:
+                money = {
+                    "answer": f"About ₹{money['invested']:,.0f} in; ₹{money['loss_if_stop']:,.0f} lost "
+                    f"if the stop hits; ₹{money['gain_if_target']:,.0f} gained at the target (after charges)",
+                    **money,
+                }
+            else:
+                money = {"answer": "Money figures not available", **money}
+            out["q4_money"] = money
     out["q5_events"] = q5
     out["q6_evidence"] = _evidence_answer()
     return out

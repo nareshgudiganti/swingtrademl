@@ -23,7 +23,8 @@ export default function EvidencePanel({ evidence }: { evidence: EvidenceSummary 
       <h3>{`Results so far — ${label}`}</h3>
       {!bot.enough_trades && <p className="tm-note"><strong>{bot.note}</strong></p>}
 
-      <h4>{`Money — ${label}`}</h4>
+      <h4>{`Version 1's practice money — ${label}`}</h4>
+      <p className="bx-small">The brain&apos;s trial is not counted here; its results stay sealed below.</p>
       <ul className="bx-plan">
         <li>Profit booked: ₹{inr(bot.profit_booked)}</li>
         <li>Profit on open trades: ₹{inr(bot.profit_open)}</li>
@@ -37,7 +38,7 @@ export default function EvidencePanel({ evidence }: { evidence: EvidenceSummary 
         <Row label="Win rate" value={bot.win_rate_pct} why="no finished trades yet" />
       </ul>
 
-      <h4>{`Compared with the market — ${label}`}</h4>
+      <h4>{`Version 1 compared with the market — ${label}`}</h4>
       <ul className="bx-plan">
         <Row label="NIFTY 50 over the same days" value={bot.nifty_same_period_pct} why={noPrices} />
         <Row

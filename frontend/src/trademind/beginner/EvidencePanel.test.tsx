@@ -40,6 +40,11 @@ describe('EvidencePanel', () => {
     expect(h).toContain('Every stock on the watchlist over the same days')
     expect(h.split('Practice money (paper)').length - 1).toBeGreaterThanOrEqual(2)
   })
+  it("says the money block is version 1's practice money, without the brain trial", () => {
+    const h = html(base)
+    expect(h).toContain('Version 1&#x27;s practice money — Practice money (paper)')
+    expect(h).toContain('trial is not counted here')
+  })
   it('null figures say Not available with a reason, never 0', () => {
     const h = html({
       ...base,

@@ -7,6 +7,13 @@ import UpcomingEvents from './UpcomingEvents'
 
 const price = (n: number | undefined) => (n == null ? 'Not available' : `₹${inr(n)}`)
 
+/** "16 Oct 2026" in India time, from the run's ISO timestamp. */
+export function viewDate(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return 'Not available'
+  return d.toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', year: 'numeric' })
+}
+
 function Section({ title, a, children }: { title: string; a: BriefAnswer; children?: React.ReactNode }) {
   return (
     <section className="tm-card bx-card">
@@ -32,6 +39,9 @@ export default function StockBrief({ data }: { data: StockBriefData }) {
   const decision = data.q2_brain.decision
   return (
     <div className="bx-card">
+      <p className="bx-small">
+        {data.as_of ? `Brain's view from ${viewDate(data.as_of)}` : "Brain's view: Not available — no brain run on record yet"}
+      </p>
       <Section title="What is this company?" a={data.q1_company} />
       <Section title="What does the brain say today, and why?" a={data.q2_brain}>
         {decision && (

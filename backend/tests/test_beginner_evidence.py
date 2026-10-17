@@ -137,12 +137,10 @@ def test_counts_only_paper_bot_trades_and_sums_charges(db_session, monkeypatch):
 
 
 def test_few_trades_note_and_win_rate_unconditionally(db_session, monkeypatch):
-    real_stats = beginner_views.performance_stats
+    def fake(db, since):
+        return {"finished": 2, "wins": 1, "realized": 10.0, "charges": 1.0, "unrealized": 0.0}
 
-    def fake(db, **kw):
-        return {**real_stats(db, **kw), "total_trades": 2, "win_rate": 0.5}
-
-    monkeypatch.setattr(beginner_views, "performance_stats", fake)
+    monkeypatch.setattr(beginner_views, "bot_paper_figures", fake)
     b = evidence_summary(db_session)["bot"]
     assert b["win_rate_pct"] == 50.0
     assert b["enough_trades"] is False
@@ -234,3 +232,47 @@ def test_endpoint_is_get_only_read_only_and_needs_auth(client, db_session):
     assert counts() == before
     methods = {m for route in beginner.router.routes for m in route.methods}
     assert methods == {"GET"}
+
+
+def _brain_strategy(db):
+    """The TradeMind brain strategy, as services/brain_golive/shadow.py names it."""
+    from swing_trade_ml.services.brain_golive.shadow import BRAIN_STRATEGY_NAME
+
+    s = db.scalar(select(Strategy).where(Strategy.name == BRAIN_STRATEGY_NAME))
+    if s is None:
+        s = Strategy(name=BRAIN_STRATEGY_NAME, strategy_type="brain", mode="paper", is_active=True)
+        db.add(s)
+        db.flush()
+    return s
+
+
+def test_brain_strategy_trades_never_reach_the_bot_figures(db_session):
+    """F5: once the brain stage moves to approval/auto, brain paper trades exist. They belong to the
+    sealed trial and must not change the version 1 win rate, profit, costs or count."""
+    bot = _strategy(db_session, "bx4_bot_f5")
+    inst = _inst(db_session, 890_020, "BX4F5")
+    now = _since() + timedelta(days=2)
+    _trade(db_session, bot, inst, 50.0, 2.0, now, True)
+    db_session.flush()
+    before = evidence_summary(db_session)["bot"]
+
+    brain = _brain_strategy(db_session)
+    _trade(db_session, brain, inst, -300.0, 12.0, now, False)
+    _trade(db_session, brain, inst, 900.0, 15.0, now, True)
+    db_session.add(
+        Position(
+            strategy_id=brain.id,
+            instrument_id=inst.id,
+            mode="paper",
+            quantity=10,
+            entry_price=100.0,
+            current_price=90.0,
+            unrealized_pnl=-100.0,
+            entry_at=datetime.now(UTC),
+            status=PositionStatus.OPEN,
+        )
+    )
+    db_session.flush()
+    after = evidence_summary(db_session)["bot"]
+    for k in ("finished_trades", "win_rate_pct", "profit_booked", "profit_open", "costs_paid"):
+        assert after[k] == before[k], k

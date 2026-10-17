@@ -59,14 +59,37 @@ def test_window_is_counted_in_trading_days_and_sorted(db_session):
     assert by["TODAYCO"]["trading_days_away"] == 0
     assert by["TODAYCO"]["plain"] == "Results today — prices can jump either way"
     assert by["AHOLI"]["trading_days_away"] == 1  # holiday not counted
-    assert by["AHOLI"]["plain"] == "Results tomorrow — prices can jump either way"
+    # Wed 21 Oct is 1 trading day away but 2 calendar days: never "tomorrow".
+    assert by["AHOLI"]["plain"] == "Results on Wed 21 Oct (1 trading day away) — prices can jump either way"
     assert by["THREEDAY"]["trading_days_away"] == 3
-    assert by["THREEDAY"]["plain"] == "Results in 3 trading days — prices can jump either way"
-    assert by["SPLITCO"]["plain"] == "Split / bonus on 24 Oct"
+    assert (
+        by["THREEDAY"]["plain"] == "Results on Fri 23 Oct (3 trading days away) — prices can jump either way"
+    )
+    assert by["SPLITCO"]["plain"] == "Split / bonus on Sat 24 Oct (3 trading days away)"
     assert by["SPLITCO"]["date"] == "2026-10-24"
     keys = [(r["date"], r["symbol"]) for r in rows]
     assert keys == sorted(keys)
     assert [r["symbol"] for r in rows if r["date"] == "2026-10-21"] == ["AHOLI", "ZHOLI"]
+
+
+def test_event_wording_uses_calendar_facts(db_session):
+    """F4: a weekend/holiday event seen the trading day before is not "today"."""
+    fri = date(2026, 10, 16)
+    _ev(db_session, "SATCO", "results", date(2026, 10, 17))
+    _ev(db_session, "SATCA", "corporate_action", date(2026, 10, 17), "Dividend")
+    _ev(db_session, "MONCO", "results", date(2026, 10, 19))
+    _ev(db_session, "FRICO", "corporate_action", fri, "Dividend")
+    db_session.flush()
+    rows = upcoming_events(db_session, ["SATCO", "SATCA", "MONCO", "FRICO"], fri)
+    by = {r["symbol"]: r for r in rows}
+    assert by["SATCO"]["trading_days_away"] == 0
+    assert by["SATCO"]["plain"] == (
+        "Results on Sat 17 Oct (before the next market day) — prices can jump either way"
+    )
+    assert by["SATCA"]["plain"] == "Dividend on Sat 17 Oct (before the next market day)"
+    assert by["MONCO"]["plain"] == "Results on Mon 19 Oct (1 trading day away) — prices can jump either way"
+    assert by["FRICO"]["plain"] == "Dividend today"
+    assert not any("tomorrow" in r["plain"] for r in rows)
 
 
 def test_window_edge_is_trading_days_not_calendar_days(db_session):

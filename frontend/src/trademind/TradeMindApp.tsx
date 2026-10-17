@@ -31,82 +31,10 @@ import Records from './pages/Records'
 import MyHoldings from './pages/MyHoldings'
 import Setup from './pages/Setup'
 import Observatory from './pages/Observatory'
+import { bookOf } from './books'
+import { ADMIN_SECTION, matches, resolveSection, splitLabel, visiblePages, visibleSections } from './menu'
 
-// One final app in five sections (owner-approved design, 2026-10-04): the top
-// row is the section, the row under it the pages of that section. Finance and
-// Classic view are hidden from the menu for now (owner, 2026-10-04); their
-// pages still exist and come back when asked for.
-type Page = { to: string; label: string; end?: boolean }
-type Section = { label: string; pages: Page[]; also?: string[] }
-
-// The top bar is one flat row (see the TradeMind mockup). A section with several pages shows them in a
-// second row; the owner's own pages live in the avatar menu, not in the bar.
-const SECTIONS: Section[] = [
-  {
-    label: 'Dashboard',
-    pages: [{ to: '/trademind/dashboard', label: 'Swing Picks' }],
-  },
-  {
-    label: 'Market',
-    pages: [{ to: '/trademind/market', label: 'Market' }],
-  },
-  {
-    label: 'Swing Picks',
-    pages: [
-      { to: '/trademind/opportunities', label: 'Opportunities' },
-      { to: '/trademind/watchlist', label: 'Watchlist' },
-    ],
-    also: ['/trademind/stock'],
-  },
-  {
-    label: 'My Portfolio',
-    pages: [
-      { to: '/trademind/positions', label: 'Positions' },
-      { to: '/trademind/testing', label: 'Testing' },
-      { to: '/trademind/holdings', label: 'My Holdings' },
-      { to: '/trademind/portfolio', label: 'Overview' },
-    ],
-  },
-  {
-    label: 'Analytics',
-    pages: [
-      { to: '/trademind/records', label: 'Records' },
-      { to: '/trademind/learn', label: 'Learn' },
-    ],
-  },
-  {
-    label: 'Brain Logs',
-    pages: [
-      { to: '/trademind', label: 'Decisions', end: true },
-      { to: '/trademind/ai', label: 'AI' },
-      { to: '/trademind/observatory', label: 'Observatory' },
-    ],
-  },
-]
-
-// Owner only. Reached from the avatar; when one is open, the same pages show in the second row.
-const OWNER_SECTION: Section = {
-  label: 'Settings',
-  pages: [
-    { to: '/trademind/control', label: 'Control' },
-    { to: '/trademind/golive', label: 'Go-live' },
-    { to: '/trademind/risk', label: 'Risk' },
-    { to: '/trademind/system', label: 'System' },
-    { to: '/trademind/setup', label: 'Setup' },
-  ],
-}
-
-function matches(path: string, to: string, end?: boolean): boolean {
-  return end ? path === to || path === `${to}/` : path === to || path.startsWith(`${to}/`)
-}
-
-function sectionFor(path: string): Section {
-  if (OWNER_SECTION.pages.some((p) => matches(path, p.to))) return OWNER_SECTION
-  return (
-    SECTIONS.find((s) => s.pages.some((p) => matches(path, p.to, p.end)) || s.also?.some((a) => matches(path, a))) ??
-    SECTIONS[0]!
-  )
-}
+// The menu lives in ./menu.ts (five sections: Today, Discover, Portfolio, Insights, Admin).
 
 const STATUS_CHIP: Record<ReturnType<typeof useBrainStatus>, { label: string; title: string }> = {
   live: { label: 'Live', title: "Connected to the brain's latest run" },
@@ -121,33 +49,46 @@ type TradeMindAppProps = {
   ownerConsole?: boolean
 }
 
+// A tab name with its Paper/Real tag kept visible (as a small pill on a phone, where the text is shortened).
+function TabLabel({ label }: { label: string }) {
+  const { text, tag } = splitLabel(label)
+  if (!tag) return <>{label}</>
+  return (
+    <>
+      {text}{' '}
+      <span className={`tm-tabtag tm-tabtag-${tag.toLowerCase()}`}>
+        <i>(</i>
+        {tag}
+        <i>)</i>
+      </span>
+    </>
+  )
+}
+
 export default function TradeMindApp({ ownerConsole = false }: TradeMindAppProps) {
   const status = useBrainStatus()
   const latest = useLatestRun()
-  const broker = useQuery({ queryKey: ['status'], queryFn: api.status, enabled: ownerConsole })
+  // Only the account named in REAL_ACCOUNT_USERS may see the real Zerodha tab (the server enforces it too).
   const { canSeeRealAccount } = usePlan()
-  const visibleSections = SECTIONS.map((s) => {
-    if (ownerConsole && !canSeeRealAccount && s.label === 'My Portfolio') {
-      return { ...s, pages: s.pages.filter((p) => p.to !== '/trademind/holdings') }
-    }
-    if (!ownerConsole && s.label === 'My Portfolio') {
-      return {
-        ...s,
-        pages: s.pages.filter((p) => p.to !== '/trademind/holdings' && p.to !== '/trademind/testing'),
-      }
-    }
-    if (!ownerConsole && s.label === 'Swing Picks') {
-      return { ...s, pages: s.pages.filter((p) => p.to !== '/trademind/watchlist') }
-    }
-    if (!ownerConsole && s.label === 'Brain Logs') {
-      return { ...s, pages: s.pages.filter((p) => p.to !== '/trademind/observatory') }
-    }
-    return s
-  })
   const location = useLocation()
-  const found = sectionFor(location.pathname)
+  const book = bookOf(location.pathname)
+  // Also read for everyone on a Portfolio screen, so the Paper strip can warn a non-owner if the server is ever not
+  // in paper mode. Everything else that uses it stays owner-only (each use checks ownerConsole).
+  const broker = useQuery({ queryKey: ['status'], queryFn: api.status, enabled: ownerConsole || book != null })
+  const sections = visibleSections(ownerConsole)
+  const section = resolveSection(location.pathname, ownerConsole)
   // The row under the bar lists only pages this account can open.
-  const section = visibleSections.find((s) => s.label === found.label) ?? found
+  // Testing is left out of the row while paper testing is off; its URL is still routed (see the testing Route).
+  const testingOn = broker.data?.paper_tester_enabled !== false
+  const pages = visiblePages(section, ownerConsole, { testingOn, realAccount: canSeeRealAccount })
+  // One strip per Portfolio screen this viewer may open (a non-owner on an owner-only URL is being redirected, so
+  // no Real strip flashes first). Testing is always paper money, so it never gets the real-money warning.
+  const showBook = book != null && visiblePages(section, ownerConsole, { realAccount: canSeeRealAccount }).some((p) => matches(location.pathname, p.to))
+  const paperButNotPaper =
+    book?.kind === 'paper' &&
+    !matches(location.pathname, '/trademind/testing') &&
+    broker.data != null &&
+    broker.data.trading_mode !== 'paper'
   const [menuOpen, setMenuOpen] = useState(false)
   useEffect(() => setMenuOpen(false), [location.pathname])
   useEffect(() => {
@@ -176,8 +117,13 @@ export default function TradeMindApp({ ownerConsole = false }: TradeMindAppProps
           TradeMind
         </Link>
         <nav className="tm-nav" aria-label="Sections">
-          {visibleSections.map((sec) => (
-            <Link key={sec.label} to={sec.pages[0]!.to} className={sec.label === section.label ? 'active' : ''}>
+          {sections.map((sec) => (
+            <Link
+              key={sec.id}
+              to={visiblePages(sec, ownerConsole, { realAccount: canSeeRealAccount })[0]!.to}
+              className={sec.id === section.id ? 'active' : ''}
+              data-testid={`nav-${sec.id}`}
+            >
               {sec.label}
             </Link>
           ))}
@@ -216,7 +162,7 @@ export default function TradeMindApp({ ownerConsole = false }: TradeMindAppProps
               </button>
               {menuOpen && (
                 <div className="tm-menu-list" role="menu">
-                  {OWNER_SECTION.pages.map((pg) => (
+                  {ADMIN_SECTION.pages.map((pg) => (
                     <Link key={pg.to} to={pg.to} role="menuitem">
                       {pg.label}
                     </Link>
@@ -241,14 +187,25 @@ export default function TradeMindApp({ ownerConsole = false }: TradeMindAppProps
           </button>
         </div>
       </header>
-      {section.pages.length > 1 && (
-        <nav className="tm-subnav" aria-label={`${section.label} pages`}>
-          {section.pages.map((pg) => (
+      {pages.length > 1 && (
+        <nav className="tm-subnav" aria-label={`${section.label} pages`} data-testid="subnav">
+          {pages.map((pg) => (
             <NavLink key={pg.to} to={pg.to} end={pg.end} className={({ isActive }) => (isActive ? 'active' : '')}>
-              {pg.label}
+              <TabLabel label={pg.label} />
             </NavLink>
           ))}
         </nav>
+      )}
+      {book && showBook && (
+        <div className={`tm-bookstrip tm-bookstrip-${book.kind}`} data-testid="book-strip" data-book={book.kind}>
+          <span className="tm-booktag">{book.kind === 'real' ? 'Real' : 'Paper'}</span>
+          <span>
+            <strong>{book.name}.</strong> {book.note}
+            {paperButNotPaper && (
+              <strong className="tm-neg"> Warning: the server is not in paper mode, so these figures may be real money.</strong>
+            )}
+          </span>
+        </div>
       )}
 
       {/* Rendered outside any parent <Route>, so the paths are anchored here. */}

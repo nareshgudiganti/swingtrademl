@@ -112,7 +112,7 @@ export default function Portfolio() {
   return (
     <div className="tm-page tm-grid">
       <div className="tm-grid tm-cols-3">
-        <Card glow className="tm-span-2" title="Portfolio Overview">
+        <Card glow className="tm-span-2" title="Portfolio Overview" sub="Paper figures: the bot's own practice book">
           {summary.isLoading && <p className="tm-dim">Loading…</p>}
           {summary.isError && <p className="tm-dim">Could not load your portfolio value right now.</p>}
           {summary.data && (

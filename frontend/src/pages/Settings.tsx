@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 
-import { ApiError, api, clearToken, setToken } from '../api/client'
+import { api, ApiError, clearToken, setToken } from '../api/client'
 import { ErrorBox, Loading } from '../components/Loading'
 import SymbolPicker from '../components/SymbolPicker'
 import { ClockIcon, PlugIcon, SendIcon, WarningIcon } from '../components/icons'

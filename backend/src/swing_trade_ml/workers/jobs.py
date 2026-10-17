@@ -597,7 +597,8 @@ def job_score_experiments() -> None:
     except Exception as exc:  # noqa: BLE001
         with contextlib.suppress(Exception):
             _record_experiment_failure(str(exc))
-        _report_error("score_experiments", exc)
+        with contextlib.suppress(Exception):
+            _report_error("score_experiments", exc)
 
 
 def job_sync_instruments() -> None:

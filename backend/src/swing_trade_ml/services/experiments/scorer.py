@@ -31,7 +31,7 @@ from swing_trade_ml.db.models.market import Candle, Instrument
 
 from . import rules
 from .ledger import active_selections
-from .protocol import PROTOCOL_V1, Protocol, ensure_owner_cohort
+from .protocol import PROTOCOL_V1, Protocol, ensure_owner_cohort, protocol_from_row
 
 log = get_logger(__name__)
 IST = ZoneInfo("Asia/Kolkata")
@@ -94,41 +94,80 @@ def _sessions(start: date, end: date) -> list[date]:
 
 
 class _Benchmarks:
-    """NIFTY and equal-weight-universe returns from one entry open to one exit close, cached per window."""
+    """NIFTY and equal-weight-universe returns from one entry open to one end close, cached per window.
 
-    def __init__(self, db: Session, index_id: int | None):
-        self.db, self.index_id, self.cache = db, index_id, {}
+    The universe gets the same data checks as a pick: a stock is left out (and counted in `dropped`) when it
+    misses a session in the window, jumps more than `big_gap` in a day, or has a split/bonus in the window.
+    Otherwise an unadjusted split would read as a -50% "return" and flatter every pick."""
 
-    def _price_on(self, d: date, column):
-        return dict(
-            self.db.execute(
-                select(Candle.instrument_id, column).where(
-                    Candle.interval == "day",
-                    Candle.ts >= _ist_midnight(d),
-                    Candle.ts < _ist_midnight(d + timedelta(days=1)),
+    def __init__(self, db: Session, index_id: int | None, protocol: Protocol):
+        self.db, self.index_id, self.protocol, self.cache = db, index_id, protocol, {}
+        self.equities = dict(
+            db.execute(
+                select(Instrument.id, Instrument.tradingsymbol).where(
+                    func.coalesce(Instrument.segment, "") != "INDICES",
+                    Instrument.tradingsymbol != settings.BENCHMARK_INDEX_SYMBOL,
+                    or_(Instrument.instrument_type.is_(None), Instrument.instrument_type == "EQ"),
                 )
             ).all()
         )
 
-    def get(self, entry: date, end: date) -> tuple[float | None, float | None, int]:
+    def get(self, entry: date, end: date) -> tuple[float | None, float | None, int, int]:
         key = (entry, end)
-        if key not in self.cache:
-            opens, closes = self._price_on(entry, Candle.open), self._price_on(end, Candle.close)
-            nifty = None
-            if self.index_id is not None and self.index_id in opens and self.index_id in closes:
-                nifty = closes[self.index_id] / opens[self.index_id] - 1
-            equities = set(
-                self.db.scalars(
-                    select(Instrument.id).where(
-                        func.coalesce(Instrument.segment, "") != "INDICES",
-                        Instrument.tradingsymbol != settings.BENCHMARK_INDEX_SYMBOL,
-                        or_(Instrument.instrument_type.is_(None), Instrument.instrument_type == "EQ"),
-                    )
+        if key in self.cache:
+            return self.cache[key]
+        rows = self.db.execute(
+            select(Candle.instrument_id, Candle.ts, Candle.open, Candle.close).where(
+                Candle.interval == "day",
+                Candle.ts >= _ist_midnight(entry),
+                Candle.ts < _ist_midnight(end + timedelta(days=1)),
+            )
+        ).all()
+        by_inst: dict[int, dict[date, tuple[float, float]]] = {}
+        for iid, ts, o, c in rows:
+            by_inst.setdefault(iid, {})[ts.astimezone(IST).date()] = (o, c)
+        nifty = None
+        idx = by_inst.get(self.index_id) if self.index_id is not None else None
+        if idx and entry in idx and end in idx:
+            nifty = idx[end][1] / idx[entry][0] - 1
+        sessions = _sessions(entry, end)
+        events = {
+            e.symbol.upper()
+            for e in self.db.scalars(
+                select(UpcomingEvent).where(
+                    UpcomingEvent.kind == "corporate_action",
+                    UpcomingEvent.event_date >= entry,
+                    UpcomingEvent.event_date <= end,
                 )
             )
-            rets = [closes[i] / opens[i] - 1 for i in equities if i in opens and i in closes and opens[i] > 0]
-            self.cache[key] = (nifty, fmean(rets) if rets else None, len(rets))
+            if _CORPORATE.search(e.detail or "")
+        }
+        rets, dropped = [], 0
+        for iid, symbol in self.equities.items():
+            bars = by_inst.get(iid)
+            if not bars:
+                continue  # not traded in this window: not part of the universe
+            clean = (
+                all(d in bars for d in sessions)
+                and bars[entry][0] > 0
+                and symbol.upper() not in events
+                and not _big_gap(bars, self.protocol.big_gap)
+            )
+            if clean:
+                rets.append(bars[end][1] / bars[entry][0] - 1)
+            else:
+                dropped += 1
+        self.cache[key] = (nifty, fmean(rets) if rets else None, len(rets), dropped)
         return self.cache[key]
+
+
+def _big_gap(bars: dict[date, tuple[float, float]], limit: float) -> dict | None:
+    ordered = sorted(bars.items())
+    for (_, (_, c0)), (d1, (o1, c1)) in pairwise(ordered):
+        for move in (c1 / c0 - 1, o1 / c0 - 1):
+            if abs(move) > limit:
+                return {"day": d1.isoformat(), "move": round(move, 4)}
+    return None
 
 
 def _flags(db: Session, sel: ExperimentSelection, bars, entry: date, end: date, protocol: Protocol) -> dict:
@@ -136,11 +175,9 @@ def _flags(db: Session, sel: ExperimentSelection, bars, entry: date, end: date, 
     missing = [d.isoformat() for d in _sessions(entry, end) if d not in bars]
     if missing:
         flags["missing_bar"] = missing
-    ordered = sorted(bars.items())
-    for (_, (_, c0)), (d1, (o1, c1)) in pairwise(ordered):
-        for move in (c1 / c0 - 1, o1 / c0 - 1):
-            if abs(move) > protocol.big_gap:
-                flags["big_gap"] = {"day": d1.isoformat(), "move": round(move, 4)}
+    gap = _big_gap(bars, protocol.big_gap)
+    if gap:
+        flags["big_gap"] = gap
     events = db.scalars(
         select(UpcomingEvent).where(
             func.upper(UpcomingEvent.symbol) == sel.symbol_at_entry.upper(),
@@ -177,7 +214,8 @@ def _score_one(db, sel, horizon, protocol, latest, bench) -> dict:
     try:
         exit_day = rules.session_n(entry, horizon)
     except rules.CalendarMissingError as exc:
-        return {**blank, "state": "data_issue", "data_flags": {"holiday_calendar_missing": str(exc)}}
+        # No holiday list yet for the exit's year: wait. It is scored once the list is added, never guessed.
+        return {**blank, "state": "pending", "data_flags": {"holiday_calendar_missing": str(exc)}}
     if latest is None or latest < entry:
         return {**blank, "state": "pending"}
     end = min(exit_day, latest)
@@ -203,7 +241,7 @@ def _score_one(db, sel, horizon, protocol, latest, bench) -> dict:
             "entry_price": entry_bar[0],
             "data_flags": {"price_above_notional": entry_bar[0]},
         }
-    nifty, universe, n_universe = bench.get(entry, last_day)
+    nifty, universe, n_universe, n_dropped = bench.get(entry, last_day)
     return {
         **blank,
         "state": "closed" if closing else "open",
@@ -221,6 +259,7 @@ def _score_one(db, sel, horizon, protocol, latest, bench) -> dict:
         "buy_hold_return": fill.gross_return,
         "excess_vs_nifty": None if nifty is None else fill.net_return - nifty,
         "excess_vs_universe": None if universe is None else fill.net_return - universe,
+        "data_flags": {"universe_dropped": n_dropped} if n_dropped else {},
     }
 
 
@@ -234,9 +273,12 @@ def run(db: Session, *, now: datetime, protocol: Protocol = PROTOCOL_V1) -> RunR
     db.add(job)
     db.flush()
     protocol_row, _ = ensure_owner_cohort(db, protocol)
+    protocol = protocol_from_row(
+        protocol_row
+    )  # score with the rules stored on first use, never today's settings
     index_id = _index_id(db)
     latest = _latest_market_day(db, index_id, now.astimezone(IST).date())
-    bench = _Benchmarks(db, index_id)
+    bench = _Benchmarks(db, index_id, protocol)
     scored = flagged = 0
     for sel in active_selections(db):
         for horizon in protocol.horizons:

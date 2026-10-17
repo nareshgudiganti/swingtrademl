@@ -13,12 +13,12 @@ from sqlalchemy.orm import Session
 from swing_trade_ml.db.models.experiments import ExperimentOutcome, ExperimentSelection
 
 from . import rules
-from .protocol import PROTOCOL_V1, Protocol, ensure_owner_cohort
+from .ledger import active_selections
+from .protocol import PROTOCOL_V1, Protocol, ensure_owner_cohort, protocol_from_row
 
 OWNER_SELECTED_NOTE = (
     "These picks were chosen by hand. Results describe this research experiment only; "
-    "they do not show that any "
-    "AI model works."
+    "they do not show that any AI model works."
 )
 
 
@@ -29,11 +29,14 @@ def _mean(xs):
 
 def build(db: Session, *, today: date, intended: int | None = None, protocol: Protocol = PROTOCOL_V1) -> dict:
     protocol_row, _ = ensure_owner_cohort(db, protocol)
+    protocol = protocol_from_row(protocol_row)
+    active = {s.id for s in active_selections(db)}  # picks replaced by a correction are not reported
     rows = db.execute(
         select(ExperimentOutcome, ExperimentSelection)
         .join(ExperimentSelection, ExperimentSelection.id == ExperimentOutcome.selection_id)
         .where(ExperimentOutcome.protocol_id == protocol_row.id)
     ).all()
+    rows = [(o, s) for o, s in rows if s.id in active]
     if intended is not None:
         rows = [(o, s) for o, s in rows if s.intended_horizon == intended]
     horizons = []
@@ -42,7 +45,9 @@ def build(db: Session, *, today: date, intended: int | None = None, protocol: Pr
         closed = [(o, s) for o, s in mine if o.state == "closed"]
         nets = [o.net_return for o, _ in closed]
         windows = [(s.entry_session, o.exit_session) for o, s in closed]
-        independent = rules.non_overlapping(windows)
+        # Independent samples = distinct entry dates (picks made the same day share one market). The stricter
+        # count of non-overlapping holding windows is shown beside it.
+        independent = len({s.entry_session for _, s in closed})
         enough = independent >= protocol.min_independent_samples and today >= date.fromisoformat(
             protocol.earliest_verdict
         )
@@ -57,8 +62,9 @@ def build(db: Session, *, today: date, intended: int | None = None, protocol: Pr
                 "pending": sum(o.state == "pending" for o, _ in mine),
                 "data_issues": sum(o.state == "data_issue" for o, _ in mine),
                 "void": sum(o.state == "void" for o, _ in mine),
-                "independent_entry_dates": len({s.entry_session for _, s in closed}),
-                "non_overlapping": independent,
+                "independent_samples": independent,
+                "independent_entry_dates": independent,
+                "non_overlapping": rules.non_overlapping(windows),
                 "minimum_needed": protocol.min_independent_samples,
                 "period": {
                     "from": min((s.entry_session for _, s in closed), default=None),
@@ -85,5 +91,14 @@ def build(db: Session, *, today: date, intended: int | None = None, protocol: Pr
             "Costs use the app's paper cost model as frozen on the protocol date.",
             "Prices are not adjusted for splits or bonuses; such windows are flagged and not scored.",
             "Picks whose holding periods overlap are not independent; see non_overlapping.",
+            "Pick returns are after costs and slippage; NIFTY and the average stock are measured "
+            "before costs, so the gaps shown are slightly harsh on the picks.",
+            "Picks with a data issue (missing price, a one-day jump over 30%, a split or bonus) or that "
+            "could not be simulated are left out of every average; the counts are shown. The jump rule "
+            "also leaves out genuine crashes and spikes.",
+            "Same-stock buy-and-hold is the same as the gross return under time-only exits, so it is "
+            "not a separate benchmark here.",
+            "The average stock leaves out stocks with missing prices, big jumps or a split/bonus in the "
+            "window.",
         ],
     }

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import exists, func, select
+from sqlalchemy import exists, func, select, text
 from sqlalchemy.orm import Session, aliased
 
 from swing_trade_ml.core.config import settings
@@ -16,7 +16,7 @@ from swing_trade_ml.db.models.experiments import ExperimentSelection
 from swing_trade_ml.db.models.market import Candle, Instrument
 
 from . import rules
-from .protocol import PROTOCOL_V1, Protocol, ensure_owner_cohort
+from .protocol import PROTOCOL_V1, Protocol, ensure_owner_cohort, protocol_from_row
 
 VALID_HORIZONS = (5, 30)
 
@@ -45,8 +45,9 @@ def _has_prices(db: Session, instrument_id: int) -> bool:
 
 
 def _superseded():
+    """Replaced by an ACCEPTED correction. A refused correction (typo, duplicate) leaves the original."""
     newer = aliased(ExperimentSelection)
-    return exists().where(newer.supersedes_id == ExperimentSelection.id)
+    return exists().where(newer.supersedes_id == ExperimentSelection.id, newer.status == "accepted")
 
 
 def active_selections(db: Session) -> list[ExperimentSelection]:
@@ -74,7 +75,11 @@ def _duplicate(
     ):
         if ignore_id is not None and sel.id == ignore_id:
             continue
-        if entry <= rules.session_n(sel.entry_session, protocol.dedupe_sessions):
+        try:
+            window_end = rules.session_n(sel.entry_session, protocol.dedupe_sessions)
+        except rules.CalendarMissingError:
+            return True  # cannot tell when the earlier window ends: treat it as still open
+        if entry <= window_end:
             return True
     return False
 
@@ -98,7 +103,8 @@ def submit(
     supersedes_id: int | None = None,
     entry_override=None,
 ) -> ExperimentSelection:
-    _, cohort = ensure_owner_cohort(db, protocol)
+    stored, cohort = ensure_owner_cohort(db, protocol)
+    protocol = protocol_from_row(stored)  # the frozen rules, not today's settings
     symbol = (symbol or "").strip().upper()
     base = {
         "cohort_id": cohort.id,
@@ -117,7 +123,8 @@ def submit(
         return reject(f"Horizon must be one of {VALID_HORIZONS} trading days.")
     try:
         entry = entry_override or rules.entry_session(now, protocol.cutoff_ist)
-        rules.session_n(entry, max(protocol.horizons))
+        # Only the shortest horizon must be countable now; a longer one waits for its holiday list (scorer).
+        rules.session_n(entry, min(protocol.horizons))
     except rules.CalendarMissingError as exc:
         return reject(str(exc))
     if not symbol:
@@ -133,6 +140,8 @@ def submit(
             entry_session=entry,
             instrument_id=inst.id,
         )
+    # One pick per stock at a time, even when two requests arrive together: lock this (cohort, stock) pair.
+    db.execute(text("SELECT pg_advisory_xact_lock(:c, :i)"), {"c": cohort.id, "i": inst.id})
     if _duplicate(db, cohort.id, inst.id, entry, protocol, ignore_id=supersedes_id):
         return reject(
             f"Already picked within the last {protocol.dedupe_sessions} sessions; one active pick per stock.",
@@ -158,10 +167,15 @@ def correct(
     """A new row that replaces an accepted pick, allowed only before its entry session's cutoff.
 
     The correction keeps the original entry session, so it cannot move a pick to a better day."""
+    stored, _ = ensure_owner_cohort(db, protocol)
+    protocol = protocol_from_row(stored)
     original = db.get(ExperimentSelection, selection_id)
     if original is None or original.status != "accepted":
         raise NotFoundError("No accepted pick with that id.")
-    if db.scalar(select(exists().where(ExperimentSelection.supersedes_id == selection_id))):
+    already = exists().where(
+        ExperimentSelection.supersedes_id == selection_id, ExperimentSelection.status == "accepted"
+    )
+    if db.scalar(select(already)):
         raise NotFoundError("That pick has already been corrected; correct the newest one.")
     if now >= rules.cutoff_moment(original.entry_session, protocol.cutoff_ist):
         raise TooLateError("The entry session's 09:00 IST cutoff has passed; this pick can no longer change.")

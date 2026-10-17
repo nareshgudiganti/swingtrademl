@@ -101,8 +101,11 @@ def list_outcomes(db: DbSession, horizon: int | None = Query(None)) -> list[dict
     )
     if horizon is not None:
         q = q.where(ExperimentOutcome.horizon == horizon)
+    active = {s.id for s in ledger.active_selections(db)}  # replaced picks are not shown
     out = []
     for o, s in db.execute(q).all():
+        if s.id not in active:
+            continue
         out.append(
             {
                 "selection_id": s.id,

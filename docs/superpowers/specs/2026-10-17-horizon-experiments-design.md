@@ -99,7 +99,7 @@ The migration is one new revision holding only these tables. It has no link to o
    Each row is an upsert keyed on (selection, horizon, protocol), so a re-run gives the same result.
 4. **Report.** Per horizon and per cohort, the report shows:
    - the number of picks;
-   - independent samples (picks whose holding periods don't overlap, and distinct entry dates);
+   - independent samples, counted as distinct entry dates (picks made the same day share one market), with the stricter count of non-overlapping holding windows shown beside it;
    - the period covered;
    - mean and median net return, and return per day held;
    - excess return against each benchmark;
@@ -165,6 +165,15 @@ The migration is one new revision holding only these tables. It has no link to o
 
 1. **Money per pick** (proposed ₹1,00,000) and **slippage** (proposed 0.10% per side).
 2. **Cutoff time** (proposed 09:00 IST) and the duplicate rule in section 2.
-3. **Review date and minimum sample.** Proposed: no verdict before 30 independent samples per horizon, and not before 31 Dec 2026. Too few samples means "not proven".
+3. **Review date and minimum sample.** No verdict before 30 independent samples (distinct entry dates) per horizon, and not before 31 Dec 2026. Too few samples means "not proven". (Counting non-overlapping windows instead would need about 7 months for 5 days and over 3 years for 30 days.)
 4. **CLAUDE.md research exception** for 30 days, limited to the experiment ledger.
 5. **P2 portfolio rules:** starting cash and maximum positions per cohort.
+
+## 10. Changes after the independent review (17 Oct)
+- A correction that is refused (typo, duplicate) no longer hides the original pick.
+- The protocol stored on first use is what scoring and pick rules use; later changes to the app's cost settings never move an experiment.
+- A horizon whose exit falls in a year with no NSE holiday list stays pending (with a flag) and is scored once the list is added; only the 5-day exit must be countable for a pick to be accepted.
+- Picks replaced by a correction are left out of the report and the outcomes list.
+- The average-stock benchmark gets the same data checks as a pick (missing price, one-day jump over 30%, split or bonus); the number left out is recorded.
+- The report says plainly what it compares (picks after costs, benchmarks before costs) and what it leaves out.
+- One pick per stock holds even for two requests at the same moment (a per-stock lock).

@@ -98,3 +98,14 @@ def ensure_owner_cohort(
         db.add(cohort)
         db.flush()
     return row, cohort
+
+
+def protocol_from_row(row: ExperimentProtocol) -> Protocol:
+    """The protocol exactly as stored on first use. Scoring and pick rules always come from here, so a later
+    change to the app's cost settings (or to PROTOCOL_V1 in code) never moves an existing experiment; a real
+    change of rules needs a new protocol code."""
+    p = dict(row.params)
+    p["costs"] = Costs(**p["costs"])
+    for key in ("horizons", "benchmarks"):
+        p[key] = tuple(p[key])
+    return Protocol(**p)

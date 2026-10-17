@@ -29,8 +29,10 @@ def test_flat_charge_only_on_sells():
 
 def test_component_sum_is_not_below_config():
     # Config may round up, never down (the cautious direction).
-    assert settings.PAPER_TAX_BPS_BUY >= 10 + 0.297 + 0.01 + 1.5 + 0.055
-    assert settings.PAPER_TAX_BPS_SELL >= 10 + 0.297 + 0.01 + 0.055
+    exchange, sebi = 0.307, 0.01  # bps, NSE equity rate in force today
+    gst = 0.18 * (exchange + sebi)  # 18% GST on exchange + SEBI fees (brokerage is 0)
+    assert 10 + exchange + sebi + 1.5 + gst <= settings.PAPER_TAX_BPS_BUY
+    assert 10 + exchange + sebi + gst <= settings.PAPER_TAX_BPS_SELL
 
 
 def test_real_report_uses_same_cost_model(monkeypatch):

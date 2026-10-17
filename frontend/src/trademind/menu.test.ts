@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import appSource from './TradeMindApp.tsx?raw'
-import { ADMIN_SECTION, SECTIONS, findSection, resolveSection, visiblePages, visibleSections } from './menu'
+import { ADMIN_SECTION, SECTIONS, findSection, resolveSection, splitLabel, visiblePages, visibleSections } from './menu'
 
 // Every TradeMind path that existed before the redesign, and the section it now belongs to.
 const EXPECTED: Record<string, string> = {
@@ -135,5 +135,39 @@ describe('owner-only pages are guarded by their route, not only hidden from the 
     expect(block, `no <Route path="${key}"> in TradeMindApp.tsx`).toBeDefined()
     expect(block).toMatch(/ownerConsole/)
     expect(block).toMatch(/<Navigate /)
+  })
+})
+
+describe('Phase 2: the four Portfolio tabs', () => {
+  const portfolio = SECTIONS.find((s) => s.id === 'portfolio')!
+
+  it('use the approved names, in order, on the same URLs', () => {
+    expect(portfolio.pages.map((p) => [p.to, p.label])).toEqual([
+      ['/trademind/positions', 'Bot (Paper)'],
+      ['/trademind/testing', 'Testing (Paper)'],
+      ['/trademind/holdings', 'My Zerodha (Real)'],
+      ['/trademind/portfolio', 'Paper Overview'],
+    ])
+  })
+
+  it('keep Testing and My Zerodha owner-only', () => {
+    expect(visiblePages(portfolio, false).map((p) => p.to)).toEqual(['/trademind/positions', '/trademind/portfolio'])
+  })
+
+  it('hide Testing from the menu when paper testing is off, and only then', () => {
+    expect(visiblePages(portfolio, true, { testingOn: false }).map((p) => p.to)).not.toContain('/trademind/testing')
+    expect(visiblePages(portfolio, true, { testingOn: true }).map((p) => p.to)).toContain('/trademind/testing')
+    expect(visiblePages(portfolio, true).map((p) => p.to)).toContain('/trademind/testing')
+  })
+
+  it('still files /trademind/testing under Portfolio when it is hidden (the direct URL keeps working)', () => {
+    expect(findSection('/trademind/testing')?.id).toBe('portfolio')
+    expect(resolveSection('/trademind/testing', true).id).toBe('portfolio')
+  })
+
+  it('splits a tab name into its text and its Paper/Real tag', () => {
+    expect(splitLabel('My Zerodha (Real)')).toEqual({ text: 'My Zerodha', tag: 'Real' })
+    expect(splitLabel('Bot (Paper)')).toEqual({ text: 'Bot', tag: 'Paper' })
+    expect(splitLabel('Paper Overview')).toEqual({ text: 'Paper Overview', tag: undefined })
   })
 })

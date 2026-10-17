@@ -47,3 +47,21 @@ export interface StockBriefData {
   q5_events: BriefAnswer & { events?: EventItem[] }
   q6_evidence: BriefAnswer & { claim?: string; claim_label?: string }
 }
+
+export interface EvidenceSummary {
+  paper_label: string
+  bot: {
+    since: string | null
+    profit_booked: number
+    profit_open: number
+    costs_paid: number
+    worst_fall_from_peak_pct: number | null
+    finished_trades: number
+    win_rate_pct: number | null
+    nifty_same_period_pct: number | null
+    every_stock_same_period_pct: number | null
+    enough_trades: boolean
+    note: string
+  }
+  brain_trial: { since: string; finished: number; needed: number; sealed: boolean; sealed_note: string }
+}

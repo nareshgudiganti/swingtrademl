@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 
 import { BASE_URL, getPreviewPlan, getToken } from '../../api/client'
-import type { EventItem, StockBriefData } from './types'
+import type { EventItem, EvidenceSummary, StockBriefData } from './types'
 
 /** Read-only GET. Same headers as client.ts's private authHeaders (which client.ts does not export). */
 async function getJson<T>(path: string): Promise<T> {
@@ -40,5 +40,12 @@ export function useUpcomingEvents(scope: 'watchlist' | 'held' | 'all', symbol?: 
   return useQuery({
     queryKey: ['beginner', 'events', scope, symbol ?? null],
     queryFn: () => getJson<EventItem[]>(`/beginner/events${q}`),
+  })
+}
+
+export function useEvidence() {
+  return useQuery({
+    queryKey: ['beginner', 'evidence'],
+    queryFn: () => getJson<EvidenceSummary>('/beginner/evidence'),
   })
 }

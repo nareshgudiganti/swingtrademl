@@ -22,6 +22,13 @@ from swing_trade_ml.db.models.feeds import (
     TradingRestriction,
     UpcomingEvent,
 )
+from swing_trade_ml.db.models.experiments import (
+    ExperimentCohort,
+    ExperimentJobRun,
+    ExperimentOutcome,
+    ExperimentProtocol,
+    ExperimentSelection,
+)
 from swing_trade_ml.db.models.fills import BrokerFill
 from swing_trade_ml.db.models.market import (
     Candle,
@@ -46,6 +53,11 @@ from swing_trade_ml.db.models.trading import (
 )
 
 __all__ = [
+    "ExperimentCohort",
+    "ExperimentJobRun",
+    "ExperimentOutcome",
+    "ExperimentProtocol",
+    "ExperimentSelection",
     "BlockDeal",
     "BrainAlert",
     "BrainApproval",

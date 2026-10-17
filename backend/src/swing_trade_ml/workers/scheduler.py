@@ -193,6 +193,14 @@ def start_scheduler() -> None:
         replace_existing=True,
     )
     scheduler.add_job(
+        jobs.job_score_experiments,
+        # Research ledger (5- and 30-day picks). After the candles, the brain's nightly run and the evening
+        # feed jobs, so it never competes with them; it holds its own advisory lock and never raises.
+        CronTrigger(day_of_week=WEEKDAYS, hour=20, minute=40, timezone=IST),
+        id="score_experiments",
+        replace_existing=True,
+    )
+    scheduler.add_job(
         jobs.job_sync_mutual_fund_navs,
         CronTrigger(day_of_week=WEEKDAYS, hour=21, minute=30, timezone=IST),
         id="sync_mutual_fund_navs",

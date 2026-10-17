@@ -15,6 +15,10 @@
     "picks": { "status": "keep", "task": "oa10", "note": "kept while plans are enabled; /home redirects to Today only while plans are disabled" },
     "topPicks": { "status": "keep", "task": "oa10" }
   },
+  "Settings": {
+    "changePassword": { "status": "keep", "note": "P0 security: change password lives on the classic Settings page (/settings, reachable by URL). Needs a TradeMind home before Phase 6 deletion." },
+    "logoutEverywhere": { "status": "keep", "note": "P0 security: sign out everywhere lives on the classic Settings page (/settings, reachable by URL). Needs a TradeMind home before Phase 6 deletion." }
+  },
   "PlansManager": { "*": { "status": "planned", "task": "oa3", "note": "Admin > Plans" } },
   "Strategies": {
     "createStrategy": { "status": "v2", "decision": "owner 2026-10-04: no create/delete/train until v2" },

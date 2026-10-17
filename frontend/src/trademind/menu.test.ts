@@ -154,6 +154,12 @@ describe('Phase 2: the four Portfolio tabs', () => {
     expect(visiblePages(portfolio, false).map((p) => p.to)).toEqual(['/trademind/positions', '/trademind/portfolio'])
   })
 
+  it('hide My Zerodha (Real) from an owner who is not the real-account user', () => {
+    expect(visiblePages(portfolio, true, { realAccount: false }).map((p) => p.to)).not.toContain('/trademind/holdings')
+    expect(visiblePages(portfolio, true, { realAccount: true }).map((p) => p.to)).toContain('/trademind/holdings')
+    expect(visiblePages(portfolio, false, { realAccount: true }).map((p) => p.to)).not.toContain('/trademind/holdings')
+  })
+
   it('hide Testing from the menu when paper testing is off, and only then', () => {
     expect(visiblePages(portfolio, true, { testingOn: false }).map((p) => p.to)).not.toContain('/trademind/testing')
     expect(visiblePages(portfolio, true, { testingOn: true }).map((p) => p.to)).toContain('/trademind/testing')

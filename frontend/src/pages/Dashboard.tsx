@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 
 import { api } from '../api/client'
+import { usePlan } from '../lib/plan'
 import type { BuyListRow, StrategySignal } from '../api/types'
 import { Empty, ErrorBox, Loading } from '../components/Loading'
 import Modal from '../components/Modal'
@@ -155,7 +156,12 @@ export default function Dashboard() {
   // book=bot, so while the bot holds nothing this page had no sight of the
   // hand-bought shares at all — and it is those that generate the stop-loss
   // messages, because the bot may only flag them, never sell them.
-  const realPositions = useQuery({ queryKey: ['realPositions'], queryFn: api.realPositions })
+  const { canSeeRealAccount } = usePlan()
+  const realPositions = useQuery({
+    queryKey: ['realPositions'],
+    queryFn: api.realPositions,
+    enabled: canSeeRealAccount, // private: only the named person's account has it
+  })
   const buyList = useQuery({ queryKey: ['buyList'], queryFn: api.buyList })
   const regime = useQuery({ queryKey: ['marketRegime'], queryFn: api.marketRegime })
   const status = useQuery({ queryKey: ['status'], queryFn: api.status, refetchInterval: 30_000 })

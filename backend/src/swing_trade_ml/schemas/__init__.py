@@ -91,10 +91,19 @@ class SignupRequest(BaseModel):
         return v.strip() if isinstance(v, str) else v
 
 
+class PasswordChangeRequest(BaseModel):
+    current_password: str
+    new_password: str = Field(..., min_length=8)
+
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     expires_in_minutes: int
+
+
+class LoginCodeExchange(BaseModel):
+    code: str = Field(..., min_length=10, max_length=128)
 
 
 class CurrentUserOut(BaseModel):
@@ -104,6 +113,7 @@ class CurrentUserOut(BaseModel):
     email: str | None
     auth_provider: str
     is_superuser: bool
+    role: str
     plan: str
 
 

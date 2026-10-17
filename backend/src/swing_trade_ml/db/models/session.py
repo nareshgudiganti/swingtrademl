@@ -5,10 +5,15 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, Boolean, DateTime, Integer, String
+from sqlalchemy import JSON, Boolean, DateTime, Integer, String, event, inspect
 from sqlalchemy.orm import Mapped, mapped_column
 
 from swing_trade_ml.db.base import Base, TimestampMixin
+
+#: What a login may do (api/deps.py Principal). owner: everything, as
+#: is_superuser meant before. tester: the manual paper-testing book only.
+#: member: what their plan opens, never a write outside their own sign-in.
+ROLES = ("owner", "tester", "member")
 
 
 class User(Base, TimestampMixin):
@@ -39,9 +44,47 @@ class User(Base, TimestampMixin):
     # "free" | "pro" — see core/plans.py. Ignored for superusers,
     # who always see everything.
     plan: Mapped[str] = mapped_column(String(16), default="free", server_default="free")
+    # See ROLES. is_superuser is kept equal to (role == "owner") on every
+    # write (listeners below), so the frontend and an older build at rollback
+    # still read the same answer.
+    role: Mapped[str] = mapped_column(String(12), default=None, server_default="member")
+    # Part of every session token ("tv"). Bumping it ends every session this
+    # account has open: password change, "sign out everywhere", disable, role change.
+    token_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    # Consecutive wrong passwords; reset on success. See endpoints/auth.py login.
+    failed_login_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     def __repr__(self) -> str:
         return f"<User {self.username}>"
+
+
+def _check_role(role: str) -> str:
+    if role not in ROLES:
+        raise ValueError(f"Unknown role {role!r}; expected one of {', '.join(ROLES)}")
+    return role
+
+
+@event.listens_for(User, "before_insert")
+def _role_on_insert(_mapper, _conn, user: User) -> None:
+    if user.role is None:
+        user.role = "owner" if user.is_superuser else "member"
+    _check_role(user.role)
+    user.is_superuser = user.role == "owner"
+    user.token_version = user.token_version or 0
+    user.failed_login_count = user.failed_login_count or 0
+
+
+@event.listens_for(User, "before_update")
+def _role_on_update(_mapper, _conn, user: User) -> None:
+    state = inspect(user)
+    if state.attrs.role.history.has_changes():
+        _check_role(user.role)
+        user.is_superuser = user.role == "owner"
+        user.token_version = (user.token_version or 0) + 1
+    elif state.attrs.is_superuser.history.has_changes():
+        user.role = "owner" if user.is_superuser else ("member" if user.role == "owner" else user.role)
+        user.token_version = (user.token_version or 0) + 1
 
 
 class PlanSettings(Base, TimestampMixin):

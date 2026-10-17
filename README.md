@@ -289,7 +289,7 @@ swingtrade sync-instruments           # refresh instrument master
 swingtrade backfill --days 1825       # historical candles
 swingtrade train --algorithm lightgbm --activate
 swingtrade scan                       # run active strategies now
-swingtrade create-user --username admin --password secret
+swingtrade create-user --username admin --password secret --role owner
 
 # Tests — the integration tests (test_ml_predict_endpoint.py, test_engine.py)
 # need a database of their own, created once against the same local Postgres

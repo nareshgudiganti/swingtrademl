@@ -1,5 +1,6 @@
 """Google sign-in, end to end with Google itself faked: the callback must send
-the browser back to the app with a token, and that token must work."""
+the browser back to the app with a one-time code, and that code must
+become a working session."""
 
 from __future__ import annotations
 
@@ -41,8 +42,10 @@ def _callback(client) -> tuple[str, str]:
     resp = client.get(f"/api/v1/auth/google/callback?code=c&state={state}", follow_redirects=False)
     assert resp.status_code in (302, 307), resp.text
     location = resp.headers["location"]
-    token = parse_qs(urlparse(location).query)["token"][0]
-    return location, token
+    code = parse_qs(urlparse(location).query)["login_code"][0]
+    exchanged = client.post("/api/v1/auth/google/exchange", json={"code": code})
+    assert exchanged.status_code == 200, exchanged.text
+    return location, exchanged.json()["access_token"]
 
 
 def test_google_callback_redirects_to_the_configured_app_with_a_working_token(client, monkeypatch):
@@ -51,7 +54,7 @@ def test_google_callback_redirects_to_the_configured_app_with_a_working_token(cl
 
     location, token = _callback(client)
 
-    assert location.startswith("https://swingtrademl.com/?token=")
+    assert location.startswith("https://swingtrademl.com/?login_code=")
     me = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
     assert me.status_code == 200, me.text
     assert me.json()["email"] == OWNER_EMAIL
@@ -59,7 +62,9 @@ def test_google_callback_redirects_to_the_configured_app_with_a_working_token(cl
     assert plan.status_code == 200, plan.text
 
 
-def test_without_frontend_url_the_browser_goes_back_to_the_site_that_handled_the_callback(client, monkeypatch):
+def test_without_frontend_url_the_browser_goes_back_to_the_site_that_handled_the_callback(
+    client, monkeypatch
+):
     """The production trap: GOOGLE_REDIRECT_URL is set to the real site but
     FRONTEND_URL is left at its localhost default, so the token was sent to
     http://localhost:5173 and the app on the real site never saw it."""
@@ -71,7 +76,7 @@ def test_without_frontend_url_the_browser_goes_back_to_the_site_that_handled_the
 
     location, _ = _callback(client)
 
-    assert location.startswith("https://swingtrademl.com/?token=")
+    assert location.startswith("https://swingtrademl.com/?login_code=")
 
 
 def test_an_explicit_frontend_url_always_wins(client, monkeypatch):
@@ -83,16 +88,14 @@ def test_an_explicit_frontend_url_always_wins(client, monkeypatch):
 
     location, _ = _callback(client)
 
-    assert location.startswith("https://app.example.org/?token=")
+    assert location.startswith("https://app.example.org/?login_code=")
 
 
 def test_local_development_still_goes_to_localhost(client, monkeypatch):
     _fake_google(monkeypatch)
     monkeypatch.setattr(settings, "FRONTEND_URL", "http://localhost:5173")
-    monkeypatch.setattr(
-        settings, "GOOGLE_REDIRECT_URL", "http://localhost:8000/api/v1/auth/google/callback"
-    )
+    monkeypatch.setattr(settings, "GOOGLE_REDIRECT_URL", "http://localhost:8000/api/v1/auth/google/callback")
 
     location, _ = _callback(client)
 
-    assert location.startswith("http://localhost:5173/?token=")
+    assert location.startswith("http://localhost:5173/?login_code=")

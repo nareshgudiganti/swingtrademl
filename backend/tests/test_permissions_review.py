@@ -27,6 +27,9 @@ _SIGN_IN = "signing in cannot require being signed in"
 OPEN_WRITES: dict[tuple[str, str], str] = {
     ("POST", "/auth/login"): _SIGN_IN,
     ("POST", "/auth/signup"): "creates an ordinary account only when sign-up is open; never an owner",
+    ("POST", "/auth/password"): "a signed-in person changes their own password, nobody else's",
+    ("POST", "/auth/logout-all"): "a signed-in person ends their own sessions, nobody else's",
+    ("POST", "/auth/google/exchange"): "finishes Google sign-in; the one-time code is the credential",
 }
 
 # Routes anyone may call without credentials, and why. Everything else must answer 401/403.
@@ -38,6 +41,7 @@ PUBLIC: dict[tuple[str, str], str] = {
     ("GET", "/auth/options"): "the sign-in page asks which sign-in options are open",
     ("POST", "/auth/login"): _SIGN_IN,
     ("POST", "/auth/signup"): "creates an ordinary account only when sign-up is open; never an owner",
+    ("POST", "/auth/google/exchange"): "finishes Google sign-in; the one-time code is the credential",
     ("GET", "/auth/google/login"): "starts Google sign-in",
     ("GET", "/auth/google/callback"): "Google sends the browser back here and cannot add our credentials",
     ("GET", "/auth/kite/login"): "starts Zerodha login; the token is only kept for the owner's own client ID",

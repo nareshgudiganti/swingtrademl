@@ -9,10 +9,19 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy import select
 
-from swing_trade_ml.api.deps import DbSession, PlanAccessDep, Principal, get_principal, require_owner
+from swing_trade_ml.api.deps import (
+    DbSession,
+    PlanAccessDep,
+    Principal,
+    PrincipalDep,
+    actor_name,
+    get_principal,
+    require_owner,
+)
 from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.plans import BASE_MODEL, CAP_TIERS, FEATURES, LIMITS, PLAN_KEYS
 from swing_trade_ml.db.models.session import User
+from swing_trade_ml.services import audit
 from swing_trade_ml.services import plans as plan_service
 
 router = APIRouter(tags=["plans"])
@@ -45,6 +54,7 @@ def my_plan(
     """
     common = {
         "can_manage_plans": principal.is_owner,
+        "can_see_real_account": principal.can_see_real_account,
         "plans_enabled": plan_service.plans_enabled(db),
         "brain_enabled": settings.BRAIN_ENABLED,
     }
@@ -73,10 +83,19 @@ def get_switch(db: DbSession) -> dict[str, bool]:
 
 
 @admin.put("/switch", response_model=dict)
-def set_switch(body: SwitchUpdate, db: DbSession) -> dict[str, bool]:
+def set_switch(body: SwitchUpdate, db: DbSession, principal: PrincipalDep) -> dict[str, bool]:
     """Turn plans on or off for everyone. Off is the app exactly as it was
     before plans: every signed-in account sees everything."""
-    return {"enabled": plan_service.set_plans_enabled(db, body.enabled)}
+    enabled = plan_service.set_plans_enabled(db, body.enabled)
+    audit.record(
+        db,
+        "plans.switch",
+        actor=principal.user,
+        actor_label=actor_name(principal),
+        after={"enabled": enabled},
+    )
+    db.commit()
+    return {"enabled": enabled}
 
 
 @admin.get("/features", response_model=dict)
@@ -95,13 +114,24 @@ def list_plans(db: DbSession) -> list[dict[str, Any]]:
 
 
 @admin.put("/plans/{key}", response_model=dict)
-def update_plan(key: str, body: PlanUpdate, db: DbSession) -> dict[str, Any]:
+def update_plan(key: str, body: PlanUpdate, db: DbSession, principal: PrincipalDep) -> dict[str, Any]:
     if key not in PLAN_KEYS:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"No plan called {key!r}")
     try:
-        return plan_service.save_plan(db, key, body.features, body.limits)
+        saved = plan_service.save_plan(db, key, body.features, body.limits)
     except ValueError as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+    audit.record(
+        db,
+        "plans.edit",
+        actor=principal.user,
+        actor_label=actor_name(principal),
+        target_type="plan",
+        target_id=key,
+        after={"features": body.features, "limits": body.limits},
+    )
+    db.commit()
+    return saved
 
 
 def _user_out(user: User) -> dict[str, Any]:
@@ -124,7 +154,9 @@ def list_users(db: DbSession) -> list[dict[str, Any]]:
 
 
 @admin.put("/users/{user_id}/plan", response_model=dict)
-def set_user_plan(user_id: int, body: UserPlanUpdate, db: DbSession) -> dict[str, Any]:
+def set_user_plan(
+    user_id: int, body: UserPlanUpdate, db: DbSession, principal: PrincipalDep
+) -> dict[str, Any]:
     if body.plan not in PLAN_KEYS:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY, f"Plan must be one of {', '.join(PLAN_KEYS)}"
@@ -132,6 +164,17 @@ def set_user_plan(user_id: int, body: UserPlanUpdate, db: DbSession) -> dict[str
     user = db.get(User, user_id)
     if user is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
+    before = user.plan
     user.plan = body.plan
+    audit.record(
+        db,
+        "user.plan_change",
+        actor=principal.user,
+        actor_label=actor_name(principal),
+        target_type="user",
+        target_id=user.id,
+        before={"plan": before},
+        after={"plan": body.plan},
+    )
     db.commit()
     return _user_out(user)

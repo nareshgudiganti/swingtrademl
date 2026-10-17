@@ -28,9 +28,19 @@ def _user_from_bearer(credentials: HTTPAuthorizationCredentials, db: Session) ->
     if not username:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Malformed token")
 
-    user = db.execute(select(User).where(User.username == username)).scalar_one_or_none()
+    uid = payload.get("uid")
+    if isinstance(uid, int):
+        user = db.get(User, uid)
+        if user is not None and user.username != username:
+            user = None
+    else:
+        user = db.execute(select(User).where(User.username == username)).scalar_one_or_none()
     if user is None or not user.is_active:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "User not found or inactive")
+    # Tokens issued before P0 carry no "tv"; they count as version 0 and stop
+    # working the first time this account's sessions are ended.
+    if int(payload.get("tv", 0)) != (user.token_version or 0):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Your session has ended. Please sign in again.")
     return user
 
 
@@ -57,8 +67,30 @@ class Principal:
     via_api_key: bool = False
 
     @property
+    def role(self) -> str:
+        if self.via_api_key:
+            return "owner"
+        return self.user.role if self.user is not None else "member"
+
+    @property
     def is_owner(self) -> bool:
-        return self.via_api_key or bool(self.user and self.user.is_superuser)
+        return self.via_api_key or bool(self.user and self.user.role == "owner")
+
+    @property
+    def is_tester(self) -> bool:
+        return bool(self.user and self.user.role == "tester")
+
+    @property
+    def can_see_real_account(self) -> bool:
+        """The real Zerodha account (My Holdings, real orders): signed-in owner
+        accounts named in REAL_ACCOUNT_USERS, and the shared API key (the owner's
+        own scripts). Testers and members never."""
+        if self.via_api_key:
+            return True
+        if self.user is None or self.user.role != "owner":
+            return False
+        allowed = {n.strip().lower() for n in settings.REAL_ACCOUNT_USERS.split(",") if n.strip()}
+        return self.user.username.lower() in allowed
 
 
 async def get_principal(
@@ -90,8 +122,8 @@ async def get_principal(
 @dataclass(frozen=True)
 class PlanAccess:
     """What the caller may see. `unrestricted` callers see everything: the
-    owner always, and every signed-in account while plans are switched off
-    (the app as it was before plans). The owner can still preview a plan
+    owner always, and a tester while plans are switched off. Members always get
+    their plan's rules. The owner can still preview a plan
     (X-Preview-Plan) and then gets exactly what that plan's users get."""
 
     unrestricted: bool
@@ -121,7 +153,10 @@ def plan_access_for(db: Session, principal: Principal, preview: str | None = Non
 
     if principal.is_owner and preview in PLAN_KEYS:
         key, previewing = preview, True
-    elif principal.is_owner or not plans_enabled(db):
+    elif principal.is_owner or (principal.is_tester and not plans_enabled(db)):
+        # Owners see everything. A tester keeps today's view (the whole app
+        # while plans are off) until their own member account exists (release C).
+        # A member never: "plans off" no longer means "everyone sees the house book" (S1).
         return PlanAccess(unrestricted=True, plan=None)
     else:
         user_plan = principal.user.plan if principal.user else None
@@ -149,6 +184,44 @@ PlanAccessDep = Annotated[PlanAccess, Depends(get_plan_access)]
 
 READ_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
+#: The only writes a tester may make: the manual paper-testing book. The close
+#: handler also checks the position really is in that book.
+TESTER_WRITES: frozenset[tuple[str, str]] = frozenset(
+    {("POST", "/portfolio/tester/buy"), ("POST", "/portfolio/positions/{position_id}/close")}
+)
+
+#: Owner-private areas a tester may not even read while plans are off: the
+#: owner's money, the Zerodha session, the safety switches, alerts and the
+#: brain's go-live controls. `/admin` already answers only the owner itself.
+#: `/brain/compare` and `/brain/trial-journal` are the rest of the go-live
+#: router (endpoints/brain_golive.py), which has no `/brain/golive` prefix.
+TESTER_PRIVATE_PREFIXES: tuple[str, ...] = (
+    "/finance",
+    "/mutual-funds",
+    "/auth/kite",
+    "/safety",
+    "/notifications",
+    "/brain/approvals",
+    "/brain/stage",
+    "/brain/compare",
+    "/brain/trial-journal",
+    "/admin",
+)
+PRIVATE_AREA = "This is a private part of the app. You don't have access."
+
+
+def _route_path(request: Request) -> str:
+    """The matched route's template (e.g. /portfolio/positions/{position_id}/close), minus the API prefix."""
+    route = request.scope.get("route")
+    path = getattr(route, "path", request.url.path)
+    if path.startswith(settings.API_V1_PREFIX):
+        path = path[len(settings.API_V1_PREFIX) :]
+    return path
+
+
+def _is_private_area(path: str) -> bool:
+    return any(path == p or path.startswith(p + "/") for p in TESTER_PRIVATE_PREFIXES)
+
 
 async def require_auth(
     request: Request,
@@ -169,15 +242,18 @@ async def require_auth(
     signed-in account may change the trading stage, approve a buy or pull a
     safety switch, which it silently allowed before (audit F-17).
     """
-    if request.method not in READ_METHODS and not principal.is_owner:
+    path = _route_path(request)
+    if (
+        request.method not in READ_METHODS
+        and not principal.is_owner
+        and not (principal.is_tester and (request.method, path) in TESTER_WRITES)
+    ):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Only the owner can change this.")
+    # A tester sees the shared app while plans are off, never the owner's private areas.
+    if principal.is_tester and _is_private_area(path):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, PRIVATE_AREA)
     if access.unrestricted:
         return
-
-    route = request.scope.get("route")
-    path = getattr(route, "path", request.url.path)
-    if path.startswith(settings.API_V1_PREFIX):
-        path = path[len(settings.API_V1_PREFIX):]
 
     brain_gate = brain_route_access(request.method, path)
     if brain_gate == "owner":
@@ -212,6 +288,27 @@ def actor_name(principal: Principal) -> str:
     if principal.user is not None:
         return principal.user.username
     return "api-key"
+
+
+async def require_real_account(principal: Annotated[Principal, Depends(get_principal)]) -> Principal:
+    """Guards everything that reads or moves the real Zerodha account."""
+    if not principal.can_see_real_account:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "This is a private account. You don't have access.")
+    return principal
+
+
+def book_for(principal: Principal, book: str) -> str:
+    """The book a caller may ask for. The real (My Holdings) book is hidden from
+    everyone else: asking for it is refused, and "all" quietly becomes the bot's
+    own book, so hand-bought shares never leak into a total. A tester may only
+    read the tester book: the house (bot) book is the owner's."""
+    if principal.can_see_real_account:
+        return book
+    if principal.is_tester and book != "tester":
+        raise HTTPException(status.HTTP_403_FORBIDDEN, PRIVATE_AREA)
+    if book == "real":
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "This is a private account. You don't have access.")
+    return "bot" if book == "all" else book
 
 
 async def require_owner(principal: Annotated[Principal, Depends(get_principal)]) -> Principal:

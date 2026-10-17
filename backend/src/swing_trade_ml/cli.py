@@ -1,7 +1,7 @@
 """Operational CLI — the setup and maintenance tasks that are awkward over HTTP.
 
 swingtrade init-db
-swingtrade create-user --username admin --password secret
+swingtrade create-user --username admin --password secret --role owner
 swingtrade sync-instruments
 swingtrade sync-context-indices
 swingtrade backfill --days 1825
@@ -42,6 +42,113 @@ def cmd_init_db(args: argparse.Namespace) -> int:
     return 0
 
 
+def _find_user(db, username: str):
+    from sqlalchemy import select
+
+    from swing_trade_ml.db.models.session import User
+
+    user = db.execute(select(User).where(User.username == username)).scalar_one_or_none()
+    if user is None:
+        raise LookupError(f"No user '{username}'")
+    return user
+
+
+def role_audit_rows(db) -> list[dict]:
+    from sqlalchemy import select
+
+    from swing_trade_ml.db.models.session import User
+
+    users = db.execute(select(User).order_by(User.id)).scalars().all()
+    return [
+        {
+            "id": u.id,
+            "username": u.username,
+            "auth_provider": u.auth_provider,
+            "active": u.is_active,
+            "role": u.role,
+            "is_superuser": u.is_superuser,
+            "last_login_at": u.last_login_at,
+            "mismatch": u.is_superuser != (u.role == "owner"),
+        }
+        for u in users
+    ]
+
+
+def apply_role(db, username: str, role: str, reason: str) -> str:
+    from sqlalchemy import func, select
+
+    from swing_trade_ml.db.models.session import ROLES, User
+    from swing_trade_ml.services import audit
+
+    if role not in ROLES:
+        raise ValueError(f"Role must be one of {', '.join(ROLES)}")
+    user = _find_user(db, username)
+    before = user.role
+    if before == "owner" and role != "owner":
+        owners = db.execute(
+            select(func.count()).select_from(User).where(User.role == "owner", User.is_active)
+        ).scalar_one()
+        if owners <= 1:
+            raise ValueError("Refusing: this is the last owner account")
+    user.role = role
+    db.flush()
+    audit.record(
+        db,
+        "user.role_change",
+        actor_label="cli",
+        target_type="user",
+        target_id=user.id,
+        before={"role": before},
+        after={"role": role, "reason": reason},
+    )
+    return f"{username}: {before} -> {role}. Their open sessions have ended."
+
+
+def apply_disable(db, username: str, reason: str) -> str:
+    from sqlalchemy import func, select
+
+    from swing_trade_ml.db.models.session import User
+    from swing_trade_ml.services import audit
+
+    user = _find_user(db, username)
+    if user.role == "owner" and user.is_active:
+        owners = db.execute(
+            select(func.count()).select_from(User).where(User.role == "owner", User.is_active)
+        ).scalar_one()
+        if owners <= 1:
+            raise ValueError("Refusing: this is the last owner account")
+    user.is_active = False
+    user.token_version = (user.token_version or 0) + 1
+    audit.record(
+        db,
+        "user.disable",
+        actor_label="cli",
+        target_type="user",
+        target_id=user.id,
+        before={"active": True},
+        after={"active": False, "reason": reason},
+    )
+    return f"{username} can no longer sign in."
+
+
+def apply_unlock(db, username: str) -> str:
+    from swing_trade_ml.services import audit
+
+    user = _find_user(db, username)
+    user.locked_until, user.failed_login_count = None, 0
+    audit.record(db, "user.unlock", actor_label="cli", target_type="user", target_id=user.id)
+    return f"{username} can sign in again."
+
+
+def apply_revoke(db, username: str) -> str:
+    from swing_trade_ml.services import audit
+
+    user = _find_user(db, username)
+    user.token_version = (user.token_version or 0) + 1
+    audit.record(db, "user.revoke_sessions", actor_label="cli", target_type="user", target_id=user.id)
+    return f"Every session of {username} has ended."
+
+
 def cmd_create_user(args: argparse.Namespace) -> int:
     from sqlalchemy import select
 
@@ -59,29 +166,59 @@ def cmd_create_user(args: argparse.Namespace) -> int:
                 email=args.email,
                 hashed_password=hash_password(args.password),
                 is_active=True,
-                is_superuser=True,
+                role=args.role,
             )
         )
     print(f"✅ Created user '{args.username}'")
     return 0
 
 
-def cmd_make_owner(args: argparse.Namespace) -> int:
-    """Make an existing login the owner: it sees everything, is never limited
-    by a plan, and can open the Plans Manager."""
-    from sqlalchemy import select
-
-    from swing_trade_ml.db.models.session import User
+def cmd_audit_roles(args: argparse.Namespace) -> int:
     from swing_trade_ml.db.session import session_scope
 
     with session_scope() as db:
-        user = db.execute(select(User).where(User.username == args.username)).scalar_one_or_none()
-        if user is None:
-            print(f"❌ No user '{args.username}'")
-            return 1
-        user.is_superuser = True
-    print(f"✅ '{args.username}' is now an owner")
+        for r in role_audit_rows(db):
+            flag = "  ⚠ role/superuser disagree" if r["mismatch"] else ""
+            print(
+                f"{r['id']:>4}  {r['username']:<28} {r['auth_provider']:<7} "
+                f"{'active' if r['active'] else 'DISABLED':<8} role={r['role']:<7} last={r['last_login_at']}{flag}"
+            )
+    print("Nothing was changed. Use set-role / disable-user after the owner approves.")
     return 0
+
+
+def _run(fn, *a) -> int:
+    from swing_trade_ml.db.session import session_scope
+
+    try:
+        with session_scope() as db:
+            print(f"✅ {fn(db, *a)}")
+        return 0
+    except (ValueError, LookupError) as exc:
+        print(f"❌ {exc}")
+        return 1
+
+
+def cmd_make_owner(args: argparse.Namespace) -> int:
+    """Make an existing login the owner: it sees everything, is never limited
+    by a plan, and can open the Plans Manager."""
+    return _run(apply_role, args.username, "owner", "make-owner command")
+
+
+def cmd_set_role(args: argparse.Namespace) -> int:
+    return _run(apply_role, args.username, args.role, args.reason)
+
+
+def cmd_disable_user(args: argparse.Namespace) -> int:
+    return _run(apply_disable, args.username, args.reason)
+
+
+def cmd_unlock_user(args: argparse.Namespace) -> int:
+    return _run(apply_unlock, args.username)
+
+
+def cmd_revoke_sessions(args: argparse.Namespace) -> int:
+    return _run(apply_revoke, args.username)
 
 
 def _ensure_brain_enabled_in_env() -> None:
@@ -250,9 +387,7 @@ def cmd_train(args: argparse.Namespace) -> int:
     with session_scope() as db:
         try:
             symbols = (
-                [s.strip().upper() for s in args.symbols.split(",") if s.strip()]
-                if args.symbols
-                else None
+                [s.strip().upper() for s in args.symbols.split(",") if s.strip()] if args.symbols else None
             )
             if args.symbols_from_model:
                 from sqlalchemy import select
@@ -266,7 +401,9 @@ def cmd_train(args: argparse.Namespace) -> int:
                     .limit(1)
                 ).scalar_one_or_none()
                 if src is None or not src.training_symbols:
-                    raise ValueError(f"No trained model named {args.symbols_from_model!r} to copy symbols from")
+                    raise ValueError(
+                        f"No trained model named {args.symbols_from_model!r} to copy symbols from"
+                    )
                 symbols = list(src.training_symbols)
             model = train_model(
                 db,
@@ -757,7 +894,27 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--username", required=True)
     p.add_argument("--password", required=True)
     p.add_argument("--email", default=None)
+    p.add_argument("--role", required=True, choices=["owner", "tester", "member"])
     p.set_defaults(func=cmd_create_user)
+
+    sub.add_parser("audit-roles", help="List every login and its role (changes nothing)").set_defaults(
+        func=cmd_audit_roles
+    )
+    p = sub.add_parser("set-role", help="Change a login's role (audited; ends their sessions)")
+    p.add_argument("--username", required=True)
+    p.add_argument("--role", required=True, choices=["owner", "tester", "member"])
+    p.add_argument("--reason", required=True)
+    p.set_defaults(func=cmd_set_role)
+    p = sub.add_parser("disable-user", help="Stop a login from signing in (audited)")
+    p.add_argument("--username", required=True)
+    p.add_argument("--reason", required=True)
+    p.set_defaults(func=cmd_disable_user)
+    p = sub.add_parser("unlock-user", help="Lift a sign-in pause early (audited)")
+    p.add_argument("--username", required=True)
+    p.set_defaults(func=cmd_unlock_user)
+    p = sub.add_parser("revoke-sessions", help="End every session of a login (audited)")
+    p.add_argument("--username", required=True)
+    p.set_defaults(func=cmd_revoke_sessions)
 
     p = sub.add_parser("make-owner", help="Make an existing login the owner (sees everything, manages plans)")
     p.add_argument("username")
@@ -842,8 +999,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--calibrate",
         action="store_true",
-        help="Fit an isotonic map on a later slice so a stated 70%% confidence hits "
-        "near 70%% (default: off)",
+        help="Fit an isotonic map on a later slice so a stated 70%% confidence hits near 70%% (default: off)",
     )
     p.add_argument("--symbols", default=None, help="Comma-separated tradingsymbols (default: the watchlist)")
     p.add_argument(

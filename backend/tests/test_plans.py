@@ -3,7 +3,7 @@
 The owner (superuser or X-API-Key) is never limited. With plans switched
 on, everyone else reaches only the routes a feature in their plan opens,
 and sees only the base model's picks unless the plan includes every model.
-With plans switched off (the default), everyone sees everything, as before
+With plans switched off (the default), owners and testers see everything; members get their plan's rules regardless, as before
 plans existed.
 """
 
@@ -22,8 +22,10 @@ from swing_trade_ml.services.plans import set_plans_enabled
 API_KEY = {"X-API-Key": "test-api-key"}
 
 
-def _user(db_session, username, *, plan="free", owner=False) -> dict[str, str]:
-    user = User(username=username, hashed_password="x", is_active=True, is_superuser=owner, plan=plan)
+def _user(db_session, username, *, plan="free", owner=False, role: str | None = None) -> dict[str, str]:
+    user = User(
+        username=username, hashed_password="x", is_active=True, is_superuser=owner, plan=plan, role=role
+    )
     db_session.add(user)
     db_session.flush()
     return {"Authorization": f"Bearer {create_access_token(user.username, {'uid': user.id})}"}
@@ -245,14 +247,18 @@ def test_assigning_a_user_to_a_plan(client, db_session, book, plans_on):
 # ------------------------------------------------------------ the switch --
 
 
-def test_plans_are_off_by_default_and_everyone_sees_everything(client, db_session, book):
-    free = _user(db_session, "v1user")
-    assert client.get("/api/v1/strategies", headers=free).status_code == 200
-    assert client.get("/api/v1/status", headers=free).status_code == 200
-    assert len(client.get("/api/v1/signals/picks", headers=free).json()) == 10
-    me = client.get("/api/v1/me/plan", headers=free).json()
+def test_plans_off_by_default_testers_see_everything_members_do_not(client, db_session, book):
+    tester = _user(db_session, "v1tester", role="tester")
+    assert client.get("/api/v1/strategies", headers=tester).status_code == 200
+    assert client.get("/api/v1/status", headers=tester).status_code == 200
+    assert len(client.get("/api/v1/signals/picks", headers=tester).json()) == 10
+    me = client.get("/api/v1/me/plan", headers=tester).json()
     assert me["unrestricted"] is True and me["plans_enabled"] is False
     assert me["can_manage_plans"] is False
+
+    member = _user(db_session, "v1member")
+    assert client.get("/api/v1/strategies", headers=member).status_code == 403
+    assert client.get("/api/v1/me/plan", headers=member).json()["unrestricted"] is False
 
 
 def test_owner_can_preview_while_plans_are_off(client, db_session, book):
@@ -262,13 +268,13 @@ def test_owner_can_preview_while_plans_are_off(client, db_session, book):
 
 
 def test_owner_flips_the_switch(client, db_session, book):
-    free = _user(db_session, "switchee")
+    tester = _user(db_session, "switchee", role="tester")
     assert client.get("/api/v1/admin/switch", headers=API_KEY).json() == {"enabled": False}
     resp = client.put("/api/v1/admin/switch", json={"enabled": True}, headers=API_KEY)
     assert resp.json() == {"enabled": True}
-    assert client.get("/api/v1/strategies", headers=free).status_code == 403
+    assert client.get("/api/v1/strategies", headers=tester).status_code == 403
     client.put("/api/v1/admin/switch", json={"enabled": False}, headers=API_KEY)
-    assert client.get("/api/v1/strategies", headers=free).status_code == 200
+    assert client.get("/api/v1/strategies", headers=tester).status_code == 200
 
 
 def test_only_the_owner_can_flip_the_switch(client, db_session):

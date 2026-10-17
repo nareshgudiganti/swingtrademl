@@ -141,20 +141,18 @@ function authHeaders(token: string): Record<string, string> {
 }
 
 /**
- * Google sign-in redirects the whole browser back to this app's own URL with
- * `?token=...` attached (see the backend's /auth/google/callback). Called
- * once on startup, before anything renders, so a fresh Google login is picked
- * up and the token never lingers visibly in the address bar.
+ * Google sign-in comes back with `?login_code=...` (one use, 60 seconds).
+ * Read it and strip it from the address bar before anything renders. An old
+ * `?token=` link is stripped and never honoured.
  */
-export function captureTokenFromRedirect(): boolean {
+export function takeLoginCodeFromRedirect(): string | null {
   const url = new URL(window.location.href)
-  const token = url.searchParams.get('token')
-  if (!token) return false
-
-  setToken(token)
+  if (!url.searchParams.has('login_code') && !url.searchParams.has('token')) return null
+  const code = url.searchParams.get('login_code')
+  url.searchParams.delete('login_code')
   url.searchParams.delete('token')
   window.history.replaceState({}, '', url.toString())
-  return true
+  return code
 }
 
 export class ApiError extends Error {
@@ -167,13 +165,14 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const token = getToken()
+/** `anonymous` sends no credentials at all, so a 401 can never clear a stored token. */
+async function request<T>(path: string, init?: RequestInit, anonymous = false): Promise<T> {
+  const token = anonymous ? '' : getToken()
   const response = await fetch(`${BASE_URL}${path}`, {
     ...init,
     headers: {
       'Content-Type': 'application/json',
-      ...authHeaders(token),
+      ...(anonymous ? {} : authHeaders(token)),
       ...init?.headers,
     },
   })
@@ -245,6 +244,9 @@ function qs(params: object): string {
 const get = <T>(path: string) => request<T>(path)
 const post = <T>(path: string, body?: unknown) =>
   request<T>(path, { method: 'POST', body: body ? JSON.stringify(body) : undefined })
+/** A POST that carries no sign-in: for calls made before there is a session. */
+const postPublic = <T>(path: string, body?: unknown) =>
+  request<T>(path, { method: 'POST', body: body ? JSON.stringify(body) : undefined }, true)
 const patch = <T>(path: string, body: unknown) =>
   request<T>(path, { method: 'PATCH', body: JSON.stringify(body) })
 const put = <T>(path: string, body: unknown) =>
@@ -266,6 +268,11 @@ export const api = {
   // -------------------------------------------------------------- auth --
   login: (username: string, password: string) =>
     post<{ access_token: string }>('/auth/login', { username, password }),
+  exchangeLoginCode: (code: string) =>
+    postPublic<{ access_token: string }>('/auth/google/exchange', { code }),
+  changePassword: (current_password: string, new_password: string) =>
+    post<{ access_token: string }>('/auth/password', { current_password, new_password }),
+  logoutEverywhere: () => post<{ message: string }>('/auth/logout-all'),
   signup: (username: string, password: string, email?: string) =>
     post<{ access_token: string }>('/auth/signup', { username, password, email }),
   authOptions: () => get<{ signup_allowed: boolean }>('/auth/options'),

@@ -44,16 +44,18 @@ class Settings(BaseSettings):
     API_V1_PREFIX: str = "/api/v1"
     CORS_ORIGINS: str = "http://localhost:5173"
 
+    # Who may see and trade the real Zerodha account (My Holdings): signed-in
+    # owner accounts whose username is listed here, comma separated, plus the
+    # shared API key (the owner's own scripts). Nobody else: real money is personal.
+    REAL_ACCOUNT_USERS: str = "sudeeksha"
+
     API_KEY: str = "change-me"
     JWT_SECRET_KEY: str = "change-me"
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_MINUTES: int = 720
 
-    # Self-registration. Fine to leave on for local development; turn off
-    # before this is reachable from anywhere but your own machine — an open
-    # signup endpoint on a system that can place real trades is a genuine
-    # account-takeover surface, not just a nuisance.
-    ALLOW_SIGNUP: bool = True
+    # Self-registration. Off by default; invitations replace it (release C). Turn on in .env only for local development.
+    ALLOW_SIGNUP: bool = False
 
     # Google "Sign in with Google" — from console.cloud.google.com, an OAuth
     # 2.0 Client ID (type: Web application) with this exact redirect URI added.

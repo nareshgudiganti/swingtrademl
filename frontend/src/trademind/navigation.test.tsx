@@ -5,7 +5,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { renderToString } from 'react-dom/server'
 import { MemoryRouter } from 'react-router-dom'
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it, vi } from 'vitest'
 
 import TradeMindApp from './TradeMindApp'
 import { SECTIONS, findSection } from './menu'
@@ -19,9 +19,23 @@ const PATHS = [
   '/trademind/does-not-exist',
 ]
 
-function render(path: string, ownerConsole: boolean, status?: Record<string, unknown>): string {
+// The shell reads the sign-in token (usePlan), and these tests run in plain Node, which has no localStorage.
+beforeAll(() => {
+  const store = new Map<string, string>()
+  vi.stubGlobal('localStorage', {
+    getItem: (k: string) => store.get(k) ?? null,
+    setItem: (k: string, v: string) => void store.set(k, v),
+    removeItem: (k: string) => void store.delete(k),
+    clear: () => store.clear(),
+  })
+})
+
+// realAccount: whether this account may see the real Zerodha account (REAL_ACCOUNT_USERS). By default the owner
+// may and nobody else may, which is how prod is set up (sudeeksha).
+function render(path: string, ownerConsole: boolean, status?: Record<string, unknown>, realAccount = ownerConsole): string {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   if (status) client.setQueryData(['status'], status)
+  client.setQueryData(['plan'], { can_see_real_account: realAccount, unrestricted: ownerConsole, features: [] })
   return renderToString(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[path]}>
@@ -75,6 +89,11 @@ describe('Phase 2: Portfolio tabs and the Paper/Real strip', () => {
 
   it('the owner sees the four approved tab names', () => {
     expect(tabs(render('/trademind/positions', true))).toEqual(['Bot (Paper)', 'Testing (Paper)', 'My Zerodha (Real)', 'Paper Overview'])
+  })
+
+  it('an owner who is not the real-account user never sees My Zerodha, its tab or its strip', () => {
+    expect(tabs(render('/trademind/positions', true, undefined, false))).toEqual(['Bot (Paper)', 'Testing (Paper)', 'Paper Overview'])
+    expect(strips(render('/trademind/holdings', true, undefined, false))).toEqual([])
   })
 
   it('a non-owner sees only the paper tabs, never My Zerodha', () => {

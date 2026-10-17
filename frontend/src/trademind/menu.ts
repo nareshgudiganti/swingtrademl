@@ -3,7 +3,15 @@
 // The route table in TradeMindApp.tsx is separate and unchanged: this only decides where a page appears
 // in the menu and which section is highlighted.
 
-export type Page = { to: string; label: string; end?: boolean; ownerOnly?: boolean; needsTesting?: boolean }
+// realAccount: shown only to the account allowed to see the real Zerodha account (REAL_ACCOUNT_USERS).
+export type Page = {
+  to: string
+  label: string
+  end?: boolean
+  ownerOnly?: boolean
+  needsTesting?: boolean
+  realAccount?: boolean
+}
 export type SectionId = 'today' | 'discover' | 'portfolio' | 'insights' | 'admin'
 export type Section = { id: SectionId; label: string; pages: Page[]; also?: string[]; ownerOnly?: boolean }
 
@@ -33,7 +41,7 @@ export const SECTIONS: Section[] = [
     pages: [
       { to: '/trademind/positions', label: 'Bot (Paper)' },
       { to: '/trademind/testing', label: 'Testing (Paper)', ownerOnly: true, needsTesting: true },
-      { to: '/trademind/holdings', label: 'My Zerodha (Real)', ownerOnly: true },
+      { to: '/trademind/holdings', label: 'My Zerodha (Real)', ownerOnly: true, realAccount: true },
       { to: '/trademind/portfolio', label: 'Paper Overview' },
     ],
   },
@@ -87,10 +95,18 @@ export function visibleSections(owner: boolean): Section[] {
 /**
  * The pages this viewer sees in the menu. `testingOn: false` (paper testing switched off on the server) hides the
  * Testing tab from the menu only; its URL is still routed and still shows its own "switched off" card.
+ * `realAccount: false` (this account is not in REAL_ACCOUNT_USERS) hides the real Zerodha tab, even for an owner.
  */
-export function visiblePages(section: Section, owner: boolean, opts: { testingOn?: boolean } = {}): Page[] {
+export function visiblePages(
+  section: Section,
+  owner: boolean,
+  opts: { testingOn?: boolean; realAccount?: boolean } = {},
+): Page[] {
   const testingOn = opts.testingOn ?? true
-  return section.pages.filter((p) => (owner || !p.ownerOnly) && (testingOn || !p.needsTesting))
+  const realAccount = opts.realAccount ?? true
+  return section.pages.filter(
+    (p) => (owner || !p.ownerOnly) && (testingOn || !p.needsTesting) && (realAccount || !p.realAccount),
+  )
 }
 
 /** "My Zerodha (Real)" -> the text and its Paper/Real tag, so the tag can be styled and kept visible on a phone. */

@@ -24,6 +24,8 @@ export function usePlan() {
     seesAll,
     // The real owner, even while previewing a plan.
     canManage: !!plan?.can_manage_plans,
+    // My Holdings and real orders: named people only, whatever the plan.
+    canSeeRealAccount: !!plan?.can_see_real_account,
     has: (feature: string) => seesAll || !!plan?.features.includes(feature),
   }
 }

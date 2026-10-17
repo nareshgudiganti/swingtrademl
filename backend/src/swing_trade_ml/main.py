@@ -21,6 +21,7 @@ from swing_trade_ml.api.v1.router import api_router
 from swing_trade_ml.brokers.kite import kite_broker
 from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.logging import configure_logging, get_logger
+from swing_trade_ml.core.security import assert_secrets_safe
 from swing_trade_ml.db.session import SessionLocal, init_database
 from swing_trade_ml.notifications import notifier
 from swing_trade_ml.workers.scheduler import start_scheduler, stop_scheduler
@@ -61,6 +62,7 @@ def _seed_watchlist() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    assert_secrets_safe(settings)
     log.info(
         "app.starting",
         app=settings.APP_NAME,

@@ -1,12 +1,10 @@
 """Horizon experiments: research ledger tables (design rev 3)
 
 Additive only. No foreign key to any money or brain table. `experiment_selections` is append-only (a trigger
-refuses UPDATE and DELETE). Coordination: B1/P0 on develop also descend from d8a1y2c3h4k5; whichever merges
-second
-re-points its down_revision so there is exactly one head.
+refuses UPDATE and DELETE). Follows P0 security (e1p0s2e3c4u5); B1 must follow this revision.
 
 Revision ID: h0r1z5e7x3p1
-Revises: d8a1y2c3h4k5
+Revises: e1p0s2e3c4u5
 Create Date: 2026-10-17 20:00:00.000000+00:00
 """
 
@@ -19,7 +17,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision: str = "h0r1z5e7x3p1"
-down_revision: str | None = "d8a1y2c3h4k5"
+down_revision: str | None = "e1p0s2e3c4u5"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

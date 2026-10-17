@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link, NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { usePlan } from '../lib/plan'
 
 import './trademind.css'
 import { api } from '../api/client'
@@ -67,6 +68,8 @@ function TabLabel({ label }: { label: string }) {
 export default function TradeMindApp({ ownerConsole = false }: TradeMindAppProps) {
   const status = useBrainStatus()
   const latest = useLatestRun()
+  // Only the account named in REAL_ACCOUNT_USERS may see the real Zerodha tab (the server enforces it too).
+  const { canSeeRealAccount } = usePlan()
   const location = useLocation()
   const book = bookOf(location.pathname)
   // Also read for everyone on a Portfolio screen, so the Paper strip can warn a non-owner if the server is ever not
@@ -77,10 +80,10 @@ export default function TradeMindApp({ ownerConsole = false }: TradeMindAppProps
   // The row under the bar lists only pages this account can open.
   // Testing is left out of the row while paper testing is off; its URL is still routed (see the testing Route).
   const testingOn = broker.data?.paper_tester_enabled !== false
-  const pages = visiblePages(section, ownerConsole, { testingOn })
+  const pages = visiblePages(section, ownerConsole, { testingOn, realAccount: canSeeRealAccount })
   // One strip per Portfolio screen this viewer may open (a non-owner on an owner-only URL is being redirected, so
   // no Real strip flashes first). Testing is always paper money, so it never gets the real-money warning.
-  const showBook = book != null && visiblePages(section, ownerConsole).some((p) => matches(location.pathname, p.to))
+  const showBook = book != null && visiblePages(section, ownerConsole, { realAccount: canSeeRealAccount }).some((p) => matches(location.pathname, p.to))
   const paperButNotPaper =
     book?.kind === 'paper' &&
     !matches(location.pathname, '/trademind/testing') &&
@@ -117,7 +120,7 @@ export default function TradeMindApp({ ownerConsole = false }: TradeMindAppProps
           {sections.map((sec) => (
             <Link
               key={sec.id}
-              to={visiblePages(sec, ownerConsole)[0]!.to}
+              to={visiblePages(sec, ownerConsole, { realAccount: canSeeRealAccount })[0]!.to}
               className={sec.id === section.id ? 'active' : ''}
               data-testid={`nav-${sec.id}`}
             >
@@ -245,7 +248,7 @@ export default function TradeMindApp({ ownerConsole = false }: TradeMindAppProps
           <Route path="control" element={ownerConsole ? <Control /> : <Navigate to="/trademind" replace />} />
           <Route path="golive" element={ownerConsole ? <GoLive /> : <Navigate to="/trademind" replace />} />
           <Route path="records" element={<Records />} />
-          <Route path="holdings" element={ownerConsole ? <MyHoldings /> : <Navigate to="/trademind/portfolio" replace />} />
+          <Route path="holdings" element={ownerConsole && canSeeRealAccount ? <MyHoldings /> : <Navigate to="/trademind/portfolio" replace />} />
           <Route path="setup" element={ownerConsole ? <Setup /> : <Navigate to="/trademind" replace />} />
           <Route path="*" element={<Navigate to="/trademind" replace />} />
         </Route>

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ComponentType, type ReactNode } from 
 import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
-import { api, captureTokenFromRedirect, clearToken, getToken, setPreviewPlan } from './api/client'
+import { ApiError, api, clearToken, getToken, setPreviewPlan, setToken, takeLoginCodeFromRedirect } from './api/client'
 import AuthScreen from './components/AuthScreen'
 import { Loading } from './components/Loading'
 import Dashboard from './pages/Dashboard'
@@ -54,6 +54,7 @@ type Screen = {
   feature?: string
   planHome?: boolean
   manage?: boolean
+  realAccount?: boolean
   inNav?: boolean
 }
 
@@ -74,7 +75,7 @@ const SCREENS: Screen[] = [
   { to: '/home', label: "Today's picks", Icon: HomeIcon, element: <PlanHome />, planHome: true, inNav: true },
   { to: '/dashboard', label: 'Dashboard', Icon: HomeIcon, element: <Dashboard />, inNav: true },
   { to: '/strategies', label: 'Strategies', Icon: ScaleIcon, element: <Strategies />, inNav: true },
-  { to: '/holdings', label: 'My Holdings', Icon: WalletIcon, element: <Holdings />, inNav: true },
+  { to: '/holdings', label: 'My Holdings', Icon: WalletIcon, element: <Holdings />, realAccount: true, inNav: true },
   {
     to: '/portfolio',
     label: 'Portfolio',
@@ -134,10 +135,21 @@ const PRIMARY_NAV_COUNT = 6
 const LIVE_ACK_STORAGE = 'stml_live_trading_ack'
 
 // Runs once at module load, before the first render decides whether to show
-// the auth screen — a Google login redirect lands here with ?token=... and
-// must be captured before that check runs, or it would flash the login
-// screen and drop the token.
-captureTokenFromRedirect()
+// the auth screen — a Google login redirect lands here with ?login_code=...
+// and must be read (and stripped from the address bar) before that check runs.
+const pendingLoginCode = takeLoginCodeFromRedirect()
+
+// The code works once, so swap it once per page load. React StrictMode runs
+// effects twice in development; the second run reuses this same promise
+// instead of spending the code again and showing "expired".
+let loginCodeExchange: Promise<{ access_token: string }> | null = null
+function exchangePendingLoginCode(code: string): Promise<{ access_token: string }> {
+  if (!loginCodeExchange) {
+    clearToken() // a stale session from before must not outlive this sign-in
+    loginCodeExchange = api.exchangeLoginCode(code)
+  }
+  return loginCodeExchange
+}
 
 function plansPathEarly(path: string): boolean {
   return path === '/plans' || path.startsWith('/plans/') || path === '/trademind/plans'
@@ -155,10 +167,24 @@ function NotInPlan({ plan }: { plan: string }) {
 }
 
 export default function App() {
+  const [loginError, setLoginError] = useState<string | null>(null)
+  const [exchanging, setExchanging] = useState(!!pendingLoginCode)
+  useEffect(() => {
+    if (!pendingLoginCode) return
+    exchangePendingLoginCode(pendingLoginCode)
+      .then((r) => {
+        setToken(r.access_token)
+        window.location.reload()
+      })
+      .catch((e) => {
+        setExchanging(false)
+        setLoginError(e instanceof ApiError ? e.message : 'Google sign-in did not finish. Please try again.')
+      })
+  }, [])
   const hasToken = !!getToken()
   const location = useLocation()
   const queryClient = useQueryClient()
-  const { plan, seesAll, canManage, has, isLoading: planLoading } = usePlan()
+  const { plan, seesAll, canManage, canSeeRealAccount, has, isLoading: planLoading } = usePlan()
 
   // Account status (mode, Kite session, portfolio) is the owner's business;
   // the API refuses it to plan users, so they don't ask.
@@ -214,8 +240,10 @@ export default function App() {
     () => localStorage.getItem(LIVE_ACK_STORAGE) === 'true',
   )
 
+  if (exchanging) return <div style={{ padding: '2rem' }}>Signing you in…</div>
+
   if (!hasToken) {
-    return <AuthScreen />
+    return <AuthScreen initialError={loginError} />
   }
 
   if (status?.live_trading_enabled && !liveAcked) {
@@ -323,6 +351,7 @@ export default function App() {
 
   const canSee = (s: Screen): boolean => {
     if (s.manage) return canManage
+    if (s.realAccount) return canSeeRealAccount
     return seesAll || !!s.planHome || (!!s.feature && has(s.feature))
   }
   // A full-app account's home is the Dashboard; /home stays reachable by URL.

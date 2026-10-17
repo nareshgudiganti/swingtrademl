@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import secrets
 import time
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from urllib.parse import urlencode
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -23,13 +23,25 @@ from swing_trade_ml.schemas import (
     CurrentUserOut,
     KiteLoginResponse,
     KiteSessionResponse,
+    LoginCodeExchange,
     LoginRequest,
+    MessageResponse,
+    PasswordChangeRequest,
     SignupRequest,
     TokenResponse,
 )
+from swing_trade_ml.services import audit, login_codes
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 log = get_logger(__name__)
+
+
+def issue_token(user: User) -> TokenResponse:
+    """A session token naming the account by id and by its current session version."""
+    return TokenResponse(
+        access_token=create_access_token(user.username, {"uid": user.id, "tv": user.token_version or 0}),
+        expires_in_minutes=settings.JWT_EXPIRE_MINUTES,
+    )
 
 
 @router.get("/options")
@@ -38,28 +50,129 @@ def auth_options() -> dict[str, bool]:
     return {"signup_allowed": settings.ALLOW_SIGNUP}
 
 
-@router.post("/login", response_model=TokenResponse)
-def login(payload: LoginRequest, db: DbSession) -> TokenResponse:
-    user = db.execute(select(User).where(User.username == payload.username)).scalar_one_or_none()
-    # One generic message for both branches — distinguishing "no such user" from
-    # "wrong password" would let an attacker enumerate valid usernames. Also
-    # covers Google-only accounts, whose hashed_password is None.
-    if (
-        user is None
-        or not user.hashed_password
-        or not verify_password(payload.password, user.hashed_password)
-    ):
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Incorrect username or password")
-    if not user.is_active:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Account is disabled")
+LOCKOUT_THRESHOLD = 5
+LOCKOUT_MINUTES = 15
+LOGIN_FAILED = "Incorrect username or password. After several wrong tries, sign-in pauses for 15 minutes."
+CURRENT_PASSWORD_WRONG = "Your current password is not right."
+PASSWORD_CHANGE_LOCKED = "Too many wrong tries. Please wait 15 minutes and try again."
+# Compared against when there is no real hash, so an unknown username takes as
+# long to refuse as a wrong password (no timing hint that the account exists).
+_DUMMY_HASH = hash_password("timing-equaliser-not-a-real-password")
 
-    user.last_login_at = datetime.now(UTC)
-    db.commit()
 
-    return TokenResponse(
-        access_token=create_access_token(user.username, {"uid": user.id}),
-        expires_in_minutes=settings.JWT_EXPIRE_MINUTES,
+def _is_locked(user: User, now: datetime) -> bool:
+    return user.locked_until is not None and user.locked_until > now
+
+
+def _count_wrong_password(user: User, now: datetime) -> bool:
+    """One more wrong password for this account. True when it has just been locked."""
+    user.failed_login_count = (user.failed_login_count or 0) + 1
+    if user.failed_login_count >= LOCKOUT_THRESHOLD:
+        user.failed_login_count = 0
+        user.locked_until = now + timedelta(minutes=LOCKOUT_MINUTES)
+        return True
+    return False
+
+
+@router.post("/password", response_model=TokenResponse)
+def change_password(
+    payload: PasswordChangeRequest, user: CurrentUser, db: DbSession, request: Request
+) -> TokenResponse:
+    """Change your own password. Every other session of this account ends; this one gets a fresh token.
+    Wrong current passwords count toward the same lock as sign-in, so a stolen session can't be used
+    to guess the password."""
+    db.refresh(user, with_for_update=True)
+    now = datetime.now(UTC)
+    if _is_locked(user, now):
+        verify_password(payload.current_password, _DUMMY_HASH)
+        audit.record(
+            db,
+            "auth.password_change_locked",
+            actor=user,
+            target_type="user",
+            target_id=user.id,
+            request=request,
+        )
+        db.commit()
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, PASSWORD_CHANGE_LOCKED)
+    if not user.hashed_password or not verify_password(payload.current_password, user.hashed_password):
+        locked = bool(user.hashed_password) and _count_wrong_password(user, now)
+        audit.record(
+            db,
+            "auth.password_change_failed",
+            actor=user,
+            target_type="user",
+            target_id=user.id,
+            after={"locked_minutes": LOCKOUT_MINUTES} if locked else None,
+            request=request,
+        )
+        db.commit()
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, CURRENT_PASSWORD_WRONG)
+    user.failed_login_count = 0
+    user.hashed_password = hash_password(payload.new_password)
+    user.token_version = (user.token_version or 0) + 1
+    audit.record(
+        db, "auth.password_change", actor=user, target_type="user", target_id=user.id, request=request
     )
+    db.commit()
+    return issue_token(user)
+
+
+@router.post("/logout-all", response_model=MessageResponse)
+def logout_everywhere(user: CurrentUser, db: DbSession, request: Request) -> MessageResponse:
+    """End every session of this account, on every device."""
+    user.token_version = (user.token_version or 0) + 1
+    audit.record(db, "auth.logout_all", actor=user, target_type="user", target_id=user.id, request=request)
+    db.commit()
+    return MessageResponse(message="Signed out on every device.")
+
+
+@router.post("/login", response_model=TokenResponse)
+def login(payload: LoginRequest, db: DbSession, request: Request) -> TokenResponse:
+    """One message for every failure (unknown user, wrong password, locked,
+    Google-only account) so the answer never tells whether an account exists."""
+    user = db.execute(
+        select(User).where(User.username == payload.username).with_for_update()
+    ).scalar_one_or_none()
+    now = datetime.now(UTC)
+    who = payload.username[:128]
+
+    def refuse(action: str, **after: object) -> HTTPException:
+        audit.record(
+            db,
+            action,
+            actor=user,
+            actor_label=who,
+            target_type="user",
+            target_id=who,
+            after=after or None,
+            request=request,
+        )
+        db.commit()
+        return HTTPException(status.HTTP_401_UNAUTHORIZED, LOGIN_FAILED)
+
+    if user is None or not user.hashed_password:
+        verify_password(payload.password, _DUMMY_HASH)
+        raise refuse("auth.login_failed", why="unknown_or_no_password")
+    if _is_locked(user, now):
+        verify_password(payload.password, _DUMMY_HASH)
+        raise refuse("auth.login_while_locked")
+    if not verify_password(payload.password, user.hashed_password):
+        if _count_wrong_password(user, now):
+            raise refuse("auth.locked", minutes=LOCKOUT_MINUTES)
+        raise refuse("auth.login_failed", failed_count=user.failed_login_count)
+    if not user.is_active:
+        # Same answer as a wrong password: a disabled account doesn't confirm the password was right.
+        raise refuse("auth.login_disabled")
+
+    user.failed_login_count = 0
+    user.locked_until = None
+    user.last_login_at = now
+    audit.record(
+        db, "auth.login", actor=user, actor_label=who, target_type="user", target_id=user.id, request=request
+    )
+    db.commit()
+    return issue_token(user)
 
 
 @router.post("/signup", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
@@ -91,10 +204,7 @@ def signup(payload: SignupRequest, db: DbSession) -> TokenResponse:
     db.refresh(user)
 
     log.info("auth.signup", username=user.username)
-    return TokenResponse(
-        access_token=create_access_token(user.username, {"uid": user.id}),
-        expires_in_minutes=settings.JWT_EXPIRE_MINUTES,
-    )
+    return issue_token(user)
 
 
 @router.get("/me", response_model=CurrentUserOut)
@@ -262,7 +372,7 @@ def google_callback(code: str, state: str, db: DbSession) -> HTMLResponse | Redi
 
     Errors render an HTML page (this is loaded by a browser via redirect, the
     same reason /kite/callback does); success redirects on to the SPA with a
-    JWT in the query string for it to pick up and store.
+    one-time login code in the query string for the app to swap for a session.
     """
     if not _consume_state(state):
         return HTMLResponse(
@@ -360,8 +470,34 @@ def google_callback(code: str, state: str, db: DbSession) -> HTMLResponse | Redi
     db.commit()
     db.refresh(user)
 
-    jwt_token = create_access_token(user.username, {"uid": user.id})
-    return RedirectResponse(f"{settings.post_login_url()}/?token={jwt_token}")
+    code = login_codes.issue(db, user)
+    db.commit()
+    # A one-time code, not the session token: the address bar ends up in
+    # browser history, server logs and Referer headers (spec finding S5).
+    return RedirectResponse(f"{settings.post_login_url()}/?login_code={code}")
+
+
+@router.post("/google/exchange", response_model=TokenResponse)
+def google_exchange(payload: LoginCodeExchange, db: DbSession, request: Request) -> TokenResponse:
+    """Swap the one-time code from the Google redirect for a session. Works once, within 60 seconds."""
+    user = login_codes.redeem(db, payload.code)
+    if user is None:
+        db.commit()  # keep the code marked used even when the account is disabled
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED, "This sign-in link has expired. Please sign in again."
+        )
+    user.last_login_at = datetime.now(UTC)
+    audit.record(
+        db,
+        "auth.login",
+        actor=user,
+        target_type="user",
+        target_id=user.id,
+        after={"via": "google"},
+        request=request,
+    )
+    db.commit()
+    return issue_token(user)
 
 
 def _unique_username_from_email(db: Session, email: str) -> str:

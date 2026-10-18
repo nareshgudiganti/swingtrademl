@@ -12,11 +12,12 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request, status
+from fastapi import Depends, FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from swing_trade_ml import __version__
+from swing_trade_ml.api.rate_limit import public_limit
 from swing_trade_ml.api.v1.router import api_router
 from swing_trade_ml.brokers.kite import kite_broker
 from swing_trade_ml.core.config import settings
@@ -149,7 +150,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
 app.include_router(api_router, prefix=settings.API_V1_PREFIX)
 
 
-@app.get("/", tags=["system"])
+@app.get("/", tags=["system"], dependencies=[Depends(public_limit)])
 def root() -> dict:
     return {
         "app": settings.APP_NAME,

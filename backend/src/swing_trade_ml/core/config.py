@@ -84,6 +84,20 @@ class Settings(BaseSettings):
 
     REDIS_URL: str = "redis://localhost:6379/0"
 
+    # Per-IP request limits (api/rate_limit.py, tracker qa7). Fixed one-minute
+    # windows counted in Redis. If Redis is unreachable requests are allowed
+    # (fail open), so this can never lock the owner out of signing in.
+    RATE_LIMIT_ENABLED: bool = True
+    # Sign-in endpoints (password, Google, Kite login/callback, sign-up,
+    # password change) share one counter per IP.
+    RATE_LIMIT_AUTH_PER_MINUTE: int = 10
+    # No-login endpoints (/auth/options, "/"). /health and /ready are left
+    # unlimited: uptime and the after-deploy check call them.
+    RATE_LIMIT_PUBLIC_PER_MINUTE: int = 60
+    # Peers whose X-Forwarded-For / X-Real-IP headers are believed: our own
+    # nginx and Docker's bridge gateway. Anyone else's headers are ignored.
+    RATE_LIMIT_TRUSTED_PROXIES: str = "127.0.0.0/8,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+
     # ------------------------------------------------------- trading mode --
     TRADING_MODE: Literal["paper", "live"] = "paper"
     ALLOW_LIVE_TRADING: bool = False

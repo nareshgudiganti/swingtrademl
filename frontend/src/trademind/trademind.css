@@ -621,6 +621,31 @@
   white-space: nowrap;
 }
 
+/* Click-to-sort header: looks like the header text, arrow shows the order. */
+.tm-sort {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.tm-sort:hover,
+.tm-sort:focus-visible {
+  color: var(--tm-text, #fff);
+}
+
+.tm-sort-arrow {
+  font-size: 0.65rem;
+  opacity: 0.55;
+}
+
+th[aria-sort='ascending'] .tm-sort-arrow,
+th[aria-sort='descending'] .tm-sort-arrow {
+  opacity: 1;
+  color: var(--tm-violet);
+}
+
 .tm-table td {
   padding: 0.55rem 0.6rem;
   border-bottom: 1px solid rgba(118, 110, 255, 0.08);

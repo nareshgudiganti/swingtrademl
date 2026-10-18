@@ -6,6 +6,7 @@ import { api, ApiError, clearToken, setToken } from '../api/client'
 import { ErrorBox, Loading } from '../components/Loading'
 import SymbolPicker from '../components/SymbolPicker'
 import { ClockIcon, PlugIcon, SendIcon, WarningIcon } from '../components/icons'
+import { stopCheckWarning } from './stopCheckWarning'
 
 // Job IDs are stable (see workers/scheduler.py); their exact cron time isn't
 // duplicated here on purpose — that's read live from `trigger`/`next_run`
@@ -169,10 +170,9 @@ export default function Settings() {
               </span>
             </div>
             <div className="stat-sub">
-              {!s?.broker_authenticated && s && s.open_positions > 0 ? (
+              {s && stopCheckWarning(s.broker_authenticated, s.open_positions, s.open_positions_by_book) ? (
                 <strong>
-                  Stop-loss/target checks are NOT running on the bot's {s.open_positions} open position
-                  {s.open_positions === 1 ? '' : 's'}.{' '}
+                  {stopCheckWarning(s.broker_authenticated, s.open_positions, s.open_positions_by_book)}{' '}
                 </strong>
               ) : null}
               <a

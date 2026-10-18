@@ -26,7 +26,7 @@ from swing_trade_ml.db.models.trading import Position, Strategy
 from swing_trade_ml.db.session import session_scope
 from swing_trade_ml.ml.backup import backup_model_artifacts
 from swing_trade_ml.notifications import notifier
-from swing_trade_ml.services import engine, ingestion, portfolio
+from swing_trade_ml.services import engine, held_read, ingestion, portfolio
 from swing_trade_ml.workers import heartbeat
 
 log = get_logger(__name__)
@@ -435,6 +435,10 @@ def job_signal_scan() -> None:
         started = datetime.now(IST)
         with session_scope() as db:
             result = engine.run_all_active(db, interval="day")
+            # Testing positions belong to a strategy that is never scanned, so their daily
+            # score is taken here, after the scan. Display only, and it never raises. Kept
+            # out of services/engine.py, which is frozen for the forward trial.
+            held_read.score_tester_positions(db)
             log.info(
                 "job.scan.done",
                 strategies=result.strategies_run,

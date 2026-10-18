@@ -45,7 +45,7 @@ from swing_trade_ml.schemas import (
     TesterPaperBuyRequest,
     TradeOut,
 )
-from swing_trade_ml.services import brain_position_score, real_orders, score_history
+from swing_trade_ml.services import brain_position_score, held_read, real_orders, score_history
 from swing_trade_ml.services import portfolio as portfolio_service
 from swing_trade_ml.services.execution import (
     close_position,
@@ -332,6 +332,14 @@ def detailed_positions(
                 "horizon_days": horizon_days,
                 "action_code": action_code,
                 "action_label": action_label,
+                # Day N of the trade, plus one word on what to do (SELL / SELL_PARTIALLY /
+                # WATCH / HOLD) for the Testing and My Holdings tabs. Display only.
+                **held_read.describe(
+                    position,
+                    action_code,
+                    action_label,
+                    (current / position.entry_price - 1) if position.entry_price else 0.0,
+                ),
             }
         )
     return result

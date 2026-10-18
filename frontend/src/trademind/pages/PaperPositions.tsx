@@ -1,7 +1,12 @@
-import { useMemo, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api } from '../../api/client'
+import type { DetailedPosition } from '../../api/types'
+import { CapFlag } from '../cap'
+import { DayCell, ScoreToday, SuggestionTag, scoreNow, suggestionRank } from '../HeldRead'
+import ScoreTrail from '../ScoreTrail'
+import { SortTh, useSort } from '../sort'
 import { Card, inr, signed, toneClass } from '../ui'
 
 type Period = 'day' | 'week' | 'month'
@@ -138,53 +143,22 @@ export default function PaperPositions() {
         </Card>
       )}
 
-      <Card title="Open positions" sub="Buy from Swing Picks → Watchlist. Sell here.">
+      <Card
+        title="Open positions"
+        sub="Buy from Swing Picks → Watchlist. Sell here. Click a column name to sort, click a stock to see its score day by day."
+      >
         {close.isError && <p className="tm-dim">Could not sell that position.</p>}
         {rows.length === 0 && !positions.isLoading && (
           <p className="tm-dim">Nothing held yet. Open Swing Picks → Watchlist and use Buy.</p>
         )}
         {rows.length > 0 && (
-          <div className="tm-table-wrap">
-            <table className="tm-table">
-              <thead>
-                <tr>
-                  <th>Stock</th>
-                  <th>Sector</th>
-                  <th className="tm-right">Qty</th>
-                  <th className="tm-right">Avg</th>
-                  <th className="tm-right">Value</th>
-                  <th className="tm-right">P&amp;L</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((p) => (
-                  <tr key={p.id}>
-                    <td className="tm-strong">{p.symbol}</td>
-                    <td className="tm-dim">{p.sector || '—'}</td>
-                    <td className="tm-right tm-num">{p.quantity}</td>
-                    <td className="tm-right tm-num">₹{inr(p.entry_price)}</td>
-                    <td className="tm-right tm-num">₹{inr(p.current_value, 0)}</td>
-                    <td className={`tm-right tm-num ${toneClass(p.unrealized_pnl)}`}>
-                      {signed(p.unrealized_pnl_pct * 100)}
-                    </td>
-                    <td>
-                      <button
-                        type="button"
-                        className="tm-btn tm-btn-danger"
-                        disabled={close.isPending}
-                        onClick={() => {
-                          if (confirm(`Paper sell all ${p.quantity} × ${p.symbol}?`)) close.mutate(p.id)
-                        }}
-                      >
-                        Paper sell
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <OpenTable
+            rows={rows}
+            selling={close.isPending}
+            onSell={(p) => {
+              if (confirm(`Paper sell all ${p.quantity} × ${p.symbol}?`)) close.mutate(p.id)
+            }}
+          />
         )}
       </Card>
 
@@ -199,30 +173,7 @@ export default function PaperPositions() {
         </div>
         {trades.isLoading && <p className="tm-dim">Loading…</p>}
         {!trades.isLoading && reportRows.length === 0 && <p className="tm-dim">No closed paper trades yet.</p>}
-        {reportRows.length > 0 && (
-          <table className="tm-table">
-            <thead>
-              <tr>
-                <th>Period</th>
-                <th className="tm-right">Trades</th>
-                <th className="tm-right">Wins</th>
-                <th className="tm-right">Net</th>
-              </tr>
-            </thead>
-            <tbody>
-              {reportRows.map((r) => (
-                <tr key={r.key}>
-                  <td>{r.key}</td>
-                  <td className="tm-right tm-num">{r.trades}</td>
-                  <td className="tm-right tm-num">{r.wins}</td>
-                  <td className={`tm-right tm-num ${toneClass(r.net)}`}>
-                    {r.net < 0 ? '−' : ''}₹{inr(Math.abs(r.net), 0)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+        {reportRows.length > 0 && <PeriodTable rows={reportRows} />}
       </Card>
     </div>
   )
@@ -246,4 +197,142 @@ function Stat({
       {note && <div className="tm-dim">{note}</div>}
     </div>
   )
+}
+
+type OpenKey = 'symbol' | 'sector' | 'day' | 'bought' | 'score' | 'suggestion' | 'value' | 'pnl'
+
+function OpenTable({
+  rows,
+  selling,
+  onSell,
+}: {
+  rows: DetailedPosition[]
+  selling: boolean
+  onSell: (p: DetailedPosition) => void
+}) {
+  const [open, setOpen] = useState<number | null>(null)
+  const { sorted, sorter } = useSort<DetailedPosition, OpenKey>(
+    rows,
+    {
+      symbol: (p) => p.symbol,
+      sector: (p) => p.sector ?? null,
+      day: (p) => p.day_number ?? null,
+      bought: (p) => p.entry_at,
+      score: (p) => scoreNow(p),
+      suggestion: suggestionRank,
+      value: (p) => p.current_value,
+      pnl: (p) => p.unrealized_pnl_pct,
+    },
+    { key: 'suggestion', dir: 'asc' },
+    { symbol: 'asc', sector: 'asc', suggestion: 'asc' },
+  )
+  return (
+    <div className="tm-table-wrap">
+      <table className="tm-table">
+        <thead>
+          <tr>
+            <SortTh sorter={sorter} k="symbol">Stock</SortTh>
+            <SortTh sorter={sorter} k="suggestion" title="What to do today: Sell, Sell half, Watch or Hold">
+              Suggestion
+            </SortTh>
+            <SortTh sorter={sorter} k="score" right>Score today</SortTh>
+            <SortTh sorter={sorter} k="day">Day</SortTh>
+            <SortTh sorter={sorter} k="bought">Bought on</SortTh>
+            <SortTh sorter={sorter} k="sector">Sector</SortTh>
+            <th className="tm-right">Qty</th>
+            <th className="tm-right">Avg</th>
+            <SortTh sorter={sorter} k="value" right>Value</SortTh>
+            <SortTh sorter={sorter} k="pnl" right>P&amp;L</SortTh>
+            <th />
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map((p) => (
+            <Fragment key={p.id}>
+              <tr className="tm-clickable" onClick={() => setOpen(open === p.id ? null : p.id)}>
+                <td className="tm-strong">
+                  {p.symbol}
+                  <CapFlag tier={p.cap_tier} gap />
+                </td>
+                <td>
+                  <SuggestionTag p={p} />
+                </td>
+                <td className="tm-right">
+                  <ScoreToday p={p} />
+                </td>
+                <td>
+                  <DayCell p={p} />
+                </td>
+                <td className="tm-dim">{shortDay(p.entry_at)}</td>
+                <td className="tm-dim">{p.sector || '—'}</td>
+                <td className="tm-right tm-num">{p.quantity}</td>
+                <td className="tm-right tm-num">₹{inr(p.entry_price)}</td>
+                <td className="tm-right tm-num">₹{inr(p.current_value, 0)}</td>
+                <td className={`tm-right tm-num ${toneClass(p.unrealized_pnl)}`}>{signed(p.unrealized_pnl_pct * 100)}</td>
+                <td>
+                  <button
+                    type="button"
+                    className="tm-btn tm-btn-danger"
+                    disabled={selling}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onSell(p)
+                    }}
+                  >
+                    Paper sell
+                  </button>
+                </td>
+              </tr>
+              {open === p.id && (
+                <tr>
+                  <td colSpan={11} className="tm-wrap">
+                    {p.suggestion_reason && <p style={{ margin: '0 0 0.5rem' }}>{p.suggestion_reason}</p>}
+                    <ScoreTrail p={p} />
+                  </td>
+                </tr>
+              )}
+            </Fragment>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+type PeriodRow = { key: string; trades: number; wins: number; net: number }
+
+function PeriodTable({ rows }: { rows: PeriodRow[] }) {
+  const { sorted, sorter } = useSort<PeriodRow, 'key' | 'trades' | 'wins' | 'net'>(
+    rows,
+    { key: (r) => r.key, trades: (r) => r.trades, wins: (r) => r.wins, net: (r) => r.net },
+    { key: 'key', dir: 'desc' },
+  )
+  return (
+    <table className="tm-table">
+      <thead>
+        <tr>
+          <SortTh sorter={sorter} k="key">Period</SortTh>
+          <SortTh sorter={sorter} k="trades" right>Trades</SortTh>
+          <SortTh sorter={sorter} k="wins" right>Wins</SortTh>
+          <SortTh sorter={sorter} k="net" right>Net</SortTh>
+        </tr>
+      </thead>
+      <tbody>
+        {sorted.map((r) => (
+          <tr key={r.key}>
+            <td>{r.key}</td>
+            <td className="tm-right tm-num">{r.trades}</td>
+            <td className="tm-right tm-num">{r.wins}</td>
+            <td className={`tm-right tm-num ${toneClass(r.net)}`}>
+              {r.net < 0 ? '−' : ''}₹{inr(Math.abs(r.net), 0)}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+}
+
+function shortDay(isoTime: string) {
+  return new Date(isoTime).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
 }

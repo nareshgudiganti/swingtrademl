@@ -1,10 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api } from '../../api/client'
 import type { DetailedPosition, RealAccount, RealOrder, RealOrdersStatus, RealReport } from '../../api/types'
+import { CapFlag, useSymbolCaps } from '../cap'
 import { Confirm } from '../Confirm'
+import { DayCell, ScoreToday, SuggestionTag, scoreNow, suggestionRank } from '../HeldRead'
 import ScoreTrail from '../ScoreTrail'
+import { SortTh, useSort } from '../sort'
 import { Card, PageHead, Tabs, Tag, inr, signed, toneClass } from '../ui'
 
 const TABS = ['My holdings', 'Straight from Zerodha', 'Real-money report'] as const
@@ -303,6 +306,132 @@ function AccountCard() {
   )
 }
 
+type HoldKey = 'symbol' | 'suggestion' | 'score' | 'day' | 'bought' | 'pnl' | 'value'
+
+/** Every tracked share: what to do today, the daily score, which day of the trade. */
+function HoldingsTable({
+  rows,
+  canSellReal,
+  waitingSymbols,
+  busy,
+  onSellReal,
+  onSold,
+}: {
+  rows: DetailedPosition[]
+  canSellReal: boolean
+  waitingSymbols: Set<string>
+  busy: boolean
+  onSellReal: (p: DetailedPosition) => void
+  onSold: (p: DetailedPosition) => void
+}) {
+  const caps = useSymbolCaps()
+  const [open, setOpen] = useState<number | null>(null)
+  const { sorted, sorter } = useSort<DetailedPosition, HoldKey>(
+    rows,
+    {
+      symbol: (p) => p.symbol,
+      suggestion: suggestionRank,
+      score: (p) => scoreNow(p),
+      day: (p) => p.day_number ?? null,
+      bought: (p) => p.entry_at,
+      pnl: (p) => p.unrealized_pnl_pct,
+      value: (p) => p.current_value,
+    },
+    { key: 'suggestion', dir: 'asc' },
+    { symbol: 'asc', suggestion: 'asc' },
+  )
+  return (
+    <div className="tm-table-wrap">
+      <table className="tm-table">
+        <thead>
+          <tr>
+            <SortTh sorter={sorter} k="symbol">Stock</SortTh>
+            <SortTh sorter={sorter} k="suggestion" title="What to do today: Sell, Sell half, Watch or Hold">
+              Suggestion
+            </SortTh>
+            <SortTh sorter={sorter} k="score" right>Score today</SortTh>
+            <th className="tm-right">Score (bought → now)</th>
+            <SortTh sorter={sorter} k="day">Day</SortTh>
+            <SortTh sorter={sorter} k="bought">Bought on</SortTh>
+            <th className="tm-right">Shares</th>
+            <th className="tm-right">You paid</th>
+            <th className="tm-right">Price now</th>
+            <SortTh sorter={sorter} k="value" right>Worth now</SortTh>
+            <SortTh sorter={sorter} k="pnl" right>Gain or loss</SortTh>
+            <th className="tm-right">Stop-loss</th>
+            <th className="tm-right">Target</th>
+            <th />
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map((p) => (
+            <Fragment key={p.id}>
+              <tr className="tm-clickable" onClick={() => setOpen(open === p.id ? null : p.id)}>
+                <td className="tm-strong">
+                  {p.symbol}
+                  <CapFlag tier={caps.get(p.symbol.toUpperCase())} gap />
+                </td>
+                <td>
+                  <SuggestionTag p={p} />
+                </td>
+                <td className="tm-right">
+                  <ScoreToday p={p} />
+                </td>
+                <td className="tm-right"><ScoreTrail p={p} compact /></td>
+                <td>
+                  <DayCell p={p} />
+                </td>
+                <td className="tm-dim">{day(p.entry_at)}</td>
+                <td className="tm-right">{p.quantity}</td>
+                <td className="tm-right">{rupees(p.entry_price)}</td>
+                <td className="tm-right">{rupees(p.current_price)}</td>
+                <td className="tm-right">{rupees(p.current_value)}</td>
+                <td className={`tm-right ${toneClass(p.unrealized_pnl)}`}>
+                  {signedRupees(p.unrealized_pnl)} ({signed(p.unrealized_pnl_pct * 100)})
+                </td>
+                <td className="tm-right">{p.stop_loss != null ? rupees(p.stop_loss) : '—'}</td>
+                <td className="tm-right">{p.take_profit != null ? rupees(p.take_profit) : '—'}</td>
+                <td onClick={(e) => e.stopPropagation()}>
+                  <div className="tm-flex" style={{ gap: '0.3rem' }}>
+                    {canSellReal && (
+                      <button
+                        className="tm-btn"
+                        onClick={() => onSellReal(p)}
+                        disabled={busy || waitingSymbols.has(p.symbol)}
+                        title={waitingSymbols.has(p.symbol) ? 'An order is still waiting at Zerodha' : undefined}
+                      >
+                        Sell real
+                      </button>
+                    )}
+                    <button
+                      className="tm-btn tm-btn-ghost"
+                      onClick={() => onSold(p)}
+                      disabled={busy || waitingSymbols.has(p.symbol)}
+                      title={waitingSymbols.has(p.symbol) ? 'An order is still waiting at Zerodha' : undefined}
+                    >
+                      I sold this
+                    </button>
+                  </div>
+                </td>
+              </tr>
+              {open === p.id && (
+                <tr>
+                  <td colSpan={14} className="tm-wrap">
+                    <div className="tm-strong">{VERDICT[p.action_code].head}</div>
+                    {p.suggestion_reason && <p className="tm-dim" style={{ margin: '0.2rem 0 0.6rem' }}>{p.suggestion_reason}</p>}
+                    <ScoreTrail p={p} />
+                    <div className="tm-dim" style={{ marginTop: '0.4rem' }}>Stop-loss: {stopText(p)}</div>
+                  </td>
+                </tr>
+              )}
+            </Fragment>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 function HoldingsTab() {
   const queryClient = useQueryClient()
   const [sold, setSold] = useState<DetailedPosition | null>(null)
@@ -493,67 +622,16 @@ function HoldingsTab() {
       {rows.length > 0 && (
         <Card
           title="Every share you hold"
-          sub="Score is how strongly the model liked the stock when you bought it, then how strongly it likes it now (out of 100)."
+          sub="Score is how strongly the model likes the stock, out of 100, checked every day. Click a column name to sort, click a stock to see its score day by day."
         >
-          <div className="tm-table-wrap">
-            <table className="tm-table">
-              <thead>
-                <tr>
-                  <th>Stock</th>
-                  <th className="tm-right">Shares</th>
-                  <th className="tm-right">You paid</th>
-                  <th className="tm-right">Price now</th>
-                  <th className="tm-right">Gain or loss</th>
-                  <th className="tm-right">Stop-loss</th>
-                  <th className="tm-right">Target</th>
-                  <th className="tm-right">Score (bought → now)</th>
-                  <th>The bot says</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((p) => (
-                  <tr key={p.id}>
-                    <td className="tm-strong">{p.symbol}</td>
-                    <td className="tm-right">{p.quantity}</td>
-                    <td className="tm-right">{rupees(p.entry_price)}</td>
-                    <td className="tm-right">{rupees(p.current_price)}</td>
-                    <td className={`tm-right ${toneClass(p.unrealized_pnl)}`}>
-                      {signedRupees(p.unrealized_pnl)} ({signed(p.unrealized_pnl_pct * 100)})
-                    </td>
-                    <td className="tm-right">{p.stop_loss != null ? rupees(p.stop_loss) : '—'}</td>
-                    <td className="tm-right">{p.take_profit != null ? rupees(p.take_profit) : '—'}</td>
-                    <td className="tm-right"><ScoreTrail p={p} compact /></td>
-                    <td className="tm-wrap">
-                      <Tag tone={VERDICT[p.action_code].tone}>{VERDICT[p.action_code].head}</Tag>
-                    </td>
-                    <td>
-                      <div className="tm-flex" style={{ gap: '0.3rem' }}>
-                        {real?.enabled && (
-                          <button
-                            className="tm-btn"
-                            onClick={() => setSellReal(p)}
-                            disabled={realSell.isPending || waitingSymbols.has(p.symbol)}
-                            title={waitingSymbols.has(p.symbol) ? 'An order is still waiting at Zerodha' : undefined}
-                          >
-                            Sell real
-                          </button>
-                        )}
-                        <button
-                          className="tm-btn tm-btn-ghost"
-                          onClick={() => setSold(p)}
-                          disabled={manualClose.isPending || waitingSymbols.has(p.symbol)}
-                          title={waitingSymbols.has(p.symbol) ? 'An order is still waiting at Zerodha' : undefined}
-                        >
-                          I sold this
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <HoldingsTable
+            rows={rows}
+            canSellReal={!!real?.enabled}
+            waitingSymbols={waitingSymbols}
+            busy={realSell.isPending || manualClose.isPending}
+            onSellReal={setSellReal}
+            onSold={setSold}
+          />
         </Card>
       )}
 

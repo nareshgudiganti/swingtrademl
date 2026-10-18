@@ -63,3 +63,48 @@ and what to do if it goes red.
   itself is the bulk, look at the biggest tables before deleting anything.
 - **If memory warns:** `free -m`, `docker stats`; a stuck training job or the frontend dev
   server are the usual suspects. Resize the droplet if it keeps happening.
+
+## After-deploy smoke test (qa2): `smoke` job in `.github/workflows/deploy.yml` + `infra/deploy/smoke.py`
+
+- **When:** right after every successful deploy to production (push to `main`).
+- **What:** from outside the server, as a visitor would, with GET requests only (it never logs in,
+  scans or places an order, and never prints response bodies):
+  - `/api/v1/health` and `/api/v1/ready` answer 200;
+  - `/api/v1/status` answers 200 and says **paper** trading. A live trading mode (or the live
+    trading switch on) fails at once, without retries: going live is the owner's call only;
+  - `/api/v1/brain/stage` and `/api/v1/risk/limits` answer 200;
+  - the pages `/` and `/trademind` load (200, the app's HTML).
+
+  Containers are still restarting just after a deploy, so failing checks are retried for about
+  2.5 minutes (waits of 5, 10, 20, 30, 30, 30 seconds). `release.sh` already checks the release
+  from inside the droplet (`verify.py`: database migrated, fresh worker heartbeat); this is the
+  outside view.
+- **Secrets:** `API_KEY` (repository secret) for the status, brain-stage and risk-limit checks;
+  without it those are skipped with a warning and only the public checks run.
+  `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` for the alert (the same ones `uptime.yml` uses).
+- **If it fails:** a Telegram message names what failed. Open Actions, Deploy to production, the
+  `smoke` job. If the site is broken, revert the commit and push (see `docs/DEPLOY.md`, Rollback).
+  If it says the bot is NOT in paper mode, check `TRADING_MODE` / `ALLOW_LIVE_TRADING` in the
+  server's `.env` immediately.
+- **Run by hand:** `python3 infra/deploy/smoke.py` (public checks only without `API_KEY` set).
+
+## Database upgrade test (qa5): Restore drill workflow with "upgrade_check"
+
+- **When:** by hand, **before deploying a branch that adds or changes a migration**
+  (`backend/alembic/versions/`). Actions, Restore drill, Run workflow: tick `upgrade_check`, and
+  put the branch name in `ref`. Outside 09:00-16:30 IST on weekdays.
+- **What:** `infra/deploy/restore-drill.sh` restores the newest prod backup into a throwaway
+  Postgres container, checks row counts, then runs that branch's `alembic upgrade head` on the
+  restored copy and prints the database revision before and after (and the branch's head).
+  Python and libraries come from the live API image; the code and migrations from `ref`.
+- **Safety:** the migration can only reach the throwaway server: it runs inside the throwaway
+  container's isolated network (no route to the live database), the script checks that network
+  mode, and a guard refuses to migrate unless the server it reached carries a marker database
+  created only in the throwaway copy. The live `.env` is never loaded. (The restored database has
+  the same name as the live one, because the backup recreates it, so the guard is on the server,
+  not the name.)
+- **If it fails:** the output names the failing migration and the SQL error. Fix the migration on
+  the branch and re-run before merging; do not deploy it. A branch that adds a new Python library
+  fails at import here: that case can only be checked by a real build.
+- **Note:** the drill script itself runs from the deployed code on the droplet, so this check
+  exists only once this change is on `main`. Last result: `/root/backups/restore-drill-last.txt`.

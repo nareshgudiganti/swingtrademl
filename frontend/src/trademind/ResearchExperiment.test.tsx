@@ -7,7 +7,8 @@ import { describe, expect, it } from 'vitest'
 
 import type { BrainDecision, BrainRun } from '../api/types'
 import Dashboard from './pages/Dashboard'
-import { ResearchExperiment } from './ResearchExperiment'
+import dashboardSource from './pages/Dashboard.tsx?raw'
+import { ResearchExperiment, canStillChange } from './ResearchExperiment'
 import type { HorizonId } from './horizons'
 import { HORIZONS, horizonById } from './horizons'
 
@@ -192,3 +193,93 @@ describe('Swing Picks: the research section appears only for the owner, on 5 and
     }
   })
 })
+
+describe('review fixes', () => {
+  const accepted = (id: number, symbol: string, entry: string, extra = {}) => ({
+    id, symbol, intended_horizon: 5, note: 'why', submitted_at: '2026-10-18T10:00:00+05:30',
+    submitted_by: 'sudeeksha', entry_session: entry, status: 'accepted', reject_reason: null, supersedes_id: null,
+    ...extra,
+  })
+
+  function renderWith(sel: unknown[], outs: unknown[] = outcomes, id: HorizonId = '5d') {
+    const c = client(true)
+    c.setQueryData(['experiments', 'selections'], sel)
+    c.setQueryData(['experiments', 'outcomes'], outs)
+    return text(
+      renderToString(
+        <QueryClientProvider client={c}>
+          <ResearchExperiment horizon={horizonById(id)} />
+        </QueryClientProvider>,
+      ),
+    )
+  }
+
+  it('a recorded pick shows straight away, on both tabs, before the evening scoring', () => {
+    const sel = [accepted(21, 'NEWPICK', '2099-01-05')]
+    for (const h of ['5d', '30d'] as const) {
+      const t = renderWith(sel, [], h)
+      expect(t).toContain('NEWPICK')
+      expect(t).toMatch(/Recorded, waiting to start/)
+      expect(t).not.toMatch(/No picks yet/)
+    }
+  })
+
+  it('a corrected pick shows once, as the new stock, in the change list and the table', () => {
+    const sel = [accepted(31, 'OLDSYM', '2099-01-05'), accepted(32, 'NEWSYM', '2099-01-05', { supersedes_id: 31 })]
+    const t = renderWith(sel, [])
+    expect(t).not.toContain('OLDSYM')
+    expect(t.match(/NEWSYM/g)?.length).toBe(2) // once in "can still be changed", once in the table
+  })
+
+  it('the range is labelled rough and unreliable while the sample is small', () => {
+    const t = renderWith(selections)
+    expect(t).not.toMatch(/Likely range/)
+    expect(t).toMatch(/Rough range/)
+    expect(t).toMatch(/unreliable until 30/i)
+    expect(t).toMatch(/too few samples/i)
+  })
+
+  it('says each pick is scored at both windows', () => {
+    expect(renderWith(selections)).toMatch(/scored at both 5 and 30 days/i)
+  })
+
+  it('a status line is always present for screen readers', () => {
+    const c = client(true)
+    const html = renderToString(
+      <QueryClientProvider client={c}>
+        <ResearchExperiment horizon={horizonById('5d')} />
+      </QueryClientProvider>,
+    )
+    expect(html).toMatch(/role="status"[^>]*aria-live="polite"|aria-live="polite"[^>]*role="status"/)
+  })
+})
+
+describe('canStillChange (09:00 IST on the start day, whatever the browser time zone)', () => {
+  // 2026-10-19 08:59 IST = 03:29 UTC; 09:00 IST = 03:30 UTC
+  it('before 09:00 IST on the start day: yes', () => {
+    expect(canStillChange('2026-10-19', new Date('2026-10-19T03:29:00Z'))).toBe(true)
+  })
+  it('at 09:00 IST: no', () => {
+    expect(canStillChange('2026-10-19', new Date('2026-10-19T03:30:00Z'))).toBe(false)
+  })
+  it('the day before: yes; the day after: no', () => {
+    expect(canStillChange('2026-10-19', new Date('2026-10-18T20:00:00Z'))).toBe(true)
+    expect(canStillChange('2026-10-19', new Date('2026-10-20T01:00:00Z'))).toBe(false)
+  })
+  it('late evening UTC that is already the start day in India: compares in IST', () => {
+    // 2026-10-18 20:00 UTC = 2026-10-19 01:30 IST: still before the cutoff
+    expect(canStillChange('2026-10-19', new Date('2026-10-18T20:00:00Z'))).toBe(true)
+    // 2026-10-19 04:00 UTC = 09:30 IST: too late, even though it is only 04:00 in UTC
+    expect(canStillChange('2026-10-19', new Date('2026-10-19T04:00:00Z'))).toBe(false)
+  })
+  it('no start day: no', () => {
+    expect(canStillChange(null, new Date())).toBe(false)
+  })
+})
+
+describe('switching between the 5- and 30-day tabs starts a fresh form', () => {
+  it('the section is keyed by the horizon, so typed text never carries over to the other tab', () => {
+    expect(dashboardSource).toMatch(/<ResearchExperiment key=\{active\.id\}/)
+  })
+})
+

@@ -226,7 +226,7 @@ function DashboardBody({ initialHorizon }: { initialHorizon: HorizonId }) {
         {!active.available ? (
           <>
             <HorizonUnavailable horizon={active} experimentBelow={canManage && !!active.experiment} />
-            {canManage && active.experiment && <ResearchExperiment horizon={active} />}
+            {canManage && active.experiment && <ResearchExperiment key={active.id} horizon={active} />}
           </>
         ) : (
           <div className="tm-table-wrap">

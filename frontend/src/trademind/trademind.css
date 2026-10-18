@@ -581,6 +581,9 @@
 /* ---------------------------------------------------------------- tables -- */
 
 .tm-table-wrap {
+  /* Containing block, so absolutely positioned bits inside a table (screen-reader-only text) are clipped by this
+     scroll area instead of widening the whole page on a phone. */
+  position: relative;
   overflow-x: auto;
   scrollbar-color: var(--tm-line-strong) transparent;
   scrollbar-width: thin;

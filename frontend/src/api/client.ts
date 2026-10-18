@@ -1,6 +1,10 @@
 // Thin fetch wrapper around the FastAPI backend.
 
 import type {
+  ExperimentOutcome,
+  ExperimentPickIn,
+  ExperimentReport,
+  ExperimentSelection,
   ObsDays,
   ObsForwardGate,
   ObsLearning,
@@ -588,6 +592,13 @@ export const api = {
 
   // ---------------------------------------------- brain observatory (owner, read-only) --
   obsDays: (from: string, to: string) => get<ObsDays>(`/brain/observatory/days?from=${from}&to=${to}`),
+  // Horizon experiments (research ledger, owner-only): owner-selected 5- and 30-day picks, simulated.
+  experimentsReport: () => get<ExperimentReport>('/experiments/report'),
+  experimentsOutcomes: () => get<ExperimentOutcome[]>('/experiments/outcomes'),
+  experimentsSelections: () => get<ExperimentSelection[]>('/experiments/selections'),
+  experimentAddPick: (pick: ExperimentPickIn) => post<ExperimentSelection>('/experiments/selections', pick),
+  experimentCorrectPick: (id: number, pick: ExperimentPickIn) =>
+    post<ExperimentSelection>(`/experiments/selections/${id}/correct`, pick),
   obsLearning: (from: string, to: string) => get<ObsLearning>(`/brain/observatory/learning?from=${from}&to=${to}`),
   obsForwardGate: () => get<ObsForwardGate>('/brain/observatory/forward-gate'),
   obsRunsPage: (date: string, afterStartedAt?: string, afterId?: string) =>

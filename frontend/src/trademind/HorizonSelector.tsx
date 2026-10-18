@@ -62,7 +62,7 @@ export function HorizonSelector({
 }
 
 /** What a screen shows for a horizon with no supported trading strategy: an explanation and no ideas. */
-export function HorizonUnavailable({ horizon: h }: { horizon: Horizon }) {
+export function HorizonUnavailable({ horizon: h, experimentBelow = false }: { horizon: Horizon; experimentBelow?: boolean }) {
   return (
     <div className="tm-horizon-unavailable" style={{ padding: '0.6rem 0.2rem' }}>
       <p>
@@ -70,6 +70,12 @@ export function HorizonUnavailable({ horizon: h }: { horizon: Horizon }) {
         so none is shown. It will not show ideas made for another window under this name.
       </p>
       {h.research && <p className="tm-dim">{h.research}</p>}
+      {experimentBelow && (
+        <p>
+          A research experiment is running below: your own picks for this window, simulated and unproven. It is
+          not a trading strategy.
+        </p>
+      )}
     </div>
   )
 }

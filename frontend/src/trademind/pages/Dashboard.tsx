@@ -20,6 +20,8 @@ import { formatDateTime } from '../../lib/format'
 import type { Action } from '../types'
 import { finalWord, ideasFrom, stockSituations, useLatestRun } from '../live'
 import { HorizonSelector, HorizonUnavailable } from '../HorizonSelector'
+import { ResearchExperiment } from '../ResearchExperiment'
+import { usePlan } from '../../lib/plan'
 import { DEFAULT_HORIZON, HORIZONS, horizonById, type HorizonId } from '../horizons'
 import { MARKET_LABEL, MARKET_PLAIN, MARKET_TONE, wordTone } from '../vocab'
 import { ActionPill, BrainArt, BrainGate, Card, CheckItem, GlowArea, Meter, Ring, StockLogo, Tag, inr } from '../ui'
@@ -101,6 +103,8 @@ function DashboardBody({ initialHorizon }: { initialHorizon: HorizonId }) {
   const latest = useLatestRun()
   const run = latest.data!
   const [win, setWin] = useState<HorizonId>(initialHorizon)
+  // The research experiment is the owner's alone (the API refuses everyone else).
+  const { canManage } = usePlan()
   const [picked, setPicked] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [sector, setSector] = useState('ALL')
@@ -220,7 +224,10 @@ function DashboardBody({ initialHorizon }: { initialHorizon: HorizonId }) {
         </div>
 
         {!active.available ? (
-          <HorizonUnavailable horizon={active} />
+          <>
+            <HorizonUnavailable horizon={active} experimentBelow={canManage && !!active.experiment} />
+            {canManage && active.experiment && <ResearchExperiment horizon={active} />}
+          </>
         ) : (
           <div className="tm-table-wrap">
             <table className="tm-table">

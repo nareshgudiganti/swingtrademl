@@ -1379,3 +1379,82 @@ export interface ObsForwardGate {
   word: string; why: string; cohort_from: string; cohort_to: string; cohort: string
   gate?: { sessions: number; finished: number; word: string }
 }
+
+// ------------------------------------------------------------------ horizon experiments (research ledger) --
+
+export interface ExperimentHorizonReport {
+  horizon: number
+  label: string
+  verdict: string
+  closed: number
+  open: number
+  pending: number
+  data_issues: number
+  void: number
+  independent_samples: number
+  independent_entry_dates: number
+  non_overlapping: number
+  minimum_needed: number
+  period: { from: string | null; to: string | null }
+  mean_net_return: number | null
+  median_net_return: number | null
+  mean_net_return_per_day: number | null
+  mean_excess_vs_nifty: number | null
+  mean_excess_vs_universe: number | null
+  net_return_range_90: [number, number] | null
+  win_rate: number | null
+}
+
+export interface ExperimentReport {
+  protocol: Record<string, unknown> & { code: string; cutoff_ist?: string; min_independent_samples?: number }
+  owner_selected_note: string
+  intended_filter: number | null
+  horizons: ExperimentHorizonReport[]
+  rejected_picks: number
+  limits: string[]
+}
+
+export interface ExperimentOutcome {
+  selection_id: number
+  symbol: string
+  intended_horizon: number | null
+  horizon: number
+  state: 'pending' | 'open' | 'closed' | 'data_issue' | 'void'
+  entry_session: string | null
+  exit_session: string | null
+  mark_session: string | null
+  entry_price: number | null
+  exit_price: number | null
+  gross_return: number | null
+  net_return: number | null
+  costs_inr: number | null
+  slippage_inr: number | null
+  nifty_return: number | null
+  universe_return: number | null
+  universe_count: number | null
+  buy_hold_return: number | null
+  excess_vs_nifty: number | null
+  excess_vs_universe: number | null
+  data_flags: Record<string, unknown>
+  scored_at: string
+}
+
+export interface ExperimentSelection {
+  id: number
+  symbol: string
+  intended_horizon: number | null
+  note: string | null
+  submitted_at: string
+  submitted_by: string
+  entry_session: string | null
+  status: 'accepted' | 'rejected'
+  reject_reason: string | null
+  supersedes_id: number | null
+}
+
+export interface ExperimentPickIn {
+  symbol: string
+  intended_horizon: number | null
+  note?: string | null
+}
+

@@ -20,6 +20,8 @@ export type Horizon = {
   validation: Validation | null
   /** Research predictions that exist for this window but are not a trading strategy. */
   research?: string
+  /** An owner-selected research experiment runs on this window (simulated, unproven; design rev 3). */
+  experiment?: boolean
 }
 
 export const VALIDATION_TEXT: Record<Validation, string> = {
@@ -43,6 +45,7 @@ export const HORIZONS: Horizon[] = [
     research:
       'The older ML models make research predictions for this window (closes +2% or more after 5 days). ' +
       'They are unvalidated and not a trading plan.',
+    experiment: true,
   },
   {
     id: '15d',
@@ -54,7 +57,17 @@ export const HORIZONS: Horizon[] = [
     availabilityText: 'Trading ideas available',
     validation: 'experimental',
   },
-  { id: '30d', days: 30, title: '30 Days', kind: 'Positional swing', span: '3 - 6 weeks', available: false, availabilityText: NONE, validation: null },
+  {
+    id: '30d',
+    days: 30,
+    title: '30 Days',
+    kind: 'Positional swing',
+    span: '3 - 6 weeks',
+    available: false,
+    availabilityText: NONE,
+    validation: null,
+    experiment: true,
+  },
   { id: '90d', days: 90, title: '3 Months', kind: 'Long swing', span: '6 - 12 weeks', available: false, availabilityText: NONE, validation: null },
 ]
 

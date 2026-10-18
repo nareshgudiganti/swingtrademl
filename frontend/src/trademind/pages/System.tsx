@@ -158,7 +158,7 @@ function SystemBody() {
         {modules.isLoading && <p className="tm-dim">Loading…</p>}
         {modules.isError && <p className="tm-dim">Could not load the module list.</p>}
         {modules.data && (
-          <div className="tm-table-wrap">
+          <div className="tm-table-wrap" tabIndex={0} role="region" aria-label="Table, scroll sideways to see more">
             <table className="tm-table">
               <tbody>
                 {modules.data.steps.map((s) => (
@@ -212,7 +212,7 @@ function SystemBody() {
         {runs.isError && <p className="tm-dim">Could not load recent runs.</p>}
         {runs.data && runs.data.length === 0 && <p className="tm-dim">No runs recorded yet.</p>}
         {runs.data && runs.data.length > 0 && (
-          <div className="tm-table-wrap">
+          <div className="tm-table-wrap" tabIndex={0} role="region" aria-label="Table, scroll sideways to see more">
             <table className="tm-table">
               <thead>
                 <tr>

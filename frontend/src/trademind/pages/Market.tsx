@@ -90,7 +90,7 @@ function MarketBody() {
           {sectors.length === 0 ? (
             <p className="tm-dim">No sector data in this run.</p>
           ) : (
-            <div className="tm-table-wrap">
+            <div className="tm-table-wrap" tabIndex={0} role="region" aria-label="Table, scroll sideways to see more">
               <table className="tm-table">
                 <thead>
                   <tr>
@@ -129,7 +129,7 @@ function MarketBody() {
           {episodes.isError && <p className="tm-dim">Could not load market history.</p>}
           {episodes.data && episodes.data.length === 0 && <p className="tm-dim">No history recorded yet.</p>}
           {episodes.data && episodes.data.length > 0 && (
-            <div className="tm-table-wrap">
+            <div className="tm-table-wrap" tabIndex={0} role="region" aria-label="Table, scroll sideways to see more">
               <table className="tm-table">
                 <thead>
                   <tr>

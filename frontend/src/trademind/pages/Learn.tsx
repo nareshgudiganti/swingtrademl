@@ -121,7 +121,7 @@ function LearnBody() {
                 <div className="tm-strong" style={{ marginTop: '0.9rem' }}>
                   Model score (a ranking, not a chance)
                 </div>
-                <div className="tm-table-wrap">
+                <div className="tm-table-wrap" tabIndex={0} role="region" aria-label="Table, scroll sideways to see more">
                   <table className="tm-table">
                     <thead>
                       <tr>
@@ -156,7 +156,7 @@ function LearnBody() {
                 <div className="tm-strong" style={{ marginTop: '0.9rem' }}>
                   By decision
                 </div>
-                <div className="tm-table-wrap">
+                <div className="tm-table-wrap" tabIndex={0} role="region" aria-label="Table, scroll sideways to see more">
                   <table className="tm-table">
                     <thead>
                       <tr>
@@ -189,7 +189,7 @@ function LearnBody() {
                 <div className="tm-strong" style={{ marginTop: '0.9rem' }}>
                   By week
                 </div>
-                <div className="tm-table-wrap">
+                <div className="tm-table-wrap" tabIndex={0} role="region" aria-label="Table, scroll sideways to see more">
                   <table className="tm-table">
                     <thead>
                       <tr>
@@ -272,7 +272,7 @@ function LearnBody() {
         {proposals.isError && <p className="tm-dim">Could not load proposals.</p>}
         {proposals.data && proposals.data.length === 0 && <p className="tm-dim">No proposals right now.</p>}
         {proposals.data && proposals.data.length > 0 && (
-          <div className="tm-table-wrap" style={{ marginTop: '0.6rem' }}>
+          <div className="tm-table-wrap" tabIndex={0} role="region" aria-label="Table, scroll sideways to see more" style={{ marginTop: '0.6rem' }}>
             <table className="tm-table">
               <tbody>
                 {proposals.data.map((p) => (

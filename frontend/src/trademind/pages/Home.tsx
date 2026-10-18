@@ -150,7 +150,7 @@ function HomeBody() {
           {top.length === 0 ? (
             <p className="tm-dim">No ideas to show right now.</p>
           ) : (
-            <div className="tm-table-wrap">
+            <div className="tm-table-wrap" tabIndex={0} role="region" aria-label="Table, scroll sideways to see more">
               <table className="tm-table">
                 <tbody>
                   {top.map((i) => (

@@ -1254,6 +1254,8 @@ export interface MarketSession {
   today?: string
   /** The last 20 finished trading days, newest first (starts at last_closed_trading_day). */
   recent_closed_trading_days?: string[]
+  /** Newest daily price date (IST), YYYY-MM-DD, null when there are no prices. Optional: older servers. */
+  latest_candle_date?: string | null
   calendar_warning: string | null
 }
 

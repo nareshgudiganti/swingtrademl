@@ -218,10 +218,13 @@ def status(db: DbSession) -> SystemStatus:
 
 
 @router.get("/market/session", dependencies=[Depends(require_auth)])
-def market_session_now() -> dict:
+def market_session_now(db: DbSession) -> dict:
     """Is the market open right now, when it next opens and closes, and a
     plain line for the top bar (the app's one market clock)."""
     s = market_session.session()
+    latest_candle_ts = db.execute(
+        select(func.max(Candle.ts)).where(Candle.interval == "day")
+    ).scalar_one_or_none()
     return {
         "state": s.state.value,
         "plain": s.plain,
@@ -234,6 +237,8 @@ def market_session_now() -> dict:
         # For the "prices are N days old" badge: today's IST date and the recent finished trading days.
         "today": s.now.date(),
         "recent_closed_trading_days": market_session.recent_closed_trading_days(s.now),
+        # Daily bars are stamped 00:00 IST (18:30 UTC the day before): convert before taking the date.
+        "latest_candle_date": latest_candle_ts.astimezone(IST).date() if latest_candle_ts else None,
         "calendar_warning": market_session.calendar_warning(s.now.date()),
     }
 

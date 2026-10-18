@@ -221,3 +221,23 @@ def test_the_market_session_endpoint_lists_recent_trading_days_for_the_prices_ba
     assert body["today"] == "2026-10-04"
     assert body["recent_closed_trading_days"][:2] == ["2026-10-01", "2026-09-30"]
     assert len(body["recent_closed_trading_days"]) == 20
+
+
+def test_the_market_session_endpoint_gives_the_newest_price_date_in_ist(client, db_session):
+    """The prices badge reads the date here, not from /status. 00:00 IST bars come back as 18:30 UTC."""
+    from datetime import UTC
+
+    from swing_trade_ml.db.models.market import Candle, Instrument
+
+    assert client.get("/api/v1/market/session", headers=HEADERS).json()["latest_candle_date"] is None
+    inst = Instrument(instrument_token=99002, tradingsymbol="TSESS", exchange="NSE")
+    db_session.add(inst)
+    db_session.flush()
+    db_session.add(
+        Candle(
+            instrument_id=inst.id, interval="day", ts=datetime(2026, 10, 15, 18, 30, tzinfo=UTC),
+            open=1, high=1, low=1, close=1, volume=1,
+        )
+    )
+    db_session.flush()
+    assert client.get("/api/v1/market/session", headers=HEADERS).json()["latest_candle_date"] == "2026-10-16"

@@ -1,0 +1,15 @@
+{
+  "about": "Known accessibility debt (qa10). Each entry: an axe rule id, the page key from a11y.spec.ts, and a TODO. A listed rule does not fail the check on that page only; every other serious or critical problem still does. Remove an entry once it is fixed; the test run adds an 'allowlist-entry-now-passes' note when one already passes. Colour fixes are design changes for the owner to approve, so they are listed here instead of being changed by the test work.",
+  "allowed": [
+    {
+      "rule": "color-contrast",
+      "page": "sign-in",
+      "todo": "The blue 'Sign in' button (button.primary in src/styles.css): white text on --accent #4f8cff is 3.21:1, needs 4.5:1. Darken the button blue (about #2f6fe0 or darker) or use dark text. Same button style is used across the classic screens."
+    },
+    {
+      "rule": "color-contrast",
+      "page": "portfolio-overview",
+      "todo": "Table column headings (.tm-table th in src/trademind/trademind.css): --tm-faint #5d6590 on the card #131c31 is 3.01:1 at 11.5px, needs 4.5:1. Use --tm-dim or a lighter faint colour for headings. Affects every TradeMind table with a heading row."
+    }
+  ]
+}

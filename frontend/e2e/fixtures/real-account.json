@@ -1,0 +1,20 @@
+{
+  "account": {
+    "cash_available": 25000, "invested": 0, "current_value": 0, "total_pnl": 0, "total_pnl_pct": null,
+    "day_pnl": 0, "account_value": 25000, "stocks": 0
+  },
+  "ordersStatus": {
+    "enabled": false, "max_order_inr": 10000, "max_day_inr": 20000, "spent_today_inr": 0,
+    "market_open": false, "market_text": "Market closed", "waiting": []
+  },
+  "report": {
+    "summary": {
+      "bought_value": 0, "sold_value": 0, "buy_count": 0, "sell_count": 0, "realized_pnl": 0, "gross_pnl": 0,
+      "charges": 0, "winning_sales": 0, "losing_sales": 0, "average_holding_days": null, "best_stock": null,
+      "worst_stock": null, "open_pnl": null, "open_value": null, "open_invested": null
+    },
+    "by_stock": [], "closed": [], "unmatched_sales": [], "fills": [],
+    "records": { "total_fills": 0, "first_at": null, "last_at": null },
+    "holdings_note": null
+  }
+}

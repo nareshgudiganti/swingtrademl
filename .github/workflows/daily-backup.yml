@@ -16,6 +16,8 @@ concurrency:
 
 jobs:
   backup:
+    # Server key: "production" environment, main only (see deploy.yml).
+    environment: production
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:

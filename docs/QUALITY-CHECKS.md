@@ -25,3 +25,15 @@ and what to do if it goes red.
   as soon as a fixed version exists.
 - **Known, not yet fixed (2026-10-18):** vitest 3 (test runner only) needs vitest 5, which needs
   a Vite major upgrade; @capacitor/cli (phone build tool). Neither ships to prod.
+
+## Money-code coverage floor (qa8): `backend/scripts/check_money_coverage.py`
+
+- **When:** every backend test run in CI (`test.yml`, after pytest writes `coverage.json`).
+- **What:** fails the build if the share of tested lines drops below **95%** in any of the money
+  files: `services/risk.py`, `services/limits.py`, `services/exit_policy.py`,
+  `services/execution.py`, and `brokers/` (`__init__`, `base`, `paper`, `kite`).
+- **Where it stood (2026-10-18):** risk 100%, limits 98.8%, exit policy 100%, execution 99.4%,
+  brokers 98.7-100%. New tests: `tests/test_money_*.py` (77 tests; Kite is always a fake, nothing
+  reaches Zerodha; "live" mode is switched on in memory only to prove the paper latch refuses).
+- **If it fails:** a change to money code arrived without tests. Add tests for the uncovered lines
+  (the CI log lists each file's figure). Never lower a floor to make a build pass.

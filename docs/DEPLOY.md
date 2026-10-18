@@ -26,6 +26,12 @@ so any fix that has to change prod behaviour must be a **code** change.
 
 2. **Make the change, tests first.** See `CLAUDE.md` for the TDD expectation.
 
+   **Branch adds or changes a migration?** Before deploying it, push the branch (not to `main`)
+   and run Actions, **Restore drill**, Run workflow with `upgrade_check` ticked and the branch name
+   in `ref`. It runs the branch's `alembic upgrade head` on a restored copy of the prod backup (a
+   throwaway container, never the live database) and reports the revision before and after.
+   Do not deploy if it fails. Details: `docs/QUALITY-CHECKS.md`, "Database upgrade test (qa5)".
+
 3. **Verify — all three, every time.** A green run of the one file you touched is
    not a green suite.
 
@@ -80,7 +86,9 @@ so any fix that has to change prod behaviour must be a **code** change.
    ```
 
    `/status` does not expose the released commit, so a green deploy run plus a
-   healthy `/health` is the available evidence. Where the change is
+   healthy `/health` is the available evidence. The deploy's `smoke` job does
+   these checks automatically from outside (and messages Telegram on failure):
+   see `docs/QUALITY-CHECKS.md`, "After-deploy smoke test (qa2)". Where the change is
    behavioural, name the observation that will confirm it and when it happens —
    for a scan change, that is the next 15:45 IST run.
 

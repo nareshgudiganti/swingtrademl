@@ -1,22 +1,30 @@
-"""Trade-level baselines, exactly as `evidence-defs-v1` defines them (evidence plan section 3a, locked as tag
+"""Baselines, exactly as `evidence-defs-v1` defines them (evidence plan section 3a, locked as tag
 evidence-defs-v1). Pure: no database.
 
-The candidate's ideas against every stock, random 5, momentum 5 and NIFTY on the candidate's own days, with
-the same next-open entry, exit rule and costs (`replay_scoring.strict_score`). NIFTY here follows each
-idea's own exit day, so it is a comparison, never an index strategy.
+Two levels, both always reported, neither replacing the other:
 
-Brought across from feature/evidence-phase-a (3686a1c), trade level only; the portfolio-level accounts of
-that branch are outside the approved Observatory Phase 1A scope.
+1. Trade level (matched): the candidate's ideas against every stock, random 5, momentum 5 and NIFTY on the
+   candidate's own days, with the same next-open entry, exit rule and costs (`replay_scoring.strict_score`).
+   NIFTY here follows each idea's own exit day, so it is a comparison, never an index strategy.
+2. Portfolio level (equal capital, independently executable): the candidate, random 5 and momentum 5 each
+   run through the same account replay (`brain/portfolio_sim.simulate`: ladder limits, sector cap, 15% halt,
+   costs), next to NIFTY bought and held and cash. Random 5 and momentum 5 trade every day of the period,
+   not only the candidate's days, so they do not depend on the candidate.
+
+The Observatory's Outcomes page (Phase 1A, `outcomes.py`) shows the trade level only; the monthly evidence
+pack (`pack.py`, evidence plan A5) shows both.
 """
 
 from __future__ import annotations
 
 import random
+import statistics
 from collections.abc import Sequence
 from datetime import date
 
 import pandas as pd
 
+from swing_trade_ml.brain.portfolio_sim import Pick, PortfolioResult, simulate
 from swing_trade_ml.brain.replay_scoring import HORIZON_BARS, POSITION_INR, STOP, TARGET, StrictOutcome
 from swing_trade_ml.brain.walk_forward import bootstrap_low, daily_edge, momentum_scores, outcomes_for
 from swing_trade_ml.services.brain_observatory import defs
@@ -27,6 +35,10 @@ Picks = dict[date, list[str]]
 NIFTY_MATCHED_NOTE = (
     "Trade-level comparison only: each NIFTY holding ends on the matching idea's exit day, which nobody "
     "could know in advance, so this is not an index strategy anyone could run."
+)
+NIFTY_HOLD_NOTE = (
+    "Whole capital in NIFTY 50 from the first day's open to the last day's close, one round trip of the "
+    "stock delivery cost model (an index fund's real costs are a little lower)."
 )
 
 
@@ -163,4 +175,153 @@ def trade_level(
             "days_with_ideas": len(days),
             "days_available": sum(1 for syms in pool.values() if syms),
         },
+    }
+
+
+# --- portfolio level ---------------------------------------------------------------------------
+
+
+def risk_report(res: PortfolioResult) -> dict:
+    """The four numbers the plan asks for, plus trade counts."""
+    return {
+        "max_drawdown": res.max_drawdown,
+        "halt_triggered": res.halted_days > 0,
+        "halted_days": res.halted_days,
+        "final_net_return": res.total_return,
+        "trades": res.trades,
+        "still_open": res.still_open,
+    }
+
+
+def _spread(values: list[float]) -> dict:
+    xs = sorted(values)
+    if not xs:
+        return {"median": None, "p5": None, "p95": None}
+    return {
+        "median": statistics.median(xs),
+        "p5": xs[int(0.05 * (len(xs) - 1))],
+        "p95": xs[int(0.95 * (len(xs) - 1))],
+    }
+
+
+def nifty_hold(index_bars: pd.DataFrame | None, days: Sequence[date], capital: float) -> dict | None:
+    """Buy NIFTY with the whole capital at the first day's open, hold, sell at the last day's close."""
+    if index_bars is None or index_bars.empty or not days:
+        return None
+    held = index_bars[(index_bars["day"] >= days[0]) & (index_bars["day"] <= days[-1])]
+    if held.empty:
+        return None
+    fill = apply_slippage(float(held.iloc[0]["open"]), "BUY")
+    qty = capital / fill
+    brokerage, taxes = compute_charges(fill * qty, "BUY")
+    qty *= capital / (fill * qty + brokerage + taxes)  # spend the capital, charges included
+    brokerage, taxes = compute_charges(fill * qty, "BUY")
+    left = capital - fill * qty - brokerage - taxes
+    peak, max_dd = capital, 0.0
+    for close in held["close"]:
+        value = left + qty * float(close)
+        peak = max(peak, value)
+        max_dd = max(max_dd, (peak - value) / peak)
+    gross = apply_slippage(float(held.iloc[-1]["close"]), "SELL") * qty
+    brokerage, taxes = compute_charges(gross, "SELL")
+    end = left + gross - brokerage - taxes
+    max_dd = max(max_dd, (peak - end) / peak)
+    return {
+        "max_drawdown": max_dd,
+        "halt_triggered": None,  # one holding and no new entries: the halt does not apply
+        "halted_days": None,
+        "final_net_return": end / capital - 1.0,
+        "note": NIFTY_HOLD_NOTE,
+    }
+
+
+def _run(
+    picks: Sequence[Pick], bars: dict[str, pd.DataFrame], days: Sequence[date], capital: float
+) -> PortfolioResult:
+    """One account. Only the picked stocks' prices are passed: the replay reads no other stock, so the
+    result is the same and the account is much quicker to replay."""
+    used = {p.symbol for p in picks}
+    return simulate(
+        picks,
+        {s: df for s, df in bars.items() if s in used},
+        days,
+        capital=capital,
+        max_drawdown_pct=defs.MAX_DRAWDOWN_HALT,
+    )
+
+
+def portfolio_baselines(
+    pool: Picks,
+    bars: dict[str, pd.DataFrame],
+    days: Sequence[date],
+    buckets: dict[str, str | None],
+    index_bars: pd.DataFrame | None,
+    *,
+    capital: float,
+    runs: int = defs.PORTFOLIO_RANDOM_RUNS,
+    seed: int = defs.RANDOM_SEED,
+) -> dict:
+    """The accounts that do not depend on any candidate: random 5 and momentum 5 on every day of the
+    pool, NIFTY bought and held, and cash. Computed once and shared by every candidate of a report."""
+    decision_days = sorted(d for d, syms in pool.items() if syms)
+    rng = random.Random(seed)
+    random_reports = []
+    for _ in range(runs if decision_days else 0):
+        picks = [
+            Pick(d, s, rng.random(), buckets.get(s))
+            for d, syms in _random_day_picks(rng, pool, decision_days).items()
+            for s in syms
+        ]
+        random_reports.append(risk_report(_run(picks, bars, days, capital)))
+
+    scores = momentum_scores(bars, decision_days)
+    mom = [
+        Pick(d, s, scores[s][d], buckets.get(s))
+        for d, syms in momentum_picks(bars, pool, decision_days).items()
+        for s in syms
+    ]
+    random_row: dict = {"runs": len(random_reports)}
+    for key in ("max_drawdown", "halted_days", "final_net_return"):
+        random_row[key] = _spread([r[key] for r in random_reports])
+    random_row["halt_triggered_share"] = (
+        sum(1 for r in random_reports if r["halt_triggered"]) / len(random_reports)
+        if random_reports
+        else None
+    )
+    return {
+        "random_5": random_row,
+        "momentum_5": risk_report(_run(mom, bars, days, capital)),
+        "nifty_hold": nifty_hold(index_bars, days, capital),
+        "cash": {"max_drawdown": 0.0, "halt_triggered": False, "halted_days": 0, "final_net_return": 0.0},
+    }
+
+
+def portfolio_level(
+    candidate: Sequence[Pick],
+    pool: Picks,
+    bars: dict[str, pd.DataFrame],
+    days: Sequence[date],
+    buckets: dict[str, str | None],
+    index_bars: pd.DataFrame | None,
+    *,
+    capital: float,
+    runs: int = defs.PORTFOLIO_RANDOM_RUNS,
+    seed: int = defs.RANDOM_SEED,
+    shared: dict | None = None,
+) -> dict:
+    """Equal-capital accounts over `days` (every trading day from the first decision day to the end of
+    the data). Every account gets the same limits; none uses another's trades. `shared` is a
+    `portfolio_baselines` result for the same pool, days and capital, to avoid recomputing it."""
+    if shared is None:
+        shared = portfolio_baselines(
+            pool, bars, days, buckets, index_bars, capital=capital, runs=runs, seed=seed
+        )
+    return {
+        "defs": defs.EVIDENCE_DEFS_VERSION,
+        "label": defs.OBSERVED_NOT_PROOF,
+        "capital": capital,
+        "first_day": days[0].isoformat() if days else None,
+        "last_day": days[-1].isoformat() if days else None,
+        "candidate": risk_report(_run(candidate, bars, days, capital)),
+        **shared,
     }

@@ -1,17 +1,18 @@
-"""evidence-defs-v1 trade-level baselines (evidence plan A4, section 3a locked as tag evidence-defs-v1).
-
-Brought across from feature/evidence-phase-a (3686a1c), trade level only: the portfolio-level accounts are
-outside the approved Phase 1A scope."""
+"""evidence-defs-v1 baselines (evidence plan A4, section 3a locked as tag evidence-defs-v1): pure
+calculations on made-up prices whose answers are known, at trade level (Observatory 1A) and portfolio level
+(evidence pack A5), plus a check that the code's definitions are the ones the frozen plan states."""
 
 from __future__ import annotations
 
 import re
+from dataclasses import replace
 from datetime import date, timedelta
 from pathlib import Path
 
 import pandas as pd
 import pytest
 
+from swing_trade_ml.brain.portfolio_sim import Pick, PortfolioResult
 from swing_trade_ml.brain.replay_scoring import StrictOutcome
 from swing_trade_ml.services.brain_observatory import baselines, defs
 
@@ -116,6 +117,59 @@ def test_index_matched_return_charges_costs_and_ends_on_the_exit_day():
     # 3 bars held: the open after DECIDE to the close of DAYS[33], minus costs
     assert rising == pytest.approx(1.01**3 - 1, abs=0.004)
     assert baselines.index_matched_return(INDEX, DAYS[-1], DAYS[-1]) is None
+
+
+def _portfolio(candidate: list[Pick]) -> dict:
+    days = [d for d in DAYS if d >= DECIDE]
+    return baselines.portfolio_level(
+        candidate, POOL, BARS, days, {s: s for s in BARS}, INDEX, capital=1_000_000, runs=20
+    )
+
+
+def test_portfolio_level_reports_the_four_risk_numbers_for_every_account():
+    p = _portfolio([Pick(DECIDE, "UP1", 0.9, "UP1")])
+    for key in ("candidate", "momentum_5", "nifty_hold", "cash"):
+        assert {"max_drawdown", "halt_triggered", "halted_days", "final_net_return"} <= set(p[key])
+    assert p["candidate"]["final_net_return"] > 0 and p["candidate"]["trades"] == 1
+    assert p["random_5"]["runs"] == 20
+    for key in ("max_drawdown", "halted_days", "final_net_return"):
+        assert set(p["random_5"][key]) == {"median", "p5", "p95"}
+    assert p["cash"]["final_net_return"] == 0.0
+    nifty = p["nifty_hold"]
+    assert nifty["halt_triggered"] is None and -0.01 < nifty["final_net_return"] < 0
+
+
+def test_baseline_accounts_never_depend_on_the_candidate():
+    a = _portfolio([Pick(DECIDE, "UP1", 0.9, "UP1")])
+    b = _portfolio([Pick(DECIDE, "DN1", 0.9, "DN1")])
+    assert a["candidate"] != b["candidate"]
+    for key in ("random_5", "momentum_5", "nifty_hold", "cash"):
+        assert a[key] == b[key]
+
+
+def test_risk_report_marks_a_halt():
+    res = PortfolioResult(
+        start_equity=100.0,
+        end_equity=80.0,
+        total_return=-0.2,
+        max_drawdown=0.2,
+        trades=3,
+        wins=0,
+        avg_trade_return=-0.05,
+        avg_invested_share=0.5,
+        halted_days=4,
+        still_open=0,
+    )
+    r = baselines.risk_report(res)
+    assert r == {
+        "max_drawdown": 0.2,
+        "halt_triggered": True,
+        "halted_days": 4,
+        "final_net_return": -0.2,
+        "trades": 3,
+        "still_open": 0,
+    }
+    assert baselines.risk_report(replace(res, halted_days=0))["halt_triggered"] is False
 
 
 # --- the code's definitions are the frozen plan's ------------------------------------------------

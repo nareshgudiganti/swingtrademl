@@ -1,7 +1,8 @@
 """Brain Observatory, Phase 1A (spec docs/superpowers/specs/2026-10-15-brain-observatory-design.md).
 
 Owner only, GET only. Every request reads through its own READ ONLY, time-limited transaction
-(services/brain_observatory/db.py) and every response passes through the free-text redaction.
+(services/brain_observatory/db.py) and every response passes through the free-text redaction. The
+monthly evidence pack (evidence plan A5, services/brain_observatory/pack.py) is served here too.
 """
 
 from __future__ import annotations
@@ -14,7 +15,15 @@ from sqlalchemy.orm import Session
 
 from swing_trade_ml.api.deps import require_owner
 from swing_trade_ml.core.config import settings
-from swing_trade_ml.services.brain_observatory import counts, health, outcomes, queries, schedule, verdicts
+from swing_trade_ml.services.brain_observatory import (
+    counts,
+    health,
+    outcomes,
+    pack,
+    queries,
+    schedule,
+    verdicts,
+)
 from swing_trade_ml.services.brain_observatory.db import get_readonly_db
 from swing_trade_ml.services.brain_observatory.redact import redact_response
 
@@ -370,3 +379,18 @@ def effectiveness() -> dict:
     return redact_response(
         {"claims": verdicts.evaluate(registry), "rejected_entries": verdicts.rejected_entries(registry)}
     )
+
+
+@router.get("/evidence-pack")
+def evidence_pack(
+    db: ReadOnlyDb,
+    now: Now,
+    month: str = Query(..., pattern=r"^\d{4}-(0[1-9]|1[0-2])$"),
+) -> dict:
+    """The monthly evidence pack (evidence plan A5): practice, paper and backtest, never added together."""
+    today = now.date()
+    if date.fromisoformat(f"{month}-01") > today:
+        raise HTTPException(422, "That month has not started yet.")
+    out = redact_response({"pack": pack.build_pack(db, month, today)})
+    out["report"] = pack.plain_report(out["pack"])  # written from the redacted pack only
+    return out

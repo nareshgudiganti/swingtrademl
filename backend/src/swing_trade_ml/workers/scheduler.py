@@ -16,7 +16,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 
 from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.logging import get_logger
-from swing_trade_ml.workers import jobs
+from swing_trade_ml.workers import job_runs, jobs
 
 log = get_logger(__name__)
 
@@ -219,6 +219,8 @@ def start_scheduler() -> None:
     if settings.BRAIN_ENABLED:
         add_brain_jobs(scheduler)
 
+    # Observe only: records each job's last run for Admin > Jobs (workers/job_runs.py). Never raises.
+    job_runs.attach(scheduler)
     scheduler.start()
     log.info(
         "scheduler.started",

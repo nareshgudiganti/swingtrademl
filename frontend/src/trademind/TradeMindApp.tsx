@@ -31,6 +31,7 @@ import Records from './pages/Records'
 import MyHoldings from './pages/MyHoldings'
 import Setup from './pages/Setup'
 import Observatory from './pages/Observatory'
+import Jobs from './pages/Jobs'
 import { bookOf } from './books'
 import { ADMIN_SECTION, matches, resolveSection, splitLabel, visiblePages, visibleSections } from './menu'
 
@@ -250,6 +251,7 @@ export default function TradeMindApp({ ownerConsole = false }: TradeMindAppProps
           <Route path="records" element={<Records />} />
           <Route path="holdings" element={ownerConsole && canSeeRealAccount ? <MyHoldings /> : <Navigate to="/trademind/portfolio" replace />} />
           <Route path="setup" element={ownerConsole ? <Setup /> : <Navigate to="/trademind" replace />} />
+          <Route path="jobs" element={ownerConsole ? <Jobs /> : <Navigate to="/trademind" replace />} />
           <Route path="*" element={<Navigate to="/trademind" replace />} />
         </Route>
       </Routes>

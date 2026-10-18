@@ -92,6 +92,7 @@ import type {
   Trade,
   TrackRecordSignal,
 } from './types'
+import type { AdminJobs } from '../trademind/jobs'
 
 export const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000/api/v1'
 
@@ -293,6 +294,9 @@ export const api = {
     put<PlanConfig>(`/admin/plans/${key}`, body),
   users: () => get<AdminUser[]>('/admin/users'),
   setUserPlan: (userId: number, plan: string) => put<AdminUser>(`/admin/users/${userId}/plan`, { plan }),
+
+  // ---------------------------------------- scheduled jobs (owner, read-only) --
+  adminJobs: () => get<AdminJobs>('/admin/jobs'),
 
   // ---------------------------------------------------------- portfolio --
   // Everything below asks for `book=bot`: the bot's own book, in whichever

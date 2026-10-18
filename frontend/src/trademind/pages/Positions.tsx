@@ -8,6 +8,10 @@ import { strategyLabel } from '../../lib/tiers'
 import { formatDate } from '../../lib/format'
 import { finalWord, holdingsFrom, useLatestRun, useMarketSession, useTrack } from '../live'
 import { wordTagColor, wordTone } from '../vocab'
+import type { GlossaryKey } from '../vocab'
+import { Term, WordTag } from '../term'
+import { PageState, StaleNotice } from '../PageState'
+import { pickState } from '../stateRules'
 import { BrainGate, Card, CheckItem, Icon, Seg, Tabs, Tag, inr, signed, toneClass } from '../ui'
 import { PositionBand } from '../PositionBand'
 import { Confirm } from '../Confirm'
@@ -43,6 +47,7 @@ function ExitPlan({ decision, pos }: { decision: BrainDecision; pos: DetailedPos
   const steps = [
     {
       step: 'First target',
+      k: 'half_out' as GlossaryKey,
       price: entry != null ? `₹${inr(entry * 1.05, 0)} (rule: entry +5%)` : 'Rule: entry +5%',
       action: 'Sell half, lock in profit',
       icon: <Icon.Target />,
@@ -55,18 +60,21 @@ function ExitPlan({ decision, pos }: { decision: BrainDecision; pos: DetailedPos
     },
     {
       step: 'Final target',
+      k: 'target' as GlossaryKey,
       price: decision.target != null ? `₹${inr(decision.target, 0)}` : '—',
       action: 'Sell the rest',
       icon: <Icon.Target />,
     },
     {
       step: 'Stop loss',
+      k: 'stop_loss' as GlossaryKey,
       price: decision.stop != null ? `₹${inr(decision.stop, 0)}` : '—',
       action: 'Sell everything, no questions',
       icon: <Icon.X />,
     },
     {
       step: 'Time stop',
+      k: 'horizon' as GlossaryKey,
       price: pos?.entry_at
         ? `by ${formatDate(new Date(new Date(pos.entry_at).getTime() + 30 * 86_400_000).toISOString())}`
         : 'Rule: 30 calendar days after entry',
@@ -81,7 +89,7 @@ function ExitPlan({ decision, pos }: { decision: BrainDecision; pos: DetailedPos
           <span className="tm-chain-dot">{s.icon}</span>
           <div>
             <div className="tm-chain-title">
-              {s.step} · <span className="tm-num">{s.price}</span>
+              {s.k ? <Term k={s.k}>{s.step}</Term> : s.step} · <span className="tm-num">{s.price}</span>
             </div>
             <div className="tm-chain-sub">{s.action}</div>
           </div>
@@ -127,6 +135,8 @@ function PositionsBody() {
 
   const [tab, setTab] = useState<TabId>('Position Overview')
   const [notes, setNotes] = useState('')
+  // Called before the early return below, so the hooks always run in the same order.
+  const market = useMarketSession()
 
   useEffect(() => {
     if (selected) setNotes(readNotes(selected.symbol))
@@ -136,9 +146,14 @@ function PositionsBody() {
     return (
       <div className="tm-page">
         <Card title={urlSymbol ? 'Not one of your holdings' : 'No positions'}>
-          <p className="tm-dim">
-            {urlSymbol ? 'Not one of your holdings.' : "The brain's last run saw no holdings."}
-          </p>
+          <PageState
+            kind="empty"
+            reason={
+              urlSymbol
+                ? `${urlSymbol} is not one of the bot's holdings in the brain's last run.`
+                : "The bot holds no paper shares in the brain's last run. When it buys, they will show here."
+            }
+          />
         </Card>
       </div>
     )
@@ -150,7 +165,7 @@ function PositionsBody() {
   const matches = (positions.data ?? []).filter((p) => p.symbol === selected.symbol)
   const pos = matches.find((p) => p.id === pickedId) ?? (matches.length === 1 ? matches[0] : undefined)
   const isReal = status.data?.trading_mode === 'live'
-  const market = useMarketSession()
+  const priceState = pickState(positions)
   const realButClosed = isReal && market.data != null && market.data.state !== 'open'
   const moneyKind = status.data ? (isReal ? 'REAL money' : 'practice money (paper trading)') : null
 
@@ -166,9 +181,12 @@ function PositionsBody() {
 
   const details = (
     <Card title="Position Details">
-      {positions.isLoading && <p className="tm-dim">Loading live price…</p>}
-      {positions.isError && <p className="tm-dim">Live price is not available right now.</p>}
-      {!positions.isLoading && !positions.isError && (
+      {priceState !== 'ready' && priceState !== 'empty' ? (
+        <PageState kind={priceState} what="the live price" error={positions.error} onRetry={positions.refetch} />
+      ) : (
+        <StaleNotice q={positions} />
+      )}
+      {positions.data !== undefined && (
         <dl className="tm-kv">
           <dt>Entry Price</dt>
           <dd>{pos ? `₹${inr(pos.entry_price)}` : '—'}</dd>
@@ -245,8 +263,12 @@ function PositionsBody() {
             </span>
           </>
         )}
-        <Tag tone={wordTagColor(finalWord(selected))}>{finalWord(selected)}</Tag>
-        {selected.confidence != null && <Tag tone="violet">{Math.round(selected.confidence * 100)} model score</Tag>}
+        <WordTag word={finalWord(selected)} />
+        {selected.confidence != null && (
+          <Term k="model_score">
+            <Tag tone="violet">{Math.round(selected.confidence * 100)} model score</Tag>
+          </Term>
+        )}
       </div>
 
       {matches.length > 1 && !pos && (

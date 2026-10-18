@@ -8,6 +8,8 @@ import { DayCell, ScoreToday, SuggestionTag, scoreNow, suggestionRank } from '..
 import ScoreTrail from '../ScoreTrail'
 import { SortTh, useSort } from '../sort'
 import { Card, inr, signed, toneClass } from '../ui'
+import { PageState, StaleNotice } from '../PageState'
+import { pickState } from '../stateRules'
 
 type Period = 'day' | 'week' | 'month'
 
@@ -43,6 +45,8 @@ export default function PaperPositions() {
   })
 
   const rows = positions.data ?? []
+  const positionsState = pickState(positions, rows.length === 0)
+  const tradesState = pickState(trades)
   const moneyRow = summary.data
   const invested = rows.reduce((s, p) => s + p.invested, 0)
   const currentValue = rows.reduce((s, p) => s + p.current_value, 0)
@@ -83,8 +87,10 @@ export default function PaperPositions() {
   return (
     <div className="tm-page tm-grid">
       <Card glow title="Testing" sub="Manual paper trades. Your existing Positions tab is unchanged.">
-        {positions.isLoading && <p className="tm-dim">Loading…</p>}
-        {positions.isError && <p className="tm-dim">Could not load positions.</p>}
+        <StaleNotice q={positions} />
+        {positionsState !== 'ready' && positionsState !== 'empty' && (
+          <PageState kind={positionsState} what="your test positions" error={positions.error} onRetry={positions.refetch} />
+        )}
         {moneyRow && (
           <div className="tm-grid tm-cols-4">
             <Stat label="Account value" value={money(moneyRow.total_value)} />
@@ -148,8 +154,8 @@ export default function PaperPositions() {
         sub="Buy from Swing Picks → Watchlist. Sell here. Click a column name to sort, click a stock to see its score day by day."
       >
         {close.isError && <p className="tm-dim">Could not sell that position.</p>}
-        {rows.length === 0 && !positions.isLoading && (
-          <p className="tm-dim">Nothing held yet. Open Swing Picks → Watchlist and use Buy.</p>
+        {positionsState === 'empty' && (
+          <PageState kind="empty" reason="Nothing held yet. Open Swing Picks → Watchlist and use Buy." />
         )}
         {rows.length > 0 && (
           <OpenTable
@@ -171,8 +177,14 @@ export default function PaperPositions() {
             </button>
           ))}
         </div>
-        {trades.isLoading && <p className="tm-dim">Loading…</p>}
-        {!trades.isLoading && reportRows.length === 0 && <p className="tm-dim">No closed paper trades yet.</p>}
+        {tradesState === 'ready' ? (
+          <StaleNotice q={trades} />
+        ) : (
+          <PageState kind={tradesState} what="your closed trades" error={trades.error} onRetry={trades.refetch} />
+        )}
+        {tradesState === 'ready' && reportRows.length === 0 && (
+          <PageState kind="empty" reason="No closed paper trades yet. A trade shows here once you sell it." />
+        )}
         {reportRows.length > 0 && <PeriodTable rows={reportRows} />}
       </Card>
     </div>

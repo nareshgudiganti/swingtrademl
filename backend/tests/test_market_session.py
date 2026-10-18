@@ -204,3 +204,40 @@ def test_a_practice_close_outside_market_hours_still_goes_through(client, db_ses
     monkeypatch.setattr(portfolio, "close_position", lambda *a, **k: trade)
     r = client.post(f"/api/v1/portfolio/positions/{pos.id}/close", json={}, headers=HEADERS)
     assert r.status_code == 200
+
+
+def test_recent_closed_trading_days_are_newest_first_and_skip_holidays():
+    # Mon 05 Oct, before 15:40: Fri 02 Oct is Gandhi Jayanti, so the last finished day is Thu 01 Oct.
+    days = ms.recent_closed_trading_days(at(2026, 10, 5, 10, 0), count=3)
+    assert days == [date(2026, 10, 1), date(2026, 9, 30), date(2026, 9, 29)]
+    # After 15:40 on a trading day, today's bar is final and comes first.
+    evening = ms.recent_closed_trading_days(at(2026, 10, 5, 16, 0), count=2)
+    assert evening == [date(2026, 10, 5), date(2026, 10, 1)]
+
+
+def test_the_market_session_endpoint_lists_recent_trading_days_for_the_prices_badge(client, monkeypatch):
+    monkeypatch.setattr(ms, "_now", lambda: at(2026, 10, 4, 11, 0))
+    body = client.get("/api/v1/market/session", headers=HEADERS).json()
+    assert body["today"] == "2026-10-04"
+    assert body["recent_closed_trading_days"][:2] == ["2026-10-01", "2026-09-30"]
+    assert len(body["recent_closed_trading_days"]) == 20
+
+
+def test_the_market_session_endpoint_gives_the_newest_price_date_in_ist(client, db_session):
+    """The prices badge reads the date here, not from /status. 00:00 IST bars come back as 18:30 UTC."""
+    from datetime import UTC
+
+    from swing_trade_ml.db.models.market import Candle, Instrument
+
+    assert client.get("/api/v1/market/session", headers=HEADERS).json()["latest_candle_date"] is None
+    inst = Instrument(instrument_token=99002, tradingsymbol="TSESS", exchange="NSE")
+    db_session.add(inst)
+    db_session.flush()
+    db_session.add(
+        Candle(
+            instrument_id=inst.id, interval="day", ts=datetime(2026, 10, 15, 18, 30, tzinfo=UTC),
+            open=1, high=1, low=1, close=1, volume=1,
+        )
+    )
+    db_session.flush()
+    assert client.get("/api/v1/market/session", headers=HEADERS).json()["latest_candle_date"] == "2026-10-16"

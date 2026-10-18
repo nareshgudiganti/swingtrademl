@@ -16,6 +16,9 @@ const queryClient = new QueryClient({
       refetchInterval: 60_000,
       refetchOnWindowFocus: true,
       retry: 1,
+      // Keep loaded answers in memory for 30 minutes (react-query's default is 5) so a slow or dropped
+      // connection, or going back to a screen, still shows the last data with its time instead of a blank page.
+      gcTime: 30 * 60_000,
     },
   },
 })

@@ -7,11 +7,14 @@ import type { BrainDecision } from '../../api/types'
 import type { Action } from '../types'
 import { barsFrom } from '../live-stock'
 import { finalWord, stockSituations, useBrainStatus, useLatestRun, useWhy } from '../live'
-import { wordClassName, wordTagColor, wordTone } from '../vocab'
+import { wordClassName, wordTone } from '../vocab'
+import { Term, TermIf, WordTag } from '../term'
 import ScoreTrail from '../ScoreTrail'
 import { Confirm } from '../Confirm'
 import { CapFlag, useSymbolCaps } from '../cap'
 import { ActionPill, BrainGate, Candles, Card, CheckItem, Icon, NotConnected, Seg, Tabs, Tag, inr, signed, toneClass } from '../ui'
+import { PageState, QueryNotice } from '../PageState'
+import { pickState } from '../stateRules'
 
 const TABS = ['Overview', 'Technical', 'Fundamental', 'AI Analysis', 'Similar Cases', 'News', 'Options'] as const
 type TabId = (typeof TABS)[number]
@@ -140,12 +143,19 @@ function StockDetailBody() {
     )
   }
 
-  const lookupFailed = !fromRun && why.isError
+  const lookupFailed = !fromRun && why.isError && why.data === undefined
   if (lookupFailed) {
+    const kind = pickState(why)
     return (
       <div className="tm-page">
-        <Card title="Could not reach the brain">
-          <p className="tm-dim">Something went wrong talking to the brain. Try again shortly.</p>
+        <Card title={kind === 'not-found' ? symbol || 'Unknown stock' : 'Could not reach the brain'}>
+          <PageState
+            kind={kind === 'ready' || kind === 'empty' ? 'error' : kind}
+            what={`what the brain thinks of ${symbol}`}
+            reason={`The brain has nothing stored for ${symbol}. Check the name, or pick a stock from Opportunities.`}
+            error={why.error}
+            onRetry={why.refetch}
+          />
         </Card>
       </div>
     )
@@ -159,7 +169,7 @@ function StockDetailBody() {
           <Icon.Back size={14} /> Opportunities
         </Link>
         <Card title={symbol || 'Unknown stock'}>
-          <p className="tm-dim">No decision for this stock today.</p>
+          <PageState kind="empty" reason="The brain made no decision for this stock today, so there is nothing to show." />
         </Card>
       </div>
     )
@@ -174,7 +184,11 @@ function StockDetailBody() {
   const stopPct = decision.stop != null && refPrice != null ? ((decision.stop - refPrice) / refPrice) * 100 : undefined
 
   const chart =
-    candlesQ.isError || (candlesQ.isSuccess && bars.length === 0) ? (
+    candlesQ.isError && candlesQ.data === undefined ? (
+      <Card className="tm-span-2" title="Price chart">
+        <QueryNotice q={candlesQ} what="the price history" />
+      </Card>
+    ) : candlesQ.data !== undefined && bars.length === 0 ? (
       <NotConnected what="Price chart" reason="No stored price history for this stock yet." />
     ) : (
       <Card
@@ -182,10 +196,13 @@ function StockDetailBody() {
         title={<span className="tm-dim" style={{ fontWeight: 500 }}>{symbol} · daily price</span>}
         action={<Seg<Range> small active={range} onChange={setRange} options={RANGES.map((r) => ({ id: r, label: r }))} />}
       >
-        {candlesQ.isLoading ? (
-          <p className="tm-dim">Loading price history…</p>
+        {candlesQ.data === undefined ? (
+          <QueryNotice q={candlesQ} what="the price history" />
         ) : (
-          <Candles bars={bars} height={300} target={decision.target ?? undefined} stop={decision.stop ?? undefined} />
+          <>
+            <QueryNotice q={candlesQ} what="the price history" />
+            <Candles bars={bars} height={300} target={decision.target ?? undefined} stop={decision.stop ?? undefined} />
+          </>
         )}
       </Card>
     )
@@ -216,12 +233,12 @@ function StockDetailBody() {
         {decision.kind === 'idea' ? (
           <ActionPill action={finalWord(decision) as Action} />
         ) : (
-          <Tag tone={wordTagColor(finalWord(decision))}>{finalWord(decision)}</Tag>
+          <WordTag word={finalWord(decision)} />
         )}
         {decision.confidence != null && (
-          <span title="A ranking, not a chance — not a probability">
+          <Term k="model_score">
             <Tag tone="violet">{Math.round(decision.confidence * 100)} model score</Tag>
-          </span>
+          </Term>
         )}
       </div>
 
@@ -246,7 +263,9 @@ function StockDetailBody() {
               <div className="tm-grid tm-cols-2" style={{ marginTop: '0.9rem', gap: '0.7rem' }}>
                 {decision.entry_low != null && (
                   <div>
-                    <div className="tm-stat-label">Buy around</div>
+                    <div className="tm-stat-label">
+                      <Term k="buy_zone">Buy around</Term>
+                    </div>
                     <div className="tm-stat-value">
                       ₹{inr(decision.entry_low, 0)}
                       {decision.entry_high != null && decision.entry_high !== decision.entry_low ? `–₹${inr(decision.entry_high, 0)}` : ''}
@@ -255,7 +274,9 @@ function StockDetailBody() {
                 )}
                 {decision.target != null && (
                   <div>
-                    <div className="tm-stat-label">Target</div>
+                    <div className="tm-stat-label">
+                      <Term k="target">Target</Term>
+                    </div>
                     <div className="tm-stat-value tm-pos">
                       ₹{inr(decision.target, 0)} {targetPct != null && <small>({signed(targetPct, 0)})</small>}
                     </div>
@@ -263,7 +284,9 @@ function StockDetailBody() {
                 )}
                 {decision.stop != null && (
                   <div>
-                    <div className="tm-stat-label">Stop Loss</div>
+                    <div className="tm-stat-label">
+                      <Term k="stop_loss">Stop Loss</Term>
+                    </div>
                     <div className="tm-stat-value tm-neg">
                       ₹{inr(decision.stop, 0)} {stopPct != null && <small>({signed(stopPct, 0)})</small>}
                     </div>
@@ -274,7 +297,9 @@ function StockDetailBody() {
                   <div className="tm-stat-value">{decision.qty}</div>
                 </div>
                 <div>
-                  <div className="tm-stat-label">Horizon</div>
+                  <div className="tm-stat-label">
+                    <Term k="horizon">Horizon</Term>
+                  </div>
                   <div className="tm-stat-value" style={{ color: 'var(--tm-violet)' }}>
                     {decision.horizon_days} trading days
                   </div>
@@ -284,10 +309,17 @@ function StockDetailBody() {
           </div>
 
           <Card title="Strength score, day by day" sub="How strongly the model liked this stock each day it was checked">
-            {trailQ.isLoading ? (
-              <p className="tm-dim">Loading…</p>
-            ) : !trailQ.data || trailQ.data.score_trail.length === 0 ? (
-              <p className="tm-dim">No daily scores saved for this stock yet. The list starts with the next daily check.</p>
+            {trailQ.data === undefined ? (
+              <QueryNotice
+                q={trailQ}
+                what="the daily scores"
+                notFound="No daily scores saved for this stock yet. The list starts with the next daily check."
+              />
+            ) : trailQ.data.score_trail.length === 0 ? (
+              <PageState
+                kind="empty"
+                reason="No daily scores saved for this stock yet. The list starts with the next daily check."
+              />
             ) : (
               <ScoreTrail
                 p={{
@@ -359,11 +391,17 @@ function StockDetailBody() {
           <Card title="In plain words">
             <p style={{ marginTop: 0 }}>
               TradeMind {decision.kind === 'idea' ? 'suggests' : 'currently has'}{' '}
-              <strong className={wordClassName(finalWord(decision))}>{finalWord(decision)}</strong> for {symbol}
+              <strong className={wordClassName(finalWord(decision))}>
+                <TermIf k={finalWord(decision)}>{finalWord(decision)}</TermIf>
+              </strong>{' '}
+              for {symbol}
               {decision.confidence != null && (
                 <>
                   {' '}
-                  with <strong>{Math.round(decision.confidence * 100)} model score</strong>
+                  with{' '}
+                  <strong>
+                    {Math.round(decision.confidence * 100)} <Term k="model_score">model score</Term>
+                  </strong>
                 </>
               )}
               .

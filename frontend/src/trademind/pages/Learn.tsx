@@ -7,6 +7,8 @@ import { formatDateTime } from '../../lib/format'
 import { useLearning, useProposals } from '../live'
 import { currentBuyLevelProposal } from '../live-system'
 import { BrainGate, Card, CheckItem, Tag } from '../ui'
+import { QueryNotice } from '../PageState'
+import { Glossary } from '../term'
 
 const PROPOSAL_STATUS_LABEL: Record<BrainProposalStatus, string> = {
   open: 'Open',
@@ -72,9 +74,15 @@ function ProposalRow({
 
 export default function Learn() {
   return (
-    <BrainGate allowNoRun>
-      <LearnBody />
-    </BrainGate>
+    <>
+      <BrainGate allowNoRun>
+        <LearnBody />
+      </BrainGate>
+      {/* The glossary needs no brain data, so it shows even when the brain is off or unreachable. */}
+      <div className="tm-page" style={{ paddingTop: 0 }}>
+        <Glossary />
+      </div>
+    </>
   )
 }
 
@@ -110,8 +118,7 @@ function LearnBody() {
         title="Learning From Results"
         sub="How well the brain's past ideas actually worked out, and any changes it wants to make. Nothing changes until you press Accept."
       >
-        {learning.isLoading && <p className="tm-dim">Loading…</p>}
-        {learning.isError && <p className="tm-dim">Could not load the learning report.</p>}
+        <QueryNotice q={learning} what="the learning report" />
         {data && (
           <>
             {data.note && <p className="tm-note">{data.note}</p>}
@@ -268,8 +275,7 @@ function LearnBody() {
           </button>
         )}
         {revertBuyLevel.isError && <p className="tm-dim">Could not revert the buy level. Try again shortly.</p>}
-        {proposals.isLoading && <p className="tm-dim">Loading…</p>}
-        {proposals.isError && <p className="tm-dim">Could not load proposals.</p>}
+        <QueryNotice q={proposals} what="proposals" />
         {proposals.data && proposals.data.length === 0 && <p className="tm-dim">No proposals right now.</p>}
         {proposals.data && proposals.data.length > 0 && (
           <div className="tm-table-wrap" tabIndex={0} role="region" aria-label="Table, scroll sideways to see more" style={{ marginTop: '0.6rem' }}>

@@ -7,6 +7,7 @@ import { Confirm } from '../Confirm'
 import { runNowLine, useBrainRunNow, useHealth, useModules, useRuns } from '../live'
 import { MARKET_LABEL, MODULE_PLAIN, STEP_LABEL, moduleName } from '../vocab'
 import { BrainGate, Card, NotConnected, Seg, Tag } from '../ui'
+import { QueryNotice } from '../PageState'
 import { formatDateTime, modelLabel } from '../../lib/format'
 
 const MODE_LABEL: Record<ModuleMode, string> = { on: 'On', shadow: 'Trial', off: 'Off' }
@@ -62,8 +63,7 @@ function SystemBody() {
       <RunControls />
       <div className="tm-grid tm-cols-3">
         <Card title="Last Run">
-          {health.isLoading && <p className="tm-dim">Loading…</p>}
-          {health.isError && <p className="tm-dim">Could not load.</p>}
+          <QueryNotice q={health} what="the last run" />
           {health.data && (
             <>
               <div className="tm-big" style={{ fontSize: '1.2rem' }}>
@@ -82,8 +82,7 @@ function SystemBody() {
           )}
         </Card>
         <Card title="Price Data">
-          {health.isLoading && <p className="tm-dim">Loading…</p>}
-          {health.isError && <p className="tm-dim">Could not load.</p>}
+          {health.data === undefined && <QueryNotice q={health} what="the price data check" />}
           {health.data && (
             <>
               <div className="tm-big" style={{ fontSize: '1.2rem' }}>
@@ -99,8 +98,7 @@ function SystemBody() {
           )}
         </Card>
         <Card title="Failed Runs, Last 7 Days">
-          {health.isLoading && <p className="tm-dim">Loading…</p>}
-          {health.isError && <p className="tm-dim">Could not load.</p>}
+          {health.data === undefined && <QueryNotice q={health} what="the failed-run count" />}
           {health.data && (
             <>
               <div className="tm-big" style={{ fontSize: '1.2rem' }}>{health.data.failed_runs_7d}</div>
@@ -113,8 +111,7 @@ function SystemBody() {
       </div>
 
       <Card title="This Server" sub="What the app itself reports right now">
-        {appStatus.isLoading && <p className="tm-dim">Loading…</p>}
-        {appStatus.isError && <p className="tm-dim">Could not load server status.</p>}
+        <QueryNotice q={appStatus} what="server status" />
         {appStatus.data && (
           <div className="tm-grid tm-cols-4">
             <div>
@@ -155,8 +152,7 @@ function SystemBody() {
       </div>
 
       <Card title="The Eight Thinking Steps" sub="Each step is answered by an installed module, or a simple built-in answer until one is built. “Trial” runs a module and records its answer without using it.">
-        {modules.isLoading && <p className="tm-dim">Loading…</p>}
-        {modules.isError && <p className="tm-dim">Could not load the module list.</p>}
+        <QueryNotice q={modules} what="the module list" />
         {modules.data && (
           <div className="tm-table-wrap" tabIndex={0} role="region" aria-label="Table, scroll sideways to see more">
             <table className="tm-table">
@@ -208,8 +204,7 @@ function SystemBody() {
       )}
 
       <Card title="Recent Runs">
-        {runs.isLoading && <p className="tm-dim">Loading…</p>}
-        {runs.isError && <p className="tm-dim">Could not load recent runs.</p>}
+        <QueryNotice q={runs} what="recent runs" />
         {runs.data && runs.data.length === 0 && <p className="tm-dim">No runs recorded yet.</p>}
         {runs.data && runs.data.length > 0 && (
           <div className="tm-table-wrap" tabIndex={0} role="region" aria-label="Table, scroll sideways to see more">

@@ -5,9 +5,12 @@ import type { Action } from '../types'
 import type { IdeaWord } from '../../api/types'
 import { formatDateTime } from '../../lib/format'
 import { finalWord, ideasFrom, holdingsFrom, marketSituation, useLatestRun, useLearning } from '../live'
-import { MARKET_LABEL, MARKET_PLAIN, MARKET_TONE, wordTagColor } from '../vocab'
+import { MARKET_LABEL, MARKET_PLAIN, MARKET_TONE } from '../vocab'
+import { Term, TermIf, WordTag } from '../term'
 import { CapFlag, useSymbolCaps } from '../cap'
 import { ActionPill, BrainArt, BrainGate, Card, CheckItem, Icon, Tag } from '../ui'
+import { noTradeReason } from '../emptyReasons'
+import { PageState } from '../PageState'
 
 const IDEA_WORDS: IdeaWord[] = ['TRADE', 'WATCH', 'WAIT', 'AVOID']
 
@@ -31,6 +34,9 @@ function HomeBody() {
   const situation = marketSituation(run)
   const attention = holdings.filter((d) => ['MONITOR', 'REDUCE', 'EXIT'].includes(finalWord(d)))
   const top = ideas.slice(0, 5)
+  const tradeCount = ideas.filter((d) => finalWord(d) === 'TRADE').length
+  // Why there are no TRADE ideas, from the run's own banner only (null when there are some).
+  const noTrade = noTradeReason(run.banner, ideas.length, tradeCount)
 
   const ideaCounts: Record<IdeaWord, number> = { TRADE: 0, WATCH: 0, WAIT: 0, AVOID: 0 }
   for (const d of ideas) {
@@ -61,7 +67,7 @@ function HomeBody() {
       <Card glow className="tm-hero">
         <div>
           <div className="tm-card-title" style={{ marginBottom: '0.9rem' }}>
-            Market Mode
+            <Term k="market_mode">Market Mode</Term>
           </div>
           <p className="tm-dim" style={{ fontSize: '0.72rem', margin: '-0.6rem 0 0.9rem' }}>
             From the brain's run on {formatDateTime(run.started_at)}
@@ -80,7 +86,9 @@ function HomeBody() {
               {run.banner.mode === 'NO_NEW_TRADES' ? <Icon.X /> : run.banner.mode === 'DEFENSIVE' ? <Icon.Alert /> : <Icon.Check />}
             </span>
             <div>
-              <div className="tm-state-word">{run.banner.mode ? MARKET_LABEL[run.banner.mode] : 'Unknown'}</div>
+              <div className="tm-state-word">
+                {run.banner.mode ? <TermIf k={run.banner.mode}>{MARKET_LABEL[run.banner.mode] ?? run.banner.mode}</TermIf> : 'Unknown'}
+              </div>
               {run.banner.mode && (
                 <Tag tone={MARKET_TONE[run.banner.mode] ?? 'blue'}>{MARKET_PLAIN[run.banner.mode]}</Tag>
               )}
@@ -118,11 +126,16 @@ function HomeBody() {
               </div>
             ))}
           </div>
+          {noTrade && (
+            <p className="tm-note" data-testid="no-trade-reason">
+              {noTrade}
+            </p>
+          )}
         </Card>
 
         <Card title="Holdings Needing Attention" sub="Stocks you hold that the brain flagged">
           {holdings.length === 0 ? (
-            <p className="tm-dim">The brain's last run saw no holdings.</p>
+            <PageState kind="empty" reason="The brain's last run found no shares held, so there is nothing to check." />
           ) : attention.length === 0 ? (
             <p className="tm-dim">Nothing needs attention — your holdings look fine.</p>
           ) : (
@@ -137,7 +150,7 @@ function HomeBody() {
                     <span className="tm-strong">{d.symbol}</span>
                     <span className="tm-dim">{d.reasons[0]}</span>
                   </span>
-                  <Tag tone={wordTagColor(finalWord(d))}>{finalWord(d)}</Tag>
+                  <WordTag word={finalWord(d)} />
                 </div>
               ))}
             </div>
@@ -148,7 +161,7 @@ function HomeBody() {
       <div className="tm-grid tm-cols-2">
         <Card title="Top Ideas" action={<Link className="tm-link" to="/trademind/opportunities">View All</Link>}>
           {top.length === 0 ? (
-            <p className="tm-dim">No ideas to show right now.</p>
+            <PageState kind="empty" reason={noTrade ?? "No ideas in the brain's last run."} />
           ) : (
             <div className="tm-table-wrap" tabIndex={0} role="region" aria-label="Table, scroll sideways to see more">
               <table className="tm-table">
@@ -165,7 +178,9 @@ function HomeBody() {
                       <td className="tm-num tm-right" title={chanceTitle(i)}>
                         <span style={{ display: 'inline-flex', gap: '0.3rem', alignItems: 'center' }}>
                           {chanceText(i)}
-                          <span className="tm-dim">est. chance</span>
+                          <span className="tm-dim">
+                            <Term k="est_chance">est. chance</Term>
+                          </span>
                         </span>
                       </td>
                       <td className="tm-dim">{i.reasons[0]}</td>
@@ -178,9 +193,12 @@ function HomeBody() {
         </Card>
 
         <Card title="Today's Insights">
-          {learning.isLoading && <p className="tm-dim">Loading…</p>}
-          {insights.length === 0 && !learning.isLoading ? (
-            <p className="tm-dim">Nothing to report today.</p>
+          {learning.isLoading && <PageState kind="loading" what="the learning report" />}
+          {learning.isError && learning.data === undefined && (
+            <PageState kind="error" what="the learning report" error={learning.error} onRetry={learning.refetch} />
+          )}
+          {insights.length === 0 && !learning.isLoading && !learning.isError ? (
+            <PageState kind="empty" reason="Nothing to report today: no holding needs attention and the brain flagged nothing new." />
           ) : (
             insights.slice(0, 6).map((x, idx) => (
               <CheckItem key={idx} tone={x.tone}>

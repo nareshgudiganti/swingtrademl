@@ -7,9 +7,11 @@ import type { BrainDecision, IdeaWord } from '../../api/types'
 import type { Action } from '../types'
 import { finalWord, ideasFrom, useLatestRun } from '../live'
 import { wordTone } from '../vocab'
+import { Term } from '../term'
 import { TrackRecord, chancePercent, chanceText, chanceTitle } from '../honest'
 import { CapFlag, useSymbolCaps } from '../cap'
 import { ActionPill, BrainGate, Card, CheckItem, Icon, GlowArea, Ring, Seg, StockLogo, inr } from '../ui'
+import { noTradeReason } from '../emptyReasons'
 
 type Filter = 'ALL' | IdeaWord
 
@@ -66,6 +68,11 @@ function OpportunitiesBody() {
       (query === '' || i.symbol.toLowerCase().includes(query.toLowerCase())),
   )
 
+  // Why there are no TRADE ideas today, from the run's own banner (null when there are some).
+  const noTrade = noTradeReason(run.banner, ideas.length, count('TRADE'))
+  const emptyText =
+    ideas.length === 0 || (filter === 'TRADE' && noTrade) ? noTrade : 'No stocks match these filters.'
+
   // Featured = top TRADE if there is one, otherwise top WATCH. ideasFrom
   // already sorts TRADE/WATCH first by confidence, so the first match wins.
   const featured = ideas.find((i) => finalWord(i) === 'TRADE') ?? ideas.find((i) => finalWord(i) === 'WATCH')
@@ -100,6 +107,11 @@ function OpportunitiesBody() {
           </span>
         </div>
 
+        {noTrade && ideas.length > 0 && (
+          <p className="tm-note" data-testid="no-trade-reason" style={{ marginTop: 0 }}>
+            {noTrade}
+          </p>
+        )}
         <div className="tm-table-wrap" tabIndex={0} role="region" aria-label="Table, scroll sideways to see more">
           <table className="tm-table">
             <thead>
@@ -108,11 +120,15 @@ function OpportunitiesBody() {
                 <th>Size</th>
                 <th>Decision</th>
                 <th className="tm-right" title="Estimated chance of reaching +8% before −4%, from past results on unseen days">
-                  Est. chance
+                  <Term k="est_chance">Est. chance</Term>
                 </th>
                 <th>Entry</th>
-                <th>Target</th>
-                <th>SL</th>
+                <th>
+                  <Term k="target">Target</Term>
+                </th>
+                <th>
+                  <Term k="stop_loss">SL</Term>
+                </th>
                 <th>Why</th>
                 <th />
               </tr>
@@ -186,8 +202,8 @@ function OpportunitiesBody() {
               ))}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="tm-dim" style={{ textAlign: 'center', padding: '1.5rem' }}>
-                    No stocks match these filters.
+                  <td colSpan={9} className="tm-dim" data-state="empty" style={{ textAlign: 'center', padding: '1.5rem' }}>
+                    {emptyText}
                   </td>
                 </tr>
               )}
@@ -206,7 +222,7 @@ function OpportunitiesBody() {
         <FeaturedCard decision={featured} />
       ) : (
         <Card title="Featured Idea">
-          <p className="tm-dim">No TRADE or WATCH idea right now.</p>
+          <p className="tm-dim" data-state="empty">No TRADE or WATCH idea right now.</p>
         </Card>
       )}
     </div>
@@ -255,7 +271,9 @@ function FeaturedCard({ decision }: { decision: BrainDecision }) {
               <span className="tm-ring-value" style={{ fontSize: 20 }}>
                 {chanceText(decision)}
               </span>
-              <span className="tm-ring-label">Est. chance</span>
+              <span className="tm-ring-label">
+                <Term k="est_chance">Est. chance</Term>
+              </span>
             </>
           }
         />

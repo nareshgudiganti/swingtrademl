@@ -5,12 +5,9 @@ import { api } from '../../api/client'
 import { formatDate, formatDateTime } from '../../lib/format'
 import { Confirm } from '../Confirm'
 import { Card, PageHead, Tag } from '../ui'
+import { QueryNotice } from '../PageState'
 
 type Dialog = 'halt' | 'resume' | 'refresh' | null
-
-function Problem({ what }: { what: string }) {
-  return <p className="tm-neg">Could not load {what}. Try again shortly.</p>
-}
 
 export default function Control() {
   const queryClient = useQueryClient()
@@ -53,8 +50,7 @@ export default function Control() {
 
       <div className="tm-grid tm-control">
         <Card title="Zerodha">
-          {status.isLoading && <p className="tm-dim">Loading…</p>}
-          {status.isError && <Problem what="the Zerodha status" />}
+          <QueryNotice q={status} what="the Zerodha status" />
           {s && (
             <>
               <div className="tm-flex tm-control-row">
@@ -84,8 +80,7 @@ export default function Control() {
         </Card>
 
         <Card title="Prices">
-          {status.isLoading && <p className="tm-dim">Loading…</p>}
-          {status.isError && <Problem what="the price information" />}
+          {status.data === undefined && <QueryNotice q={status} what="the price information" />}
           {s && (
             <>
               <div className="tm-flex tm-control-row">
@@ -100,8 +95,7 @@ export default function Control() {
         </Card>
 
         <Card title="New trades">
-          {safety.isLoading && <p className="tm-dim">Loading…</p>}
-          {safety.isError && <Problem what="whether new trades are allowed" />}
+          <QueryNotice q={safety} what="whether new trades are allowed" />
           {safety.data && (
             <>
               <div className="tm-flex tm-control-row">

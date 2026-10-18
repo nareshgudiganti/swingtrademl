@@ -27,7 +27,7 @@ from swing_trade_ml.db.session import session_scope
 from swing_trade_ml.ml.backup import backup_model_artifacts
 from swing_trade_ml.notifications import notifier
 from swing_trade_ml.services import engine, held_read, ingestion, portfolio
-from swing_trade_ml.workers import heartbeat
+from swing_trade_ml.workers import heartbeat, job_runs
 
 log = get_logger(__name__)
 
@@ -55,6 +55,7 @@ def job_heartbeat() -> None:
 
 def _report_error(context: str, exc: Exception) -> None:
     log.error("job.failed", job=context, error=str(exc))
+    job_runs.note_failure(exc)  # Admin > Jobs shows this run as failed; observe only, never raises
     notifier.send_sync(
         f"⚠️ <b>Job failed — {context}</b>\n\n<code>{str(exc)[:800]}</code>", "error"
     )

@@ -4,9 +4,11 @@ import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 
-import { ApiError, api } from '../../api/client'
+import { api } from '../../api/client'
 import type { ObsByKey, ObsDay, ObsModuleRow, ObsRunsCursor } from '../../api/types'
 import { Card, Tabs } from '../ui'
+import { PageState, StaleNotice } from '../PageState'
+import { errorStatus, pickState, type QueryLike } from '../stateRules'
 
 const TABS = ['Decision flow', 'Module activity', 'Results & proof'] as const
 const FIGURES = [
@@ -69,22 +71,34 @@ function Redacted({ fields }: { fields?: string[] }) {
   return fields && fields.length ? <p className="tm-dim">Some text is hidden for safety ({fields.length}).</p> : null
 }
 
-// Every card's request state: loading, an explicit error (never a blank card), or an empty message.
+// Every card's request state: loading, an explicit error (never a blank card) with "Try again", or an empty
+// message. Drawn by the shared PageState; a failed refetch keeps the loaded data and shows the stale notice.
+// The server's own words stay under the plain sentence: this is the owner's diagnostic screen.
 function QueryState({
   q, empty, id,
-}: { q: { isLoading: boolean; isError: boolean; error: unknown }; empty?: string; id: string }) {
-  if (q.isLoading) return <p className="tm-dim" data-testid={`obs-loading-${id}`}>Loading…</p>
-  if (q.isError) {
+}: { q: QueryLike & { refetch?: () => unknown }; empty?: string; id: string }) {
+  const kind = pickState(q)
+  if (kind === 'loading' || kind === 'offline') {
+    return <div data-testid={`obs-loading-${id}`}><PageState kind={kind} what="this" /></div>
+  }
+  if (kind !== 'ready' && kind !== 'empty') {
     const e = q.error
-    const status = e instanceof ApiError ? e.status : undefined
-    const label = status === 403 ? 'Owner only' : status === 404 ? 'Not found' : 'Could not load'
+    const status = errorStatus(e)
     return (
-      <p className="tm-neg" role="alert" data-testid="obs-error" data-obs-error-for={id}>
-        {label}{status ? ` (${status})` : ''}: {e instanceof Error ? e.message : String(e)}
-      </p>
+      <div data-testid="obs-error" data-obs-error-for={id}>
+        <PageState kind={kind === 'not-found' ? 'error' : kind} what="this" error={e} onRetry={q.refetch} />
+        <p className="tm-note">
+          Server said{status ? ` (${status})` : ''}: {e instanceof Error ? e.message : String(e)}
+        </p>
+      </div>
     )
   }
-  return empty ? <p className="tm-dim" data-testid={`obs-empty-${id}`}>{empty}</p> : null
+  return (
+    <>
+      <StaleNotice q={q} />
+      {empty ? <div data-testid={`obs-empty-${id}`}><PageState kind="empty" reason={empty} /></div> : null}
+    </>
+  )
 }
 
 function DayRow({ d, selected }: { d: ObsDay; selected: boolean }) {

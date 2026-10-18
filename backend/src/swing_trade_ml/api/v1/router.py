@@ -14,6 +14,7 @@ from swing_trade_ml.api.v1.endpoints import (
     experiments,
     finance,
     instruments,
+    jobs,
     market_data,
     ml,
     mutual_funds,
@@ -66,3 +67,4 @@ api_router.include_router(brain.router, dependencies=protected)
 api_router.include_router(brain_golive.router, dependencies=protected)
 api_router.include_router(brain_observatory.router, dependencies=protected)
 api_router.include_router(experiments.router, dependencies=protected)
+api_router.include_router(jobs.router, dependencies=protected)

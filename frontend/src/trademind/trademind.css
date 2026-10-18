@@ -1856,3 +1856,32 @@ button.tm-avatar {
   padding-left: 0.7rem;
   padding-right: 0.7rem;
 }
+
+/* "Prices from ..." badge (top bar, every page): plain when fresh, amber when out of date. Stays on a phone,
+   in its short form. */
+.tm-asof {
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  white-space: nowrap;
+  color: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.06);
+}
+.tm-asof-stale {
+  color: var(--tm-amber);
+  border-color: rgba(255, 181, 71, 0.6);
+  background: rgba(255, 181, 71, 0.12);
+}
+.tm-asof-short {
+  display: none;
+}
+@media (max-width: 480px) {
+  .tm-asof-long {
+    display: none;
+  }
+  .tm-asof-short {
+    display: inline;
+  }
+}

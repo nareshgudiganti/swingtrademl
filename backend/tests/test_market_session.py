@@ -204,3 +204,20 @@ def test_a_practice_close_outside_market_hours_still_goes_through(client, db_ses
     monkeypatch.setattr(portfolio, "close_position", lambda *a, **k: trade)
     r = client.post(f"/api/v1/portfolio/positions/{pos.id}/close", json={}, headers=HEADERS)
     assert r.status_code == 200
+
+
+def test_recent_closed_trading_days_are_newest_first_and_skip_holidays():
+    # Mon 05 Oct, before 15:40: Fri 02 Oct is Gandhi Jayanti, so the last finished day is Thu 01 Oct.
+    days = ms.recent_closed_trading_days(at(2026, 10, 5, 10, 0), count=3)
+    assert days == [date(2026, 10, 1), date(2026, 9, 30), date(2026, 9, 29)]
+    # After 15:40 on a trading day, today's bar is final and comes first.
+    evening = ms.recent_closed_trading_days(at(2026, 10, 5, 16, 0), count=2)
+    assert evening == [date(2026, 10, 5), date(2026, 10, 1)]
+
+
+def test_the_market_session_endpoint_lists_recent_trading_days_for_the_prices_badge(client, monkeypatch):
+    monkeypatch.setattr(ms, "_now", lambda: at(2026, 10, 4, 11, 0))
+    body = client.get("/api/v1/market/session", headers=HEADERS).json()
+    assert body["today"] == "2026-10-04"
+    assert body["recent_closed_trading_days"][:2] == ["2026-10-01", "2026-09-30"]
+    assert len(body["recent_closed_trading_days"]) == 20

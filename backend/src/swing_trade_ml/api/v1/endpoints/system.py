@@ -231,6 +231,9 @@ def market_session_now() -> dict:
         "next_open": s.next_open,
         "next_close": s.next_close,
         "last_closed_trading_day": s.last_closed_trading_day,
+        # For the "prices are N days old" badge: today's IST date and the recent finished trading days.
+        "today": s.now.date(),
+        "recent_closed_trading_days": market_session.recent_closed_trading_days(s.now),
         "calendar_warning": market_session.calendar_warning(s.now.date()),
     }
 

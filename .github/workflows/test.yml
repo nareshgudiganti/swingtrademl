@@ -80,7 +80,13 @@ jobs:
         env:
           # conftest.py pins the rest; this must point at the service above.
           DATABASE_URL: postgresql+psycopg://swingtrade:swingtrade_local_pw@localhost:5433/swing_trade_ml_test
-        run: pytest -q
+        run: pytest -q --cov=swing_trade_ml --cov-report=json
+
+      - name: Money-code coverage floor
+        # qa8: fails the build if line coverage of risk, limits, exit policy, execution or the
+        # brokers drops below its floor. Floors live in the script; see docs/QUALITY-CHECKS.md.
+        working-directory: backend
+        run: python scripts/check_money_coverage.py coverage.json
 
   frontend:
     runs-on: ubuntu-latest

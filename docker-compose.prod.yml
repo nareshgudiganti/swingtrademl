@@ -15,12 +15,26 @@
 # already does for "/api/" to the api container.
 
 services:
+  # The base file publishes postgres, redis and the api on every interface, which is right on a
+  # laptop and wrong here: Docker writes its own iptables rules, so ufw does not block them, and
+  # on 2026-10-18 all three answered from the internet (redis with no password). `!override`
+  # replaces the base list instead of appending to it (needs Docker Compose 2.24+). The host
+  # nginx proxies "/api/" to 127.0.0.1:8000, so the api stays published on loopback only;
+  # postgres and redis are reached over the compose network and need no host port at all.
+  postgres:
+    ports: !reset []
+
+  redis:
+    ports: !reset []
+
   # The TradeMind brain, in practice mode: its ideas are recorded and scored
   # next to version 1, nothing is bought (docs/brain/GO_LIVE.md). Set to
   # "false" here and redeploy to hide it again.
   # MAX_PORTFOLIO_DRAWDOWN_PCT: the settled 15% halt (CLAUDE.md). The server .env
   # had 0.20, which outranks the code default; this line outranks the .env.
   api:
+    ports: !override
+      - "127.0.0.1:8000:8000"
     environment:
       BRAIN_ENABLED: "true"
       MAX_PORTFOLIO_DRAWDOWN_PCT: "0.15"
@@ -47,7 +61,7 @@ services:
         VITE_API_BASE_URL: https://swingtrademl.com/api/v1
     container_name: stml-frontend
     restart: unless-stopped
-    ports:
+    ports: !override
       - "127.0.0.1:8080:80"
     depends_on:
       - api

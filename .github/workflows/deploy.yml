@@ -45,6 +45,9 @@ jobs:
   deploy:
     needs: [window, validate]
     if: github.ref == 'refs/heads/main'
+    # The server key lives in the "production" environment, which only main may use, so a
+    # workflow pushed on any other branch cannot read it.
+    environment: production
     runs-on: ubuntu-latest
     steps:
       - name: Deploy tested commit over SSH

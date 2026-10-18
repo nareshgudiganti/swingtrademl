@@ -1856,3 +1856,107 @@ button.tm-avatar {
   padding-left: 0.7rem;
   padding-right: 0.7rem;
 }
+
+/* ------------------------------------------------- tap a word: glossary -- */
+/* <Term> (term.tsx): a word you can tap to see what it means. */
+
+.tm-term {
+  display: inline;
+}
+
+.tm-term-btn {
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  cursor: help;
+  border-radius: 4px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.tm-term-word {
+  text-decoration: underline dotted;
+  text-decoration-color: var(--tm-dim);
+  text-underline-offset: 3px;
+}
+
+.tm-term-btn:focus-visible {
+  outline: 2px solid var(--tm-cyan);
+  outline-offset: 2px;
+}
+
+.tm-term-box {
+  position: fixed;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-width: calc(100vw - 32px);
+  padding: 0.7rem 0.8rem;
+  background: var(--tm-bg-2);
+  color: var(--tm-text);
+  border: 1px solid var(--tm-line-strong);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+  font-size: 0.82rem;
+  font-weight: 400;
+  line-height: 1.45;
+  letter-spacing: normal;
+  text-transform: none;
+  text-align: left;
+  white-space: normal;
+  cursor: auto;
+}
+
+.tm-term-box:focus {
+  outline: none;
+}
+
+.tm-term-title {
+  font-weight: 700;
+}
+
+.tm-term-close {
+  align-self: flex-end;
+  font: inherit;
+  font-size: 0.75rem;
+  color: var(--tm-dim);
+  background: none;
+  border: 1px solid var(--tm-line);
+  border-radius: 6px;
+  padding: 0.3rem 0.7rem;
+  min-height: 32px;
+  cursor: pointer;
+}
+
+.tm-term-close:focus-visible {
+  outline: 2px solid var(--tm-cyan);
+  outline-offset: 2px;
+}
+
+.tm-glossary dt {
+  font-weight: 700;
+  margin-top: 0.6rem;
+}
+
+.tm-glossary dd {
+  margin: 0.15rem 0 0;
+  color: var(--tm-dim);
+}
+
+/* Read out by screen readers, not shown. */
+.tm-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

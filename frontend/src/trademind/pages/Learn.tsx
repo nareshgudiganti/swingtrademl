@@ -7,6 +7,7 @@ import { formatDateTime } from '../../lib/format'
 import { useLearning, useProposals } from '../live'
 import { currentBuyLevelProposal } from '../live-system'
 import { BrainGate, Card, CheckItem, Tag } from '../ui'
+import { Glossary } from '../term'
 
 const PROPOSAL_STATUS_LABEL: Record<BrainProposalStatus, string> = {
   open: 'Open',
@@ -72,9 +73,15 @@ function ProposalRow({
 
 export default function Learn() {
   return (
-    <BrainGate allowNoRun>
-      <LearnBody />
-    </BrainGate>
+    <>
+      <BrainGate allowNoRun>
+        <LearnBody />
+      </BrainGate>
+      {/* The glossary needs no brain data, so it shows even when the brain is off or unreachable. */}
+      <div className="tm-page" style={{ paddingTop: 0 }}>
+        <Glossary />
+      </div>
+    </>
   )
 }
 

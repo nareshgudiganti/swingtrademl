@@ -4,6 +4,7 @@ import { api } from '../../api/client'
 import { formatDateTime } from '../../lib/format'
 import { marketSituation, useEpisodes, useLatestRun } from '../live'
 import { MARKET_LABEL, MARKET_PLAIN, MARKET_TONE } from '../vocab'
+import { Term, TermIf } from '../term'
 import { BrainGate, Card, NotConnected, Tag, inr } from '../ui'
 
 const ROTATION: Record<string, string> = {
@@ -43,13 +44,13 @@ function MarketBody() {
         <Card
           glow
           className="tm-span-2"
-          title="Market Mode"
+          title={<Term k="market_mode">Market Mode</Term>}
           sub={`From the brain's run on ${formatDateTime(run.started_at)}`}
         >
           <div className="tm-hero-state" style={{ minWidth: 200 }}>
             <div>
               <div className="tm-state-word" style={{ fontSize: '1.7rem' }}>
-                {run.banner.mode ? MARKET_LABEL[run.banner.mode] : 'Unknown'}
+                {run.banner.mode ? <TermIf k={run.banner.mode}>{MARKET_LABEL[run.banner.mode] ?? run.banner.mode}</TermIf> : 'Unknown'}
               </div>
               {run.banner.mode && (
                 <Tag tone={MARKET_TONE[run.banner.mode] ?? 'blue'}>{MARKET_PLAIN[run.banner.mode]}</Tag>

@@ -8,6 +8,8 @@ import { strategyLabel } from '../../lib/tiers'
 import { formatDate } from '../../lib/format'
 import { finalWord, holdingsFrom, useLatestRun, useMarketSession, useTrack } from '../live'
 import { wordTagColor, wordTone } from '../vocab'
+import type { GlossaryKey } from '../vocab'
+import { Term, WordTag } from '../term'
 import { BrainGate, Card, CheckItem, Icon, Seg, Tabs, Tag, inr, signed, toneClass } from '../ui'
 import { PositionBand } from '../PositionBand'
 import { Confirm } from '../Confirm'
@@ -43,6 +45,7 @@ function ExitPlan({ decision, pos }: { decision: BrainDecision; pos: DetailedPos
   const steps = [
     {
       step: 'First target',
+      k: 'half_out' as GlossaryKey,
       price: entry != null ? `₹${inr(entry * 1.05, 0)} (rule: entry +5%)` : 'Rule: entry +5%',
       action: 'Sell half, lock in profit',
       icon: <Icon.Target />,
@@ -55,18 +58,21 @@ function ExitPlan({ decision, pos }: { decision: BrainDecision; pos: DetailedPos
     },
     {
       step: 'Final target',
+      k: 'target' as GlossaryKey,
       price: decision.target != null ? `₹${inr(decision.target, 0)}` : '—',
       action: 'Sell the rest',
       icon: <Icon.Target />,
     },
     {
       step: 'Stop loss',
+      k: 'stop_loss' as GlossaryKey,
       price: decision.stop != null ? `₹${inr(decision.stop, 0)}` : '—',
       action: 'Sell everything, no questions',
       icon: <Icon.X />,
     },
     {
       step: 'Time stop',
+      k: 'horizon' as GlossaryKey,
       price: pos?.entry_at
         ? `by ${formatDate(new Date(new Date(pos.entry_at).getTime() + 30 * 86_400_000).toISOString())}`
         : 'Rule: 30 calendar days after entry',
@@ -81,7 +87,7 @@ function ExitPlan({ decision, pos }: { decision: BrainDecision; pos: DetailedPos
           <span className="tm-chain-dot">{s.icon}</span>
           <div>
             <div className="tm-chain-title">
-              {s.step} · <span className="tm-num">{s.price}</span>
+              {s.k ? <Term k={s.k}>{s.step}</Term> : s.step} · <span className="tm-num">{s.price}</span>
             </div>
             <div className="tm-chain-sub">{s.action}</div>
           </div>
@@ -245,8 +251,12 @@ function PositionsBody() {
             </span>
           </>
         )}
-        <Tag tone={wordTagColor(finalWord(selected))}>{finalWord(selected)}</Tag>
-        {selected.confidence != null && <Tag tone="violet">{Math.round(selected.confidence * 100)} model score</Tag>}
+        <WordTag word={finalWord(selected)} />
+        {selected.confidence != null && (
+          <Term k="model_score">
+            <Tag tone="violet">{Math.round(selected.confidence * 100)} model score</Tag>
+          </Term>
+        )}
       </div>
 
       {matches.length > 1 && !pos && (

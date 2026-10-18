@@ -5,7 +5,8 @@ import type { Action } from '../types'
 import type { IdeaWord } from '../../api/types'
 import { formatDateTime } from '../../lib/format'
 import { finalWord, ideasFrom, holdingsFrom, marketSituation, useLatestRun, useLearning } from '../live'
-import { MARKET_LABEL, MARKET_PLAIN, MARKET_TONE, wordTagColor } from '../vocab'
+import { MARKET_LABEL, MARKET_PLAIN, MARKET_TONE } from '../vocab'
+import { Term, TermIf, WordTag } from '../term'
 import { CapFlag, useSymbolCaps } from '../cap'
 import { ActionPill, BrainArt, BrainGate, Card, CheckItem, Icon, Tag } from '../ui'
 
@@ -61,7 +62,7 @@ function HomeBody() {
       <Card glow className="tm-hero">
         <div>
           <div className="tm-card-title" style={{ marginBottom: '0.9rem' }}>
-            Market Mode
+            <Term k="market_mode">Market Mode</Term>
           </div>
           <p className="tm-dim" style={{ fontSize: '0.72rem', margin: '-0.6rem 0 0.9rem' }}>
             From the brain's run on {formatDateTime(run.started_at)}
@@ -80,7 +81,9 @@ function HomeBody() {
               {run.banner.mode === 'NO_NEW_TRADES' ? <Icon.X /> : run.banner.mode === 'DEFENSIVE' ? <Icon.Alert /> : <Icon.Check />}
             </span>
             <div>
-              <div className="tm-state-word">{run.banner.mode ? MARKET_LABEL[run.banner.mode] : 'Unknown'}</div>
+              <div className="tm-state-word">
+                {run.banner.mode ? <TermIf k={run.banner.mode}>{MARKET_LABEL[run.banner.mode] ?? run.banner.mode}</TermIf> : 'Unknown'}
+              </div>
               {run.banner.mode && (
                 <Tag tone={MARKET_TONE[run.banner.mode] ?? 'blue'}>{MARKET_PLAIN[run.banner.mode]}</Tag>
               )}
@@ -137,7 +140,7 @@ function HomeBody() {
                     <span className="tm-strong">{d.symbol}</span>
                     <span className="tm-dim">{d.reasons[0]}</span>
                   </span>
-                  <Tag tone={wordTagColor(finalWord(d))}>{finalWord(d)}</Tag>
+                  <WordTag word={finalWord(d)} />
                 </div>
               ))}
             </div>
@@ -165,7 +168,9 @@ function HomeBody() {
                       <td className="tm-num tm-right" title={chanceTitle(i)}>
                         <span style={{ display: 'inline-flex', gap: '0.3rem', alignItems: 'center' }}>
                           {chanceText(i)}
-                          <span className="tm-dim">est. chance</span>
+                          <span className="tm-dim">
+                            <Term k="est_chance">est. chance</Term>
+                          </span>
                         </span>
                       </td>
                       <td className="tm-dim">{i.reasons[0]}</td>

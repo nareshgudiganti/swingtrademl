@@ -109,6 +109,8 @@ export interface SystemStatus {
   active_strategies: number
   open_positions: number
   latest_candle_date: string | null
+  /** Open positions per book, never summed: bot, testing (practice), real (Zerodha holdings). */
+  open_positions_by_book?: { bot: number; testing: number; real: number }
   last_scan_at: string | null
   last_scan_result: {
     ts: string
@@ -1161,6 +1163,8 @@ export interface BrainProposal {
 // M18 go-live: the brain beside version 1, scored the same way.
 export interface BrainCompareSummary {
   ideas: number
+  // The rule these ideas were scored on, in plain words (top-level brain / version1 only).
+  scored_on?: string
   finished: number
   hit_rate: number | null
   stopped: number | null
@@ -1187,6 +1191,7 @@ export interface BrainCompare {
   version1: BrainCompareSummary
   by_week: BrainCompareWeek[]
   note: string
+  scored_on_warning?: string
   brain_finished: number
   needed: number
 }

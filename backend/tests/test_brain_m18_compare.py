@@ -114,3 +114,31 @@ def test_compare_endpoint_on_an_empty_book(client):
 def test_compare_is_hidden_while_the_brain_is_off(client, monkeypatch):
     monkeypatch.setattr(settings, "BRAIN_ENABLED", False)
     assert client.get("/api/v1/brain/compare", headers=HEADERS).status_code == 404
+
+
+def test_each_side_says_the_rule_it_was_scored_on():
+    def rule(strategy, tp, sl, days):
+        r = _row(strategy, D1, "TARGET_HIT", tp)
+        return cmp.Row(
+            strategy=r.strategy, is_brain=r.is_brain, symbol=r.symbol, day=r.day, generated_at=r.generated_at,
+            outcome=r.outcome, outcome_pct=r.outcome_pct, target_pct=tp, stop_pct=sl, horizon_days=days,
+        )
+
+    out = cmp.compare([rule("brain", 0.08, -0.04, 15), rule("v1", 0.02, -0.01, 5)], {D1})
+    assert out["brain"]["scored_on"] == "+8% before -4% within 15 trading days"
+    assert out["version1"]["scored_on"] == "+2% before -1% within 5 trading days"
+    assert "should not be compared directly" in out["scored_on_warning"]
+
+
+def test_scored_on_is_honest_when_nothing_to_read():
+    out = cmp.compare([], set())
+    assert out["brain"]["scored_on"].startswith("Not known yet")
+
+
+def test_the_loader_reads_the_rule_from_the_signals(db_session):
+    brain = brain_strategy(db_session)
+    inst = instrument(db_session, "M18CMPR", 918411)
+    signal(db_session, brain, inst, D1, outcome="TARGET_HIT", outcome_pct=0.08)
+    rows, days = cmp.load(db_session)
+    mine = [r for r in rows if r.symbol == "M18CMPR"]
+    assert cmp.scored_on(mine) == "+8% before -4% within 15 trading days"

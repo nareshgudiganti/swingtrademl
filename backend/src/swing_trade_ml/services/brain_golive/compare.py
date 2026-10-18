@@ -39,6 +39,10 @@ class Row:
     outcome: str | None
     outcome_pct: float | None
     blocked: bool = False  # brain idea refused by a v1 risk limit (practice evidence only)
+    # The rule this idea was scored on, from the Signal's own price / target / stop / horizon.
+    target_pct: float | None = None
+    stop_pct: float | None = None
+    horizon_days: int | None = None
 
 
 def one_per_day(rows: list[Row]) -> list[Row]:
@@ -61,6 +65,36 @@ def summarise(rows: list[Row]) -> dict:
         "stopped": sum(r.outcome == STOP for r in finished) / n if n else None,
         "avg_outcome_pct": sum(pcts) / len(pcts) if pcts else None,
     }
+
+
+def _median(values: list[float]) -> float | None:
+    vals = sorted(values)
+    if not vals:
+        return None
+    mid = len(vals) // 2
+    return vals[mid] if len(vals) % 2 else (vals[mid - 1] + vals[mid]) / 2
+
+
+def _pct_text(x: float) -> str:
+    return f"{x * 100:.1f}".rstrip("0").rstrip(".") + "%"
+
+
+def scored_on(rows: list[Row]) -> str:
+    """Plain-English rule these ideas were scored on, read from the ideas' own stored
+    target, stop and horizon (the numbers the scorer really used), never assumed."""
+    t = _median([r.target_pct for r in rows if r.target_pct is not None])
+    st = _median([r.stop_pct for r in rows if r.stop_pct is not None])
+    h = _median([float(r.horizon_days) for r in rows if r.horizon_days is not None])
+    if t is None or st is None or h is None:
+        return "Not known yet (no ideas to read the rule from)"
+    days = int(round(h))
+    return (
+        f"+{_pct_text(t)} before -{_pct_text(abs(st))} within {days} trading day"
+        + ("s" if days != 1 else "")
+    )
+
+
+SCORED_ON_WARNING = "These two numbers measure different things and should not be compared directly."
 
 
 def _week(day: date) -> str:
@@ -105,9 +139,10 @@ def compare(rows: list[Row], brain_days: set[date], min_finished: int = MIN_FINI
             {"name": n, "is_brain": n in brain_names, **summarise([r for r in rows if r.strategy == n])}
             for n in names
         ],
-        "brain": b,
+        "brain": {**b, "scored_on": scored_on([r for r in rows if r.is_brain])},
         "brain_blocked": summarise(blocked),
-        "version1": v,
+        "version1": {**v, "scored_on": scored_on(v1)},
+        "scored_on_warning": SCORED_ON_WARNING,
         "by_week": [
             {
                 "week": w,
@@ -128,6 +163,10 @@ def load(db: Session, since: date | None = None) -> tuple[list[Row], set[date]]:
             Signal.outcome,
             Signal.outcome_pct,
             Signal.features,
+            Signal.price,
+            Signal.take_profit,
+            Signal.stop_loss,
+            Signal.horizon_days,
             Strategy.name,
             Strategy.strategy_type,
             Instrument.tradingsymbol,
@@ -161,8 +200,11 @@ def load(db: Session, since: date | None = None) -> tuple[list[Row], set[date]]:
             outcome=outcome,
             outcome_pct=pct,
             blocked=bool(stype in STAGED_TYPES and isinstance(features, dict) and features.get(BLOCKED_KEY)),
+            target_pct=(tp - price) / price if price and tp is not None else None,
+            stop_pct=(sl - price) / price if price and sl is not None else None,
+            horizon_days=horizon,
         )
-        for generated, outcome, pct, features, name, stype, symbol in db.execute(stmt)
+        for generated, outcome, pct, features, price, tp, sl, horizon, name, stype, symbol in db.execute(stmt)
     ]
     return rows, {d for (d,) in db.execute(days_stmt)}
 

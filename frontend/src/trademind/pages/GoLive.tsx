@@ -71,13 +71,20 @@ function CompareCard() {
   return (
     <Card
       title="Brain vs version 1"
-      sub="The brain runs as a practice strategy next to version 1. Both are scored the same way: did the price reach the target before the stop? Only days when the brain ran are compared."
+      sub="The brain runs as a practice strategy next to version 1. Each idea is scored on whether the price reached its own target before its own stop, but the two sides use different rules (shown below). Only days when the brain ran are compared."
     >
       {compare.isLoading && <p className="tm-dim">Loading…</p>}
       {compare.isError && <p className="tm-neg">Could not load the comparison: {errText(compare.error)}</p>}
       {data && (
         <div className="tm-grid">
           <div className="tm-note">{data.note}</div>
+          {data.brain.scored_on && data.version1.scored_on && (
+            <div className="tm-note">
+              <div>Brain is scored on: {data.brain.scored_on}</div>
+              <div>Version 1 is scored on: {data.version1.scored_on}</div>
+              <div>{data.scored_on_warning ?? 'These two numbers measure different things and should not be compared directly.'}</div>
+            </div>
+          )}
           <p className="tm-dim tm-gl-p">
             {Math.min(data.brain_finished, data.needed)} of {data.needed} brain ideas have finished. {data.needed} are
             needed before its ideas can be bought, and even then only with your OK.

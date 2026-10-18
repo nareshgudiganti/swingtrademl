@@ -1,0 +1,6 @@
+{
+  "state": "closed", "plain": "Market closed", "trading_day": true,
+  "opens_at": "2026-10-16T03:45:00Z", "closes_at": "2026-10-16T10:00:00Z",
+  "next_open": "2026-10-19T03:45:00Z", "next_close": "2026-10-19T10:00:00Z",
+  "last_closed_trading_day": "2026-10-16", "calendar_warning": null
+}

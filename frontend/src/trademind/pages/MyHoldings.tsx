@@ -349,7 +349,7 @@ function HoldingsTable({
     { symbol: 'asc', suggestion: 'asc' },
   )
   return (
-    <div className="tm-table-wrap">
+    <div className="tm-table-wrap" tabIndex={0} role="region" aria-label="Table, scroll sideways to see more">
       <table className="tm-table">
         <thead>
           <tr>
@@ -814,7 +814,7 @@ function ReportTab() {
             {data.by_stock.length === 0 ? (
               <p className="tm-dim">Nothing bought or sold in this period.</p>
             ) : (
-              <div className="tm-table-wrap">
+              <div className="tm-table-wrap" tabIndex={0} role="region" aria-label="Table, scroll sideways to see more">
                 <table className="tm-table">
                   <thead>
                     <tr>
@@ -854,7 +854,7 @@ function ReportTab() {
             {data.closed.length === 0 ? (
               <p className="tm-dim">No sales in this period.</p>
             ) : (
-              <div className="tm-table-wrap">
+              <div className="tm-table-wrap" tabIndex={0} role="region" aria-label="Table, scroll sideways to see more">
                 <table className="tm-table">
                   <thead>
                     <tr>
@@ -893,7 +893,7 @@ function ReportTab() {
             {data.fills.length === 0 ? (
               <p className="tm-dim">Nothing bought or sold in this period.</p>
             ) : (
-              <div className="tm-table-wrap">
+              <div className="tm-table-wrap" tabIndex={0} role="region" aria-label="Table, scroll sideways to see more">
                 <table className="tm-table">
                   <thead>
                     <tr>
@@ -994,7 +994,7 @@ function ZerodhaTab() {
         <PageState kind="empty" reason="No shares in the connected Zerodha account." />
       )}
       {holdings.data && holdings.data.length > 0 && (
-        <div className="tm-table-wrap">
+        <div className="tm-table-wrap" tabIndex={0} role="region" aria-label="Table, scroll sideways to see more">
           <table className="tm-table">
             <thead>
               <tr>

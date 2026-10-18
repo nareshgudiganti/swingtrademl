@@ -1,0 +1,15 @@
+# Secret scan rules (tracker qa3). The repo is public, so a Kite key, token or password that
+# reaches GitHub is leaked the moment it is pushed. Uses gitleaks' full default rule set; the
+# allowlist below names exact, known-fake values only. Never widen it to a path or a whole rule.
+
+title = "swing-trade-bot secret scan"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Known fake values used in tests and plans"
+regexes = [
+  # Made-up JWT in the Observatory redaction test (signature decodes to "signature-value-here").
+  '''eyJhbGciOiJIUzI1NiJ9\.eyJzdWIiOiJvd25lciJ9\.c2lnbmF0dXJlLXZhbHVlLWhlcmU''',
+]

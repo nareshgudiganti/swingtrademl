@@ -1,0 +1,5 @@
+{
+  "last_run": { "run_id": "run-2026-10-16", "kind": "nightly", "started_at": "2026-10-16T12:30:00Z", "status": "done", "ms": 41200, "error": null },
+  "last_nightly_ok": "2026-10-16T12:30:00Z", "failed_runs_7d": 0,
+  "data": { "score": 0.96, "fresh": true, "issues": [] }, "stale_count": 0
+}

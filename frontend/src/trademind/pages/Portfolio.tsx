@@ -250,7 +250,7 @@ export default function Portfolio() {
             <PageState kind="empty" reason="The bot holds no paper shares in the brain's last run." />
           )}
           {status === 'live' && holdings.length > 0 && (
-            <div className="tm-table-wrap">
+            <div className="tm-table-wrap" tabIndex={0} role="region" aria-label="Table, scroll sideways to see more">
               <table className="tm-table">
                 <thead>
                   <tr>

@@ -163,7 +163,7 @@ function HomeBody() {
           {top.length === 0 ? (
             <PageState kind="empty" reason={noTrade ?? "No ideas in the brain's last run."} />
           ) : (
-            <div className="tm-table-wrap">
+            <div className="tm-table-wrap" tabIndex={0} role="region" aria-label="Table, scroll sideways to see more">
               <table className="tm-table">
                 <tbody>
                   {top.map((i) => (

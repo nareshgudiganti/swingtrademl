@@ -1,0 +1,8 @@
+{
+  "since": "2026-09-28", "n_scored": 12,
+  "by_band": [{ "band": "60-70", "n": 7, "said": 0.64, "hit": 0.57, "avg_r": 0.3 }],
+  "by_word": [{ "word": "TRADE", "n": 7, "hit": 0.57, "avg_r": 0.3 }],
+  "by_week": [{ "week": "2026-W41", "n": 4, "hit": 0.5, "avg_r": 0.1 }],
+  "failures": [], "drift": [], "drift_lines": [], "drift_note": null,
+  "note": "Twelve practice ideas have finished so far. That is too few to judge the brain yet."
+}

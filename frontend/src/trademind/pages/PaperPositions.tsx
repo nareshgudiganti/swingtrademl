@@ -239,7 +239,7 @@ function OpenTable({
     { symbol: 'asc', sector: 'asc', suggestion: 'asc' },
   )
   return (
-    <div className="tm-table-wrap">
+    <div className="tm-table-wrap" tabIndex={0} role="region" aria-label="Table, scroll sideways to see more">
       <table className="tm-table">
         <thead>
           <tr>

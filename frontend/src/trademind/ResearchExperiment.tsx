@@ -302,7 +302,7 @@ export function ResearchExperiment({ horizon: h }: { horizon: Horizon }) {
           <p className="tm-dim">No picks yet. Picks are scored every weekday evening after the market closes.</p>
         )}
         {rows.length > 0 && (
-          <div className="tm-table-wrap">
+          <div className="tm-table-wrap" tabIndex={0} role="region" aria-label="Table, scroll sideways to see more">
             <table className="tm-table">
               <thead>
                 <tr>

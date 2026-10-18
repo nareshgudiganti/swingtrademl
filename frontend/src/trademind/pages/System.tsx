@@ -154,7 +154,7 @@ function SystemBody() {
       <Card title="The Eight Thinking Steps" sub="Each step is answered by an installed module, or a simple built-in answer until one is built. “Trial” runs a module and records its answer without using it.">
         <QueryNotice q={modules} what="the module list" />
         {modules.data && (
-          <div className="tm-table-wrap">
+          <div className="tm-table-wrap" tabIndex={0} role="region" aria-label="Table, scroll sideways to see more">
             <table className="tm-table">
               <tbody>
                 {modules.data.steps.map((s) => (
@@ -207,7 +207,7 @@ function SystemBody() {
         <QueryNotice q={runs} what="recent runs" />
         {runs.data && runs.data.length === 0 && <p className="tm-dim">No runs recorded yet.</p>}
         {runs.data && runs.data.length > 0 && (
-          <div className="tm-table-wrap">
+          <div className="tm-table-wrap" tabIndex={0} role="region" aria-label="Table, scroll sideways to see more">
             <table className="tm-table">
               <thead>
                 <tr>

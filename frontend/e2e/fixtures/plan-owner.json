@@ -1,0 +1,6 @@
+{
+  "plan": "owner", "unrestricted": true, "can_manage_plans": true, "can_see_real_account": true,
+  "plans_enabled": true, "brain_enabled": true, "previewing": false,
+  "features": ["trademind", "bot_portfolio", "bot_performance", "track_record", "model_lab"],
+  "limits": { "picks_per_day": 5, "allowed_cap_tiers": ["large", "midcap", "smallcap"], "history_days": 365 }
+}

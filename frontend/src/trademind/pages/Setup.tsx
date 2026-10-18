@@ -207,7 +207,7 @@ function DataTab() {
           <p className="tm-dim">No price history yet. Update the list of tradable stocks first, then download the history.</p>
         )}
         {coverage.data && coverage.data.length > 0 && (
-          <div className="tm-table-wrap">
+          <div className="tm-table-wrap" tabIndex={0} role="region" aria-label="Table, scroll sideways to see more">
             <table className="tm-table">
               <thead>
                 <tr>
@@ -298,7 +298,7 @@ function StrategiesTab() {
       <QueryNotice q={strategies} what="the strategies" />
       {strategies.data && strategies.data.length === 0 && <p className="tm-dim">There are no strategies yet.</p>}
       {strategies.data && strategies.data.length > 0 && (
-        <div className="tm-table-wrap">
+        <div className="tm-table-wrap" tabIndex={0} role="region" aria-label="Table, scroll sideways to see more">
           <table className="tm-table">
             <thead>
               <tr>
@@ -457,7 +457,7 @@ function ModelsTab() {
           </>
         )}
         {active.length > 0 && (
-          <div className="tm-table-wrap">
+          <div className="tm-table-wrap" tabIndex={0} role="region" aria-label="Table, scroll sideways to see more">
             <table className="tm-table">
               <thead>
                 <tr>
@@ -527,7 +527,7 @@ function ModelsTab() {
             <div className="tm-stat-label" style={{ marginBottom: '0.5rem' }}>
               {report.data.total_scored} predictions checked. Bands with fewer than 30 examples are not real evidence.
             </div>
-            <div className="tm-table-wrap">
+            <div className="tm-table-wrap" tabIndex={0} role="region" aria-label="Table, scroll sideways to see more">
               <table className="tm-table">
                 <thead>
                   <tr>

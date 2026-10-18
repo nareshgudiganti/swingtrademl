@@ -79,7 +79,7 @@ function CompareCard() {
             needed before its ideas can be bought, and even then only with your OK.
           </p>
           {data.strategies.length > 0 && (
-            <div className="tm-table-wrap">
+            <div className="tm-table-wrap" tabIndex={0} role="region" aria-label="Table, scroll sideways to see more">
               <table className="tm-table">
                 <thead>
                   <tr>
@@ -109,7 +109,7 @@ function CompareCard() {
           {data.by_week.length > 0 && (
             <>
               <div className="tm-strong">By week</div>
-              <div className="tm-table-wrap">
+              <div className="tm-table-wrap" tabIndex={0} role="region" aria-label="Table, scroll sideways to see more">
                 <table className="tm-table">
                   <thead>
                     <tr>

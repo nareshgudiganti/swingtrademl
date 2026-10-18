@@ -4,8 +4,22 @@ name: Restore drill
 # droplet can be restored. Runs infra/deploy/restore-drill.sh over the same SSH key the deploy uses:
 # it restores into a throwaway container, compares row counts with the live database (read-only),
 # and removes the container. It never writes to the live database and never touches trading.
+#
+# Database upgrade test (tracker qa5): with "upgrade_check" ticked it then runs `alembic upgrade head`
+# on the restored copy with the code of "ref" (empty = the deployed commit), and reports the database
+# revision before and after. Run it with the branch name BEFORE merging a branch that adds a migration.
+# The migration runs inside the throwaway container's isolated network only (guards in the script).
 on:
   workflow_dispatch:
+    inputs:
+      upgrade_check:
+        description: "Also run alembic upgrade head on the restored copy (database upgrade test)"
+        type: boolean
+        default: true
+      ref:
+        description: "Code whose migrations to test: branch, tag or commit (empty = what is deployed)"
+        type: string
+        default: ""
 
 concurrency:
   group: restore-drill
@@ -20,11 +34,15 @@ jobs:
     steps:
       - name: Run the restore drill on the droplet
         uses: appleboy/ssh-action@v1.0.3
+        env:
+          UPGRADE_CHECK: ${{ inputs.upgrade_check && '1' || '0' }}
+          UPGRADE_REF: ${{ inputs.ref }}
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           command_timeout: 35m
+          envs: UPGRADE_CHECK,UPGRADE_REF
           script: |
             set -e
             # Market hours (IST, weekdays 09:00-16:30) are for the trial; the drill uses disk and CPU.
@@ -34,4 +52,6 @@ jobs:
               exit 1
             fi
             df -h /
-            bash /root/app/infra/deploy/restore-drill.sh
+            # A ref is passed to git fetch; allow only plain branch/tag/commit characters.
+            case "$UPGRADE_REF" in -*|*[!A-Za-z0-9._/-]*) echo "Bad ref: use a branch, tag or commit." >&2; exit 1 ;; esac
+            UPGRADE_CHECK="$UPGRADE_CHECK" UPGRADE_REF="$UPGRADE_REF" bash /root/app/infra/deploy/restore-drill.sh

@@ -1,0 +1,18 @@
+# Dependabot (tracker qa4): weekly pull requests for library updates. Nothing merges by itself;
+# every update PR goes through the normal test workflow and the owner's review.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /backend
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly

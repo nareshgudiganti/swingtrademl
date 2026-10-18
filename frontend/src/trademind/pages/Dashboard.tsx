@@ -230,7 +230,7 @@ function DashboardBody({ initialHorizon }: { initialHorizon: HorizonId }) {
             {canManage && active.experiment && <ResearchExperiment key={active.id} horizon={active} />}
           </>
         ) : (
-          <div className="tm-table-wrap">
+          <div className="tm-table-wrap" tabIndex={0} role="region" aria-label="Table, scroll sideways to see more">
             <table className="tm-table">
               <thead>
                 <tr>

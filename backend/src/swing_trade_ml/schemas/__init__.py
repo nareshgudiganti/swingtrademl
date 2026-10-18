@@ -51,7 +51,11 @@ class SystemStatus(BaseModel):
     active_models: list[str] = []
     watchlist_size: int
     active_strategies: int
+    # The bot's OWN book only (paper while TRADING_MODE=paper). It never includes the
+    # manual Testing book or real Zerodha holdings; see open_positions_by_book.
     open_positions: int
+    # Open positions per book, never summed together: {bot, testing, real}.
+    open_positions_by_book: dict[str, int] = {}
     latest_candle_date: date | None
     last_scan_at: datetime | None
     last_scan_result: dict[str, Any] | None

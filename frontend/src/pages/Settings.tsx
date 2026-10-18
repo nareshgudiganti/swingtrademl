@@ -171,7 +171,7 @@ export default function Settings() {
             <div className="stat-sub">
               {!s?.broker_authenticated && s && s.open_positions > 0 ? (
                 <strong>
-                  Stop-loss/target checks are NOT running on your {s.open_positions} open position
+                  Stop-loss/target checks are NOT running on the bot's {s.open_positions} open position
                   {s.open_positions === 1 ? '' : 's'}.{' '}
                 </strong>
               ) : null}

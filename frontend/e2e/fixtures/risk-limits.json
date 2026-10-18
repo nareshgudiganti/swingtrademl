@@ -1,0 +1,12 @@
+{
+  "portfolio_value": 980002, "cash": 958662, "rung_value": 1000000, "max_positions": 5, "open_positions": 2,
+  "max_position_pct": 0.2, "min_position_inr": 5000, "sector_rule": "At most 25% of the account in one sector",
+  "sector_cap_pct": 0.25, "max_adv_pct": 0.01, "scale_out_enabled": true, "max_share_price_inr": null,
+  "allowed_cap_tiers": ["large", "midcap", "smallcap"], "small_cap_budget_pct": 0.2, "cash_floor_inr": 20000,
+  "risk_per_trade_pct": 0.01, "max_drawdown_pct": 0.15, "regime": "normal", "plain_regime": "Normal market",
+  "deployable_fraction": 1, "deployable_ceiling_inr": 960000, "invested_inr": 21130, "room_inr": 938870,
+  "sectors": [
+    { "sector": "IT", "value_inr": 11736, "pct_of_portfolio": 0.012 },
+    { "sector": "Energy", "value_inr": 9604, "pct_of_portfolio": 0.0098 }
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "plan": "pro", "unrestricted": false, "can_manage_plans": false, "can_see_real_account": false,
+  "plans_enabled": true, "brain_enabled": true, "previewing": false,
+  "features": ["trademind", "bot_portfolio", "bot_performance"],
+  "limits": { "picks_per_day": 5, "allowed_cap_tiers": ["large"], "history_days": 90 }
+}

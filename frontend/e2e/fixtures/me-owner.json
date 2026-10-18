@@ -1,0 +1,1 @@
+{ "id": 1, "username": "owner", "email": "owner@example.test", "auth_provider": "local", "is_superuser": true, "role": "owner", "plan": "pro" }

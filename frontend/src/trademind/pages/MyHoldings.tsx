@@ -9,6 +9,7 @@ import { DayCell, ScoreToday, SuggestionTag, scoreNow, suggestionRank } from '..
 import ScoreTrail from '../ScoreTrail'
 import { SortTh, useSort } from '../sort'
 import { Card, PageHead, Tabs, Tag, inr, signed, toneClass } from '../ui'
+import { PageState, QueryNotice, StaleNotice } from '../PageState'
 
 const TABS = ['My holdings', 'Straight from Zerodha', 'Real-money report'] as const
 type TabId = (typeof TABS)[number]
@@ -268,9 +269,16 @@ function AccountCard() {
   return (
     <Card title="Your Zerodha account" sub="Live from Zerodha, for every share in your account. Read-only.">
       {account.isLoading && <p className="tm-dim">Asking Zerodha…</p>}
-      {account.isError && (
-        <p className="tm-dim">Could not reach Zerodha just now ({(account.error as Error).message}).</p>
+      {account.isError && account.data === undefined && (
+        <PageState
+          kind="error"
+          what="your Zerodha account"
+          title={`Could not reach Zerodha just now (${(account.error as Error).message}).`}
+          error={account.error}
+          onRetry={account.refetch}
+        />
       )}
+      <StaleNotice q={account} />
       {a && (
         <div className="tm-rows">
           <div className="tm-row">
@@ -553,17 +561,14 @@ function HoldingsTab() {
           </div>
         )}
         {notice && <div className="tm-callout" style={{ marginBottom: '0.6rem' }}>{notice}</div>}
-        {tracked.isLoading && <p className="tm-dim">Loading your shares…</p>}
-        {tracked.isError && (
-          <p className="tm-neg">Could not load your shares: {(tracked.error as Error).message}</p>
-        )}
+        <QueryNotice q={tracked} what="your shares" />
         {holdings.isError && (
           <p className="tm-dim">
             Could not reach Zerodha just now ({(holdings.error as Error).message}), so the count of new shares may be off.
           </p>
         )}
         {tracked.data && rows.length === 0 && (
-          <p className="tm-dim">Nothing in this list yet. Press “Import from Zerodha” to copy your shares here.</p>
+          <PageState kind="empty" reason="Nothing in this list yet. Press “Import from Zerodha” to copy your shares here." />
         )}
         {rows.length > 0 && (
           <div className="tm-rows">
@@ -695,9 +700,8 @@ function ReportTab() {
     </div>
   )
 
-  if (report.isLoading) return <p className="tm-dim">Loading your report…</p>
-  if (report.isError) return <p className="tm-neg">Could not load the report: {(report.error as Error).message}</p>
-  const data = report.data!
+  if (report.data === undefined) return <QueryNotice q={report} what="your report" />
+  const data = report.data
   const s = data.summary
   const noHistory = data.records.total_fills === 0
   const salesCount = s.winning_sales + s.losing_sales
@@ -976,13 +980,18 @@ function ZerodhaTab() {
       sub="This is exactly what Zerodha reports for your account right now, unchanged by the bot. Read-only."
     >
       {holdings.isLoading && <p className="tm-dim">Loading from Zerodha…</p>}
-      {holdings.isError && (
-        <p className="tm-neg">
-          Could not reach Zerodha: {((holdings.error as Error).message || 'log in to Zerodha and try again').replace(/\.$/, '')}.
-        </p>
+      {holdings.isError && holdings.data === undefined && (
+        <PageState
+          kind="error"
+          what="your Zerodha shares"
+          title={`Could not reach Zerodha: ${((holdings.error as Error).message || 'log in to Zerodha and try again').replace(/\.$/, '')}.`}
+          error={holdings.error}
+          onRetry={holdings.refetch}
+        />
       )}
+      <StaleNotice q={holdings} />
       {holdings.data && holdings.data.length === 0 && (
-        <p className="tm-dim">No shares in the connected Zerodha account.</p>
+        <PageState kind="empty" reason="No shares in the connected Zerodha account." />
       )}
       {holdings.data && holdings.data.length > 0 && (
         <div className="tm-table-wrap">

@@ -11,6 +11,7 @@ import { Term } from '../term'
 import { TrackRecord, chancePercent, chanceText, chanceTitle } from '../honest'
 import { CapFlag, useSymbolCaps } from '../cap'
 import { ActionPill, BrainGate, Card, CheckItem, Icon, GlowArea, Ring, Seg, StockLogo, inr } from '../ui'
+import { noTradeReason } from '../emptyReasons'
 
 type Filter = 'ALL' | IdeaWord
 
@@ -67,6 +68,11 @@ function OpportunitiesBody() {
       (query === '' || i.symbol.toLowerCase().includes(query.toLowerCase())),
   )
 
+  // Why there are no TRADE ideas today, from the run's own banner (null when there are some).
+  const noTrade = noTradeReason(run.banner, ideas.length, count('TRADE'))
+  const emptyText =
+    ideas.length === 0 || (filter === 'TRADE' && noTrade) ? noTrade : 'No stocks match these filters.'
+
   // Featured = top TRADE if there is one, otherwise top WATCH. ideasFrom
   // already sorts TRADE/WATCH first by confidence, so the first match wins.
   const featured = ideas.find((i) => finalWord(i) === 'TRADE') ?? ideas.find((i) => finalWord(i) === 'WATCH')
@@ -101,6 +107,11 @@ function OpportunitiesBody() {
           </span>
         </div>
 
+        {noTrade && ideas.length > 0 && (
+          <p className="tm-note" data-testid="no-trade-reason" style={{ marginTop: 0 }}>
+            {noTrade}
+          </p>
+        )}
         <div className="tm-table-wrap">
           <table className="tm-table">
             <thead>
@@ -191,8 +202,8 @@ function OpportunitiesBody() {
               ))}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="tm-dim" style={{ textAlign: 'center', padding: '1.5rem' }}>
-                    No stocks match these filters.
+                  <td colSpan={9} className="tm-dim" data-state="empty" style={{ textAlign: 'center', padding: '1.5rem' }}>
+                    {emptyText}
                   </td>
                 </tr>
               )}
@@ -211,7 +222,7 @@ function OpportunitiesBody() {
         <FeaturedCard decision={featured} />
       ) : (
         <Card title="Featured Idea">
-          <p className="tm-dim">No TRADE or WATCH idea right now.</p>
+          <p className="tm-dim" data-state="empty">No TRADE or WATCH idea right now.</p>
         </Card>
       )}
     </div>

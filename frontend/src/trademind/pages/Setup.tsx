@@ -8,6 +8,7 @@ import SymbolPicker from '../../components/SymbolPicker'
 import { formatDate, formatPercent, modelLabel } from '../../lib/format'
 import { Confirm } from '../Confirm'
 import { Card, PageHead, Seg, Tabs, Tag } from '../ui'
+import { QueryNotice } from '../PageState'
 
 const TABS = ['Account & alerts', 'Stocks watched', 'Price data', 'Strategies', 'Models'] as const
 type TabName = (typeof TABS)[number]
@@ -28,8 +29,7 @@ function AccountTab() {
   return (
     <div className="tm-grid tm-cols-2">
       <Card title="Who is logged in">
-        {me.isLoading && <p className="tm-dim">Loading…</p>}
-        {me.isError && <Problem what="your account" />}
+        <QueryNotice q={me} what="your account" />
         {me.data && (
           <>
             <div className="tm-strong">{me.data.username}</div>
@@ -53,8 +53,7 @@ function AccountTab() {
       </Card>
 
       <Card title="Zerodha connection">
-        {status.isLoading && <p className="tm-dim">Loading…</p>}
-        {status.isError && <Problem what="the connection" />}
+        <QueryNotice q={status} what="the connection" />
         {status.data && (
           <>
             <div>
@@ -70,8 +69,7 @@ function AccountTab() {
       </Card>
 
       <Card title="Telegram alerts" sub="Messages sent to your phone when something needs your attention">
-        {telegram.isLoading && <p className="tm-dim">Loading…</p>}
-        {telegram.isError && <Problem what="Telegram status" />}
+        <QueryNotice q={telegram} what="Telegram status" />
         {telegram.data && (
           <>
             <div className="tm-between" style={{ flexWrap: 'wrap', gap: '0.5rem' }}>
@@ -134,8 +132,7 @@ function WatchTab() {
       title="Stocks watched"
       sub="The stocks the app keeps an eye on. The brain also looks at the stocks from version 1, so it may study more than this list."
     >
-      {watchlist.isLoading && <p className="tm-dim">Loading…</p>}
-      {watchlist.isError && <Problem what="the list" />}
+      <QueryNotice q={watchlist} what="the list" />
       {watchlist.data && (
         <>
           <div className="tm-dim" style={{ fontSize: '0.8rem', marginBottom: '0.4rem' }}>
@@ -205,8 +202,7 @@ function DataTab() {
       </Card>
 
       <Card title="What price history we have">
-        {coverage.isLoading && <p className="tm-dim">Loading…</p>}
-        {coverage.isError && <Problem what="price history" />}
+        <QueryNotice q={coverage} what="price history" />
         {coverage.data && coverage.data.length === 0 && (
           <p className="tm-dim">No price history yet. Update the list of tradable stocks first, then download the history.</p>
         )}
@@ -299,8 +295,7 @@ function StrategiesTab() {
       title="Strategies"
       sub="Each strategy is one way the app finds stocks to buy. You can switch them on or off here."
     >
-      {strategies.isLoading && <p className="tm-dim">Loading…</p>}
-      {strategies.isError && <Problem what="the strategies" />}
+      <QueryNotice q={strategies} what="the strategies" />
       {strategies.data && strategies.data.length === 0 && <p className="tm-dim">There are no strategies yet.</p>}
       {strategies.data && strategies.data.length > 0 && (
         <div className="tm-table-wrap">
@@ -493,8 +488,7 @@ function ModelsTab() {
           />
         }
       >
-        {horizonAcc.isLoading && <p className="tm-dim">Loading…</p>}
-        {horizonAcc.isError && <Problem what="this check" />}
+        <QueryNotice q={horizonAcc} what="this check" />
         {horizonAcc.data &&
           (horizonAcc.data.evaluable > 0 ? (
             <>
@@ -524,8 +518,7 @@ function ModelsTab() {
           />
         }
       >
-        {report.isLoading && <p className="tm-dim">Loading…</p>}
-        {report.isError && <Problem what="this check" />}
+        <QueryNotice q={report} what="this check" />
         {report.data && report.data.buckets.length === 0 && (
           <p className="tm-dim">Nothing has been checked yet. This needs predictions whose outcome is already known.</p>
         )}

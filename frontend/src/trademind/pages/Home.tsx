@@ -9,6 +9,8 @@ import { MARKET_LABEL, MARKET_PLAIN, MARKET_TONE } from '../vocab'
 import { Term, TermIf, WordTag } from '../term'
 import { CapFlag, useSymbolCaps } from '../cap'
 import { ActionPill, BrainArt, BrainGate, Card, CheckItem, Icon, Tag } from '../ui'
+import { noTradeReason } from '../emptyReasons'
+import { PageState } from '../PageState'
 
 const IDEA_WORDS: IdeaWord[] = ['TRADE', 'WATCH', 'WAIT', 'AVOID']
 
@@ -32,6 +34,9 @@ function HomeBody() {
   const situation = marketSituation(run)
   const attention = holdings.filter((d) => ['MONITOR', 'REDUCE', 'EXIT'].includes(finalWord(d)))
   const top = ideas.slice(0, 5)
+  const tradeCount = ideas.filter((d) => finalWord(d) === 'TRADE').length
+  // Why there are no TRADE ideas, from the run's own banner only (null when there are some).
+  const noTrade = noTradeReason(run.banner, ideas.length, tradeCount)
 
   const ideaCounts: Record<IdeaWord, number> = { TRADE: 0, WATCH: 0, WAIT: 0, AVOID: 0 }
   for (const d of ideas) {
@@ -121,11 +126,16 @@ function HomeBody() {
               </div>
             ))}
           </div>
+          {noTrade && (
+            <p className="tm-note" data-testid="no-trade-reason">
+              {noTrade}
+            </p>
+          )}
         </Card>
 
         <Card title="Holdings Needing Attention" sub="Stocks you hold that the brain flagged">
           {holdings.length === 0 ? (
-            <p className="tm-dim">The brain's last run saw no holdings.</p>
+            <PageState kind="empty" reason="The brain's last run found no shares held, so there is nothing to check." />
           ) : attention.length === 0 ? (
             <p className="tm-dim">Nothing needs attention — your holdings look fine.</p>
           ) : (
@@ -151,7 +161,7 @@ function HomeBody() {
       <div className="tm-grid tm-cols-2">
         <Card title="Top Ideas" action={<Link className="tm-link" to="/trademind/opportunities">View All</Link>}>
           {top.length === 0 ? (
-            <p className="tm-dim">No ideas to show right now.</p>
+            <PageState kind="empty" reason={noTrade ?? "No ideas in the brain's last run."} />
           ) : (
             <div className="tm-table-wrap">
               <table className="tm-table">
@@ -183,9 +193,12 @@ function HomeBody() {
         </Card>
 
         <Card title="Today's Insights">
-          {learning.isLoading && <p className="tm-dim">Loading…</p>}
-          {insights.length === 0 && !learning.isLoading ? (
-            <p className="tm-dim">Nothing to report today.</p>
+          {learning.isLoading && <PageState kind="loading" what="the learning report" />}
+          {learning.isError && learning.data === undefined && (
+            <PageState kind="error" what="the learning report" error={learning.error} onRetry={learning.refetch} />
+          )}
+          {insights.length === 0 && !learning.isLoading && !learning.isError ? (
+            <PageState kind="empty" reason="Nothing to report today: no holding needs attention and the brain flagged nothing new." />
           ) : (
             insights.slice(0, 6).map((x, idx) => (
               <CheckItem key={idx} tone={x.tone}>

@@ -59,7 +59,9 @@ export function useBrainStatus(): 'live' | 'no-run' | 'off' | 'loading' | 'error
   // to tell "brain on but no run yet" from "brain switched off".
   const health = useQuery({ queryKey: ['brainHealth'], queryFn: api.brainHealth, retry: false })
 
-  if (latest.isSuccess) return 'live'
+  // A run that loaded before stays 'live' even when a later refetch fails (slow or no network): the screen
+  // keeps showing it with a "showing data from …" notice instead of going blank (BrainGate adds the notice).
+  if (latest.isSuccess || latest.data !== undefined) return 'live'
 
   const latestIs404 = latest.error instanceof ApiError && latest.error.status === 404
   if (!latestIs404) {

@@ -8,6 +8,7 @@ import { finalWord, ideasFrom, useLatestRun } from '../live'
 import type { Action } from '../types'
 import { CapFlag, useSymbolCaps } from '../cap'
 import { ActionPill, BrainGate, Card, inr } from '../ui'
+import { QueryNotice } from '../PageState'
 
 function entryZone(d: BrainDecision): string {
   if (d.entry_low != null && d.entry_high != null && d.entry_low !== d.entry_high) {
@@ -55,9 +56,8 @@ function WatchlistBody() {
   return (
     <div className="tm-page tm-grid">
       <Card glow title="Watchlist" sub="Buy only from here. The paper position shows under Portfolio → Testing.">
-        {watchlist.isLoading && <p className="tm-dim">Loading…</p>}
-        {watchlist.isError && <p className="tm-dim">Could not load the watchlist.</p>}
-        {symbols.length === 0 && !watchlist.isLoading && (
+        <QueryNotice q={watchlist} what="the watchlist" />
+        {symbols.length === 0 && watchlist.data !== undefined && (
           <p className="tm-dim">No symbols on the watchlist yet. Add them in Settings.</p>
         )}
         {buy.isError && <p className="tm-dim">{(buy.error as Error).message}</p>}

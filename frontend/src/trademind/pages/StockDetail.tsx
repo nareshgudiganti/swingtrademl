@@ -13,6 +13,8 @@ import ScoreTrail from '../ScoreTrail'
 import { Confirm } from '../Confirm'
 import { CapFlag, useSymbolCaps } from '../cap'
 import { ActionPill, BrainGate, Candles, Card, CheckItem, Icon, NotConnected, Seg, Tabs, Tag, inr, signed, toneClass } from '../ui'
+import { PageState, QueryNotice } from '../PageState'
+import { pickState } from '../stateRules'
 
 const TABS = ['Overview', 'Technical', 'Fundamental', 'AI Analysis', 'Similar Cases', 'News', 'Options'] as const
 type TabId = (typeof TABS)[number]
@@ -141,12 +143,19 @@ function StockDetailBody() {
     )
   }
 
-  const lookupFailed = !fromRun && why.isError
+  const lookupFailed = !fromRun && why.isError && why.data === undefined
   if (lookupFailed) {
+    const kind = pickState(why)
     return (
       <div className="tm-page">
-        <Card title="Could not reach the brain">
-          <p className="tm-dim">Something went wrong talking to the brain. Try again shortly.</p>
+        <Card title={kind === 'not-found' ? symbol || 'Unknown stock' : 'Could not reach the brain'}>
+          <PageState
+            kind={kind === 'ready' || kind === 'empty' ? 'error' : kind}
+            what={`what the brain thinks of ${symbol}`}
+            reason={`The brain has nothing stored for ${symbol}. Check the name, or pick a stock from Opportunities.`}
+            error={why.error}
+            onRetry={why.refetch}
+          />
         </Card>
       </div>
     )
@@ -160,7 +169,7 @@ function StockDetailBody() {
           <Icon.Back size={14} /> Opportunities
         </Link>
         <Card title={symbol || 'Unknown stock'}>
-          <p className="tm-dim">No decision for this stock today.</p>
+          <PageState kind="empty" reason="The brain made no decision for this stock today, so there is nothing to show." />
         </Card>
       </div>
     )
@@ -175,7 +184,11 @@ function StockDetailBody() {
   const stopPct = decision.stop != null && refPrice != null ? ((decision.stop - refPrice) / refPrice) * 100 : undefined
 
   const chart =
-    candlesQ.isError || (candlesQ.isSuccess && bars.length === 0) ? (
+    candlesQ.isError && candlesQ.data === undefined ? (
+      <Card className="tm-span-2" title="Price chart">
+        <QueryNotice q={candlesQ} what="the price history" />
+      </Card>
+    ) : candlesQ.data !== undefined && bars.length === 0 ? (
       <NotConnected what="Price chart" reason="No stored price history for this stock yet." />
     ) : (
       <Card
@@ -183,10 +196,13 @@ function StockDetailBody() {
         title={<span className="tm-dim" style={{ fontWeight: 500 }}>{symbol} · daily price</span>}
         action={<Seg<Range> small active={range} onChange={setRange} options={RANGES.map((r) => ({ id: r, label: r }))} />}
       >
-        {candlesQ.isLoading ? (
-          <p className="tm-dim">Loading price history…</p>
+        {candlesQ.data === undefined ? (
+          <QueryNotice q={candlesQ} what="the price history" />
         ) : (
-          <Candles bars={bars} height={300} target={decision.target ?? undefined} stop={decision.stop ?? undefined} />
+          <>
+            <QueryNotice q={candlesQ} what="the price history" />
+            <Candles bars={bars} height={300} target={decision.target ?? undefined} stop={decision.stop ?? undefined} />
+          </>
         )}
       </Card>
     )
@@ -293,10 +309,17 @@ function StockDetailBody() {
           </div>
 
           <Card title="Strength score, day by day" sub="How strongly the model liked this stock each day it was checked">
-            {trailQ.isLoading ? (
-              <p className="tm-dim">Loading…</p>
-            ) : !trailQ.data || trailQ.data.score_trail.length === 0 ? (
-              <p className="tm-dim">No daily scores saved for this stock yet. The list starts with the next daily check.</p>
+            {trailQ.data === undefined ? (
+              <QueryNotice
+                q={trailQ}
+                what="the daily scores"
+                notFound="No daily scores saved for this stock yet. The list starts with the next daily check."
+              />
+            ) : trailQ.data.score_trail.length === 0 ? (
+              <PageState
+                kind="empty"
+                reason="No daily scores saved for this stock yet. The list starts with the next daily check."
+              />
             ) : (
               <ScoreTrail
                 p={{

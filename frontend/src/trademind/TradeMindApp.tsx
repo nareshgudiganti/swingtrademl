@@ -12,6 +12,7 @@ import { clearToken } from '../api/client'
 import { formatDateTime } from '../lib/format'
 import { useBrainStatus, useLatestRun, useMarketSession } from './live'
 import { Card, Icon } from './ui'
+import { OfflineBanner } from './PageState'
 import PricesBadge from './PricesBadge'
 import Home from './pages/Home'
 import Dashboard from './pages/Dashboard'
@@ -210,6 +211,7 @@ export default function TradeMindApp({ ownerConsole = false }: TradeMindAppProps
           </span>
         </div>
       )}
+      <OfflineBanner />
 
       {/* Rendered outside any parent <Route>, so the paths are anchored here. */}
       <Routes>

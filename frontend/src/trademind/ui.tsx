@@ -5,7 +5,13 @@ import { useId, type ReactNode } from 'react'
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import clsx from 'clsx'
 
-import { useBrainStatus } from './live'
+import { useQuery } from '@tanstack/react-query'
+
+import { api } from '../api/client'
+import { runFailedNote } from './emptyReasons'
+import { useBrainStatus, useLatestRun } from './live'
+import { PageState, StaleNotice } from './PageState'
+import { errorStatus, staleSince } from './stateRules'
 import { Term } from './term'
 import type { Action, CandleBar, Point } from './types'
 import { isGlossaryKey } from './vocab'
@@ -196,7 +202,12 @@ export function BrainOff() {
 /** The one place that turns the brain's loading / off / no-run / error states
  * into a page. Children render only once the brain is live. `allowNoRun` is
  * for pages whose own data does not depend on a run (System, Learn): they
- * still render when the brain has not run yet. */
+ * still render when the brain has not run yet.
+ *
+ * Once a run has loaded it stays on screen: if a later refetch fails (slow or
+ * no network) the page keeps the run and shows "Showing data from 15:42 —
+ * can't reach the server right now" above it. When the brain's newest nightly
+ * run failed, it says so, so an old run is never mistaken for today's. */
 export function BrainGate({
   children,
   what = 'the brain',
@@ -207,22 +218,31 @@ export function BrainGate({
   allowNoRun?: boolean
 }) {
   const status = useBrainStatus()
+  const latest = useLatestRun()
+  const health = useQuery({ queryKey: ['brainHealth'], queryFn: api.brainHealth, retry: false })
 
   if (status === 'off') return <div className="tm-page"><BrainOff /></div>
 
   if (status === 'loading') {
     return (
       <div className="tm-page">
-        <p className="tm-dim">Connecting to {what}…</p>
+        <PageState kind={latest.fetchStatus === 'paused' ? 'offline' : 'loading'} what={what} />
       </div>
     )
   }
 
   if (status === 'error') {
+    const err = latest.isError ? latest.error : health.error
+    const code = errorStatus(err)
     return (
       <div className="tm-page">
         <Card title="Could not reach the brain">
-          <p className="tm-dim">Something went wrong talking to the brain. Try again shortly.</p>
+          <PageState
+            kind={code === 401 ? 'signed-out' : code === 403 ? 'forbidden' : 'error'}
+            what={what}
+            error={err}
+            onRetry={() => Promise.all([latest.refetch(), health.refetch()])}
+          />
         </Card>
       </div>
     )
@@ -232,13 +252,32 @@ export function BrainGate({
     return (
       <div className="tm-page">
         <Card title="No run yet">
-          <p className="tm-dim">The brain has not run yet.</p>
+          <PageState
+            kind="empty"
+            reason="The brain has not finished a run yet, so there is nothing to show. It runs each evening after the market closes."
+          />
         </Card>
       </div>
     )
   }
 
-  return <>{children}</>
+  const failed = status === 'live' ? runFailedNote(latest.data?.started_at, health.data) : null
+  const stale = staleSince(latest) != null
+  return (
+    <>
+      {(failed || stale) && (
+        <div className="tm-page-notices" data-testid="brain-notices">
+          <StaleNotice q={latest} />
+          {failed && (
+            <p className="tm-callout" data-testid="run-failed-note">
+              {failed}
+            </p>
+          )}
+        </div>
+      )}
+      {children}
+    </>
+  )
 }
 
 // Tap the pill to see what the word means (the glossary in vocab.ts).

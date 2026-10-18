@@ -7,6 +7,7 @@ import { finalWord, holdingsFrom, useBrainStatus, useLatestRun } from '../live'
 import { wordTone } from '../vocab'
 import { Term, WordTag } from '../term'
 import { BrainOff, Card, CheckItem, Donut, GlowArea, inr, signed, toneClass } from '../ui'
+import { PageState, QueryNotice } from '../PageState'
 
 // Purely a colour wheel for the donut — never a data value, so cycling a
 // fixed palette by rank is fine even though the sectors themselves are real.
@@ -116,8 +117,7 @@ export default function Portfolio() {
     <div className="tm-page tm-grid">
       <div className="tm-grid tm-cols-3">
         <Card glow className="tm-span-2" title="Portfolio Overview" sub="Paper figures: the bot's own practice book">
-          {summary.isLoading && <p className="tm-dim">Loading…</p>}
-          {summary.isError && <p className="tm-dim">Could not load your portfolio value right now.</p>}
+          <QueryNotice q={summary} what="your portfolio value" />
           {summary.data && (
             <div className="tm-flex" style={{ alignItems: 'flex-end', gap: '1.5rem' }}>
               <div style={{ minWidth: 220 }}>
@@ -130,8 +130,7 @@ export default function Portfolio() {
                 </div>
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                {equity.isLoading && <p className="tm-dim">Loading history…</p>}
-                {equity.isError && <p className="tm-dim">History is not available right now.</p>}
+                <QueryNotice q={equity} what="the value history" />
                 {equity.data && equity.data.length >= 2 && (
                   <GlowArea
                     data={equity.data.map((p) => ({ t: p.date.slice(5), v: p.total_value }))}
@@ -147,8 +146,7 @@ export default function Portfolio() {
           )}
         </Card>
         <Card title="Account">
-          {summary.isLoading && <p className="tm-dim">Loading…</p>}
-          {summary.isError && <p className="tm-dim">Not available right now.</p>}
+          {summary.data === undefined && <QueryNotice q={summary} what="your account" />}
           {summary.data && (
             <div className="tm-rows">
               <div className="tm-row">
@@ -191,10 +189,9 @@ export default function Portfolio() {
             </>
           }
         >
-          {riskLimits.isLoading && <p className="tm-dim">Loading…</p>}
-          {riskLimits.isError && <p className="tm-dim">Not available right now.</p>}
+          <QueryNotice q={riskLimits} what="the sector split" />
           {riskLimits.data && riskLimits.data.sectors.length === 0 && (
-            <p className="tm-dim">Nothing held yet, so there is nothing to break down by sector.</p>
+            <PageState kind="empty" reason="Nothing held yet, so there is nothing to break down by sector." />
           )}
           {riskLimits.data && riskLimits.data.sectors.length > 0 && (
             <div className="tm-flex" style={{ gap: '1.4rem' }}>
@@ -225,17 +222,17 @@ export default function Portfolio() {
         {status === 'off' && <BrainOff />}
         {status === 'loading' && (
           <Card title="Your Portfolio as a Whole">
-            <p className="tm-dim">Connecting to the brain…</p>
+            <PageState kind="loading" what="the brain's view" />
           </Card>
         )}
         {status === 'error' && (
           <Card title="Your Portfolio as a Whole">
-            <p className="tm-dim">Something went wrong talking to the brain. Try again shortly.</p>
+            <PageState kind="error" what="the brain's view" error={latest.error} onRetry={latest.refetch} />
           </Card>
         )}
         {status === 'no-run' && (
           <Card title="Your Portfolio as a Whole">
-            <p className="tm-dim">The brain has not run yet.</p>
+            <PageState kind="empty" reason="The brain has not finished a run yet, so it has no view of your portfolio." />
           </Card>
         )}
         {status === 'live' && run && <BrainPortfolioCard run={run} />}
@@ -244,10 +241,14 @@ export default function Portfolio() {
       <div className="tm-grid tm-cols-2">
         <Card title="Holdings" sub="What you own right now, and what the brain thinks of each">
           {status === 'off' && <p className="tm-dim">The brain is switched off on this server.</p>}
-          {status === 'loading' && <p className="tm-dim">Connecting to the brain…</p>}
-          {status === 'error' && <p className="tm-dim">Something went wrong talking to the brain.</p>}
-          {status === 'no-run' && <p className="tm-dim">The brain has not run yet.</p>}
-          {status === 'live' && holdings.length === 0 && <p className="tm-dim">The brain's last run saw no holdings.</p>}
+          {status === 'loading' && <PageState kind="loading" what="the brain's view" />}
+          {status === 'error' && (
+            <PageState kind="error" what="the brain's view" error={latest.error} onRetry={latest.refetch} />
+          )}
+          {status === 'no-run' && <PageState kind="empty" reason="The brain has not finished a run yet." />}
+          {status === 'live' && holdings.length === 0 && (
+            <PageState kind="empty" reason="The bot holds no paper shares in the brain's last run." />
+          )}
           {status === 'live' && holdings.length > 0 && (
             <div className="tm-table-wrap">
               <table className="tm-table">
@@ -289,9 +290,11 @@ export default function Portfolio() {
         </Card>
         <Card glow title="Suggestions" sub="What the brain would change">
           {status === 'off' && <p className="tm-dim">The brain is switched off on this server.</p>}
-          {status === 'loading' && <p className="tm-dim">Connecting to the brain…</p>}
-          {status === 'error' && <p className="tm-dim">Something went wrong talking to the brain.</p>}
-          {status === 'no-run' && <p className="tm-dim">The brain has not run yet.</p>}
+          {status === 'loading' && <PageState kind="loading" what="the brain's view" />}
+          {status === 'error' && (
+            <PageState kind="error" what="the brain's view" error={latest.error} onRetry={latest.refetch} />
+          )}
+          {status === 'no-run' && <PageState kind="empty" reason="The brain has not finished a run yet." />}
           {status === 'live' &&
             (() => {
               const flagged = holdings.filter((h) => finalWord(h) !== 'HOLD')

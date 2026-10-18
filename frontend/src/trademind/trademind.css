@@ -1987,4 +1987,68 @@ button.tm-avatar {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+
+/* ux2 / ux8: shared empty, loading and error states (PageState.tsx) and the offline / stale-data notices. */
+.tm-state {
+  margin: 0.25rem 0;
+}
+
+.tm-state-box {
+  display: grid;
+  gap: 0.4rem;
+  justify-items: start;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--tm-line);
+  border-radius: 10px;
+  background: rgba(139, 124, 255, 0.05);
+}
+
+.tm-state-box p {
+  margin: 0;
+}
+
+.tm-state-error {
+  border-color: rgba(255, 181, 71, 0.45);
+  background: rgba(255, 181, 71, 0.06);
+}
+
+.tm-stale {
+  margin: 0 0 0.6rem;
+  padding: 0.35rem 0.6rem;
+  font-size: 0.74rem;
+  color: var(--tm-amber);
+  border: 1px solid rgba(255, 181, 71, 0.35);
+  border-radius: 8px;
+  background: rgba(255, 181, 71, 0.06);
+}
+
+.tm-offline {
+  padding: 0.45rem 1.25rem;
+  font-size: 0.78rem;
+  color: var(--tm-amber);
+  background: rgba(255, 181, 71, 0.08);
+  border-bottom: 1px solid rgba(255, 181, 71, 0.35);
+}
+
+.tm-page-notices {
+  max-width: 1500px;
+  margin: 0 auto;
+  padding: 0.8rem 1.25rem 0;
+}
+
+.tm-page-notices .tm-stale,
+.tm-page-notices .tm-callout {
+  margin: 0;
+}
+
+.tm-page-notices + .tm-page {
+  padding-top: 0.6rem;
+}
+
+@media (max-width: 860px) {
+  .tm-offline,
+  .tm-page-notices {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
 }

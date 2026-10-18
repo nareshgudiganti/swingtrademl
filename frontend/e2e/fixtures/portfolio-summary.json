@@ -1,0 +1,12 @@
+{
+  "mode": "paper", "measured_since": "2026-09-28", "starting_capital": 979792, "total_value": 980002,
+  "cash": 958662, "holdings_value": 21340, "realized_pnl": 0, "unrealized_pnl": 210, "total_pnl": 210,
+  "total_return_pct": 0.0002, "open_positions": 2, "total_trades": 0, "winning_trades": 0, "losing_trades": 0,
+  "win_rate": 0, "avg_win": 0, "avg_loss": 0, "profit_factor": 0, "avg_holding_days": 0, "expectancy": 0,
+  "total_charges": 0, "max_drawdown_pct": 0.004, "current_drawdown_pct": 0.001, "day_pnl": 7, "day_pnl_pct": 0.0,
+  "sharpe_ratio": 0, "sortino_ratio": 0,
+  "top_movers": [
+    { "symbol": "TCS", "pnl": 336, "pnl_pct": 0.0295 },
+    { "symbol": "RELIANCE", "pnl": -126, "pnl_pct": -0.0129 }
+  ]
+}

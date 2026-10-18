@@ -1,0 +1,11 @@
+{
+  "stage": "shadow",
+  "plain": "Practice only: the brain records ideas but buys nothing.",
+  "finished": 12,
+  "finished_blocked": 1,
+  "needed": 30,
+  "ready": false,
+  "trial": { "word": "too early", "sessions": 14, "finished": 12 },
+  "trial_plain": "Too early to judge: 12 of 30 practice ideas have finished.",
+  "history": []
+}

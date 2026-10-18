@@ -161,7 +161,7 @@ function TradeHistory() {
           />
         }
       >
-        <div className="tm-table-wrap">
+        <div className="tm-table-wrap" tabIndex={0} role="region" aria-label="Table, scroll sideways to see more">
           <table className="tm-table">
             <thead>
               <tr>
@@ -193,7 +193,7 @@ function TradeHistory() {
 
       {byStrategy.length > 1 && (
         <Card title="Result by strategy" sub="Which approach is earning, and which is not">
-          <div className="tm-table-wrap">
+          <div className="tm-table-wrap" tabIndex={0} role="region" aria-label="Table, scroll sideways to see more">
             <table className="tm-table">
               <thead>
                 <tr>
@@ -219,7 +219,7 @@ function TradeHistory() {
       )}
 
       <Card title="Every finished trade" sub="Newest first">
-        <div className="tm-table-wrap">
+        <div className="tm-table-wrap" tabIndex={0} role="region" aria-label="Table, scroll sideways to see more">
           <table className="tm-table">
             <thead>
               <tr>
@@ -286,7 +286,7 @@ const OUTCOME: Record<string, { label: string; tone: 'green' | 'red' | 'amber' }
 function ScanTable({ rows }: { rows: TrackRecordSignal[] }) {
   const [open, setOpen] = useState<number | null>(null)
   return (
-    <div className="tm-table-wrap">
+    <div className="tm-table-wrap" tabIndex={0} role="region" aria-label="Table, scroll sideways to see more">
       <table className="tm-table">
         <thead>
           <tr>
@@ -376,7 +376,7 @@ function Picks() {
           <p className="tm-dim">Nothing on the buy list today. The model found no stock worth buying.</p>
         )}
         {buy.data && buy.data.length > 0 && (
-          <div className="tm-table-wrap">
+          <div className="tm-table-wrap" tabIndex={0} role="region" aria-label="Table, scroll sideways to see more">
             <table className="tm-table">
               <thead>
                 <tr>
@@ -457,7 +457,7 @@ function StrategyResults() {
             sub={`Holding ${s.open_positions} now`}
             action={<Tag tone={s.is_active ? 'green' : 'amber'}>{s.is_active ? 'Running' : 'Paused'}</Tag>}
           >
-            <div className="tm-table-wrap">
+            <div className="tm-table-wrap" tabIndex={0} role="region" aria-label="Table, scroll sideways to see more">
               <table className="tm-table">
                 <thead>
                   <tr>

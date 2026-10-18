@@ -238,7 +238,7 @@ export default function Portfolio() {
           {status === 'no-run' && <p className="tm-dim">The brain has not run yet.</p>}
           {status === 'live' && holdings.length === 0 && <p className="tm-dim">The brain's last run saw no holdings.</p>}
           {status === 'live' && holdings.length > 0 && (
-            <div className="tm-table-wrap">
+            <div className="tm-table-wrap" tabIndex={0} role="region" aria-label="Table, scroll sideways to see more">
               <table className="tm-table">
                 <thead>
                   <tr>

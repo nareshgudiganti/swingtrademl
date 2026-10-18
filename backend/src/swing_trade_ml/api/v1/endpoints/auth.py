@@ -14,6 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from swing_trade_ml.api.deps import CurrentUser, DbSession, require_auth
+from swing_trade_ml.api.rate_limit import auth_limit, public_limit
 from swing_trade_ml.brokers.kite import kite_broker
 from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.logging import get_logger
@@ -44,7 +45,7 @@ def issue_token(user: User) -> TokenResponse:
     )
 
 
-@router.get("/options")
+@router.get("/options", dependencies=[Depends(public_limit)])
 def auth_options() -> dict[str, bool]:
     """What the login page may offer. Public: it is read before anyone is signed in."""
     return {"signup_allowed": settings.ALLOW_SIGNUP}
@@ -74,7 +75,7 @@ def _count_wrong_password(user: User, now: datetime) -> bool:
     return False
 
 
-@router.post("/password", response_model=TokenResponse)
+@router.post("/password", response_model=TokenResponse, dependencies=[Depends(auth_limit)])
 def change_password(
     payload: PasswordChangeRequest, user: CurrentUser, db: DbSession, request: Request
 ) -> TokenResponse:
@@ -127,7 +128,7 @@ def logout_everywhere(user: CurrentUser, db: DbSession, request: Request) -> Mes
     return MessageResponse(message="Signed out on every device.")
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post("/login", response_model=TokenResponse, dependencies=[Depends(auth_limit)])
 def login(payload: LoginRequest, db: DbSession, request: Request) -> TokenResponse:
     """One message for every failure (unknown user, wrong password, locked,
     Google-only account) so the answer never tells whether an account exists."""
@@ -175,7 +176,12 @@ def login(payload: LoginRequest, db: DbSession, request: Request) -> TokenRespon
     return issue_token(user)
 
 
-@router.post("/signup", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/signup",
+    response_model=TokenResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(auth_limit)],
+)
 def signup(payload: SignupRequest, db: DbSession) -> TokenResponse:
     """Self-registration.
 
@@ -212,7 +218,7 @@ def me(user: CurrentUser) -> User:
     return user
 
 
-@router.get("/kite/login", response_model=KiteLoginResponse)
+@router.get("/kite/login", response_model=KiteLoginResponse, dependencies=[Depends(auth_limit)])
 def kite_login() -> KiteLoginResponse:
     """Start the Kite login. Must be repeated every trading day."""
     if not settings.kite_configured:
@@ -230,7 +236,7 @@ def kite_login() -> KiteLoginResponse:
     )
 
 
-@router.get("/kite/callback", response_class=HTMLResponse)
+@router.get("/kite/callback", response_class=HTMLResponse, dependencies=[Depends(auth_limit)])
 def kite_callback(request_token: str, db: DbSession) -> HTMLResponse:
     """Kite redirects the browser here with a request_token.
 
@@ -338,7 +344,7 @@ def _consume_state(token: str) -> bool:
     return (time.monotonic() - issued_at) <= _STATE_TTL_SECONDS
 
 
-@router.get("/google/login")
+@router.get("/google/login", dependencies=[Depends(auth_limit)])
 def google_login() -> RedirectResponse:
     """Redirect straight to Google's consent screen.
 
@@ -366,7 +372,7 @@ def google_login() -> RedirectResponse:
     return RedirectResponse(f"{GOOGLE_AUTH_URL}?{urlencode(params)}")
 
 
-@router.get("/google/callback", response_model=None)
+@router.get("/google/callback", response_model=None, dependencies=[Depends(auth_limit)])
 def google_callback(code: str, state: str, db: DbSession) -> HTMLResponse | RedirectResponse:
     """Google redirects the browser here after consent.
 
@@ -477,7 +483,7 @@ def google_callback(code: str, state: str, db: DbSession) -> HTMLResponse | Redi
     return RedirectResponse(f"{settings.post_login_url()}/?login_code={code}")
 
 
-@router.post("/google/exchange", response_model=TokenResponse)
+@router.post("/google/exchange", response_model=TokenResponse, dependencies=[Depends(auth_limit)])
 def google_exchange(payload: LoginCodeExchange, db: DbSession, request: Request) -> TokenResponse:
     """Swap the one-time code from the Google redirect for a session. Works once, within 60 seconds."""
     user = login_codes.redeem(db, payload.code)

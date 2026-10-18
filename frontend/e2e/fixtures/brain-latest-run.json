@@ -1,0 +1,76 @@
+{
+  "run_id": "run-2026-10-16",
+  "kind": "nightly",
+  "as_of": "2026-10-16",
+  "live": true,
+  "book": "bot",
+  "started_at": "2026-10-16T12:30:00Z",
+  "finished_at": "2026-10-16T12:30:41Z",
+  "ms": 41200,
+  "status": "done",
+  "error": null,
+  "progress": null,
+  "banner": { "mode": "NORMAL", "headline": "The market is steady. New trades are allowed within the usual limits." },
+  "counts": { "TRADE": 1, "WATCH": 1, "WAIT": 1, "AVOID": 0, "HOLD": 1, "MONITOR": 1 },
+  "modules": { "M01": "on", "M07": "on" },
+  "quality": { "overall": { "score": 0.96, "fresh": true, "issues": [] }, "stale": [] },
+  "sectors": [
+    { "sector": "IT", "name": "Information technology", "rank": 1, "of_total": 8, "strength_20d": 0.042, "rotation": "leading" },
+    { "sector": "BANK", "name": "Banks", "rank": 2, "of_total": 8, "strength_20d": 0.018, "rotation": "improving" }
+  ],
+  "situations": [
+    {
+      "scope": "market",
+      "subject": "NIFTY",
+      "label": "steady uptrend",
+      "confidence": 0.7,
+      "is_unknown": false,
+      "suggest_defensive": false,
+      "evidence": ["Nifty is above its 50-day average.", "More stocks are rising than falling."]
+    }
+  ],
+  "portfolio": { "largest_position": ["TCS", 0.12], "top_sector": ["IT", 0.2], "holdings_moving_together": [] },
+  "decisions": [
+    {
+      "id": 101, "run_id": "run-2026-10-16", "symbol": "INFY", "kind": "idea", "word": "TRADE",
+      "reasons": ["Strong upward move with rising volume."],
+      "entry_low": 1480, "entry_high": 1495, "target": 1610, "stop": 1430, "qty": 6, "horizon_days": 15, "confidence": 0.71,
+      "honest_score": { "status": "not_measured", "note": "Not measured on unseen days yet." },
+      "evidence_text": "Price closed above the high of the last month.",
+      "downgraded_from": null, "downgrade_reason": null,
+      "overruled_word": null, "overrule_reason": null, "overruled_by": null, "overruled_at": null
+    },
+    {
+      "id": 102, "run_id": "run-2026-10-16", "symbol": "HDFCBANK", "kind": "idea", "word": "WATCH",
+      "reasons": ["Trend is improving but not confirmed."],
+      "entry_low": null, "entry_high": null, "target": null, "stop": null, "qty": 0, "horizon_days": 15, "confidence": 0.58,
+      "honest_score": null, "evidence_text": null,
+      "downgraded_from": "TRADE", "downgrade_reason": "Bank sector is already near its limit.",
+      "overruled_word": null, "overrule_reason": null, "overruled_by": null, "overruled_at": null
+    },
+    {
+      "id": 103, "run_id": "run-2026-10-16", "symbol": "ITC", "kind": "idea", "word": "WAIT",
+      "reasons": ["No clear direction."],
+      "entry_low": null, "entry_high": null, "target": null, "stop": null, "qty": 0, "horizon_days": 15, "confidence": 0.44,
+      "honest_score": null, "evidence_text": null,
+      "downgraded_from": null, "downgrade_reason": null,
+      "overruled_word": null, "overrule_reason": null, "overruled_by": null, "overruled_at": null
+    },
+    {
+      "id": 104, "run_id": "run-2026-10-16", "symbol": "TCS", "kind": "holding", "word": "HOLD",
+      "reasons": ["Plan is working: price is above entry."],
+      "entry_low": null, "entry_high": null, "target": 4104, "stop": 3648, "qty": 3, "horizon_days": 15, "confidence": 0.66,
+      "honest_score": null, "evidence_text": null,
+      "downgraded_from": null, "downgrade_reason": null,
+      "overruled_word": null, "overrule_reason": null, "overruled_by": null, "overruled_at": null
+    },
+    {
+      "id": 105, "run_id": "run-2026-10-16", "symbol": "RELIANCE", "kind": "holding", "word": "MONITOR",
+      "reasons": ["Price slipped below its 10-day average."],
+      "entry_low": null, "entry_high": null, "target": 1501, "stop": 1334, "qty": 7, "horizon_days": 15, "confidence": 0.49,
+      "honest_score": null, "evidence_text": null,
+      "downgraded_from": null, "downgrade_reason": null,
+      "overruled_word": null, "overrule_reason": null, "overruled_by": null, "overruled_at": null
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "app": "swing-trade-ml", "environment": "e2e", "trading_mode": "paper", "live_trading_enabled": false,
+  "brain_enabled": true, "paper_tester_enabled": true, "broker_authenticated": true, "scheduler_running": true,
+  "scheduled_jobs": [{ "id": "nightly", "name": "Nightly brain run", "trigger": "cron[hour=18]", "next_run": "2026-10-16T12:30:00Z" }],
+  "telegram_enabled": false, "active_model": "swing_classifier:12",
+  "active_models": ["swing_classifier:12", "swing_classifier_midcap:4", "swing_classifier_smallcap:3"],
+  "watchlist_size": 10, "active_strategies": 2, "open_positions": 2,
+  "latest_candle_date": "2026-10-15", "last_scan_at": "2026-10-16T04:00:00Z",
+  "last_scan_result": { "ts": "2026-10-16T04:00:00Z", "strategies_run": 2, "instruments_evaluated": 10, "signals_generated": 3, "buys": 1, "exits": 0, "executed": 1, "errors": 0, "blocked": null },
+  "status_level": "ok", "status_message": "All systems normal"
+}

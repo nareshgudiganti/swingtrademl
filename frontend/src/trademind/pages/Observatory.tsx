@@ -259,7 +259,7 @@ export default function Observatory() {
       <Card title="Daily counts" sub={`The selected day and the 13 trading days before it. Tracked holdings are by book, signals and paper orders by mode; none are summed or linked to a run.`}>
         <QueryState q={days} id="days" empty={days.data && dayRows.length === 0 ? 'No days in range' : undefined} />
         {dayRows.length > 0 && (
-          <div className="tm-table-wrap">
+          <div className="tm-table-wrap" tabIndex={0} role="region" aria-label="Table, scroll sideways to see more">
             <table className="tm-table" data-testid="obs-day-counts">
               <thead>
                 <tr>
@@ -343,7 +343,7 @@ export default function Observatory() {
           {chosenRun && !r && <QueryState q={run} id="modules" />}
           {r && (
             <>
-              <div className="tm-table-wrap">
+              <div className="tm-table-wrap" tabIndex={0} role="region" aria-label="Table, scroll sideways to see more">
                 <table className="tm-table" data-testid="obs-modules-table">
                   <thead>
                     <tr>

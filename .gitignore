@@ -11,6 +11,7 @@ venv/
 .mypy_cache/
 .ruff_cache/
 .coverage
+coverage.json
 htmlcov/
 
 # --- Node ---
@@ -58,3 +59,10 @@ logs/
 
 # Claude Code personal settings (deploy permissions) — never commit to a public repo
 .claude/settings.local.json
+
+# --- Browser tests (Playwright): build, results and reports stay local (public repo) ---
+frontend/dist-e2e/
+frontend/test-results/
+frontend/playwright-report/
+frontend/blob-report/
+frontend/playwright/.cache/

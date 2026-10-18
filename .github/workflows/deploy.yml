@@ -68,3 +68,47 @@ jobs:
             git fetch origin "$RELEASE_SHA"
             git checkout --detach "$RELEASE_SHA"
             bash infra/deploy/release.sh "$RELEASE_SHA" "$PREVIOUS_SHA"
+
+  # After-deploy smoke test (tracker qa2). release.sh already checks the release from INSIDE the
+  # droplet (verify.py). This checks from OUTSIDE, as a user would: health/ready, paper mode (a live
+  # trading mode fails loudly), brain stage, risk limits, and the / and /trademind pages. Read-only:
+  # GET requests only, response bodies are never printed (public repo, public logs). Retries for
+  # ~2.5 minutes while containers restart. On failure it messages the owner on Telegram, the same way
+  # uptime.yml does. Without the API_KEY repository secret the authed checks are skipped with a warning.
+  smoke:
+    needs: deploy
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: infra/deploy/smoke.py
+          sparse-checkout-cone-mode: false
+
+      - name: Smoke test the live site (read-only)
+        id: smoke
+        env:
+          SMOKE_BASE_URL: https://swingtrademl.com
+          API_KEY: ${{ secrets.API_KEY }}
+        run: |
+          if [ -z "$API_KEY" ]; then
+            echo "::warning::No API_KEY repository secret: paper-mode, brain-stage and risk-limit checks skipped."
+          fi
+          python3 infra/deploy/smoke.py
+
+      - name: Message on Telegram
+        if: failure() && steps.smoke.outcome == 'failure'
+        env:
+          TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
+          PROBLEMS: ${{ steps.smoke.outputs.problems }}
+          SHA: ${{ github.sha }}
+        run: |
+          if [ -z "$TOKEN" ] || [ -z "$CHAT" ]; then echo "::warning::No Telegram secrets; cannot message."; exit 0; fi
+          when=$(TZ=Asia/Kolkata date '+%d %b %H:%M IST')
+          text=$(printf '🔴 TradeMind deploy %s finished, but the after-deploy check FAILED (%s)\n%s\nOpen GitHub, Actions, Deploy to production for details. To undo: revert the commit and push.' "${SHA:0:7}" "$when" "${PROBLEMS:-the smoke test did not finish}")
+          curl -s -m 20 -o /dev/null -w 'telegram %{http_code}\n' "https://api.telegram.org/bot${TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${CHAT}" --data-urlencode "text=${text}"

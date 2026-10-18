@@ -46,7 +46,7 @@ export default function Jobs() {
             {data.jobs.length === 0 ? (
               <p className="tm-dim">The worker has not sent its job list yet.</p>
             ) : (
-              <div className="tm-table-wrap">
+              <div className="tm-table-wrap" tabIndex={0} role="region" aria-label="Table, scroll sideways to see more">
                 <table className="tm-table" data-testid="jobs-table">
                   <thead>
                     <tr>

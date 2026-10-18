@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     DEBUG: bool = True
     LOG_LEVEL: str = "INFO"
     LOG_FORMAT: Literal["json", "console"] = "console"
+    # Count ERROR log lines by kind in Redis for the daily check's "new kind of error" (qa9).
+    ERROR_WATCH_ENABLED: bool = True
     TIMEZONE: str = "Asia/Kolkata"
 
     # ----------------------------------------------------------------- api --

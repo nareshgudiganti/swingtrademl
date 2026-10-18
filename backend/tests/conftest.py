@@ -17,6 +17,8 @@ os.environ.setdefault("ALLOW_LIVE_TRADING", "false")
 os.environ.setdefault("POSITION_SIZING_MODE", "risk_based")
 os.environ.setdefault("ENABLE_SCHEDULER", "false")
 os.environ.setdefault("TELEGRAM_ENABLED", "false")
+# Tests log errors on purpose; they must not count toward a developer's local Redis error watch.
+os.environ.setdefault("ERROR_WATCH_ENABLED", "false")
 os.environ.setdefault("API_KEY", "test-api-key")
 os.environ.setdefault("JWT_SECRET_KEY", "test-jwt-secret")
 os.environ.setdefault("DB_AUTO_MIGRATE", "false")

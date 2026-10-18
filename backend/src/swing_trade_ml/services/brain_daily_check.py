@@ -230,6 +230,10 @@ def compute(db: Session, now: datetime | None = None, backup_dir: str | None = N
             found = weekly._check(label, False, f"Could not check ({exc.__class__.__name__}).")
         if found is not None:
             checks.append(found)
+    # Server checks (qa9 new kinds of error, qa11 disk / memory / database size): never raise.
+    from swing_trade_ml.services import server_health
+
+    checks.extend(server_health.checks(db, day))
     dropped = out["intraday"].get("dropped")
     if dropped:
         listed = "; ".join(f"{d['module']}: {d['reason']} ({d['runs']} runs)" for d in dropped)

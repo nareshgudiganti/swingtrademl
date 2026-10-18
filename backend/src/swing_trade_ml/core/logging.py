@@ -11,6 +11,7 @@ import sys
 
 import structlog
 
+from swing_trade_ml.core import error_watch
 from swing_trade_ml.core.config import settings
 
 
@@ -25,12 +26,18 @@ def configure_logging() -> None:
     for noisy in ("apscheduler", "httpx", "httpcore", "urllib3", "kiteconnect"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
 
+    # Count every ERROR by kind in Redis, so a new kind reaches the daily check (qa9).
+    if settings.ERROR_WATCH_ENABLED:
+        error_watch.install()
+
     shared = [
         structlog.contextvars.merge_contextvars,
         structlog.stdlib.add_log_level,
         structlog.stdlib.add_logger_name,
         structlog.processors.TimeStamper(fmt="iso", utc=True),
         structlog.processors.StackInfoRenderer(),
+        # Before format_exc_info, so the exception class is still there (error watch, qa9).
+        error_watch.tag_error_kind,
         structlog.processors.format_exc_info,
     ]
 
@@ -41,7 +48,7 @@ def configure_logging() -> None:
     )
 
     structlog.configure(
-        processors=[*shared, renderer],
+        processors=[*shared, error_watch.with_error_kind(renderer)],
         wrapper_class=structlog.stdlib.BoundLogger,
         logger_factory=structlog.stdlib.LoggerFactory(),
         cache_logger_on_first_use=True,

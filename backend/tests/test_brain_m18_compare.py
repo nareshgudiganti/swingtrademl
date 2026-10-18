@@ -139,6 +139,6 @@ def test_the_loader_reads_the_rule_from_the_signals(db_session):
     brain = brain_strategy(db_session)
     inst = instrument(db_session, "M18CMPR", 918411)
     signal(db_session, brain, inst, D1, outcome="TARGET_HIT", outcome_pct=0.08)
-    rows, days = cmp.load(db_session)
+    rows, _ = cmp.load(db_session)
     mine = [r for r in rows if r.symbol == "M18CMPR"]
     assert cmp.scored_on(mine) == "+8% before -4% within 15 trading days"

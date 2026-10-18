@@ -33,8 +33,9 @@ def _status(client):
 def test_status_splits_open_positions_by_book(db_session, client):
     before = _status(client)["open_positions_by_book"]
     bot = v1_strategy(db_session, name="fxb-bot")
-    testing = v1_strategy(db_session, name="fxb-tester", strategy_type="tester_paper", execution_mode="advisory")
-    real = v1_strategy(db_session, name="real_trading", strategy_type="long_term_value", execution_mode="advisory")
+    advisory = {"execution_mode": "advisory"}
+    testing = v1_strategy(db_session, name="fxb-tester", strategy_type="tester_paper", **advisory)
+    real = v1_strategy(db_session, name="real_trading", strategy_type="long_term_value", **advisory)
     for i, (strat, n, mode) in enumerate([(bot, 2, "paper"), (testing, 3, "paper"), (real, 4, "live")]):
         for j in range(n):
             _pos(db_session, strat, instrument(db_session, f"FXB{i}{j}", 960000 + i * 10 + j), mode)

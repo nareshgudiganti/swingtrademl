@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 from datetime import date, datetime, time
+from typing import Any
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi import status as http_status
-from typing import Any
-
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 

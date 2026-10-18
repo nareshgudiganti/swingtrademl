@@ -87,7 +87,7 @@ def scored_on(rows: list[Row]) -> str:
     h = _median([float(r.horizon_days) for r in rows if r.horizon_days is not None])
     if t is None or st is None or h is None:
         return "Not known yet (no ideas to read the rule from)"
-    days = int(round(h))
+    days = round(h)
     return (
         f"+{_pct_text(t)} before -{_pct_text(abs(st))} within {days} trading day"
         + ("s" if days != 1 else "")

@@ -117,6 +117,16 @@ def last_closed_trading_day(now: datetime) -> date:
     return previous_trading_day(day)
 
 
+def recent_closed_trading_days(now: datetime, count: int = 20) -> list[date]:
+    """The last `count` trading days whose bar is final, newest first (starts at
+    `last_closed_trading_day`). Calendar data only, so the app can count how many
+    trading days old its prices are without its own copy of the holiday list."""
+    days = [last_closed_trading_day(now)]
+    while len(days) < count:
+        days.append(previous_trading_day(days[-1]))
+    return days
+
+
 def _clock(t: time) -> str:
     hour = t.hour % 12 or 12
     return f"{hour}:{t.minute:02d} {'am' if t.hour < 12 else 'pm'}"

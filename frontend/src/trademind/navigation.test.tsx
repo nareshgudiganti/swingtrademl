@@ -131,3 +131,40 @@ describe('Phase 2: Portfolio tabs and the Paper/Real strip', () => {
     expect(render('/trademind/portfolio', false, { trading_mode: 'live' })).toContain('not in paper mode')
   })
 })
+
+describe('ux1: the "Prices from ..." badge is in the top bar on every page', () => {
+  function renderWithPrices(path: string, ownerConsole: boolean, latest: string | null): string {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    client.setQueryData(['status'], { paper_tester_enabled: true, trading_mode: 'paper' })
+    client.setQueryData(['marketSession'], {
+      state: 'pre_open', plain: 'Market opens at 9:15 am', trading_day: true, opens_at: null, closes_at: null,
+      next_open: '2026-10-20T09:15:00+05:30', next_close: '2026-10-20T15:30:00+05:30',
+      last_closed_trading_day: '2026-10-19', today: '2026-10-20',
+      recent_closed_trading_days: ['2026-10-19', '2026-10-16', '2026-10-15'], calendar_warning: null,
+      latest_candle_date: latest,
+    })
+    client.setQueryData(['plan'], { can_see_real_account: ownerConsole, unrestricted: ownerConsole, features: [] })
+    return renderToString(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={[path]}>
+          <TradeMindApp ownerConsole={ownerConsole} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+  }
+
+  for (const owner of [true, false]) {
+    it.each([...new Set(PATHS)])(`${owner ? 'owner' : 'non-owner'}: %s`, (path) => {
+      expect(renderWithPrices(path, owner, '2026-10-19')).toContain('data-testid="prices-badge"')
+    })
+  }
+
+  it('is plain when fresh and amber when stale', () => {
+    const fresh = renderWithPrices('/trademind', false, '2026-10-19')
+    expect(fresh).toContain('Prices from yesterday&#x27;s close')
+    expect(fresh).not.toContain('tm-asof-stale')
+    const stale = renderWithPrices('/trademind', false, '2026-10-15')
+    expect(stale).toContain('Prices are 2 days old')
+    expect(stale).toContain('tm-asof-stale')
+  })
+})

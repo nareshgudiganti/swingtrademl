@@ -12,6 +12,7 @@ import { clearToken } from '../api/client'
 import { formatDateTime } from '../lib/format'
 import { useBrainStatus, useLatestRun, useMarketSession } from './live'
 import { Card, Icon } from './ui'
+import PricesBadge from './PricesBadge'
 import Home from './pages/Home'
 import Dashboard from './pages/Dashboard'
 import Market from './pages/Market'
@@ -129,6 +130,7 @@ export default function TradeMindApp({ ownerConsole = false }: TradeMindAppProps
           ))}
         </nav>
         <div className="tm-topbar-right">
+          <PricesBadge />
           {market.data && (
             <span
               className={`tm-zchip tm-market-chip ${market.data.state === 'open' ? 'tm-zchip-ok' : ''}`}

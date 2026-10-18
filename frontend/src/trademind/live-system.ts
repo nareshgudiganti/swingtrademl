@@ -43,3 +43,10 @@ export function currentBuyLevelProposal(proposals: BrainProposal[]): BrainPropos
   const latest = accepted.reduce((a, b) => ((a.decided_at ?? '') > (b.decided_at ?? '') ? a : b))
   return latest.change.buy_level != null ? latest : null
 }
+
+export const BEFORE_TRIAL_NOTE = 'Before the clean trial (28 Sep 2026): the early part of this chart is an older record and is not the current test.'
+
+/** True when the drawdown chart still includes days from before the clean trial. */
+export function includesBeforeTrial(points: EquityPoint[]): boolean {
+  return points.some((p) => p.before_trial === true)
+}

@@ -161,6 +161,10 @@ export interface PortfolioSummary {
   expectancy: number
   total_charges: number
   max_drawdown_pct: number
+  /** Set when max_drawdown_pct also covers the old record from before the clean trial. */
+  max_drawdown_label?: string | null
+  /** The clean trial's own worst fall (only present with the label above). */
+  max_drawdown_since_trial_pct?: number
   current_drawdown_pct: number
   day_pnl: number
   day_pnl_pct: number
@@ -379,6 +383,8 @@ export interface EquityPoint {
   day_pnl: number
   drawdown_pct: number
   open_positions: number
+  /** True for points from before the clean trial (28 Sep 2026). */
+  before_trial?: boolean
 }
 
 export interface Strategy {

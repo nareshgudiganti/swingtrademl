@@ -173,6 +173,11 @@ export default function Portfolio() {
                   )
                 })()}
               </div>
+              {summary.data.max_drawdown_label ? (
+                <p className="tm-dim" style={{ fontSize: 11, margin: 0 }}>
+                  {summary.data.max_drawdown_label}
+                </p>
+              ) : null}
             </div>
           )}
         </Card>

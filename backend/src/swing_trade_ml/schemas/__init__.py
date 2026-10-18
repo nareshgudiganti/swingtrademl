@@ -451,6 +451,8 @@ class EquityPoint(BaseModel):
     day_pnl: float
     drawdown_pct: float
     open_positions: int
+    # True for points from before the clean paper trial; their drawdown measures a replaced system.
+    before_trial: bool = False
 
 
 # ---------------------------------------------------------------------- ml --

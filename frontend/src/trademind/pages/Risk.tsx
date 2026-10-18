@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 
 import { api } from '../../api/client'
-import { biggestSector, currentDrawdownPct, drawdownChartSeries, refusedDecisions } from '../live-system'
+import { BEFORE_TRIAL_NOTE, biggestSector, currentDrawdownPct, drawdownChartSeries, includesBeforeTrial, refusedDecisions } from '../live-system'
 import { useBrainStatus, useLatestRun } from '../live'
 import { BrainOff, Card, CheckItem, GlowArea, Meter, NotConnected, Ring, inr } from '../ui'
 
@@ -347,7 +347,7 @@ export default function Risk() {
             </Card>
           </div>
         ) : points.length > 1 ? (
-          <Card className="tm-span-2" title="Drawdown" sub="How far the portfolio was below its best point, day by day">
+          <Card className="tm-span-2" title="Drawdown" sub={includesBeforeTrial(points) ? `How far the portfolio was below its best point, day by day. ${BEFORE_TRIAL_NOTE}` : 'How far the portfolio was below its best point, day by day'}>
             <GlowArea data={drawdownChartSeries(points)} color="#ff4d6a" height={180} axes domain={['dataMin', 0]} formatter={(v) => `${v.toFixed(1)}%`} />
           </Card>
         ) : (

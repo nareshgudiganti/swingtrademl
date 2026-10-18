@@ -6,7 +6,9 @@ import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YA
 import clsx from 'clsx'
 
 import { useBrainStatus } from './live'
+import { Term } from './term'
 import type { Action, CandleBar, Point } from './types'
+import { isGlossaryKey } from './vocab'
 
 // ------------------------------------------------------------- formatting --
 
@@ -239,19 +241,10 @@ export function BrainGate({
   return <>{children}</>
 }
 
-const ACTION_HINT: Record<Action, string> = {
-  TRADE: 'Worth buying now, at the suggested size',
-  WATCH: 'Interesting — wait for a better moment',
-  WAIT: 'Nothing to do yet',
-  AVOID: 'Stay away for now',
-}
-
+// Tap the pill to see what the word means (the glossary in vocab.ts).
 export function ActionPill({ action }: { action: Action }) {
-  return (
-    <span className={`tm-pill tm-pill-${action.toLowerCase()}`} title={ACTION_HINT[action]}>
-      {action}
-    </span>
-  )
+  const pill = <span className={`tm-pill tm-pill-${String(action).toLowerCase()}`}>{action}</span>
+  return isGlossaryKey(action) ? <Term k={action}>{pill}</Term> : pill
 }
 
 export function Tag({ tone, children }: { tone: 'green' | 'amber' | 'red' | 'blue' | 'violet'; children: ReactNode }) {

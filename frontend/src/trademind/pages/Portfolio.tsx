@@ -4,8 +4,9 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { api } from '../../api/client'
 import type { BrainRun, DetailedPosition } from '../../api/types'
 import { finalWord, holdingsFrom, useBrainStatus, useLatestRun } from '../live'
-import { wordTagColor, wordTone } from '../vocab'
-import { BrainOff, Card, CheckItem, Donut, GlowArea, Tag, inr, signed, toneClass } from '../ui'
+import { wordTone } from '../vocab'
+import { Term, WordTag } from '../term'
+import { BrainOff, Card, CheckItem, Donut, GlowArea, inr, signed, toneClass } from '../ui'
 
 // Purely a colour wheel for the donut — never a data value, so cycling a
 // fixed palette by rank is fine even though the sectors themselves are real.
@@ -32,7 +33,9 @@ function BrainPortfolioCard({ run }: { run: BrainRun }) {
           </span>
         </div>
         <div className="tm-row">
-          <span className="tm-dim">Biggest sector</span>
+          <span className="tm-dim">
+            Biggest <Term k="sector">sector</Term>
+          </span>
           <span className="tm-strong">
             {view.top_sector ? `${view.top_sector[0]} · ${(view.top_sector[1] * 100).toFixed(0)}%` : '—'}
           </span>
@@ -163,7 +166,9 @@ export default function Portfolio() {
                 </span>
               </div>
               <div className="tm-row" title="Biggest fall from a high point">
-                <span className="tm-dim">Max Drawdown</span>
+                <span className="tm-dim">
+                  Max <Term k="drawdown">Drawdown</Term>
+                </span>
                 {(() => {
                   const ddPct = Math.round(summary.data.max_drawdown_pct * 1000) / 10
                   return (
@@ -179,7 +184,13 @@ export default function Portfolio() {
       </div>
 
       <div className="tm-grid tm-cols-2">
-        <Card title="Sector Allocation">
+        <Card
+          title={
+            <>
+              <Term k="sector">Sector</Term> Allocation
+            </>
+          }
+        >
           {riskLimits.isLoading && <p className="tm-dim">Loading…</p>}
           {riskLimits.isError && <p className="tm-dim">Not available right now.</p>}
           {riskLimits.data && riskLimits.data.sectors.length === 0 && (
@@ -246,7 +257,9 @@ export default function Portfolio() {
                     <th className="tm-right">Qty</th>
                     <th className="tm-right">Avg price</th>
                     <th className="tm-right">Value</th>
-                    <th className="tm-right">P&amp;L</th>
+                    <th className="tm-right">
+                      <Term k="unrealised">P&amp;L</Term>
+                    </th>
                     <th>Brain says</th>
                   </tr>
                 </thead>
@@ -263,7 +276,7 @@ export default function Portfolio() {
                           {p ? `${p.unrealized_pnl >= 0 ? '+' : '−'}₹${inr(Math.abs(p.unrealized_pnl), 0)}` : '—'}
                         </td>
                         <td>
-                          <Tag tone={wordTagColor(finalWord(h))}>{finalWord(h)}</Tag>
+                          <WordTag word={finalWord(h)} />
                           {h.reasons[0] && <div className="tm-dim" style={{ fontSize: '0.75rem', marginTop: 2 }}>{h.reasons[0]}</div>}
                         </td>
                       </tr>

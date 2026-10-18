@@ -24,6 +24,7 @@ import { ResearchExperiment } from '../ResearchExperiment'
 import { usePlan } from '../../lib/plan'
 import { DEFAULT_HORIZON, HORIZONS, horizonById, type HorizonId } from '../horizons'
 import { MARKET_LABEL, MARKET_PLAIN, MARKET_TONE, wordTone } from '../vocab'
+import { Term, TermIf } from '../term'
 import { ActionPill, BrainArt, BrainGate, Card, CheckItem, GlowArea, Meter, Ring, StockLogo, Tag, inr } from '../ui'
 
 const RANGES = [
@@ -239,11 +240,17 @@ function DashboardBody({ initialHorizon }: { initialHorizon: HorizonId }) {
                   <th className="tm-right">Current price</th>
                   <th>Setup</th>
                   <th>Entry range</th>
-                  <th title="Rule: sell half here">Target 1</th>
-                  <th>Target 2</th>
-                  <th>Stop loss</th>
+                  <th title="Rule: sell half here">
+                    <Term k="half_out">Target 1</Term>
+                  </th>
+                  <th>
+                    <Term k="target">Target 2</Term>
+                  </th>
+                  <th>
+                    <Term k="stop_loss">Stop loss</Term>
+                  </th>
                   <th className="tm-right" title="Estimated chance of +8% before −4%, from past results on unseen days">
-                    Est. chance
+                    <Term k="est_chance">Est. chance</Term>
                   </th>
                   <th>Timeframe</th>
                   <th />
@@ -357,7 +364,9 @@ function SummaryStrip({ run, picks }: { run: BrainRun; picks: BrainDecision[] })
         </div>
         {mode && (
           <>
-            <Tag tone={MARKET_TONE[mode] ?? 'blue'}>{MARKET_LABEL[mode]}</Tag>
+            <TermIf k={mode}>
+              <Tag tone={MARKET_TONE[mode] ?? 'blue'}>{MARKET_LABEL[mode] ?? mode}</Tag>
+            </TermIf>
             <p className="tm-note">{MARKET_PLAIN[mode]}</p>
           </>
         )}

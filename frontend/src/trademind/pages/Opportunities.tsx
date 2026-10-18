@@ -7,6 +7,7 @@ import type { BrainDecision, IdeaWord } from '../../api/types'
 import type { Action } from '../types'
 import { finalWord, ideasFrom, useLatestRun } from '../live'
 import { wordTone } from '../vocab'
+import { Term } from '../term'
 import { TrackRecord, chancePercent, chanceText, chanceTitle } from '../honest'
 import { CapFlag, useSymbolCaps } from '../cap'
 import { ActionPill, BrainGate, Card, CheckItem, Icon, GlowArea, Ring, Seg, StockLogo, inr } from '../ui'
@@ -108,11 +109,15 @@ function OpportunitiesBody() {
                 <th>Size</th>
                 <th>Decision</th>
                 <th className="tm-right" title="Estimated chance of reaching +8% before −4%, from past results on unseen days">
-                  Est. chance
+                  <Term k="est_chance">Est. chance</Term>
                 </th>
                 <th>Entry</th>
-                <th>Target</th>
-                <th>SL</th>
+                <th>
+                  <Term k="target">Target</Term>
+                </th>
+                <th>
+                  <Term k="stop_loss">SL</Term>
+                </th>
                 <th>Why</th>
                 <th />
               </tr>
@@ -255,7 +260,9 @@ function FeaturedCard({ decision }: { decision: BrainDecision }) {
               <span className="tm-ring-value" style={{ fontSize: 20 }}>
                 {chanceText(decision)}
               </span>
-              <span className="tm-ring-label">Est. chance</span>
+              <span className="tm-ring-label">
+                <Term k="est_chance">Est. chance</Term>
+              </span>
             </>
           }
         />

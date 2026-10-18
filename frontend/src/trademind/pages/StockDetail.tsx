@@ -7,7 +7,8 @@ import type { BrainDecision } from '../../api/types'
 import type { Action } from '../types'
 import { barsFrom } from '../live-stock'
 import { finalWord, stockSituations, useBrainStatus, useLatestRun, useWhy } from '../live'
-import { wordClassName, wordTagColor, wordTone } from '../vocab'
+import { wordClassName, wordTone } from '../vocab'
+import { Term, TermIf, WordTag } from '../term'
 import ScoreTrail from '../ScoreTrail'
 import { Confirm } from '../Confirm'
 import { CapFlag, useSymbolCaps } from '../cap'
@@ -216,12 +217,12 @@ function StockDetailBody() {
         {decision.kind === 'idea' ? (
           <ActionPill action={finalWord(decision) as Action} />
         ) : (
-          <Tag tone={wordTagColor(finalWord(decision))}>{finalWord(decision)}</Tag>
+          <WordTag word={finalWord(decision)} />
         )}
         {decision.confidence != null && (
-          <span title="A ranking, not a chance — not a probability">
+          <Term k="model_score">
             <Tag tone="violet">{Math.round(decision.confidence * 100)} model score</Tag>
-          </span>
+          </Term>
         )}
       </div>
 
@@ -246,7 +247,9 @@ function StockDetailBody() {
               <div className="tm-grid tm-cols-2" style={{ marginTop: '0.9rem', gap: '0.7rem' }}>
                 {decision.entry_low != null && (
                   <div>
-                    <div className="tm-stat-label">Buy around</div>
+                    <div className="tm-stat-label">
+                      <Term k="buy_zone">Buy around</Term>
+                    </div>
                     <div className="tm-stat-value">
                       ₹{inr(decision.entry_low, 0)}
                       {decision.entry_high != null && decision.entry_high !== decision.entry_low ? `–₹${inr(decision.entry_high, 0)}` : ''}
@@ -255,7 +258,9 @@ function StockDetailBody() {
                 )}
                 {decision.target != null && (
                   <div>
-                    <div className="tm-stat-label">Target</div>
+                    <div className="tm-stat-label">
+                      <Term k="target">Target</Term>
+                    </div>
                     <div className="tm-stat-value tm-pos">
                       ₹{inr(decision.target, 0)} {targetPct != null && <small>({signed(targetPct, 0)})</small>}
                     </div>
@@ -263,7 +268,9 @@ function StockDetailBody() {
                 )}
                 {decision.stop != null && (
                   <div>
-                    <div className="tm-stat-label">Stop Loss</div>
+                    <div className="tm-stat-label">
+                      <Term k="stop_loss">Stop Loss</Term>
+                    </div>
                     <div className="tm-stat-value tm-neg">
                       ₹{inr(decision.stop, 0)} {stopPct != null && <small>({signed(stopPct, 0)})</small>}
                     </div>
@@ -274,7 +281,9 @@ function StockDetailBody() {
                   <div className="tm-stat-value">{decision.qty}</div>
                 </div>
                 <div>
-                  <div className="tm-stat-label">Horizon</div>
+                  <div className="tm-stat-label">
+                    <Term k="horizon">Horizon</Term>
+                  </div>
                   <div className="tm-stat-value" style={{ color: 'var(--tm-violet)' }}>
                     {decision.horizon_days} trading days
                   </div>
@@ -359,11 +368,17 @@ function StockDetailBody() {
           <Card title="In plain words">
             <p style={{ marginTop: 0 }}>
               TradeMind {decision.kind === 'idea' ? 'suggests' : 'currently has'}{' '}
-              <strong className={wordClassName(finalWord(decision))}>{finalWord(decision)}</strong> for {symbol}
+              <strong className={wordClassName(finalWord(decision))}>
+                <TermIf k={finalWord(decision)}>{finalWord(decision)}</TermIf>
+              </strong>{' '}
+              for {symbol}
               {decision.confidence != null && (
                 <>
                   {' '}
-                  with <strong>{Math.round(decision.confidence * 100)} model score</strong>
+                  with{' '}
+                  <strong>
+                    {Math.round(decision.confidence * 100)} <Term k="model_score">model score</Term>
+                  </strong>
                 </>
               )}
               .

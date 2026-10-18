@@ -276,6 +276,17 @@ def trial_start(mode: str) -> datetime | None:
     return datetime.combine(settings.PAPER_TRIAL_START_DATE, time.min, tzinfo=IST)
 
 
+def before_trial_label(mode: str) -> str | None:
+    """'Before the clean trial (28 Sep 2026)', or None when no trial boundary applies.
+
+    Snapshots older than the boundary come from a paper record that measured a replaced
+    system (its drawdown can be huge). Any display that still includes them says so."""
+    boundary = trial_start(mode)
+    if boundary is None:
+        return None
+    return f"Before the clean trial ({boundary.day} {boundary:%b %Y})"
+
+
 def _opening_equity(db: Session, mode: str, since: datetime, fallback: float) -> float:
     """What the account was worth when the trial opened — the last snapshot
     before the boundary, so a windowed return measures the trial rather than
@@ -474,6 +485,18 @@ def performance_stats(
             drawdowns = [s.drawdown_pct for s in snapshots]
         stats["max_drawdown_pct"] = float(max(drawdowns))
         stats["current_drawdown_pct"] = float(drawdowns[-1])
+        boundary = trial_start(mode)
+        if since is None and boundary is not None:
+            # All-time view: the figure above includes the replaced run, so label it, and
+            # also give the clean trial's own worst fall (rebuilt from the trial's values).
+            trial_values = [s.total_value for s in snapshots if s.ts >= boundary]
+            trial_peak = _trial_peak(db, mode, boundary, until=boundary)
+            stats["max_drawdown_since_trial_pct"] = float(
+                max(_running_drawdowns(trial_values, trial_peak), default=0.0)
+            )
+            stats["max_drawdown_label"] = (
+                f"Includes history before the clean trial ({boundary.day} {boundary:%b %Y})"
+            )
         stats["day_pnl"] = float(snapshots[-1].day_pnl)
         stats["day_pnl_pct"] = (
             float(snapshots[-1].day_pnl / snapshots[-2].total_value)
@@ -640,12 +663,23 @@ def equity_curve(
         .scalars()
         .all()
     )
+    trial_boundary = trial_start(mode)
     if boundary is not None:
         # Same rebuild as performance_stats: seed with the trial's peak up to
         # the first point shown, so a shorter `days` window agrees too.
         drawdowns = _running_drawdowns(
             [s.total_value for s in snapshots], _trial_peak(db, mode, boundary, until=since)
         )
+    elif trial_boundary is not None:
+        # All-time view: points before the trial keep their stored drawdown (labelled
+        # `before_trial` below); points from the trial on are measured from the trial's own peak.
+        drawdowns = []
+        trial_vals = [s.total_value for s in snapshots if s.ts >= trial_boundary]
+        rebuilt = iter(
+            _running_drawdowns(trial_vals, _trial_peak(db, mode, trial_boundary, until=trial_boundary))
+        )
+        for s in snapshots:
+            drawdowns.append(next(rebuilt) if s.ts >= trial_boundary else s.drawdown_pct)
     else:
         drawdowns = [s.drawdown_pct for s in snapshots]
     return [
@@ -657,6 +691,7 @@ def equity_curve(
             "day_pnl": s.day_pnl,
             "drawdown_pct": dd,
             "open_positions": s.open_positions,
+            "before_trial": trial_boundary is not None and s.ts < trial_boundary,
         }
         for s, dd in zip(snapshots, drawdowns, strict=True)
     ]

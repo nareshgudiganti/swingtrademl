@@ -107,7 +107,10 @@ export interface SystemStatus {
   active_models?: string[]
   watchlist_size: number
   active_strategies: number
+  /** The bot's own book only. Never includes Testing or real holdings. */
   open_positions: number
+  /** Open positions per book, never summed: bot, testing (practice), real (Zerodha holdings). */
+  open_positions_by_book?: { bot: number; testing: number; real: number }
   latest_candle_date: string | null
   last_scan_at: string | null
   last_scan_result: {
@@ -158,6 +161,10 @@ export interface PortfolioSummary {
   expectancy: number
   total_charges: number
   max_drawdown_pct: number
+  /** Set when max_drawdown_pct also covers the old record from before the clean trial. */
+  max_drawdown_label?: string | null
+  /** The clean trial's own worst fall (only present with the label above). */
+  max_drawdown_since_trial_pct?: number
   current_drawdown_pct: number
   day_pnl: number
   day_pnl_pct: number
@@ -376,6 +383,8 @@ export interface EquityPoint {
   day_pnl: number
   drawdown_pct: number
   open_positions: number
+  /** True for points from before the clean trial (28 Sep 2026). */
+  before_trial?: boolean
 }
 
 export interface Strategy {
@@ -1160,6 +1169,8 @@ export interface BrainProposal {
 
 // M18 go-live: the brain beside version 1, scored the same way.
 export interface BrainCompareSummary {
+  // The rule these ideas were scored on, in plain words (top-level brain / version1 only).
+  scored_on?: string
   ideas: number
   finished: number
   hit_rate: number | null
@@ -1186,6 +1197,7 @@ export interface BrainCompare {
   brain: BrainCompareSummary
   version1: BrainCompareSummary
   by_week: BrainCompareWeek[]
+  scored_on_warning?: string
   note: string
   brain_finished: number
   needed: number

@@ -36,8 +36,8 @@ export function BrainCompareCard() {
     <div className="card" style={{ marginBottom: '1.25rem' }}>
       <h2>Brain vs version 1</h2>
       <p className="stat-sub">
-        The brain runs as a practice strategy next to version 1. Both are scored the same way: did the price reach
-        the target before the stop? Only days when the brain ran are compared.
+        The brain runs as a practice strategy next to version 1. Each idea is scored on whether the price reached
+        its own target before its own stop, but the two sides use different rules (shown below). Only days when the brain ran are compared.
       </p>
       {compare.isLoading && <Loading />}
       {compare.isError && <ErrorBox error={compare.error} />}
@@ -46,6 +46,13 @@ export function BrainCompareCard() {
           <div className="banner banner-info" style={{ margin: '0.6rem 0' }}>
             {data.note}
           </div>
+          {data.brain.scored_on && data.version1.scored_on && (
+            <div className="banner banner-warn" style={{ margin: '0.6rem 0' }}>
+              <div>Brain is scored on: {data.brain.scored_on}</div>
+              <div>Version 1 is scored on: {data.version1.scored_on}</div>
+              <div>{data.scored_on_warning ?? 'These two numbers measure different things and should not be compared directly.'}</div>
+            </div>
+          )}
           <p className="stat-sub">
             {Math.min(data.brain_finished, data.needed)} of {data.needed} brain ideas have finished. {data.needed} are
             needed before its ideas can be bought, and even then only with your OK.

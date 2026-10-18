@@ -251,3 +251,40 @@ def test_trial_drawdown_is_rebuilt_from_values_not_stored_column(trial, db_sessi
     stats = portfolio_service.performance_stats(db_session, "paper")
     assert stats["max_drawdown_pct"] == pytest.approx(0.05)
     assert stats["current_drawdown_pct"] == pytest.approx(0.05)
+
+
+# ---- anything that still includes the old record says so -------------------
+
+
+def test_all_time_drawdown_is_labelled_and_the_clean_trial_figure_sits_beside_it(trial, book, db_session):
+    stats = portfolio_service.performance_stats(db_session, "paper", all_time=True)
+    assert stats["max_drawdown_pct"] == pytest.approx(0.02)  # includes the replaced run
+    assert stats["max_drawdown_label"] == "Includes history before the clean trial (28 Sep 2026)"
+    assert stats["max_drawdown_since_trial_pct"] == 0.0
+
+    default = portfolio_service.performance_stats(db_session, "paper")
+    assert "max_drawdown_label" not in default  # the default view is the trial alone
+
+
+def test_label_text_for_older_history(trial):
+    assert portfolio_service.before_trial_label("paper") == "Before the clean trial (28 Sep 2026)"
+    assert portfolio_service.before_trial_label("live") is None
+
+
+def test_all_time_equity_curve_marks_points_before_the_trial(trial, book, client):
+    every = client.get("/api/v1/portfolio/equity-curve?days=1825&all_time=true", headers=HEADERS).json()
+    assert [p["before_trial"] for p in every] == [True, False]
+    scoped = client.get("/api/v1/portfolio/equity-curve?days=1825", headers=HEADERS).json()
+    assert [p["before_trial"] for p in scoped] == [False]
+
+
+def test_a_huge_old_drawdown_never_leaks_into_trial_points(trial, book, db_session, client):
+    from sqlalchemy import update
+
+    db_session.execute(
+        update(PortfolioSnapshot).where(PortfolioSnapshot.ts == BEFORE).values(drawdown_pct=0.709)
+    )
+    db_session.commit()
+    every = client.get("/api/v1/portfolio/equity-curve?days=1825&all_time=true", headers=HEADERS).json()
+    assert every[0]["drawdown_pct"] == pytest.approx(0.709) and every[0]["before_trial"] is True
+    assert every[1]["drawdown_pct"] == 0.0 and every[1]["before_trial"] is False

@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from datetime import date, datetime, time
+from typing import Any
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi import status as http_status
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
+from sqlalchemy.orm import Session
 
 from swing_trade_ml import __version__
 from swing_trade_ml.api.deps import DbSession, require_auth
@@ -15,12 +17,14 @@ from swing_trade_ml.brokers import get_broker, kite_broker
 from swing_trade_ml.core import market_session
 from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.enums import ModelStatus, PositionStatus
+from swing_trade_ml.core.strategy_policy import NON_SCAN_STRATEGY_TYPES
 from swing_trade_ml.db.models.market import Candle, Instrument
 from swing_trade_ml.db.models.ml import MLModel
 from swing_trade_ml.db.models.trading import Position, Signal, Strategy
 from swing_trade_ml.db.session import check_connection
 from swing_trade_ml.ml.registry import get_active_model
 from swing_trade_ml.schemas import HealthResponse, ReadinessResponse, SystemStatus
+from swing_trade_ml.services.portfolio import REAL_TRADING_STRATEGY_NAME
 from swing_trade_ml.workers import heartbeat
 from swing_trade_ml.workers.scheduler import list_jobs
 
@@ -145,6 +149,28 @@ def ready(db: DbSession) -> ReadinessResponse:
     )
 
 
+def open_positions_by_book(db: Session) -> dict[str, int]:
+    """Open positions per book. The three books never mix: the bot's own book, the manual
+    Testing (paper) book, and real Zerodha holdings tracked under `real_trading`."""
+
+    def count(*where: Any) -> int:
+        return int(
+            db.execute(
+                select(func.count(Position.id))
+                .outerjoin(Strategy, Strategy.id == Position.strategy_id)
+                .where(Position.status == PositionStatus.OPEN, *where)
+            ).scalar_one()
+        )
+
+    is_testing = Strategy.strategy_type.in_(sorted(NON_SCAN_STRATEGY_TYPES))
+    is_real = Strategy.name == REAL_TRADING_STRATEGY_NAME
+    return {
+        "bot": count(or_(Strategy.id.is_(None), ~(is_testing | is_real))),
+        "testing": count(is_testing),
+        "real": count(is_real),
+    }
+
+
 def _build_status(db: DbSession) -> SystemStatus:
     # Same staleness fix as ready() above — this process's kite_broker is
     # never touched by the worker's periodic check, so verify against the
@@ -168,6 +194,7 @@ def _build_status(db: DbSession) -> SystemStatus:
         calendar_warning=market_session.calendar_warning(),
     )
 
+    books = open_positions_by_book(db)
     return SystemStatus(
         app=settings.APP_NAME,
         environment=settings.ENVIRONMENT,
@@ -194,11 +221,8 @@ def _build_status(db: DbSession) -> SystemStatus:
                 select(func.count(Strategy.id)).where(Strategy.is_active.is_(True))
             ).scalar_one()
         ),
-        open_positions=int(
-            db.execute(
-                select(func.count(Position.id)).where(Position.status == PositionStatus.OPEN)
-            ).scalar_one()
-        ),
+        open_positions=books["bot"],
+        open_positions_by_book=books,
         latest_candle_date=latest_candle_date,
         last_scan_at=last_scan_at,
         last_scan_result=heartbeat.read_last_scan(),

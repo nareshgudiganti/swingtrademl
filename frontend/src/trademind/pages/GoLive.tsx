@@ -9,6 +9,7 @@ import type { BrainApproval, BrainApprovalStatus, BrainCompareSummary, BrainStag
 import { formatCurrency, formatDateTime, formatSignedPercent } from '../../lib/format'
 import { Confirm } from '../Confirm'
 import { BrainGate, Card, PageHead, Tag } from '../ui'
+import { QueryNotice } from '../PageState'
 
 const STAGE_ORDER: BrainStageName[] = ['shadow', 'approval', 'auto']
 const STAGE_TITLE: Record<BrainStageName, string> = {
@@ -31,10 +32,6 @@ function pct(value: number | null): string {
 
 function avg(value: number | null): string {
   return value === null ? 'n/a' : formatSignedPercent(value, 1)
-}
-
-function errText(e: unknown): string {
-  return e instanceof Error ? e.message : String(e)
 }
 
 export default function GoLive() {
@@ -73,8 +70,7 @@ function CompareCard() {
       title="Brain vs version 1"
       sub="The brain runs as a practice strategy next to version 1. Both are scored the same way: did the price reach the target before the stop? Only days when the brain ran are compared."
     >
-      {compare.isLoading && <p className="tm-dim">Loading…</p>}
-      {compare.isError && <p className="tm-neg">Could not load the comparison: {errText(compare.error)}</p>}
+      <QueryNotice q={compare} what="the comparison" />
       {data && (
         <div className="tm-grid">
           <div className="tm-note">{data.note}</div>
@@ -169,8 +165,7 @@ function StageCard() {
 
   return (
     <Card title="Trading stage">
-      {stage.isLoading && <p className="tm-dim">Loading…</p>}
-      {stage.isError && <p className="tm-neg">Could not load the stage: {errText(stage.error)}</p>}
+      <QueryNotice q={stage} what="the stage" />
       {s && (
         <div className="tm-grid">
           <div>
@@ -348,8 +343,7 @@ function ApprovalsCard() {
             The brain is in practice mode, so nothing can be approved or bought. You can still reject an idea.
           </div>
         )}
-        {list.isLoading && <p className="tm-dim">Loading…</p>}
-        {list.isError && <p className="tm-neg">Could not load the list: {errText(list.error)}</p>}
+        <QueryNotice q={list} what="the list" />
         {list.data && list.data.length === 0 && <p className="tm-dim">Nothing is waiting.</p>}
         {list.data?.map((a) => (
           <ApprovalItem

@@ -8,6 +8,8 @@ import { strategyLabel } from '../../lib/tiers'
 import { formatDate } from '../../lib/format'
 import { finalWord, holdingsFrom, useLatestRun, useMarketSession, useTrack } from '../live'
 import { wordTagColor, wordTone } from '../vocab'
+import { PageState, StaleNotice } from '../PageState'
+import { pickState } from '../stateRules'
 import { BrainGate, Card, CheckItem, Icon, Seg, Tabs, Tag, inr, signed, toneClass } from '../ui'
 import { PositionBand } from '../PositionBand'
 import { Confirm } from '../Confirm'
@@ -127,6 +129,8 @@ function PositionsBody() {
 
   const [tab, setTab] = useState<TabId>('Position Overview')
   const [notes, setNotes] = useState('')
+  // Called before the early return below, so the hooks always run in the same order.
+  const market = useMarketSession()
 
   useEffect(() => {
     if (selected) setNotes(readNotes(selected.symbol))
@@ -136,9 +140,14 @@ function PositionsBody() {
     return (
       <div className="tm-page">
         <Card title={urlSymbol ? 'Not one of your holdings' : 'No positions'}>
-          <p className="tm-dim">
-            {urlSymbol ? 'Not one of your holdings.' : "The brain's last run saw no holdings."}
-          </p>
+          <PageState
+            kind="empty"
+            reason={
+              urlSymbol
+                ? `${urlSymbol} is not one of the bot's holdings in the brain's last run.`
+                : "The bot holds no paper shares in the brain's last run. When it buys, they will show here."
+            }
+          />
         </Card>
       </div>
     )
@@ -150,7 +159,7 @@ function PositionsBody() {
   const matches = (positions.data ?? []).filter((p) => p.symbol === selected.symbol)
   const pos = matches.find((p) => p.id === pickedId) ?? (matches.length === 1 ? matches[0] : undefined)
   const isReal = status.data?.trading_mode === 'live'
-  const market = useMarketSession()
+  const priceState = pickState(positions)
   const realButClosed = isReal && market.data != null && market.data.state !== 'open'
   const moneyKind = status.data ? (isReal ? 'REAL money' : 'practice money (paper trading)') : null
 
@@ -166,9 +175,12 @@ function PositionsBody() {
 
   const details = (
     <Card title="Position Details">
-      {positions.isLoading && <p className="tm-dim">Loading live price…</p>}
-      {positions.isError && <p className="tm-dim">Live price is not available right now.</p>}
-      {!positions.isLoading && !positions.isError && (
+      {priceState !== 'ready' && priceState !== 'empty' ? (
+        <PageState kind={priceState} what="the live price" error={positions.error} onRetry={positions.refetch} />
+      ) : (
+        <StaleNotice q={positions} />
+      )}
+      {positions.data !== undefined && (
         <dl className="tm-kv">
           <dt>Entry Price</dt>
           <dd>{pos ? `₹${inr(pos.entry_price)}` : '—'}</dd>

@@ -5,6 +5,7 @@ import { formatDateTime } from '../../lib/format'
 import { marketSituation, useEpisodes, useLatestRun } from '../live'
 import { MARKET_LABEL, MARKET_PLAIN, MARKET_TONE } from '../vocab'
 import { BrainGate, Card, NotConnected, Tag, inr } from '../ui'
+import { QueryNotice } from '../PageState'
 
 const ROTATION: Record<string, string> = {
   leading: 'Leading — stronger for 1 and 3 months',
@@ -69,8 +70,7 @@ function MarketBody() {
         </Card>
 
         <Card title="NIFTY 50" sub="From the market data service">
-          {regime.isLoading && <p className="tm-dim">Loading…</p>}
-          {regime.isError && <p className="tm-dim">Could not load the NIFTY level.</p>}
+          <QueryNotice q={regime} what="the NIFTY level" />
           {regime.data && (
             <>
               <div className="tm-big tm-num" style={{ fontSize: '1.6rem' }}>
@@ -125,8 +125,7 @@ function MarketBody() {
 
       <div className="tm-grid tm-cols-2">
         <Card title="Market History" sub="The stretches the market went through, as the brain names them">
-          {episodes.isLoading && <p className="tm-dim">Loading…</p>}
-          {episodes.isError && <p className="tm-dim">Could not load market history.</p>}
+          <QueryNotice q={episodes} what="market history" />
           {episodes.data && episodes.data.length === 0 && <p className="tm-dim">No history recorded yet.</p>}
           {episodes.data && episodes.data.length > 0 && (
             <div className="tm-table-wrap">

@@ -22,6 +22,7 @@ import planOwner from '../fixtures/plan-owner.json' with { type: 'json' }
 import portfolioSummary from '../fixtures/portfolio-summary.json' with { type: 'json' }
 import positions from '../fixtures/positions.json' with { type: 'json' }
 import realAccount from '../fixtures/real-account.json' with { type: 'json' }
+import realTax from '../fixtures/real-tax.json' with { type: 'json' }
 import riskLimits from '../fixtures/risk-limits.json' with { type: 'json' }
 import safetyState from '../fixtures/safety-state.json' with { type: 'json' }
 import status from '../fixtures/status.json' with { type: 'json' }
@@ -205,6 +206,7 @@ function answer(role: Role, method: string, path: string, query: URLSearchParams
   if (path === '/portfolio/real/account') return owner ? { body: realAccount.account } : undefined
   if (path === '/portfolio/real/orders-status') return owner ? { body: realAccount.ordersStatus } : undefined
   if (path === '/real-report') return owner ? { body: realAccount.report } : undefined
+  if (path === '/real-report/tax') return owner ? { body: realTax } : { status: 403, body: { detail: 'This is a private account.' } }
 
   return undefined
 }

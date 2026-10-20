@@ -1,0 +1,25 @@
+{
+  "year": "2025-26",
+  "start": "2025-04-01",
+  "end": "2026-03-31",
+  "years": ["2026-27", "2025-26", "2024-25"],
+  "rows": [
+    {
+      "stock": "SAMPLEA", "buy_date": "2025-04-07", "sell_date": "2025-06-02", "quantity": 10,
+      "buy_value": 1000, "sell_value": 1200, "charges": 2.5, "gain": 197.5, "days_held": 56,
+      "type": "Short-term", "buy_missing": false
+    },
+    {
+      "stock": "SAMPLEB", "buy_date": null, "sell_date": "2025-07-01", "quantity": 2,
+      "buy_value": null, "sell_value": 400, "charges": null, "gain": null, "days_held": null,
+      "type": null, "buy_missing": true
+    }
+  ],
+  "totals": {
+    "short_term": 197.5, "long_term": 0, "same_day": 0, "charges": 2.5,
+    "buy_value": 1000, "sell_value": 1200, "sales": 1, "missing_buy_count": 1
+  },
+  "charges_are_estimates": true,
+  "method": "FIFO",
+  "notes": ["For your records — check against Zerodha's Tax P&L (Console) and ask a tax adviser."]
+}

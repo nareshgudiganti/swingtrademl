@@ -10,6 +10,7 @@ import ScoreTrail from '../ScoreTrail'
 import { SortTh, useSort } from '../sort'
 import { Card, PageHead, Tabs, Tag, inr, signed, toneClass } from '../ui'
 import { PageState, QueryNotice, StaleNotice } from '../PageState'
+import TaxExportCard from '../TaxExport'
 
 const TABS = ['My holdings', 'Straight from Zerodha', 'Real-money report'] as const
 type TabId = (typeof TABS)[number]
@@ -689,7 +690,10 @@ function ReportTab() {
 
   const report = useQuery({ queryKey: ['realReport', range], queryFn: () => api.realReport(range), retry: false })
 
-  const refreshed = () => queryClient.invalidateQueries({ queryKey: ['realReport'] })
+  const refreshed = () => {
+    queryClient.invalidateQueries({ queryKey: ['realReport'] })
+    queryClient.invalidateQueries({ queryKey: ['realTax'] })
+  }
   const sync = useMutation({ mutationFn: api.syncRealTrades, onSuccess: refreshed })
   const upload = useMutation({ mutationFn: (f: File) => api.importTradebook(f), onSuccess: refreshed })
 
@@ -802,6 +806,8 @@ function ReportTab() {
 
       {!noHistory && (
         <>
+          <TaxExportCard />
+
           {data.unmatched_sales.length > 0 && (
             <p className="tm-warn">
               {data.unmatched_sales.length} sale{data.unmatched_sales.length === 1 ? '' : 's'} (

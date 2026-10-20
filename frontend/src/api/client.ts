@@ -96,6 +96,7 @@ import type {
 } from './types'
 import type { AlertSettings, AlertSettingsUpdate } from '../trademind/alerts'
 import type { AdminJobs } from '../trademind/jobs'
+import type { RealTaxExport } from '../trademind/taxRecords'
 
 export const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000/api/v1'
 
@@ -234,6 +235,24 @@ async function requestForm<T>(path: string, form: FormData): Promise<T> {
   }
 
   return response.json() as Promise<T>
+}
+
+/** A GET whose answer is a file (CSV), not JSON. Same credentials and errors as request<T>(). */
+async function requestText(path: string): Promise<string> {
+  const token = getToken()
+  const response = await fetch(`${BASE_URL}${path}`, { headers: authHeaders(token) })
+  if (!response.ok) {
+    if (response.status === 401 && token) clearToken()
+    let detail = response.statusText
+    try {
+      const body = await response.json()
+      detail = typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail)
+    } catch {
+      /* keep statusText */
+    }
+    throw new ApiError(detail, response.status)
+  }
+  return response.text()
 }
 
 /** Builds a `?a=1&b=2` suffix from a params object, dropping empty/undefined
@@ -459,6 +478,8 @@ export const api = {
     form.append('file', file)
     return requestForm<MessageResponse>('/real-report/import-tradebook', form)
   },
+  realTax: (year: string) => get<RealTaxExport>(`/real-report/tax${qs({ year })}`),
+  realTaxCsv: (year: string) => requestText(`/real-report/tax.csv${qs({ year })}`),
 
   // ------------------------------------------------------------ finance --
   uploadFinanceStatement: (file: File, password?: string) => {

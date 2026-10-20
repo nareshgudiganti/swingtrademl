@@ -9,13 +9,23 @@
       "files": [
         "brain/modules/m05_memory/module.py"
       ]
+    },
+    {
+      "date": "2026-10-20",
+      "commit": "99147d8",
+      "why": "Owner approved 2026-10-20 (ps Wave 0): fix the 4 qa6 'bolder on bad data' bugs now, all in the cautious direction; safety correction, not a strategy change; clean-data decisions unchanged",
+      "files": [
+        "brain/constitution.py",
+        "brain/contracts.py",
+        "brain/fallbacks.py"
+      ]
     }
   ],
   "files": {
-    "brain/constitution.py": "46ca6a2c9f361115",
+    "brain/constitution.py": "330dadf520840415",
     "brain/context.py": "fb09a057dabd9a9b",
-    "brain/contracts.py": "0483394d688ee408",
-    "brain/fallbacks.py": "0459b7e5f7042eb3",
+    "brain/contracts.py": "2f93e1b4c59c729b",
+    "brain/fallbacks.py": "c741046948680b93",
     "brain/market_mode.py": "1de6a7cab03cca77",
     "brain/module.py": "cef01e1220ce9f5a",
     "brain/modules/__init__.py": "e96df03782a22a49",

@@ -8,12 +8,13 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
 
 from swing_trade_ml.api.deps import DbSession, require_real_account
 from swing_trade_ml.api.v1.endpoints.portfolio import _held_quantity, _load_kite_holdings
 from swing_trade_ml.schemas import MessageResponse
 from swing_trade_ml.services import fills as fills_service
+from swing_trade_ml.services import tax_export
 from swing_trade_ml.services.real_report import build_report
 
 router = APIRouter(prefix="/real-report", tags=["real-report"], dependencies=[Depends(require_real_account)])
@@ -47,6 +48,30 @@ def report(db: DbSession, start: date | None = None, end: date | None = None) ->
     result = build_report(db, start, end, holdings)
     result["holdings_note"] = holdings_note
     return result
+
+
+def _tax_year(db: DbSession, year: str | None) -> dict[str, Any]:
+    try:
+        return tax_export.build_tax_export(db, year or tax_export.current_fy())
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+
+@router.get("/tax", response_model=dict)
+def tax_year(db: DbSession, year: str | None = None) -> dict[str, Any]:
+    """Real sales in one financial year (e.g. 2025-26), sorted short-term / long-term. Read-only."""
+    return _tax_year(db, year)
+
+
+@router.get("/tax.csv")
+def tax_year_csv(db: DbSession, year: str | None = None) -> Response:
+    """The same, as a spreadsheet file. The BOM lets Excel show the ₹ sign."""
+    export = _tax_year(db, year)
+    return Response(
+        content=chr(0xFEFF) + tax_export.to_csv(export),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="real-trades-tax-{export["year"]}.csv"'},
+    )
 
 
 @router.post("/sync", response_model=MessageResponse)

@@ -79,6 +79,8 @@ def _match(
                     "sell_date": f.executed_at,
                     "buy_price": _r(lot.price),
                     "sell_price": _r(f.price),
+                    "buy_value": _r(cost),
+                    "sell_value": _r(f.price * take),
                     "gross_pnl": _r(gross),
                     "charges": _r(charges),
                     "net_pnl": _r(gross - charges),

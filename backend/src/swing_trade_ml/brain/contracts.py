@@ -328,6 +328,11 @@ def validate_record(record: object) -> None:
     elif isinstance(record, Opinion):
         if not -1.0 <= record.stance <= 1.0 or not 0.0 <= record.confidence <= 1.0:
             raise ContractError(f"Opinion from {record.source} is out of range")
+        for name in ("probability", "threshold"):
+            value = getattr(record, name)
+            # `not 0 <= x <= 1` is also True for NaN, so a NaN score is refused here too.
+            if value is not None and not 0.0 <= value <= 1.0:
+                raise ContractError(f"Opinion from {record.source} has a {name} outside 0..1 ({value!r})")
     elif isinstance(record, DataQuality):
         if not 0.0 <= record.score <= 1.0:
             raise ContractError(f"Quality score for {record.symbol} is out of range")

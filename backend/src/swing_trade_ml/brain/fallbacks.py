@@ -11,6 +11,7 @@ no risk gate means no new trades.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable
 
 import pandas as pd
@@ -55,26 +56,58 @@ def state(ctx: BrainContext) -> c.Contribution:
     )
 
 
+JUDGE_MISSING = "The market judge did not answer today, so the brain stays careful."
+NO_BREADTH = (
+    "The market judge did not answer and market breadth is not available, "
+    "so the brain suggests no new trades."
+)
+
+
+def _latest_breadth(ctx: BrainContext) -> float | None:
+    """Share of watchlist stocks above their 50-day average on the latest day, or None."""
+    try:
+        series = ctx.reader.breadth_series()
+    except Exception:  # noqa: BLE001 - a missing input is answered by caution, never by a crash
+        return None
+    if series is None or len(series) == 0:
+        return None
+    value = series.iloc[-1]
+    return float(value) if pd.notna(value) else None
+
+
 def _market_from_trend(ctx: BrainContext) -> c.MarketState:
+    """Used only when no market judge (M10) answered. A missing judge is never a reason to be bold:
+    the answer is at best DEFENSIVE, and NO NEW TRADES when breadth is missing too (bad-data drill)."""
     closes = ctx.reader.index_closes()
     regime = classify_regime(closes if closes is not None else pd.Series(dtype=float))
     trend = _TREND.get(regime["regime"], "unknown")
     volatility = regime["volatility_level"]
 
-    if trend == "up" and volatility != "elevated":
-        mode = c.MarketMode.NORMAL
-        reasons = ("NIFTY's 50-day average is above its 200-day average (up-trend).",)
-    elif trend == "unknown":
-        mode = c.MarketMode.DEFENSIVE
-        reasons = ("Not enough NIFTY history to judge the trend, so the brain stays careful.",)
+    if trend == "up":
+        trend_reason = "NIFTY's 50-day average is above its 200-day average (up-trend)."
     elif trend == "down":
-        mode = c.MarketMode.DEFENSIVE
-        reasons = ("NIFTY's 50-day average is below its 200-day average (down-trend).",)
+        trend_reason = "NIFTY's 50-day average is below its 200-day average (down-trend)."
     else:
-        mode = c.MarketMode.DEFENSIVE
-        reasons = ("Market swings are larger than usual.",)
+        trend_reason = "Not enough NIFTY history to judge the trend."
+    if volatility == "elevated":
+        trend_reason += " Market swings are larger than usual."
 
-    return c.MarketState(trend=trend, volatility=volatility, mode=mode, reasons=reasons)
+    breadth = _latest_breadth(ctx)
+    if breadth is None:
+        return c.MarketState(
+            trend=trend,
+            volatility=volatility,
+            mode=c.MarketMode.NO_NEW_TRADES,
+            reasons=(NO_BREADTH, trend_reason),
+        )
+    reasons = (
+        JUDGE_MISSING,
+        trend_reason,
+        f"{breadth:.0%} of watchlist stocks are above their 50-day average.",
+    )
+    return c.MarketState(
+        trend=trend, volatility=volatility, breadth_pct=breadth, mode=c.MarketMode.DEFENSIVE, reasons=reasons
+    )
 
 
 def nothing(ctx: BrainContext) -> c.Contribution:
@@ -144,6 +177,16 @@ def decide(ctx: BrainContext) -> c.Contribution:
             decisions.append(c.Decision(symbol=symbol, kind="idea", word=c.IdeaWord.WAIT, reasons=(why,)))
             continue
         p, threshold = opinion.probability, opinion.threshold or 0.5
+        if not (math.isfinite(p) and math.isfinite(threshold)):
+            decisions.append(
+                c.Decision(
+                    symbol=symbol,
+                    kind="idea",
+                    word=c.IdeaWord.WAIT,
+                    reasons=("The model score for this stock is not a usable number today.",),
+                )
+            )
+            continue
         if p < threshold:
             decisions.append(
                 c.Decision(

@@ -39,3 +39,12 @@ cd backend
 python -m swing_trade_ml.brain.cost_stress --wf-from 2023-07-01 --wf-to 2025-01-31 \
     --replay ../docs/brain/evidence/asof_replay_2026-07-13_2026-08-14.json
 ```
+
+## Result (run 2026-10-20, one run)
+
+- Reproduction: at normal costs the walk-forward re-run equals the frozen wf-protocol-v1 result exactly
+  (1,980 ideas, -0.204% per trade, edge -0.187% a day); all 561 stored replay ideas reproduced exactly.
+- **Answer: the edge does not stay above zero** — it was already below zero at normal costs.
+  At 2x charges and fills 0.3% worse: walk-forward -1.09% per trade (edge over every stock -0.17% a day),
+  replay ideas -1.81% per trade. Every 0.3% of worse fills costs about 0.6% per trade (buy and sell).
+- Nothing changed in the brain, its rules or the trial. Full tables: `cost_stress.md`.

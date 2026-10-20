@@ -39,3 +39,17 @@ of the result (owner, 2026-10-20 plan section 5 point 4).
 cd backend
 python -m swing_trade_ml.brain.bad_market --upto 2026-09-07
 ```
+
+## Result (run 2026-10-20, one run)
+
+- **The banner helped in every window.** With the banner, the account's worst fall was 4–9%; with
+  "always NORMAL" it was 7–16%. In the long Sep 2024 → Mar 2025 fall, "always NORMAL" went past the 15% halt
+  (−16.4%) while the banner account fell −8.9% (return −5.6% vs −14.9%).
+- **Timing was mixed.** Careful at or within 3 days of the peak in 3 of 5 windows. In Oct 2024 it turned
+  careful only on day 14, after 72% of that fall had happened.
+- **NO NEW TRADES never fired.** No window had a crash day (NIFTY −4% or VIX +30% in one day); the
+  2-ideas, half-size DEFENSIVE limits did the work.
+- Ideas on careful days averaged −0.3% to −1.6% each, and hit the stop about 2–7 times as often as +8%,
+  so the banner skipped mostly losers.
+- Diagnostic on development data: this shows the banner limits damage. It does not show the picks make
+  money (they lost in every window, with or without the banner). Nothing changed. Tables: `bad_market.md`.

@@ -1,0 +1,425 @@
+{
+ "protocol": "ps2-bad-market-v1",
+ "data_to": "2026-09-07",
+ "nifty_days": 1261,
+ "stocks": 49,
+ "windows": [
+  {
+   "window": {
+    "kind": "20-day fall",
+    "peak": "2026-02-26",
+    "trough": "2026-03-30",
+    "fall": -0.12414032486748194,
+    "bars": 20
+   },
+   "report": {
+    "from": "2026-01-30",
+    "to": "2026-05-15",
+    "model_cutoff": "2026-01-29"
+   },
+   "modes": {
+    "NORMAL": 19,
+    "DEFENSIVE": 52,
+    "NO_NEW_TRADES": 0
+   },
+   "banner": {
+    "mode_at_peak": "NORMAL",
+    "first_careful": {
+     "day": "2026-03-04",
+     "days_after_peak": 3,
+     "nifty_fall_by_then": -0.03985048957604065,
+     "share_of_fall_by_then": 0.3210116424182109
+    },
+    "first_no_new_trades": null,
+    "careful_days": 18,
+    "falling_days": 21
+   },
+   "account": {
+    "with_banner": {
+     "start_equity": 1000000.0,
+     "end_equity": 979893.27,
+     "total_return": -0.02010672563577287,
+     "max_drawdown": 0.05593721085940094,
+     "trades": 70,
+     "win_rate": 0.42857142857142855,
+     "avg_trade_return": -0.004263134211579329,
+     "avg_invested_share": 0.3002123506826328,
+     "halted_days": 0,
+     "still_open": 0,
+     "triggers": 0,
+     "forced_exits": 0,
+     "forced_shortfall": 0.0,
+     "longest_underwater_days": 75,
+     "skipped": {
+      "market_mode_limit": 39,
+      "already_held": 125,
+      "no_free_slot": 119,
+      "too_small_or_no_cash": 2
+     }
+    },
+    "always_normal": {
+     "start_equity": 1000000.0,
+     "end_equity": 987555.41,
+     "total_return": -0.012444588283000102,
+     "max_drawdown": 0.09599279268310032,
+     "trades": 71,
+     "win_rate": 0.49295774647887325,
+     "avg_trade_return": -0.0017308655349024245,
+     "avg_invested_share": 0.4699772154991582,
+     "halted_days": 0,
+     "still_open": 0,
+     "triggers": 0,
+     "forced_exits": 0,
+     "forced_shortfall": 0.0,
+     "longest_underwater_days": 75,
+     "skipped": {
+      "no_free_slot": 142,
+      "already_held": 138,
+      "too_small_or_no_cash": 4
+     }
+    }
+   },
+   "careful_day_ideas": {
+    "ideas": 260,
+    "finished": 260,
+    "hit_target": 66,
+    "hit_stop": 148,
+    "avg_net": -0.003199175015531466
+   },
+   "model_auc": 0.4525216892334678
+  },
+  {
+   "window": {
+    "kind": "20-day fall",
+    "peak": "2024-09-26",
+    "trough": "2024-10-25",
+    "fall": -0.0776337396365967,
+    "bars": 20
+   },
+   "report": {
+    "from": "2024-08-29",
+    "to": "2024-12-10",
+    "model_cutoff": "2024-08-28"
+   },
+   "modes": {
+    "NORMAL": 34,
+    "DEFENSIVE": 37,
+    "NO_NEW_TRADES": 0
+   },
+   "banner": {
+    "mode_at_peak": "NORMAL",
+    "first_careful": {
+     "day": "2024-10-17",
+     "days_after_peak": 14,
+     "nifty_fall_by_then": -0.0559275710871775,
+     "share_of_fall_by_then": 0.7204028989067677
+    },
+    "first_no_new_trades": null,
+    "careful_days": 7,
+    "falling_days": 21
+   },
+   "account": {
+    "with_banner": {
+     "start_equity": 1000000.0,
+     "end_equity": 964426.85,
+     "total_return": -0.03557315023538432,
+     "max_drawdown": 0.053490568015306814,
+     "trades": 66,
+     "win_rate": 0.42424242424242425,
+     "avg_trade_return": -0.0075504905441422,
+     "avg_invested_share": 0.347905505709519,
+     "halted_days": 0,
+     "still_open": 0,
+     "triggers": 0,
+     "forced_exits": 0,
+     "forced_shortfall": 0.0,
+     "longest_underwater_days": 74,
+     "skipped": {
+      "already_held": 132,
+      "no_free_slot": 131,
+      "market_mode_limit": 26
+     }
+    },
+    "always_normal": {
+     "start_equity": 1000000.0,
+     "end_equity": 952315.53,
+     "total_return": -0.04768447044705659,
+     "max_drawdown": 0.07088894603363141,
+     "trades": 69,
+     "win_rate": 0.4492753623188406,
+     "avg_trade_return": -0.007155060430550449,
+     "avg_invested_share": 0.4763884775318387,
+     "halted_days": 0,
+     "still_open": 0,
+     "triggers": 0,
+     "forced_exits": 0,
+     "forced_shortfall": 0.0,
+     "longest_underwater_days": 74,
+     "skipped": {
+      "already_held": 141,
+      "no_free_slot": 143,
+      "too_small_or_no_cash": 2
+     }
+    }
+   },
+   "careful_day_ideas": {
+    "ideas": 185,
+    "finished": 185,
+    "hit_target": 15,
+    "hit_stop": 113,
+    "avg_net": -0.0160402120024758
+   },
+   "model_auc": 0.5553440314467186
+  },
+  {
+   "window": {
+    "kind": "20-day fall",
+    "peak": "2024-12-13",
+    "trough": "2025-01-13",
+    "fall": -0.06792351513830175,
+    "bars": 20
+   },
+   "report": {
+    "from": "2024-11-13",
+    "to": "2025-02-21",
+    "model_cutoff": "2024-11-12"
+   },
+   "modes": {
+    "NORMAL": 5,
+    "DEFENSIVE": 66,
+    "NO_NEW_TRADES": 0
+   },
+   "banner": {
+    "mode_at_peak": "NORMAL",
+    "first_careful": {
+     "day": "2024-12-17",
+     "days_after_peak": 2,
+     "nifty_fall_by_then": -0.017453761461222572,
+     "share_of_fall_by_then": 0.2569619876957822
+    },
+    "first_no_new_trades": null,
+    "careful_days": 18,
+    "falling_days": 21
+   },
+   "account": {
+    "with_banner": {
+     "start_equity": 1000000.0,
+     "end_equity": 954763.31,
+     "total_return": -0.045236685592849324,
+     "max_drawdown": 0.05855717885564986,
+     "trades": 70,
+     "win_rate": 0.35714285714285715,
+     "avg_trade_return": -0.0118932008413242,
+     "avg_invested_share": 0.23283347297455206,
+     "halted_days": 0,
+     "still_open": 0,
+     "triggers": 0,
+     "forced_exits": 0,
+     "forced_shortfall": 0.0,
+     "longest_underwater_days": 80,
+     "skipped": {
+      "market_mode_limit": 33,
+      "already_held": 166,
+      "no_free_slot": 86
+     }
+    },
+    "always_normal": {
+     "start_equity": 1000000.0,
+     "end_equity": 919334.52,
+     "total_return": -0.08066548483207081,
+     "max_drawdown": 0.10245430596334326,
+     "trades": 70,
+     "win_rate": 0.35714285714285715,
+     "avg_trade_return": -0.012716786432284724,
+     "avg_invested_share": 0.45148444137110005,
+     "halted_days": 0,
+     "still_open": 0,
+     "triggers": 0,
+     "forced_exits": 0,
+     "forced_shortfall": 0.0,
+     "longest_underwater_days": 80,
+     "skipped": {
+      "already_held": 182,
+      "no_free_slot": 100,
+      "too_small_or_no_cash": 3
+     }
+    }
+   },
+   "careful_day_ideas": {
+    "ideas": 330,
+    "finished": 330,
+    "hit_target": 50,
+    "hit_stop": 224,
+    "avg_net": -0.014421642526496675
+   },
+   "model_auc": 0.5461393254076181
+  },
+  {
+   "window": {
+    "kind": "20-day fall",
+    "peak": "2025-02-04",
+    "trough": "2025-03-04",
+    "fall": -0.06978316501153148,
+    "bars": 19
+   },
+   "report": {
+    "from": "2025-01-08",
+    "to": "2025-04-22",
+    "model_cutoff": "2025-01-07"
+   },
+   "modes": {
+    "NORMAL": 0,
+    "DEFENSIVE": 69,
+    "NO_NEW_TRADES": 1
+   },
+   "banner": {
+    "mode_at_peak": "DEFENSIVE",
+    "first_careful": {
+     "day": "2025-02-04",
+     "days_after_peak": 0,
+     "nifty_fall_by_then": 0.0,
+     "share_of_fall_by_then": 0.0
+    },
+    "first_no_new_trades": null,
+    "careful_days": 20,
+    "falling_days": 20
+   },
+   "account": {
+    "with_banner": {
+     "start_equity": 1000000.0,
+     "end_equity": 989348.03,
+     "total_return": -0.010651973113799396,
+     "max_drawdown": 0.04357775449674628,
+     "trades": 79,
+     "win_rate": 0.4177215189873418,
+     "avg_trade_return": -0.002814033572021093,
+     "avg_invested_share": 0.22330343649658396,
+     "halted_days": 0,
+     "still_open": 0,
+     "triggers": 0,
+     "forced_exits": 0,
+     "forced_shortfall": 0.0,
+     "longest_underwater_days": 77,
+     "skipped": {
+      "market_mode_limit": 62,
+      "already_held": 137,
+      "no_free_slot": 72
+     }
+    },
+    "always_normal": {
+     "start_equity": 1000000.0,
+     "end_equity": 975119.84,
+     "total_return": -0.02488015747228256,
+     "max_drawdown": 0.08859283858774439,
+     "trades": 85,
+     "win_rate": 0.4,
+     "avg_trade_return": -0.003166903947851451,
+     "avg_invested_share": 0.48342802572330046,
+     "halted_days": 0,
+     "still_open": 0,
+     "triggers": 0,
+     "forced_exits": 0,
+     "forced_shortfall": 0.0,
+     "longest_underwater_days": 94,
+     "skipped": {
+      "already_held": 163,
+      "no_free_slot": 91,
+      "too_small_or_no_cash": 11
+     }
+    }
+   },
+   "careful_day_ideas": {
+    "ideas": 350,
+    "finished": 350,
+    "hit_target": 103,
+    "hit_stop": 212,
+    "avg_net": -0.004846257494281309
+   },
+   "model_auc": 0.519219442252446
+  },
+  {
+   "window": {
+    "kind": "longest fall",
+    "peak": "2024-09-26",
+    "trough": "2025-03-04",
+    "fall": -0.1576667728357246,
+    "bars": 109
+   },
+   "report": {
+    "from": "2024-08-29",
+    "to": "2025-04-22",
+    "model_cutoff": "2024-08-28"
+   },
+   "modes": {
+    "NORMAL": 39,
+    "DEFENSIVE": 120,
+    "NO_NEW_TRADES": 1
+   },
+   "banner": {
+    "mode_at_peak": "NORMAL",
+    "first_careful": {
+     "day": "2024-10-17",
+     "days_after_peak": 14,
+     "nifty_fall_by_then": -0.0559275710871775,
+     "share_of_fall_by_then": 0.3547200851599168
+    },
+    "first_no_new_trades": null,
+    "careful_days": 91,
+    "falling_days": 110
+   },
+   "account": {
+    "with_banner": {
+     "start_equity": 1000000.0,
+     "end_equity": 943822.02,
+     "total_return": -0.056177982067822985,
+     "max_drawdown": 0.08872609404152106,
+     "trades": 154,
+     "win_rate": 0.42857142857142855,
+     "avg_trade_return": -0.005411380449602917,
+     "avg_invested_share": 0.3293154970160609,
+     "halted_days": 0,
+     "still_open": 0,
+     "triggers": 0,
+     "forced_exits": 0,
+     "forced_shortfall": 0.0,
+     "longest_underwater_days": 163,
+     "skipped": {
+      "already_held": 297,
+      "no_free_slot": 252,
+      "market_mode_limit": 97
+     }
+    },
+    "always_normal": {
+     "start_equity": 1000000.0,
+     "end_equity": 851101.33,
+     "total_return": -0.14889866745450686,
+     "max_drawdown": 0.16383529545652067,
+     "trades": 149,
+     "win_rate": 0.38926174496644295,
+     "avg_trade_return": -0.010254801195599591,
+     "avg_invested_share": 0.5086206296211758,
+     "halted_days": 33,
+     "still_open": 0,
+     "triggers": 1,
+     "forced_exits": 0,
+     "forced_shortfall": 0.0,
+     "longest_underwater_days": 163,
+     "skipped": {
+      "already_held": 317,
+      "no_free_slot": 261,
+      "too_small_or_no_cash": 28,
+      "drawdown_halt": 45
+     }
+    }
+   },
+   "careful_day_ideas": {
+    "ideas": 605,
+    "finished": 605,
+    "hit_target": 119,
+    "hit_stop": 361,
+    "avg_net": -0.008042639059750788
+   },
+   "model_auc": 0.5553440314467186
+  }
+ ]
+}

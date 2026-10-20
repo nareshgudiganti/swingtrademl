@@ -23,6 +23,7 @@ Run (backend/): python -m swing_trade_ml.brain.bad_market
 from __future__ import annotations
 
 import json
+import sys
 from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 from datetime import date, timedelta
@@ -149,7 +150,7 @@ def banner_timing(modes: dict[date, str], w: Window, nifty: pd.Series) -> dict:
                     "day": d.isoformat(),
                     "days_after_peak": i,
                     "nifty_fall_by_then": fell,
-                    "share_of_fall_by_then": fell / w.fall if w.fall else None,
+                    "share_of_fall_by_then": max(0.0, fell / w.fall) if w.fall else None,
                 }
         return None
 
@@ -345,12 +346,12 @@ def plain_report(result: dict) -> str:
         f"## One ₹{CAPITAL:,.0f} account, model's best 5 a day: with the banner vs always NORMAL",
         "",
         "| Window | Worst fall (banner) | Worst fall (always NORMAL) | Return (banner) "
-        "| Return (always NORMAL) | Trades (banner / NORMAL) | 15% halt reached |",
+        "| Return (always NORMAL) | Trades (banner / NORMAL) | 15% halt reached (banner / NORMAL) |",
         "|---|---|---|---|---|---|---|",
     ]
     for r in result["windows"]:
         w, a, n = r["window"], r["account"]["with_banner"], r["account"]["always_normal"]
-        halt = "yes" if max(a["max_drawdown"], n["max_drawdown"]) >= MAX_DRAWDOWN else "no"
+        halt = " / ".join("yes" if x["max_drawdown"] >= MAX_DRAWDOWN else "no" for x in (a, n))
         lines.append(
             f"| {w['peak']} to {w['trough']} | {_fall(a['max_drawdown'])} | {_fall(n['max_drawdown'])} | "
             f"{_pct(a['total_return'])} | {_pct(n['total_return'])} | "
@@ -411,6 +412,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 0
         result = run(db, upto=upto)
     md, js = write_report(result, Path(a.out))
+    sys.stdout.reconfigure(errors="replace")  # a Windows console cannot print the rupee sign
     print(plain_report(result))
     print(f"Written: {md} and {js}")
     return 0

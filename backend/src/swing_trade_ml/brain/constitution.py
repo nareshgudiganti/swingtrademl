@@ -9,9 +9,14 @@ C3  a defensive suggestion from situation recognition (M04) turns a NORMAL
     banner DEFENSIVE
 C5  data not checked, or stale → TRADE capped at WATCH
 C11 every stock in the run gets a decision with a reason
+C12 a TRADE must carry a usable plan: finite prices with 0 < stop < entry < target, and a share count
+    no larger than the risk gate approved; otherwise it becomes WAIT (bad-data drill)
 """
 
 from __future__ import annotations
+
+import math
+from dataclasses import replace
 
 from swing_trade_ml.brain import contracts as c
 from swing_trade_ml.brain.context import BrainContext
@@ -20,6 +25,28 @@ from swing_trade_ml.brain.market_mode import effective_mode
 NO_RISK_GATE = "The risk gate is not installed or did not run, so the brain will not suggest new trades."
 NOT_APPROVED = "The risk gate did not approve this trade."
 DATA_NOT_CHECKED = "Data quality was not checked (the data gateway is not installed)."
+BAD_PLAN = "The trade plan's prices are not usable (stop, buy range and target must be real prices in order)."
+
+
+def plan_is_usable(stop: object, entry_low: object, entry_high: object, target: object) -> bool:
+    """0 < stop < entry_low <= entry_high < target, every one a finite number. Shared with the order
+    approval step, so both boundaries apply the same rule."""
+    values = [_finite(v) for v in (stop, entry_low, entry_high, target)]
+    if any(v is None for v in values):
+        return False
+    s, lo, hi, t = values
+    return 0 < s < lo <= hi < t
+
+
+def _finite(v: object) -> float | None:
+    """A real number (stored Decimals included), or None for missing, NaN, infinity, bools and text."""
+    if v is None or isinstance(v, bool | str):
+        return None
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return None
+    return f if math.isfinite(f) else None
 
 
 def _no_new_trades_reasons(ctx: BrainContext) -> list[str]:
@@ -57,6 +84,23 @@ def _cap_trade(ctx: BrainContext, d: c.Decision, stop_reasons: list[str]) -> c.D
     if not quality.fresh:
         detail = "; ".join(quality.issues) or f"quality score {quality.score:.2f}"
         return c.downgrade(d, c.IdeaWord.WATCH, f"Data is not reliable today ({detail}).")
+    return _check_plan(d, verdict)
+
+
+def _check_plan(d: c.Decision, verdict: c.RiskVerdict) -> c.Decision:
+    """C12: a TRADE needs real, ordered prices and a size inside what the risk gate approved."""
+    if (
+        not plan_is_usable(d.stop, d.entry_low, d.entry_high, d.target)
+        or not isinstance(d.qty, int)
+        or d.qty < 0
+    ):
+        return c.downgrade(d, c.IdeaWord.WAIT, BAD_PLAN)
+    if d.qty > verdict.max_qty:
+        return replace(
+            d,
+            qty=verdict.max_qty,
+            reasons=(*d.reasons, f"Size lowered to the {verdict.max_qty} shares the risk gate approved."),
+        )
     return d
 
 

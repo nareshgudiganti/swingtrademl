@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from brain_fakes import FakeReader, allow_all_risk_gate, fresh_quality, registry, request
+from brain_fakes import FakeReader, allow_all_risk_gate, fresh_quality, normal_market_judge, registry, request
 from swing_trade_ml.brain import contracts as c
 from swing_trade_ml.brain.contracts import HoldingWord, IdeaWord
 from swing_trade_ml.brain.module import REGISTRY, Step
@@ -19,7 +19,7 @@ def test_m08_is_the_decide_step_module():
 
 
 def test_a_full_run_gives_a_trade_with_zone_levels_size_and_evidence():
-    reg = registry(allow_all_risk_gate(max_qty=12), fresh_quality(), DecisionEngine)
+    reg = registry(allow_all_risk_gate(max_qty=12), fresh_quality(), normal_market_judge(), DecisionEngine)
     ctx = execute(request(), FakeReader(probabilities={"ABC": 0.9}), reg, modes={})
     d = ctx.decisions["ABC"]
     assert d.word is IdeaWord.TRADE and d.qty == 12

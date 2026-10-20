@@ -29,6 +29,7 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from swing_trade_ml.brain.constitution import plan_is_usable
 from swing_trade_ml.brokers import current_mode, get_broker
 from swing_trade_ml.core import market_session
 from swing_trade_ml.core.config import settings
@@ -292,6 +293,15 @@ def _check(db: Session, a: BrainApproval, now: datetime, automatic: bool, live: 
     if d.kind != "idea" or word != "TRADE":
         raise ApprovalExpired(
             f"The brain no longer says TRADE for {a.symbol} ({word}): {brain_strategy.why(d)}"
+        )
+    # Same plan rule as the brain's final check (constitution C12), applied again at the order boundary
+    # so a later change upstream can never send a buy without real, ordered prices.
+    if not (
+        plan_is_usable(d.stop, d.entry_low, d.entry_high, d.target)
+        and plan_is_usable(signal.stop_loss, signal.price, signal.price, signal.take_profit)
+    ):
+        raise ApprovalRefused(
+            f"The trade plan for {a.symbol} has no usable stop, buy price or target, so nothing was bought."
         )
     if risk.has_open_position(db, mode, a.instrument_id, strategy_id=strategy.id):
         raise ApprovalExpired(f"You already hold {a.symbol} through the brain.")

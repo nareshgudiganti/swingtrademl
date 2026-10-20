@@ -193,8 +193,23 @@ def _likes(probabilities: dict[str, float], module_id: str = "M90"):
     return make_module(module_id, Step.REASON, writes=("Opinion@1",), run=run, kind="plugin")
 
 
+def market_judge_like_m10():
+    """M10 stand-in for the pure drills: NORMAL on a calm NIFTY up-trend, DEFENSIVE otherwise (the real
+    judge also needs VIX, breadth and FII flows, which the in-memory reader does not have). Without a
+    judge the state fallback is never NORMAL, so the clean baseline would not be bold."""
+
+    def run(view):
+        closes = view.reader.index_closes()
+        regime = market_context.classify_regime(closes if closes is not None else pd.Series(dtype=float))
+        calm_up = regime["regime"] == "bullish" and regime["volatility_level"] != "elevated"
+        mode = MarketMode.NORMAL if calm_up else MarketMode.DEFENSIVE
+        return c.Contribution(market=c.MarketState(mode=mode, reasons=("Drill market judge.",)))
+
+    return make_module("M10", Step.STATE, writes=("MarketState@1",), run=run)
+
+
 def _pure_classes():
-    return [fresh_quality(), risk_gate_like_m07(), DecisionEngine]
+    return [fresh_quality(), market_judge_like_m10(), risk_gate_like_m07(), DecisionEngine]
 
 
 def _pure_run(reader=None, classes=None, modes=None, universe=("ABC", "XYZ")):
@@ -434,17 +449,7 @@ GARBAGE = {
     ),
 }
 
-# Known bold outcomes (documented, not fixed: trial freeze).
-GARBAGE_BUGS = {
-    "opinion probability above 1": (
-        "BUG: a probability of 7.0 (outside 0..1) is not rejected by contracts.validate_record; it counts "
-        "as liked, so a stock the clean run left at WAIT becomes a TRADE"
-    ),
-    "TRADE with NaN levels and a huge size": (
-        "BUG: a decide module may write a TRADE with NaN stop/target and qty 10^9; nothing checks levels "
-        "or size, and with an allowed verdict and fresh data the constitution lets it through"
-    ),
-}
+GARBAGE_BUGS: dict[str, str] = {}  # both found 2026-10-19 (qa6) were fixed 2026-10-20 (ps Wave 0)
 
 
 @pytest.mark.parametrize(
@@ -475,12 +480,6 @@ def test_drill_garbage_from_a_module_is_never_bolder(clean, case):
             )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG: with M08 dropped, the decide fallback treats a NaN model score as at/above the buy level "
-    "(`p < threshold` is False for NaN) and drafts a TRADE; the constitution lowers it only to WATCH, "
-    "so a stock with no usable score shows WATCH instead of WAIT (bolder than the no-score baseline)",
-)
 def test_drill_nan_model_score_with_decision_engine_down_is_not_bolder_than_no_score():
     classes = [cls for cls in _pure_classes() if cls.manifest.id != "M08"]
     no_score = _pure_run(DrillReader(probabilities={"ABC": ABC_LIKED}), classes)
@@ -503,7 +502,14 @@ THU = date(2026, 9, 24)
 
 
 def _db_classes(extra=()):
-    return [DataGateway, RiskGate, DecisionEngine, _likes(dict.fromkeys(SYMBOLS, ABC_LIKED)), *extra]
+    return [
+        DataGateway,
+        market_judge_like_m10(),
+        RiskGate,
+        DecisionEngine,
+        _likes(dict.fromkeys(SYMBOLS, ABC_LIKED)),
+        *extra,
+    ]
 
 
 def _db_run(db, classes=None, *, book="paper", as_of=AS_OF, modes=None, universe=SYMBOLS):
@@ -668,13 +674,7 @@ def test_db_drill_zero_close_on_todays_bar(db_world):
 
 # 4. Every installed module crashing, one at a time (database) ---------------------------
 
-# Known bold outcomes (documented, not fixed: trial freeze).
-MODULE_CRASH_BUGS = {
-    "M10": "BUG: when the market judge (M10) fails, the state fallback judges the market from the NIFTY "
-    "50/200-day trend alone and ignores breadth; a market M10 calls DEFENSIVE (0% of stocks above their "
-    "50-day average) becomes NORMAL, so M07 drops its defensive limits (2 ideas, half size) and the run "
-    "approves every liked stock at full size",
-}
+MODULE_CRASH_BUGS: dict[str, str] = {}  # M10 fallback fixed 2026-10-20 (ps Wave 0)
 ALL_MODULE_IDS = [
     pytest.param(m, marks=pytest.mark.xfail(strict=True, reason=MODULE_CRASH_BUGS[m]))
     if m in MODULE_CRASH_BUGS

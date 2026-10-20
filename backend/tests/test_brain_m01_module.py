@@ -7,7 +7,7 @@ from datetime import UTC, date, datetime, time, timedelta
 
 import pytest
 
-from brain_fakes import make_module, registry
+from brain_fakes import make_module, normal_market_judge, registry
 from swing_trade_ml.brain import contracts as c
 from swing_trade_ml.brain.module import REGISTRY, Step
 from swing_trade_ml.brain.modules.m01_quality.module import DataGateway
@@ -92,7 +92,10 @@ def _likes(symbol):
 def _run(db, symbol, as_of=AS_OF):
     req = c.RunRequest(run_id="t", kind="nightly", as_of=as_of, universe=(symbol,), live=True)
     return execute(
-        req, DatedReader(db, as_of=as_of, live=True), registry(DataGateway, RiskGate, _likes(symbol)), {}
+        req,
+        DatedReader(db, as_of=as_of, live=True),
+        registry(DataGateway, normal_market_judge(), RiskGate, _likes(symbol)),
+        {},
     )
 
 

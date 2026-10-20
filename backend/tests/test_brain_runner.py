@@ -15,6 +15,7 @@ from brain_fakes import (
     allow_all_risk_gate,
     fresh_quality,
     make_module,
+    normal_market_judge,
     registry,
     request,
 )
@@ -68,7 +69,7 @@ def test_a_stock_with_no_price_data_is_wait_with_a_reason():
 
 
 def test_with_risk_gate_and_fresh_data_a_strong_stock_is_a_trade():
-    reg = registry(allow_all_risk_gate(max_qty=12), fresh_quality())
+    reg = registry(allow_all_risk_gate(max_qty=12), fresh_quality(), normal_market_judge())
     ctx = execute(request(), FakeReader(probabilities={"ABC": 0.9}), reg, modes={})
     abc = ctx.decisions["ABC"]
     assert abc.word is IdeaWord.TRADE
@@ -78,7 +79,7 @@ def test_with_risk_gate_and_fresh_data_a_strong_stock_is_a_trade():
 
 
 def test_unchecked_data_caps_a_trade_at_watch():
-    reg = registry(allow_all_risk_gate())
+    reg = registry(allow_all_risk_gate(), normal_market_judge())
     ctx = execute(request(), FakeReader(probabilities={"ABC": 0.9}), reg, modes={})
     assert ctx.decisions["ABC"].word is IdeaWord.WATCH
     assert "data" in ctx.decisions["ABC"].downgrade_reason.lower()
@@ -140,7 +141,7 @@ def test_owner_halt_means_no_new_trades():
 
 
 def test_the_risk_gate_cannot_be_switched_off():
-    reg = registry(allow_all_risk_gate(), fresh_quality())
+    reg = registry(allow_all_risk_gate(), fresh_quality(), normal_market_judge())
     ctx = execute(request(), FakeReader(probabilities={"ABC": 0.9}), reg, modes={"M07": Mode.OFF})
     assert ctx.decisions["ABC"].word is IdeaWord.TRADE
     assert _trace(ctx, "M07")[0].status == "used"

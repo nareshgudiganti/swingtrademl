@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from brain_fakes import make_module, registry
+from brain_fakes import make_module, normal_market_judge, registry
 from swing_trade_ml.brain import contracts as c
 from swing_trade_ml.brain.module import REGISTRY, Step
 from swing_trade_ml.brain.modules.m07_risk.module import RiskGate
@@ -81,7 +81,12 @@ def _fresh(symbol="M07TEST", fresh=True):
 
 def _run(db_session, *modules, live=True, symbols=("M07TEST",)):
     req = c.RunRequest(run_id="t", kind="nightly", as_of=NOW, universe=symbols, live=live)
-    return execute(req, DatedReader(db_session, as_of=NOW, live=live), registry(RiskGate, *modules), {})
+    return execute(
+        req,
+        DatedReader(db_session, as_of=NOW, live=live),
+        registry(RiskGate, normal_market_judge(), *modules),
+        {},
+    )
 
 
 def test_m07_is_registered_as_the_mandatory_risk_step():

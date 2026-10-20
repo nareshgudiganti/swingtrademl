@@ -631,10 +631,12 @@ def test_the_market_open_job_buys_nothing_without_a_live_price(fx):
 
 
 def test_a_live_price_at_or_below_the_stop_buys_nothing(fx):
-    fx.decision.entry_low = 90.0  # even if the brain's range reached below its stop
+    # A range reaching below the stop is now refused as an unusable plan (constitution C12), so the
+    # live check is reached with a signal stop inside the range: 98-103, signal stop 99, price 98.5.
+    fx.signal.stop_loss = 99.0
     fx.db.flush()
     a = _pending(fx)
-    fx.live["price"] = 96.0
+    fx.live["price"] = 98.5
     with pytest.raises(approvals.ApprovalExpired, match="stop"):
         approvals.approve(fx.db, a.id, by="owner")
     assert fx.opened == [] and fx.db.get(BrainApproval, a.id).status == "expired"
@@ -780,10 +782,10 @@ def test_a_live_price_on_the_edge_of_the_range_still_buys(fx, price):
 
 
 def test_a_live_price_exactly_at_the_stop_is_refused(fx):
-    fx.decision.entry_low = 96.0  # the range starts at the stop itself
+    fx.signal.stop_loss = 99.0  # the signal's stop sits inside the brain's 98-103 range
     fx.db.flush()
     a = _pending(fx)
-    fx.live["price"] = 96.0
+    fx.live["price"] = 99.0
     with pytest.raises(approvals.ApprovalExpired, match="at or below the stop"):
         approvals.approve(fx.db, a.id, by="owner")
     assert fx.opened == []
@@ -843,3 +845,24 @@ def test_an_order_with_no_position_yet_stays_unlinked(fx, monkeypatch):
     approvals.expire_stale(fx.db)
     row = fx.db.get(BrainApproval, a.id)
     assert row.position_id is None and row.result_note.startswith("Order sent")
+
+
+@pytest.mark.parametrize(
+    "broken",
+    [
+        lambda fx: setattr(fx.decision, "stop", float("nan")),
+        lambda fx: setattr(fx.decision, "target", None),
+        lambda fx: setattr(fx.decision, "stop", 120.0),  # stop above the buy range
+        lambda fx: setattr(fx.signal, "take_profit", 90.0),  # target below the price
+        lambda fx: setattr(fx.signal, "stop_loss", float("inf")),
+    ],
+)
+def test_a_plan_without_usable_prices_is_never_bought(fx, broken):
+    """ps Wave 0 (bad-data drill 2): the order boundary repeats the constitution's plan rule, so a
+    stop or target that is missing, not a number or out of order never becomes an order."""
+    a = _pending(fx)
+    broken(fx)
+    fx.db.flush()
+    with pytest.raises(approvals.ApprovalRefused, match="no usable stop, buy price or target"):
+        approvals.approve(fx.db, a.id, by="owner")
+    assert fx.opened == []

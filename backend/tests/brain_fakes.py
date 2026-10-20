@@ -156,6 +156,18 @@ def fresh_quality() -> type[BrainModule]:
     return make_module("M01", Step.PERCEIVE, writes=("DataQuality@1",), run=run)
 
 
+def normal_market_judge() -> type[BrainModule]:
+    """A stand-in for M10 that calls the market NORMAL. Without a market judge the state fallback is
+    never NORMAL (ps Wave 0, 2026-10-20), so tests that expect a TRADE install this one."""
+
+    def run(view):
+        return c.Contribution(
+            market=c.MarketState(mode=c.MarketMode.NORMAL, reasons=("Test market is calm.",))
+        )
+
+    return make_module("M10", Step.STATE, writes=("MarketState@1",), run=run)
+
+
 def registry(*module_classes) -> ModuleRegistry:
     reg = ModuleRegistry()
     for cls in module_classes:

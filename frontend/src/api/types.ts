@@ -135,6 +135,33 @@ export interface ScheduledJob {
   next_run: string | null
 }
 
+/** One book checked by GET /portfolio/health. Books are never added together. */
+export type HealthBook = 'bot' | 'tester' | 'real'
+
+export interface HealthIssue {
+  kind: 'no_stop' | 'stop_too_far' | 'stock_too_big' | 'sector_too_big' | 'two_in_one_sector' | 'results_soon' | 'past_plan'
+  symbols: string[]
+  /** One short plain sentence. */
+  title: string
+  /** The numbers and the rule, shown on tap. */
+  detail: string
+}
+
+/** Read-only warnings about one book's holdings (services/holdings_health.py). */
+export interface HoldingsHealth {
+  book: HealthBook
+  book_label: string
+  is_real_money: boolean
+  account_value: number
+  account_value_basis: string
+  holdings_checked: number
+  rules: string[]
+  results_checked: boolean
+  notes: string[]
+  issues: HealthIssue[]
+  checked_at: string
+}
+
 export interface PortfolioSummary {
   mode: TradingMode
   // The date these figures are measured from (the current paper trial), or

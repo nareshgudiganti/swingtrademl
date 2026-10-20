@@ -19,6 +19,7 @@ PRIVATE_READS = [
     f"{API}/positions/detailed?book=real",
     f"{API}/trades?book=real",
     f"{API}/summary?book=real",
+    f"{API}/health?book=real",
     "/api/v1/real-report",
 ]
 PRIVATE_WRITES = [

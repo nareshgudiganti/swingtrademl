@@ -29,7 +29,7 @@
     "@axe-core/playwright": "4.13.0",
     "@capacitor/android": "^8.5.1",
     "@capacitor/cli": "^8.5.1",
-    "@capacitor/ios": "^8.5.1",
+    "@capacitor/ios": "^8.5.3",
     "@playwright/test": "1.63.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",

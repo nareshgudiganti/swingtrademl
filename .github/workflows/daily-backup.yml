@@ -23,7 +23,7 @@ jobs:
     steps:
       - name: Make the copies on the droplet
         id: backup
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}

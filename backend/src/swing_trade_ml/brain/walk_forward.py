@@ -29,7 +29,15 @@ from sqlalchemy.orm import Session
 
 from swing_trade_ml.brain.horizon_grid import _days_beaten, _group, _index_after, summarise, top_k_by_day
 from swing_trade_ml.brain.replay_score import load_bars
-from swing_trade_ml.brain.replay_scoring import HORIZON_BARS, STOP, TARGET, StrictOutcome, strict_score
+from swing_trade_ml.brain.replay_scoring import (
+    HORIZON_BARS,
+    NORMAL,
+    STOP,
+    TARGET,
+    CostStress,
+    StrictOutcome,
+    strict_score,
+)
 from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.db.models.market import Instrument
 
@@ -103,7 +111,12 @@ def momentum_scores(bars: dict[str, pd.DataFrame], days: Sequence[date]) -> dict
 
 
 def outcomes_for(
-    bars: dict[str, pd.DataFrame], days: Sequence[date], horizon: int, target: float, stop: float
+    bars: dict[str, pd.DataFrame],
+    days: Sequence[date],
+    horizon: int,
+    target: float,
+    stop: float,
+    stress: CostStress = NORMAL,
 ) -> dict[tuple[str, date], StrictOutcome]:
     """Strict outcome of deciding on `day` (enter the next bar's open), for every stock and day."""
     out: dict[tuple[str, date], StrictOutcome] = {}
@@ -116,7 +129,7 @@ def outcomes_for(
             k = _index_after(bar_days, day)
             if k is not None:
                 out[(sym, day)] = strict_score(
-                    df.iloc[k : k + horizon], horizon=horizon, target=target, stop=stop
+                    df.iloc[k : k + horizon], horizon=horizon, target=target, stop=stop, stress=stress
                 )
     return out
 
@@ -244,9 +257,11 @@ def run_walk_forward(
     stop: float = STOP,
     train_fn=None,
     score_fn=None,
+    stress: CostStress = NORMAL,
 ) -> dict:
     """`train_fn(db, cutoff, horizon, target, stop)` returns a model; `score_fn(db, instrument,
-    model, after)` returns {day: score}. Both default to the real ones and are replaceable in tests."""
+    model, after)` returns {day: score}. Both default to the real ones and are replaceable in tests.
+    `stress` scores every idea (and the baselines) at dearer costs; picks do not depend on it."""
     if train_fn is None:
         train_fn = _train
     if score_fn is None:
@@ -276,7 +291,7 @@ def run_walk_forward(
         if not days:
             continue
         log.info("walk_forward.fold", cutoff=fold.cutoff.isoformat(), start=fold.start.isoformat())
-        outcomes = outcomes_for(bars, days, horizon, target, stop)
+        outcomes = outcomes_for(bars, days, horizon, target, stop, stress)
         everyone = {d: [s for (s, dd) in outcomes if dd == d] for d in days}
         model = train_fn(db, fold.cutoff, horizon, target, stop)
         scores = {
@@ -322,6 +337,7 @@ def run_walk_forward(
         "protocol": PROTOCOL_VERSION,
         "top_k": top_k,
         "rule": {"horizon": horizon, "target": target, "stop": stop},
+        "costs": stress.label,
         "stocks": len(bars),
         "folds": fold_rows,
         "pooled": {

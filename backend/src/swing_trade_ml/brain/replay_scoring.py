@@ -6,6 +6,9 @@ assumes exactly +8% / -4%. This stricter rule is closer to what a real order wou
 get: it enters at the next day's open, fills a gap at the open (not at the level),
 pays slippage and charges (`services/costs.py`) and sells half at +5%. After the
 half-out the stop is NOT moved up: that is the cautious reading of a plain stop.
+
+`CostStress` (ps3) asks "does the result survive dearer trading?": charges multiplied and every
+fill made a little worse on top of the normal slippage. The default changes nothing.
 """
 
 from __future__ import annotations
@@ -26,6 +29,24 @@ POSITION_INR = 40_000.0  # about the smallest position the risk rules allow
 
 
 @dataclass(frozen=True, slots=True)
+class CostStress:
+    charges_x: float = 1.0  # brokerage and taxes are multiplied by this
+    extra_slip: float = 0.0  # every fill this fraction worse, on top of the normal slippage
+
+    @property
+    def label(self) -> str:
+        parts = []
+        if self.charges_x != 1.0:
+            parts.append(f"{self.charges_x:g}x charges")
+        if self.extra_slip:
+            parts.append(f"fills {self.extra_slip:.2%} worse")
+        return ", ".join(parts) or "normal costs"
+
+
+NORMAL = CostStress()
+
+
+@dataclass(frozen=True, slots=True)
 class StrictOutcome:
     status: str  # target | stop | timeout | open
     net_return: float | None  # fraction of the money put in, after costs; None while open
@@ -35,11 +56,11 @@ class StrictOutcome:
     exit_day: date | None
 
 
-def _sell(price: float, qty: float) -> float:
+def _sell(price: float, qty: float, stress: CostStress = NORMAL) -> float:
     """Cash received for selling `qty` shares at `price`, after slippage and charges."""
-    gross = apply_slippage(price, "SELL") * qty
+    gross = apply_slippage(price, "SELL") * (1 - stress.extra_slip) * qty
     brokerage, taxes = compute_charges(gross, "SELL")
-    return gross - brokerage - taxes
+    return gross - (brokerage + taxes) * stress.charges_x
 
 
 def _done(status, cash_in, cash_out, days, half_done, gap, day) -> StrictOutcome:
@@ -53,16 +74,18 @@ def strict_score(
     target: float = TARGET,
     stop: float = STOP,
     half_out: float | None = HALF_OUT,
+    stress: CostStress = NORMAL,
 ) -> StrictOutcome:
     """`bars`: columns day, open, high, low, close; the first row is the entry day
     (the day after the decision), ascending. The keyword options let the horizon grid
-    score other settings with the same costs; the defaults are the settled rule."""
+    score other settings with the same costs; the defaults are the settled rule.
+    Under `stress` the levels follow the dearer fill, as a live order's would."""
     if bars.empty:
         return StrictOutcome("open", None, None, False, False, None)
-    fill = apply_slippage(float(bars.iloc[0]["open"]), "BUY")
+    fill = apply_slippage(float(bars.iloc[0]["open"]), "BUY") * (1 + stress.extra_slip)
     qty = POSITION_INR / fill
     brokerage, taxes = compute_charges(fill * qty, "BUY")
-    cash_in = fill * qty + brokerage + taxes
+    cash_in = fill * qty + (brokerage + taxes) * stress.charges_x
     stop_px, target_px = fill * (1 - stop), fill * (1 + target)
     half = None if half_out is None else fill * (1 + half_out)
 
@@ -73,19 +96,19 @@ def strict_score(
         o, h, lo, day = float(row["open"]), float(row["high"]), float(row["low"]), row["day"]
         if lo <= stop_px:  # checked first: a bar touching the stop and anything else is the stop
             gap = gap or o <= stop_px
-            cash_out += _sell(o if o <= stop_px else stop_px, held)
+            cash_out += _sell(o if o <= stop_px else stop_px, held, stress)
             return _done("stop", cash_in, cash_out, i + 1, half_done, gap, day)
         if half is not None and not half_done and h >= half:
-            cash_out += _sell(o if o >= half else half, qty / 2)
+            cash_out += _sell(o if o >= half else half, qty / 2, stress)
             held, half_done = qty / 2, True
         if h >= target_px:
             gap = gap or o >= target_px
-            cash_out += _sell(o if o >= target_px else target_px, held)
+            cash_out += _sell(o if o >= target_px else target_px, held, stress)
             return _done("target", cash_in, cash_out, i + 1, half_done, gap, day)
     if n < horizon:
         return StrictOutcome("open", None, None, half_done, gap, None)
     last = bars.iloc[horizon - 1]
-    cash_out += _sell(float(last["close"]), held)
+    cash_out += _sell(float(last["close"]), held, stress)
     return _done("timeout", cash_in, cash_out, horizon, half_done, gap, last["day"])
 
 

@@ -120,3 +120,52 @@ def test_a_tighter_stop_is_hit_by_a_small_drop():
     rows = [(100, 100.5, 97.5, 98)] + [FLAT] * 14
     assert strict_score(bars(rows)).status == "timeout"
     assert strict_score(bars(rows), stop=0.02, half_out=None).status == "stop"
+
+
+# ps3 cost stress: the default must not move, and each stress must cost more in a predictable way.
+
+
+def test_normal_stress_is_the_default():
+    from swing_trade_ml.brain.replay_scoring import NORMAL
+
+    rows = [FLAT] * 2 + [(100, 109, 100, 108)]
+    assert strict_score(bars(rows), stress=NORMAL) == strict_score(bars(rows))
+
+
+def test_double_charges_cost_more_but_do_not_change_the_exit():
+    from swing_trade_ml.brain.replay_scoring import CostStress
+
+    rows = [FLAT] * 2 + [(100, 109, 100, 108)]
+    base = strict_score(bars(rows))
+    double = strict_score(bars(rows), stress=CostStress(charges_x=2.0))
+    assert double.status == base.status == "target" and double.days == base.days
+    assert double.net_return < base.net_return
+
+
+def test_worse_fills_cost_about_the_extra_slippage_on_each_side():
+    from swing_trade_ml.brain.replay_scoring import CostStress
+
+    rows = [FLAT] * 15
+    base = strict_score(bars(rows))
+    worse = strict_score(bars(rows), stress=CostStress(extra_slip=0.003))
+    assert worse.status == "timeout"
+    # buy 0.3% dearer and sell 0.3% cheaper: about 0.6% of the money, a little less because
+    # the dearer buy also buys fewer shares
+    assert 0.0055 < base.net_return - worse.net_return < 0.0062
+
+
+def test_worse_buy_fill_moves_the_levels_with_it():
+    """Levels are set from the price really paid, as a live order would be."""
+    from swing_trade_ml.brain.replay_scoring import CostStress
+
+    # +8% from a fill of 100 plus slippage is touched at 108.2, but not after a 0.3% worse fill
+    rows = [(100, 100.5, 99.5, 100)] + [(100, 108.2, 99.5, 100)] + [FLAT] * 13
+    assert strict_score(bars(rows), half_out=None).status == "target"
+    assert strict_score(bars(rows), half_out=None, stress=CostStress(extra_slip=0.003)).status == "timeout"
+
+
+def test_stress_labels_are_plain():
+    from swing_trade_ml.brain.replay_scoring import NORMAL, CostStress
+
+    assert NORMAL.label == "normal costs"
+    assert CostStress(charges_x=2.0, extra_slip=0.003).label == "2x charges, fills 0.30% worse"

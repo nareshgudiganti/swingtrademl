@@ -32,6 +32,7 @@ INDIA VIX and 16 NIFTY sector indices run to 2026-09-09 (context only, no stock 
 | 2026-07-13 to 2026-08-14 | As-of brain replay; trial-journal replay demo | Model picks no better than random; tool demo only | 2026-10-11 / 13 | `asof_replay_*`; audit session |
 | 2021-08 to 2026-08-14 (49 stocks) | Label vs next-open entry agreement (F-06) | No change; effect small | 2026-10-13 | `AUDIT-2026-10-13.md` F-06 |
 | 2021-08 to 2026-09 (306 stocks) | Large one-day moves (F-07) | Classification only; no rule changed | 2026-10-13 | `AUDIT-2026-10-13.md` F-07 |
+| 2023-07-01 to 2025-01-31; 2026-07-13 to 2026-08-14 | ps3 cost stress: walk-forward picks and stored replay ideas re-scored at 2x charges and fills 0.3% worse (both periods already spent) | Diagnostic only; nothing changed (protocol ps3-cost-stress-v1) | 2026-10-20 | `cost_stress/` |
 
 **Conclusion for local data:** every period up to 2026-09-07 is development data. There is no untouched
 local period.

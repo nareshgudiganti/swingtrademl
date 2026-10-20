@@ -15,7 +15,7 @@ from calendar import monthrange
 from datetime import date, datetime
 from typing import Any
 
-from swing_trade_ml.services.brain_observatory import baselines, defs, evidence, fills, outcomes
+from swing_trade_ml.services.brain_observatory import baselines, defs, evidence, fills, outcomes, spot_check
 from swing_trade_ml.services.brain_observatory.redact import redact_text
 
 PORTFOLIO_CAPITAL = 1_000_000.0  # every portfolio account in the pack starts with this
@@ -124,6 +124,8 @@ def build_pack(db, month: str, today: date) -> dict[str, Any]:
         },
         # Not a fourth kind of evidence: how realistic the recorded fill prices were (ps4).
         "fills": fills.fill_quality(db, start, end)["summary"],
+        # Are the stated reasons true? 20 random decisions rechecked from raw prices (ps9).
+        "spot_check": {k: v for k, v in spot_check.spot_check(db, start, end).items() if k != "rows"},
     }
 
 
@@ -285,6 +287,29 @@ def _fill_lines(summary: dict[str, Any]) -> list[str]:
     return lines
 
 
+def _spot_lines(sc: dict[str, Any]) -> list[str]:
+    lines = [
+        "## 5. Are the brain's reasons true? (spot check)",
+        "",
+        "Decisions picked at random from this month's nightly runs (the same ones every time), with every "
+        "reason that makes a claim about prices recomputed from the raw daily prices the run could see.",
+        "",
+    ]
+    if not sc.get("decisions"):
+        return [*lines, "No nightly decisions this month."]
+    lines += [
+        f"- Decisions checked: {sc['decisions']}; all their price claims true: {sc['decisions_all_true']}.",
+        f"- Price claims checked: {sc['claims_checked']}; true: {sc['claims_true']}.",
+        f"- Reasons with no price claim (scores, similar cases, news): {sc['reasons_not_checkable']}.",
+    ]
+    if sc["mismatches"]:
+        lines += ["", "| Stock | Day | Claim | What the prices say |", "|---|---|---|---|"]
+        lines += [f"| {m['symbol']} | {m['day']} | {m['claim']} | {m['detail']} |" for m in sc["mismatches"]]
+    else:
+        lines.append("- No mismatches.")
+    return lines
+
+
 def plain_report(pack: dict[str, Any]) -> str:
     s = pack["sections"]
     pr, pa, bt = s["practice"], s["paper"], s["backtest"]
@@ -330,6 +355,7 @@ def plain_report(pack: dict[str, Any]) -> str:
         why = "; ".join(c["problems"]) or c["independence_note"] or "-"
         lines.append(f"| {c['label']} | **{c['word']}** | {why} |")
     lines += ["", *_fill_lines(pack.get("fills") or {})]
+    lines += ["", *_spot_lines(pack.get("spot_check") or {})]
     lines += [
         "",
         "## Read this before drawing a conclusion",

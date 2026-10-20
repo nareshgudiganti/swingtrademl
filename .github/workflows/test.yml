@@ -49,7 +49,7 @@ jobs:
           # still points at the recorded commit (tests/test_brain_observatory_verdicts_ci.py, E1).
           fetch-depth: 0
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip

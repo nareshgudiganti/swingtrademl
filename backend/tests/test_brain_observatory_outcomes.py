@@ -126,7 +126,15 @@ def test_sessions_loader_equals_the_trial_journal(db_session, realistic_cohort):
     start, end = realistic_cohort.start, realistic_cohort.today
     mine = queries.nightly_sessions(db_session, start, end, live=True, book="paper")
     assert len(mine) == len(realistic_cohort.days) > 40
-    assert mine == load_sessions(db_session, start, end, live=True)
+    # Same days, banners and ideas; each day's ideas as a set. load_sessions reads them with no ORDER BY,
+    # so Postgres returns them in on-disk order, which changes when autovacuum lets new rows reuse space freed
+    # by earlier tests (qa12: failed at random in CI). The journal never relies on that order: every pick
+    # list is sorted by (score, symbol) or by symbol.
+    assert _ideas_as_sets(mine) == _ideas_as_sets(load_sessions(db_session, start, end, live=True))
+
+
+def _ideas_as_sets(sessions):
+    return [(s.day, s.banner, sorted(s.ideas, key=repr)) for s in sessions]
 
 
 def test_bounded_bars_give_the_same_journal(db_session, realistic_cohort):
@@ -202,15 +210,15 @@ def test_backtest_reads_replays_only(db_session):
 
 def test_outcomes_processing_is_bounded(db_session, realistic_cohort):
     counter = count_statements(db_session)
-    t0 = _time.perf_counter()
+    t0 = _time.process_time()
     o.build(db_session, realistic_cohort.start, realistic_cohort.today, "practice")
     o.official_forward_gate(db_session, realistic_cohort.today)
     assert counter.n <= 12, counter.n
     assert counter.control <= 6, counter.control
-    # Wall-clock is only a guard against a real blow-up (per-day queries would take minutes). The 1,000 random
-    # draws of evidence-defs-v1 are CPU work (about 5 s on a busy dev machine), so the deterministic bound is
-    # the statement count above, not this.
-    assert _time.perf_counter() - t0 < 12.0
+    # A guard against a real blow-up in the Python work (the 1,000 random draws of evidence-defs-v1 take about
+    # 5 s). It counts this process's CPU time, not wall-clock time, so a busy machine or a slow CI runner
+    # waiting its turn does not fail it (qa12); database work is bounded by the statement count above.
+    assert _time.process_time() - t0 < 12.0
 
 
 def test_the_computed_shape_is_what_the_page_reads():

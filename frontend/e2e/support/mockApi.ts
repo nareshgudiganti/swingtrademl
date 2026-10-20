@@ -30,6 +30,7 @@ export type Role = 'owner' | 'member'
 
 export const FAKE_TOKEN = 'e2e-fake-token-not-a-real-jwt'
 const TOKEN_STORAGE = 'stml.token' // same key as src/api/client.ts
+const TOUR_KEY_PREFIX = 'tm.tour.seen.v1:' // same key as tourKey() in src/trademind/tourRules.ts
 
 /** Trading days before 2026-10-16 (weekends skipped), oldest first, stamped IST midnight like real candles. */
 function tradingDays(n: number): Date[] {
@@ -192,9 +193,18 @@ export type MockApi = {
  * Serve the fake backend for this page. With `signedIn`, the browser starts with a (fake) saved sign-in, so the
  * app opens straight into TradeMind; without it, the sign-in screen shows first.
  */
-export async function mockApi(page: Page, opts: { role?: Role; signedIn?: boolean } = {}): Promise<MockApi> {
+export async function mockApi(page: Page, opts: { role?: Role; signedIn?: boolean; tourSeen?: boolean } = {}): Promise<MockApi> {
   const role = opts.role ?? 'owner'
   const state: MockApi = { unmocked: [] }
+
+  // The first-time tour opens by itself for an account that has not seen it, and would cover every journey.
+  // Mark it seen for both fake accounts unless a test is about the tour (tour.spec.ts passes tourSeen: false).
+  if (opts.tourSeen ?? true) {
+    await page.addInitScript((keys) => keys.forEach((k) => localStorage.setItem(k, '1')), [
+      TOUR_KEY_PREFIX + meOwner.username,
+      TOUR_KEY_PREFIX + meMember.username,
+    ])
+  }
 
   if (opts.signedIn ?? true) {
     await page.addInitScript(

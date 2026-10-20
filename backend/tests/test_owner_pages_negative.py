@@ -28,6 +28,7 @@ REAL_ACCOUNT = [
     "/api/v1/portfolio/real/account",
     "/api/v1/real-report",
     "/api/v1/portfolio/positions/detailed?book=real",
+    "/api/v1/portfolio/health?book=real",
 ]
 _HAS_REAL_GUARD = hasattr(deps, "require_real_account")
 

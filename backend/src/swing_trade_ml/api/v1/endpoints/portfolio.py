@@ -345,6 +345,23 @@ def detailed_positions(
     return result
 
 
+@router.get("/health", response_model=dict)
+def holdings_health(
+    db: DbSession,
+    principal: PrincipalDep,
+    book: Literal["bot", "tester", "real"] = "bot",
+) -> dict[str, Any]:
+    """Plain-English health check of ONE book's open holdings: too much in one
+    stock or sector, a stop-loss further than agreed, a trade past its
+    15-trading-day plan, a results day coming up. Read-only warnings — it never
+    places an order or changes a stop, a size or a limit. There is no "all":
+    paper and real money are never checked together. The real book is private
+    to REAL_ACCOUNT_USERS, through the same `book_for` guard as every read here."""
+    from swing_trade_ml.services import holdings_health as health_service
+
+    return health_service.health_for_book(db, book_for(principal, book))
+
+
 def _load_kite_holdings(db: DbSession) -> list[dict[str, Any]]:
     """Authenticate and pull raw Kite holdings, turning a rejected/expired
     token or any other Kite-side failure into a clean 400 instead of letting

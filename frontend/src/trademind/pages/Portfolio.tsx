@@ -8,6 +8,7 @@ import { wordTone } from '../vocab'
 import { Term, WordTag } from '../term'
 import { BrainOff, Card, CheckItem, Donut, GlowArea, inr, signed, toneClass } from '../ui'
 import { PageState, QueryNotice } from '../PageState'
+import { HoldingsHealthCard } from '../HoldingsHealth'
 
 // Purely a colour wheel for the donut — never a data value, so cycling a
 // fixed palette by rank is fine even though the sectors themselves are real.
@@ -242,6 +243,8 @@ export default function Portfolio() {
         )}
         {status === 'live' && run && <BrainPortfolioCard run={run} />}
       </div>
+
+      <HoldingsHealthCard />
 
       <div className="tm-grid tm-cols-2">
         <Card title="Holdings" sub="What you own right now, and what the brain thinks of each">

@@ -173,6 +173,29 @@ function answer(role: Role, method: string, path: string, query: URLSearchParams
     if (book === 'real' && !owner) return { status: 403, body: { detail: 'Owner only.' } }
     return { body: [] }
   }
+  if (path === '/portfolio/health') {
+    const book = query.get('book') ?? 'bot'
+    if (book === 'real' && !owner) return { status: 403, body: { detail: 'Owner only.' } }
+    const labels: Record<string, string> = { bot: 'Bot (Paper)', tester: 'Testing (Paper)', real: 'My Zerodha (Real)' }
+    return {
+      body: {
+        book,
+        book_label: labels[book] ?? book,
+        is_real_money: book === 'real',
+        account_value: 1_000_000,
+        account_value_basis: "The bot's account: shares held plus cash left",
+        holdings_checked: book === 'bot' ? 1 : 0,
+        rules: ['At most 25% of the account in one sector', 'Stop-loss 4% below the price paid'],
+        results_checked: true,
+        notes: [],
+        issues:
+          book === 'bot'
+            ? [{ kind: 'past_plan', symbols: ['INFY'], title: 'INFY is on day 16 of a 15-day plan.', detail: 'A reminder to review it.' }]
+            : [],
+        checked_at: '2026-10-20T10:00:00+05:30',
+      },
+    }
+  }
   if (path === '/portfolio/trades') return { body: [] }
   if (path === '/portfolio/equity-curve') return { body: equityCurve(Number(query.get('days') ?? 180)) }
   if (path === '/portfolio/holdings') return owner ? { body: [] } : { status: 403, body: { detail: 'Owner only.' } }

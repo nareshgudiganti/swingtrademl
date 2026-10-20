@@ -2,6 +2,8 @@
 
 import type {
   ExperimentOutcome,
+  HealthBook,
+  HoldingsHealth,
   ExperimentPickIn,
   ExperimentReport,
   ExperimentSelection,
@@ -316,6 +318,9 @@ export const api = {
   // the advisory "real_trading" strategy with the same confidence/stop-loss
   // fields, but never traded by the bot.
   realPositions: () => get<DetailedPosition[]>('/portfolio/positions/detailed?book=real'),
+  // Read-only health check of ONE book's holdings (never "all": paper and real are never added together).
+  // book=real is refused by the server for anyone not in REAL_ACCOUNT_USERS.
+  holdingsHealth: (book: HealthBook) => get<HoldingsHealth>(`/portfolio/health?book=${book}`),
   // strategyId is optional: the backend creates or reuses the advisory
   // `real_trading` strategy when it's omitted, so a fresh install doesn't
   // need one hand-built first.

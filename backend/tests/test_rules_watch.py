@@ -79,3 +79,37 @@ def test_it_is_part_of_the_daily_check(db_session, tmp_path):
 
     names = [c["name"] for c in weekly.compute_checks(db_session, backup_dir=str(tmp_path))["checks"]]
     assert "Risk rules" in names
+
+
+def _five_day_v1(monkeypatch):
+    monkeypatch.setattr(settings, "ML_PREDICTION_HORIZON_DAYS", 5)
+    monkeypatch.setattr(settings, "ML_TARGET_RETURN_PCT", 0.02)
+    monkeypatch.setattr(settings, "ML_STOP_RETURN_PCT", 0.04)
+
+
+def test_the_v1_bot_on_the_agreed_5_day_horizon_passes(db_session, monkeypatch):
+    """Owner 2026-10-20: +2% in 5 days is a second agreed horizon for the v1 bot, not a broken rule."""
+    _five_day_v1(monkeypatch)
+    _strategy(db_session, "rw_ml5", "ml_swing", params={"model_name": "x"})
+    _strategy(db_session, "rw_adv5", "real_trading", stop_loss_pct=0.04, take_profit_pct=0.02)
+    c = rules_watch.check(db_session)
+    assert c["ok"], c["detail"]
+    assert "v1 bot on 5 days at +2% / -4%" in c["detail"]
+
+
+def test_a_target_from_the_other_horizon_still_fails(db_session, monkeypatch):
+    _five_day_v1(monkeypatch)
+    monkeypatch.setattr(settings, "ML_TARGET_RETURN_PCT", 0.08)  # 5 days but the 15-day target
+    detail = rules_watch.check(db_session)["detail"]
+    assert "target is 8%, agreed 2% for 5 days" in detail
+
+
+def test_an_unagreed_horizon_fails(db_session, monkeypatch):
+    monkeypatch.setattr(settings, "ML_PREDICTION_HORIZON_DAYS", 10)
+    assert "model horizon is 10 days, agreed 5 or 15" in rules_watch.check(db_session)["detail"]
+
+
+def test_the_brain_must_stay_on_15_days(db_session, monkeypatch):
+    _five_day_v1(monkeypatch)
+    monkeypatch.setattr(m08_policy, "DEFAULT_POLICY", replace(m08_policy.DEFAULT_POLICY, horizon_days=5))
+    assert "brain horizon is 5 days, agreed 15" in rules_watch.check(db_session)["detail"]

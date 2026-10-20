@@ -8,6 +8,10 @@ not hold the target, the stop or the horizon.
 
 Read-only. Any difference is a failed check, so the 16:20 daily check messages it the same evening.
 Changing a rule means changing it here too, with the owner's OK, which is the point.
+
+Two horizons are agreed (owner, 2026-10-20): 15 trading days at +8% / -4% (the brain, the settled rule) and
+5 days at +2% / -4% (the v1 bot and its models, a separate horizon tested on its own). The v1 settings may
+use either one, but target and horizon must belong to the same one; the brain is always on 15 days.
 """
 
 from __future__ import annotations
@@ -31,6 +35,11 @@ AGREED = {
     "max_drawdown_pct": 0.15,
     "max_sector_pct": 0.25,
 }
+# Target and stop per agreed horizon (trading days). The 15-day row is AGREED above.
+HORIZONS = {
+    15: {"target_pct": AGREED["target_pct"], "stop_pct": AGREED["stop_pct"]},
+    5: {"target_pct": 0.02, "stop_pct": 0.04},
+}
 NAME = "Risk rules"
 
 
@@ -49,16 +58,23 @@ def _settings_differences() -> list[str]:
     if settings.ALLOW_LIVE_TRADING:
         out.append("live trading is allowed (ALLOW_LIVE_TRADING)")
     pairs = (
-        ("target", settings.ML_TARGET_RETURN_PCT, "target_pct"),
-        ("stop", settings.ML_STOP_RETURN_PCT, "stop_pct"),
         ("half-out point", settings.ML_FIRST_TARGET_PCT, "first_target_pct"),
         ("drawdown halt", settings.MAX_PORTFOLIO_DRAWDOWN_PCT, "max_drawdown_pct"),
     )
     for label, value, key in pairs:
         if not _same(value, AGREED[key]):
             out.append(f"{label} is {_pct(value)}, agreed {_pct(AGREED[key])}")
-    if AGREED["horizon_trading_days"] != settings.ML_PREDICTION_HORIZON_DAYS:
-        out.append(f"model horizon is {settings.ML_PREDICTION_HORIZON_DAYS} days, agreed 15")
+    days = settings.ML_PREDICTION_HORIZON_DAYS
+    agreed = HORIZONS.get(days)
+    if agreed is None:
+        out.append(f"model horizon is {days} days, agreed 5 or 15")
+        agreed = HORIZONS[15]
+    for label, value, key in (
+        ("target", settings.ML_TARGET_RETURN_PCT, "target_pct"),
+        ("stop", settings.ML_STOP_RETURN_PCT, "stop_pct"),
+    ):
+        if not _same(value, agreed[key]):
+            out.append(f"{label} is {_pct(value)}, agreed {_pct(agreed[key])} for {days} days")
     return out
 
 
@@ -125,9 +141,14 @@ def _strategy_differences(db: Session) -> list[str]:
         levels = _levels_for(s)
         if levels is not None:
             stop, target = levels
-            if not _same(stop, AGREED["stop_pct"]):
+            # ml_swing follows the v1 settings' horizon; any other type may sit on either agreed horizon.
+            if s.strategy_type == "ml_swing":
+                h = HORIZONS.get(settings.ML_PREDICTION_HORIZON_DAYS, HORIZONS[15])
+            else:
+                h = HORIZONS[5] if _same(target, HORIZONS[5]["target_pct"]) else HORIZONS[15]
+            if not _same(stop, h["stop_pct"]):
                 found.append(f"stop {_pct(stop)}")
-            if not _same(target, AGREED["target_pct"]):
+            if not _same(target, h["target_pct"]):
                 found.append(f"target {_pct(target)}")
         policy = exit_policy_for_strategy(s)
         if not _same(policy.scale_out_at_pct, AGREED["first_target_pct"]):
@@ -159,8 +180,12 @@ def check(db: Session) -> dict:
         except Exception as exc:  # noqa: BLE001 - one bad read must not hide the rest
             differences.append(f"could not read the {label} ({exc.__class__.__name__})")
     if not differences:
+        days = settings.ML_PREDICTION_HORIZON_DAYS
+        v1 = HORIZONS[days]
         detail = (
-            "Paper only; +8% target, -4% stop, half out at +5%, 30-day time stop, 15% halt, 25% sector cap."
+            "Paper only; brain on 15 days at +8% / -4%; v1 bot on "
+            f"{days} days at +{_pct(v1['target_pct'])} / -{_pct(v1['stop_pct'])}; "
+            "half out at +5%, 30-day time stop, 15% halt, 25% sector cap."
         )
         return {"name": NAME, "ok": True, "detail": detail, "level": "ok"}
     detail = "Differs from the agreed rules: " + "; ".join(differences) + "."

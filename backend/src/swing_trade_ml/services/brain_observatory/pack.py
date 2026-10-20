@@ -40,8 +40,10 @@ def practice_baselines(db, start: date, end: date) -> dict[str, Any]:
     Sessions, prices and NIFTY are loaded exactly as the Outcomes page loads them for `category=practice`
     (`outcomes._journal`: live nightly runs, paper book, practice stage, bounded bars), so the "Brain says
     TRADE" trade-level row is the Outcomes page's computed row."""
+    from swing_trade_ml.brain import splits
     from swing_trade_ml.brain.portfolio_sim import Pick
     from swing_trade_ml.brain.trial_journal import picks_for
+    from swing_trade_ml.brain.walk_forward import classify_regime
     from swing_trade_ml.ml.sector_map import get_sector_bucket
 
     _, ctx, error = outcomes._journal(
@@ -68,6 +70,10 @@ def practice_baselines(db, start: date, end: date) -> dict[str, Any]:
         bars = {s: df for s, df in ctx["bars"].items() if len(df)}
         index_bars = ctx["index_bars"]
         buckets = {s: get_sector_bucket(s) for s in bars}
+
+        def buckets_or_unmapped(sym: str) -> str:
+            return buckets.get(sym) or get_sector_bucket(sym) or splits.UNMAPPED
+
         days = sorted({d for df in bars.values() for d in df["day"] if d >= sessions[0].day})
 
         out: dict[str, Any] = {
@@ -75,6 +81,11 @@ def practice_baselines(db, start: date, end: date) -> dict[str, Any]:
             "sessions": len(sessions),
             "trade_level": {},
             "portfolio_level": {},
+            # ps8: counts only. Results by market type or sector would use up the clean period.
+            "splits": {
+                "market_type": classify_regime(bars, start, end)["label"],
+                "note": splits.COUNTS_ONLY_NOTE,
+            },
         }
         shared = baselines.portfolio_baselines(
             pool, bars, days, buckets, index_bars, capital=PORTFOLIO_CAPITAL
@@ -82,6 +93,11 @@ def practice_baselines(db, start: date, end: date) -> dict[str, Any]:
         for name in CANDIDATE_SETS:
             picks = {s.day: picks_for(s)[name] for s in sessions}
             out["trade_level"][name] = baselines.trade_level(picks, pool, bars, index_bars)
+            out["splits"][name] = splits.by_sector(
+                ((sym, None) for syms in picks.values() for sym in syms),
+                results=False,
+                sector=buckets_or_unmapped,
+            )
             cand = [
                 Pick(d, sym, scores.get((d, sym)) or 0.0, buckets.get(sym))
                 for d, syms in picks.items()
@@ -249,7 +265,31 @@ def _practice_lines(pr: dict) -> list[str]:
     ]
     for name in CANDIDATE_SETS:
         lines += _portfolio_table(name, b["portfolio_level"][name])
-    return [*lines, "NIFTY bought and held: " + baselines.NIFTY_HOLD_NOTE, ""]
+    lines += ["NIFTY bought and held: " + baselines.NIFTY_HOLD_NOTE, ""]
+    return [*lines, *_split_lines(b.get("splits"))]
+
+
+def _split_lines(sp: dict | None) -> list[str]:
+    """Ideas by sector, and the month's market type (ps8). Counts only, never results."""
+    if not sp:
+        return []
+    lines = [
+        "### By market type and sector",
+        "",
+        f"Market type this month (average stock move, `{defs.EVIDENCE_DEFS_VERSION}`): "
+        f"**{sp['market_type']}**. " + sp["note"],
+        "",
+        "| Sector | " + " | ".join(SET_NAMES[n] for n in CANDIDATE_SETS) + " |",
+        "|---|" + "---|" * len(CANDIDATE_SETS),
+    ]
+    sectors = sorted({sec for n in CANDIDATE_SETS for sec in sp.get(n, {})})
+    for sec in sectors:
+        cells = []
+        for n in CANDIDATE_SETS:
+            r = sp.get(n, {}).get(sec)
+            cells.append("-" if r is None else f"{r['ideas']} ideas, {r['stocks']} stocks")
+        lines.append(f"| {sec} | " + " | ".join(cells) + " |")
+    return [*lines, ""]
 
 
 def _bps(x: float | None) -> str:

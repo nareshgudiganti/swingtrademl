@@ -226,3 +226,65 @@ def test_the_model_check_never_makes_the_day_a_problem(db_session, tmp_path):
     names = {c["name"]: c for c in r["checks"]}
     assert names["Score matches the trade plan"]["level"] == "info"
     assert "Score matches the trade plan" not in (daily.message_if_problem(r) or "")
+
+
+# --- ps6 decision stability ------------------------------------------------------------------
+
+YESTERDAY = datetime(2026, 10, 13, 10, 50, tzinfo=UTC)
+
+
+def _two_nights(db, words_then: dict, words_now: dict, closes: dict):
+    """A nightly run on 13 Oct and one on 14 Oct; closes = {symbol: (13 Oct close, 14 Oct close)}."""
+    _run(db, "ps6-then", "nightly", [], [], started=YESTERDAY)
+    _run(db, "ps6-now", "nightly", [], [], started=NOW)
+    for n, (sym, (c13, c14)) in enumerate(closes.items()):
+        inst = instrument(db, sym, 960100 + n)
+        candle(db, inst, date(2026, 10, 13), c13)
+        candle(db, inst, DAY, c14)
+    for sym, w in words_then.items():
+        decision(db, "ps6-then", sym, w)
+    for sym, w in words_now.items():
+        decision(db, "ps6-now", sym, w)
+    db.flush()
+
+
+def test_a_jump_to_the_opposite_answer_on_a_flat_price_is_a_flip(db_session):
+    _two_nights(
+        db_session,
+        {"PSA": "TRADE", "PSB": "TRADE", "PSC": "WAIT", "PSD": "TRADE"},
+        {"PSA": "AVOID", "PSB": "AVOID", "PSC": "WATCH", "PSD": "TRADE"},
+        {"PSA": (100.0, 100.5), "PSB": (100.0, 95.0), "PSC": (100.0, 100.0), "PSD": (100.0, 100.0)},
+    )
+    run = db_session.get(BrainRun, "ps6-now")
+    st = daily.decision_flips(db_session, run)
+    # PSA flipped on a 0.5% move; PSB's flip followed a real 5% fall; PSC changed mildly; PSD held.
+    assert [f["symbol"] for f in st["flips"]] == ["PSA"]
+    assert (st["compared"], st["changed"]) == (4, 3)
+    check = daily.check_decision_stability(st)
+    assert check["level"] == "info" and check["ok"]
+    assert "1 of 4 stocks jumped to the opposite answer" in check["detail"]
+    assert "PSA TRADE→AVOID" in check["detail"] and "Normal range not set yet" in check["detail"]
+
+
+def test_more_flips_than_the_owners_normal_range_is_a_warning(db_session, monkeypatch):
+    monkeypatch.setattr(daily, "NORMAL_MAX_FLIPS", 0)
+    _two_nights(db_session, {"PSE": "TRADE"}, {"PSE": "AVOID"}, {"PSE": (100.0, 100.0)})
+    check = daily.check_decision_stability(
+        daily.decision_flips(db_session, db_session.get(BrainRun, "ps6-now"))
+    )
+    assert check["level"] == "warn" and not check["ok"]
+
+
+def test_the_flip_count_is_kept_in_the_daily_record(db_session, tmp_path):
+    _two_nights(db_session, {"PSF": "TRADE"}, {"PSF": "AVOID"}, {"PSF": (100.0, 100.0)})
+    result = daily.compute(db_session, NOW, backup_dir=str(tmp_path))
+    assert any(c["name"] == "Decision flips" for c in result["checks"])
+    assert result["run"]["stability"]["flips"][0]["symbol"] == "PSF"
+    daily.store(db_session, result)
+    stored = db_session.query(BrainDailyCheck).filter_by(day=DAY).one()
+    assert stored.run["stability"]["compared"] == 1
+
+
+def test_the_first_nightly_run_has_nothing_to_compare(db_session):
+    _run(db_session, "ps6-only", "nightly", [], [], started=NOW)
+    assert daily.decision_flips(db_session, db_session.get(BrainRun, "ps6-only")) is None

@@ -15,7 +15,7 @@ from calendar import monthrange
 from datetime import date, datetime
 from typing import Any
 
-from swing_trade_ml.services.brain_observatory import baselines, defs, evidence, outcomes
+from swing_trade_ml.services.brain_observatory import baselines, defs, evidence, fills, outcomes, spot_check
 from swing_trade_ml.services.brain_observatory.redact import redact_text
 
 PORTFOLIO_CAPITAL = 1_000_000.0  # every portfolio account in the pack starts with this
@@ -122,6 +122,10 @@ def build_pack(db, month: str, today: date) -> dict[str, Any]:
             evidence.Category.PAPER.value: paper.as_dict(),
             evidence.Category.BACKTEST.value: backtest.as_dict(),
         },
+        # Not a fourth kind of evidence: how realistic the recorded fill prices were (ps4).
+        "fills": fills.fill_quality(db, start, end)["summary"],
+        # Are the stated reasons true? 20 random decisions rechecked from raw prices (ps9).
+        "spot_check": {k: v for k, v in spot_check.spot_check(db, start, end).items() if k != "rows"},
     }
 
 
@@ -248,6 +252,64 @@ def _practice_lines(pr: dict) -> list[str]:
     return [*lines, "NIFTY bought and held: " + baselines.NIFTY_HOLD_NOTE, ""]
 
 
+def _bps(x: float | None) -> str:
+    """Basis points shown as a percentage: plainer for the owner (100 bps = 1%)."""
+    return "-" if x is None else f"{x / 100:+.2f}%"
+
+
+def _fill_lines(summary: dict[str, Any]) -> list[str]:
+    lines = [
+        "## 4. How realistic were the fill prices?",
+        "",
+        "Every filled order this month against what the market really offered: in market hours the day's "
+        "typical price (and whether the price was inside the day's low-high range at all), outside market "
+        "hours the next session's open. **Better by** above zero means the recorded price flatters the "
+        "result. Paper and real orders are shown apart.",
+        "",
+    ]
+    if not summary:
+        return [*lines, "No filled orders this month."]
+    lines += [
+        "| Orders | When | Fills | Better by (average) | Better by (median) | Outside the day's range "
+        "| No price data |",
+        "|---|---|---|---|---|---|---|",
+    ]
+    for mode, parts in summary.items():
+        for when, label in (("in_hours", "in market hours"), ("after_hours", "outside market hours")):
+            st = parts[when]
+            if not st["fills"]:
+                continue
+            outside = st["outside_day_range"] if when == "in_hours" else "-"
+            lines.append(
+                f"| {mode} | {label} | {st['fills']} | {_bps(st['avg_better_by_bps'])} | "
+                f"{_bps(st['median_better_by_bps'])} | {outside} | {st['no_price_data']} |"
+            )
+    return lines
+
+
+def _spot_lines(sc: dict[str, Any]) -> list[str]:
+    lines = [
+        "## 5. Are the brain's reasons true? (spot check)",
+        "",
+        "Decisions picked at random from this month's nightly runs (the same ones every time), with every "
+        "reason that makes a claim about prices recomputed from the raw daily prices the run could see.",
+        "",
+    ]
+    if not sc.get("decisions"):
+        return [*lines, "No nightly decisions this month."]
+    lines += [
+        f"- Decisions checked: {sc['decisions']}; all their price claims true: {sc['decisions_all_true']}.",
+        f"- Price claims checked: {sc['claims_checked']}; true: {sc['claims_true']}.",
+        f"- Reasons with no price claim (scores, similar cases, news): {sc['reasons_not_checkable']}.",
+    ]
+    if sc["mismatches"]:
+        lines += ["", "| Stock | Day | Claim | What the prices say |", "|---|---|---|---|"]
+        lines += [f"| {m['symbol']} | {m['day']} | {m['claim']} | {m['detail']} |" for m in sc["mismatches"]]
+    else:
+        lines.append("- No mismatches.")
+    return lines
+
+
 def plain_report(pack: dict[str, Any]) -> str:
     s = pack["sections"]
     pr, pa, bt = s["practice"], s["paper"], s["backtest"]
@@ -292,6 +354,8 @@ def plain_report(pack: dict[str, Any]) -> str:
     for c in bt["data"]["claims"]:
         why = "; ".join(c["problems"]) or c["independence_note"] or "-"
         lines.append(f"| {c['label']} | **{c['word']}** | {why} |")
+    lines += ["", *_fill_lines(pack.get("fills") or {})]
+    lines += ["", *_spot_lines(pack.get("spot_check") or {})]
     lines += [
         "",
         "## Read this before drawing a conclusion",

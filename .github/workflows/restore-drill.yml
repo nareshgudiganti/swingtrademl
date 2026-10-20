@@ -33,7 +33,7 @@ jobs:
     timeout-minutes: 40
     steps:
       - name: Run the restore drill on the droplet
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@v1.2.5
         env:
           UPGRADE_CHECK: ${{ inputs.upgrade_check && '1' || '0' }}
           UPGRADE_REF: ${{ inputs.ref }}

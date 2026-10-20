@@ -110,7 +110,7 @@ def test_the_previous_run_is_the_same_kind_and_live(db_session):
 def test_api_preview_and_send(client, db_session, monkeypatch):
     _run(db_session, "al-13", decisions=[("ABC", "idea", "TRADE")])
     sender = Sender()
-    monkeypatch.setattr(service, "default_sender", lambda: sender)
+    monkeypatch.setattr(service, "default_sender", lambda kind=None: sender)
     preview = client.get("/api/v1/brain/runs/al-13/alerts", headers=HEADERS).json()
     assert preview["items"]
     sent = client.post("/api/v1/brain/runs/al-13/alerts/send", headers=HEADERS).json()

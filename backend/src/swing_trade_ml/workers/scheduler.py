@@ -56,6 +56,15 @@ def start_scheduler() -> None:
         replace_existing=True,
     )
 
+    # Also always-on: held Telegram messages (quiet hours / daily digest, tracker ux3)
+    # are sent once due. It only sends; it never trades or reads trading state.
+    scheduler.add_job(
+        jobs.job_flush_alerts,
+        IntervalTrigger(minutes=5),
+        id="flush_alerts",
+        replace_existing=True,
+    )
+
     # Unattended login, timed just after Zerodha expires the previous day's
     # token (~06:00 IST) and well before market open — see
     # job_kite_auto_login's docstring. No-ops if credentials aren't set.

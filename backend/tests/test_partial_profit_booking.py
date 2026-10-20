@@ -63,7 +63,7 @@ def _offline(monkeypatch):
     notifications instead of sending them."""
     monkeypatch.setattr(kite_broker, "_token_loaded", False)
     sent: list[str] = []
-    monkeypatch.setattr(execution.notifier, "send_sync", lambda text, event=None: sent.append(text) or True)
+    monkeypatch.setattr(execution.notifier, "send_sync", lambda text, *a, **kw: sent.append(text) or True)
     return sent
 
 

@@ -75,7 +75,7 @@ def test_alert_quotes_the_risk_layers_own_wording(db_session):
 
 def test_alert_fires_when_candidates_were_refused_and_nothing_bought(db_session, monkeypatch):
     sent: list[str] = []
-    monkeypatch.setattr(jobs.notifier, "send_sync", lambda text, event=None: sent.append(text) or True)
+    monkeypatch.setattr(jobs.notifier, "send_sync", lambda text, event=None, **kw: sent.append(text) or True)
 
     class _Result:
         strategies_run = 1
@@ -105,7 +105,7 @@ def test_no_alert_when_a_buy_went_through(db_session, monkeypatch):
     designed — alerting on it would nag daily and train the alert to be
     ignored before the day it matters."""
     sent: list[str] = []
-    monkeypatch.setattr(jobs.notifier, "send_sync", lambda text, event=None: sent.append(text) or True)
+    monkeypatch.setattr(jobs.notifier, "send_sync", lambda text, event=None, **kw: sent.append(text) or True)
 
     class _Result:
         strategies_run = 1

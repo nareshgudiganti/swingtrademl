@@ -1,0 +1,83 @@
+{
+  "switchable": [
+    {
+      "key": "trade_ideas",
+      "label": "New buy ideas",
+      "explain": "A message when the bot or the brain finds a stock worth buying, or a brain idea is waiting for your OK. Turning it off only stops the phone message: the ideas still appear in the app and nothing about what is bought changes.",
+      "on": true
+    },
+    {
+      "key": "paper_buys",
+      "label": "Practice buys",
+      "explain": "A message when the bot buys a stock with pretend (paper) money. Buys with real money always message you.",
+      "on": false
+    },
+    {
+      "key": "holding_warnings",
+      "label": "Score slipping on a stock you hold",
+      "explain": "An early heads-up when the model's score for a stock you hold gets weaker. It is a warning, not a sell: the stop-loss keeps protecting the stock, and every sell message always reaches you.",
+      "on": true
+    },
+    {
+      "key": "daily_summary",
+      "label": "End-of-day summary",
+      "explain": "One message after the market closes with the day's profit or loss and what is held.",
+      "on": true
+    },
+    {
+      "key": "weekly_report",
+      "label": "Weekly brain report",
+      "explain": "Saturday's checklist on how the brain did this week. The same report is on the System page.",
+      "on": true
+    },
+    {
+      "key": "app_status",
+      "label": "App restarted / Zerodha login worked",
+      "explain": "A message when the app starts or stops (for example after an update) and when a Zerodha login succeeded. Login problems always message you.",
+      "on": true
+    }
+  ],
+  "always_on": [
+    {
+      "key": "sells",
+      "label": "Sells and stop-losses",
+      "explain": "When a stock you hold hits its stop-loss, target or time limit, is sold, or should be sold. You may need to act quickly, so this can't be switched off or delayed.",
+      "on": true
+    },
+    {
+      "key": "real_orders",
+      "label": "Real-money orders",
+      "explain": "Every real buy or sell sent to your Zerodha account, any order Zerodha refused or cancelled, and an approved idea that could not be bought. Real money is involved.",
+      "on": true
+    },
+    {
+      "key": "risk_halts",
+      "label": "Safety stops on buying",
+      "explain": "When a safety rule stops new buys, for example the account fell 15% from its best value. You need to know the bot has stopped buying.",
+      "on": true
+    },
+    {
+      "key": "login_problems",
+      "label": "Zerodha login problems",
+      "explain": "When the bot is not logged in to Zerodha. Without it prices stop updating and stop-losses are not checked.",
+      "on": true
+    },
+    {
+      "key": "system_problems",
+      "label": "Something broke",
+      "explain": "A job failed, market data is missing, the server disk is filling up, or errors are piling up. These need fixing before they cost money.",
+      "on": true
+    }
+  ],
+  "disabled": [
+    "paper_buys"
+  ],
+  "quiet_enabled": true,
+  "quiet_start": "22:00",
+  "quiet_end": "07:00",
+  "digest_enabled": false,
+  "digest_time": "18:00",
+  "last_digest_on": null,
+  "held": 1,
+  "timezone": "IST"
+}

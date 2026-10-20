@@ -25,6 +25,7 @@ from swing_trade_ml.core.logging import configure_logging, get_logger
 from swing_trade_ml.core.security import assert_secrets_safe
 from swing_trade_ml.db.session import SessionLocal, init_database
 from swing_trade_ml.notifications import notifier
+from swing_trade_ml.notifications.alert_policy import APP_STATUS
 from swing_trade_ml.workers.scheduler import start_scheduler, stop_scheduler
 
 configure_logging()
@@ -94,7 +95,7 @@ async def lifespan(app: FastAPI):
     # event loop, and send_sync's internal asyncio.run() always raises "cannot
     # be called from a running event loop" from here. send_sync exists for
     # truly synchronous callers (APScheduler's worker threads), not this one.
-    await notifier.send(f"🚀 <b>Swing Trade ML started</b>\n\n{mode_line}", "system")
+    await notifier.send(f"🚀 <b>Swing Trade ML started</b>\n\n{mode_line}", "system", kind=APP_STATUS)
 
     if settings.is_live_trading:
         # Loud on purpose. This is the one state where a bug costs real money.
@@ -104,7 +105,7 @@ async def lifespan(app: FastAPI):
 
     log.info("app.stopping")
     stop_scheduler()
-    await notifier.send("🛑 <b>Swing Trade ML stopped</b>", "system")
+    await notifier.send("🛑 <b>Swing Trade ML stopped</b>", "system", kind=APP_STATUS)
 
 
 app = FastAPI(

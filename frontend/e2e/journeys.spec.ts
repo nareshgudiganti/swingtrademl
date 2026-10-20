@@ -109,6 +109,7 @@ test.describe('5. Admin', () => {
       ['System', /\/system$/],
       ['Setup', /\/setup$/],
       ['Observatory', /\/observatory$/],
+      ['Alerts', /\/alerts$/],
     ] as const) {
       await subnav.getByRole('link', { name, exact: true }).click()
       await expect(page).toHaveURL(url)
@@ -117,6 +118,34 @@ test.describe('5. Admin', () => {
     // The account menu lists the same Admin pages.
     await page.getByRole('button', { name: 'Your account and settings' }).click()
     await expect(page.getByRole('menuitem', { name: 'Control' })).toBeVisible()
+  })
+
+  test('Alerts: switchable messages have a switch and an explanation, safety messages are always on', async ({ page }) => {
+    await mockApi(page)
+    await openPage(page, '/trademind/alerts')
+    const switchable = page.getByTestId('alerts-switchable')
+    await expect(switchable.getByLabel('New buy ideas')).toBeChecked()
+    await expect(switchable.getByLabel('Practice buys')).not.toBeChecked()
+    const always = page.getByTestId('alerts-always-on')
+    await expect(always.getByText('Sells and stop-losses')).toBeVisible()
+    await expect(always.getByRole('checkbox')).toHaveCount(0)
+    await expect(page.getByTestId('alerts-held')).toContainText('1 message is waiting')
+
+    // The explanation opens on tap.
+    const ideas = page.locator('[data-alert="trade_ideas"]')
+    await expect(ideas.getByText(/finds a stock worth buying/)).toBeHidden()
+    await ideas.getByText('What is this?').click()
+    await expect(ideas.getByText(/finds a stock worth buying/)).toBeVisible()
+
+    // Save turns on only after a change, and a digest inside quiet hours is caught before saving.
+    const save = page.getByRole('button', { name: 'Save', exact: true })
+    await expect(save).toBeDisabled()
+    await switchable.getByLabel('New buy ideas').uncheck()
+    await expect(save).toBeEnabled()
+    await page.getByLabel('Send one digest a day').check()
+    await page.getByLabel('At').fill('23:00')
+    await expect(page.getByText('Pick a digest time outside your quiet hours')).toBeVisible()
+    await expect(save).toBeDisabled()
   })
 
   test('a non-owner sees no Admin and no real-money tab, and owner pages send them back', async ({ page }) => {
@@ -145,7 +174,7 @@ test.describe('5. Admin', () => {
 test.describe('6. Phone width (390 x 844)', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
 
-  for (const path of ['/trademind', '/trademind/stock/INFY', '/trademind/positions', '/trademind/portfolio', '/trademind/control']) {
+  for (const path of ['/trademind', '/trademind/stock/INFY', '/trademind/positions', '/trademind/portfolio', '/trademind/control', '/trademind/alerts']) {
     test(`no sideways scrolling on ${path}`, async ({ page }) => {
       await mockApi(page)
       await openPage(page, path)

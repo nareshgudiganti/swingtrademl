@@ -38,7 +38,7 @@ from swing_trade_ml.db.models.brain import BrainDecision, BrainRun
 from swing_trade_ml.db.models.brain_golive import BrainApproval
 from swing_trade_ml.db.models.market import Instrument
 from swing_trade_ml.db.models.trading import Order, Position, Signal, Strategy
-from swing_trade_ml.notifications import notifier
+from swing_trade_ml.notifications import alert_policy, notifier
 from swing_trade_ml.services import risk
 from swing_trade_ml.services.brain_golive.stage import AUTO_BY, current_stage
 from swing_trade_ml.services.execution import BLOCKED_BY_RISK_KEY, open_position
@@ -547,7 +547,7 @@ def announce(created: list[BrainApproval]) -> bool:
         "the market opens, after every check runs again.\n"
         f"Open: {settings.post_login_url()}/brain#approvals"
     )
-    return notifier.send_sync(text, "signal")
+    return notifier.send_sync(text, "signal", kind=alert_policy.TRADE_IDEAS)
 
 
 def approve(db: Session, approval_id: int, by: str, note: str = "") -> BrainApproval:

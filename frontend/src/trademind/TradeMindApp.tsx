@@ -14,6 +14,7 @@ import { useBrainStatus, useLatestRun, useMarketSession } from './live'
 import { Card, Icon } from './ui'
 import { OfflineBanner } from './PageState'
 import PricesBadge from './PricesBadge'
+import { Tour } from './Tour'
 import Home from './pages/Home'
 import Dashboard from './pages/Dashboard'
 import Market from './pages/Market'
@@ -180,6 +181,7 @@ export default function TradeMindApp({ ownerConsole = false }: TradeMindAppProps
               <Icon.User />
             </span>
           )}
+          <Tour realAccount={ownerConsole && canSeeRealAccount} />
           <button
             className="tm-logout"
             title="Log out of this app"

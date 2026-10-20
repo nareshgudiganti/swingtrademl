@@ -51,7 +51,8 @@ for (const scheme of ['light', 'dark'] as const) {
     for (const [key, target] of Object.entries(SCANNED)) {
       test(`${key} has no serious or critical problems`, async ({ page }, info) => {
         await target.open(page)
-        await expect(page.getByText(target.ready, { exact: true }).first()).toBeVisible()
+        // Not exact: a glossary word (e.g. "Market Mode") is a button that also carries hidden screen-reader text.
+        await expect(page.getByText(target.ready).first()).toBeVisible()
         await settle(page)
 
         const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']).analyze()

@@ -67,7 +67,7 @@ def _allow_everything(monkeypatch) -> list[str]:
     no_broker(monkeypatch)
     sent: list[str] = []
     monkeypatch.setattr(
-        execution.notifier, "send_sync", lambda text, event="system": sent.append(text) or True
+        execution.notifier, "send_sync", lambda text, event="system", **kw: sent.append(text) or True
     )
     monkeypatch.setattr(execution, "portfolio_value_and_cash", lambda db, mode: (1_000_000.0, 1_000_000.0))
     monkeypatch.setattr(execution.risk, "check_entry", lambda **kw: RiskDecision(True, 10))
@@ -251,7 +251,7 @@ def _watch_exits(monkeypatch, broker_mode: str, prices: dict[str, float]):
     monkeypatch.setattr(execution, "_claim_exit", lambda db, p: True)
     monkeypatch.setattr(execution, "_release_exit", lambda db, p: None)
     monkeypatch.setattr(
-        execution.notifier, "send_sync", lambda text, event="system": sent.append(text) or True
+        execution.notifier, "send_sync", lambda text, event="system", **kw: sent.append(text) or True
     )
     return closed, sent
 

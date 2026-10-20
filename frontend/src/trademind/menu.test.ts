@@ -24,6 +24,7 @@ const EXPECTED: Record<string, string> = {
   '/trademind/setup': 'admin',
   '/trademind/observatory': 'admin',
   '/trademind/jobs': 'admin',
+  '/trademind/alerts': 'admin',
 }
 const PARAM_ROUTES: Record<string, string> = {
   '/trademind/stock/INFY': 'discover',

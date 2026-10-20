@@ -149,8 +149,10 @@ export type GlossaryKey =
   | 'paper'
   | 'real'
   | 'unrealised'
+  | 'quiet_hours'
+  | 'digest'
 
-export type GlossaryGroup = 'idea' | 'holding' | 'market' | 'plan' | 'money'
+export type GlossaryGroup = 'idea' | 'holding' | 'market' | 'plan' | 'money' | 'alerts'
 export type GlossaryEntry = { label: string; text: string; group: GlossaryGroup }
 
 export const IDEA_WORDS: IdeaWord[] = ['TRADE', 'WATCH', 'WAIT', 'AVOID']
@@ -278,6 +280,16 @@ export const GLOSSARY: Record<GlossaryKey, GlossaryEntry> = {
     group: 'money',
     text: "What you would gain or lose on stocks you still hold if you sold them at today's price. It only becomes real when you sell.",
   },
+  quiet_hours: {
+    label: 'Quiet hours',
+    group: 'alerts',
+    text: 'A time window (India time) when everyday messages wait instead of buzzing your phone. They are sent together when the window ends. Sell and safety messages still come straight away.',
+  },
+  digest: {
+    label: 'Daily digest',
+    group: 'alerts',
+    text: 'One message a day, at the time you choose, that collects the everyday messages instead of sending each one. Sell and safety messages still come straight away.',
+  },
 }
 
 export function isGlossaryKey(k: string): k is GlossaryKey {
@@ -290,4 +302,5 @@ export const GLOSSARY_GROUPS: { id: GlossaryGroup; title: string }[] = [
   { id: 'market', title: 'The market today' },
   { id: 'plan', title: 'The plan for each trade' },
   { id: 'money', title: 'Money, scores and accounts' },
+  { id: 'alerts', title: 'Alerts on your phone' },
 ]

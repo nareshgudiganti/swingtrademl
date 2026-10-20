@@ -85,6 +85,9 @@ function AccountTab() {
                 ? 'Sell warnings and other alerts are sent to Telegram. Without this you would only see them by opening the app.'
                 : (telegram.data.error ?? 'Telegram is not set up, so alerts only show inside the app.')}
             </p>
+            <p className="tm-dim" style={{ marginBottom: 0 }}>
+              <Link to="/trademind/alerts">Choose which alerts you get</Link>, set quiet hours or a daily digest.
+            </p>
             {result && <p className="tm-pos">{result}</p>}
           </>
         )}

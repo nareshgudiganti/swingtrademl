@@ -63,6 +63,7 @@ export const SECTIONS: Section[] = [
       { to: '/trademind/risk', label: 'Risk' },
       { to: '/trademind/system', label: 'System' },
       { to: '/trademind/setup', label: 'Setup' },
+      { to: '/trademind/alerts', label: 'Alerts' },
       { to: '/trademind/observatory', label: 'Observatory' },
       { to: '/trademind/jobs', label: 'Jobs' },
     ],

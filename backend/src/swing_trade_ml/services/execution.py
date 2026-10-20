@@ -37,7 +37,7 @@ from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.db.models.market import Instrument
 from swing_trade_ml.db.models.trading import Order, Position, Signal, Strategy, Trade
 from swing_trade_ml.ml import real_question
-from swing_trade_ml.notifications import notifier
+from swing_trade_ml.notifications import alert_policy, notifier
 from swing_trade_ml.services import risk, score_history, system_state
 from swing_trade_ml.services.costs import compute_charges
 from swing_trade_ml.services.exit_policy import (
@@ -261,6 +261,7 @@ def open_position(
     notifier.send_sync(
         _entry_message(instrument, position, signal, result, broker.mode),
         "fill",
+        kind=_buy_alert_kind(broker.mode),
     )
     return position
 
@@ -315,7 +316,11 @@ def manual_open_position(
         mode=strategy.mode,
     )
 
-    notifier.send_sync(_manual_entry_message(instrument, position, strategy.mode), "fill")
+    notifier.send_sync(
+        _manual_entry_message(instrument, position, strategy.mode),
+        "fill",
+        kind=_buy_alert_kind(strategy.mode),
+    )
     return position
 
 
@@ -859,7 +864,9 @@ def _check_confidence_decay(
         score_history.mark_alerted(db, position.id)
         db.commit()
         notifier.send_sync(
-            _confidence_decay_message(instrument, position, current_confidence, mode), "signal"
+            _confidence_decay_message(instrument, position, current_confidence, mode),
+            "signal",
+            kind=alert_policy.HOLDING_WARNINGS,
         )
         return
     if status == "reset":
@@ -871,7 +878,9 @@ def _check_confidence_decay(
     db.commit()
     if send_band_alert:
         notifier.send_sync(
-            _score_band_message(instrument, position, current_confidence, recorded.band, mode), "signal"
+            _score_band_message(instrument, position, current_confidence, recorded.band, mode),
+            "signal",
+            kind=alert_policy.HOLDING_WARNINGS,
         )
 
 
@@ -1199,11 +1208,15 @@ def process_decision(
             notifier.send_sync(
                 _advisory_entry_message(instrument, decision, strategy, verdict.quantity, mode),
                 "signal",
+                kind=alert_policy.TRADE_IDEAS,
             )
         return signal
 
     notifier.send_sync(
-        _signal_message(instrument, decision, strategy, verdict.quantity, mode), "signal"
+        _signal_message(instrument, decision, strategy, verdict.quantity, mode),
+        "signal",
+        # An order follows this message: with real money it is never switched off or held.
+        kind=alert_policy.TRADE_IDEAS if str(mode) == TradingMode.PAPER else None,
     )
     open_position(db, strategy, instrument, signal, verdict.quantity)
     return signal
@@ -1672,7 +1685,11 @@ def _finish_reconciled_order(db: Session, order: Order, result: OrderResult) -> 
             "execution.reconcile.entry_filled",
             symbol=instrument.tradingsymbol, order_id=order.id, price=fill_price, qty=filled_qty,
         )
-        notifier.send_sync(_entry_message(instrument, position, signal, result, order.mode), "fill")
+        notifier.send_sync(
+            _entry_message(instrument, position, signal, result, order.mode),
+            "fill",
+            kind=_buy_alert_kind(order.mode),
+        )
     else:
         if order.position_id is None:
             log.error("execution.reconcile.exit_without_position", order_id=order.id)
@@ -1799,6 +1816,11 @@ def _signal_message(instrument, decision, strategy, quantity, mode) -> str:
         )
     lines += ["", f"Strategy: <i>{strategy.name}</i>", f"Reason: {decision.reason}"]
     return "\n".join(lines)
+
+
+def _buy_alert_kind(mode: str) -> str | None:
+    """A paper buy message may be switched off by the owner; a real-money buy never can."""
+    return alert_policy.PAPER_BUYS if str(mode) == TradingMode.PAPER else None
 
 
 def _entry_message(instrument, position, signal, result, mode) -> str:

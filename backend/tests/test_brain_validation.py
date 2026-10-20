@@ -170,7 +170,7 @@ def alerts(monkeypatch):
     monkeypatch.setattr(cli, "log", cli.log)  # keep the real logger
     from swing_trade_ml.notifications import notifier
 
-    monkeypatch.setattr(notifier, "send_sync", lambda text, event="system": sent.append(text) or True)
+    monkeypatch.setattr(notifier, "send_sync", lambda text, event="system", **kw: sent.append(text) or True)
     return sent
 
 

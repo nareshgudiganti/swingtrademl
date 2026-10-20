@@ -116,7 +116,7 @@ def test_legacy_long_term_auto_row_routes_to_advisory(monkeypatch, signal):
     monkeypatch.setattr(execution, 'record_signal', lambda *a: record)
     monkeypatch.setattr(execution, '_advisory_entry_message', lambda *a: '')
     monkeypatch.setattr(execution, '_advisory_exit_message', lambda *a: '')
-    monkeypatch.setattr(execution.notifier, 'send_sync', lambda *a: None)
+    monkeypatch.setattr(execution.notifier, 'send_sync', lambda *a, **kw: None)
     broker_entry, broker_exit = Mock(), Mock()
     monkeypatch.setattr(execution, 'open_position', broker_entry)
     monkeypatch.setattr(execution, 'close_position', broker_exit)

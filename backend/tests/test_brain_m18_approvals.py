@@ -61,7 +61,7 @@ def fx(db_session, monkeypatch):
     monkeypatch.setattr(approvals, "open_position", fake_open)
     sent: list[str] = []
     monkeypatch.setattr(
-        approvals.notifier, "send_sync", lambda text, event="system": sent.append(text) or True
+        approvals.notifier, "send_sync", lambda text, event="system", **kw: sent.append(text) or True
     )
     strategy = brain_strategy(db_session)
     inst = instrument(db_session, "M18APR", 918301)

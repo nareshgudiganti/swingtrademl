@@ -94,6 +94,7 @@ import type {
   Trade,
   TrackRecordSignal,
 } from './types'
+import type { AlertSettings, AlertSettingsUpdate } from '../trademind/alerts'
 import type { AdminJobs } from '../trademind/jobs'
 
 export const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000/api/v1'
@@ -446,6 +447,8 @@ export const api = {
   telegramStatus: () =>
     get<{ ok: boolean; bot: string | null; error: string | null }>('/notifications/telegram/status'),
   telegramTest: () => post<MessageResponse>('/notifications/telegram/test'),
+  alertSettings: () => get<AlertSettings>('/notifications/alert-settings'),
+  saveAlertSettings: (body: AlertSettingsUpdate) => put<AlertSettings>('/notifications/alert-settings', body),
 
   // --------------------------------------------------- real buy/sell report --
   realReport: (params: { start?: string; end?: string } = {}) =>

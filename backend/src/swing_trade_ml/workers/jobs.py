@@ -11,7 +11,7 @@ close" means anything.
 from __future__ import annotations
 
 import contextlib
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -25,7 +25,7 @@ from swing_trade_ml.db.models.safety import RiskEvent
 from swing_trade_ml.db.models.trading import Position, Strategy
 from swing_trade_ml.db.session import session_scope
 from swing_trade_ml.ml.backup import backup_model_artifacts
-from swing_trade_ml.notifications import notifier
+from swing_trade_ml.notifications import alert_policy, notifier
 from swing_trade_ml.services import engine, held_read, ingestion, portfolio
 from swing_trade_ml.workers import heartbeat, job_runs
 
@@ -155,6 +155,23 @@ def job_kite_auto_login() -> None:
         _report_error("kite_auto_login", exc)
 
 
+def job_flush_alerts() -> None:
+    """Send the informational Telegram messages held for quiet hours or the daily
+    digest, once they are due (services/alert_settings.py, tracker ux3). Skips
+    quietly while Telegram is off; a failure is logged and retried next run, never
+    turned into another Telegram message (that would repeat every few minutes)."""
+    if not notifier.enabled:
+        return
+    try:
+        from swing_trade_ml.services import alert_settings
+
+        with session_scope() as db:
+            alert_settings.flush(db, datetime.now(UTC), notifier.deliver_sync)
+    except Exception as exc:  # noqa: BLE001 - a held message stays held; nothing else depends on this
+        log.error("job.flush_alerts.failed", error=str(exc))
+        job_runs.note_failure(exc)
+
+
 def job_check_kite_login() -> None:
     """Always-on, any hour — confirms a completed Kite login over Telegram
     immediately, rather than only noticing it during market hours.
@@ -176,7 +193,9 @@ def job_check_kite_login() -> None:
             if session_ok and kite_broker.loaded_session_id != prev_session_id:
                 global _no_session_alert_at
                 _no_session_alert_at = None
-                notifier.send_sync("🔑 Kite login successful — session is active.", "system")
+                notifier.send_sync(
+                    "🔑 Kite login successful — session is active.", "system", kind=alert_policy.APP_STATUS
+                )
     except Exception as exc:  # noqa: BLE001
         _report_error("check_kite_login", exc)
 
@@ -717,8 +736,6 @@ def job_brain_strategy() -> None:
 def _warn_if_no_ideas_counted(db) -> None:
     """One Telegram line when the brain ran but no idea reached the practice counter.
     The 4-9 Oct 2026 failure stayed silent for six days; this makes it a same-day message."""
-    from datetime import UTC
-
     from swing_trade_ml.services.brain_golive import idea_watch
 
     try:
@@ -828,6 +845,6 @@ def job_brain_weekly_health() -> None:
             status=result["status"],
             failing=[c["name"] for c in result["checks"] if not c["ok"]],
         )
-        notifier.send_sync(weekly.format_message(result))
+        notifier.send_sync(weekly.format_message(result), kind=alert_policy.WEEKLY_REPORT)
     except Exception as exc:  # noqa: BLE001
         _report_error("brain_weekly_health", exc)

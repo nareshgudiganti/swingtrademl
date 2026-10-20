@@ -14,7 +14,7 @@ from swing_trade_ml.services import execution
 
 @pytest.fixture(autouse=True)
 def _quiet(monkeypatch):
-    monkeypatch.setattr(execution.notifier, "send_sync", lambda text, event=None: True)
+    monkeypatch.setattr(execution.notifier, "send_sync", lambda text, event=None, **kw: True)
 
 
 def _setup(db, symbol="MRGTEST"):

@@ -20,6 +20,7 @@ import httpx
 from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.enums import NotificationEvent
 from swing_trade_ml.core.logging import get_logger
+from swing_trade_ml.notifications.alert_policy import DAILY_SUMMARY
 
 log = get_logger(__name__)
 
@@ -47,8 +48,16 @@ class TelegramNotifier:
         return self.enabled and event in settings.telegram_events
 
     async def send(
-        self, text: str, event: NotificationEvent | str = NotificationEvent.SYSTEM
+        self,
+        text: str,
+        event: NotificationEvent | str = NotificationEvent.SYSTEM,
+        kind: str | None = None,
     ) -> bool:
+        """Send one message. `kind` tags an informational message with one of the
+        owner's switchable alert types (notifications/alert_policy.py); such a
+        message may be dropped (type switched off) or held for quiet hours or the
+        digest. A message with no kind is safety-critical or untagged and is
+        always sent at once. Held counts as True: it will be delivered."""
         if not self._should_send(event):
             # The key must be `event_type`, never `event`: structlog reserves
             # `event` for the log message itself, so passing it as a keyword
@@ -57,6 +66,21 @@ class TelegramNotifier:
             log.debug("telegram.skipped", event_type=str(event), enabled=self.enabled)
             return False
 
+        if kind is not None:
+            from swing_trade_ml.services import alert_settings
+
+            # The settings read is a short blocking database call; keep it off the event loop.
+            decision = await asyncio.to_thread(alert_settings.gate, kind, text)
+            if decision == "drop":
+                log.info("telegram.switched_off", kind=kind)
+                return False
+            if decision == "held":
+                log.info("telegram.held", kind=kind)
+                return True
+
+        return await self._post(text)
+
+    async def _post(self, text: str) -> bool:
         payload = {
             "chat_id": self._chat_id,
             "text": text[:MAX_MESSAGE_LENGTH],
@@ -81,8 +105,22 @@ class TelegramNotifier:
             log.error("telegram.send_error", error=str(exc))
             return False
 
+    def deliver_sync(self, text: str) -> bool:
+        """Send already-held messages (the digest), past the alert settings. Blocking, for
+        scheduler threads. False while Telegram is switched off, so nothing is marked sent."""
+        if not self.enabled:
+            return False
+        try:
+            return asyncio.run(self._post(text))
+        except RuntimeError as exc:
+            log.error("telegram.sync_in_async_context", error=str(exc))
+            return False
+
     def send_sync(
-        self, text: str, event: NotificationEvent | str = NotificationEvent.SYSTEM
+        self,
+        text: str,
+        event: NotificationEvent | str = NotificationEvent.SYSTEM,
+        kind: str | None = None,
     ) -> bool:
         """Blocking wrapper for APScheduler jobs, which run in worker threads.
 
@@ -91,7 +129,7 @@ class TelegramNotifier:
         the desired failure — use `send` there instead.
         """
         try:
-            return asyncio.run(self.send(text, event))
+            return asyncio.run(self.send(text, event, kind=kind))
         except RuntimeError as exc:
             log.error("telegram.sync_in_async_context", error=str(exc))
             return False
@@ -196,6 +234,7 @@ class TelegramNotifier:
         stats: dict[str, Any],
         mode: str = "paper",
         post_exit_watch: list[dict[str, Any]] | None = None,
+        kind: str | None = DAILY_SUMMARY,
     ) -> bool:
         badge = "📝 PAPER" if mode == "paper" else "💰 LIVE"
         day_pnl = stats.get("day_pnl", 0.0)
@@ -243,7 +282,7 @@ class TelegramNotifier:
                     f"({row['days_since_exit']}d ago) {flag}"
                 )
 
-        return await self.send("\n".join(lines), NotificationEvent.DAILY_SUMMARY)
+        return await self.send("\n".join(lines), NotificationEvent.DAILY_SUMMARY, kind=kind)
 
     async def notify_error(self, context: str, error: str) -> bool:
         text = (

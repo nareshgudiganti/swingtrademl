@@ -28,11 +28,19 @@ ALERTING_KINDS = {"nightly", "intraday"}
 Sender = Callable[[str], bool]
 
 
-def default_sender() -> Sender:
+def default_sender(kind: str | None = None) -> Sender:
     from swing_trade_ml.core.enums import NotificationEvent
     from swing_trade_ml.notifications import notifier
 
-    return lambda text: notifier.send_sync(text, NotificationEvent.SIGNAL)
+    return lambda text: notifier.send_sync(text, NotificationEvent.SIGNAL, kind=kind)
+
+
+def alert_kind(items: list[AlertItem]) -> str | None:
+    """A message made only of new ideas may be switched off or held by the owner's alert
+    settings (ux3). One that mentions a held stock or a market-mode change is always sent."""
+    from swing_trade_ml.notifications.alert_policy import TRADE_IDEAS
+
+    return TRADE_IDEAS if items and all(i.kind == "trade" for i in items) else None
 
 
 def _view(db: Session, run: BrainRun) -> RunView:
@@ -114,7 +122,7 @@ def send(db: Session, run_id: str, sender: Sender | None = None) -> dict:
     if text is None:
         _mark_checked(db, run)
         return {"sent": False, "count": 0, "text": None}
-    sent = (sender or default_sender())(text)
+    sent = (sender or default_sender(alert_kind(items)))(text)
     if sent:
         run.alerts_checked_at = datetime.now(UTC)
         day = _alert_day(run)

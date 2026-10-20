@@ -46,6 +46,7 @@ WARN_EVERY_SECONDS = 300.0
 JOB_LABELS: dict[str, tuple[str, str]] = {
     "heartbeat": ("Worker heartbeat", "Proves the background worker is alive"),
     "check_kite_login": ("Zerodha login check", "Picks up a finished Zerodha login"),
+    "flush_alerts": ("Held alerts", "Sends alerts held for quiet hours or the daily digest"),
     "brain_run_queue": ("Brain: queued runs", "Runs 'Run the brain now' requests one at a time"),
     "kite_auto_login": ("Zerodha auto-login", "Logs in to Zerodha before the market opens"),
     "nag_missing_session": ("Zerodha login reminder", "Alerts you if Zerodha is still not logged in"),

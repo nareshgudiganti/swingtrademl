@@ -27,6 +27,7 @@ const SCANNED: Record<string, { open: (page: Page) => Promise<void>; ready: stri
   'portfolio-real': { open: (page) => signedIn(page, '/trademind/holdings'), ready: 'Your Zerodha account' },
   'portfolio-overview': { open: (page) => signedIn(page, '/trademind/portfolio'), ready: 'Portfolio Overview' },
   admin: { open: (page) => signedIn(page, '/trademind/control'), ready: 'Money being used' },
+  'admin-alerts': { open: (page) => signedIn(page, '/trademind/alerts'), ready: 'Messages you can switch off' },
 }
 
 async function signedIn(page: Page, path: string) {

@@ -100,10 +100,10 @@ def record_run_scores(db: Session, run_id: str, send: Callable[[str], None] | No
         return 0
     today = run.as_of.astimezone(IST).date()
     if send is None:
-        from swing_trade_ml.notifications import notifier
+        from swing_trade_ml.notifications import alert_policy, notifier
 
         def send(text: str) -> None:
-            notifier.send_sync(text, "signal")
+            notifier.send_sync(text, "signal", kind=alert_policy.HOLDING_WARNINGS)
 
     rows = db.execute(
         select(Position, Instrument, Strategy)

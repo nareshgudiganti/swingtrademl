@@ -116,7 +116,7 @@ def test_missing_days_stay_gaps_in_the_trail(db_session):
 def test_daily_refresh_sends_one_message_for_the_slide(db_session, monkeypatch):
     pos = _held(db_session, "REFRESH")
     sent: list[str] = []
-    monkeypatch.setattr(execution.notifier, "send_sync", lambda msg, kind: sent.append(msg))
+    monkeypatch.setattr(execution.notifier, "send_sync", lambda msg, event, **kw: sent.append(msg))
     strat = db_session.get(Strategy, pos.strategy_id)
     inst = db_session.get(Instrument, pos.instrument_id)
 

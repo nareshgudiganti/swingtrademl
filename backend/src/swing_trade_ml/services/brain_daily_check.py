@@ -152,6 +152,104 @@ def check_stale_stocks(run: BrainRun | None) -> dict | None:
     return weekly._check("Stale stocks", False, detail, "warn")
 
 
+# ps6 decision stability. A flip is a jump between opposite answers from one nightly run to the next
+# while the price hardly moved: many of them mean the answers are noise, not a view.
+OPPOSITES = ({"TRADE", "AVOID"}, {"HOLD", "EXIT"})
+FLIP_MOVE = 0.02  # a price move under 2% between the two runs counts as "hardly moved"
+# Owner sets this after two weeks of counts (plan ps6). Until then the check only reports the number.
+NORMAL_MAX_FLIPS: int | None = None
+
+
+def _previous_nightly(db: Session, run: BrainRun) -> BrainRun | None:
+    return db.execute(
+        select(BrainRun)
+        .where(
+            BrainRun.kind == "nightly",
+            BrainRun.live.is_(True),
+            BrainRun.status == "done",
+            BrainRun.as_of < run.as_of,
+        )
+        .order_by(BrainRun.as_of.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+
+
+def _close_on_or_before(db: Session, symbol: str, day: date) -> float | None:
+    from swing_trade_ml.db.models.market import Candle, Instrument
+
+    # Daily candles are stamped at IST midnight, so "before the next IST midnight" is "on or before day".
+    upto = datetime.combine(day + timedelta(days=1), time(0, 0), tzinfo=IST)
+    return db.execute(
+        select(Candle.close)
+        .join(Instrument, Instrument.id == Candle.instrument_id)
+        .where(Instrument.tradingsymbol == symbol, Candle.interval == "day", Candle.ts < upto)
+        .order_by(Candle.ts.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+
+
+def decision_flips(db: Session, run: BrainRun | None) -> dict | None:
+    """Stocks whose answer jumped to its opposite since the previous nightly run with < 2% price move."""
+    from swing_trade_ml.brain import service
+
+    if run is None:
+        return None
+    prev = _previous_nightly(db, run)
+    if prev is None:
+        return None
+    before = {(d.kind, d.symbol): d.word for d in service.decisions_for(db, prev.id)}
+    day_now, day_before = run.as_of.astimezone(IST).date(), prev.as_of.astimezone(IST).date()
+    compared, changed, flips = 0, 0, []
+    for d in service.decisions_for(db, run.id):
+        old = before.get((d.kind, d.symbol))
+        if old is None:
+            continue
+        compared += 1
+        if old == d.word:
+            continue
+        changed += 1
+        if not any({old, d.word} == pair for pair in OPPOSITES):
+            continue
+        now_px, then_px = (
+            _close_on_or_before(db, d.symbol, day_now),
+            _close_on_or_before(db, d.symbol, day_before),
+        )
+        if now_px is None or not then_px:
+            continue
+        move = now_px / then_px - 1
+        if abs(move) < FLIP_MOVE:
+            flips.append({"symbol": d.symbol, "from": old, "to": d.word, "move": round(move, 4)})
+    return {
+        "since_run": prev.id,
+        "compared": compared,
+        "changed": changed,
+        "flips": flips,
+        "normal_max": NORMAL_MAX_FLIPS,
+    }
+
+
+def check_decision_stability(stability: dict | None) -> dict | None:
+    from swing_trade_ml.services import brain_weekly_health as weekly
+
+    if stability is None:
+        return None
+    flips = stability["flips"]
+    shown = ", ".join(f"{f['symbol']} {f['from']}→{f['to']}" for f in flips[:5])
+    shown += f" and {len(flips) - 5} more" if len(flips) > 5 else ""
+    detail = (
+        f"{len(flips)} of {stability['compared']} stocks jumped to the opposite answer since the last "
+        f"nightly run while the price moved less than {FLIP_MOVE:.0%}"
+        + (f": {shown}." if flips else ".")
+        + f" {stability['changed']} answers changed in all."
+    )
+    limit = stability["normal_max"]
+    if limit is None:
+        return weekly._check("Decision flips", True, detail + " Normal range not set yet.", "info")
+    if len(flips) > limit:
+        return weekly._check("Decision flips", False, detail + f" More than the normal {limit}.", "warn")
+    return weekly._check("Decision flips", True, detail + f" Within the normal {limit}.")
+
+
 def _live_models(db: Session) -> list:
     from swing_trade_ml.core.enums import ModelStatus
     from swing_trade_ml.db.models.ml import MLModel
@@ -211,6 +309,13 @@ def compute(db: Session, now: datetime | None = None, backup_dir: str | None = N
     checks = list(result["checks"])
     run = service.latest_run(db, "nightly")
     out = {"day": day.isoformat(), "run": _run_summary(db, run), "intraday": {}, "trial": {}}
+    stability = None
+    try:
+        stability = decision_flips(db, run)
+    except Exception as exc:  # noqa: BLE001 - one bad part must not hide the rest
+        checks.append(weekly._check("Decision flips", False, f"Could not check ({exc.__class__.__name__})."))
+    if out["run"] and stability is not None:
+        out["run"]["stability"] = stability  # kept in the stored record, so the counts have a history
     for key, fn in (("intraday", _intraday), ("trial", _trial)):
         try:
             out[key] = fn(db, day)
@@ -223,6 +328,7 @@ def compute(db: Session, now: datetime | None = None, backup_dir: str | None = N
         ("Ideas reached the counter", lambda: check_ideas_reached_counter(db, day)),
         ("Stale stocks", lambda: check_stale_stocks(run)),
         ("Score matches the trade plan", lambda: check_model_question(_live_models(db))),
+        ("Decision flips", lambda: check_decision_stability(stability)),
     ):
         try:
             found = fn()

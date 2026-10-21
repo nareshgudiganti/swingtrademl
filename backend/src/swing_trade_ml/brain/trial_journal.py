@@ -277,6 +277,8 @@ def plain_report(j: dict) -> str:
     lines = ["# Trial journal", ""]
     if j["sessions"] == 0:
         return "# Trial journal\n\nNo live nightly brain runs in this range, so there is nothing to record.\n"
+    if j.get("sealed"):
+        return _sealed_report(j)
     if j.get("source") == "replay":
         lines += [
             "**Replay, not live.** These sessions were re-run on past days, so there are no TRADE words "
@@ -355,6 +357,51 @@ def plain_report(j: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _sealed_report(j: dict) -> str:
+    """The journal of a range reaching the blind trial (services/trial_seal.seal_journal): counts only."""
+    from swing_trade_ml.services import trial_seal
+
+    r, s, g = j["rule"], j["summaries"], j.get("gate") or {}
+    lines = [
+        "# Trial journal",
+        "",
+        f"{j['sessions']} sessions, {j['first_day']} to {j['last_day']}. Rule: next-day open, "
+        f"+{r['target']:.0%} / -{r['stop']:.0%}, half out at +5%, {r['horizon']} trading days, "
+        "costs and slippage included.",
+        "",
+        trial_seal.journal_report_note(),
+        "",
+        f"**Gate: {g.get('word', 'too early')}.** {trial_seal.gate_counts_text(g)}",
+        "",
+        "## Counts (results sealed)",
+        "| Followed | Picked | Finished | Still open |",
+        "|---|---|---|---|",
+    ]
+    for name in SETS:
+        row = s[name]
+        lines.append(
+            f"| {SET_NAMES[name]} | {row.get('picked', '')} | {row['ideas']} | {row.get('still_open', '')} |"
+        )
+    lines += [
+        "",
+        f"Brain TRADE ideas finished: {s['brain_trade']['ideas']} of {GATE_IDEAS} the go-live gate asks for.",
+        "",
+        "## Session by session",
+        "| Day | Banner | TRADE | WATCH | WAIT | AVOID | Top 5 |",
+        "|---|---|---|---|---|---|---|",
+    ]
+    for d in j["days"]:
+        w = d["words"]
+        top5 = d["picks"]["brain_top5"]
+        top = ", ".join(p["symbol"] if d.get("sealed") else _pick_text(p) for p in top5) or "none"
+        lines.append(
+            f"| {d['day']} | {d['banner'] or '-'} | {w.get('TRADE', 0)} | {w.get('WATCH', 0)} | "
+            f"{w.get('WAIT', 0)} | {w.get('AVOID', 0)} | {top} |"
+        )
+    lines += ["", "Nothing here changes a rule. Results are shown at the trial's evaluation."]
+    return "\n".join(lines) + "\n"
+
+
 def _gate_text(g: dict) -> str:
     if g["word"] == "too early":
         return (
@@ -417,11 +464,22 @@ def main(argv: Sequence[str] | None = None) -> int:
     p.add_argument("--to", dest="end", default=None, help="YYYY-MM-DD (default: today)")
     p.add_argument("--out", default="docs/brain/evidence")
     p.add_argument("--replays", action="store_true", help="read replayed runs (local practice) instead of live ones")
+    p.add_argument(
+        "--unsealed",
+        action="store_true",
+        help="show the blind trial's results; every use must be recorded in docs/brain/EXPOSURE-LEDGER.md",
+    )
     a = p.parse_args(argv)
     start = date.fromisoformat(a.start)
     end = date.fromisoformat(a.end) if a.end else datetime.now(IST).date()
     with SessionLocal() as db:
         journal = journal_for(db, start, end, replays=a.replays)
+    from swing_trade_ml.services import trial_seal
+
+    if a.unsealed:
+        print(trial_seal.unsealed_warning())
+    elif not a.replays:
+        journal = trial_seal.seal_journal(journal)  # the blind trial: counts only (live runs)
     print(plain_report(journal))
     if journal["sessions"]:
         md, js = write_journal(journal, Path(a.out))

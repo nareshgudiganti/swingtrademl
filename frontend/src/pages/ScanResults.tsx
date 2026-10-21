@@ -14,6 +14,8 @@ const OUTCOME_LABEL: Record<string, { label: string; icon: string }> = {
 }
 
 function statusFor(row: TrackRecordSignal): { label: string; icon: string } {
+  // A brain idea from the blind trial: its result is sealed until the trial's evaluation.
+  if (row.sealed) return { label: 'Sealed (blind trial)', icon: '•' }
   if (row.outcome) return OUTCOME_LABEL[row.outcome] ?? { label: row.outcome, icon: '•' }
   return { label: 'Open', icon: '⚪' }
 }

@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from swing_trade_ml.api.deps import require_owner
 from swing_trade_ml.core.config import settings
+from swing_trade_ml.services import trial_seal
 from swing_trade_ml.services.brain_observatory import (
     counts,
     health,
@@ -252,7 +253,19 @@ def stock_detail(run_id: str, decision_id: int, db: ReadOnlyDb) -> dict:
             "by": "owner",
         }
     outcome = None
-    if d.outcome is not None:
+    if d.outcome is not None and trial_seal.is_sealed_day(day):
+        # The blind trial (services/trial_seal.py): that it finished is a count; how it did is sealed.
+        outcome = {
+            "outcome": None,
+            "gross_return": None,
+            "days": None,
+            "max_up": None,
+            "max_down": None,
+            "resolved_on": None,
+            "sealed": True,
+            "source": trial_seal.SEALED_TEXT,
+        }
+    elif d.outcome is not None:
         outcome = {
             "outcome": d.outcome,
             "gross_return": d.outcome_return,

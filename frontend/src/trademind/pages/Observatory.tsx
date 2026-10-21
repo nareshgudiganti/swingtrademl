@@ -123,6 +123,11 @@ function DayRow({ d, selected }: { d: ObsDay; selected: boolean }) {
   )
 }
 
+// The blind trial's results are sealed by the server (services/trial_seal.py); say so calmly, not as a fault.
+function notAvailable(why: string | null | undefined): string {
+  return why?.startsWith('Sealed') ? why : `Not available — ${why ?? ''}`
+}
+
 export default function Observatory() {
   const [day, setDay] = useState(todayIst())
   const [runId, setRunId] = useState<string>('')
@@ -334,10 +339,12 @@ export default function Observatory() {
                 {stock.data.features.state === 'observed'
                   ? <p>Close ₹{stock.data.features.close} on {stock.data.features.bar_date}</p>
                   : <p className="tm-dim">Not observed — {stock.data.features.why}</p>}
-                {stock.data.decision.outcome && (
+                {stock.data.decision.outcome && (stock.data.decision.outcome.sealed ? (
+                  <p data-testid="obs-stock-outcome-sealed">Outcome: finished. {stock.data.decision.outcome.source}</p>
+                ) : (
                   <p>Outcome: {stock.data.decision.outcome.outcome}, {pct(stock.data.decision.outcome.gross_return)} gross
                     <br /><span className="tm-dim">{stock.data.decision.outcome.source}</span></p>
-                )}
+                ))}
                 <p className="tm-dim">
                   {stock.data.tracker.label}{stock.data.tracker.book ? ` (book: ${stock.data.tracker.book})` : ''}: {stock.data.tracker.rows.length} record(s)
                 </p>
@@ -399,16 +406,29 @@ export default function Observatory() {
             {results.data && (
               <div data-testid="obs-results">
                 <p className="tm-dim" data-testid="obs-observed-not-proof">{PROOF_LABEL}{results.data.label ? ` — ${results.data.label}` : ''}</p>
+                {results.data.sealed && (
+                  <p data-testid="obs-results-sealed">
+                    <b>Trial days {results.data.sealed.from} to {results.data.sealed.to}</b>: {results.data.sealed.text}{' '}
+                    {results.data.sealed.sessions} session(s), {results.data.sealed.trade_ideas} TRADE idea(s),{' '}
+                    {results.data.sealed.graded} graded idea(s) of every word ({results.data.sealed.graded_trade} TRADE).
+                    <br />
+                    <span className="tm-dim">
+                      {results.data.results_period
+                        ? `The figures below cover only ${results.data.results_period.from} to ${results.data.results_period.to}, before the trial started.`
+                        : 'No days before the trial in this range, so there are no figures below.'}
+                    </span>
+                  </p>
+                )}
                 <div data-testid="obs-stored-grades">
                   <p>
                     Stored grades, all ideas of every word (gross): {results.data.stored_grades.available
                       ? `${results.data.stored_grades.count} ideas, average ${pct(results.data.stored_grades.avg_gross_return)} gross`
-                      : `Not available — ${results.data.stored_grades.why ?? ''}`}
+                      : notAvailable(results.data.stored_grades.why)}
                   </p>
                   <p data-testid="obs-stored-grades-trade">
                     Of those, ideas the brain said TRADE: {results.data.stored_grades.trade?.available
                       ? `${results.data.stored_grades.trade.count} ideas, average ${pct(results.data.stored_grades.trade.avg_gross_return)} gross`
-                      : `Not available — ${results.data.stored_grades.trade?.why ?? 'no graded TRADE ideas'}`}
+                      : notAvailable(results.data.stored_grades.trade?.why ?? 'no graded TRADE ideas')}
                   </p>
                   <p className="tm-dim">{results.data.stored_grades.all_words_note}</p>
                   <p className="tm-dim">{results.data.stored_grades.source}</p>
@@ -431,7 +451,7 @@ export default function Observatory() {
                   const value = k === 'random_5' ? f.avg_net_mean : f.avg_net
                   return (
                     <p key={k} data-testid="obs-figure" data-figure={k}>
-                      <b>{label}</b>: {f.available ? pct(value) : `Not available — ${f.why ?? ''}`}
+                      <b>{label}</b>: {f.available ? pct(value) : notAvailable(f.why)}
                       {f.available && k === 'random_5' && f.beaten_share != null && (
                         <> · beaten by the brain in {Math.round(f.beaten_share * 100)}% of {f.draws} draws</>
                       )}
@@ -444,7 +464,7 @@ export default function Observatory() {
                     <b>Brain minus every stock, per day</b>:{' '}
                     {results.data.computed.edge.available
                       ? `${pct(results.data.computed.edge.mean)} (lower bound ${pct(results.data.computed.edge.lower_bound)}; ${results.data.computed.edge.word})`
-                      : `Not available — ${results.data.computed.edge.why ?? ''}`}
+                      : notAvailable(results.data.computed.edge.why)}
                     <br /><span className="tm-dim">{results.data.computed.edge.source}</span>
                   </p>
                 )}

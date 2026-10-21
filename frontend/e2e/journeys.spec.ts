@@ -171,6 +171,21 @@ test.describe('5. Admin', () => {
   })
 })
 
+test.describe('5c. Go-live: the blind trial is sealed', () => {
+  test('the stage card shows counts and the sealed sentence, never whether the trial made a profit', async ({ page }) => {
+    await mockApi(page)
+    await openPage(page, '/trademind/golive')
+    await expect(page.getByText('12 of 30 brain ideas have finished.', { exact: false })).toBeVisible()
+    const plain = page.getByTestId('golive-trial-plain')
+    await expect(plain).toContainText("Sealed until the trial's evaluation (blind test): counts only.")
+    await expect(plain).toContainText('14 of 15 trial sessions')
+    const text = await page.locator('.tm-page').innerText()
+    expect(text).not.toMatch(/profit after costs: (yes|no)/i)
+    expect(text).not.toMatch(/beats buying every stock: (yes|no)/i)
+    expect(text).not.toContain('The forward trial has passed')
+  })
+})
+
 test.describe('6. Phone width (390 x 844)', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
 

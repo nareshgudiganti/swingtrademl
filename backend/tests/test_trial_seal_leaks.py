@@ -1,6 +1,6 @@
 """The blind trial's seal (services/trial_seal.py; evidence plan amendment 1, A4).
 
-Brain ideas from the trial's days are seeded with distinctive results (+7.77% at target, best +9.11%,
+Brain ideas from the trial's days are seeded with distinctive results (+7.77% at target, best +73.16492%,
 worst -2.33%; 1.94 R). Then EVERY GET route of the app is called as the owner, plus the reports and the
 daily check, and none of those numbers may appear in any format. The same rows on a day before the trial
 must still show them (nothing over-sealed), and the go-live gate's real decision is unchanged.
@@ -31,10 +31,12 @@ IST = ZoneInfo("Asia/Kolkata")
 SEALED_DAY = date(2026, 10, 15)  # a trial day (TRIAL_START is 2026-10-14)
 OPEN_DAY = date(2026, 10, 9)  # a Friday before the trial
 NOW = datetime(2026, 10, 28, 18, 0, tzinfo=IST)
-RETURN, BEST, WORST = 0.0777, 0.0911, -0.0233
+# BEST is a number that appears nowhere else in the app (evidence amendment 1, A4: "plant a distinctive
+# result"); RETURN and WORST are realistic results so the gate and the reports really compute with them.
+RETURN, BEST, WORST = 0.0777, 0.7316492, -0.0233
 # Every way those numbers could be written: raw, as a percentage, rounded, signed, in R (0.0777 / 0.04).
 LEAKS = (
-    "0.0777", "7.77", "7.8%", "+7.8", "0.078", "0.0911", "9.11", "9.1%", "0.0233", "2.33", "2.3%", "1.94",
+    "0.0777", "7.77", "7.8%", "+7.8", "0.078", "0.7316", "73.16", "73.2%", "0.0233", "2.33", "2.3%", "1.94",
 )  # fmt: skip
 
 # Skipped, by name, with why. Everything else is called.
@@ -384,7 +386,7 @@ def test_results_from_before_the_trial_still_show(obs_client, db_session):
         return r.text
 
     assert "0.0777" in text(f"/api/v1/brain/observatory/runs/{run}/stocks/{dec}")
-    assert "0.0911" in text(f"/api/v1/brain/observatory/runs/{run}/stocks/{dec}")
+    assert "0.7316492" in text(f"/api/v1/brain/observatory/runs/{run}/stocks/{dec}")
     assert "0.0777" in text(
         "/api/v1/brain/observatory/outcomes?from=2026-10-01&to=2026-10-13&category=practice"
     )
@@ -468,3 +470,35 @@ def test_the_gate_decides_exactly_as_before(db_session, monkeypatch, gate, allow
         assert trial_seal.GATE_SEALED_TEXT in message
         assert not re.search(r"profit|beat|behind|pass", message.replace("passed", ""))
         assert stage.current_stage(db_session) == "shadow"
+
+
+# --- Telegram and the daily summary ----------------------------------------------------------------
+
+
+def test_telegram_messages_hold_no_sealed_result(db_session, tmp_path, monkeypatch):
+    """Every Telegram text that reports on the brain or the day: the daily check's problem message, the
+    Saturday health message and the end-of-day summary. Built from a day holding a sealed trial result."""
+    import asyncio
+
+    from swing_trade_ml.notifications.telegram import notifier
+    from swing_trade_ml.services import brain_weekly_health as weekly
+    from swing_trade_ml.services import portfolio
+
+    _seed(db_session, SEALED_DAY)
+    now = datetime.combine(SEALED_DAY + timedelta(days=3), time(16, 20), tzinfo=IST)
+    result = daily.compute(db_session, now, backup_dir=str(tmp_path))
+    texts = {"daily check": daily.message_if_problem({**result, "status": "check"}) or ""}
+    texts["weekly health"] = weekly.format_message(weekly.compute_checks(db_session, now, str(tmp_path)))
+    sent: list[str] = []
+
+    async def capture(text, *args, **kwargs):
+        sent.append(text)
+        return True
+
+    monkeypatch.setattr(notifier, "send", capture)
+    stats = portfolio.performance_stats(db_session)
+    asyncio.run(notifier.notify_daily_summary(stats, stats["mode"], []))
+    texts["daily summary"] = "\n".join(sent)
+    assert all(texts.values()), texts  # each message was really built
+    found = {name: _leaks(t) for name, t in texts.items() if _leaks(t)}
+    assert found == {}, f"sealed results in a Telegram message: {found}"

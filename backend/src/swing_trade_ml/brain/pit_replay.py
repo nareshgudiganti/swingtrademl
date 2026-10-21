@@ -275,6 +275,8 @@ class DayRecord:
     ideas: list[tuple[str, str, str | None]]  # every idea: (symbol, final word, word it was lowered from)
     holding_words: dict[str, int] = field(default_factory=dict)
     seen: dict = field(default_factory=dict)  # the account the brain saw (for the no-look-ahead check)
+    # modules the run dropped (too slow, an error ...), so their fallback answered: a busy machine shows here
+    dropped: dict[str, str] = field(default_factory=dict)
 
     def to_json(self) -> dict:
         d = asdict(self)
@@ -290,6 +292,7 @@ class DayRecord:
             ideas=[tuple(i) for i in d["ideas"]],
             holding_words=d.get("holding_words", {}),
             seen=d.get("seen", {}),
+            dropped=d.get("dropped", {}),
         )
 
 
@@ -312,6 +315,11 @@ def record_from(day: date, ctx: BrainContext, account: SimAccount) -> DayRecord:
             "as_of": account.as_of.isoformat() if account.as_of else None,
             **{k: round(v, 2) if isinstance(v, float) else v for k, v in account.numbers().items()},
             "held": [h.symbol for h in account.holdings()],
+        },
+        dropped={
+            e.module_id: e.reason
+            for e in ctx.trace
+            if e.module_id != "fallback" and e.status in ("fallback", "rejected")
         },
     )
 
@@ -590,6 +598,7 @@ def run(
 
         def decide(day, account, reg=reg, flat=flat, name=name):
             log.info("pit_replay.day", variant=name, day=day.isoformat())
+            print(f"{name} {day.isoformat()}", flush=True)  # progress in the run log
             return run_brain_day(
                 db, day, account, registry=reg, modes=modes, asof_model=asof_model, flat_score=flat
             )
@@ -653,6 +662,7 @@ def run(
                     "banner": r.banner,
                     "trades": len(r.picks),
                     "holding_words": r.holding_words,
+                    "modules_dropped": r.dropped,
                 }
                 for d, r in sorted(recs.items())
             ]
@@ -748,6 +758,12 @@ def plain_report(result: dict) -> str:
                 f"- {NAMES[key]}: {acc[key]['skipped'] or 'none skipped'}; still open at the end: "
                 f"{acc[key]['still_open']}; exits {acc[key]['exits']}"
             )
+    for name, recs in result.get("brain_days", {}).items():
+        drops = Counter(m for r in recs for m in r.get("modules_dropped", {}))
+        lines.append(
+            f"- Modules dropped in the {NAMES[name]} runs (their fallback answered): "
+            + (", ".join(f"{m} on {k} days" for m, k in sorted(drops.items())) or "none")
+        )
     lines += [
         "",
         "## How to read it",

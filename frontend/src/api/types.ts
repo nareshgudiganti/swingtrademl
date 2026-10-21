@@ -1427,6 +1427,15 @@ export interface ObsLearning {
   results_collected: number; results_collected_label: string; changes_proposed: ObsByKey; learning_checks: number
   proven_improvement: ObsClaim; note: string; redacted_fields: string[]
 }
+export interface ObsScoreBand {
+  band: string; ideas: number; finished?: number; hit_rate: number | null
+}
+export interface ObsScoreBands {
+  question: string; rule: string; trial_start: string
+  development: { source: string; period: string; note: string; bands: ObsScoreBand[] }
+  live: { period: 'before_trial' | 'trial'; from: string; to: string; label: string; sealed: boolean; bands: ObsScoreBand[] }[]
+}
+
 export interface ObsForwardGate {
   word: string; why: string; cohort_from: string; cohort_to: string; cohort: string
   gate?: { sessions: number; finished: number; word: string }

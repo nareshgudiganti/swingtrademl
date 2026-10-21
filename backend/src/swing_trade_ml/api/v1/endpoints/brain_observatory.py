@@ -22,6 +22,7 @@ from swing_trade_ml.services.brain_observatory import (
     pack,
     queries,
     schedule,
+    score_bands,
     verdicts,
 )
 from swing_trade_ml.services.brain_observatory.db import get_readonly_db
@@ -365,6 +366,17 @@ def outcomes_route(
 ) -> dict:
     _range(start, end)
     return redact_response(outcomes.build(db, start, end, category))
+
+
+@router.get("/score-bands")
+def score_bands_route(
+    db: ReadOnlyDb,
+    start: date = Query(..., alias="from"),
+    end: date = Query(..., alias="to"),
+) -> dict:
+    """ps5: ideas grouped by model score vs how often +8% came first. The trial period is counts only."""
+    _range(start, end)
+    return redact_response(score_bands.build(db, start, end, settings.TRADING_MODE))
 
 
 @router.get("/forward-gate")

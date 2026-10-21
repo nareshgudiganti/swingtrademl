@@ -44,6 +44,7 @@ Prod candles continue to the latest trading day (2026-10-12 when this was writte
 |---|---|---|---|---|
 | 2026-09-25 to 2026-10-09 | Brain decisions and their outcomes (519 scored); v1 ideas since 09-28 (121) | Found the zero-ideas bug and the tester-book bug; owner decisions on top 5 a day and sectors | 2026-10-09 | memory: two-week review; `EXPERT-TRADER-PLAN.md` |
 | 2026-10-13 | Prod configuration only: active models, risk limits, account counts | Audit findings F-02, F-11, F-17; no outcomes seen | 2026-10-13 | `AUDIT-2026-10-13.md` |
+| 2026-10-14 onward (prod, forward trial) | Trial-period results were DISPLAYED from ~2026-10-15/16: Observatory 'Results this month' (`/brain/observatory/outcomes`) and the daily check record's trial section (hit rate, average result, edge). Whether anyone looked: UNKNOWN | Nothing decided. Recorded so the trial is not assumed fully blind; results to be sealed (amendment 1, A4) | 2026-10-21 | amendment 1; owner decision 2026-10-21 |
 
 ## What is still clean
 
@@ -52,6 +53,9 @@ Prod candles continue to the latest trading day (2026-10-12 when this was writte
 | 2026-09-09 to 2026-09-24 (prod) | **Probably clean for stock outcomes**, not certain | No recorded look at outcomes. But ideas made on these days finish inside 09-25 to 10-09, which was reviewed, so some of their results were seen indirectly. Treat as **not clean**. |
 | 2026-09-25 to 2026-10-09 (prod) | **Not clean** | Outcomes reviewed on 2026-10-09. |
 | **2026-10-14 onward (prod)** | **Clean today** | Nothing looked at yet. This is where the forward practice trial and any hold-out should start. |
+
+2026-10-21: exposure of the trial period since ~15–16 Oct is UNKNOWN (see Production data); treat as
+possibly seen until the owner says otherwise.
 
 **Decided (owner, 2026-10-13):** the forward trial and "Hold-out A" (layer-2 draft, section 4) start on
 **2026-10-14**, not 2026-09-09. The trial journal is run as

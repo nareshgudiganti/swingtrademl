@@ -1,7 +1,7 @@
 # Evidence plan — Amendment 1 (`evidence-defs-v2`)
 
-Status: **APPROVED IN PRINCIPLE 2026-10-21 (owner), with the clarifications below; final text review by
-the owner, then commit + tag `evidence-defs-v2` before 2026-11-08. Not yet tagged.** Phase B (from
+Status: **APPROVED 2026-10-21 (owner merged PR #37 and confirmed it as the final read). LOCKED: tag
+`evidence-defs-v2` is on the commit that adds this line.** Phase B (from
 2026-11-09) is judged under it. Owner decisions: section A11. Tracker: Atlas → "Prove the brain is
 strong" → ps0c.
 
@@ -195,5 +195,6 @@ guarantee.
 | 4 | Trial results are hidden in **both** the Observatory and the daily check, and everywhere else (API, reports, downloads, evidence packs, daily summaries, Telegram). Past exposure is recorded as **UNKNOWN** | A4 |
 | 5 | Pass criteria in plan section 4 confirmed as written (ev2), with the definitions in A9a | A9a |
 
-Still to do: the owner's final read of this text, then commit, tag `evidence-defs-v2` (before
-2026-11-08), and add one row to the plan's change log (section 7).
+Done 2026-10-21: owner's final read (PR #37 merged), change-log row added to the plan (section 7), tag
+`evidence-defs-v2`. The seeded stock split (ev15, PR #41, `docs/brain/evidence/stock_split/`) is locked
+with it.

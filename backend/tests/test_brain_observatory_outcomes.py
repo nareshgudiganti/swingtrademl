@@ -18,10 +18,18 @@ from observatory_fixtures import (  # noqa: F401 — realistic_cohort is a pytes
     realistic_cohort,
     trading_days,
 )
+from swing_trade_ml.services import trial_seal
 from swing_trade_ml.services.brain_observatory import outcomes as o
 from swing_trade_ml.services.brain_observatory import queries
 
 COMPARISONS = ("candidate", "every_stock", "random_5", "momentum_5", "nifty_matched")
+
+
+@pytest.fixture
+def unsealed(monkeypatch):
+    """These tests check the figures themselves, as they will be shown after the trial's evaluation; the
+    seal is tested in test_trial_seal_leaks.py."""
+    monkeypatch.setattr(trial_seal, "SEALED", False)
 
 
 def test_stored_grades_are_labelled_gross():
@@ -52,7 +60,7 @@ def test_category_is_required_and_validated(db_session):
     assert paper["label"] == "Observed, not proof"
 
 
-def test_categories_are_never_summed(monkeypatch, db_session):
+def test_categories_are_never_summed(monkeypatch, db_session, unsealed):
     seen = []
     monkeypatch.setattr(queries, "stored_grade_rows", lambda db, s, e, live: seen.append(live) or [])
     a = o.build(db_session, date(2026, 10, 1), date(2026, 10, 15), "practice")
@@ -72,7 +80,7 @@ def test_empty_range_is_unavailable_not_zero(db_session):
     assert c["cash"]["available"] is True and c["cash"]["avg_net"] == 0.0
 
 
-def test_journal_failure_is_honest(monkeypatch, db_session):
+def test_journal_failure_is_honest(monkeypatch, db_session, unsealed):
     def boom(*_a, **_k):
         raise RuntimeError("no candles at postgresql://user:hunter2@db.example.com/x")
 
@@ -158,7 +166,7 @@ def test_forward_gate_ignores_the_page_range(db_session, realistic_cohort):
     assert set(a) >= {"word", "why", "cohort_from", "cohort_to", "cohort", "gate"}
 
 
-def test_forward_gate_equals_the_trial_journal(db_session, realistic_cohort):
+def test_forward_gate_equals_the_trial_journal(db_session, realistic_cohort, unsealed):
     from swing_trade_ml.brain.trial_journal import TRIAL_START, journal_for
 
     official = journal_for(db_session, TRIAL_START, realistic_cohort.today)["gate"]
@@ -167,7 +175,7 @@ def test_forward_gate_equals_the_trial_journal(db_session, realistic_cohort):
     assert got["gate"]["finished"] > 20 and got["word"] != "Proven"
 
 
-def test_practice_uses_evidence_defs_v1_baselines(db_session, realistic_cohort):
+def test_practice_uses_evidence_defs_v1_baselines(db_session, realistic_cohort, unsealed):
     out = o.build(db_session, realistic_cohort.start, realistic_cohort.today, "practice")
     c = out["computed"]
     assert out["available"] is True and c["defs"] == "evidence-defs-v1"

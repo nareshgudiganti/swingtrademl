@@ -5,7 +5,7 @@ import type { ReactNode } from 'react'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 
 import { api } from '../../api/client'
-import type { ObsByKey, ObsDay, ObsModuleRow, ObsRunsCursor } from '../../api/types'
+import type { ObsByKey, ObsDay, ObsModuleRow, ObsRunsCursor, ObsScoreBand } from '../../api/types'
 import { Card, Tabs } from '../ui'
 import { PageState, StaleNotice } from '../PageState'
 import { errorStatus, pickState, type QueryLike } from '../stateRules'
@@ -165,6 +165,11 @@ export default function Observatory() {
   const learning = useQuery({
     queryKey: ['obs-learning', month.from, month.to],
     queryFn: () => api.obsLearning(month.from, month.to),
+    enabled: tab === 'Results & proof',
+  })
+  const bands = useQuery({
+    queryKey: ['obs-score-bands', day],
+    queryFn: () => api.obsScoreBands(shiftDay(day, -91), day),
     enabled: tab === 'Results & proof',
   })
   const results = useQuery({
@@ -334,10 +339,12 @@ export default function Observatory() {
                 {stock.data.features.state === 'observed'
                   ? <p>Close ₹{stock.data.features.close} on {stock.data.features.bar_date}</p>
                   : <p className="tm-dim">Not observed — {stock.data.features.why}</p>}
-                {stock.data.decision.outcome && (
+                {stock.data.decision.outcome && (stock.data.decision.outcome.sealed ? (
+                  <p data-testid="obs-stock-outcome-sealed">Outcome: finished. {stock.data.decision.outcome.source}</p>
+                ) : (
                   <p>Outcome: {stock.data.decision.outcome.outcome}, {pct(stock.data.decision.outcome.gross_return)} gross
                     <br /><span className="tm-dim">{stock.data.decision.outcome.source}</span></p>
-                )}
+                ))}
                 <p className="tm-dim">
                   {stock.data.tracker.label}{stock.data.tracker.book ? ` (book: ${stock.data.tracker.book})` : ''}: {stock.data.tracker.rows.length} record(s)
                 </p>
@@ -399,6 +406,19 @@ export default function Observatory() {
             {results.data && (
               <div data-testid="obs-results">
                 <p className="tm-dim" data-testid="obs-observed-not-proof">{PROOF_LABEL}{results.data.label ? ` — ${results.data.label}` : ''}</p>
+                {results.data.sealed && (
+                  <p data-testid="obs-results-sealed">
+                    <b>Trial days {results.data.sealed.from} to {results.data.sealed.to}</b>: {results.data.sealed.text}{' '}
+                    {results.data.sealed.sessions} session(s), {results.data.sealed.trade_ideas} TRADE idea(s),{' '}
+                    {results.data.sealed.graded} graded idea(s) of every word ({results.data.sealed.graded_trade} TRADE).
+                    <br />
+                    <span className="tm-dim">
+                      {results.data.results_period
+                        ? `The figures below cover only ${results.data.results_period.from} to ${results.data.results_period.to}, before the trial started.`
+                        : 'No days before the trial in this range, so there are no figures below.'}
+                    </span>
+                  </p>
+                )}
                 <div data-testid="obs-stored-grades">
                   <p>
                     Stored grades, all ideas of every word (gross): {results.data.stored_grades.available
@@ -452,6 +472,27 @@ export default function Observatory() {
               </div>
             )}
           </Card>
+          <Card title="Does a higher score really mean better results?" sub="How often +8% came before -4%, by the score the idea had">
+            <div data-testid="obs-score-bands">
+              <QueryState q={bands} id="score-bands" />
+              {bands.data && (
+                <>
+                  <p className="tm-dim">If the bars are about the same height, the score is not telling good ideas from bad ones.</p>
+                  <h4>Tested on past data ({bands.data.development.period})</h4>
+                  <ScoreBars rows={bands.data.development.bands} />
+                  <p className="tm-dim">{bands.data.development.note}</p>
+                  {bands.data.live.map((part) => (
+                    <div key={part.period} data-testid="obs-score-bands-live" data-period={part.period}>
+                      <h4>{part.period === 'trial' ? 'The trial so far' : 'Before the trial'} ({part.from} to {part.to})</h4>
+                      <p className="tm-dim">{part.label}</p>
+                      <ScoreBars rows={part.bands} sealed={part.sealed} />
+                    </div>
+                  ))}
+                  <p className="tm-dim">Rule: {bands.data.rule}</p>
+                </>
+              )}
+            </div>
+          </Card>
           <Card title="Is it proven?" sub="Only frozen, independent tests count">
             <QueryState q={proof} id="proof-tab" empty={proof.data && proof.data.claims.length === 0 ? 'No verdicts available.' : undefined} />
             {(proof.data?.claims ?? []).map((c) => (
@@ -484,6 +525,32 @@ export default function Observatory() {
           </Card>
         </div>
       )}
+    </div>
+  )
+}
+
+function ScoreBars({ rows, sealed = false }: { rows: ObsScoreBand[]; sealed?: boolean }) {
+  // Bars fill to a 50% hit rate; the +8%-first rate needed to break even is about 33%.
+  return (
+    <div data-testid="obs-score-bars">
+      {rows.map((b) => {
+        const shown = !sealed && b.hit_rate != null
+        const width = shown ? Math.min(100, ((b.hit_rate as number) / 0.5) * 100) : 0
+        const text = sealed
+          ? `${b.ideas} ideas · ${b.finished ?? 0} finished`
+          : shown
+            ? `${Math.round((b.hit_rate as number) * 100)}% of ${b.finished ?? b.ideas} ideas`
+            : `${b.ideas} ideas · none finished`
+        return (
+          <div key={b.band} className="tm-hbar" style={{ gridTemplateColumns: '110px 1fr 150px' }} data-band={b.band}>
+            <span className="tm-dim">Score {b.band}</span>
+            <div className="tm-hbar-track">
+              <div className="tm-hbar-fill tm-violet" style={{ width: `${width}%` }} />
+            </div>
+            <span className="tm-right tm-num">{text}</span>
+          </div>
+        )
+      })}
     </div>
   )
 }

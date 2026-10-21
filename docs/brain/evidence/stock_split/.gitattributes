@@ -1,0 +1,2 @@
+# Locked research artefact (ev15): keep exact bytes so the recorded SHA-256 matches on every checkout.
+stock_split_ev15.json -text

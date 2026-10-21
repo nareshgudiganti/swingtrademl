@@ -67,6 +67,11 @@ def test_compare_counts_changes_and_scores_only_liked_ideas():
 def test_readings_name_useless_modules_and_an_unsafe_risk_gate():
     base = {"avg_net": 0.01}
     assert "adds nothing" in ma.reading("M11", {"changed_words": 0, "avg_net": 0.01}, base)
+    # Same final words but the liked ideas moved: the module matters (replay risk check refuses all).
+    sole = {"changed_words": 0, "liked_added": 0, "liked_dropped": 561, "liked": 0, "avg_net": None}
+    assert ma.reading("M08", sole, base).startswith("makes every idea")
+    some = {"changed_words": 0, "liked_added": 2, "liked_dropped": 1, "liked": 9, "avg_net": 0.0}
+    assert "changes which ideas" in ma.reading("M10", some, base)
     assert "helps" in ma.reading("M10", {"changed_words": 3, "avg_net": -0.01}, base)
     assert "hurts" in ma.reading("M10", {"changed_words": 3, "avg_net": 0.02}, base)
     assert ma.reading("M07", {"trade_words": 0}, base).startswith("safe")

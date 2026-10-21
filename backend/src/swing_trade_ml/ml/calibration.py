@@ -22,7 +22,7 @@ See the plan's Stage 1.6.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, time
 from typing import Literal
 
 from sqlalchemy import select
@@ -150,6 +150,16 @@ def signal_calibration(
     if since is not None:
         stmt = stmt.where(Signal.generated_at >= since)
 
+    from swing_trade_ml.services import trial_seal
+
+    if trial_seal.active():
+        # The blind trial (services/trial_seal.py): brain ideas from the trial are left out until its
+        # evaluation; version 1's signals and earlier brain ideas stay.
+        from swing_trade_ml.db.models.trading import Strategy
+
+        brain_ids = select(Strategy.id).where(Strategy.strategy_type == "brain")
+        first = datetime.combine(trial_seal.SEALED_FROM, time(0, 0), tzinfo=trial_seal.IST)
+        stmt = stmt.where(~(Signal.strategy_id.in_(brain_ids) & (Signal.generated_at >= first)))
     rows = [
         (float(conf), outcome == TARGET_HIT, outcome_pct)
         for conf, outcome, outcome_pct in db.execute(stmt).all()

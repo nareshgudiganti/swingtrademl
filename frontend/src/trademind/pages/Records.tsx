@@ -321,7 +321,17 @@ function ScanTable({ rows }: { rows: TrackRecordSignal[] }) {
                 <td className="tm-right">{r.current_price != null ? `₹${inr(r.current_price)}` : '—'}</td>
                 <td className="tm-right">₹{inr(r.stop_loss)}</td>
                 <td className="tm-right">₹{inr(r.take_profit)}</td>
-                <td>{o ? <Tag tone={o.tone}>{o.label}</Tag> : <Tag tone="blue">Still open</Tag>}</td>
+                <td>
+                  {r.sealed ? (
+                    <span title="Sealed until the trial's evaluation (blind test): counts only.">
+                      <Tag tone="violet">Sealed</Tag>
+                    </span>
+                  ) : o ? (
+                    <Tag tone={o.tone}>{o.label}</Tag>
+                  ) : (
+                    <Tag tone="blue">Still open</Tag>
+                  )}
+                </td>
                 <td className={`tm-right ${pct != null ? toneClass(pct) : 'tm-dim'}`}>
                   {pct != null ? signed(pct * 100) : '—'}
                 </td>

@@ -142,6 +142,7 @@ def brain_route_access(method: str, path: str) -> Literal["owner", "trademind"] 
         "/brain/runs/latest",
         "/brain/health",
         "/brain/learning",
+        "/brain/changes",
     }:
         return "trademind"
     if path.startswith("/brain/why/"):

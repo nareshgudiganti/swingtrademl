@@ -1,0 +1,48 @@
+{
+ "protocol": "ps11-wait-check-v1",
+ "from": "2026-07-13",
+ "to": "2026-08-14",
+ "groups": {
+  "wanted": {
+   "stock_days": 561,
+   "finished": 561,
+   "stop": 317,
+   "target": 106,
+   "timeout": 138,
+   "avg_net": -0.009860173622198022,
+   "lost_share": 0.6292335115864528
+  },
+  "WAIT": {
+   "stock_days": 7039,
+   "finished": 7039,
+   "stop": 3561,
+   "target": 1532,
+   "timeout": 1946,
+   "avg_net": -0.003981980032816432,
+   "lost_share": 0.575649950277028
+  },
+  "AVOID": {
+   "stock_days": 0,
+   "finished": 0,
+   "stop": 0,
+   "target": 0,
+   "timeout": 0,
+   "avg_net": null,
+   "lost_share": null
+  },
+  "every stock-day": {
+   "stock_days": 7600,
+   "finished": 7600,
+   "stop": 3878,
+   "target": 1638,
+   "timeout": 2084,
+   "avg_net": -0.004415883533295784,
+   "lost_share": 0.5796052631578947
+  }
+ },
+ "day_by_day": {
+  "days": 25,
+  "wanted_better": 13
+ },
+ "reading": "WAIT was the right call on average (buying anyway averaged -0.40% after costs). The ideas the brain wanted did no better than the ones it waited on."
+}

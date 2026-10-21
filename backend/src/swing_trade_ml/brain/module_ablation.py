@@ -127,6 +127,15 @@ def reading(module_id: str, row: dict, base_row: dict) -> str:
             if row["trade_words"] == 0
             else f"UNSAFE: {row['trade_words']} TRADE words without the risk gate"
         )
+    # In a replay the risk check refuses every idea, so final words can stay the
+    # same while the module still decides which ideas the brain wanted.
+    if row["changed_words"] == 0 and (row.get("liked_added") or row.get("liked_dropped")):
+        if row.get("liked") == 0:
+            return "makes every idea: without it the brain wants none"
+        return (
+            f"changes which ideas the brain wants (+{row['liked_added']} / -{row['liked_dropped']}); "
+            "final words unchanged because the replay's risk check refuses them all"
+        )
     if row["changed_words"] == 0:
         return "adds nothing on these days (no decision changed)"
     a, b = row["avg_net"], base_row["avg_net"]

@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from swing_trade_ml.api.deps import require_owner
 from swing_trade_ml.core.config import settings
+from swing_trade_ml.services import trial_seal
 from swing_trade_ml.services.brain_observatory import (
     counts,
     health,
@@ -22,6 +23,7 @@ from swing_trade_ml.services.brain_observatory import (
     pack,
     queries,
     schedule,
+    score_bands,
     verdicts,
 )
 from swing_trade_ml.services.brain_observatory.db import get_readonly_db
@@ -252,7 +254,19 @@ def stock_detail(run_id: str, decision_id: int, db: ReadOnlyDb) -> dict:
             "by": "owner",
         }
     outcome = None
-    if d.outcome is not None:
+    if d.outcome is not None and trial_seal.is_sealed_day(day):
+        # The blind trial (services/trial_seal.py): that it finished is a count; how it did is sealed.
+        outcome = {
+            "outcome": None,
+            "gross_return": None,
+            "days": None,
+            "max_up": None,
+            "max_down": None,
+            "resolved_on": None,
+            "sealed": True,
+            "source": trial_seal.SEALED_TEXT,
+        }
+    elif d.outcome is not None:
         outcome = {
             "outcome": d.outcome,
             "gross_return": d.outcome_return,
@@ -365,6 +379,17 @@ def outcomes_route(
 ) -> dict:
     _range(start, end)
     return redact_response(outcomes.build(db, start, end, category))
+
+
+@router.get("/score-bands")
+def score_bands_route(
+    db: ReadOnlyDb,
+    start: date = Query(..., alias="from"),
+    end: date = Query(..., alias="to"),
+) -> dict:
+    """ps5: ideas grouped by model score vs how often +8% came first. The trial period is counts only."""
+    _range(start, end)
+    return redact_response(score_bands.build(db, start, end, settings.TRADING_MODE))
 
 
 @router.get("/forward-gate")

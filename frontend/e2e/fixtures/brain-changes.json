@@ -1,0 +1,51 @@
+{
+  "comparable": true,
+  "note": null,
+  "current": { "run_id": "run-2026-10-16", "as_of": "2026-10-16T15:50:00+05:30", "day": "2026-10-16", "banner_mode": "NORMAL" },
+  "previous": { "run_id": "run-2026-10-15", "as_of": "2026-10-15T15:50:00+05:30", "day": "2026-10-15", "banner_mode": "NORMAL" },
+  "ideas": [
+    {
+      "symbol": "HDFCBANK",
+      "held_now": false,
+      "before": {
+        "word": "WATCH", "brain_word": "WATCH", "overruled_word": null, "overrule_reason": null,
+        "reasons": ["The market is careful and this stock is falling, so the brain waits for it to turn up."],
+        "downgraded_from": "TRADE", "downgrade_reason": "The market is careful and this stock is falling, so the brain waits for it to turn up.",
+        "rank": 3, "rank_of": 3, "score_kind": "model"
+      },
+      "now": {
+        "word": "WATCH", "brain_word": "WATCH", "overruled_word": null, "overrule_reason": null,
+        "reasons": ["Good idea, but the risk check said no: Bank sector is already near its limit.", "Trend is improving but not confirmed."],
+        "downgraded_from": "TRADE", "downgrade_reason": "Good idea, but the risk check said no: Bank sector is already near its limit.",
+        "rank": 2, "rank_of": 3, "score_kind": "model"
+      }
+    },
+    {
+      "symbol": "INFY",
+      "held_now": false,
+      "before": {
+        "word": "WAIT", "brain_word": "WAIT", "overruled_word": null, "overrule_reason": null,
+        "reasons": ["Model score 52% is below the buy level 55%."],
+        "downgraded_from": null, "downgrade_reason": null,
+        "rank": 1, "rank_of": 3, "score_kind": "model"
+      },
+      "now": {
+        "word": "TRADE", "brain_word": "TRADE", "overruled_word": null, "overrule_reason": null,
+        "reasons": ["Strong upward move with rising volume."],
+        "downgraded_from": null, "downgrade_reason": null,
+        "rank": 1, "rank_of": 3, "score_kind": "model"
+      }
+    },
+    {
+      "symbol": "ITC",
+      "held_now": false,
+      "before": null,
+      "now": {
+        "word": "WAIT", "brain_word": "WAIT", "overruled_word": null, "overrule_reason": null,
+        "reasons": ["No clear direction."],
+        "downgraded_from": null, "downgrade_reason": null,
+        "rank": 3, "rank_of": 3, "score_kind": "model"
+      }
+    }
+  ]
+}

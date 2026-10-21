@@ -71,6 +71,28 @@ test.describe('3. Stock page', () => {
   })
 })
 
+test.describe('3b. Why not TRADE, and what changed since yesterday (ux11)', () => {
+  test('Today lists what changed; a WATCH idea says why it is not a TRADE and what changed', async ({ page }) => {
+    await mockApi(page)
+    await openPage(page, '/trademind')
+    const summary = page.getByTestId('changes-summary')
+    await expect(summary).toBeVisible()
+    await expect(summary.getByText(/1 decision changed/)).toBeVisible()
+    await expect(summary.getByText(/WAIT → TRADE/)).toBeVisible()
+    await expect(summary).not.toContainText('%')
+
+    await openPage(page, '/trademind/stock/HDFCBANK')
+    const why = page.getByTestId('why-not-trade')
+    await expect(why).toBeVisible()
+    // The fixture's downgrade reason matches no known rule, so it is shown exactly as stored.
+    await expect(why.getByText('Bank sector is already near its limit.')).toBeVisible()
+    const change = page.getByTestId('idea-change')
+    await expect(change).toHaveAttribute('data-change', 'reason')
+    await expect(change.getByText('Still WATCH, but for a different reason than yesterday.')).toBeVisible()
+    await expect(change.getByText(/Moved up 1 place in the ranking/)).toBeVisible()
+  })
+})
+
 test.describe('4. Portfolio', () => {
   test('every Portfolio tab opens, and each says whose money it shows', async ({ page }) => {
     await mockApi(page)
@@ -168,6 +190,38 @@ test.describe('5. Admin', () => {
     await openPage(page, '/trademind/holdings')
     await expect(page).toHaveURL(/\/trademind\/portfolio$/)
     await expect(page.getByTestId('book-strip')).toHaveAttribute('data-book', 'paper')
+  })
+})
+
+test.describe('5b. Observatory: score vs result (ps5)', () => {
+  test('past data shows hit rates; the blind trial shows counts only, never a result', async ({ page }) => {
+    await mockApi(page)
+    await openPage(page, '/trademind/observatory')
+    await page.getByRole('tab', { name: 'Results & proof' }).click()
+    const card = page.getByTestId('obs-score-bands')
+    await expect(page.getByText('Does a higher score really mean better results?')).toBeVisible()
+    await expect(card.locator('[data-band="80%-100%"]').first()).toContainText('41% of 429 ideas')
+    const trial = card.locator('[data-testid="obs-score-bands-live"][data-period="trial"]')
+    await expect(trial).toContainText('counts only')
+    await expect(trial.locator('[data-band="80%-100%"]')).toContainText('6 ideas · 2 finished')
+    for (const row of await trial.locator('[data-band] .tm-num').allTextContents()) {
+      expect(row).not.toContain('%')
+    }
+  })
+})
+
+test.describe('5c. Go-live: the blind trial is sealed', () => {
+  test('the stage card shows counts and the sealed sentence, never whether the trial made a profit', async ({ page }) => {
+    await mockApi(page)
+    await openPage(page, '/trademind/golive')
+    await expect(page.getByText('12 of 30 brain ideas have finished.', { exact: false })).toBeVisible()
+    const plain = page.getByTestId('golive-trial-plain')
+    await expect(plain).toContainText("Sealed until the trial's evaluation (blind test): counts only.")
+    await expect(plain).toContainText('14 of 15 trial sessions')
+    const text = await page.locator('.tm-page').innerText()
+    expect(text).not.toMatch(/profit after costs: (yes|no)/i)
+    expect(text).not.toMatch(/beats buying every stock: (yes|no)/i)
+    expect(text).not.toContain('The forward trial has passed')
   })
 })
 

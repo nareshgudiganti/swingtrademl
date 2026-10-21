@@ -106,6 +106,7 @@ def test_non_owner_is_refused_on_every_route(client, db_session):
         "/outcomes?from=2026-10-15&to=2026-10-15&category=practice",
         "/forward-gate",
         "/effectiveness",
+        "/score-bands?from=2026-10-01&to=2026-10-15",
     ):
         assert client.get(BASE + path, headers=guest).status_code == 403, path
 

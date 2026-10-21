@@ -9,6 +9,7 @@ import type {
   ExperimentSelection,
   ObsDays,
   ObsForwardGate,
+  ObsScoreBands,
   ObsLearning,
   ObsOutcomes,
   ObsClaim,
@@ -96,6 +97,7 @@ import type {
 } from './types'
 import type { AlertSettings, AlertSettingsUpdate } from '../trademind/alerts'
 import type { AdminJobs } from '../trademind/jobs'
+import type { BrainChanges } from '../trademind/changes'
 import type { RealTaxExport } from '../trademind/taxRecords'
 
 export const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000/api/v1'
@@ -587,6 +589,8 @@ export const api = {
   setBrainModuleMode: (id: string, mode: 'on' | 'shadow' | 'off') =>
     put<{ module_id: string; mode: string }>(`/brain/modules/${id}`, { mode }),
   brainHealth: () => get<BrainHealth>('/brain/health'),
+  // ux11: today's nightly ideas next to the previous trading day's (read only).
+  brainChanges: (runId: string) => get<BrainChanges>(`/brain/changes?run_id=${encodeURIComponent(runId)}`),
   brainEpisodes: () => get<BrainEpisode[]>('/brain/episodes'),
   brainTrack: (symbol: string) => get<BrainTrack>(`/brain/track/${encodeURIComponent(symbol)}`),
   brainWhatIf: (symbol: string, qty: number, price?: number) =>
@@ -653,4 +657,6 @@ export const api = {
   obsOutcomes: (from: string, to: string, category: 'practice' | 'backtest') =>
     get<ObsOutcomes>(`/brain/observatory/outcomes?from=${from}&to=${to}&category=${category}`),
   obsEffectiveness: () => get<{ claims: ObsClaim[] }>('/brain/observatory/effectiveness'),
+  obsScoreBands: (from: string, to: string) =>
+    get<ObsScoreBands>(`/brain/observatory/score-bands?from=${from}&to=${to}`),
 }

@@ -12,6 +12,7 @@ import pytest
 
 from brain_m18_fixtures import DAY, brain_strategy, instrument, signal
 from swing_trade_ml.db.models.brain_golive import BrainStageChange
+from swing_trade_ml.services import trial_seal
 from swing_trade_ml.services.brain_golive import stage
 
 HEADERS = {"X-API-Key": "test-api-key"}
@@ -71,13 +72,38 @@ def test_every_change_is_recorded_with_who_when_and_why(db_session, trial_passed
 def test_30_finished_ideas_alone_no_longer_leave_practice(db_session):
     # 30 finished ideas from before the trial, and no trial session yet: the trial rule says "too early".
     finished_ideas(db_session, 30)
-    with pytest.raises(stage.StageRefusedError, match="has not passed yet"):
+    # The blind trial (services/trial_seal.py): the refusal gives counts, never the reason.
+    with pytest.raises(stage.StageRefusedError, match="not met yet") as refused:
         stage.set_stage(db_session, "approval", by="owner", reason="Looks good")
+    assert "0 of 15 trial sessions" in str(refused.value) and "profit" not in str(refused.value)
     assert stage.current_stage(db_session) == "shadow"
     assert stage.stage_overview(db_session)["ready"] is False
 
 
+def test_unsealed_the_refusal_says_the_trial_has_not_passed(db_session, monkeypatch):
+    monkeypatch.setattr(trial_seal, "SEALED", False)
+    finished_ideas(db_session, 30)
+    with pytest.raises(stage.StageRefusedError, match="has not passed yet"):
+        stage.set_stage(db_session, "approval", by="owner", reason="Looks good")
+    assert stage.current_stage(db_session) == "shadow"
+
+
 def test_a_finished_trial_that_is_behind_is_refused(db_session, monkeypatch):
+    finished_ideas(db_session, 30)
+    behind = {**PASSED, "word": "behind", "beats_random": False}
+    monkeypatch.setattr(stage, "trial_gate", lambda db: behind)
+    with pytest.raises(stage.StageRefusedError, match="details sealed") as refused:
+        stage.set_stage(db_session, "approval", by="owner", reason="Close enough")
+    assert "beat" not in str(refused.value) and "profit" not in str(refused.value)
+    assert stage.current_stage(db_session) == "shadow"
+    # What is shown says the counts are met, never whether the trial is behind.
+    shown = stage.stage_overview(db_session)
+    assert shown["trial"]["word"] == "sealed" and "beats_random" not in shown["trial"]
+    assert "behind" not in str(shown) and shown["sealed"] is True
+
+
+def test_unsealed_a_trial_that_is_behind_says_why(db_session, monkeypatch):
+    monkeypatch.setattr(trial_seal, "SEALED", False)
     finished_ideas(db_session, 30)
     behind = {**PASSED, "word": "behind", "beats_random": False}
     monkeypatch.setattr(stage, "trial_gate", lambda db: behind)

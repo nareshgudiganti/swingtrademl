@@ -5,7 +5,7 @@ Pure functions on `Row`s plus one loader."""
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from sqlalchemy import distinct, func, select
 from sqlalchemy.orm import Session
@@ -27,6 +27,7 @@ MIN_FINISHED_TO_COMPARE = 10
 COUNT_BLOCKED_TOWARD_GATE = False
 BLOCKED_KEY = "blocked_by_risk_limit"  # == services.execution.BLOCKED_BY_RISK_KEY (not imported: cycle)
 EXCLUDED_TYPES = ("long_term_value",)  # a one-year horizon is not comparable
+SEALED_NOTE = "Sealed until the trial's evaluation (blind test): counts only."  # == trial_seal.SEALED_TEXT
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,9 +55,19 @@ def one_per_day(rows: list[Row]) -> list[Row]:
     return sorted(latest.values(), key=lambda r: (r.day, r.strategy, r.symbol))
 
 
-def summarise(rows: list[Row]) -> dict:
+def summarise(rows: list[Row], sealed: bool = False) -> dict:
+    """`sealed` (the blind trial, services/trial_seal.py): counts only, every result None."""
     finished = [r for r in rows if r.outcome is not None]
     n = len(finished)
+    if sealed:
+        return {
+            "ideas": len(rows),
+            "finished": n,
+            "hit_rate": None,
+            "stopped": None,
+            "avg_outcome_pct": None,
+            "sealed": True,
+        }
     pcts = [r.outcome_pct for r in finished if r.outcome_pct is not None]
     return {
         "ideas": len(rows),
@@ -108,6 +119,17 @@ def _note(n_days: int, brain: dict, v1: dict, min_finished: int) -> str:
             "The brain strategy has not run yet. Once it runs after the nightly brain run, "
             "its ideas appear here and are scored as they finish."
         )
+    if brain.get("sealed"):
+        # Never the brain's figures while the trial is blind; version 1's own figures stay.
+        v1_part = (
+            f"Version 1's ideas on the same days reached their target {v1['hit_rate']:.0%} of the time "
+            f"(average {v1['avg_outcome_pct'] or 0.0:+.1%})."
+            if v1["finished"] >= min_finished and v1["hit_rate"] is not None
+            else f"{v1['finished']} of version 1's ideas on the same days have finished."
+        )
+        return (
+            f"{brain['finished']} of the brain's ideas on these days have finished. {SEALED_NOTE} {v1_part}"
+        )
     if brain["finished"] < min_finished or v1["finished"] < min_finished:
         return (
             f"Only {brain['finished']} of the brain's ideas and {v1['finished']} of version 1's have "
@@ -122,7 +144,14 @@ def _note(n_days: int, brain: dict, v1: dict, min_finished: int) -> str:
     )
 
 
-def compare(rows: list[Row], brain_days: set[date], min_finished: int = MIN_FINISHED_TO_COMPARE) -> dict:
+def compare(
+    rows: list[Row],
+    brain_days: set[date],
+    min_finished: int = MIN_FINISHED_TO_COMPARE,
+    sealed_from: date | None = None,
+) -> dict:
+    """`sealed_from` (the blind trial, services/trial_seal.py): any brain group holding an idea from
+    that day on shows counts only, and `brain_before_trial` gives the brain's results before it."""
     rows = [r for r in one_per_day(rows) if r.day in brain_days]
     brain = [r for r in rows if r.is_brain and not r.blocked]
     blocked = [r for r in rows if r.is_brain and r.blocked]
@@ -130,29 +159,43 @@ def compare(rows: list[Row], brain_days: set[date], min_finished: int = MIN_FINI
     names = sorted({r.strategy for r in brain}) + sorted({r.strategy for r in v1})
     brain_names = {r.strategy for r in brain}
     days = sorted(brain_days)
-    b, v = summarise(brain), summarise(v1)
-    return {
+
+    def sealed(group: list[Row]) -> bool:
+        return sealed_from is not None and any(r.is_brain and r.day >= sealed_from for r in group)
+
+    def brain_summary(group: list[Row]) -> dict:
+        return summarise(group, sealed=sealed(group))
+
+    b, v = brain_summary(brain), summarise(v1)
+    out = {
         "days": len(days),
         "first_day": days[0].isoformat() if days else None,
         "last_day": days[-1].isoformat() if days else None,
         "strategies": [
-            {"name": n, "is_brain": n in brain_names, **summarise([r for r in rows if r.strategy == n])}
+            {"name": n, "is_brain": n in brain_names, **brain_summary([r for r in rows if r.strategy == n])}
             for n in names
         ],
         "brain": {**b, "scored_on": scored_on([r for r in rows if r.is_brain])},
-        "brain_blocked": summarise(blocked),
+        "brain_blocked": brain_summary(blocked),
         "version1": {**v, "scored_on": scored_on(v1)},
         "scored_on_warning": SCORED_ON_WARNING,
         "by_week": [
             {
                 "week": w,
-                "brain": summarise([r for r in brain if _week(r.day) == w]),
+                "brain": brain_summary([r for r in brain if _week(r.day) == w]),
                 "version1": summarise([r for r in v1 if _week(r.day) == w]),
             }
             for w in sorted({_week(r.day) for r in rows})
         ],
         "note": _note(len(days), b, v, min_finished),
+        "sealed": sealed(brain + blocked),
     }
+    if out["sealed"]:
+        before = [r for r in brain if r.day < sealed_from]
+        out["sealed_from"] = sealed_from.isoformat()
+        out["sealed_text"] = SEALED_NOTE
+        out["brain_before_trial"] = {**summarise(before), "to": (sealed_from - timedelta(days=1)).isoformat()}
+    return out
 
 
 def load(db: Session, since: date | None = None) -> tuple[list[Row], set[date]]:
@@ -233,8 +276,13 @@ def finished_brain_ideas(db: Session) -> int:
 
 
 def report(db: Session, since: date | None = None) -> dict:
+    from swing_trade_ml.services import trial_seal
+
     rows, days = load(db, since)
-    return {**compare(rows, days), "brain_finished": finished_brain_ideas(db),
+    return {
+        **compare(rows, days, sealed_from=trial_seal.sealed_from()),
+        "brain_finished": finished_brain_ideas(db),
         "brain_finished_placeable": finished_placeable_brain_ideas(db),
         "brain_finished_blocked": finished_blocked_brain_ideas(db),
-        "needed": NEEDED_FINISHED}
+        "needed": NEEDED_FINISHED,
+    }

@@ -339,10 +339,12 @@ export default function Observatory() {
                 {stock.data.features.state === 'observed'
                   ? <p>Close ₹{stock.data.features.close} on {stock.data.features.bar_date}</p>
                   : <p className="tm-dim">Not observed — {stock.data.features.why}</p>}
-                {stock.data.decision.outcome && (
+                {stock.data.decision.outcome && (stock.data.decision.outcome.sealed ? (
+                  <p data-testid="obs-stock-outcome-sealed">Outcome: finished. {stock.data.decision.outcome.source}</p>
+                ) : (
                   <p>Outcome: {stock.data.decision.outcome.outcome}, {pct(stock.data.decision.outcome.gross_return)} gross
                     <br /><span className="tm-dim">{stock.data.decision.outcome.source}</span></p>
-                )}
+                ))}
                 <p className="tm-dim">
                   {stock.data.tracker.label}{stock.data.tracker.book ? ` (book: ${stock.data.tracker.book})` : ''}: {stock.data.tracker.rows.length} record(s)
                 </p>
@@ -404,6 +406,19 @@ export default function Observatory() {
             {results.data && (
               <div data-testid="obs-results">
                 <p className="tm-dim" data-testid="obs-observed-not-proof">{PROOF_LABEL}{results.data.label ? ` — ${results.data.label}` : ''}</p>
+                {results.data.sealed && (
+                  <p data-testid="obs-results-sealed">
+                    <b>Trial days {results.data.sealed.from} to {results.data.sealed.to}</b>: {results.data.sealed.text}{' '}
+                    {results.data.sealed.sessions} session(s), {results.data.sealed.trade_ideas} TRADE idea(s),{' '}
+                    {results.data.sealed.graded} graded idea(s) of every word ({results.data.sealed.graded_trade} TRADE).
+                    <br />
+                    <span className="tm-dim">
+                      {results.data.results_period
+                        ? `The figures below cover only ${results.data.results_period.from} to ${results.data.results_period.to}, before the trial started.`
+                        : 'No days before the trial in this range, so there are no figures below.'}
+                    </span>
+                  </p>
+                )}
                 <div data-testid="obs-stored-grades">
                   <p>
                     Stored grades, all ideas of every word (gross): {results.data.stored_grades.available

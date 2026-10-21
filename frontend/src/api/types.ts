@@ -326,6 +326,9 @@ export interface TrackRecordSignal {
   reason: string | null
   trade_net_pnl: number | null
   trade_return_pct: number | null
+  // A brain idea from the blind trial: outcome, outcome_pct, outcome_at and current_price are null
+  // until the trial's evaluation. Absent on an older backend.
+  sealed?: boolean
 }
 
 /** Stored market candle used for short-term price-performance summaries. */
@@ -1177,6 +1180,12 @@ export interface BrainLearning {
   drift_lines: string[]
   drift_note: string | null
   note: string | null
+  // The blind trial: the breakdowns cover only ideas decided before `sealed_from`; the rest are counted.
+  sealed?: boolean
+  sealed_from?: string
+  sealed_text?: string
+  n_scored_before_trial?: number
+  n_scored_sealed?: number
 }
 
 export type BrainProposalStatus = 'open' | 'accepted' | 'dismissed'
@@ -1186,6 +1195,8 @@ export interface BrainProposal {
   kind: string
   title: string
   evidence: string
+  // True when the proposal was made during the blind trial: `evidence` is then the sealed sentence.
+  evidence_sealed?: boolean
   change: Record<string, unknown>
   status: BrainProposalStatus
   created_at: string
@@ -1203,6 +1214,8 @@ export interface BrainCompareSummary {
   hit_rate: number | null
   stopped: number | null
   avg_outcome_pct: number | null
+  // Brain ideas from the blind trial: counts only, every result null.
+  sealed?: boolean
 }
 
 export interface BrainCompareStrategy extends BrainCompareSummary {
@@ -1228,6 +1241,11 @@ export interface BrainCompare {
   note: string
   brain_finished: number
   needed: number
+  // The blind trial: brain results are sealed from `sealed_from`; `brain_before_trial` has the days before.
+  sealed?: boolean
+  sealed_from?: string
+  sealed_text?: string
+  brain_before_trial?: BrainCompareSummary & { to: string }
 }
 
 export type BrainStageName = 'shadow' | 'approval' | 'auto'
@@ -1248,11 +1266,16 @@ export interface BrainStage {
   // Scored, but not counted in `finished`. Absent on an older backend.
   finished_blocked?: number
   needed: number
-  // True only when `finished` reaches `needed` AND the forward trial's pass rule passes.
+  // Unsealed: true only when `finished` reaches `needed` AND the forward trial's pass rule passes.
+  // Sealed (the blind trial): true when the counts are met; the server still checks the pass rule.
   ready: boolean
-  // The forward trial's pass rule ("too early", "pass", "behind", or "error" when it could not be worked
-  // out) and, when not passed, the plain reason. Absent on an older backend.
-  trial?: { word: string; sessions?: number; finished?: number; profit?: boolean; beats_random?: boolean }
+  sealed?: boolean
+  // The forward trial's rule ("too early", "pass", "behind", "error"; while sealed only "too early",
+  // "sealed" or "error", with counts and no profit / beats-random flags) and its plain sentence.
+  trial?: {
+    word: string; sessions?: number; finished?: number; profit?: boolean; beats_random?: boolean
+    counts_met?: boolean; sealed?: boolean; text?: string
+  }
   trial_plain?: string | null
   history: BrainStageChange[]
 }
@@ -1375,7 +1398,10 @@ export interface ObsStockDetail {
     horizon_days: number; reasons: string[]; evidence_text: string | null; downgraded_from: string | null
     downgrade_reason: string | null; downgrade_label: string
     overrule: { word: string; overrule_reason: string | null; at: string | null; by: string } | null
-    outcome: { outcome: string; gross_return: number | null; days: number | null; resolved_on: string | null; source: string } | null
+    outcome: {
+      outcome: string | null; gross_return: number | null; days: number | null; resolved_on: string | null
+      source: string; sealed?: boolean
+    } | null
   }
   features: { state: string; why?: string; close?: number; atr_14?: number | null; bar_date?: string }
   stale: { listed_stale?: boolean; note?: string; state?: string }
@@ -1410,6 +1436,11 @@ export interface ObsOutcomes {
   }
   excluded?: { other_stage_days: number; other_book_runs: number }
   label: string
+  // The blind trial: figures above cover only `results_period` (null = none); `sealed` counts the trial days.
+  results_period?: { from: string; to: string } | null
+  sealed?: {
+    from: string; to: string; text: string; sessions: number; trade_ideas: number; graded: number; graded_trade: number
+  }
 }
 export interface ObsByKey { [key: string]: number }
 export interface ObsDay {
@@ -1438,7 +1469,8 @@ export interface ObsScoreBands {
 
 export interface ObsForwardGate {
   word: string; why: string; cohort_from: string; cohort_to: string; cohort: string
-  gate?: { sessions: number; finished: number; word: string }
+  gate?: { sessions: number; finished: number; word: string; counts_met?: boolean }
+  sealed?: boolean
 }
 
 // ------------------------------------------------------------------ horizon experiments (research ledger) --

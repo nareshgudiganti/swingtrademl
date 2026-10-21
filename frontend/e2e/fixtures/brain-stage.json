@@ -5,7 +5,17 @@
   "finished_blocked": 1,
   "needed": 30,
   "ready": false,
-  "trial": { "word": "too early", "sessions": 14, "finished": 12 },
-  "trial_plain": "Too early to judge: 12 of 30 practice ideas have finished.",
+  "sealed": true,
+  "trial": {
+    "sessions": 14,
+    "finished": 12,
+    "sessions_needed": 15,
+    "finished_needed": 30,
+    "counts_met": false,
+    "word": "too early",
+    "sealed": true,
+    "text": "Sealed until the trial's evaluation (blind test): counts only."
+  },
+  "trial_plain": "14 of 15 trial sessions, 12 of 30 finished brain TRADE ideas since the trial started. Sealed until the trial's evaluation (blind test): counts only.",
   "history": []
 }

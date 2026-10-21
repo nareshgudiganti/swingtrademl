@@ -11,6 +11,7 @@ import { CapFlag, useSymbolCaps } from '../cap'
 import { ActionPill, BrainArt, BrainGate, Card, CheckItem, Icon, Tag } from '../ui'
 import { noTradeReason } from '../emptyReasons'
 import { PageState } from '../PageState'
+import { ChangesSummaryCard } from '../IdeaExplain'
 
 const IDEA_WORDS: IdeaWord[] = ['TRADE', 'WATCH', 'WAIT', 'AVOID']
 
@@ -157,6 +158,8 @@ function HomeBody() {
           )}
         </Card>
       </div>
+
+      <ChangesSummaryCard runId={run.run_id} />
 
       <div className="tm-grid tm-cols-2">
         <Card title="Top Ideas" action={<Link className="tm-link" to="/trademind/opportunities">View All</Link>}>

@@ -5,6 +5,7 @@ import { usePlan } from '../../lib/plan'
 import { finalWord, ideasFrom, useBrainStatus, useLatestRun, useRunTrace, useWhy } from '../live'
 import { MODULE_PLAIN, STEP_LABEL, moduleName, traceLine, wordClassName, wordTone } from '../vocab'
 import { TrackRecord, chancePercent, chanceText, chanceTitle } from '../honest'
+import { IdeaExplain } from '../IdeaExplain'
 import { BrainGate, Card, CheckItem, Icon, NotConnected, Tabs, inr } from '../ui'
 
 const OWNER_TABS = ['Summary', 'Evidence', 'Similar Cases', 'Model Output', 'Risk Analysis'] as const
@@ -177,6 +178,9 @@ function AIDecisionBody() {
                     <p className="tm-dim">No reasons recorded for this decision.</p>
                   )}
                 </div>
+              </div>
+              <div style={{ marginTop: '1rem' }}>
+                <IdeaExplain decision={decision} runId={fromRun ? run?.run_id : undefined} />
               </div>
             </>
           )}

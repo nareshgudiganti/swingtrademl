@@ -71,6 +71,28 @@ test.describe('3. Stock page', () => {
   })
 })
 
+test.describe('3b. Why not TRADE, and what changed since yesterday (ux11)', () => {
+  test('Today lists what changed; a WATCH idea says why it is not a TRADE and what changed', async ({ page }) => {
+    await mockApi(page)
+    await openPage(page, '/trademind')
+    const summary = page.getByTestId('changes-summary')
+    await expect(summary).toBeVisible()
+    await expect(summary.getByText(/1 decision changed/)).toBeVisible()
+    await expect(summary.getByText(/WAIT → TRADE/)).toBeVisible()
+    await expect(summary).not.toContainText('%')
+
+    await openPage(page, '/trademind/stock/HDFCBANK')
+    const why = page.getByTestId('why-not-trade')
+    await expect(why).toBeVisible()
+    // The fixture's downgrade reason matches no known rule, so it is shown exactly as stored.
+    await expect(why.getByText('Bank sector is already near its limit.')).toBeVisible()
+    const change = page.getByTestId('idea-change')
+    await expect(change).toHaveAttribute('data-change', 'reason')
+    await expect(change.getByText('Still WATCH, but for a different reason than yesterday.')).toBeVisible()
+    await expect(change.getByText(/Moved up 1 place in the ranking/)).toBeVisible()
+  })
+})
+
 test.describe('4. Portfolio', () => {
   test('every Portfolio tab opens, and each says whose money it shows', async ({ page }) => {
     await mockApi(page)

@@ -10,6 +10,7 @@ import type { Page, Route } from '@playwright/test'
 
 import alertSettings from '../fixtures/alert-settings.json' with { type: 'json' }
 import authOptions from '../fixtures/auth-options.json' with { type: 'json' }
+import brainChanges from '../fixtures/brain-changes.json' with { type: 'json' }
 import brainHealth from '../fixtures/brain-health.json' with { type: 'json' }
 import brainLatestRun from '../fixtures/brain-latest-run.json' with { type: 'json' }
 import brainLearning from '../fixtures/brain-learning.json' with { type: 'json' }
@@ -146,6 +147,7 @@ function answer(role: Role, method: string, path: string, query: URLSearchParams
   // Brain (practice mode) and the market clock.
   if (path === '/brain/runs/latest') return { body: brainLatestRun }
   if (path === '/brain/health') return { body: brainHealth }
+  if (path === '/brain/changes') return { body: brainChanges }
   if (path === '/brain/learning') return { body: brainLearning }
   if (path === '/brain/proposals') return { body: [] }
   if (path === '/brain/observatory/score-bands') return owner ? { body: scoreBands } : { status: 403, body: { detail: 'Owner only.' } }

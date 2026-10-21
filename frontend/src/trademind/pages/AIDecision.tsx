@@ -5,6 +5,7 @@ import { usePlan } from '../../lib/plan'
 import { finalWord, ideasFrom, useBrainStatus, useLatestRun, useRunTrace, useWhy } from '../live'
 import { MODULE_PLAIN, STEP_LABEL, moduleName, traceLine, wordClassName, wordTone } from '../vocab'
 import { TrackRecord, chancePercent, chanceText, chanceTitle } from '../honest'
+import { IdeaExplain } from '../IdeaExplain'
 import { BrainGate, Card, CheckItem, Icon, NotConnected, Tabs, inr } from '../ui'
 import { WhatWouldChange } from '../WhatWouldChange'
 
@@ -180,6 +181,9 @@ function AIDecisionBody() {
                 </div>
               </div>
               <WhatWouldChange decision={decision} />
+              <div style={{ marginTop: '1rem' }}>
+                <IdeaExplain decision={decision} runId={fromRun ? run?.run_id : undefined} />
+              </div>
             </>
           )}
 

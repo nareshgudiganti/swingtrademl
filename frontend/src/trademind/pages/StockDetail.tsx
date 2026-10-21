@@ -16,6 +16,7 @@ import { ActionPill, BrainGate, Candles, Card, CheckItem, Icon, NotConnected, Se
 import { PageState, QueryNotice } from '../PageState'
 import { pickState } from '../stateRules'
 import { WhatWouldChange } from '../WhatWouldChange'
+import { IdeaExplain } from '../IdeaExplain'
 
 const TABS = ['Overview', 'Technical', 'Fundamental', 'AI Analysis', 'Similar Cases', 'News', 'Options'] as const
 type TabId = (typeof TABS)[number]
@@ -309,6 +310,8 @@ function StockDetailBody() {
               </div>
             </Card>
           </div>
+
+          <IdeaExplain decision={decision} runId={fromRun ? run?.run_id : undefined} />
 
           <Card title="Strength score, day by day" sub="How strongly the model liked this stock each day it was checked">
             {trailQ.data === undefined ? (

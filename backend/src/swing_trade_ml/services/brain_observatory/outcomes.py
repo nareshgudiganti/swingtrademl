@@ -13,6 +13,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 
 from swing_trade_ml.core.config import settings
+from swing_trade_ml.services import trial_seal
 from swing_trade_ml.services.brain_observatory import baselines, defs, queries
 from swing_trade_ml.services.brain_observatory.redact import redact_text
 from swing_trade_ml.services.brain_observatory.schedule import day_window, run_day
@@ -120,6 +121,26 @@ def stored_grades(rows) -> dict:
         "why": "No finished, graded TRADE ideas in these days.",
     }
     return {**base, **total, "by_word": by_word, "trade": trade}
+
+
+def sealed_grades(rows) -> dict:
+    """Stored grades of the blind trial's days (services/trial_seal.py): how many, never how they did."""
+    graded = [(r[0], r[4] if len(r) > 4 else None) for r in rows if r[0] and r[0] != "noscore"]
+
+    def group(n: int) -> dict:
+        return {"available": False, "count": n, "by_outcome": {}, "avg_gross_return": None}
+
+    words = sorted({w for _, w in graded if w})
+    return {
+        "source": SOURCES["stored_grade"],
+        "gross": True,
+        "all_words_note": ALL_WORDS_NOTE,
+        **group(len(graded)),
+        "sealed": True,
+        "why": trial_seal.SEALED_TEXT,
+        "by_word": {w: group(sum(1 for _, x in graded if x == w)) for w in words},
+        "trade": {**group(sum(1 for _, x in graded if x == "TRADE")), "why": trial_seal.SEALED_TEXT},
+    }
 
 
 # --- stage rule -------------------------------------------------------------------------------------
@@ -294,6 +315,12 @@ def official_forward_gate(db, today: date) -> dict:
             "gate": None,
         }
     gate_row = journal["gate"]
+    if trial_seal.active():
+        # The blind trial: counts only, never the gate's answer or its profit / beats-random flags.
+        shown = trial_seal.sealed_gate(gate_row)
+        word = FORWARD_INSUFFICIENT if shown["word"] == "too early" else "Counts met; result sealed"
+        why = f"{trial_seal.gate_counts_text(shown)} {trial_seal.SEALED_TEXT}"
+        return {"word": word, "why": why, "available": True, **out, "gate": shown, "sealed": True}
     if gate_row["word"] == "too early":
         why = "Fewer than 15 sessions or 30 finished TRADE ideas."
     else:
@@ -318,6 +345,61 @@ def build(db, start: date, end: date, category: str) -> dict:
             "why": "v1 paper trades are not brain decisions; they are not shown in Phase 1A and are never "
             "added to brain results.",
         }
+    if category == "practice" and trial_seal.touches_seal(start, end):
+        return _build_sealed(db, start, end)
+    return _build_open(db, start, end, category)
+
+
+def _practice_rows(db, start: date, end: date, history: list) -> list:
+    return [
+        r
+        for r in queries.stored_grade_rows(db, start, end, True)
+        if r[3] == BOOK and stage_on_day(history, run_day(r[2])) == PRACTICE_STAGE
+    ]
+
+
+def _build_sealed(db, start: date, end: date) -> dict:
+    """Practice over a range that reaches the blind trial (services/trial_seal.py): the days before it
+    exactly as before, the trial's days as counts only (`sealed`)."""
+    lo = max(start, trial_seal.SEALED_FROM)
+    if start < lo:
+        out = _build_open(db, start, lo - timedelta(days=1), "practice")
+        out["results_period"] = {"from": start.isoformat(), "to": (lo - timedelta(days=1)).isoformat()}
+    else:
+        out = {
+            "category": "practice",
+            "available": True,
+            "label": LABEL,
+            "note": NOTE,
+            "stored_grades": None,  # filled below
+            "computed": _unavailable_all(trial_seal.SEALED_TEXT),
+            "excluded": {"other_stage_days": 0, "other_book_runs": 0},
+            "results_period": None,
+        }
+    history = queries.stage_history(db)
+    rows = _practice_rows(db, lo, end, history)
+    sessions = queries.nightly_sessions(db, lo, end, live=True, book=BOOK)
+    kept = [x for x in sessions if stage_on_day(history, x.day) == PRACTICE_STAGE]
+    grades = sealed_grades(rows)
+    if out["stored_grades"] is None:
+        out["stored_grades"] = grades
+        out["excluded"] = {
+            "other_stage_days": len(sessions) - len(kept),
+            "other_book_runs": queries.other_book_runs(db, lo, end, live=True, book=BOOK),
+        }
+    out["sealed"] = {
+        "from": lo.isoformat(),
+        "to": end.isoformat(),
+        "text": trial_seal.SEALED_TEXT,
+        "sessions": len(kept),
+        "trade_ideas": sum(1 for x in kept for i in x.ideas if i.word == "TRADE"),
+        "graded": grades["count"],
+        "graded_trade": grades["trade"]["count"],
+    }
+    return out
+
+
+def _build_open(db, start: date, end: date, category: str) -> dict:
     live = category == "practice"
     stage_filter = PRACTICE_STAGE if live else None
     history = queries.stage_history(db) if live else []

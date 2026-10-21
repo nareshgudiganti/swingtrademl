@@ -411,17 +411,22 @@ def learning(db: DbSession, since: date | None = Query(None)) -> dict:
     """The learning loop's report (M09): expected vs actual by confidence
     band, word and week, failure patterns and feature drift. Never changes
     anything by itself."""
-    from swing_trade_ml.brain.modules.m09_learn.learn import learning_report
+    from swing_trade_ml.services import trial_seal
 
-    return learning_report(db, since)
+    # The blind trial (services/trial_seal.py): ideas decided since it started are counted only.
+    return trial_seal.learning_report(db, since)
 
 
 def _proposal_out(p: BrainProposal) -> dict:
+    from swing_trade_ml.services import trial_seal
+
     return {
         "id": p.id,
         "kind": p.kind,
         "title": p.title,
-        "evidence": p.evidence,
+        # A proposal made during the blind trial was worked out from its results: sealed.
+        "evidence": trial_seal.proposal_evidence(p.evidence, p.created_at),
+        "evidence_sealed": trial_seal.is_sealed_dt(p.created_at),
         "change": p.change,
         "status": p.status,
         "created_at": p.created_at,

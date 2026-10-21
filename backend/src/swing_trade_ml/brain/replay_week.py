@@ -89,14 +89,17 @@ def run_replay_week(
     symbols: list[str] | None = None,
     wait_seconds: float = 0,
     asof_model=None,
+    registry=None,
 ) -> list[ReplayDayResult]:
-    """Replay each IST trading day in [start, end]. Raises RunBusyError if the lock is held."""
+    """Replay each IST trading day in [start, end]. Raises RunBusyError if the lock is held.
+    `registry` replaces the installed modules (module on/off tests); None = all of them."""
+    extra = {} if registry is None else {"registry": registry}
     results: list[ReplayDayResult] = []
     with brain_queue.run_lock(kind, book, wait_seconds=wait_seconds):
         for day in iter_ist_trading_days(start, end):
             as_of = as_of_end_of_ist_day(day)
             ctx, run_id = service.run_brain(
-                db, kind=kind, as_of=as_of, symbols=symbols, book=book, asof_model=asof_model
+                db, kind=kind, as_of=as_of, symbols=symbols, book=book, asof_model=asof_model, **extra
             )
             run = db.get(BrainRun, run_id)
             banner = (run.banner_mode if run else None) or ctx.banner.mode.value

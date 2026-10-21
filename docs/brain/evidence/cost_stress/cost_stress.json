@@ -1,0 +1,162 @@
+{
+ "protocol": "ps3-cost-stress-v1",
+ "settings": [
+  "normal costs",
+  "2x charges",
+  "fills 0.30% worse",
+  "2x charges, fills 0.30% worse"
+ ],
+ "harshest": "2x charges, fills 0.30% worse",
+ "top_k": 5,
+ "walk_forward_window": {
+  "from": "2023-07-01",
+  "to": "2025-01-31"
+ },
+ "walk_forward": {
+  "normal costs": {
+   "model": {
+    "ideas": 1980,
+    "days": 396,
+    "hit_rate": 0.1601010101010101,
+    "avg_net": -0.002038939548709073,
+    "avg_net_by_day": -0.0020389395487090726
+   },
+   "every_stock": {
+    "ideas": 19404,
+    "days": 396,
+    "hit_rate": 0.18150896722325294,
+    "avg_net": -0.00017161395316578942,
+    "avg_net_by_day": -0.00017161395316578953
+   },
+   "momentum": {
+    "ideas": 1980,
+    "days": 396,
+    "hit_rate": 0.22575757575757577,
+    "avg_net": -0.00018592586178915892,
+    "avg_net_by_day": -0.00018592586178915895
+   },
+   "model_edge_per_day": -0.001867325595543283,
+   "model_edge_low": -0.00513018427018618,
+   "worst_fold_avg": -0.02712766933640415,
+   "predictive": "fail",
+   "economic": "fail",
+   "folds": 21
+  },
+  "2x charges": {
+   "model": {
+    "ideas": 1980,
+    "days": 396,
+    "hit_rate": 0.1601010101010101,
+    "avg_net": -0.0048001472570003605,
+    "avg_net_by_day": -0.0048001472570003605
+   },
+   "every_stock": {
+    "ideas": 19404,
+    "days": 396,
+    "hit_rate": 0.18150896722325294,
+    "avg_net": -0.002940452376978173,
+    "avg_net_by_day": -0.0029404523769781736
+   },
+   "momentum": {
+    "ideas": 1980,
+    "days": 396,
+    "hit_rate": 0.22575757575757577,
+    "avg_net": -0.002968735760772855,
+    "avg_net_by_day": -0.002968735760772855
+   },
+   "model_edge_per_day": -0.0018596948800221873,
+   "model_edge_low": -0.005105411786951901,
+   "worst_fold_avg": -0.02976735188764438,
+   "predictive": "fail",
+   "economic": "fail",
+   "folds": 21
+  },
+  "fills 0.30% worse": {
+   "model": {
+    "ideas": 1980,
+    "days": 396,
+    "hit_rate": 0.14444444444444443,
+    "avg_net": -0.008127940542497944,
+    "avg_net_by_day": -0.008127940542497944
+   },
+   "every_stock": {
+    "ideas": 19404,
+    "days": 396,
+    "hit_rate": 0.16408987837559266,
+    "avg_net": -0.006375823997906042,
+    "avg_net_by_day": -0.006375823997906042
+   },
+   "momentum": {
+    "ideas": 1980,
+    "days": 396,
+    "hit_rate": 0.20353535353535354,
+    "avg_net": -0.00650621595538597,
+    "avg_net_by_day": -0.006506215955385969
+   },
+   "model_edge_per_day": -0.0017521165445919028,
+   "model_edge_low": -0.004796543123573776,
+   "worst_fold_avg": -0.030861301818556813,
+   "predictive": "fail",
+   "economic": "fail",
+   "folds": 21
+  },
+  "2x charges, fills 0.30% worse": {
+   "model": {
+    "ideas": 1980,
+    "days": 396,
+    "hit_rate": 0.14444444444444443,
+    "avg_net": -0.01086454019246144,
+    "avg_net_by_day": -0.010864540192461438
+   },
+   "every_stock": {
+    "ideas": 19404,
+    "days": 396,
+    "hit_rate": 0.16408987837559266,
+    "avg_net": -0.009117809610102577,
+    "avg_net_by_day": -0.009117809610102577
+   },
+   "momentum": {
+    "ideas": 1980,
+    "days": 396,
+    "hit_rate": 0.20353535353535354,
+    "avg_net": -0.009262295768704406,
+    "avg_net_by_day": -0.009262295768704404
+   },
+   "model_edge_per_day": -0.001746730582358862,
+   "model_edge_low": -0.0047701367774014266,
+   "worst_fold_avg": -0.03348429647930297,
+   "predictive": "fail",
+   "economic": "fail",
+   "folds": 21
+  }
+ },
+ "ideas_source": "asof_replay_2026-07-13_2026-08-14.json",
+ "ideas": {
+  "ideas": 561,
+  "by_costs": {
+   "normal costs": {
+    "ideas": 561,
+    "hit_rate": 0.1889483065953654,
+    "avg_net": -0.009860173622198022
+   },
+   "2x charges": {
+    "ideas": 561,
+    "hit_rate": 0.1889483065953654,
+    "avg_net": -0.012582765825561892
+   },
+   "fills 0.30% worse": {
+    "ideas": 561,
+    "hit_rate": 0.17647058823529413,
+    "avg_net": -0.015395038525252492
+   },
+   "2x charges, fills 0.30% worse": {
+    "ideas": 561,
+    "hit_rate": 0.17647058823529413,
+    "avg_net": -0.018094670294311003
+   }
+  },
+  "reproduced": 561,
+  "mismatched": 0,
+  "no_price_data": 0
+ }
+}

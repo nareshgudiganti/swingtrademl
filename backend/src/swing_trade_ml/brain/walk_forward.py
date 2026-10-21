@@ -27,9 +27,18 @@ import pandas as pd
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from swing_trade_ml.brain import splits
 from swing_trade_ml.brain.horizon_grid import _days_beaten, _group, _index_after, summarise, top_k_by_day
 from swing_trade_ml.brain.replay_score import load_bars
-from swing_trade_ml.brain.replay_scoring import HORIZON_BARS, STOP, TARGET, StrictOutcome, strict_score
+from swing_trade_ml.brain.replay_scoring import (
+    HORIZON_BARS,
+    NORMAL,
+    STOP,
+    TARGET,
+    CostStress,
+    StrictOutcome,
+    strict_score,
+)
 from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.db.models.market import Instrument
 
@@ -103,7 +112,12 @@ def momentum_scores(bars: dict[str, pd.DataFrame], days: Sequence[date]) -> dict
 
 
 def outcomes_for(
-    bars: dict[str, pd.DataFrame], days: Sequence[date], horizon: int, target: float, stop: float
+    bars: dict[str, pd.DataFrame],
+    days: Sequence[date],
+    horizon: int,
+    target: float,
+    stop: float,
+    stress: CostStress = NORMAL,
 ) -> dict[tuple[str, date], StrictOutcome]:
     """Strict outcome of deciding on `day` (enter the next bar's open), for every stock and day."""
     out: dict[tuple[str, date], StrictOutcome] = {}
@@ -116,7 +130,7 @@ def outcomes_for(
             k = _index_after(bar_days, day)
             if k is not None:
                 out[(sym, day)] = strict_score(
-                    df.iloc[k : k + horizon], horizon=horizon, target=target, stop=stop
+                    df.iloc[k : k + horizon], horizon=horizon, target=target, stop=stop, stress=stress
                 )
     return out
 
@@ -244,9 +258,11 @@ def run_walk_forward(
     stop: float = STOP,
     train_fn=None,
     score_fn=None,
+    stress: CostStress = NORMAL,
 ) -> dict:
     """`train_fn(db, cutoff, horizon, target, stop)` returns a model; `score_fn(db, instrument,
-    model, after)` returns {day: score}. Both default to the real ones and are replaceable in tests."""
+    model, after)` returns {day: score}. Both default to the real ones and are replaceable in tests.
+    `stress` scores every idea (and the baselines) at dearer costs; picks do not depend on it."""
     if train_fn is None:
         train_fn = _train
     if score_fn is None:
@@ -271,12 +287,14 @@ def run_walk_forward(
     fold_rows: list[dict] = []
     pooled: dict[str, dict[date, list[StrictOutcome]]] = {"model": {}, "momentum": {}, "every": {}}
     pooled_diffs = {"model": [], "momentum": []}
+    split_rows: dict[str, list[tuple[str, str, StrictOutcome]]] = {"model": [], "every_stock": []}
+    window_labels: list[str] = []
     for fold in folds:
         days = sorted({d for df in bars.values() for d in df["day"] if fold.start <= d <= fold.end})
         if not days:
             continue
         log.info("walk_forward.fold", cutoff=fold.cutoff.isoformat(), start=fold.start.isoformat())
-        outcomes = outcomes_for(bars, days, horizon, target, stop)
+        outcomes = outcomes_for(bars, days, horizon, target, stop, stress)
         everyone = {d: [s for (s, dd) in outcomes if dd == d] for d in days}
         model = train_fn(db, fold.cutoff, horizon, target, stop)
         scores = {
@@ -295,13 +313,22 @@ def run_walk_forward(
             pooled[name].update(g)
         for name in ("model", "momentum"):
             pooled_diffs[name].extend(daily_edge(picks[name], everyone, outcomes))
+        regime = classify_regime(bars, fold.start, fold.end)
+        window_labels.append(regime["label"])
+        for name, chosen in (("model", picks["model"]), ("every_stock", everyone)):
+            split_rows[name].extend(
+                (regime["label"], s, outcomes[(s, d)])
+                for d, syms in chosen.items()
+                for s in syms
+                if (s, d) in outcomes
+            )
         fold_rows.append(
             {
                 "cutoff": fold.cutoff.isoformat(),
                 "start": fold.start.isoformat(),
                 "end": fold.end.isoformat(),
                 "days": len(days),
-                "regime": classify_regime(bars, fold.start, fold.end),
+                "regime": regime,
                 "model": summarise(grouped["model"]),
                 "momentum": summarise(grouped["momentum"]),
                 "every_stock": summarise(grouped["every"]),
@@ -322,6 +349,7 @@ def run_walk_forward(
         "protocol": PROTOCOL_VERSION,
         "top_k": top_k,
         "rule": {"horizon": horizon, "target": target, "stop": stop},
+        "costs": stress.label,
         "stocks": len(bars),
         "folds": fold_rows,
         "pooled": {
@@ -333,6 +361,13 @@ def run_walk_forward(
             "momentum_edge_per_day": _mean(pooled_diffs["momentum"]),
         },
         "by_regime": dict(by_regime),
+        "splits": {
+            name: {
+                "by_market_type": splits.by_market_type(rows, window_labels),
+                "by_sector": splits.by_sector((s, o) for _, s, o in rows),
+            }
+            for name, rows in split_rows.items()
+        },
         "worst_fold_avg": min(
             (r["model"]["avg_net_by_day"] for r in eligible_rows if r["model"]["avg_net_by_day"] is not None),
             default=None,
@@ -364,6 +399,41 @@ def _mean(xs: Sequence[float]) -> float | None:
 
 def _pct(x: float | None, digits: int = 2) -> str:
     return "n/a" if x is None else f"{x * 100:.{digits}f}%"
+
+
+def split_lines(sp: dict | None) -> list[str]:
+    """Result per trade by market type and by sector, model next to every stock (ps8)."""
+    if not sp:
+        return []
+    m, e = sp["model"], sp["every_stock"]
+
+    def row(name: str, mr: dict, er: dict | None, extra: str = "") -> str:
+        er = er or {}
+        return (
+            f"| {name}{extra} | {mr['finished']} | {_pct(mr['hit_rate'], 0)} | {_pct(mr['avg_net'])} | "
+            f"{er.get('finished', 0)} | {_pct(er.get('avg_net'))} |"
+        )
+
+    head = (
+        "| {} | Model finished | Model hit target | Model average "
+        "| Every stock finished | Every stock average |"
+    )
+    lines = ["", "## Result by market type (after costs)", head.format("Market"), "|---|---|---|---|---|---|"]
+    for label, r in m["by_market_type"].items():
+        lines.append(row(label, r, e["by_market_type"].get(label), f" ({r.get('windows', 0)} windows)"))
+    weak = splits.weak_market_types(m["by_market_type"])
+    lines += [
+        "",
+        f"Market types below {splits.WEAK_TYPE_LIMIT:.0%} per trade (seen in at least "
+        f"{splits.WEAK_TYPE_MIN_FOLDS} windows): {', '.join(weak) if weak else 'none'}.",
+        "",
+        "## Result by sector (after costs; today's sector map)",
+        head.format("Sector"),
+        "|---|---|---|---|---|---|",
+    ]
+    for label, r in m["by_sector"].items():
+        lines.append(row(label, r, e["by_sector"].get(label), f" ({r['stocks']} stocks)"))
+    return lines
 
 
 def plain_report(result: dict) -> str:
@@ -422,6 +492,7 @@ def plain_report(result: dict) -> str:
     lines += ["", "## By market type", "| Market | Windows | Model beat every-stock |", "|---|---|---|"]
     for label, b in sorted(result["by_regime"].items()):
         lines.append(f"| {label} | {b['folds']} | {b['better']} |")
+    lines += split_lines(result.get("splits"))
     return "\n".join(lines) + "\n"
 
 

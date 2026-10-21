@@ -278,3 +278,17 @@ def test_the_pack_runs_in_the_read_only_session(client, monkeypatch):
         app.dependency_overrides.pop(ep.get_now, None)
     with Session(engine) as check:
         assert check.get(BrainModuleSetting, "OBEV") is None
+
+
+def test_pack_splits_ideas_by_sector_and_market_type_as_counts_only(obs_client, db_session):
+    """ps8: the split never carries a result, so the clean period is not used up by looking."""
+    _seed(db_session)
+    body = obs_client.get(f"{URL}/evidence-pack?month=2026-01", headers=API_KEY).json()
+    sp = body["pack"]["sections"]["practice"]["baselines"]["splits"]
+    assert sp["market_type"] in {"rising", "sideways", "falling", "unknown"}
+    trade = sp["brain_trade"]
+    assert sum(r["ideas"] for r in trade.values()) == 1
+    for name in pack.CANDIDATE_SETS:
+        for row in sp[name].values():
+            assert set(row) == {"ideas", "stocks"}
+    assert "### By market type and sector" in body["report"] and "Counts only" in body["report"]

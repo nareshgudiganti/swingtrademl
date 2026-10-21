@@ -108,9 +108,8 @@ def test_a_stopped_run_resumes_from_the_checkpoint(tmp_path, monkeypatch):
 
 
 def test_the_real_brain_without_the_risk_gate_never_says_trade(db_session):
-    from tests.test_brain_golden_day import GOLDEN_DAY, STOCKS, _build_market
-
     from swing_trade_ml.brain.replay_week import run_replay_week
+    from test_brain_golden_day import GOLDEN_DAY, STOCKS, _build_market
 
     _build_market(db_session)
     symbols = [s[0] for s in STOCKS]

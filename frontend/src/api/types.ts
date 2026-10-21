@@ -962,6 +962,8 @@ export interface BrainDecision {
   overrule_reason: string | null
   overruled_by: string | null
   overruled_at: string | null
+  /** Display-only (bx10): what would have to change for a TRADE; empty for TRADE and holdings. */
+  what_would_change?: { key: string; text: string }[]
 }
 
 export interface BrainBanner {

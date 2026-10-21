@@ -6,6 +6,7 @@ import { finalWord, ideasFrom, useBrainStatus, useLatestRun, useRunTrace, useWhy
 import { MODULE_PLAIN, STEP_LABEL, moduleName, traceLine, wordClassName, wordTone } from '../vocab'
 import { TrackRecord, chancePercent, chanceText, chanceTitle } from '../honest'
 import { BrainGate, Card, CheckItem, Icon, NotConnected, Tabs, inr } from '../ui'
+import { WhatWouldChange } from '../WhatWouldChange'
 
 const OWNER_TABS = ['Summary', 'Evidence', 'Similar Cases', 'Model Output', 'Risk Analysis'] as const
 const PRO_TABS = ['Summary', 'Risk Analysis'] as const
@@ -178,6 +179,7 @@ function AIDecisionBody() {
                   )}
                 </div>
               </div>
+              <WhatWouldChange decision={decision} />
             </>
           )}
 

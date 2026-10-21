@@ -15,6 +15,7 @@ import { CapFlag, useSymbolCaps } from '../cap'
 import { ActionPill, BrainGate, Candles, Card, CheckItem, Icon, NotConnected, Seg, Tabs, Tag, inr, signed, toneClass } from '../ui'
 import { PageState, QueryNotice } from '../PageState'
 import { pickState } from '../stateRules'
+import { WhatWouldChange } from '../WhatWouldChange'
 
 const TABS = ['Overview', 'Technical', 'Fundamental', 'AI Analysis', 'Similar Cases', 'News', 'Options'] as const
 type TabId = (typeof TABS)[number]
@@ -259,6 +260,7 @@ function StockDetailBody() {
                 <p className="tm-dim">No reasons recorded for this decision.</p>
               )}
               {decision.evidence_text && <p className="tm-note" style={{ marginTop: '0.7rem' }}>{decision.evidence_text}</p>}
+              <WhatWouldChange decision={decision} />
               <Overrule decision={decision} />
               <div className="tm-grid tm-cols-2" style={{ marginTop: '0.9rem', gap: '0.7rem' }}>
                 {decision.entry_low != null && (

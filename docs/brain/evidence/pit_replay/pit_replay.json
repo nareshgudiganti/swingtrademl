@@ -1,0 +1,623 @@
+{
+ "protocol": "ps12-pit-replay-v1",
+ "decision_days": [
+  "2026-07-13",
+  "2026-07-14",
+  "2026-07-15",
+  "2026-07-16",
+  "2026-07-17",
+  "2026-07-20",
+  "2026-07-21",
+  "2026-07-22",
+  "2026-07-23",
+  "2026-07-24",
+  "2026-07-27",
+  "2026-07-28",
+  "2026-07-29",
+  "2026-07-30",
+  "2026-07-31",
+  "2026-08-03",
+  "2026-08-04",
+  "2026-08-05",
+  "2026-08-06",
+  "2026-08-07",
+  "2026-08-10",
+  "2026-08-11",
+  "2026-08-12",
+  "2026-08-13",
+  "2026-08-14"
+ ],
+ "account_days": [
+  "2026-07-13",
+  "2026-09-04",
+  40
+ ],
+ "asof_model": "swing_classifier_asof_20260710",
+ "capital": 979792.0,
+ "buy_level": 0.6,
+ "slippage_bps": 5.0,
+ "stocks": 304,
+ "accounts": {
+  "brain": {
+   "final_equity": 972755.28,
+   "return": -0.007181848221235576,
+   "max_drawdown": 0.012951317233562654,
+   "trades": 16,
+   "still_open": 0,
+   "hit_rate_target_first": 0.25,
+   "avg_net_per_trade": -0.009667640780010284,
+   "exits": {
+    "stop": 11,
+    "target": 4,
+    "timeout": 1
+   },
+   "halted_days": 0,
+   "days_no_new_trades": 0,
+   "days_defensive": 25,
+   "skipped": {}
+  },
+  "rules_only": {
+   "final_equity": 977754.29,
+   "return": -0.002079737889386535,
+   "max_drawdown": 0.015400266479050895,
+   "trades": 25,
+   "still_open": 0,
+   "hit_rate_target_first": 0.16,
+   "avg_net_per_trade": -0.0014890659167313292,
+   "exits": {
+    "target": 4,
+    "stop": 11,
+    "timeout": 10
+   },
+   "halted_days": 0,
+   "days_no_new_trades": 0,
+   "days_defensive": 25,
+   "skipped": {}
+  },
+  "model_only": {
+   "final_equity": 975560.7,
+   "return": -0.00431857425114468,
+   "max_drawdown": 0.02831007474662284,
+   "trades": 27,
+   "still_open": 0,
+   "hit_rate_target_first": 0.2962962962962963,
+   "avg_net_per_trade": -0.001718540835519461,
+   "exits": {
+    "stop": 15,
+    "target": 8,
+    "timeout": 4
+   },
+   "halted_days": 0,
+   "days_no_new_trades": null,
+   "days_defensive": null,
+   "skipped": {
+    "no_free_slot": 460,
+    "already_held": 73,
+    "too_small_or_no_cash": 1
+   },
+   "ideas": 561
+  },
+  "random": {
+   "draws": 200,
+   "final_equity": {
+    "median": 976047.1200000001,
+    "p5": 962749.46,
+    "p95": 987769.16
+   },
+   "return": {
+    "median": -0.0038221186545817076,
+    "p5": -0.01739403480008328,
+    "p95": 0.008141687031955724
+   },
+   "max_drawdown": {
+    "median": 0.009657555158401415,
+    "p5": 0.004638780804001864,
+    "p95": 0.01835645929029318
+   },
+   "trades": {
+    "median": 15.0,
+    "p5": 14,
+    "p95": 16
+   },
+   "hit_rate_target_first": {
+    "median": 0.19375,
+    "p5": 0.0625,
+    "p95": 0.375
+   },
+   "avg_net_per_trade": {
+    "median": -0.005003643013977373,
+    "p5": -0.0224693689399671,
+    "p95": 0.010594488984494367
+   },
+   "days_no_new_trades": 0,
+   "days_defensive": 25,
+   "seeds": "12..211"
+  },
+  "nifty": {
+   "final_equity": 969706.17,
+   "return": -0.01029385055232801,
+   "max_drawdown": 0.03688427134545931,
+   "trades": 1
+  },
+  "cash": {
+   "final_equity": 979792.0,
+   "return": 0.0,
+   "max_drawdown": 0.0,
+   "trades": 0
+  }
+ },
+ "brain_days": {
+  "brain": [
+   {
+    "day": "2026-07-13",
+    "banner": "DEFENSIVE",
+    "trades": 1,
+    "holding_words": {},
+    "modules_dropped": {}
+   },
+   {
+    "day": "2026-07-14",
+    "banner": "DEFENSIVE",
+    "trades": 0,
+    "holding_words": {
+     "HOLD": 1
+    },
+    "modules_dropped": {}
+   },
+   {
+    "day": "2026-07-15",
+    "banner": "DEFENSIVE",
+    "trades": 1,
+    "holding_words": {
+     "HOLD": 1
+    },
+    "modules_dropped": {}
+   },
+   {
+    "day": "2026-07-16",
+    "banner": "DEFENSIVE",
+    "trades": 1,
+    "holding_words": {
+     "HOLD": 2
+    },
+    "modules_dropped": {}
+   },
+   {
+    "day": "2026-07-17",
+    "banner": "DEFENSIVE",
+    "trades": 0,
+    "holding_words": {
+     "HOLD": 3
+    },
+    "modules_dropped": {}
+   },
+   {
+    "day": "2026-07-20",
+    "banner": "DEFENSIVE",
+    "trades": 0,
+    "holding_words": {
+     "HOLD": 2
+    },
+    "modules_dropped": {}
+   },
+   {
+    "day": "2026-07-21",
+    "banner": "DEFENSIVE",
+    "trades": 0,
+    "holding_words": {
+     "HOLD": 1
+    },
+    "modules_dropped": {}
+   },
+   {
+    "day": "2026-07-22",
+    "banner": "DEFENSIVE",
+    "trades": 0,
+    "holding_words": {
+     "HOLD": 1
+    },
+    "modules_dropped": {}
+   },
+   {
+    "day": "2026-07-23",
+    "banner": "DEFENSIVE",
+    "trades": 0,
+    "holding_words": {
+     "HOLD": 1
+    },
+    "modules_dropped": {}
+   },
+   {
+    "day": "2026-07-24",
+    "banner": "DEFENSIVE",
+    "trades": 1,
+    "holding_words": {},
+    "modules_dropped": {}
+   },
+   {
+    "day": "2026-07-27",
+    "banner": "DEFENSIVE",
+    "trades": 1,
+    "holding_words": {
+     "HOLD": 1
+    },
+    "modules_dropped": {}
+   },
+   {
+    "day": "2026-07-28",
+    "banner": "DEFENSIVE",
+    "trades": 0,
+    "holding_words": {
+     "HOLD": 1
+    },
+    "modules_dropped": {}
+   },
+   {
+    "day": "2026-07-29",
+    "banner": "DEFENSIVE",
+    "trades": 2,
+    "holding_words": {},
+    "modules_dropped": {}
+   },
+   {
+    "day": "2026-07-30",
+    "banner": "DEFENSIVE",
+    "trades": 1,
+    "holding_words": {
+     "HOLD": 2
+    },
+    "modules_dropped": {}
+   },
+   {
+    "day": "2026-07-31",
+    "banner": "DEFENSIVE",
+    "trades": 0,
+    "holding_words": {
+     "MONITOR": 1,
+     "HOLD": 2
+    },
+    "modules_dropped": {}
+   },
+   {
+    "day": "2026-08-03",
+    "banner": "DEFENSIVE",
+    "trades": 1,
+    "holding_words": {
+     "HOLD": 2,
+     "MONITOR": 1
+    },
+    "modules_dropped": {}
+   },
+   {
+    "day": "2026-08-04",
+    "banner": "DEFENSIVE",
+    "trades": 0,
+    "holding_words": {
+     "HOLD": 4
+    },
+    "modules_dropped": {}
+   },
+   {
+    "day": "2026-08-05",
+    "banner": "DEFENSIVE",
+    "trades": 2,
+    "holding_words": {
+     "HOLD": 3,
+     "MONITOR": 1
+    },
+    "modules_dropped": {}
+   },
+   {
+    "day": "2026-08-06",
+    "banner": "DEFENSIVE",
+    "trades": 1,
+    "holding_words": {
+     "MONITOR": 1,
+     "HOLD": 2
+    },
+    "modules_dropped": {}
+   },
+   {
+    "day": "2026-08-07",
+    "banner": "DEFENSIVE",
+    "trades": 1,
+    "holding_words": {
+     "HOLD": 3,
+     "MONITOR": 1
+    },
+    "modules_dropped": {}
+   },
+   {
+    "day": "2026-08-10",
+    "banner": "DEFENSIVE",
+    "trades": 0,
+    "holding_words": {
+     "HOLD": 4
+    },
+    "modules_dropped": {}
+   },
+   {
+    "day": "2026-08-11",
+    "banner": "DEFENSIVE",
+    "trades": 1,
+    "holding_words": {
+     "HOLD": 4
+    },
+    "modules_dropped": {}
+   },
+   {
+    "day": "2026-08-12",
+    "banner": "DEFENSIVE",
+    "trades": 0,
+    "holding_words": {
+     "HOLD": 4
+    },
+    "modules_dropped": {}
+   },
+   {
+    "day": "2026-08-13",
+    "banner": "DEFENSIVE",
+    "trades": 1,
+    "holding_words": {
+     "HOLD": 4
+    },
+    "modules_dropped": {}
+   },
+   {
+    "day": "2026-08-14",
+    "banner": "DEFENSIVE",
+    "trades": 1,
+    "holding_words": {
+     "MONITOR": 1,
+     "HOLD": 4
+    },
+    "modules_dropped": {}
+   }
+  ],
+  "rules_only": [
+   {
+    "day": "2026-07-13",
+    "banner": "DEFENSIVE",
+    "trades": 2,
+    "holding_words": {},
+    "modules_dropped": {}
+   },
+   {
+    "day": "2026-07-14",
+    "banner": "DEFENSIVE",
+    "trades": 2,
+    "holding_words": {
+     "HOLD": 2
+    },
+    "modules_dropped": {}
+   },
+   {
+    "day": "2026-07-15",
+    "banner": "DEFENSIVE",
+    "trades": 1,
+    "holding_words": {
+     "HOLD": 3
+    },
+    "modules_dropped": {}
+   },
+   {
+    "day": "2026-07-16",
+    "banner": "DEFENSIVE",
+    "trades": 1,
+    "holding_words": {
+     "HOLD": 4
+    },
+    "modules_dropped": {}
+   },
+   {
+    "day": "2026-07-17",
+    "banner": "DEFENSIVE",
+    "trades": 2,
+    "holding_words": {
+     "HOLD": 3,
+     "MONITOR": 2
+    },
+    "modules_dropped": {}
+   },
+   {
+    "day": "2026-07-20",
+    "banner": "DEFENSIVE",
+    "trades": 1,
+    "holding_words": {
+     "HOLD": 7
+    },
+    "modules_dropped": {}
+   },
+   {
+    "day": "2026-07-21",
+    "banner": "DEFENSIVE",
+    "trades": 0,
+    "holding_words": {
+     "HOLD": 8
+    },
+    "modules_dropped": {}
+   },
+   {
+    "day": "2026-07-22",
+    "banner": "DEFENSIVE",
+    "trades": 2,
+    "holding_words": {
+     "HOLD": 6
+    },
+    "modules_dropped": {}
+   },
+   {
+    "day": "2026-07-23",
+    "banner": "DEFENSIVE",
+    "trades": 1,
+    "holding_words": {
+     "HOLD": 6,
+     "MONITOR": 1
+    },
+    "modules_dropped": {}
+   },
+   {
+    "day": "2026-07-24",
+    "banner": "DEFENSIVE",
+    "trades": 1,
+    "holding_words": {
+     "HOLD": 5,
+     "MONITOR": 2
+    },
+    "modules_dropped": {}
+   },
+   {
+    "day": "2026-07-27",
+    "banner": "DEFENSIVE",
+    "trades": 0,
+    "holding_words": {
+     "HOLD": 6,
+     "MONITOR": 2
+    },
+    "modules_dropped": {}
+   },
+   {
+    "day": "2026-07-28",
+    "banner": "DEFENSIVE",
+    "trades": 1,
+    "holding_words": {
+     "HOLD": 6,
+     "MONITOR": 1
+    },
+    "modules_dropped": {}
+   },
+   {
+    "day": "2026-07-29",
+    "banner": "DEFENSIVE",
+    "trades": 0,
+    "holding_words": {
+     "HOLD": 7,
+     "MONITOR": 1
+    },
+    "modules_dropped": {}
+   },
+   {
+    "day": "2026-07-30",
+    "banner": "DEFENSIVE",
+    "trades": 1,
+    "holding_words": {
+     "HOLD": 6,
+     "MONITOR": 1
+    },
+    "modules_dropped": {}
+   },
+   {
+    "day": "2026-07-31",
+    "banner": "DEFENSIVE",
+    "trades": 0,
+    "holding_words": {
+     "HOLD": 7,
+     "MONITOR": 1
+    },
+    "modules_dropped": {}
+   },
+   {
+    "day": "2026-08-03",
+    "banner": "DEFENSIVE",
+    "trades": 0,
+    "holding_words": {
+     "HOLD": 7,
+     "MONITOR": 1
+    },
+    "modules_dropped": {}
+   },
+   {
+    "day": "2026-08-04",
+    "banner": "DEFENSIVE",
+    "trades": 2,
+    "holding_words": {
+     "HOLD": 5,
+     "MONITOR": 1
+    },
+    "modules_dropped": {
+     "M14": "too slow: 17610.83 s against a 15.00 s budget"
+    }
+   },
+   {
+    "day": "2026-08-05",
+    "banner": "DEFENSIVE",
+    "trades": 1,
+    "holding_words": {
+     "HOLD": 6,
+     "MONITOR": 1
+    },
+    "modules_dropped": {
+     "M02": "too slow: 94.27 s against a 90.00 s budget"
+    }
+   },
+   {
+    "day": "2026-08-06",
+    "banner": "DEFENSIVE",
+    "trades": 1,
+    "holding_words": {
+     "HOLD": 5,
+     "MONITOR": 2
+    },
+    "modules_dropped": {}
+   },
+   {
+    "day": "2026-08-07",
+    "banner": "DEFENSIVE",
+    "trades": 0,
+    "holding_words": {
+     "HOLD": 6,
+     "MONITOR": 2
+    },
+    "modules_dropped": {}
+   },
+   {
+    "day": "2026-08-10",
+    "banner": "DEFENSIVE",
+    "trades": 2,
+    "holding_words": {
+     "HOLD": 4,
+     "MONITOR": 2
+    },
+    "modules_dropped": {}
+   },
+   {
+    "day": "2026-08-11",
+    "banner": "DEFENSIVE",
+    "trades": 1,
+    "holding_words": {
+     "HOLD": 5,
+     "MONITOR": 1
+    },
+    "modules_dropped": {}
+   },
+   {
+    "day": "2026-08-12",
+    "banner": "DEFENSIVE",
+    "trades": 1,
+    "holding_words": {
+     "HOLD": 5
+    },
+    "modules_dropped": {}
+   },
+   {
+    "day": "2026-08-13",
+    "banner": "DEFENSIVE",
+    "trades": 1,
+    "holding_words": {
+     "HOLD": 5
+    },
+    "modules_dropped": {}
+   },
+   {
+    "day": "2026-08-14",
+    "banner": "DEFENSIVE",
+    "trades": 1,
+    "holding_words": {
+     "HOLD": 5,
+     "MONITOR": 1
+    },
+    "modules_dropped": {}
+   }
+  ]
+ }
+}

@@ -1415,3 +1415,56 @@ def test_scorable_ideas_behave_as_before_next_to_an_unscorable_one(db_session):
     assert score_pending(db_session, LONG_AFTER) == 1
     assert good.outcome == "target"
     assert ghost.outcome == scoring.UNSCORABLE
+
+
+# --- ps13: M09 only suggests; nothing it does changes the brain by itself ----
+
+
+def test_the_weekly_learning_job_changes_nothing_by_itself(db_session):
+    """ps13 (outside review 2026-10-20): even when the weekly job finds evidence strong enough to propose a
+    new buy level, the buy level, every module's mode and the default stay exactly as they were. Only the
+    owner's accept makes a proposal count (constitution C9)."""
+    i = 0
+    for _ in range(15):
+        _scored_run(db_session, f"fx-ps13-t-{i}", f"T{i}", 0.65, "target", 0.08)
+        i += 1
+    for _ in range(5):
+        _scored_run(db_session, f"fx-ps13-u-{i}", f"U{i}", 0.65, "stop", -0.04)
+        i += 1
+    for _ in range(10):
+        _scored_run(db_session, f"fx-ps13-v-{i}", f"V{i}", 0.6, "stop", -0.04)
+        i += 1
+    db_session.commit()
+    modes_before = service.load_modes(db_session)
+    default_before = settings.ML_MIN_CONFIDENCE
+
+    report = learn_mod.run_learning(db_session)
+
+    assert len(report["new_proposals"]) == 1  # it did find something to suggest
+    assert [p.status for p in store.list_proposals(db_session)] == ["open"]
+    assert store.accepted_buy_level(db_session) is None
+    assert service.load_modes(db_session) == modes_before
+    assert default_before == settings.ML_MIN_CONFIDENCE
+
+
+def test_only_the_owners_screens_can_apply_a_learning_change():
+    """ps13 guard: accepting a proposal, going back to the default buy level and switching a module's mode
+    are called only from the owner's API, the CLI and accept itself — never from a scheduled job or a
+    module. A new caller elsewhere fails here and needs the owner's say."""
+    import re
+    from pathlib import Path
+
+    src = Path(service.__file__).resolve().parents[1]
+    allowed = {
+        "api/v1/endpoints/brain.py",
+        "cli.py",
+        "brain/modules/m09_learn/store.py",  # accept() switches a module's mode, under the owner's accept
+    }
+    call = re.compile(r"\b(?:store\.accept|revert_buy_level|set_mode)\(")
+    callers = set()
+    for path in src.rglob("*.py"):
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if call.search(line) and not line.lstrip().startswith("def "):
+                callers.add(path.relative_to(src).as_posix())
+    assert callers <= allowed, f"new caller(s) of a learning change: {sorted(callers - allowed)}"
+    assert "workers/jobs.py" not in callers

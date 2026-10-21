@@ -34,3 +34,11 @@ cd backend
 python -m swing_trade_ml.brain.module_ablation --from 2026-07-13 --to 2026-08-14 \
     --asof-model swing_classifier_asof_20260710
 ```
+
+## Correction after the run (2026-10-21)
+
+The fixed reading rule only looked at final words. In a replay the risk check uses today's account and refuses
+every idea, so no final word is ever TRADE and "decisions changed" is 0 for every module, even M08, whose
+removal dropped all 561 liked ideas. The rule then read M08 as "adds nothing", which is wrong. The reading now
+also looks at the liked ideas (added / dropped). Only the wording of the reading changed: no replay was rerun,
+no number changed, nothing in the brain or the trial changed.

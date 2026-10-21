@@ -9,6 +9,7 @@ import type {
   ExperimentSelection,
   ObsDays,
   ObsForwardGate,
+  ObsScoreBands,
   ObsLearning,
   ObsOutcomes,
   ObsClaim,
@@ -653,4 +654,6 @@ export const api = {
   obsOutcomes: (from: string, to: string, category: 'practice' | 'backtest') =>
     get<ObsOutcomes>(`/brain/observatory/outcomes?from=${from}&to=${to}&category=${category}`),
   obsEffectiveness: () => get<{ claims: ObsClaim[] }>('/brain/observatory/effectiveness'),
+  obsScoreBands: (from: string, to: string) =>
+    get<ObsScoreBands>(`/brain/observatory/score-bands?from=${from}&to=${to}`),
 }

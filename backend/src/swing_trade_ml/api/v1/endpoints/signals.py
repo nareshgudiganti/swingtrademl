@@ -14,6 +14,7 @@ from swing_trade_ml.core.enums import PositionStatus
 from swing_trade_ml.db.models.market import Candle, Instrument
 from swing_trade_ml.db.models.trading import Position, Signal, Strategy, Trade
 from swing_trade_ml.schemas import SignalOut
+from swing_trade_ml.services import trial_seal
 from swing_trade_ml.services.plans import history_cutoff, strategy_visible
 from swing_trade_ml.strategies.brain import BLOCKED_BY_RISK_KEY
 from swing_trade_ml.strategies.tier import cap_tier
@@ -426,6 +427,11 @@ def track_record(db: DbSession, access: PlanAccessDep) -> list[dict]:
             current_price = float(latest_candle)
 
         age_days = (datetime.now(UTC) - sig.generated_at).days
+        # The blind trial (services/trial_seal.py): a brain idea from the trial shows no result, and no
+        # current price either (with the idea's own price it would show how the idea is doing).
+        sealed = strategy.strategy_type == "brain" and trial_seal.is_sealed_dt(sig.generated_at)
+        if sealed:
+            current_price, trade_row = None, None
 
         out.append({
             "signal_id": sig.id,
@@ -441,12 +447,13 @@ def track_record(db: DbSession, access: PlanAccessDep) -> list[dict]:
             "take_profit": sig.take_profit,
             "current_price": current_price,
             "confidence": sig.confidence,
-            "outcome": sig.outcome,
-            "outcome_pct": sig.outcome_pct,
-            "outcome_at": sig.outcome_at,
+            "outcome": None if sealed else sig.outcome,
+            "outcome_pct": None if sealed else sig.outcome_pct,
+            "outcome_at": None if sealed else sig.outcome_at,
             "was_executed": sig.was_executed,
             "reason": sig.reason,
             "trade_net_pnl": trade_row.net_pnl if trade_row else None,
             "trade_return_pct": trade_row.return_pct if trade_row else None,
+            "sealed": sealed,
         })
     return out

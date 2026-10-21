@@ -12,6 +12,7 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from swing_trade_ml.db.models.brain_golive import BrainApproval, BrainStageChange
+from swing_trade_ml.services import trial_seal
 from swing_trade_ml.services.brain_golive.compare import (
     NEEDED_FINISHED,
     finished_blocked_brain_ideas,
@@ -70,6 +71,9 @@ def _trial_refusal(g: dict) -> str:
             "The trial result could not be checked just now, so the brain stays in practice. "
             "Try again later; nothing was changed."
         )
+    if trial_seal.active():
+        # The blind trial (services/trial_seal.py): say only the counts, never why the gate refused.
+        return f"{trial_seal.GATE_SEALED_TEXT} {trial_seal.gate_counts_text(g)} The brain stays in practice."
     yes_no = {True: "yes", False: "no"}
     facts = (
         f"{g.get('sessions', 0)} of 15 trial sessions, {g.get('finished', 0)} of {NEEDED_FINISHED} finished "
@@ -174,16 +178,31 @@ def stage_overview(db: Session, history_limit: int = 20) -> dict:
     history = db.execute(
         select(BrainStageChange).order_by(BrainStageChange.id.desc()).limit(history_limit)
     ).scalars()
+    sealed = trial_seal.active()
+    if sealed:
+        # Blind trial: show only the counts. "ready" says the counts are met, never that the trial
+        # passed; set_stage still applies the full gate and refuses with the sealed text if it is not met.
+        shown = trial_seal.sealed_gate(gate)
+        ready = finished >= NEEDED_FINISHED and bool(shown.get("counts_met"))
+        if gate["word"] == "error":
+            plain = _trial_refusal(gate)
+        else:
+            plain = f"{trial_seal.gate_counts_text(shown)} {trial_seal.SEALED_TEXT}"
+    else:
+        shown = gate
+        # Ready only when both hold: the 30 finished ideas and the forward trial's pass rule.
+        ready = finished >= NEEDED_FINISHED and gate["word"] == "pass"
+        plain = None if gate["word"] == "pass" else _trial_refusal(gate)
     return {
         "stage": stage,
         "plain": PLAIN[stage],
         "finished": finished,
         "finished_blocked": finished_blocked_brain_ideas(db),
         "needed": NEEDED_FINISHED,
-        # Ready only when both hold: the 30 finished ideas and the forward trial's pass rule.
-        "ready": finished >= NEEDED_FINISHED and gate["word"] == "pass",
-        "trial": gate,
-        "trial_plain": None if gate["word"] == "pass" else _trial_refusal(gate),
+        "ready": ready,
+        "sealed": sealed,
+        "trial": shown,
+        "trial_plain": plain,
         "history": [
             {
                 "stage": h.stage,

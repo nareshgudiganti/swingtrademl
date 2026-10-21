@@ -18,6 +18,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from swing_trade_ml.db.models.brain import BrainDailyCheck, BrainRun
+from swing_trade_ml.services import trial_seal
 
 IST = ZoneInfo("Asia/Kolkata")
 TRIAL_SETS = ("brain_trade", "brain_blocked", "brain_top5", "brain_over_80", "v1_buys", "every_stock")
@@ -70,13 +71,15 @@ def _trial(db: Session, day: date) -> dict:
         return {"start": TRIAL_START.isoformat(), "sessions": 0, "gate": {"word": "not started"}}
     j = journal_for(db, TRIAL_START, day)
     sets = {name: {f: (j["summaries"].get(name) or {}).get(f) for f in SET_FIELDS} for name in TRIAL_SETS}
-    return {
+    out = {
         "start": TRIAL_START.isoformat(),
         "sessions": j["sessions"],
         "gate": j["gate"],
         "sets": sets,
         "nifty": j["summaries"].get("nifty"),
     }
+    # The blind trial (services/trial_seal.py): only counts are stored, so no stored row holds a result.
+    return trial_seal.seal_daily_trial(out, day)
 
 
 def check_ideas_reached_counter(db: Session, day: date) -> dict | None:
@@ -395,7 +398,8 @@ def _out(row: BrainDailyCheck) -> dict:
         "checks": row.checks,
         "run": row.run,
         "intraday": row.intraday,
-        "trial": row.trial,
+        # Rows stored before the seal may hold the trial's results: shown as counts only.
+        "trial": trial_seal.seal_daily_trial(row.trial, row.day),
     }
 
 

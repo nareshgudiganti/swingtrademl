@@ -11,7 +11,8 @@ swingtrade status
 swingtrade brain modules | set M02 off | run [--as-of 2026-09-15] | replay-week [--days 5] |
     validate-week [--days 5] | replay-score [--days 20] | rescore-learning [--since 2026-09-01] |
     why RELIANCE |
-    learn [--since 2026-09-01]
+    learn [--since 2026-09-01] |
+    phase-b --candidate B1 [--dry-run]
 swingtrade brain strategy-create | shadow-scan
 """
 
@@ -622,6 +623,13 @@ def _load_asof_model(db, name: str):
 
 
 def cmd_brain(args: argparse.Namespace) -> int:
+    if args.brain_command == "phase-b":
+        # Offline research (evidence plan Phase B). Handled before any database session opens:
+        # a dry run reads no data, and a real run is refused by its own guard until it is allowed.
+        from swing_trade_ml.brain import phase_b
+
+        return phase_b.cli(args)
+
     from datetime import UTC, date, datetime, time
 
     from swing_trade_ml.brain import service
@@ -1122,6 +1130,13 @@ def build_parser() -> argparse.ArgumentParser:
     b = brain_sub.add_parser("why", help="Run the brain for one stock and show its full trace")
     b.add_argument("symbol")
     b.add_argument("--book", default="paper", choices=["paper", "live"])
+    b = brain_sub.add_parser(
+        "phase-b",
+        help="Evidence plan Phase B: one run per candidate, refused before 9 Nov 2026 (--dry-run: plan)",
+    )
+    b.add_argument("--candidate", required=True, choices=["B1", "B2", "B3"])
+    b.add_argument("--dry-run", action="store_true", help="print dates, stocks and manifest; score nothing")
+    b.add_argument("--out", default=None, help="output folder (default docs/brain/evidence/phase_b)")
     p.set_defaults(func=cmd_brain)
 
     return parser

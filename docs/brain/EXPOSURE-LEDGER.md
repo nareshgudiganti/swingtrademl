@@ -36,6 +36,7 @@ INDIA VIX and 16 NIFTY sector indices run to 2026-09-09 (context only, no stock 
 | 2024-08 to 2026-05 (5 bad-market windows) | ps2 bad-market test: replayed banner timing and one account with vs without the banner, model picks per window | Diagnostic only; nothing changed (protocol ps2-bad-market-v1) | 2026-10-20 | `bad_market/` |
 | 2026-07-13 to 2026-08-14 | ps1 module on/off: whole-brain replays with one module left out at a time, liked ideas scored | Diagnostic only; nothing changed (protocol ps1-module-ablation-v1). Result 2026-10-21: only M08 changed which ideas were wanted; M07 off safe; others changed nothing (replay cannot see the day's account, needs ps12) | 2026-10-20 | `module_ablation/` |
 | 2026-07-13 to 2026-08-14 | ps11 WAIT / AVOID check: every stock-day of the ps1 whole-brain replay scored as if bought, grouped by the brain's word | Diagnostic only; nothing changed (protocol ps11-wait-check-v1) | 2026-10-21 | `wait_check/` |
+| 2026-07-13 to 2026-09-04 (decisions to 08-14, then 15 settle days) | ps12 point-in-time replay: one account each for the brain, rules only, model only, 200 random accounts, NIFTY and cash, on identical rules; plus a 2-day smoke check of ps1 on this replay (base and M14) | Diagnostic only; nothing changed (protocol ps12-pit-replay-v1) | 2026-10-21 | `pit_replay/` |
 
 **Conclusion for local data:** every period up to 2026-09-07 is development data. There is no untouched
 local period.

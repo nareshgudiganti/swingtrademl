@@ -28,6 +28,7 @@ import sys
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from datetime import date
+from functools import partial
 from pathlib import Path
 
 from sqlalchemy.orm import Session
@@ -39,6 +40,7 @@ from swing_trade_ml.core.logging import get_logger
 log = get_logger(__name__)
 
 PROTOCOL_ID = "ps1-module-ablation-v1"
+PIT_PROTOCOL_ID = "ps1-module-ablation-pit-v1"  # the same test on the ps12 replay
 BASE = "all modules"
 RISK_GATE = "M07"
 NOT_JUDGEABLE = {
@@ -46,6 +48,9 @@ NOT_JUDGEABLE = {
     "M14": "reads today's account in a replay, not the account of the replayed day",
     "M15": "follows holdings; a replay has no holdings from the past",
 }
+# With --pit (ps12) every replayed day sees the replay account as it stood that day, so the risk gate
+# approves ideas and M14 / M15 read real (simulated) holdings: only M09 stays out of reach.
+NOT_JUDGEABLE_PIT = {"M09": NOT_JUDGEABLE["M09"]}
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,14 +71,15 @@ def registry_without(module_id: str | None, base: ModuleRegistry = REGISTRY) -> 
     return reg
 
 
-def plan(base: ModuleRegistry, modes: dict) -> tuple[list[str], dict[str, str]]:
+def plan(base: ModuleRegistry, modes: dict, *, pit: bool = False) -> tuple[list[str], dict[str, str]]:
     """(modules to switch off one at a time, {module: why it is not tested})."""
+    not_judgeable = NOT_JUDGEABLE_PIT if pit else NOT_JUDGEABLE
     test: list[str] = []
     skip: dict[str, str] = {}
     for cls in base.all():
         m = cls.manifest
-        if m.id in NOT_JUDGEABLE:
-            skip[m.id] = NOT_JUDGEABLE[m.id]
+        if m.id in not_judgeable:
+            skip[m.id] = not_judgeable[m.id]
         elif resolve_mode(m, modes.get(m.id)) is not Mode.ON:
             skip[m.id] = "in shadow mode: it cannot change a decision"
         else:
@@ -157,6 +163,51 @@ def run_variant(
     return out
 
 
+def run_variant_pit(
+    db: Session,
+    setup: tuple,
+    name: str,
+    *,
+    asof_model,
+    checkpoint_dir: Path,
+    modes: dict,
+    decide: Callable | None = None,
+) -> tuple[list[Judged], dict]:
+    """One variant on the point-in-time replay (ps12): each day the brain, without `name`'s module, sees
+    the replay account as it stood that day; its TRADE words are bought at the next open. Returns the
+    judged ideas and the account's numbers. Each day is saved as it finishes (resumable)."""
+    from swing_trade_ml.brain import pit_replay
+    from swing_trade_ml.ml.sector_map import get_sector_bucket
+
+    days, bars, sim_days = setup
+    reg = pit_replay.pit_registry(registry_without(None if name == BASE else name))
+    if decide is None:
+
+        def decide(day, account):
+            log.info("module_ablation.pit_day", without=name, day=day.isoformat())
+            return pit_replay.run_brain_day(
+                db, day, account, registry=reg, modes=modes, asof_model=asof_model, flat_score=None
+            )
+
+    else:
+        decide = partial(decide, reg)
+    slug = "base" if name == BASE else name
+    res, recs = pit_replay.run_account(
+        bars,
+        sim_days,
+        days,
+        decide,
+        buckets=get_sector_bucket,
+        checkpoint=checkpoint_dir / f"pit_{slug}.json",
+    )
+    judged = [
+        Judged(s, d, w, w == "TRADE" or dg == "TRADE")
+        for d, r in sorted(recs.items())
+        for s, w, dg in r.ideas
+    ]
+    return judged, pit_replay.row(res, recs)
+
+
 def _load(path: Path) -> dict:
     if not path.exists():
         return {}
@@ -185,16 +236,47 @@ def run(
     upto: date,
     only: Sequence[str] | None = None,
     replay: Callable | None = None,
+    pit: bool = False,
+    pit_setup: tuple | None = None,
+    pit_decide: Callable | None = None,
 ) -> dict:
+    """`pit=True` runs every variant on the point-in-time replay (ps12, `pit_replay.py`), so the risk
+    gate approves ideas against the replay account and M14 / M15 can be judged. `pit_setup` (days, bars,
+    account days) and `pit_decide(registry, day, account)` replace the database and the brain in tests."""
     from swing_trade_ml.brain import service
     from swing_trade_ml.brain.replay_score import load_bars
     from swing_trade_ml.brain.replay_scoring import strict_for
 
-    to_test, skipped = plan(REGISTRY, service.load_modes(db))
+    modes = service.load_modes(db)
+    to_test, skipped = plan(REGISTRY, modes, pit=pit)
     if only:
         to_test = [m for m in to_test if m in only]
     variants = [BASE, *to_test]
     done = _load(checkpoint)
+    accounts: dict[str, dict] = {}
+    if pit:
+        from contextlib import nullcontext
+
+        from swing_trade_ml.brain import pit_replay
+        from swing_trade_ml.brain import queue as brain_queue
+
+        if pit_setup is None:
+            _, bars, _, sim_days = pit_replay.prepare(db, days, upto)
+            pit_setup = (list(days), bars, sim_days)
+        for name in variants:
+            log.info("module_ablation.variant", without=name, pit=True)
+            lock = nullcontext() if pit_decide is not None else brain_queue.run_lock("nightly", "paper")
+            with lock:
+                done[name], accounts[name] = run_variant_pit(
+                    db,
+                    pit_setup,
+                    name,
+                    asof_model=asof_model,
+                    checkpoint_dir=checkpoint.parent,
+                    modes=modes,
+                    decide=pit_decide,
+                )
+            _save(checkpoint, done)
     for name in variants:
         if name in done:
             continue
@@ -212,8 +294,13 @@ def run(
     for name in to_test:
         row = compare(done[BASE], done[name], outcomes)
         rows[name] = {**row, "reading": reading(name, row, base_row)}
+        if pit:
+            rows[name]["account"] = accounts[name]
+    if pit:
+        base_row = {**base_row, "account": accounts[BASE]}
     return {
-        "protocol": PROTOCOL_ID,
+        "protocol": PIT_PROTOCOL_ID if pit else PROTOCOL_ID,
+        "pit": pit,
         "days": [d.isoformat() for d in days],
         "asof_model": getattr(asof_model, "name", None),
         "base": base_row,
@@ -224,6 +311,29 @@ def run(
 
 def _pct(x: float | None) -> str:
     return "n/a" if x is None else f"{x:+.2%}"
+
+
+def _pit_lines(result: dict) -> list[str]:
+    """The account each variant ran (point-in-time replay only)."""
+
+    def line(name: str, a: dict) -> str:
+        return (
+            f"| {name} | {a['return']:+.2%} | {a['max_drawdown']:.2%} | {a['trades']} | "
+            f"{_pct(a['hit_rate_target_first'])} | {_pct(a['avg_net_per_trade'])} | "
+            f"{a['days_no_new_trades']} / {a['days_defensive']} |"
+        )
+
+    out = [
+        "",
+        "## The replay account of each variant (same start money, rules and costs)",
+        "",
+        "| Without | Return | Worst fall | Trades finished | Reached +8% first | Avg / trade "
+        "| Days NO NEW TRADES / DEFENSIVE |",
+        "|---|---|---|---|---|---|---|",
+        line("(nothing: all modules)", result["base"]["account"]),
+    ]
+    out += [line(mid, r["account"]) for mid, r in result["without"].items()]
+    return out
 
 
 def plain_report(result: dict) -> str:
@@ -247,6 +357,8 @@ def plain_report(result: dict) -> str:
             f"| {mid} | {r['changed_words']} | {r['liked_added']} / {r['liked_dropped']} | {r['liked']} | "
             f"{_pct(r['avg_net'])} | {r['reading']} |"
         )
+    if result.get("pit"):
+        lines += _pit_lines(result)
     lines += ["", "## Not tested", "", "| Module | Why |", "|---|---|"]
     lines += [f"| {m} | {why} |" for m, why in sorted(result["not_tested"].items())]
     lines += [
@@ -254,8 +366,17 @@ def plain_report(result: dict) -> str:
         "## Limits",
         "",
         "- Development data only. 'Helps' here is not evidence; 'adds nothing' or 'hurts' is a real warning.",
-        "- In a replay the risk check uses today's account, so no replayed idea is ever approved; 'liked' "
-        "counts the ideas the brain wanted before that check.",
+        *(
+            [
+                "- Point-in-time replay (ps12): each day the brain saw the replay account as it stood that "
+                "day; its TRADE words were bought at the next open by the same account rules.",
+            ]
+            if result.get("pit")
+            else [
+                "- In a replay the risk check uses today's account, so no replayed idea is ever approved; "
+                "'liked' counts the ideas the brain wanted before that check.",
+            ]
+        ),
         "- One switch at a time: two modules that do the same job would each look useless.",
         "- Only one as-of model exists locally, so only the days after its cutoff whose ideas have finished.",
     ]
@@ -276,8 +397,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     p.add_argument("--asof-model", required=True)
     p.add_argument("--upto", default="2026-09-07", help="last day of prices used to score ideas")
     p.add_argument("--only", nargs="*", default=None, help="test only these modules (e.g. M10 M07)")
-    p.add_argument("--out", default="../docs/brain/evidence/module_ablation")
+    p.add_argument("--out", default=None, help="default: evidence/module_ablation (or _pit with --pit)")
+    p.add_argument(
+        "--pit",
+        action="store_true",
+        help="run on the point-in-time replay (ps12): the risk gate, M14 and M15 see the replay account",
+    )
     a = p.parse_args(argv)
+    a.out = a.out or "../docs/brain/evidence/module_ablation" + ("_pit" if a.pit else "")
     days = list(iter_ist_trading_days(date.fromisoformat(a.start), date.fromisoformat(a.end)))
     out = Path(a.out)
     with SessionLocal() as db:
@@ -294,6 +421,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             checkpoint=out / "checkpoint.json",
             upto=date.fromisoformat(a.upto),
             only=a.only,
+            pit=a.pit,
         )
     out.mkdir(parents=True, exist_ok=True)
     (out / "module_ablation.md").write_text(plain_report(result), encoding="utf-8")

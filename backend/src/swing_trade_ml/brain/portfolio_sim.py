@@ -57,6 +57,18 @@ class _Position:
     half_done: bool = False
     cash_back: float = 0.0
     last_close: float = 0.0
+    fill: float = 0.0  # the buy fill per share, slippage included
+    exit_reason: str | None = None  # target | stop | timeout | forced, once fully sold
+
+
+@dataclass(frozen=True, slots=True)
+class ClosedTrade:
+    symbol: str
+    entry_day: date
+    exit_day: date
+    status: str  # target (+8% reached first) | stop | timeout | forced (the drawdown control sold it)
+    net_return: float  # cash back / cash put in - 1, after slippage and charges
+    half_out: bool
 
 
 @dataclass(slots=True)
@@ -77,6 +89,7 @@ class PortfolioResult:
     longest_underwater_days: int = 0  # longest run of days below the previous equity peak
     skipped: dict[str, int] = field(default_factory=dict)
     curve: list[tuple[date, float]] = field(default_factory=list)
+    closed: list[ClosedTrade] = field(default_factory=list)  # every finished trade, in exit order
 
     def summary(self) -> dict:
         return {
@@ -108,6 +121,7 @@ def _step(pos: _Position, row, horizon: int) -> tuple[bool, float]:
     if lo <= pos.stop_px:  # a bar touching the stop and anything else counts as the stop
         got += _sell(o if o <= pos.stop_px else pos.stop_px, pos.qty)
         pos.qty = 0
+        pos.exit_reason = "stop"
     else:
         if not pos.half_done and pos.qty >= 2 and h >= pos.half_px:
             half = pos.qty // 2
@@ -117,11 +131,282 @@ def _step(pos: _Position, row, horizon: int) -> tuple[bool, float]:
         if h >= pos.target_px:
             got += _sell(o if o >= pos.target_px else pos.target_px, pos.qty)
             pos.qty = 0
+            pos.exit_reason = "target"
         elif pos.bars_held >= horizon:
             got += _sell(c, pos.qty)
             pos.qty = 0
+            pos.exit_reason = "timeout"
     pos.cash_back += got
     return pos.qty == 0, got
+
+
+def entry_budget(
+    equity: float,
+    cash: float,
+    limits,
+    mode: str,
+    sector_used: float,
+    *,
+    stop: float = STOP,
+    risk_per_trade_pct: float = RISK_PER_TRADE,
+) -> float:
+    """Rupees one new position may take: 1% risk at the stop, capped by the ladder's single-stock limit,
+    halved in a DEFENSIVE market, inside the sector cap and the cash reserve."""
+    budget = min(limits.max_position_pct, risk_per_trade_pct / stop) * equity
+    if mode == "DEFENSIVE":
+        budget *= DEFENSIVE_SIZE_FACTOR
+    if limits.sector_cap_pct is not None:
+        budget = min(budget, limits.sector_cap_pct * equity - sector_used)
+    return min(budget, cash - limits.cash_floor_inr)
+
+
+class Book:
+    """One account, stepped one trading day at a time. `simulate` runs it over a whole period; the
+    point-in-time brain replay (`pit_replay.py`) steps it between brain runs, so each run sees the
+    account exactly as it stood at that day's close. The rules are the ones `simulate` documents."""
+
+    def __init__(
+        self,
+        bars: dict[str, pd.DataFrame],
+        *,
+        capital: float,
+        horizon: int = HORIZON_BARS,
+        target: float = TARGET,
+        stop: float = STOP,
+        half_out: float = HALF_OUT,
+        risk_per_trade_pct: float = RISK_PER_TRADE,
+        max_drawdown_pct: float = MAX_DRAWDOWN,
+        drawdown_policy: str = "halt",
+        cooldown_days: int = 10,
+    ) -> None:
+        self.index = {s: df.set_index("day") for s, df in bars.items() if not df.empty}
+        self.capital = float(capital)
+        self.horizon, self.target, self.stop, self.half_out = horizon, target, stop, half_out
+        self.risk_per_trade_pct = risk_per_trade_pct
+        self.max_drawdown_pct = max_drawdown_pct
+        self.drawdown_policy = drawdown_policy
+        self.cooldown_days = cooldown_days
+        self.cash = self.peak = self.equity = self.control_peak = float(capital)
+        self.open_: list[_Position] = []
+        self.closed: list[ClosedTrade] = []
+        self.skipped: dict[str, int] = {}
+        self.curve: list[tuple[date, float]] = []
+        self.invested_share: list[float] = []
+        self.halted_days = 0
+        self.max_dd = 0.0
+        self.cooldown_left = 0
+        self.pending: str | None = None
+        self.triggers = self.forced_exits = self.underwater = self.longest_underwater = 0
+        self.forced_shortfall = 0.0
+        self.was_halted = False
+        self.last_day: date | None = None
+
+    # --- what the account looks like now (after the last stepped day's close) ---
+
+    def halted_now(self) -> bool:
+        """Would the drawdown halt stop a buy at the next open? (the "halt" policy's rule)"""
+        if self.drawdown_policy == "halt":
+            return self.control_peak > 0 and (self.control_peak - self.equity) / self.control_peak >= (
+                self.max_drawdown_pct
+            )
+        return self.cooldown_left > 0 or self.pending is not None
+
+    def drawdown(self) -> float:
+        return (self.peak - self.equity) / self.peak if self.peak else 0.0
+
+    def exposure(self) -> dict[str, float]:
+        """Rupees held per sector bucket (an unmapped stock is its own bucket), at the last close."""
+        out: dict[str, float] = {}
+        for p in self.open_:
+            key = p.bucket or p.symbol
+            out[key] = out.get(key, 0.0) + p.qty * p.last_close
+        return out
+
+    def refusal(
+        self, symbol: str, bucket: str | None, price: float | None, mode: str, limits, *, cash: float
+    ) -> tuple[str | None, int, float]:
+        """Why a buy of `symbol` at `price` (before slippage) would be refused, or (None, qty, fill).
+        The checks and their order are the buy rules of `step`."""
+        if symbol in {p.symbol for p in self.open_}:
+            return "already_held", 0, 0.0
+        if len(self.open_) >= limits.max_positions:
+            return "no_free_slot", 0, 0.0
+        if price is None:
+            return "no_price", 0, 0.0
+        exposure = self.exposure()
+        key = bucket or symbol
+        if limits.sector_rule == "one_per_sector" and key in exposure:
+            return "sector_cap", 0, 0.0
+        fill = apply_slippage(float(price), "BUY")
+        budget = entry_budget(
+            self.equity,
+            cash,
+            limits,
+            mode,
+            exposure.get(key, 0.0),
+            stop=self.stop,
+            risk_per_trade_pct=self.risk_per_trade_pct,
+        )
+        qty = math.floor(budget / fill) if fill > 0 else 0
+        if qty < 1 or qty * fill < limits.min_position_inr:
+            return "too_small_or_no_cash", 0, fill
+        brokerage, taxes = compute_charges(fill * qty, "BUY")
+        if fill * qty + brokerage + taxes > cash:
+            return "too_small_or_no_cash", 0, fill
+        return None, qty, fill
+
+    def _skip(self, reason: str) -> None:
+        self.skipped[reason] = self.skipped.get(reason, 0) + 1
+
+    def _close(self, pos: _Position, day: date, status: str) -> None:
+        self.closed.append(
+            ClosedTrade(
+                pos.symbol, pos.entry_day, day, status, pos.cash_back / pos.cost_in - 1.0, pos.half_done
+            )
+        )
+
+    # --- one trading day ---
+
+    def step(self, day: date, todays: Sequence[Pick], mode: str = "NORMAL") -> None:
+        """Buy `todays` picks (decided at the previous trading day's close, in market mode `mode`) at
+        this day's open, then apply this day's bar to every position and record the closing equity."""
+        todays = sorted(todays, key=lambda p: (-p.score, p.symbol))
+        limits = limits_for(self.equity)
+        if self.pending is not None:  # forced exits decided at yesterday's close, filled at today's open
+            left: list[_Position] = []
+            for pos in self.open_:
+                ix = self.index.get(pos.symbol)
+                sell_qty = pos.qty if self.pending == "all" else pos.qty // 2
+                if ix is None or day not in ix.index or sell_qty < 1:
+                    left.append(pos)
+                    continue
+                o = float(ix.loc[day, "open"])
+                got = _sell(o, sell_qty)
+                self.forced_shortfall += sell_qty * pos.last_close - got
+                self.forced_exits += 1
+                self.cash += got
+                pos.cash_back += got
+                pos.qty -= sell_qty
+                pos.last_close = o
+                if pos.qty == 0:
+                    pos.exit_reason = "forced"
+                    self._close(pos, day, "forced")
+                else:
+                    left.append(pos)
+            self.open_ = left
+            self.pending = "all" if self.pending == "all" and any(p.qty for p in self.open_) else None
+            self.cooldown_left = self.cooldown_days
+            self.equity = self.cash + sum(p.qty * p.last_close for p in self.open_)
+        if self.drawdown_policy == "halt":
+            halted = self.halted_now()
+        else:
+            halted = self.cooldown_left > 0 or self.pending is not None
+            if self.cooldown_left > 0:
+                self.cooldown_left -= 1
+                if self.cooldown_left == 0:
+                    self.control_peak = self.equity  # a fresh start after the cooling-off period
+        if halted:
+            self.halted_days += 1
+        if halted and not self.was_halted:
+            self.triggers += 1 if self.drawdown_policy == "halt" else 0
+        self.was_halted = halted
+        cap_new = (
+            0 if mode == "NO_NEW_TRADES" else DEFENSIVE_MAX_NEW if mode == "DEFENSIVE" else NORMAL_MAX_NEW
+        )
+        bought = 0
+        for pick in todays:
+            if bought >= cap_new:
+                self._skip("market_mode_limit" if mode != "NORMAL" else "top_5_limit")
+                continue
+            if halted:
+                self._skip("drawdown_halt")
+                continue
+            ix = self.index.get(pick.symbol)
+            price = float(ix.loc[day, "open"]) if ix is not None and day in ix.index else None
+            why, qty, fill = self.refusal(pick.symbol, pick.bucket, price, mode, limits, cash=self.cash)
+            if why is not None:
+                self._skip(why)
+                continue
+            brokerage, taxes = compute_charges(fill * qty, "BUY")
+            cost = fill * qty + brokerage + taxes
+            self.cash -= cost
+            self.open_.append(
+                _Position(
+                    pick.symbol,
+                    pick.bucket,
+                    qty,
+                    cost,
+                    day,
+                    fill * (1 - self.stop),
+                    fill * (1 + self.target),
+                    fill * (1 + self.half_out),
+                    last_close=fill,
+                    fill=fill,
+                )
+            )
+            bought += 1
+
+        # 2. today's bar for every position (a new one counts today as bar 1, like strict_score)
+        still: list[_Position] = []
+        for pos in self.open_:
+            ix = self.index.get(pos.symbol)
+            if ix is None or day not in ix.index:
+                still.append(pos)
+                continue
+            closed, got = _step(pos, ix.loc[day], self.horizon)
+            self.cash += got
+            if closed:
+                self._close(pos, day, pos.exit_reason or "timeout")
+            else:
+                still.append(pos)
+        self.open_ = still
+
+        # 3. close-of-day equity
+        shares_value = sum(p.qty * p.last_close for p in self.open_)
+        self.equity = self.cash + shares_value
+        self.peak = max(self.peak, self.equity)
+        self.control_peak = max(self.control_peak, self.equity)
+        self.max_dd = max(self.max_dd, (self.peak - self.equity) / self.peak if self.peak else 0.0)
+        self.underwater = self.underwater + 1 if self.equity < self.peak else 0
+        self.longest_underwater = max(self.longest_underwater, self.underwater)
+        if (
+            self.drawdown_policy != "halt"
+            and self.pending is None
+            and self.cooldown_left == 0
+            and self.open_
+            and self.control_peak > 0
+            and (self.control_peak - self.equity) / self.control_peak >= self.max_drawdown_pct
+        ):
+            self.pending = "all" if self.drawdown_policy == "liquidate" else "half"
+            self.triggers += 1
+        self.curve.append((day, self.equity))
+        self.invested_share.append(shares_value / self.equity if self.equity else 0.0)
+        self.last_day = day
+
+    def result(self) -> PortfolioResult:
+        """A position still open when the data ends is marked at its last close, not counted as a trade."""
+        returns = [t.net_return for t in self.closed]
+        return PortfolioResult(
+            start_equity=self.capital,
+            end_equity=self.equity,
+            total_return=self.equity / self.capital - 1.0,
+            max_drawdown=self.max_dd,
+            trades=len(returns),
+            wins=sum(1 for r in returns if r > 0),
+            avg_trade_return=sum(returns) / len(returns) if returns else None,
+            avg_invested_share=(
+                sum(self.invested_share) / len(self.invested_share) if self.invested_share else 0.0
+            ),
+            halted_days=self.halted_days,
+            still_open=len(self.open_),
+            triggers=self.triggers,
+            forced_exits=self.forced_exits,
+            forced_shortfall=self.forced_shortfall,
+            longest_underwater_days=self.longest_underwater,
+            skipped=self.skipped,
+            curve=self.curve,
+            closed=list(self.closed),
+        )
 
 
 def simulate(
@@ -155,178 +440,24 @@ def simulate(
     by_day: dict[date, list[Pick]] = {}
     for p in picks:
         by_day.setdefault(p.day, []).append(p)
-    index = {s: df.set_index("day") for s, df in bars.items() if not df.empty}
-
-    cash, peak = float(capital), float(capital)
-    open_: list[_Position] = []
-    closed_returns: list[float] = []
-    skipped: dict[str, int] = {}
-    curve: list[tuple[date, float]] = []
-    invested_share: list[float] = []
-    halted_days, max_dd = 0, 0.0
-    control_peak, cooldown_left, pending = float(capital), 0, None
-    triggers = forced_exits = underwater = longest_underwater = 0
-    forced_shortfall = 0.0
-    was_halted = False
-
-    def skip(reason: str) -> None:
-        skipped[reason] = skipped.get(reason, 0) + 1
-
-    equity = float(capital)
-    for i, day in enumerate(days):
-        # 1. buys decided on the previous trading day, filled at today's open
-        todays = sorted(by_day.get(days[i - 1], []), key=lambda p: (-p.score, p.symbol)) if i else []
-        mode = modes.get(days[i - 1], "NORMAL") if i else "NORMAL"
-        limits = limits_for(equity)
-        if pending is not None:  # forced exits decided at yesterday's close, filled at today's open
-            left: list[_Position] = []
-            for pos in open_:
-                ix = index.get(pos.symbol)
-                sell_qty = pos.qty if pending == "all" else pos.qty // 2
-                if ix is None or day not in ix.index or sell_qty < 1:
-                    left.append(pos)
-                    continue
-                o = float(ix.loc[day, "open"])
-                got = _sell(o, sell_qty)
-                forced_shortfall += sell_qty * pos.last_close - got
-                forced_exits += 1
-                cash += got
-                pos.cash_back += got
-                pos.qty -= sell_qty
-                pos.last_close = o
-                if pos.qty == 0:
-                    closed_returns.append(pos.cash_back / pos.cost_in - 1.0)
-                else:
-                    left.append(pos)
-            open_ = left
-            pending = "all" if pending == "all" and any(p.qty for p in open_) else None
-            cooldown_left = cooldown_days
-            equity = cash + sum(p.qty * p.last_close for p in open_)
-        if drawdown_policy == "halt":
-            halted = control_peak > 0 and (control_peak - equity) / control_peak >= max_drawdown_pct
-        else:
-            halted = cooldown_left > 0 or pending is not None
-            if cooldown_left > 0:
-                cooldown_left -= 1
-                if cooldown_left == 0:
-                    control_peak = equity  # a fresh start after the cooling-off period
-        if halted:
-            halted_days += 1
-        if halted and not was_halted:
-            triggers += 1 if drawdown_policy == "halt" else 0
-        was_halted = halted
-        cap_new = (
-            0 if mode == "NO_NEW_TRADES" else DEFENSIVE_MAX_NEW if mode == "DEFENSIVE" else NORMAL_MAX_NEW
-        )
-        bought = 0
-        held = {p.symbol for p in open_}
-        for pick in todays:
-            if bought >= cap_new:
-                skip("market_mode_limit" if mode != "NORMAL" else "top_5_limit")
-                continue
-            if halted:
-                skip("drawdown_halt")
-                continue
-            if pick.symbol in held:
-                skip("already_held")
-                continue
-            if len(open_) >= limits.max_positions:
-                skip("no_free_slot")
-                continue
-            ix = index.get(pick.symbol)
-            if ix is None or day not in ix.index:
-                skip("no_price")
-                continue
-            exposure = {}
-            for p in open_:
-                key = p.bucket or p.symbol
-                exposure[key] = exposure.get(key, 0.0) + p.qty * p.last_close
-            key = pick.bucket or pick.symbol
-            if limits.sector_rule == "one_per_sector" and key in exposure:
-                skip("sector_cap")
-                continue
-            fill = apply_slippage(float(ix.loc[day, "open"]), "BUY")
-            risk_pct = risk_per_trade_pct
-            budget = min(limits.max_position_pct, risk_pct / stop) * equity
-            if mode == "DEFENSIVE":
-                budget *= DEFENSIVE_SIZE_FACTOR
-            if limits.sector_cap_pct is not None:
-                budget = min(budget, limits.sector_cap_pct * equity - exposure.get(key, 0.0))
-            budget = min(budget, cash - limits.cash_floor_inr)
-            qty = math.floor(budget / fill) if fill > 0 else 0
-            if qty < 1 or qty * fill < limits.min_position_inr:
-                skip("too_small_or_no_cash")
-                continue
-            brokerage, taxes = compute_charges(fill * qty, "BUY")
-            cost = fill * qty + brokerage + taxes
-            if cost > cash:
-                skip("too_small_or_no_cash")
-                continue
-            cash -= cost
-            open_.append(
-                _Position(
-                    pick.symbol, pick.bucket, qty, cost, day,
-                    fill * (1 - stop), fill * (1 + target), fill * (1 + half_out), last_close=fill,
-                )
-            )
-            held.add(pick.symbol)
-            bought += 1
-
-        # 2. today's bar for every position (a new one counts today as bar 1, like strict_score)
-        still: list[_Position] = []
-        for pos in open_:
-            ix = index.get(pos.symbol)
-            if ix is None or day not in ix.index:
-                still.append(pos)
-                continue
-            closed, got = _step(pos, ix.loc[day], horizon)
-            cash += got
-            if closed:
-                closed_returns.append(pos.cash_back / pos.cost_in - 1.0)
-            else:
-                still.append(pos)
-        open_ = still
-
-        # 3. close-of-day equity
-        shares_value = sum(p.qty * p.last_close for p in open_)
-        equity = cash + shares_value
-        peak = max(peak, equity)
-        control_peak = max(control_peak, equity)
-        max_dd = max(max_dd, (peak - equity) / peak if peak else 0.0)
-        underwater = underwater + 1 if equity < peak else 0
-        longest_underwater = max(longest_underwater, underwater)
-        if (
-            drawdown_policy != "halt"
-            and pending is None
-            and cooldown_left == 0
-            and open_
-            and control_peak > 0
-            and (control_peak - equity) / control_peak >= max_drawdown_pct
-        ):
-            pending = "all" if drawdown_policy == "liquidate" else "half"
-            triggers += 1
-        curve.append((day, equity))
-        invested_share.append(shares_value / equity if equity else 0.0)
-
-    # a position still open when the data ends is marked at its last close, not counted as a trade
-    return PortfolioResult(
-        start_equity=float(capital),
-        end_equity=equity,
-        total_return=equity / capital - 1.0,
-        max_drawdown=max_dd,
-        trades=len(closed_returns),
-        wins=sum(1 for r in closed_returns if r > 0),
-        avg_trade_return=sum(closed_returns) / len(closed_returns) if closed_returns else None,
-        avg_invested_share=sum(invested_share) / len(invested_share) if invested_share else 0.0,
-        halted_days=halted_days,
-        still_open=len(open_),
-        triggers=triggers,
-        forced_exits=forced_exits,
-        forced_shortfall=forced_shortfall,
-        longest_underwater_days=longest_underwater,
-        skipped=skipped,
-        curve=curve,
+    book = Book(
+        bars,
+        capital=capital,
+        horizon=horizon,
+        target=target,
+        stop=stop,
+        half_out=half_out,
+        risk_per_trade_pct=risk_per_trade_pct,
+        max_drawdown_pct=max_drawdown_pct,
+        drawdown_policy=drawdown_policy,
+        cooldown_days=cooldown_days,
     )
+    for i, day in enumerate(days):
+        # buys decided on the previous trading day, filled at today's open
+        todays = by_day.get(days[i - 1], []) if i else []
+        mode = modes.get(days[i - 1], "NORMAL") if i else "NORMAL"
+        book.step(day, todays, mode)
+    return book.result()
 
 
 def random_picks(
@@ -498,8 +629,7 @@ LIMITS: tuple[str, ...] = (
 
 
 MODE_LIMIT = (
-    "Market mode comes from the banner the brain recorded on {have} of the {total} scored days. "
-    "{rest}"
+    "Market mode comes from the banner the brain recorded on {have} of the {total} scored days. {rest}"
 )
 
 

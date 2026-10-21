@@ -12,9 +12,10 @@ through `GET /brain/observatory/evidence-pack?month=YYYY-MM`, then committed und
 from __future__ import annotations
 
 from calendar import monthrange
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any
 
+from swing_trade_ml.services import trial_seal
 from swing_trade_ml.services.brain_observatory import baselines, defs, evidence, fills, outcomes, spot_check
 from swing_trade_ml.services.brain_observatory.redact import redact_text
 
@@ -35,6 +36,38 @@ def month_bounds(month: str, today: date) -> tuple[date, date]:
 
 
 def practice_baselines(db, start: date, end: date) -> dict[str, Any]:
+    """The baselines below, sealed for the blind trial (services/trial_seal.py): figures only for the days
+    before it; the trial's own days are counted (`sealed`), never scored."""
+    if not trial_seal.touches_seal(start, end):
+        return _practice_baselines(db, start, end)
+    lo = max(start, trial_seal.SEALED_FROM)
+    out = (
+        _practice_baselines(db, start, lo - timedelta(days=1))
+        if start < lo
+        else {"available": True, "sessions": 0}
+    )
+    out["results_period"] = (
+        {"from": start.isoformat(), "to": (lo - timedelta(days=1)).isoformat()} if start < lo else None
+    )
+    from swing_trade_ml.brain.trial_journal import picks_for
+
+    history = outcomes.queries.stage_history(db)
+    sessions = [
+        s
+        for s in outcomes.queries.nightly_sessions(db, lo, end, live=True, book=outcomes.BOOK)
+        if outcomes.stage_on_day(history, s.day) == outcomes.PRACTICE_STAGE
+    ]
+    out["sealed"] = {
+        "from": lo.isoformat(),
+        "to": end.isoformat(),
+        "text": trial_seal.SEALED_TEXT,
+        "sessions": len(sessions),
+        "picked": {name: sum(len(picks_for(s)[name]) for s in sessions) for name in CANDIDATE_SETS},
+    }
+    return out
+
+
+def _practice_baselines(db, start: date, end: date) -> dict[str, Any]:
     """Trade-level and portfolio-level baselines for the three followed sets of the practice sessions.
 
     Sessions, prices and NIFTY are loaded exactly as the Outcomes page loads them for `category=practice`
@@ -232,16 +265,39 @@ def _portfolio_table(name: str, p: dict) -> list[str]:
     ]
 
 
+def _sealed_lines(b: dict) -> list[str]:
+    """The blind trial's days in this month: counts only (services/trial_seal.py)."""
+    sealed = b.get("sealed")
+    if not sealed:
+        return []
+    picked = ", ".join(f"{SET_NAMES[n]}: {sealed['picked'][n]}" for n in CANDIDATE_SETS)
+    shown = b.get("results_period")
+    return [
+        f"**Trial days {sealed['from']} to {sealed['to']}: {sealed['text']}** "
+        f"{sealed['sessions']} sessions; ideas picked: {picked}.",
+        "",
+        (
+            f"The figures below cover only {shown['from']} to {shown['to']}, before the trial started."
+            if shown
+            else "No days before the trial in this month, so there are no figures below."
+        ),
+        "",
+    ]
+
+
 def _practice_lines(pr: dict) -> list[str]:
     b, g, grades = pr["baselines"], pr["forward_gate"], pr["data"]["stored_grades"]
     lines = [
         f"Forward gate over the whole trial ({g['cohort_from']} to {g['cohort_to']}; a working-order check, "
         f"not proof): **{g['word']}**. {g['why']}",
         "",
+        *_sealed_lines(b),
     ]
     if not b["available"]:
         return [*lines, b["why"], ""]
     if not b["sessions"]:
+        if b.get("sealed"):
+            return lines
         return [*lines, "No live nightly brain runs in the practice stage in this month.", ""]
     trade = grades["trade"]
     lines += [

@@ -727,7 +727,14 @@ def cmd_brain(args: argparse.Namespace) -> int:
             title = (
                 "M09 rescore-learning" if args.brain_command == "rescore-learning" else "M09 learning report"
             )
-            _print_learning_summary(report, since, title)
+            from swing_trade_ml.services import trial_seal
+
+            # The blind trial (services/trial_seal.py): print only ideas decided before it; count the rest.
+            shown = trial_seal.learning_report(db, since)
+            shown.update(
+                newly_scored=report.get("newly_scored", 0), new_proposals=report.get("new_proposals", [])
+            )
+            _print_learning_summary(shown, since, title)
             return 0
         if args.brain_command in ("replay-week", "validate-week"):
             from swing_trade_ml.brain import queue as brain_queue

@@ -17,7 +17,21 @@ function avg(value: number | null): string {
   return value === null ? 'n/a' : formatSignedPercent(value, 1)
 }
 
+// The blind trial: brain results are sealed until its evaluation; only counts are shown.
+const SEALED_TEXT = "Sealed until the trial's evaluation (blind test): counts only."
+
 function SummaryCells({ s }: { s: BrainCompareSummary }) {
+  if (s.sealed) {
+    return (
+      <>
+        <td>{s.ideas}</td>
+        <td>{s.finished}</td>
+        <td>sealed</td>
+        <td>sealed</td>
+        <td>sealed</td>
+      </>
+    )
+  }
   return (
     <>
       <td>{s.ideas}</td>
@@ -46,6 +60,11 @@ export function BrainCompareCard() {
           <div className="banner banner-info" style={{ margin: '0.6rem 0' }}>
             {data.note}
           </div>
+          {data.sealed && (
+            <p className="stat-sub">
+              Brain ideas from {data.sealed_from}: {data.sealed_text ?? SEALED_TEXT}
+            </p>
+          )}
           {data.brain.scored_on && data.version1.scored_on && (
             <div className="banner banner-warn" style={{ margin: '0.6rem 0' }}>
               <div>Brain is scored on: {data.brain.scored_on}</div>
@@ -108,8 +127,8 @@ export function BrainCompareCard() {
                       <tr key={w.week}>
                         <td>{w.week}</td>
                         <td>{w.brain.finished}</td>
-                        <td>{pct(w.brain.hit_rate)}</td>
-                        <td>{avg(w.brain.avg_outcome_pct)}</td>
+                        <td>{w.brain.sealed ? 'sealed' : pct(w.brain.hit_rate)}</td>
+                        <td>{w.brain.sealed ? 'sealed' : avg(w.brain.avg_outcome_pct)}</td>
                         <td>{w.version1.finished}</td>
                         <td>{pct(w.version1.hit_rate)}</td>
                         <td>{avg(w.version1.avg_outcome_pct)}</td>
@@ -162,12 +181,14 @@ export function BrainStageCard() {
           </p>
           <p className="stat-sub">
             {Math.min(s.finished, s.needed)} of {s.needed} brain ideas have finished.{' '}
-            {s.ready
-              ? 'The forward trial has passed too. That is enough evidence to move on, if you choose to.'
-              : `The brain stays in practice until ${s.needed} have finished and the forward trial passes.`}{' '}
+            {s.sealed
+              ? `The brain stays in practice until ${s.needed} have finished and the forward trial passes. The trial's result is sealed until its evaluation, so only counts are shown; when you change the stage, the server checks the trial and refuses if it is not met.`
+              : s.ready
+                ? 'The forward trial has passed too. That is enough evidence to move on, if you choose to.'
+                : `The brain stays in practice until ${s.needed} have finished and the forward trial passes.`}{' '}
             Going back to practice is always allowed and takes effect at once.
           </p>
-          {!s.ready && s.trial_plain && <p className="stat-sub">{s.trial_plain}</p>}
+          {(s.sealed || !s.ready) && s.trial_plain && <p className="stat-sub">{s.trial_plain}</p>}
           {s.finished_blocked !== undefined && (
             <p className="stat-sub">
               {s.finished_blocked} more finished {s.finished_blocked === 1 ? 'idea was' : 'ideas were'} stopped by the

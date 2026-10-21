@@ -193,6 +193,38 @@ test.describe('5. Admin', () => {
   })
 })
 
+test.describe('5b. Observatory: score vs result (ps5)', () => {
+  test('past data shows hit rates; the blind trial shows counts only, never a result', async ({ page }) => {
+    await mockApi(page)
+    await openPage(page, '/trademind/observatory')
+    await page.getByRole('tab', { name: 'Results & proof' }).click()
+    const card = page.getByTestId('obs-score-bands')
+    await expect(page.getByText('Does a higher score really mean better results?')).toBeVisible()
+    await expect(card.locator('[data-band="80%-100%"]').first()).toContainText('41% of 429 ideas')
+    const trial = card.locator('[data-testid="obs-score-bands-live"][data-period="trial"]')
+    await expect(trial).toContainText('counts only')
+    await expect(trial.locator('[data-band="80%-100%"]')).toContainText('6 ideas · 2 finished')
+    for (const row of await trial.locator('[data-band] .tm-num').allTextContents()) {
+      expect(row).not.toContain('%')
+    }
+  })
+})
+
+test.describe('5c. Go-live: the blind trial is sealed', () => {
+  test('the stage card shows counts and the sealed sentence, never whether the trial made a profit', async ({ page }) => {
+    await mockApi(page)
+    await openPage(page, '/trademind/golive')
+    await expect(page.getByText('12 of 30 brain ideas have finished.', { exact: false })).toBeVisible()
+    const plain = page.getByTestId('golive-trial-plain')
+    await expect(plain).toContainText("Sealed until the trial's evaluation (blind test): counts only.")
+    await expect(plain).toContainText('14 of 15 trial sessions')
+    const text = await page.locator('.tm-page').innerText()
+    expect(text).not.toMatch(/profit after costs: (yes|no)/i)
+    expect(text).not.toMatch(/beats buying every stock: (yes|no)/i)
+    expect(text).not.toContain('The forward trial has passed')
+  })
+})
+
 test.describe('6. Phone width (390 x 844)', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
 

@@ -34,7 +34,7 @@ INDIA VIX and 16 NIFTY sector indices run to 2026-09-09 (context only, no stock 
 | 2021-08 to 2026-09 (306 stocks) | Large one-day moves (F-07) | Classification only; no rule changed | 2026-10-13 | `AUDIT-2026-10-13.md` F-07 |
 | 2023-07-01 to 2025-01-31; 2026-07-13 to 2026-08-14 | ps3 cost stress: walk-forward picks and stored replay ideas re-scored at 2x charges and fills 0.3% worse (both periods already spent) | Diagnostic only; nothing changed (protocol ps3-cost-stress-v1) | 2026-10-20 | `cost_stress/` |
 | 2024-08 to 2026-05 (5 bad-market windows) | ps2 bad-market test: replayed banner timing and one account with vs without the banner, model picks per window | Diagnostic only; nothing changed (protocol ps2-bad-market-v1) | 2026-10-20 | `bad_market/` |
-| 2026-07-13 to 2026-08-14 | ps1 module on/off: whole-brain replays with one module left out at a time, liked ideas scored | Diagnostic only; nothing changed (protocol ps1-module-ablation-v1) | 2026-10-20 | `module_ablation/` |
+| 2026-07-13 to 2026-08-14 | ps1 module on/off: whole-brain replays with one module left out at a time, liked ideas scored | Diagnostic only; nothing changed (protocol ps1-module-ablation-v1). Result 2026-10-21: only M08 changed which ideas were wanted; M07 off safe; others changed nothing (replay cannot see the day's account, needs ps12) | 2026-10-20 | `module_ablation/` |
 
 **Conclusion for local data:** every period up to 2026-09-07 is development data. There is no untouched
 local period.
@@ -47,6 +47,7 @@ Prod candles continue to the latest trading day (2026-10-12 when this was writte
 |---|---|---|---|---|
 | 2026-09-25 to 2026-10-09 | Brain decisions and their outcomes (519 scored); v1 ideas since 09-28 (121) | Found the zero-ideas bug and the tester-book bug; owner decisions on top 5 a day and sectors | 2026-10-09 | memory: two-week review; `EXPERT-TRADER-PLAN.md` |
 | 2026-10-13 | Prod configuration only: active models, risk limits, account counts | Audit findings F-02, F-11, F-17; no outcomes seen | 2026-10-13 | `AUDIT-2026-10-13.md` |
+| 2026-10-14 onward (prod, forward trial) | Trial-period results were DISPLAYED from ~2026-10-15/16: Observatory 'Results this month' (`/brain/observatory/outcomes`) and the daily check record's trial section (hit rate, average result, edge). Whether anyone looked: UNKNOWN | Nothing decided. Recorded so the trial is not assumed fully blind; results to be sealed (amendment 1, A4) | 2026-10-21 | amendment 1; owner decision 2026-10-21 |
 
 ## What is still clean
 
@@ -55,6 +56,9 @@ Prod candles continue to the latest trading day (2026-10-12 when this was writte
 | 2026-09-09 to 2026-09-24 (prod) | **Probably clean for stock outcomes**, not certain | No recorded look at outcomes. But ideas made on these days finish inside 09-25 to 10-09, which was reviewed, so some of their results were seen indirectly. Treat as **not clean**. |
 | 2026-09-25 to 2026-10-09 (prod) | **Not clean** | Outcomes reviewed on 2026-10-09. |
 | **2026-10-14 onward (prod)** | **Clean today** | Nothing looked at yet. This is where the forward practice trial and any hold-out should start. |
+
+2026-10-21: exposure of the trial period since ~15–16 Oct is UNKNOWN (see Production data); treat as
+possibly seen until the owner says otherwise.
 
 **Decided (owner, 2026-10-13):** the forward trial and "Hold-out A" (layer-2 draft, section 4) start on
 **2026-10-14**, not 2026-09-09. The trial journal is run as

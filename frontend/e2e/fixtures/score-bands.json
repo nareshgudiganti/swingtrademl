@@ -1,0 +1,152 @@
+{
+  "question": "Does a higher score really mean better results?",
+  "rule": "+8% before -4% within 15 trading days (stored M09 grade: entry at the decision close, gross)",
+  "trial_start": "2026-10-14",
+  "development": {
+    "source": "docs/brain/evidence/score_reliability.json (raw_table_all_folds)",
+    "period": "walk-forward 2025-10-01 to 2026-08-15, a fresh model per 28-day window",
+    "note": "Development data, already looked at: a diagnostic, not proof.",
+    "bands": [
+      {
+        "band": "0%-30%",
+        "ideas": 4074,
+        "hit_rate": 0.143
+      },
+      {
+        "band": "30%-40%",
+        "ideas": 1940,
+        "hit_rate": 0.139
+      },
+      {
+        "band": "40%-50%",
+        "ideas": 1626,
+        "hit_rate": 0.138
+      },
+      {
+        "band": "50%-60%",
+        "ideas": 1133,
+        "hit_rate": 0.135
+      },
+      {
+        "band": "60%-70%",
+        "ideas": 807,
+        "hit_rate": 0.152
+      },
+      {
+        "band": "70%-80%",
+        "ideas": 522,
+        "hit_rate": 0.211
+      },
+      {
+        "band": "80%-100%",
+        "ideas": 429,
+        "hit_rate": 0.408
+      }
+    ]
+  },
+  "live": [
+    {
+      "period": "before_trial",
+      "from": "2026-07-22",
+      "to": "2026-10-13",
+      "label": "Before the trial started: already looked at, shown with results (not proof).",
+      "sealed": false,
+      "bands": [
+        {
+          "band": "0%-30%",
+          "ideas": 10,
+          "finished": 8,
+          "hit_rate": 0.25
+        },
+        {
+          "band": "30%-40%",
+          "ideas": 10,
+          "finished": 8,
+          "hit_rate": 0.25
+        },
+        {
+          "band": "40%-50%",
+          "ideas": 10,
+          "finished": 8,
+          "hit_rate": 0.25
+        },
+        {
+          "band": "50%-60%",
+          "ideas": 10,
+          "finished": 8,
+          "hit_rate": 0.25
+        },
+        {
+          "band": "60%-70%",
+          "ideas": 10,
+          "finished": 8,
+          "hit_rate": 0.25
+        },
+        {
+          "band": "70%-80%",
+          "ideas": 10,
+          "finished": 8,
+          "hit_rate": 0.25
+        },
+        {
+          "band": "80%-100%",
+          "ideas": 10,
+          "finished": 8,
+          "hit_rate": 0.25
+        }
+      ]
+    },
+    {
+      "period": "trial",
+      "from": "2026-10-14",
+      "to": "2026-10-21",
+      "label": "Sealed until the trial's evaluation (blind test): counts only.",
+      "sealed": true,
+      "bands": [
+        {
+          "band": "0%-30%",
+          "ideas": 6,
+          "finished": 2,
+          "hit_rate": null
+        },
+        {
+          "band": "30%-40%",
+          "ideas": 6,
+          "finished": 2,
+          "hit_rate": null
+        },
+        {
+          "band": "40%-50%",
+          "ideas": 6,
+          "finished": 2,
+          "hit_rate": null
+        },
+        {
+          "band": "50%-60%",
+          "ideas": 6,
+          "finished": 2,
+          "hit_rate": null
+        },
+        {
+          "band": "60%-70%",
+          "ideas": 6,
+          "finished": 2,
+          "hit_rate": null
+        },
+        {
+          "band": "70%-80%",
+          "ideas": 6,
+          "finished": 2,
+          "hit_rate": null
+        },
+        {
+          "band": "80%-100%",
+          "ideas": 6,
+          "finished": 2,
+          "hit_rate": null
+        }
+      ]
+    }
+  ],
+  "redacted_fields": []
+}

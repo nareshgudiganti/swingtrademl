@@ -20,6 +20,7 @@ from swing_trade_ml.brain.module import Mode
 from swing_trade_ml.core.config import settings
 from swing_trade_ml.db.models.brain import BrainDecision, BrainProposal, BrainRun
 from swing_trade_ml.db.models.market import Instrument
+from swing_trade_ml.services.what_would_change import ModelRank, model_ranks, what_would_change
 
 
 def _brain_switched_on() -> None:
@@ -96,7 +97,13 @@ def _honest_score(d: BrainDecision, evidence: dict | None) -> dict | None:
     return None
 
 
-def _decision_out(d: BrainDecision, evidence: dict | None = None) -> dict:
+def _decision_out(
+    d: BrainDecision,
+    evidence: dict | None = None,
+    *,
+    run: BrainRun | None = None,
+    rank: ModelRank | None = None,
+) -> dict:
     return {
         "id": d.id,
         "run_id": d.run_id,
@@ -119,6 +126,13 @@ def _decision_out(d: BrainDecision, evidence: dict | None = None) -> dict:
         "evidence_text": d.evidence_text,
         "downgraded_from": d.downgraded_from,
         "downgrade_reason": d.downgrade_reason,
+        # Display-only (bx10): what would have to change for a TRADE, read from the stored reasons.
+        "what_would_change": what_would_change(
+            d,
+            rank=rank,
+            banner_mode=run.banner_mode if run is not None else None,
+            banner_headline=run.banner_headline if run is not None else None,
+        ),
     }
 
 
@@ -142,6 +156,7 @@ def _run_summary(db, run: BrainRun) -> dict:
 def _run_out(db, run: BrainRun) -> dict:
     decisions = service.decisions_for(db, run.id)
     evidence = _score_evidence(db)
+    ranks = model_ranks(decisions)
     return {
         "quality": run.quality,
         "sectors": (run.context or {}).get("sectors", []),
@@ -162,7 +177,7 @@ def _run_out(db, run: BrainRun) -> dict:
         "banner": {"mode": run.banner_mode, "headline": run.banner_headline},
         "modules": run.modules,
         "counts": dict(Counter(d.word for d in decisions)),
-        "decisions": [_decision_out(d, evidence) for d in decisions],
+        "decisions": [_decision_out(d, evidence, run=run, rank=ranks.get(d.id)) for d in decisions],
     }
 
 
@@ -386,7 +401,7 @@ def why(symbol: str, db: DbSession, book: str = Query("paper", pattern="^(paper|
     return {
         "run_id": run_id,
         "banner": {"mode": run.banner_mode, "headline": run.banner_headline},
-        "decision": _decision_out(decision, _score_evidence(db)) if decision else None,
+        "decision": _decision_out(decision, _score_evidence(db), run=run) if decision else None,
         "trace": run.trace,
     }
 
@@ -396,17 +411,22 @@ def learning(db: DbSession, since: date | None = Query(None)) -> dict:
     """The learning loop's report (M09): expected vs actual by confidence
     band, word and week, failure patterns and feature drift. Never changes
     anything by itself."""
-    from swing_trade_ml.brain.modules.m09_learn.learn import learning_report
+    from swing_trade_ml.services import trial_seal
 
-    return learning_report(db, since)
+    # The blind trial (services/trial_seal.py): ideas decided since it started are counted only.
+    return trial_seal.learning_report(db, since)
 
 
 def _proposal_out(p: BrainProposal) -> dict:
+    from swing_trade_ml.services import trial_seal
+
     return {
         "id": p.id,
         "kind": p.kind,
         "title": p.title,
-        "evidence": p.evidence,
+        # A proposal made during the blind trial was worked out from its results: sealed.
+        "evidence": trial_seal.proposal_evidence(p.evidence, p.created_at),
+        "evidence_sealed": trial_seal.is_sealed_dt(p.created_at),
         "change": p.change,
         "status": p.status,
         "created_at": p.created_at,

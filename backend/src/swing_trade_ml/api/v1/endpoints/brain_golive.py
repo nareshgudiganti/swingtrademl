@@ -35,6 +35,7 @@ def trial_journal_report(
     """The forward trial's journal (layer-2 draft, section 5a): what the brain signalled each session,
     what following it would have done after costs, the baselines and the gate answer. Read-only."""
     from swing_trade_ml.brain.trial_journal import IST, journal_for, plain_report
+    from swing_trade_ml.services import trial_seal
 
     if end is None:
         # Asking before the trial starts is fine: it simply has no sessions yet.
@@ -43,7 +44,8 @@ def trial_journal_report(
         raise HTTPException(422, "'to' must be on or after 'from'.")
     if (end - start).days > TRIAL_MAX_DAYS:
         raise HTTPException(422, f"Ask for at most {TRIAL_MAX_DAYS} days at a time.")
-    journal = journal_for(db, start, end)
+    # The blind trial (services/trial_seal.py): a range reaching it shows counts only.
+    journal = trial_seal.seal_journal(journal_for(db, start, end))
     return {"journal": journal, "report": plain_report(journal)}
 
 

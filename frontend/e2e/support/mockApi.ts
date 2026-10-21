@@ -25,6 +25,7 @@ import positions from '../fixtures/positions.json' with { type: 'json' }
 import realAccount from '../fixtures/real-account.json' with { type: 'json' }
 import realTax from '../fixtures/real-tax.json' with { type: 'json' }
 import riskLimits from '../fixtures/risk-limits.json' with { type: 'json' }
+import scoreBands from '../fixtures/score-bands.json' with { type: 'json' }
 import safetyState from '../fixtures/safety-state.json' with { type: 'json' }
 import status from '../fixtures/status.json' with { type: 'json' }
 import strategies from '../fixtures/strategies.json' with { type: 'json' }
@@ -149,6 +150,7 @@ function answer(role: Role, method: string, path: string, query: URLSearchParams
   if (path === '/brain/changes') return { body: brainChanges }
   if (path === '/brain/learning') return { body: brainLearning }
   if (path === '/brain/proposals') return { body: [] }
+  if (path === '/brain/observatory/score-bands') return owner ? { body: scoreBands } : { status: 403, body: { detail: 'Owner only.' } }
   if (path === '/brain/episodes') return { body: [] }
   if (path === '/brain/runs') return { body: [] }
   if (path === '/brain/stage') return owner ? { body: brainStage } : { status: 403, body: { detail: 'Owner only.' } }

@@ -396,6 +396,9 @@ def _spot_lines(sc: dict[str, Any]) -> list[str]:
     lines += [
         f"- Decisions checked: {sc['decisions']}; all their price claims true: {sc['decisions_all_true']}.",
         f"- Price claims checked: {sc['claims_checked']}; true: {sc['claims_true']}.",
+        "- Plans built on a price later revised (last traded price at the 15:50 run vs NSE's official "
+        f"close): {sc.get('claims_price_revised', 0)}.",
+        f"- Real mismatches: {sc.get('claims_false', len(sc['mismatches']))}.",
         f"- Reasons with no price claim (scores, similar cases, news): {sc['reasons_not_checkable']}.",
     ]
     if sc["mismatches"]:
@@ -403,6 +406,20 @@ def _spot_lines(sc: dict[str, Any]) -> list[str]:
         lines += [f"| {m['symbol']} | {m['day']} | {m['claim']} | {m['detail']} |" for m in sc["mismatches"]]
     else:
         lines.append("- No mismatches.")
+    if sc.get("price_revised"):
+        lines += [
+            "",
+            "These plans are not wrong: the brain planned on the last traded price at its 15:50 run, and "
+            "NSE's official close, stored later, came out slightly different.",
+            "",
+            "| Stock | Day | Plan built on | Official close | Plan vs close |",
+            "|---|---|---|---|---|",
+        ]
+        lines += [
+            f"| {p['symbol']} | {p['day']} | ₹{p['implied_price']:,.2f} | ₹{p['stored_close']:,.2f} | "
+            f"{p['diff_pct']:+.1f}% |"
+            for p in sc["price_revised"]
+        ]
     return lines
 
 

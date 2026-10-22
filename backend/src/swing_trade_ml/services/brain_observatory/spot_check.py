@@ -12,6 +12,12 @@ Claims checked today:
 - "X is N% above its 50-day average";
 - "NIFTY's 50-day average is above / below its 200-day average".
 
+Each claim gets a `status`: "true", "false" (a real mismatch) or "price_revised" for a trade plan whose
+target, stop and buy range all agree on one price that is not the stored close. The nightly run plans on
+the last traded price at about 15:50 IST; NSE's official close, stored later, can differ a little. Such a
+plan is internally right, just built on a price that was revised after the run, so it is not a mismatch.
+`ok` is True only for "true".
+
 Any other reason is counted as "not checkable from prices" (scores, similar cases, news...). This reads
 decisions and prices only, never outcomes, so it does not spend any held-out period.
 """
@@ -44,8 +50,11 @@ def _rupees(s: str) -> float:
     return float(s.replace(",", ""))
 
 
-def _result(claim: str, ok: bool, detail: str) -> dict[str, Any]:
-    return {"claim": claim, "ok": ok, "detail": detail}
+TRUE, FALSE, PRICE_REVISED = "true", "false", "price_revised"
+
+
+def _result(claim: str, ok: bool, detail: str, status: str | None = None) -> dict[str, Any]:
+    return {"claim": claim, "ok": ok, "status": status or (TRUE if ok else FALSE), "detail": detail}
 
 
 def _plan(m: re.Match, bars: pd.DataFrame, _index: pd.Series) -> dict:
@@ -67,7 +76,36 @@ def _plan(m: re.Match, bars: pd.DataFrame, _index: pd.Series) -> dict:
         problems.append(f"stop ₹{stop:,.0f} is not -{down}% of the close ₹{close:,.2f} (₹{want_s:,.2f})")
     if not lo - 1 <= close <= hi + 1:
         problems.append(f"the close ₹{close:,.2f} is outside the buy range ₹{lo:,.0f} to ₹{hi:,.0f}")
-    return _result("trade plan levels", not problems, "; ".join(problems) or f"close ₹{close:,.2f}")
+    if not problems:
+        return _result("trade plan levels", True, f"close ₹{close:,.2f}")
+    revised = _revised_price(lo, hi, target, up, stop, down)
+    if revised is not None:
+        diff = (revised / close - 1) * 100
+        return {
+            **_result(
+                "trade plan levels",
+                False,
+                f"plan consistent with ₹{revised:,.2f}; the stored official close is ₹{close:,.2f} "
+                f"({abs(diff):.1f}% different): price revised after the run",
+                PRICE_REVISED,
+            ),
+            "implied_price": round(revised, 2),
+            "stored_close": round(close, 2),
+            "diff_pct": round(diff, 2),
+        }
+    return _result("trade plan levels", False, "; ".join(problems))
+
+
+def _revised_price(lo: float, hi: float, target: float, up: int, stop: float, down: int) -> float | None:
+    """The one price the whole plan was built on, or None if target, stop and buy range disagree."""
+    from_target, from_stop = target / (1 + up / 100), stop / (1 - down / 100)
+    price = (from_target + from_stop) / 2
+    tol = 1.0 + 0.001 * price  # the text rounds to whole rupees
+    if abs(from_target - from_stop) > tol:
+        return None
+    if lo <= hi and not lo - 1 <= price <= hi + 1:  # a backwards range (hi < lo) says nothing either way
+        return None
+    return price
 
 
 def _volume_x(bars: pd.DataFrame) -> float | None:
@@ -218,20 +256,27 @@ def spot_check(db: Session, start: date, end: date, n: int = SAMPLE) -> dict[str
             }
         )
     claims = [c for r in rows for c in r["claims"]]
-    mismatches = [
-        {"symbol": r["symbol"], "day": r["day"], "decision_id": r["decision_id"], **c}
-        for r in rows
-        for c in r["claims"]
-        if not c["ok"]
-    ]
+
+    def listed(status: str) -> list[dict]:
+        return [
+            {"symbol": r["symbol"], "day": r["day"], "decision_id": r["decision_id"], **c}
+            for r in rows
+            for c in r["claims"]
+            if c["status"] == status
+        ]
+
+    mismatches, price_revised = listed(FALSE), listed(PRICE_REVISED)
     return {
         "from": start.isoformat(),
         "to": end.isoformat(),
         "decisions": len(rows),
         "claims_checked": len(claims),
-        "claims_true": len(claims) - len(mismatches),
+        "claims_true": sum(1 for c in claims if c["status"] == TRUE),
+        "claims_price_revised": len(price_revised),
+        "claims_false": len(mismatches),
         "decisions_all_true": sum(1 for r in rows if all(c["ok"] for c in r["claims"])),
         "reasons_not_checkable": sum(r["not_checkable"] for r in rows),
         "mismatches": mismatches,
+        "price_revised": price_revised,
         "rows": rows,
     }

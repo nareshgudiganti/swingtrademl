@@ -131,3 +131,15 @@ python -m swing_trade_ml.brain.pause_check --out ../docs/brain/evidence/pause_ch
   known edge, not what the brain's edge is.
 - Case B's other book is random picks, not the real v1 bot.
 - Monthly verdicts with few ideas (0.64 a day, about 13 a month) are noisy by nature.
+
+## Result (run 2026-10-22, one run)
+
+- Reproduction: both walk-forward windows reused the stored models and matched the stored results exactly
+  (1,980 ideas, -0.204% a trade; 1,075 ideas, -0.104% a trade). Account draws: 10 per start (no fallback).
+- No-skill paths firing within 12 months (real days, 5 a day): rule 1 100%, rule 2 88%, rule 3 (Case A) 66%.
+  Reading: all three "often by chance" → "consider loosening" (rule 1 also stops a +1% strategy within 3 months
+  in 91% of paths).
+- Order with the 15% halt: in all 1,218 accounts where the halt fired, the brain book's 8% fall came on an
+  earlier day (none same day, after or never). No opposite instructions possible; rule 2 sometimes fires only
+  after the halt (up to 24 of 440 accounts).
+- Nothing changed: the provisional numbers stay as the owner set them. Full report: `pause_check.md`.

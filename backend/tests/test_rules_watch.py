@@ -113,3 +113,29 @@ def test_the_brain_must_stay_on_15_days(db_session, monkeypatch):
     _five_day_v1(monkeypatch)
     monkeypatch.setattr(m08_policy, "DEFAULT_POLICY", replace(m08_policy.DEFAULT_POLICY, horizon_days=5))
     assert "brain horizon is 5 days, agreed 15" in rules_watch.check(db_session)["detail"]
+
+
+def test_the_accepted_benchmark_is_shown_but_does_not_fail(db_session):
+    """Owner 2026-10-22: sma_crossover_benchmark keeps its own -5% / +15% levels as a comparison strategy."""
+    _strategy(
+        db_session, "sma_crossover_benchmark", "sma_crossover", stop_loss_pct=0.05, take_profit_pct=0.15
+    )
+    c = rules_watch.check(db_session)
+    assert c["ok"] and c["level"] == "ok", c["detail"]
+    assert "Accepted exception: sma_crossover_benchmark uses stop 5%, target 15%" in c["detail"]
+
+
+def test_the_exception_covers_only_its_levels_and_only_that_strategy(db_session):
+    _strategy(
+        db_session,
+        "sma_crossover_benchmark",
+        "sma_crossover",
+        stop_loss_pct=0.05,
+        take_profit_pct=0.15,
+        params={"time_stop_days": 15},
+    )
+    _strategy(db_session, "rw_other_sma", "sma_crossover", stop_loss_pct=0.05, take_profit_pct=0.15)
+    c = rules_watch.check(db_session)
+    assert not c["ok"]
+    assert "sma_crossover_benchmark uses time stop 15 days" in c["detail"]  # other differences still fail
+    assert "rw_other_sma uses stop 5%, target 15%" in c["detail"]  # another strategy gets no exception

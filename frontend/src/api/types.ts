@@ -1199,6 +1199,10 @@ export interface BrainProposal {
   evidence: string
   // True when the proposal was made during the blind trial: `evidence` is then the sealed sentence.
   evidence_sealed?: boolean
+  // True when the whole proposal is sealed (blind trial): `title` and `evidence` are sealed sentences and
+  // `change` is empty. It cannot be judged blind, so the pages show it without Accept / Reject.
+  sealed?: boolean
+  sealed_note?: string
   change: Record<string, unknown>
   status: BrainProposalStatus
   created_at: string

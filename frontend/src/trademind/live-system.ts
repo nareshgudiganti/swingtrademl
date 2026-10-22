@@ -41,8 +41,11 @@ export function currentBuyLevelProposal(proposals: BrainProposal[]): BrainPropos
   const accepted = proposals.filter((p) => p.kind === 'buy_level' && p.status === 'accepted')
   if (accepted.length === 0) return null
   const latest = accepted.reduce((a, b) => ((a.decided_at ?? '') > (b.decided_at ?? '') ? a : b))
-  return latest.change.buy_level != null ? latest : null
+  // A sealed one hides its value, but it is never the owner's "back to default" (that is never sealed).
+  return latest.sealed || latest.change.buy_level != null ? latest : null
 }
+
+export const SEALED_PROPOSAL_NOTE = 'Sealed during the blind trial'
 
 export const BEFORE_TRIAL_NOTE = 'Before the clean trial (28 Sep 2026): the early part of this chart is an older record and is not the current test.'
 

@@ -5,7 +5,7 @@ import { api } from '../../api/client'
 import type { BrainProposal, BrainProposalStatus } from '../../api/types'
 import { formatDateTime } from '../../lib/format'
 import { useLearning, useProposals } from '../live'
-import { currentBuyLevelProposal } from '../live-system'
+import { SEALED_PROPOSAL_NOTE, currentBuyLevelProposal } from '../live-system'
 import { BrainGate, Card, CheckItem, Tag } from '../ui'
 import { QueryNotice } from '../PageState'
 import { Glossary } from '../term'
@@ -22,7 +22,9 @@ const PROPOSAL_STATUS_TONE: Record<BrainProposalStatus, 'blue' | 'green' | 'red'
   dismissed: 'red',
 }
 
-function ProposalRow({
+/** One proposal. A proposal made during the blind trial comes back sealed (title, evidence and change
+ * hidden by the server): it cannot be judged blind, so it shows no Accept / Reject. */
+export function ProposalRow({
   p,
   pending,
   onDecide,
@@ -49,7 +51,8 @@ function ProposalRow({
         )}
       </td>
       <td>
-        {p.status === 'open' && (
+        {p.sealed && p.status === 'open' && <div className="tm-dim">{SEALED_PROPOSAL_NOTE}</div>}
+        {!p.sealed && p.status === 'open' && (
           <div className="tm-flex" style={{ gap: '0.4rem', flexWrap: 'wrap' }}>
             <input
               className="tm-input"

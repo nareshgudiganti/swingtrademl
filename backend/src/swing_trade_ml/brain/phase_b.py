@@ -24,8 +24,8 @@ rules-only replay from `module_ablation`. Offline research only: nothing here is
 decision, order or risk code.
 
 GUARD. Phase B runs from 2026-11-09 (IST), once, after the rules are locked. A real run refuses
-unless the date has come, the git tags `evidence-defs-v1` and `evidence-defs-v2` exist, and the stock
-split file matches its recorded SHA-256. `--dry-run` prints the plan and scores nothing.
+unless the date has come, the git tags `evidence-defs-v1`, `evidence-defs-v2` and `phase-b-settings`
+exist, and the stock split file matches its recorded SHA-256. `--dry-run` prints the plan and scores nothing.
 """
 
 from __future__ import annotations
@@ -49,7 +49,8 @@ IST = ZoneInfo("Asia/Kolkata")
 PROTOCOL_ID = "evidence-plan-phase-b"
 PROTOCOL_VERSION = "1"
 DEFS_VERSION = "evidence-defs-v2"  # amendment 1; it builds on evidence-defs-v1 (plan section 3a)
-REQUIRED_TAGS = ("evidence-defs-v1", "evidence-defs-v2")
+SETTINGS_TAG = "phase-b-settings"  # B1-B3 settings, docs/superpowers/specs/2026-10-22-phase-b-settings.md
+REQUIRED_TAGS = ("evidence-defs-v1", "evidence-defs-v2", SETTINGS_TAG)
 PHASE_B_START = date(2026, 11, 9)  # no real run, and no result, before this IST day
 DEV_START = date(2025, 2, 1)  # development data: the "seen" sample, plan section 3
 DEV_END = date(2026, 8, 15)
@@ -137,7 +138,8 @@ def refusal_reasons(*, today: date, tags: Iterable[str], split_dir: Path) -> lis
     have = set(tags)
     for tag in REQUIRED_TAGS:
         if tag not in have:
-            reasons.append(f"The git tag {tag} does not exist yet: the definitions are not locked.")
+            what = "the candidate settings are" if tag == SETTINGS_TAG else "the definitions are"
+            reasons.append(f"The git tag {tag} does not exist yet: {what} not locked.")
     js = split_dir / SPLIT_FILE
     if not js.exists():
         reasons.append(f"The stock split file is missing ({js}).")

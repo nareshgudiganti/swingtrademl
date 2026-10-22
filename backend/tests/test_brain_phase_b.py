@@ -21,7 +21,7 @@ from swing_trade_ml.brain.replay_scoring import StrictOutcome
 REPO = Path(__file__).resolve().parents[2]
 SPLIT_DIR = REPO / "docs" / "brain" / "evidence" / "stock_split"
 LEDGER = REPO / "docs" / "brain" / "EXPOSURE-LEDGER.md"
-BOTH_TAGS = {"evidence-defs-v1", "evidence-defs-v2"}
+BOTH_TAGS = {"evidence-defs-v1", "evidence-defs-v2", "phase-b-settings"}  # every required tag
 
 
 # ---------------------------------------------------------------- synthetic market
@@ -79,6 +79,13 @@ def test_real_run_is_refused_when_the_split_file_does_not_match_its_recorded_has
     js.write_bytes(js.read_bytes().replace(b'"seed": 7', b'"seed": 8'))
     reasons = pb.refusal_reasons(today=date(2026, 11, 9), tags=BOTH_TAGS, split_dir=tmp_path)
     assert any("hash" in r for r in reasons)
+
+
+def test_real_run_is_refused_without_the_locked_candidate_settings_tag():
+    tags = {"evidence-defs-v1", "evidence-defs-v2"}
+    reasons = pb.refusal_reasons(today=date(2026, 11, 9), tags=tags, split_dir=SPLIT_DIR)
+    assert len(reasons) == 1
+    assert "phase-b-settings" in reasons[0] and "candidate settings" in reasons[0]
 
 
 def test_real_run_is_allowed_from_9_november_with_both_tags_and_the_locked_split():

@@ -420,13 +420,11 @@ def learning(db: DbSession, since: date | None = Query(None)) -> dict:
 def _proposal_out(p: BrainProposal) -> dict:
     from swing_trade_ml.services import trial_seal
 
-    return {
+    out = {
         "id": p.id,
         "kind": p.kind,
         "title": p.title,
-        # A proposal made during the blind trial was worked out from its results: sealed.
-        "evidence": trial_seal.proposal_evidence(p.evidence, p.created_at),
-        "evidence_sealed": trial_seal.is_sealed_dt(p.created_at),
+        "evidence": p.evidence,
         "change": p.change,
         "status": p.status,
         "created_at": p.created_at,
@@ -434,6 +432,9 @@ def _proposal_out(p: BrainProposal) -> dict:
         "decided_at": p.decided_at,
         "decided_note": p.decided_note,
     }
+    # A proposal made during the blind trial was worked out from its results: its title, evidence and
+    # change are sealed (services/trial_seal.py). Counts, status and dates stay.
+    return trial_seal.seal_proposal(out, p.created_at)
 
 
 @router.get("/proposals")

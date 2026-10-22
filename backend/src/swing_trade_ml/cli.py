@@ -739,8 +739,13 @@ def cmd_brain(args: argparse.Namespace) -> int:
 
             # The blind trial (services/trial_seal.py): print only ideas decided before it; count the rest.
             shown = trial_seal.learning_report(db, since)
+            # A proposal made now was worked out from results that include the trial's: sealed while it runs.
+            made_now = datetime.now(UTC)
             shown.update(
-                newly_scored=report.get("newly_scored", 0), new_proposals=report.get("new_proposals", [])
+                newly_scored=report.get("newly_scored", 0),
+                new_proposals=[
+                    trial_seal.seal_proposal(p, made_now) for p in report.get("new_proposals", [])
+                ],
             )
             _print_learning_summary(shown, since, title)
             return 0

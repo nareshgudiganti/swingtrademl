@@ -66,3 +66,41 @@ export interface EvidenceSummary {
   }
   brain_trial: { since: string; finished: number; needed: number; sealed: boolean; sealed_note: string }
 }
+
+// oa11: GET /beginner/insights. Practice and real are separate objects; there is never a total.
+export type InsightsPeriod = 'day' | 'week' | 'month'
+export interface InsightsBook {
+  finished: number
+  wins: number
+  net_pnl: number
+  charges: number
+  money_used: number
+  return_pct: number | null
+}
+export interface InsightsBenchmark {
+  pct: number | null
+  why: string | null
+  stocks?: number
+}
+export interface InsightsRow {
+  key: string
+  label: string
+  from: string
+  to: string
+  paper: InsightsBook
+  real: InsightsBook | null
+  nifty_50: InsightsBenchmark
+  every_stock: InsightsBenchmark
+}
+export interface InsightsData {
+  period: InsightsPeriod
+  today: string
+  since: string | null
+  paper_label: string
+  real_label: string | null
+  real_shown: boolean
+  defs: string
+  definitions: { paper: string; real?: string; nifty_50: string; every_stock: string }
+  note: string
+  rows: InsightsRow[]
+}

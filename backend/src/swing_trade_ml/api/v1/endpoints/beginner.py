@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from swing_trade_ml.api.deps import PRIVATE_AREA, PrincipalDep
 from swing_trade_ml.core.market_session import IST
-from swing_trade_ml.services import beginner_views
+from swing_trade_ml.services import beginner_views, insights
 from swing_trade_ml.services.brain_observatory.db import get_readonly_db
 
 ReadOnlyDb = Annotated[Session, Depends(get_readonly_db)]
@@ -50,6 +50,19 @@ def evidence(db: ReadOnlyDb, principal: PrincipalDep) -> dict:
     """How the practice-money bot is doing, in plain figures. Brain trial shows a count only."""
     _not_for_testers(principal)
     return beginner_views.evidence_summary(db)
+
+
+@router.get("/insights")
+def insights_route(
+    db: ReadOnlyDb,
+    principal: PrincipalDep,
+    period: Literal["day", "week", "month"] = "month",
+) -> dict:
+    """oa11: day / week / month results of the practice book and (only for the real-account owner) the
+    real book, side by side and never added together, with NIFTY 50 and every-stock benchmarks after
+    costs. The brain's sealed trial is never part of these figures."""
+    _not_for_testers(principal)
+    return insights.build(db, period, datetime.now(IST).date(), with_real=principal.can_see_real_account)
 
 
 @router.get("/stock/{symbol}")

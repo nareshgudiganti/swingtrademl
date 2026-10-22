@@ -18,7 +18,7 @@ import MoneyAtStake from './MoneyAtStake'
 import type { BeginnerDecision, EventItem, MoneyAtStakeData, StockBriefData } from './types'
 
 /** The plan part of the stock brief: the sell-half price and the last exit day, worked out by the backend. */
-export type PlanData = Pick<StockBriefData['q3_plan'], 'available' | 'why' | 'sell_half_price' | 'last_exit_day'>
+export type PlanData = Pick<StockBriefData['q3_plan'], 'available' | 'why' | 'sell_half_price' | 'sell_half_pct' | 'last_exit_day'>
 
 const price = (n: number | null | undefined) => (n == null ? NA : `₹${inr(n)}`)
 const RISK_RULE = /risk|limit|cap\b|drawdown|sector|blocked|no new trades/i
@@ -181,7 +181,10 @@ export default function IdeaCard({
       {isTrade && d.qty > 0 && (
         <div data-part="money">
           <div>{`Shares (paper account): ${d.qty}`}</div>
-          <MoneyAtStake value={money ?? { available: false, why: 'figures not loaded' }} />
+          <MoneyAtStake
+            value={money ?? { available: false, why: 'figures not loaded' }}
+            halfPct={plan?.available ? plan.sell_half_pct : undefined}
+          />
         </div>
       )}
 

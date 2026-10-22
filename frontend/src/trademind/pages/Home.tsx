@@ -1,17 +1,16 @@
 import { useNavigate, Link } from 'react-router-dom'
 
-import { chanceText, chanceTitle } from '../honest'
-import type { Action } from '../types'
 import type { IdeaWord } from '../../api/types'
 import { formatDateTime } from '../../lib/format'
 import { finalWord, ideasFrom, holdingsFrom, marketSituation, useLatestRun, useLearning } from '../live'
 import { MARKET_LABEL, MARKET_PLAIN, MARKET_TONE } from '../vocab'
 import { Term, TermIf, WordTag } from '../term'
 import { CapFlag, useSymbolCaps } from '../cap'
-import { ActionPill, BrainArt, BrainGate, Card, CheckItem, Icon, Tag } from '../ui'
+import { BrainArt, BrainGate, Card, CheckItem, Icon, Tag } from '../ui'
 import { noTradeReason } from '../emptyReasons'
 import { PageState } from '../PageState'
 import { ChangesSummaryCard } from '../IdeaExplain'
+import LiveIdeaCard from '../beginner/LiveIdeaCard'
 
 const IDEA_WORDS: IdeaWord[] = ['TRADE', 'WATCH', 'WAIT', 'AVOID']
 
@@ -35,6 +34,8 @@ function HomeBody() {
   const situation = marketSituation(run)
   const attention = holdings.filter((d) => ['MONITOR', 'REDUCE', 'EXIT'].includes(finalWord(d)))
   const top = ideas.slice(0, 5)
+  // Every idea score in the run, so each card can say "Rank 2 of 9 today" instead of a bare number.
+  const dayScores = ideas.map((d) => d.confidence)
   const tradeCount = ideas.filter((d) => finalWord(d) === 'TRADE').length
   // Why there are no TRADE ideas, from the run's own banner only (null when there are some).
   const noTrade = noTradeReason(run.banner, ideas.length, tradeCount)
@@ -166,31 +167,16 @@ function HomeBody() {
           {top.length === 0 ? (
             <PageState kind="empty" reason={noTrade ?? "No ideas in the brain's last run."} />
           ) : (
-            <div className="tm-table-wrap" tabIndex={0} role="region" aria-label="Table, scroll sideways to see more">
-              <table className="tm-table">
-                <tbody>
-                  {top.map((i) => (
-                    <tr key={i.id} className="tm-clickable" onClick={() => navigate(`/trademind/stock/${encodeURIComponent(i.symbol)}`)}>
-                      <td className="tm-strong">
-                        {i.symbol}
-                        <CapFlag tier={caps.get(i.symbol.toUpperCase())} gap />
-                      </td>
-                      <td>
-                        <ActionPill action={finalWord(i) as Action} />
-                      </td>
-                      <td className="tm-num tm-right" title={chanceTitle(i)}>
-                        <span style={{ display: 'inline-flex', gap: '0.3rem', alignItems: 'center' }}>
-                          {chanceText(i)}
-                          <span className="tm-dim">
-                            <Term k="est_chance">est. chance</Term>
-                          </span>
-                        </span>
-                      </td>
-                      <td className="tm-dim">{i.reasons[0]}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="bx-cards" data-testid="top-ideas">
+              {top.map((i) => (
+                <LiveIdeaCard
+                  key={i.id}
+                  decision={i}
+                  compact
+                  dayScores={dayScores}
+                  tags={<CapFlag tier={caps.get(i.symbol.toUpperCase())} />}
+                />
+              ))}
             </div>
           )}
         </Card>

@@ -51,16 +51,41 @@ test.describe('2. Today', () => {
     }
     // RELIANCE is the one holding the brain flagged (MONITOR); TCS (HOLD) is fine and not listed.
     await expect(page.getByText('Price slipped below its 10-day average.', { exact: true })).toBeVisible()
-    await expect(page.getByRole('row', { name: /INFY/ })).toBeVisible()
+    await expect(page.locator('[data-card="idea"][data-symbol="INFY"]')).toBeVisible()
     await expect(page.getByText(/practice ideas have finished so far/)).toBeVisible()
   })
+})
+
+test.describe('2b. One recommendation card (oa12)', () => {
+  for (const path of ['/trademind', '/trademind/opportunities']) {
+    test(`every idea on ${path} uses the card, says Experimental, unproven and shows no score as a %`, async ({ page }) => {
+      await mockApi(page)
+      await openPage(page, path)
+      const cards = page.locator('[data-card="idea"]')
+      await expect(cards.first()).toBeVisible()
+      const n = await cards.count()
+      expect(n).toBeGreaterThan(0)
+      for (let i = 0; i < n; i++) {
+        const card = cards.nth(i)
+        await expect(card.getByText('Experimental, unproven', { exact: true })).toBeVisible()
+        await expect(card.locator('[data-part="model-status"]')).toContainText('7 of 21')
+        // No calibrated chance in these fixtures, so no % at all next to the score.
+        await expect(card.locator('[data-part="score"]')).not.toContainText('%')
+        await expect(card).not.toContainText(/validated|\bproven\b|profitable|probability/i)
+      }
+      // INFY is the TRADE: its plan and rupees come from the stock brief.
+      const infy = page.locator('[data-card="idea"][data-symbol="INFY"]').first()
+      await expect(infy).toContainText('Last exit day: Mon 9 Nov 2026')
+      await expect(infy).toContainText('If the stop is hit you lose about ₹402.10')
+    })
+  }
 })
 
 test.describe('3. Stock page', () => {
   test('opening a top idea shows its price chart and the brain decision', async ({ page }) => {
     await mockApi(page)
     await openPage(page, '/trademind')
-    await page.getByRole('row', { name: /INFY/ }).click()
+    await page.locator('[data-card="idea"][data-symbol="INFY"]').getByRole('link', { name: 'INFY' }).click()
     await expect(page).toHaveURL(/\/trademind\/stock\/INFY$/)
     await expect(page.getByText('INFY · daily price')).toBeVisible()
     await expect(page.getByText('TradeMind Decision')).toBeVisible()
@@ -228,7 +253,7 @@ test.describe('5c. Go-live: the blind trial is sealed', () => {
 test.describe('6. Phone width (390 x 844)', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
 
-  for (const path of ['/trademind', '/trademind/stock/INFY', '/trademind/positions', '/trademind/portfolio', '/trademind/control', '/trademind/alerts']) {
+  for (const path of ['/trademind', '/trademind/opportunities', '/trademind/stock/INFY', '/trademind/positions', '/trademind/portfolio', '/trademind/control', '/trademind/alerts']) {
     test(`no sideways scrolling on ${path}`, async ({ page }) => {
       await mockApi(page)
       await openPage(page, path)

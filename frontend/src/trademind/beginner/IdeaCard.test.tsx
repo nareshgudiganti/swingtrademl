@@ -19,7 +19,7 @@ const decision = (over: Partial<BrainDecision> = {}): BrainDecision => ({
   stop: 1450,
   qty: 10,
   horizon_days: 15,
-  confidence: 72,
+  confidence: 0.72,
   honest_score: null,
   evidence_text: null,
   downgraded_from: null,
@@ -82,27 +82,28 @@ describe('IdeaCard', () => {
     expect(out).toContain('Not available')
     expect(out).toContain('plan incomplete')
   })
-  it('never says probability or chance of winning on the raw score', () => {
+  it('never says probability and never shows the raw score as a %', () => {
     const out = html(decision())
     expect(out.toLowerCase()).not.toContain('probability')
-    expect(out).toContain('72 model score')
-    expect(out).toContain('a ranking, not a chance of winning')
+    expect(out).toContain('Model score 72 (a ranking number, not a chance of profit)')
+    expect(out).toContain("A ranking among today&#x27;s ideas, not a chance of making money.")
+    expect(out).not.toMatch(/72\s*%/)
     expect(out).not.toMatch(/~\d+%/)
   })
-  it('shows a % chance only through honest_score', () => {
-    const out = html(
-      decision({ honest_score: { status: 'measured', honest_chance: 0.31 } }),
-    )
+  it('shows a % chance only through a calibrated honest_score', () => {
+    const out = html(decision({ honest_score: { status: 'measured', honest_chance: 0.31 } }))
     expect(out).toContain('~31%')
+    const m06 = html(decision({ honest_score: { status: 'calibrated', honest_chance: 0.4 } }))
+    expect(m06).toContain('~40%')
   })
   it('missing confidence shows Not available', () => {
-    expect(html(decision({ confidence: null }))).toContain('Score: Not available')
+    expect(html(decision({ confidence: null }))).toContain('Model score: Not available — the model gave no score')
   })
   it('always says Experimental, unproven and the horizon', () => {
     const out = html(decision({ word: 'WAIT', qty: 0 }))
     expect(out).toContain('Experimental, unproven')
     expect(out).toContain('15 trading days')
-    expect(out).toContain('Not proven')
+    expect(out).toContain('Model status: Experimental, unproven')
   })
   it('renders holding words and events', () => {
     const out = renderToString(

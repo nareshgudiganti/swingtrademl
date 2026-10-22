@@ -44,7 +44,7 @@ HORIZONS = {
 # Owner 2026-10-22: sma_crossover_benchmark is a comparison strategy with textbook levels (-5% / +15%);
 # changing it during the trial would change what the bot is compared against.
 ACCEPTED_LEVELS = {
-    "sma_crossover_benchmark": "a comparison strategy with its own levels, kept as is (owner, 2026-10-22)",
+    "sma_crossover_benchmark": "it is not used to judge the brain (owner, 2026-10-22)",
 }
 NAME = "Risk rules"
 
@@ -159,7 +159,7 @@ def _strategy_differences(db: Session, accepted: list[str] | None = None) -> lis
             if not _same(target, h["target_pct"]):
                 found.append(f"target {_pct(target)}")
         if found and s.name in ACCEPTED_LEVELS and accepted is not None:
-            accepted.append(f"{s.name} uses " + ", ".join(found) + f": {ACCEPTED_LEVELS[s.name]}")
+            accepted.append(f"{s.name} uses its own rules ({', '.join(found)}); {ACCEPTED_LEVELS[s.name]}")
             found = []
         policy = exit_policy_for_strategy(s)
         if not _same(policy.scale_out_at_pct, AGREED["first_target_pct"]):
@@ -200,9 +200,9 @@ def check(db: Session) -> dict:
             "half out at +5%, 30-day time stop, 15% halt, 25% sector cap."
         )
         if accepted:
-            detail += " Accepted exception: " + "; ".join(accepted) + "."
+            detail += " Accepted benchmark: " + "; ".join(accepted) + "."
         return {"name": NAME, "ok": True, "detail": detail, "level": "ok"}
     detail = "Differs from the agreed rules: " + "; ".join(differences) + "."
     if accepted:
-        detail += " Accepted exception: " + "; ".join(accepted) + "."
+        detail += " Accepted benchmark: " + "; ".join(accepted) + "."
     return {"name": NAME, "ok": False, "detail": detail, "level": "fail"}

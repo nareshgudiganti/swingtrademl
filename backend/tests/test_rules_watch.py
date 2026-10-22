@@ -122,7 +122,10 @@ def test_the_accepted_benchmark_is_shown_but_does_not_fail(db_session):
     )
     c = rules_watch.check(db_session)
     assert c["ok"] and c["level"] == "ok", c["detail"]
-    assert "Accepted exception: sma_crossover_benchmark uses stop 5%, target 15%" in c["detail"]
+    assert (
+        "Accepted benchmark: sma_crossover_benchmark uses its own rules (stop 5%, target 15%); "
+        "it is not used to judge the brain" in c["detail"]
+    )
 
 
 def test_the_exception_covers_only_its_levels_and_only_that_strategy(db_session):

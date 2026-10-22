@@ -17,14 +17,11 @@
   .bx-bottombar { display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; justify-content: space-around; padding: 0.4rem 0 calc(0.4rem + env(safe-area-inset-bottom, 0px)); background: var(--tm-bg-2, var(--surface, #fff)); border-top: 1px solid var(--tm-line-strong, rgba(128,128,128,0.35)); }
   .bx-tab { flex: 1; text-align: center; padding: 0.5rem 0.2rem; font-size: 0.8rem; text-decoration: none; color: inherit; }
   .bx-tab.bx-active { font-weight: 700; color: var(--tm-violet, inherit); }
-  /* The bottom bar replaces the top row of sections on a phone (one section menu, not two),
-     and the page gets room so the bar never covers its last line. */
-  .tm .tm-nav { display: none; }
-  .tm { padding-bottom: 3.6rem; }
 }
 
 /* ---- wiring in the TradeMind shell and pages (fx8) ---- */
-.tm-topbar .bx-search { width: 15rem; max-width: 100%; }
+.tm-topbar .bx-search { width: 15rem; max-width: 100%; min-width: 0; box-sizing: border-box; }
+.tm-topbar .bx-search-input { box-sizing: border-box; min-width: 0; }
 .tm-topbar .bx-search-input { padding: 0.32rem 0.6rem; font-size: 0.8rem; border-radius: 8px; border: 1px solid var(--tm-line-strong); background: var(--tm-card); color: var(--tm-text); }
 .tm-topbar .bx-search-note { position: absolute; left: 0; right: 0; z-index: 40; margin: 0.2rem 0 0; padding: 0.4rem 0.6rem; border-radius: 8px; background: var(--tm-bg-2); border: 1px solid var(--tm-line-strong); }
 @media (max-width: 860px) {

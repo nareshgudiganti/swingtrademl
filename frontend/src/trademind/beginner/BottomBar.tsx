@@ -1,4 +1,5 @@
-// Phone bottom bar (bx7): one link per menu section, first page the viewer may open. Mounted by TradeMindApp.
+// Phone bottom bar (bx7): one link per menu section, first page the viewer may open. NOT mounted: left unwired
+// until the owner decides the phone layout (PR #55). If mounted, it is meant to replace the top row on a phone.
 // Hidden on wide screens by beginner.css (.bx-bottombar shows under 640px only, where it replaces the top row).
 import { Link } from 'react-router-dom'
 

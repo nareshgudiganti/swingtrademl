@@ -41,9 +41,30 @@ def _plan_text(close: float, target: float, stop: float) -> str:
 def test_a_true_plan_matches_and_a_wrong_target_is_caught():
     bars = _flat_then_breakout()
     good, _ = spot_check.check_decision([_plan_text(105, 113.4, 100.8)], bars, NO_INDEX)
-    assert good[0]["ok"], good
+    assert good[0]["ok"] and good[0]["status"] == "true", good
     bad, _ = spot_check.check_decision([_plan_text(105, 120.0, 100.8)], bars, NO_INDEX)
     assert not bad[0]["ok"] and "is not +8% of the close" in bad[0]["detail"]
+
+
+def test_a_consistent_plan_on_a_revised_price_is_not_a_mismatch():
+    # Planned on ₹110 (target 119 = +8%, stop 106 = -4%), but the stored official close is ₹105.
+    claims, _ = spot_check.check_decision([_plan_text(110, 119.0, 106.0)], _flat_then_breakout(), NO_INDEX)
+    c = claims[0]
+    assert c["status"] == "price_revised" and not c["ok"], c
+    assert 110 <= c["implied_price"] <= 110.5 and c["stored_close"] == 105.0
+    assert "price revised after the run" in c["detail"]
+
+
+def test_a_plan_whose_target_and_stop_disagree_is_still_a_mismatch():
+    # Target implies ~₹110, stop implies ~₹105: not one price, so a real mismatch.
+    claims, _ = spot_check.check_decision([_plan_text(110, 119.0, 100.8)], _flat_then_breakout(), NO_INDEX)
+    assert claims[0]["status"] == "false" and not claims[0]["ok"], claims
+
+
+def test_a_revised_price_outside_the_buy_range_is_still_a_mismatch():
+    text = "Plan: buy around ₹104 to ₹106, target ₹119 (+8%), stop ₹106 (-4%), up to 15 trading days."
+    claims, _ = spot_check.check_decision([text], _flat_then_breakout(), NO_INDEX)
+    assert claims[0]["status"] == "false", claims
 
 
 def test_the_brains_own_setup_lines_are_confirmed_by_the_independent_recheck():
@@ -139,6 +160,13 @@ def _seed(db):
                 word="WATCH",
                 reasons=[_plan_text(105, 130.0, 100.8)],  # a wrong target: must be listed
             ),
+            BrainDecision(
+                run_id="spot-1",
+                symbol="SPOTX",
+                kind="idea",
+                word="TRADE",
+                reasons=[_plan_text(110, 119.0, 106.0)],  # planned on ₹110, official close ₹105
+            ),
         ]
     )
     db.flush()
@@ -147,8 +175,10 @@ def _seed(db):
 def test_the_monthly_pack_lists_every_mismatch(db_session):
     _seed(db_session)
     sc = spot_check.spot_check(db_session, date(2026, 1, 1), date(2026, 1, 31))
-    assert (sc["decisions"], sc["claims_checked"], sc["claims_true"]) == (2, 3, 2)
+    assert (sc["decisions"], sc["claims_checked"], sc["claims_true"]) == (3, 4, 2)
+    assert (sc["claims_price_revised"], sc["claims_false"]) == (1, 1)
     assert [m["claim"] for m in sc["mismatches"]] == ["trade plan levels"]
+    assert [(p["symbol"], p["stored_close"]) for p in sc["price_revised"]] == [("SPOTX", 105.0)]
     # The same month always picks the same decisions.
     again = spot_check.spot_check(db_session, date(2026, 1, 1), date(2026, 1, 31))
     assert [r["decision_id"] for r in again["rows"]] == [r["decision_id"] for r in sc["rows"]]
@@ -156,3 +186,8 @@ def test_the_monthly_pack_lists_every_mismatch(db_session):
     report = pack.plain_report(pack.build_pack(db_session, "2026-01", date(2026, 2, 15)))
     assert "## 5. Are the brain's reasons true? (spot check)" in report
     assert "| SPOTX | 2026-01-30 | trade plan levels |" in report
+    assert (
+        "Plans built on a price later revised (last traded price at the 15:50 run vs NSE's official close): 1"
+        in report
+    )
+    assert "| SPOTX | 2026-01-30 | ₹110.30 | ₹105.00 | +5.0% |" in report

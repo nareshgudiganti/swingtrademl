@@ -14,6 +14,7 @@ import { useBrainStatus, useLatestRun, useMarketSession } from './live'
 import { Card, Icon } from './ui'
 import { OfflineBanner } from './PageState'
 import PricesBadge from './PricesBadge'
+import TopBarAlerts from './TopBarAlerts'
 import { Tour } from './Tour'
 import Home from './pages/Home'
 import Dashboard from './pages/Dashboard'
@@ -157,6 +158,8 @@ export default function TradeMindApp({ ownerConsole = false }: TradeMindAppProps
               {broker.data.broker_authenticated ? 'Zerodha connected' : 'Zerodha: not logged in'}
             </Link>
           )}
+          {/* oa8: alerts bell + trading-stage chip, owner only (the server refuses everyone else). */}
+          {ownerConsole && <TopBarAlerts />}
           <span className="tm-status-chip" title={chipTitle}>
             {chip.label}
           </span>

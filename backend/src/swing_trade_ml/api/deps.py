@@ -201,6 +201,7 @@ TESTER_PRIVATE_PREFIXES: tuple[str, ...] = (
     "/auth/kite",
     "/safety",
     "/notifications",
+    "/brain/alerts",
     "/brain/approvals",
     "/brain/stage",
     "/brain/compare",

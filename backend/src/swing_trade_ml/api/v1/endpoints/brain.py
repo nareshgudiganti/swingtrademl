@@ -366,6 +366,13 @@ def market_episodes(db: DbSession) -> list[dict]:
     ]
 
 
+@router.get("/alerts")
+def recent_alerts(db: DbSession, limit: int = Query(20, ge=1, le=50)) -> list[dict]:
+    """The brain's recent alerts (what was really sent), newest first. Read only: the bell keeps
+    "seen" in the browser, so nothing here is written."""
+    return alerts.recent(db, limit)
+
+
 @router.get("/runs/{run_id}/alerts")
 def alert_preview(run_id: str, db: DbSession) -> dict:
     """What this run would tell the owner on Telegram (nothing is sent)."""

@@ -40,6 +40,12 @@ HORIZONS = {
     15: {"target_pct": AGREED["target_pct"], "stop_pct": AGREED["stop_pct"]},
     5: {"target_pct": 0.02, "stop_pct": 0.04},
 }
+# Strategies the owner accepted with their own levels: still shown in the check, never a failure.
+# Owner 2026-10-22: sma_crossover_benchmark is a comparison strategy with textbook levels (-5% / +15%);
+# changing it during the trial would change what the bot is compared against.
+ACCEPTED_LEVELS = {
+    "sma_crossover_benchmark": "a comparison strategy with its own levels, kept as is (owner, 2026-10-22)",
+}
 NAME = "Risk rules"
 
 
@@ -131,7 +137,9 @@ def _levels_for(strategy: Any) -> tuple[float, float] | None:
     )
 
 
-def _strategy_differences(db: Session) -> list[str]:
+def _strategy_differences(db: Session, accepted: list[str] | None = None) -> list[str]:
+    """Differences that fail the check. Stop / target differences of an ACCEPTED_LEVELS strategy go to
+    `accepted` instead (shown, not failed); its other differences still fail."""
     from swing_trade_ml.db.models.trading import Strategy
     from swing_trade_ml.services.exit_policy import exit_policy_for_strategy
 
@@ -150,6 +158,9 @@ def _strategy_differences(db: Session) -> list[str]:
                 found.append(f"stop {_pct(stop)}")
             if not _same(target, h["target_pct"]):
                 found.append(f"target {_pct(target)}")
+        if found and s.name in ACCEPTED_LEVELS and accepted is not None:
+            accepted.append(f"{s.name} uses " + ", ".join(found) + f": {ACCEPTED_LEVELS[s.name]}")
+            found = []
         policy = exit_policy_for_strategy(s)
         if not _same(policy.scale_out_at_pct, AGREED["first_target_pct"]):
             at = "off" if policy.scale_out_at_pct is None else _pct(policy.scale_out_at_pct)
@@ -171,8 +182,9 @@ def check(db: Session) -> dict:
         ("settings", _settings_differences),
         ("brain policy", _brain_differences),
         ("capital ladder", _ladder_differences),
-        ("strategies", lambda: _strategy_differences(db)),
+        ("strategies", lambda: _strategy_differences(db, accepted)),
     )
+    accepted: list[str] = []
     differences: list[str] = []
     for label, fn in parts:
         try:
@@ -187,6 +199,10 @@ def check(db: Session) -> dict:
             f"{days} days at +{_pct(v1['target_pct'])} / -{_pct(v1['stop_pct'])}; "
             "half out at +5%, 30-day time stop, 15% halt, 25% sector cap."
         )
+        if accepted:
+            detail += " Accepted exception: " + "; ".join(accepted) + "."
         return {"name": NAME, "ok": True, "detail": detail, "level": "ok"}
     detail = "Differs from the agreed rules: " + "; ".join(differences) + "."
+    if accepted:
+        detail += " Accepted exception: " + "; ".join(accepted) + "."
     return {"name": NAME, "ok": False, "detail": detail, "level": "fail"}

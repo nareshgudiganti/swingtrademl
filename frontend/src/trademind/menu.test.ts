@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import appSource from './TradeMindApp.tsx?raw'
+import stockSource from './pages/StockDetail.tsx?raw'
 import { ADMIN_SECTION, SECTIONS, findSection, resolveSection, splitLabel, visiblePages, visibleSections } from './menu'
 
 // Every TradeMind path that existed before the redesign, and the section it now belongs to.
@@ -25,6 +26,7 @@ const EXPECTED: Record<string, string> = {
   '/trademind/observatory': 'admin',
   '/trademind/jobs': 'admin',
   '/trademind/alerts': 'admin',
+  '/trademind/plans': 'admin',
 }
 const PARAM_ROUTES: Record<string, string> = {
   '/trademind/stock/INFY': 'discover',
@@ -177,5 +179,54 @@ describe('Phase 2: the four Portfolio tabs', () => {
     expect(splitLabel('My Zerodha (Real)')).toEqual({ text: 'My Zerodha', tag: 'Real' })
     expect(splitLabel('Bot (Paper)')).toEqual({ text: 'Bot', tag: 'Paper' })
     expect(splitLabel('Paper Overview')).toEqual({ text: 'Paper Overview', tag: undefined })
+  })
+})
+
+describe('oa3: Plans is an Admin page', () => {
+  it('sits in Admin, last, under the name "Plans"', () => {
+    expect(ADMIN_SECTION.pages.at(-1)).toEqual({ to: '/trademind/plans', label: 'Plans' })
+  })
+
+  it('is hidden from a non-owner (Admin is owner only)', () => {
+    const shown = visibleSections(false).flatMap((s) => visiblePages(s, false).map((p) => p.to))
+    expect(shown).not.toContain('/trademind/plans')
+  })
+
+  it('mounts the existing Plans manager, unchanged, behind the owner check', () => {
+    expect(appSource).toMatch(/import PlansManager from '\.\.\/pages\/PlansManager'/)
+    expect(appSource).toMatch(/<Route path="plans" element=\{ownerConsole \? <div className="tm-page"><PlansManager \/><\/div> : <Navigate /)
+  })
+})
+
+describe('oa7: the old "Brain Logs" section is broken up', () => {
+  // What Brain Logs held before the redesign, and where each page lives now.
+  const MOVED: [string, string, string][] = [
+    ['Decisions', '/trademind', 'today'],
+    ['AI', '/trademind/ai', 'discover'],
+    ['Observatory', '/trademind/observatory', 'admin'],
+  ]
+
+  it('there is no "Brain Logs" section, and no section or page uses the name', () => {
+    expect(SECTIONS.map((s) => s.label)).not.toContain('Brain Logs')
+    expect(SECTIONS.flatMap((s) => s.pages.map((p) => p.label))).not.toContain('Brain Logs')
+    expect(appSource).not.toMatch(/Brain Logs/)
+  })
+
+  it.each(MOVED)('%s (%s) is still in the menu, now under %s', (_name, to, id) => {
+    const sec = SECTIONS.find((s) => s.id === id)!
+    expect(sec.pages.map((p) => p.to)).toContain(to)
+    expect(findSection(to)?.id).toBe(id)
+  })
+
+  it('AI sits with the stock page it explains, and the stock page links to it', () => {
+    expect(findSection('/trademind/stock/INFY')?.id).toBe(findSection('/trademind/ai')?.id)
+    expect(findSection('/trademind/ai/INFY')?.id).toBe('discover')
+    expect(stockSource).toMatch(/to=\{`\/trademind\/ai\/\$\{encodeURIComponent\(symbol\)\}`\}/)
+  })
+
+  it('every old URL is still routed', () => {
+    for (const r of ['index element={<Home />}', 'path="ai" element', 'path="ai/:symbol" element', 'path="observatory" element']) {
+      expect(appSource).toContain(r)
+    }
   })
 })

@@ -29,6 +29,7 @@ from swing_trade_ml.brain.replay_report import (
 from swing_trade_ml.brain.replay_scoring import locked_score, strict_for
 from swing_trade_ml.brain.replay_week import run_replay_week
 from swing_trade_ml.core.market_session import last_closed_trading_day
+from swing_trade_ml.core.strategy_policy import HAND_BOOK_STRATEGY_NAMES
 from swing_trade_ml.db.models.market import Candle, Instrument
 from swing_trade_ml.db.models.trading import Signal, Strategy
 from swing_trade_ml.ml.asof import asof_cutoff
@@ -122,7 +123,8 @@ def load_bars(db: Session, symbols: Sequence[str], upto: date) -> dict[str, pd.D
 
 
 def v1_buys(db: Session, start: date, end: date) -> dict[date, list[str]]:
-    """Version 1's `ml_swing` BUY signals per IST day (paper), for the same-days comparison."""
+    """Version 1's `ml_swing` BUY signals per IST day (paper), for the same-days comparison. The My
+    Holdings / Real Trading book is `ml_swing` too: it is left out by name (evidence amendment 1, A3)."""
     lo = datetime.combine(start, time(0, 0), tzinfo=IST)
     hi = datetime.combine(end + timedelta(days=1), time(0, 0), tzinfo=IST)
     rows = db.execute(
@@ -131,6 +133,7 @@ def v1_buys(db: Session, start: date, end: date) -> dict[date, list[str]]:
         .join(Instrument, Instrument.id == Signal.instrument_id)
         .where(
             Strategy.strategy_type == "ml_swing",
+            Strategy.name.not_in(HAND_BOOK_STRATEGY_NAMES),
             Signal.signal_type == "BUY",
             Signal.mode == "paper",
             Signal.generated_at >= lo,

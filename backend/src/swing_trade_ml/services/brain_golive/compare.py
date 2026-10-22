@@ -11,7 +11,11 @@ from sqlalchemy import distinct, func, select
 from sqlalchemy.orm import Session
 
 from swing_trade_ml.core.enums import SignalType
-from swing_trade_ml.core.strategy_policy import STAGED_TYPES
+from swing_trade_ml.core.strategy_policy import (
+    HAND_BOOK_STRATEGY_NAMES,
+    NON_SCAN_STRATEGY_TYPES,
+    STAGED_TYPES,
+)
 from swing_trade_ml.db.models.market import Instrument
 from swing_trade_ml.db.models.trading import Signal, Strategy
 from swing_trade_ml.strategies.brain import IST, ist_day_bounds
@@ -27,6 +31,9 @@ MIN_FINISHED_TO_COMPARE = 10
 COUNT_BLOCKED_TOWARD_GATE = False
 BLOCKED_KEY = "blocked_by_risk_limit"  # == services.execution.BLOCKED_BY_RISK_KEY (not imported: cycle)
 EXCLUDED_TYPES = ("long_term_value",)  # a one-year horizon is not comparable
+# Stocks a person chose (evidence plan amendment 1, A3) are never the brain's, nor version 1's baseline:
+# the manual paper-testing book and the My Holdings / Real Trading book are left out by type and by name.
+HUMAN_TYPES = tuple(sorted(NON_SCAN_STRATEGY_TYPES))
 SEALED_NOTE = "Sealed until the trial's evaluation (blind test): counts only."  # == trial_seal.SEALED_TEXT
 
 
@@ -99,9 +106,8 @@ def scored_on(rows: list[Row]) -> str:
     if t is None or st is None or h is None:
         return "Not known yet (no ideas to read the rule from)"
     days = round(h)
-    return (
-        f"+{_pct_text(t)} before -{_pct_text(abs(st))} within {days} trading day"
-        + ("s" if days != 1 else "")
+    return f"+{_pct_text(t)} before -{_pct_text(abs(st))} within {days} trading day" + (
+        "s" if days != 1 else ""
     )
 
 
@@ -220,7 +226,8 @@ def load(db: Session, since: date | None = None) -> tuple[list[Row], set[date]]:
             Signal.signal_type == SignalType.BUY,
             Signal.stop_loss.isnot(None),
             Signal.take_profit.isnot(None),
-            Strategy.strategy_type.not_in(EXCLUDED_TYPES),
+            Strategy.strategy_type.not_in(EXCLUDED_TYPES + HUMAN_TYPES),
+            Strategy.name.not_in(HAND_BOOK_STRATEGY_NAMES),
         )
     )
     ist_date = func.date(func.timezone("Asia/Kolkata", Signal.generated_at))
@@ -254,9 +261,7 @@ def load(db: Session, since: date | None = None) -> tuple[list[Row], set[date]]:
 
 def _finished_brain(db: Session, blocked: bool) -> int:
     rows, _ = load(db)
-    return sum(
-        1 for r in one_per_day(rows) if r.is_brain and r.outcome is not None and r.blocked == blocked
-    )
+    return sum(1 for r in one_per_day(rows) if r.is_brain and r.outcome is not None and r.blocked == blocked)
 
 
 def finished_placeable_brain_ideas(db: Session) -> int:

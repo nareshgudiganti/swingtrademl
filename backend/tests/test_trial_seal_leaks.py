@@ -373,6 +373,71 @@ def test_the_journal_report_and_the_pack_report_are_sealed(db_session):
     assert trial_seal.SEALED_TEXT in report
 
 
+# --- learning proposals made during the trial: title, evidence and change are sealed ----------------
+
+PROPOSAL_LEAKS = ("Raise the buy level", "buy level to 73%", "buy level to 65%", "Switch M05", "0.73")
+
+
+def _plant_proposals(db, day: date) -> list[int]:
+    """Two proposals made on `day` whose titles and changes say which way the results went."""
+    rows = [
+        BrainProposal(
+            kind="buy_level",
+            title="Raise the buy level to 73%",
+            evidence="Among 40 past ideas scored 73% or more, the average was +1.94 R.",
+            change={"buy_level": 0.73},
+            created_at=_ist(day, 20, 5),
+        ),
+        BrainProposal(
+            kind="module_mode",
+            title="Switch M05 to shadow: its ideas did worse",
+            evidence="M05 ideas reached the target less often.",
+            change={"module": "M05", "mode": "shadow"},
+            created_at=_ist(day, 20, 6),
+        ),
+    ]
+    db.add_all(rows)
+    db.flush()
+    return [r.id for r in rows]
+
+
+def test_proposals_made_during_the_trial_are_sealed_everywhere(obs_client, db_session):
+    ids = _seed(db_session, SEALED_DAY)  # also holds "Raise the buy level to 65%"
+    planted = _plant_proposals(db_session, SEALED_DAY)
+    texts = _call_everything(obs_client, ids)
+    found = {url: [x for x in PROPOSAL_LEAKS if x in t] for url, t in texts.items()}
+    assert {u: f for u, f in found.items() if f} == {}, "a sealed proposal's title or change was shown"
+
+    listed = obs_client.get("/api/v1/brain/proposals", headers=API_KEY).json()
+    assert len(listed) == 3
+    for p in listed:  # the record stays: id, kind, status, date; the content is sealed
+        assert p["sealed"] is True and p["evidence_sealed"] is True
+        assert p["title"] == trial_seal.PROPOSAL_SEALED_TITLE and p["evidence"] == trial_seal.SEALED_TEXT
+        assert p["change"] == {} and p["status"] == "open" and p["created_at"]
+    assert {p["kind"] for p in listed} == {"buy_level", "module_mode"}
+    # Deciding one (through the API) answers sealed too.
+    r = obs_client.post(f"/api/v1/brain/proposals/{planted[1]}/reject", json={}, headers=API_KEY)
+    assert r.status_code == 200 and r.json()["status"] == "dismissed"
+    assert not [x for x in PROPOSAL_LEAKS if x in r.text]
+
+
+def test_the_owners_own_revert_is_not_sealed(obs_client, db_session):
+    """Going back to the default buy level is the owner's click, not a trial result."""
+    r = obs_client.post("/api/v1/brain/proposals/buy-level/revert", json={}, headers=API_KEY)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["sealed"] is False and body["title"] == "Go back to the default buy level"
+    assert body["change"] == {"buy_level": None}
+
+
+def test_the_learning_command_line_seals_new_proposal_titles():
+    shown = trial_seal.seal_proposal(
+        {"id": 1, "kind": "buy_level", "title": "Raise the buy level to 73%", "evidence": "+1.94 R"},
+        NOW.astimezone(UTC),
+    )
+    assert shown["title"] == trial_seal.PROPOSAL_SEALED_TITLE and "1.94" not in json.dumps(shown)
+
+
 # --- nothing before the trial is over-sealed -------------------------------------------------------
 
 
@@ -394,6 +459,10 @@ def test_results_from_before_the_trial_still_show(obs_client, db_session):
     assert "0.0777" in text("/api/v1/signals/track-record")
     assert "1.94" in text("/api/v1/brain/learning")
     assert "1.94" in text("/api/v1/brain/proposals")
+    _plant_proposals(db_session, OPEN_DAY)
+    shown = text("/api/v1/brain/proposals")
+    assert "Raise the buy level to 73%" in shown and "Raise the buy level to 65%" in shown
+    assert "Switch M05 to shadow" in shown and "0.73" in shown and '"sealed":false' in shown
     assert "0.0777" in text("/api/v1/ml/calibration?source=signals")
     # A range reaching into the trial keeps the days before it.
     straddle = obs_client.get(

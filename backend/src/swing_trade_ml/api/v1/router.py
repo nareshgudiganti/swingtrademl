@@ -8,10 +8,10 @@ from swing_trade_ml.api.deps import require_auth
 from swing_trade_ml.api.v1.endpoints import (
     auth,
     backtest,
+    beginner,
     brain,
     brain_changes,
     brain_golive,
-    beginner,
     brain_observatory,
     experiments,
     finance,

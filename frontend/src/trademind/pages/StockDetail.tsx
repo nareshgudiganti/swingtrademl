@@ -17,6 +17,20 @@ import { PageState, QueryNotice } from '../PageState'
 import { pickState } from '../stateRules'
 import { WhatWouldChange } from '../WhatWouldChange'
 import { IdeaExplain } from '../IdeaExplain'
+import { usePlan } from '../../lib/plan'
+import { StockBriefForSymbol } from '../beginner/StockBrief'
+
+// bx1 + bx3 + bx8: six plain questions (with ₹ at stake for a TRADE idea and what is coming up). Read-only
+// (/beginner/stock). No plan opens /beginner to members, so only accounts that see the whole app get it.
+function PlainBrief({ symbol }: { symbol: string }) {
+  const { seesAll } = usePlan()
+  if (!seesAll || !symbol) return null
+  return (
+    <Card title="In plain words" sub="Six simple questions about this stock, answered from stored data">
+      <StockBriefForSymbol symbol={symbol} />
+    </Card>
+  )
+}
 
 const TABS = ['Overview', 'Technical', 'Fundamental', 'AI Analysis', 'Similar Cases', 'News', 'Options'] as const
 type TabId = (typeof TABS)[number]
@@ -173,6 +187,9 @@ function StockDetailBody() {
         <Card title={symbol || 'Unknown stock'}>
           <PageState kind="empty" reason="The brain made no decision for this stock today, so there is nothing to show." />
         </Card>
+        <div style={{ marginTop: '0.9rem' }}>
+          <PlainBrief symbol={symbol} />
+        </div>
       </div>
     )
   }
@@ -310,6 +327,8 @@ function StockDetailBody() {
               </div>
             </Card>
           </div>
+
+          <PlainBrief symbol={symbol} />
 
           <IdeaExplain decision={decision} runId={fromRun ? run?.run_id : undefined} />
 

@@ -7,6 +7,10 @@ MANUAL_ONLY_TYPES = frozenset({"long_term_value"})
 STAGED_TYPES = frozenset({"brain"})
 # Never scanned by the daily engine — manual paper validation only.
 NON_SCAN_STRATEGY_TYPES = frozenset({"tester_paper"})
+# Books of stocks a person chose (evidence plan amendment 1, A3: "human-selected ideas never count as the
+# brain's"): My Holdings / Real Trading (`real_trading`, services/portfolio.py) and manual paper testing
+# (`tester_paper`, services/tester_paper.py). Never part of any brain result, baseline or gate.
+HAND_BOOK_STRATEGY_NAMES = ("real_trading", "tester_paper")
 
 
 def outside_tester_book(strategy_id_col):

@@ -20,6 +20,7 @@ import { BrainApprovalsCard, BrainCompareCard, BrainStageCard } from '../compone
 import { formatCurrency, formatDateTime } from '../lib/format'
 import { MODULE_PLAIN, moduleName, traceLine } from '../trademind/vocab'
 import { runNowLine, useBrainRunNow } from '../trademind/live'
+import { SEALED_PROPOSAL_NOTE } from '../trademind/live-system'
 
 /* The brain console (build book module M17). Everything here is in plain
  * words: the brain only suggests and records; it never places an order. */
@@ -364,7 +365,8 @@ function currentBuyLevelProposal(proposals: BrainProposal[]): BrainProposal | nu
   const accepted = proposals.filter((p) => p.kind === 'buy_level' && p.status === 'accepted')
   if (accepted.length === 0) return null
   const latest = accepted.reduce((a, b) => ((a.decided_at ?? '') > (b.decided_at ?? '') ? a : b))
-  return latest.change.buy_level != null ? latest : null
+  // A sealed one (blind trial) hides its value, but the owner's "back to default" is never sealed.
+  return latest.sealed || latest.change.buy_level != null ? latest : null
 }
 
 function ProposalRow({
@@ -394,7 +396,9 @@ function ProposalRow({
         )}
       </td>
       <td>
-        {p.status === 'open' && (
+        {/* Made during the blind trial: sealed by the server, so it cannot be judged here yet. */}
+        {p.sealed && p.status === 'open' && <div className="stat-sub">{SEALED_PROPOSAL_NOTE}</div>}
+        {!p.sealed && p.status === 'open' && (
           <div className="brain-overrule">
             <input
               value={note}

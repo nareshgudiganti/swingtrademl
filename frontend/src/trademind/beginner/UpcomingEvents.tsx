@@ -1,3 +1,4 @@
+import { useUpcomingEvents } from './api'
 import './beginner.css'
 import type { EventItem } from './types'
 
@@ -13,4 +14,12 @@ export default function UpcomingEvents({ events }: { events: EventItem[] }) {
       ))}
     </ul>
   )
+}
+
+/** The list for a set of stocks ('held' = the bot's open paper positions; owner only on the server). */
+export function UpcomingEventsLive({ scope }: { scope: 'watchlist' | 'held' }) {
+  const q = useUpcomingEvents(scope)
+  if (q.isLoading) return <p className="tm-note">Loading…</p>
+  if (q.isError || !q.data) return <p className="tm-note">Not available — the list could not be loaded</p>
+  return <UpcomingEvents events={q.data} />
 }

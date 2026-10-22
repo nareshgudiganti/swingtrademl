@@ -5,6 +5,7 @@ import type { EvidenceSummary } from './types'
 
 const NA = 'Not available'
 const pct = (n: number) => `${n.toFixed(1)}%`
+const rupees = (n: number) => `${n < 0 ? '−' : ''}₹${inr(Math.abs(n))}`
 
 function Row({ label, value, why }: { label: string; value: number | null; why: string }) {
   return (
@@ -19,16 +20,16 @@ export default function EvidencePanel({ evidence }: { evidence: EvidenceSummary 
   const { bot, brain_trial: brain, paper_label: label } = evidence
   const noPrices = 'no price history for those dates'
   return (
-    <section className="bx-evidence">
+    <section className="bx-evidence" data-testid="evidence-panel">
       <h3>{`Results so far — ${label}`}</h3>
       {!bot.enough_trades && <p className="tm-note"><strong>{bot.note}</strong></p>}
 
       <h4>{`Version 1's practice money — ${label}`}</h4>
       <p className="bx-small">The brain&apos;s trial is not counted here; its results stay sealed below.</p>
       <ul className="bx-plan">
-        <li>Profit booked: ₹{inr(bot.profit_booked)}</li>
-        <li>Profit on open trades: ₹{inr(bot.profit_open)}</li>
-        <li>Costs paid: ₹{inr(bot.costs_paid)}</li>
+        <li>Profit booked: {rupees(bot.profit_booked)}</li>
+        <li>Profit on open trades: {rupees(bot.profit_open)}</li>
+        <li>Costs paid: {rupees(bot.costs_paid)}</li>
         <Row
           label="Worst fall from the top"
           value={bot.worst_fall_from_peak_pct}

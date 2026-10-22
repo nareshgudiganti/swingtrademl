@@ -216,3 +216,38 @@ def learning_report(db, since: date | None = None) -> dict:
 def proposal_evidence(evidence: str | None, created_at: datetime | None) -> str | None:
     """A learning proposal made on or after the seal was worked out from the trial's results."""
     return SEALED_TEXT if is_sealed_dt(created_at) else evidence
+
+
+# --- learning proposals (the stored rows and M09 stay as they are; only what is shown is sealed) -----
+
+PROPOSAL_SEALED_TITLE = "A learning proposal was made (details sealed until the trial's evaluation)."
+PROPOSAL_SEALED_NOTE = "Sealed during the blind trial"
+
+
+def _owner_revert(kind: str | None, change: dict | None) -> bool:
+    """The owner's own "go back to the default buy level" (m09_learn.store.revert_buy_level) is stored as
+    a proposal, but it comes from the owner's click, never from the trial's results."""
+    return kind == "buy_level" and isinstance(change, dict) and change == {"buy_level": None}
+
+
+def proposal_sealed(kind: str | None, change: dict | None, created_at: datetime | None) -> bool:
+    return is_sealed_dt(created_at) and not _owner_revert(kind, change)
+
+
+def seal_proposal(out: dict, created_at: datetime | None) -> dict:
+    """A learning proposal as it may be shown. One made on or after the seal was worked out from the
+    trial's results, so its title ("Raise the buy level to 70%"), evidence and change (the new value, which
+    says which way) would hint at them: they are replaced by sealed text. Its id, kind, status and dates
+    stay, so the record of what happened to it is complete."""
+    sealed = proposal_sealed(out.get("kind"), out.get("change"), created_at)
+    if not sealed:
+        return {**out, "sealed": False, "evidence_sealed": False}
+    return {
+        **out,
+        "title": PROPOSAL_SEALED_TITLE,
+        "evidence": SEALED_TEXT,
+        "change": {},
+        "sealed": True,
+        "evidence_sealed": True,
+        "sealed_note": PROPOSAL_SEALED_NOTE,
+    }

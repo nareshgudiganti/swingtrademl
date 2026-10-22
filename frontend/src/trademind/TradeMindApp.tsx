@@ -37,6 +37,8 @@ import Observatory from './pages/Observatory'
 import Jobs from './pages/Jobs'
 import Alerts from './pages/Alerts'
 import { bookOf } from './books'
+import StockSearch from './beginner/StockSearch'
+import BottomBar from './beginner/BottomBar'
 import { ADMIN_SECTION, matches, resolveSection, splitLabel, visiblePages, visibleSections } from './menu'
 
 // The menu lives in ./menu.ts (five sections: Today, Discover, Portfolio, Insights, Admin).
@@ -74,7 +76,9 @@ export default function TradeMindApp({ ownerConsole = false }: TradeMindAppProps
   const status = useBrainStatus()
   const latest = useLatestRun()
   // Only the account named in REAL_ACCOUNT_USERS may see the real Zerodha tab (the server enforces it too).
-  const { canSeeRealAccount } = usePlan()
+  // seesAll: the owner, or a tester while plans are off. Stock search reads /instruments, which no plan opens to
+  // members, so they do not get the box (the server would refuse it anyway).
+  const { canSeeRealAccount, seesAll } = usePlan()
   const location = useLocation()
   const book = bookOf(location.pathname)
   // Also read for everyone on a Portfolio screen, so the Paper strip can warn a non-owner if the server is ever not
@@ -133,6 +137,7 @@ export default function TradeMindApp({ ownerConsole = false }: TradeMindAppProps
             </Link>
           ))}
         </nav>
+        {(ownerConsole || seesAll) && <StockSearch />}
         <div className="tm-topbar-right">
           <PricesBadge />
           {market.data && (
@@ -263,6 +268,8 @@ export default function TradeMindApp({ ownerConsole = false }: TradeMindAppProps
           <Route path="*" element={<Navigate to="/trademind" replace />} />
         </Route>
       </Routes>
+      {/* Phone only (CSS): the five sections at the bottom of the screen, in place of the top row. */}
+      <BottomBar isOwner={ownerConsole} activePath={location.pathname} realAccount={canSeeRealAccount} />
     </div>
   )
 }

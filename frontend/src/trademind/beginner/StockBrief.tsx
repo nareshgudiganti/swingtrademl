@@ -38,8 +38,8 @@ export default function StockBrief({ data }: { data: StockBriefData }) {
   const plan = data.q3_plan
   const decision = data.q2_brain.decision
   return (
-    <div className="bx-card">
-      <p className="bx-small">
+    <div className="bx-brief" data-testid="stock-brief">
+      <p className="bx-small bx-brief-asof">
         {data.as_of ? `Brain's view from ${viewDate(data.as_of)}` : "Brain's view: Not available — no brain run on record yet"}
       </p>
       <Section title="What is this company?" a={data.q1_company} />
@@ -58,12 +58,12 @@ export default function StockBrief({ data }: { data: StockBriefData }) {
           <li>{`Sell half at: ${price(plan.sell_half_price)}`}</li>
           <li>{`Target: ${price(plan.target)}`}</li>
           <li>{`Stop: ${price(plan.stop)}`}</li>
-          <li>{`Last day to be out: ${plan.last_exit_day ?? 'Not available'}`}</li>
+          <li>{`Last day to be out: ${plan.last_exit_day ? viewDate(`${plan.last_exit_day}T12:00:00+05:30`) : 'Not available'}`}</li>
         </ul>
       </Section>
       <section className="tm-card bx-card">
         <h3>How much money is at stake?</h3>
-        <MoneyAtStake value={data.q4_money} />
+        <MoneyAtStake value={data.q4_money} halfPct={plan.sell_half_pct} />
       </section>
       <Section title="Is anything coming up?" a={data.q5_events}>
         <UpcomingEvents events={data.q5_events.events ?? []} />

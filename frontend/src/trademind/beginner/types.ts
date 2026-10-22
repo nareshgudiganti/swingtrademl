@@ -39,6 +39,7 @@ export interface StockBriefData {
   q3_plan: BriefAnswer & {
     buy_zone?: [number, number]
     sell_half_price?: number
+    sell_half_pct?: number
     target?: number
     stop?: number
     last_exit_day?: string

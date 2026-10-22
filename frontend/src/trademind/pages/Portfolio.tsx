@@ -9,6 +9,8 @@ import { Term, WordTag } from '../term'
 import { BrainOff, Card, CheckItem, Donut, GlowArea, inr, signed, toneClass } from '../ui'
 import { PageState, QueryNotice } from '../PageState'
 import { HoldingsHealthCard } from '../HoldingsHealth'
+import { usePlan } from '../../lib/plan'
+import { UpcomingEventsLive } from '../beginner/UpcomingEvents'
 
 // Purely a colour wheel for the donut — never a data value, so cycling a
 // fixed palette by rank is fine even though the sectors themselves are real.
@@ -99,6 +101,8 @@ function BrainPortfolioCard({ run }: { run: BrainRun }) {
 }
 
 export default function Portfolio() {
+  // The bot's held stocks are the owner's book: the server answers this list only for the owner.
+  const { canManage } = usePlan()
   const status = useBrainStatus()
   const latest = useLatestRun()
   const summary = useQuery({ queryKey: ['summary'], queryFn: () => api.summary() })
@@ -319,6 +323,12 @@ export default function Portfolio() {
             })()}
         </Card>
       </div>
+
+      {canManage && (
+        <Card title="Coming up for the stocks the bot holds" sub="Results and other company events in the next 15 trading days">
+          <UpcomingEventsLive scope="held" />
+        </Card>
+      )}
     </div>
   )
 }

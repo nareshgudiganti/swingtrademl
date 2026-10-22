@@ -8,6 +8,7 @@ from swing_trade_ml.api.deps import require_auth
 from swing_trade_ml.api.v1.endpoints import (
     auth,
     backtest,
+    beginner,
     brain,
     brain_changes,
     brain_golive,
@@ -70,3 +71,4 @@ api_router.include_router(brain_golive.router, dependencies=protected)
 api_router.include_router(brain_observatory.router, dependencies=protected)
 api_router.include_router(experiments.router, dependencies=protected)
 api_router.include_router(jobs.router, dependencies=protected)
+api_router.include_router(beginner.router, dependencies=protected)

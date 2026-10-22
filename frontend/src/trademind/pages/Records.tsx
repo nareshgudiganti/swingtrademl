@@ -4,6 +4,8 @@ import { useQuery } from '@tanstack/react-query'
 import { api } from '../../api/client'
 import type { Trade, TrackRecordSignal } from '../../api/types'
 import { Card, PageHead, Seg, Tabs, Tag, inr, signed, toneClass } from '../ui'
+import { usePlan } from '../../lib/plan'
+import { EvidencePanelLive } from '../beginner/EvidencePanel'
 
 const TABS = ['Trade history', "Version 1's picks", 'Strategy results'] as const
 type TabName = (typeof TABS)[number]
@@ -498,11 +500,24 @@ function StrategyResults() {
   )
 }
 
+// bx4: is it working so far? Practice money only; the brain's trial is a count until its review (sealed). The bot's
+// own book is the owner's, so the server refuses this to everyone else and it is not shown to them.
+function Evidence() {
+  const { canManage } = usePlan()
+  if (!canManage) return null
+  return (
+    <Card glow title="Is it working so far?" sub="Practice money (paper) only. No real money is counted here.">
+      <EvidencePanelLive />
+    </Card>
+  )
+}
+
 export default function Records() {
   const [tab, setTab] = useState<TabName>('Trade history')
   return (
     <div className="tm-page tm-grid">
       <PageHead title="Records" sub="Everything that has already happened, for reading only" />
+      <Evidence />
       <Tabs tabs={TABS} active={tab} onChange={setTab} />
       {tab === 'Trade history' && <TradeHistory />}
       {tab === "Version 1's picks" && <Picks />}

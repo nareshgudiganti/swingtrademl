@@ -1,0 +1,38 @@
+.bx-card { display: flex; flex-direction: column; gap: 0.6rem; }
+.bx-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.bx-sym { font-weight: 700; font-size: 1.05rem; }
+.bx-plan, .bx-money { margin: 0; padding: 0; list-style: none; display: grid; gap: 0.2rem; }
+.bx-money-title { font-weight: 600; }
+.bx-small { font-size: 0.8rem; opacity: 0.75; }
+.bx-card details summary { cursor: pointer; }
+
+.bx-search { position: relative; }
+.bx-search-input { width: 100%; padding: 0.5rem 0.7rem; }
+.bx-search-list { position: absolute; left: 0; right: 0; z-index: 40; margin: 0; padding: 0; list-style: none; background: var(--tm-bg-2, var(--surface, #fff)); border: 1px solid var(--tm-line-strong, rgba(128,128,128,0.35)); border-radius: 8px; overflow: hidden; }
+.bx-search-hit { display: block; width: 100%; text-align: left; padding: 0.5rem 0.7rem; background: none; border: 0; cursor: pointer; color: inherit; }
+.bx-search-hit.bx-active { background: rgba(128,128,128,0.18); }
+
+.bx-bottombar { display: none; }
+@media (max-width: 639px) {
+  .bx-bottombar { display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; justify-content: space-around; padding: 0.4rem 0 calc(0.4rem + env(safe-area-inset-bottom, 0px)); background: var(--tm-bg-2, var(--surface, #fff)); border-top: 1px solid var(--tm-line-strong, rgba(128,128,128,0.35)); }
+  .bx-tab { flex: 1; text-align: center; padding: 0.5rem 0.2rem; font-size: 0.8rem; text-decoration: none; color: inherit; }
+  .bx-tab.bx-active { font-weight: 700; color: var(--tm-violet, inherit); }
+  /* The bottom bar replaces the top row of sections on a phone (one section menu, not two),
+     and the page gets room so the bar never covers its last line. */
+  .tm .tm-nav { display: none; }
+  .tm { padding-bottom: 3.6rem; }
+}
+
+/* ---- wiring in the TradeMind shell and pages (fx8) ---- */
+.tm-topbar .bx-search { width: 15rem; max-width: 100%; }
+.tm-topbar .bx-search-input { padding: 0.32rem 0.6rem; font-size: 0.8rem; border-radius: 8px; border: 1px solid var(--tm-line-strong); background: var(--tm-card); color: var(--tm-text); }
+.tm-topbar .bx-search-note { position: absolute; left: 0; right: 0; z-index: 40; margin: 0.2rem 0 0; padding: 0.4rem 0.6rem; border-radius: 8px; background: var(--tm-bg-2); border: 1px solid var(--tm-line-strong); }
+@media (max-width: 860px) {
+  .tm-topbar .bx-search { order: 4; flex-basis: 100%; width: 100%; }
+}
+.bx-brief { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 0.8rem; }
+.bx-brief-asof { grid-column: 1 / -1; margin: 0; }
+.bx-brief > .tm-card { padding: 0.9rem 1rem; }
+.bx-brief h3, .bx-evidence h3, .bx-evidence h4 { margin: 0 0 0.3rem; font-size: 0.95rem; }
+.bx-evidence h4 { margin-top: 0.8rem; font-size: 0.85rem; }
+.bx-brief p { margin: 0; }

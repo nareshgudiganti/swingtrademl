@@ -22,6 +22,7 @@ import Settings from './pages/Settings'
 import Brain from './pages/Brain'
 import TradeMindApp from './trademind/TradeMindApp'
 import { PLAN_LABELS, usePlan } from './lib/plan'
+import { plansShell } from './lib/plansRoute'
 import { modelLabel } from './lib/format'
 import {
   AlertTriangleIcon,
@@ -279,13 +280,11 @@ export default function App() {
   const isOwner = canManage || !!me?.is_superuser
   const brainOn = isOwner ? !!status?.brain_enabled : !!plan?.brain_enabled
   const canTradeMind = brainOn && (isOwner || has('trademind'))
-  const plansPath =
-    location.pathname === '/plans' ||
-    location.pathname.startsWith('/plans/') ||
-    location.pathname === '/trademind/plans'
-
-  // Plans manager: classic light shell (not inside the dark TradeMind chrome).
-  if (plansPath) {
+  // Plans manager: the owner in TradeMind gets it under Admin > Plans (handled with the other TradeMind pages below);
+  // every other way in keeps the classic light shell, as before (see lib/plansRoute.ts).
+  const plansScreen = plansShell(location.pathname, { isOwner, brainEnabled: status?.brain_enabled, statusFailed })
+  if (plansScreen === 'wait') return <Loading />
+  if (plansScreen === 'classic') {
     if (planLoading) return <Loading />
     const backTo = isOwner && status?.brain_enabled ? '/trademind' : '/dashboard'
     return (

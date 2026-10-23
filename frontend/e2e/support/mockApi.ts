@@ -8,6 +8,7 @@
 
 import type { Page, Route } from '@playwright/test'
 
+import adminPlans from '../fixtures/admin-plans.json' with { type: 'json' }
 import alertSettings from '../fixtures/alert-settings.json' with { type: 'json' }
 import authOptions from '../fixtures/auth-options.json' with { type: 'json' }
 import brainChanges from '../fixtures/brain-changes.json' with { type: 'json' }
@@ -25,6 +26,7 @@ import portfolioSummary from '../fixtures/portfolio-summary.json' with { type: '
 import positions from '../fixtures/positions.json' with { type: 'json' }
 import realAccount from '../fixtures/real-account.json' with { type: 'json' }
 import realTax from '../fixtures/real-tax.json' with { type: 'json' }
+import riskEvents from '../fixtures/risk-events.json' with { type: 'json' }
 import riskLimits from '../fixtures/risk-limits.json' with { type: 'json' }
 import scoreBands from '../fixtures/score-bands.json' with { type: 'json' }
 import safetyState from '../fixtures/safety-state.json' with { type: 'json' }
@@ -144,6 +146,11 @@ function answer(role: Role, method: string, path: string, query: URLSearchParams
   if (path === '/status') return owner ? { body: status } : { status: 403, body: { detail: 'Owner only.' } }
   if (path === '/safety/state') return owner ? { body: safetyState } : { status: 403, body: { detail: 'Owner only.' } }
   if (path === '/risk/limits') return { body: riskLimits }
+  if (path === '/safety/risk-events') return owner ? { body: riskEvents.slice(0, Number(query.get('limit') ?? 50)) } : { status: 403, body: { detail: 'Owner only.' } }
+
+  // Plans manager (owner only, like the real /admin API).
+  const adminPlan: Record<string, unknown> = { '/admin/switch': adminPlans.switch, '/admin/features': adminPlans.features, '/admin/plans': adminPlans.plans, '/admin/users': adminPlans.users }
+  if (path in adminPlan) return owner ? { body: adminPlan[path] } : { status: 403, body: { detail: 'Owner only.' } }
 
   // Brain (practice mode) and the market clock.
   if (path === '/brain/runs/latest') return { body: brainLatestRun }

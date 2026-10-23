@@ -4,29 +4,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api/client'
 import { Empty, ErrorBox, Loading } from '../components/Loading'
 import { formatCurrency, formatDate, formatDateTime } from '../lib/format'
-
-/** The risk layer records a rejection under a machine name. These are the
- * same limits in the words the rest of the app uses for them. */
-const RULE_LABEL: Record<string, string> = {
-  SECTOR_CAP: 'Too much in one sector',
-  POSITION_LIMIT: 'Already holding the maximum number of stocks',
-  CAP_TIER: 'Small-company budget full',
-  LIQUIDITY: 'Stock trades too little to buy this size',
-  DEPLOYABLE: 'Market conditions cap how much goes out today',
-  CASH_FLOOR: 'Would eat into the cash reserve',
-  CASH: 'Not enough cash',
-  DRAWDOWN: 'Account down too far — new buying halted',
-  ENTRIES_HALTED: 'You halted new buying',
-  COOLDOWN: 'Stopped out of this stock recently',
-  DUPLICATE: 'Already holding this stock',
-}
+import { RISK_EVENT_LIMIT, RULE_LABEL } from '../lib/riskRules'
 
 export default function Safety() {
   const queryClient = useQueryClient()
   const [reason, setReason] = useState('')
 
   const state = useQuery({ queryKey: ['safetyState'], queryFn: api.safetyState })
-  const events = useQuery({ queryKey: ['riskEvents'], queryFn: () => api.riskEvents(100) })
+  const events = useQuery({ queryKey: ['riskEvents'], queryFn: () => api.riskEvents(RISK_EVENT_LIMIT) })
   const status = useQuery({ queryKey: ['systemStatus'], queryFn: api.status })
 
   const invalidate = () => {

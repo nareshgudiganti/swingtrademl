@@ -1,7 +1,5 @@
 {
   "Finance": { "*": { "status": "separate_app", "decision": "owner 2026-10-04: Personal Finance stays a separate app" } },
-  "Capital": { "riskEvents": { "status": "planned", "task": "oa2" } },
-  "Safety": { "riskEvents": { "status": "planned", "task": "oa2" } },
   "Dashboard": {
     "predict": { "status": "decide", "task": "oa15", "note": "POST /ml/predict?persist=true behind the 'full model-ranked watchlist' (Advanced). It generates and stores predictions. Owner decides whether the classic ranked list is needed beyond Opportunities." },
     "strategySignals": { "status": "planned", "task": "oa5", "note": "read-only per-strategy signal list in Discover (owner 2026-10-16)" }
@@ -19,7 +17,6 @@
     "changePassword": { "status": "keep", "note": "P0 security: change password lives on the classic Settings page (/settings, reachable by URL). Needs a TradeMind home before Phase 6 deletion." },
     "logoutEverywhere": { "status": "keep", "note": "P0 security: sign out everywhere lives on the classic Settings page (/settings, reachable by URL). Needs a TradeMind home before Phase 6 deletion." }
   },
-  "PlansManager": { "*": { "status": "planned", "task": "oa3", "note": "Admin > Plans" } },
   "Strategies": {
     "createStrategy": { "status": "v2", "decision": "owner 2026-10-04: no create/delete/train until v2" },
     "deleteStrategy": { "status": "v2", "decision": "owner 2026-10-04: no create/delete/train until v2" },

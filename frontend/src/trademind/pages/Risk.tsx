@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { api } from '../../api/client'
 import { BEFORE_TRIAL_NOTE, biggestSector, currentDrawdownPct, drawdownChartSeries, includesBeforeTrial, refusedDecisions } from '../live-system'
 import { useBrainStatus, useLatestRun } from '../live'
+import RiskEventLog from '../RiskEventLog'
 import { BrainOff, Card, CheckItem, GlowArea, Meter, NotConnected, Ring, inr } from '../ui'
 
 // `hard` marks a check that actually stops new trades outright (the kill
@@ -389,6 +390,8 @@ export default function Risk() {
           </>
         )}
       </Card>
+
+      <RiskEventLog />
     </div>
   )
 }

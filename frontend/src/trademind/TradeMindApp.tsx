@@ -36,6 +36,7 @@ import Setup from './pages/Setup'
 import Observatory from './pages/Observatory'
 import Jobs from './pages/Jobs'
 import Alerts from './pages/Alerts'
+import PlansManager from '../pages/PlansManager'
 import { bookOf } from './books'
 import StockSearch from './beginner/StockSearch'
 import { ADMIN_SECTION, matches, resolveSection, splitLabel, visiblePages, visibleSections } from './menu'
@@ -264,6 +265,8 @@ export default function TradeMindApp({ ownerConsole = false }: TradeMindAppProps
           <Route path="setup" element={ownerConsole ? <Setup /> : <Navigate to="/trademind" replace />} />
           <Route path="jobs" element={ownerConsole ? <Jobs /> : <Navigate to="/trademind" replace />} />
           <Route path="alerts" element={ownerConsole ? <Alerts /> : <Navigate to="/trademind" replace />} />
+          {/* Admin > Plans: the existing Plans manager, unchanged (it keeps its own owner check too). */}
+          <Route path="plans" element={ownerConsole ? <div className="tm-page"><PlansManager /></div> : <Navigate to="/trademind" replace />} />
           <Route path="*" element={<Navigate to="/trademind" replace />} />
         </Route>
       </Routes>

@@ -157,6 +157,8 @@ test.describe('5. Admin', () => {
       ['Setup', /\/setup$/],
       ['Observatory', /\/observatory$/],
       ['Alerts', /\/alerts$/],
+      ['Jobs', /\/jobs$/],
+      ['Plans', /\/plans$/],
     ] as const) {
       await subnav.getByRole('link', { name, exact: true }).click()
       await expect(page).toHaveURL(url)
@@ -165,6 +167,31 @@ test.describe('5. Admin', () => {
     // The account menu lists the same Admin pages.
     await page.getByRole('button', { name: 'Your account and settings' }).click()
     await expect(page.getByRole('menuitem', { name: 'Control' })).toBeVisible()
+    await expect(page.getByRole('menuitem', { name: 'Plans' })).toBeVisible()
+  })
+
+  test('Risk shows the risk-event log: the same blocked buys the classic Safety page lists (oa2)', async ({ page }) => {
+    await mockApi(page)
+    const asked = page.waitForRequest((r) => r.url().includes('/api/v1/safety/risk-events'))
+    await openPage(page, '/trademind/risk')
+    expect(new URL((await asked).url()).searchParams.get('limit')).toBe('100') // the same latest 100 as Safety
+    const log = page.getByTestId('risk-event-log')
+    await expect(log.getByText('2 events')).toBeVisible()
+    await expect(log.locator('tr[data-event]')).toHaveCount(2)
+    await expect(log.getByText('Too much in one sector')).toBeVisible()
+    await expect(log.getByText('Already holding the maximum number of stocks')).toBeVisible()
+  })
+
+  test('Plans opens the existing Plans manager inside TradeMind; /plans still opens the classic screen (oa3)', async ({ page }) => {
+    await mockApi(page)
+    await openPage(page, '/trademind/plans')
+    await expect(page.getByRole('heading', { name: 'Free & Pro plans' })).toBeVisible()
+    await expect(page.getByTestId('nav-admin')).toHaveClass(/active/)
+    await expect(page.getByText('Plan gating is OFF.')).toBeVisible()
+
+    await openPage(page, '/plans')
+    await expect(page.getByRole('heading', { name: 'Free & Pro plans' })).toBeVisible()
+    await expect(page.getByTestId('nav-admin')).toHaveCount(0)
   })
 
   test('Alerts: switchable messages have a switch and an explanation, safety messages are always on', async ({ page }) => {
@@ -215,6 +242,9 @@ test.describe('5. Admin', () => {
     await openPage(page, '/trademind/holdings')
     await expect(page).toHaveURL(/\/trademind\/portfolio$/)
     await expect(page.getByTestId('book-strip')).toHaveAttribute('data-book', 'paper')
+    // Plans: still the classic screen's own owner check, exactly as before (oa3).
+    await openPage(page, '/trademind/plans')
+    await expect(page.getByText('Owner access required')).toBeVisible()
   })
 })
 

@@ -1,0 +1,4 @@
+[
+  { "id": 2, "ts": "2026-10-15T10:05:00+05:30", "mode": "paper", "strategy_id": 7, "instrument_id": 11, "symbol": "TCS", "rule": "SECTOR_CAP", "reason": "IT would be 31% of the account, over the 25% limit", "amount_inr": 24000 },
+  { "id": 1, "ts": "2026-10-14T10:05:00+05:30", "mode": "paper", "strategy_id": 7, "instrument_id": 12, "symbol": "ITC", "rule": "POSITION_LIMIT", "reason": "5 of 5 positions already open", "amount_inr": 18000 }
+]

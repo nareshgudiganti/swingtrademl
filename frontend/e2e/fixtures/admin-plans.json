@@ -1,0 +1,16 @@
+{
+  "switch": { "enabled": false },
+  "features": {
+    "features": [{ "key": "trademind", "label": "TradeMind", "group": "Screens", "description": "The TradeMind app" }],
+    "limits": [{ "key": "picks_per_day", "label": "Picks per day", "description": "How many picks a day", "kind": "int" }],
+    "cap_tiers": ["large", "midcap", "smallcap"],
+    "base_model": "swing_classifier"
+  },
+  "plans": [
+    { "key": "free", "name": "Free", "features": { "trademind": false }, "limits": { "picks_per_day": 1, "allowed_cap_tiers": ["large"], "history_days": 30 } },
+    { "key": "pro", "name": "Pro", "features": { "trademind": true }, "limits": { "picks_per_day": 5, "allowed_cap_tiers": ["large", "midcap"], "history_days": 365 } }
+  ],
+  "users": [
+    { "id": 1, "username": "owner", "email": "owner@example.test", "auth_provider": "local", "is_active": true, "is_owner": true, "plan": "pro", "last_login_at": null }
+  ]
+}

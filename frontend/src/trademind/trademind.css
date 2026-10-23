@@ -1769,7 +1769,15 @@ th[aria-sort='descending'] .tm-sort-arrow {
 }
 .tm-dash-ranges {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.2rem;
+  min-width: 0;
+}
+/* oa5 put this chart on Today: on a 390px phone the five range buttons pushed the page 12px sideways. */
+@media (max-width: 480px) {
+  .tm-dash-ranges button {
+    padding: 0.15rem 0.3rem;
+  }
 }
 .tm-dash-ranges button {
   padding: 0.15rem 0.5rem;

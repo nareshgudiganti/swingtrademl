@@ -38,7 +38,6 @@ import Jobs from './pages/Jobs'
 import Alerts from './pages/Alerts'
 import { bookOf } from './books'
 import StockSearch from './beginner/StockSearch'
-import BottomBar from './beginner/BottomBar'
 import { ADMIN_SECTION, matches, resolveSection, splitLabel, visiblePages, visibleSections } from './menu'
 
 // The menu lives in ./menu.ts (five sections: Today, Discover, Portfolio, Insights, Admin).
@@ -268,8 +267,6 @@ export default function TradeMindApp({ ownerConsole = false }: TradeMindAppProps
           <Route path="*" element={<Navigate to="/trademind" replace />} />
         </Route>
       </Routes>
-      {/* Phone only (CSS): the five sections at the bottom of the screen, in place of the top row. */}
-      <BottomBar isOwner={ownerConsole} activePath={location.pathname} realAccount={canSeeRealAccount} />
     </div>
   )
 }

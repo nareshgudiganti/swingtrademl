@@ -1,4 +1,4 @@
-// fx8 (Beginner Wave 2): the bx blocks appear where they were wired, only for the accounts the server answers,
+// fx8 (Beginner Wave 2): the bx blocks appear where they were wired (BottomBar is not wired yet), only for the accounts the server answers,
 // and the brain trial stays a count. Pages are rendered with their data already in the query cache (no network).
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { renderToString } from 'react-dom/server'
@@ -180,32 +180,22 @@ function shell(who: Who, path: string) {
   )
 }
 
-describe('shell: stock search on every page and the phone bottom bar (bx7)', () => {
+describe('shell: stock search on every page (bx7); phone bottom bar left unwired', () => {
   const PATHS = ['/trademind', '/trademind/records', '/trademind/portfolio', '/trademind/stock/INFY', '/trademind/learn']
-  it.each(PATHS)('owner and tester get the search box and the bottom bar at %s', (path) => {
+  it.each(PATHS)('owner and tester get the search box at %s', (path) => {
     for (const who of ['owner', 'tester'] as const) {
-      const html = shell(who, path)
-      expect(html).toContain('aria-label="Search a stock"')
-      expect(html).toContain('class="bx-bottombar"')
+      expect(shell(who, path)).toContain('aria-label="Search a stock"')
     }
   })
-  it('a member gets the bottom bar but no search box (the server refuses them the stock list)', () => {
-    const html = shell('member', '/trademind')
-    expect(html).not.toContain('aria-label="Search a stock"')
-    expect(html).toContain('class="bx-bottombar"')
+  it('a member gets no search box (the server refuses them the stock list)', () => {
+    expect(shell('member', '/trademind')).not.toContain('aria-label="Search a stock"')
   })
-  it('the bottom bar never links to the real account or an owner page for others', () => {
-    for (const who of ['tester', 'member'] as const) {
-      const bar = shell(who, '/trademind/portfolio').split('class="bx-bottombar"')[1]!.split('</nav>')[0]!
-      expect(bar).not.toContain('/trademind/holdings')
-      expect(bar).not.toContain('/trademind/control')
-      expect((bar.match(/<a /g) ?? []).length).toBe(4)
+  it('the bottom bar is not mounted until the owner decides the phone layout; the top row stays', () => {
+    for (const who of ['owner', 'tester', 'member'] as const) {
+      const html = shell(who, '/trademind/portfolio')
+      expect(html).not.toContain('bx-bottombar')
+      expect(html).toContain('data-testid="nav-today"')
     }
-  })
-  it('highlights the same section as the top bar (a non-owner on an owner page gets Today)', () => {
-    const bar = shell('tester', '/trademind/control').split('class="bx-bottombar"')[1]!.split('</nav>')[0]!
-    const active = bar.split('<a ').find((a) => a.includes('aria-current="page"'))
-    expect(active).toContain('href="/trademind"')
   })
 })
 

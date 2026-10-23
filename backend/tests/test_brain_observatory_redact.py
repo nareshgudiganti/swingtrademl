@@ -77,3 +77,21 @@ def test_only_named_keys_are_free_text():
         "overrule_reason",
     } <= FREE_TEXT_KEYS
     assert not {"id", "run_id", "decision_id", "symbol", "next_cursor", "after_id", "word"} & FREE_TEXT_KEYS
+
+
+def test_a_long_file_path_is_not_masked():
+    """ob15: a traceback path is not a secret; masking it hid where the error happened."""
+    s = "boom in /app/src/swing_trade_ml/services/brain_observatory/outcomes.py line 12"
+    assert redact_text(s) == s
+
+
+def test_a_long_mixed_case_token_with_slashes_is_still_masked():
+    token = "Ab3dE/fG7hIjK9lMnO/pQrStUvWxYz0123456789ABcd"
+    assert token not in redact_text(f"value {token} end")
+
+
+def test_dicts_nested_under_a_free_text_key_are_redacted():
+    """ob15: free text stays free text however deep it is nested under a free-text key."""
+    out = redact_response({"detail": {"inner": {"deep": f"jwt {JWT}"}}, "run_id": "x"})
+    assert JWT not in out["detail"]["inner"]["deep"]
+    assert out["redacted_fields"] == ["detail.inner.deep"]

@@ -242,28 +242,43 @@ def learning_summary(db: Session, start: date, end: date, book: str) -> dict:
 def stored_grade_rows(
     db: Session, start: date, end: date, live: bool
 ) -> list[tuple[str, float | None, datetime, str, str]]:
+    """Graded ideas of finished nightly runs. A replay (live=False) of the same day and book can be run
+    many times; only the latest finished replay of each day counts, so a day is never counted twice."""
     lo, hi = _range(start, end)
-    return list(
-        db.execute(
-            select(
-                BrainDecision.outcome,
-                BrainDecision.outcome_return,
-                BrainRun.as_of,
-                BrainRun.book,
-                func.coalesce(BrainDecision.overruled_word, BrainDecision.word),
-            )
-            .join(BrainRun, BrainRun.id == BrainDecision.run_id)
-            .where(
-                BrainDecision.kind == "idea",
-                BrainDecision.outcome.is_not(None),
-                BrainRun.kind == "nightly",
-                BrainRun.live.is_(live),
-                BrainRun.status == "done",
-                BrainRun.as_of >= lo,
-                BrainRun.as_of < hi,
-            )
-        ).all()
+    runs = (
+        BrainRun.kind == "nightly",
+        BrainRun.live.is_(live),
+        BrainRun.status == "done",
+        BrainRun.as_of >= lo,
+        BrainRun.as_of < hi,
     )
+    stmt = (
+        select(
+            BrainDecision.outcome,
+            BrainDecision.outcome_return,
+            BrainRun.as_of,
+            BrainRun.book,
+            func.coalesce(BrainDecision.overruled_word, BrainDecision.word),
+        )
+        .join(BrainRun, BrainRun.id == BrainDecision.run_id)
+        .where(BrainDecision.kind == "idea", BrainDecision.outcome.is_not(None), *runs)
+    )
+    if not live:
+        latest = (
+            select(
+                BrainRun.id,
+                func.row_number()
+                .over(
+                    partition_by=(BrainRun.book, BrainRun.as_of),
+                    order_by=(BrainRun.started_at.desc(), BrainRun.id.desc()),
+                )
+                .label("n"),
+            )
+            .where(*runs)
+            .subquery()
+        )
+        stmt = stmt.where(BrainRun.id.in_(select(latest.c.id).where(latest.c.n == 1)))
+    return list(db.execute(stmt).all())
 
 
 def other_book_runs(db: Session, start: date, end: date, *, live: bool, book: str) -> int:

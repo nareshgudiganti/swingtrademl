@@ -10,15 +10,19 @@ import { Card, Tabs } from '../ui'
 import { scoreBandText, withoutScorePercent } from '../scoreText'
 import { PageState, StaleNotice } from '../PageState'
 import { errorStatus, pickState, type QueryLike } from '../stateRules'
+import {
+  FIGURE_LABELS, excludedText, headlineText, notObservedText, problemCauses, runDuration, timeIst,
+} from '../observatoryText'
+import { ObservatoryBoundary } from './ObservatoryBoundary'
 
 const TABS = ['Decision flow', 'Module activity', 'Results & proof'] as const
 const FIGURES = [
-  ['candidate', 'Brain TRADE ideas'],
-  ['every_stock', 'Every stock (random baseline)'],
-  ['random_5', 'Random 5 a day'],
-  ['momentum_5', 'Momentum 5 a day'],
-  ['nifty_matched', "NIFTY over each idea's own holding days"],
-  ['cash', 'Cash'],
+  ['candidate', FIGURE_LABELS.candidate],
+  ['every_stock', FIGURE_LABELS.every_stock],
+  ['random_5', FIGURE_LABELS.random_5],
+  ['momentum_5', FIGURE_LABELS.momentum_5],
+  ['nifty_matched', FIGURE_LABELS.nifty_matched],
+  ['cash', FIGURE_LABELS.cash],
 ] as const
 type Tab = (typeof TABS)[number]
 
@@ -124,7 +128,12 @@ function DayRow({ d, selected }: { d: ObsDay; selected: boolean }) {
   )
 }
 
+// A drawing error inside the page shows a plain message instead of a blank screen (ob15).
 export default function Observatory() {
+  return <ObservatoryBoundary><ObservatoryPage /></ObservatoryBoundary>
+}
+
+function ObservatoryPage() {
   const [day, setDay] = useState(todayIst())
   const [runId, setRunId] = useState<string>('')
   const [symbol, setSymbol] = useState('')
@@ -201,7 +210,7 @@ export default function Observatory() {
             <select className="tm-select" data-testid="obs-run-select" value={chosenRun}
               onChange={(e) => { setRunId(e.target.value); setDecisionId(null) }}>
               {runItems.map((x) => (
-                <option key={x.id} value={x.id}>{x.kind} · {x.status} · {x.started_at?.slice(11, 16)} UTC</option>
+                <option key={x.id} value={x.id}>{x.kind} · {x.status} · {timeIst(x.started_at)}</option>
               ))}
             </select>
           </label>
@@ -227,9 +236,12 @@ export default function Observatory() {
           <div data-testid="obs-card-ran">
             {r ? (
               <>
-                <h3>{r.headline === 'completed' ? 'Completed' : r.headline === 'degraded' ? 'Completed with problems' : r.headline}</h3>
-                <p>{Math.round(r.run.ms / 1000)} s · {String(r.counts.used)} modules used · {String(r.counts.failed)} failed ·{' '}
-                  {String(r.counts.not_observed)} not observed (inferred)</p>
+                <h3 data-testid="obs-run-headline">{headlineText(r.headline)}</h3>
+                {problemCauses(r).length > 0 && (
+                  <ul data-testid="obs-run-causes">{problemCauses(r).map((c) => <li key={c}>{c}</li>)}</ul>
+                )}
+                <p>{runDuration(r.run)} · {String(r.counts.used)} modules used · {String(r.counts.failed)} failed ·{' '}
+                  {notObservedText(r)}</p>
                 {r.run.error && <p className="tm-neg">{r.run.error}</p>}
               </>
             ) : chosenRun ? <QueryState q={run} id="run" /> : <QueryState q={runs} id="run-none" empty="No run selected." />}
@@ -437,7 +449,7 @@ export default function Observatory() {
                 <p className="tm-dim">Category: {results.data.category} (live practice-stage ideas only; never mixed with backtests or v1 paper trades)</p>
                 {results.data.excluded && (
                   <p className="tm-dim" data-testid="obs-excluded">
-                    Excluded, not mixed in: {results.data.excluded.other_stage_days} day(s) in another stage, {results.data.excluded.other_book_runs} run(s) in another book.
+                    {excludedText(results.data.excluded)}
                   </p>
                 )}
                 {FIGURES.map(([k, label]) => {

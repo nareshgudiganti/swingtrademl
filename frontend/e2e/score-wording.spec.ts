@@ -78,6 +78,8 @@ async function withStoredScoreLine(page: Page) {
   const run = structuredClone(brainLatestRun)
   for (const d of run.decisions) {
     if (d.symbol === 'ITC') d.reasons = ['Model score 44% is below the buy level 55%.']
+    if (d.symbol === 'RELIANCE') d.reasons = ['Model score 49% is below the buy level 55%.']
+    if (d.symbol === 'INFY') d.reasons = ['The model scores this stock 71% against a buy level of 55%; strong trend.']
   }
   await page.route(
     (url) => url.pathname === '/api/v1/brain/runs/latest',
@@ -93,6 +95,21 @@ for (const path of ['/trademind/stock/ITC', '/trademind/watchlist']) {
     await expectNoScoreAsPercent(page)
   })
 }
+
+test('Today: a flagged holding’s stored score line shows without a %', async ({ page }) => {
+  await withStoredScoreLine(page)
+  await openPage(page, '/trademind')
+  await expect(page.getByTestId('needs-you').getByText('Model score 49 is below the buy level 55.').first()).toBeVisible()
+  await expectNoScoreAsPercent(page)
+})
+
+test('Swing Picks list (Today at the picks): reasons and ranking without a %', async ({ page }) => {
+  await withStoredScoreLine(page)
+  await openPage(page, '/trademind/dashboard')
+  await expect(page.locator('#picks')).toBeVisible()
+  await expect(page.getByText('The model scores this stock 71 against a buy level of 55; strong trend.').first()).toBeVisible()
+  await expectNoScoreAsPercent(page)
+})
 
 test('setup models tab groups predictions by model score without %', async ({ page }) => {
   await openPage(page, '/trademind/setup')

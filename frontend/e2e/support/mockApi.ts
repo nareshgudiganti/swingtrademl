@@ -21,8 +21,10 @@ import brainStage from '../fixtures/brain-stage.json' with { type: 'json' }
 import marketSession from '../fixtures/market-session.json' with { type: 'json' }
 import meMember from '../fixtures/me-member.json' with { type: 'json' }
 import meOwner from '../fixtures/me-owner.json' with { type: 'json' }
+import meTester from '../fixtures/me-tester.json' with { type: 'json' }
 import planMember from '../fixtures/plan-member.json' with { type: 'json' }
 import planOwner from '../fixtures/plan-owner.json' with { type: 'json' }
+import planTester from '../fixtures/plan-tester.json' with { type: 'json' }
 import portfolioSummary from '../fixtures/portfolio-summary.json' with { type: 'json' }
 import positions from '../fixtures/positions.json' with { type: 'json' }
 import realAccount from '../fixtures/real-account.json' with { type: 'json' }
@@ -34,8 +36,10 @@ import safetyState from '../fixtures/safety-state.json' with { type: 'json' }
 import status from '../fixtures/status.json' with { type: 'json' }
 import strategies from '../fixtures/strategies.json' with { type: 'json' }
 import v1Picks from '../fixtures/v1-picks.json' with { type: 'json' }
+import strategySignals from '../fixtures/strategy-signals.json' with { type: 'json' }
 
-export type Role = 'owner' | 'member'
+// tester: sees the whole app while plans are off, but never the owner's private areas (like the real server).
+export type Role = 'owner' | 'member' | 'tester'
 
 export const FAKE_TOKEN = 'e2e-fake-token-not-a-real-jwt'
 const TOKEN_STORAGE = 'stml.token' // same key as src/api/client.ts
@@ -141,8 +145,8 @@ function answer(role: Role, method: string, path: string, query: URLSearchParams
 
   // Signing in and who you are.
   if (path === '/auth/options') return { body: authOptions }
-  if (path === '/auth/me') return { body: owner ? meOwner : meMember }
-  if (path === '/me/plan') return { body: owner ? planOwner : planMember }
+  if (path === '/auth/me') return { body: owner ? meOwner : role === 'tester' ? meTester : meMember }
+  if (path === '/me/plan') return { body: owner ? planOwner : role === 'tester' ? planTester : planMember }
 
   // Account status is owner-only on the real server too.
   if (path === '/status') return owner ? { body: status } : { status: 403, body: { detail: 'Owner only.' } }
@@ -176,6 +180,8 @@ function answer(role: Role, method: string, path: string, query: URLSearchParams
   }
   if (path === '/market/session') return { body: marketSession }
   if (path === '/strategies') return { body: strategies }
+  // A strategy's signals are open to no plan on the real server: the owner and a tester (plans off) only.
+  if (path === '/strategies/1/signals') return owner || role === 'tester' ? { body: strategySignals } : { status: 403, body: { detail: 'Not in your plan.' } }
 
   // Version 1's picks (Records page) and the watchlist, so the model score wording can be checked there (ux10).
   if (path === '/signals/buy-list') return { body: v1Picks.buyList }
@@ -267,6 +273,7 @@ export async function mockApi(page: Page, opts: { role?: Role; signedIn?: boolea
     await page.addInitScript((keys) => keys.forEach((k) => localStorage.setItem(k, '1')), [
       TOUR_KEY_PREFIX + meOwner.username,
       TOUR_KEY_PREFIX + meMember.username,
+      TOUR_KEY_PREFIX + meTester.username,
     ])
   }
 

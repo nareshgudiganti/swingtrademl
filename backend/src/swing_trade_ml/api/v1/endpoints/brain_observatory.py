@@ -143,6 +143,8 @@ def runs(
     after_id: str | None = None,
     limit: int = Query(200, ge=1, le=queries.PAGE_MAX),
 ) -> dict:
+    if (after_started_at is None) != (after_id is None):
+        raise HTTPException(422, "A runs cursor needs both after_started_at and after_id.")
     after = (after_started_at, after_id) if after_started_at and after_id else None
     rows = queries.runs_on(db, day, after, limit)
     page, more = rows[:limit], len(rows) > limit

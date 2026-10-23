@@ -2113,3 +2113,61 @@ button.tm-avatar {
   gap: 0.25rem;
   font-size: 0.8rem;
 }
+
+/* ------------------------------------------------------- oa5: Today page -- */
+
+/* BrainGate draws its own page wrapper for "no run yet" and errors; inside Today it must not pad twice. */
+.tm-today .tm-page {
+  padding: 0;
+}
+
+.tm-hero.tm-today-status {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.tm-today-safety {
+  display: grid;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.tm-today-safety-row {
+  display: grid;
+  grid-template-columns: minmax(7rem, auto) minmax(0, 1fr);
+  align-items: center;
+  gap: 0.2rem 0.6rem;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid rgba(118, 110, 255, 0.14);
+  border-radius: 10px;
+  color: inherit;
+  text-decoration: none;
+  font-size: 0.8rem;
+}
+
+.tm-today-safety-row .tm-tag {
+  justify-self: start;
+}
+
+.tm-today-safety-row small {
+  grid-column: 1 / -1;
+}
+
+.tm-today-safety-row:hover,
+.tm-today-safety-row:focus-visible {
+  border-color: rgba(118, 110, 255, 0.4);
+}
+
+.tm-today-h2 {
+  margin: 0.4rem 0 0;
+  font-size: 1.05rem;
+}
+
+@media (max-width: 860px) {
+  .tm-hero.tm-today-status {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .tm-today-safety-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

@@ -7,7 +7,8 @@ import { describe, expect, it } from 'vitest'
 
 import type { BrainDecision, BrainRun } from '../api/types'
 import Dashboard from './pages/Dashboard'
-import dashboardSource from './pages/Dashboard.tsx?raw'
+// The Swing Picks code moved to today/SwingPicks.tsx (oa5).
+import dashboardSource from './today/SwingPicks.tsx?raw'
 import { ResearchExperiment, canStillChange } from './ResearchExperiment'
 import type { HorizonId } from './horizons'
 import { HORIZONS, horizonById } from './horizons'

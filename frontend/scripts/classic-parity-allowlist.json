@@ -1,8 +1,7 @@
 {
   "Finance": { "*": { "status": "separate_app", "decision": "owner 2026-10-04: Personal Finance stays a separate app" } },
   "Dashboard": {
-    "predict": { "status": "decide", "task": "oa15", "note": "POST /ml/predict?persist=true behind the 'full model-ranked watchlist' (Advanced). It generates and stores predictions. Owner decides whether the classic ranked list is needed beyond Opportunities." },
-    "strategySignals": { "status": "planned", "task": "oa5", "note": "read-only per-strategy signal list in Discover (owner 2026-10-16)" }
+    "predict": { "status": "decide", "task": "oa15", "note": "POST /ml/predict?persist=true behind the 'full model-ranked watchlist' (Advanced). It generates and stores predictions. Owner decides whether the classic ranked list is needed beyond Opportunities." }
   },
   "Models": {
     "activateModel": { "status": "decide", "task": "oa15", "note": "chooses which trained model the live system uses; TradeMind Setup is view-only. NOT assumed v2: the classic Models page stays until the owner decides." },

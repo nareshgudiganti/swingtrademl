@@ -9,6 +9,8 @@ import { CapFlag, useSymbolCaps } from '../cap'
 import { BrainGate, Card, Icon, GlowArea, Seg, StockLogo, inr } from '../ui'
 import { noTradeReason } from '../emptyReasons'
 import LiveIdeaCard from '../beginner/LiveIdeaCard'
+import { usePlan } from '../../lib/plan'
+import { StrategySignals } from '../StrategySignals'
 
 type Filter = 'ALL' | IdeaWord
 
@@ -28,6 +30,9 @@ function OpportunitiesBody() {
   const [buying, setBuying] = useState<string | null>(null)
   const [qty, setQty] = useState('1')
   const caps = useSymbolCaps()
+  // oa5: the version 1 per-strategy signals, read only. Their endpoints are open to no plan, so only accounts
+  // that see the whole app (the owner, or a tester while plans are off) get the list.
+  const { seesAll } = usePlan()
 
   const buy = useMutation({
     mutationFn: (symbol: string) =>
@@ -171,6 +176,8 @@ function OpportunitiesBody() {
           <p className="tm-dim" data-state="empty">No TRADE or WATCH idea right now.</p>
         </Card>
       )}
+
+      {seesAll && <StrategySignals />}
     </div>
   )
 }

@@ -35,6 +35,7 @@ import scoreBands from '../fixtures/score-bands.json' with { type: 'json' }
 import safetyState from '../fixtures/safety-state.json' with { type: 'json' }
 import status from '../fixtures/status.json' with { type: 'json' }
 import strategies from '../fixtures/strategies.json' with { type: 'json' }
+import v1Picks from '../fixtures/v1-picks.json' with { type: 'json' }
 import strategySignals from '../fixtures/strategy-signals.json' with { type: 'json' }
 
 // tester: sees the whole app while plans are off, but never the owner's private areas (like the real server).
@@ -181,6 +182,26 @@ function answer(role: Role, method: string, path: string, query: URLSearchParams
   if (path === '/strategies') return { body: strategies }
   // A strategy's signals are open to no plan on the real server: the owner and a tester (plans off) only.
   if (path === '/strategies/1/signals') return owner || role === 'tester' ? { body: strategySignals } : { status: 403, body: { detail: 'Not in your plan.' } }
+
+  // Version 1's picks (Records page) and the watchlist, so the model score wording can be checked there (ux10).
+  if (path === '/signals/buy-list') return { body: v1Picks.buyList }
+  if (path === '/signals/track-record') return { body: v1Picks.trackRecord }
+  if (path === '/instruments/watchlist') {
+    return {
+      body: ['INFY', 'ITC'].map((s, i) => ({
+        id: i + 1,
+        instrument_token: 1000 + i,
+        tradingsymbol: s,
+        name: null,
+        exchange: 'NSE',
+        instrument_type: 'EQ',
+        lot_size: 1,
+        tick_size: 0.05,
+        is_watchlisted: true,
+        is_active: true,
+      })),
+    }
+  }
 
   // Prices and scores.
   if (path.startsWith('/market-data/candles/')) {

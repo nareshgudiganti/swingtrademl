@@ -9,6 +9,7 @@ import { SEALED_PROPOSAL_NOTE, currentBuyLevelProposal } from '../live-system'
 import { BrainGate, Card, CheckItem, Tag } from '../ui'
 import { QueryNotice } from '../PageState'
 import { Glossary } from '../term'
+import { SCORE_HINT, scoreBandText, scorePoints, withoutScorePercent } from '../scoreText'
 
 const PROPOSAL_STATUS_LABEL: Record<BrainProposalStatus, string> = {
   open: 'Open',
@@ -37,8 +38,8 @@ export function ProposalRow({
   return (
     <tr>
       <td>
-        <div className="tm-strong">{p.title}</div>
-        <div className="tm-faint">{p.evidence}</div>
+        <div className="tm-strong">{withoutScorePercent(p.title)}</div>
+        <div className="tm-faint">{withoutScorePercent(p.evidence)}</div>
       </td>
       <td>
         <Tag tone={PROPOSAL_STATUS_TONE[p.status]}>{PROPOSAL_STATUS_LABEL[p.status]}</Tag>
@@ -131,13 +132,14 @@ function LearnBody() {
                 <div className="tm-strong" style={{ marginTop: '0.9rem' }}>
                   Model score (a ranking, not a chance)
                 </div>
+                <p className="tm-dim" style={{ margin: '0.25rem 0 0' }}>{SCORE_HINT}</p>
                 <div className="tm-table-wrap" tabIndex={0} role="region" aria-label="Table, scroll sideways to see more">
                   <table className="tm-table">
                     <thead>
                       <tr>
                         <th>Model score</th>
                         <th className="tm-right">Ideas</th>
-                        <th className="tm-right">The brain said</th>
+                        <th className="tm-right">Average model score</th>
                         <th className="tm-right">What happened</th>
                         <th className="tm-right">Average result</th>
                       </tr>
@@ -145,9 +147,9 @@ function LearnBody() {
                     <tbody>
                       {data.by_band.map((b) => (
                         <tr key={b.band}>
-                          <td>{b.band}</td>
+                          <td>{scoreBandText(b.band)}</td>
                           <td className="tm-right tm-num">{b.n}</td>
-                          <td className="tm-right tm-num">{(b.said * 100).toFixed(0)}%</td>
+                          <td className="tm-right tm-num">{scorePoints(b.said) ?? '—'}</td>
                           <td className="tm-right tm-num">{(b.hit * 100).toFixed(0)}%</td>
                           <td className="tm-right tm-num">
                             {b.avg_r >= 0 ? '+' : ''}

@@ -12,13 +12,13 @@ import { Link } from 'react-router-dom'
 import { api } from '../../api/client'
 import type { BrainApproval, BrainProposal } from '../../api/types'
 import { formatDateTime } from '../../lib/format'
-import { withoutScorePercent } from '../beginner/cardText'
+import { withoutScorePercent } from '../scoreText'
 import { useProposals } from '../live'
 import { Card, Tag, inr } from '../ui'
 
 /** A proposal title with any model score written without its % sign ("Raise the buy level to 65"). */
 export function proposalTitle(title: string): string {
-  return withoutScorePercent(title).replace(/\b(buy level to) (\d+(?:\.\d+)?)%/gi, '$1 $2')
+  return withoutScorePercent(title) // the one helper in scoreText also covers "buy level to 65%"
 }
 
 /** What is waiting: approvals still pending, open proposals that can be decided, and sealed ones that cannot yet. */

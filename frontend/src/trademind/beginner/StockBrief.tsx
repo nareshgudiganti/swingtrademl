@@ -4,6 +4,7 @@ import './beginner.css'
 import MoneyAtStake from './MoneyAtStake'
 import type { BriefAnswer, StockBriefData } from './types'
 import UpcomingEvents from './UpcomingEvents'
+import { withoutScorePercent } from '../scoreText'
 
 const price = (n: number | undefined) => (n == null ? 'Not available' : `₹${inr(n)}`)
 
@@ -47,7 +48,7 @@ export default function StockBrief({ data }: { data: StockBriefData }) {
         {decision && (
           <ul className="bx-plan">
             {decision.reasons.map((r) => (
-              <li key={r}>{r}</li>
+              <li key={r}>{withoutScorePercent(r)}</li>
             ))}
           </ul>
         )}

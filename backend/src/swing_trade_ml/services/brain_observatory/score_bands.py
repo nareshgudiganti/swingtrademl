@@ -40,8 +40,8 @@ DEVELOPMENT = {
     "source": "docs/brain/evidence/score_reliability.json (raw_table_all_folds)",
     "period": "walk-forward 2025-10-01 to 2026-08-15, a fresh model per 28-day window",
     "note": (
-        "Development data, already looked at: a diagnostic, not proof. Scores from 0% to 70% all reached "
-        "+8% first about 14-15% of the time (flat). Only the 80%+ band stood out, and that was found by "
+        "Development data, already looked at: a diagnostic, not proof. Scores from 0 to 70 all reached "
+        "+8% first about 14-15% of the time (flat). Only the score 80+ band stood out, and that was found by "
         "looking at this same data, so it is a lead to test (evidence plan Phase B, candidate B1), "
         "not a result."
     ),

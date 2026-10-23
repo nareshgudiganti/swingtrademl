@@ -7,6 +7,7 @@ import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { api } from '../../api/client'
 import type { ObsByKey, ObsDay, ObsModuleRow, ObsRunsCursor, ObsScoreBand } from '../../api/types'
 import { Card, Tabs } from '../ui'
+import { scoreBandText, withoutScorePercent } from '../scoreText'
 import { PageState, StaleNotice } from '../PageState'
 import { errorStatus, pickState, type QueryLike } from '../stateRules'
 import {
@@ -335,9 +336,9 @@ function ObservatoryPage() {
               <div data-testid="obs-stock-detail">
                 <h3>{stock.data.decision.word}</h3>
                 <h4>Reasons (stored text)</h4>
-                <ul>{stock.data.decision.reasons.map((x, i) => <li key={i}>{x}</li>)}</ul>
+                <ul>{stock.data.decision.reasons.map((x, i) => <li key={i}>{withoutScorePercent(x)}</li>)}</ul>
                 {stock.data.decision.downgraded_from && (
-                  <p>Was {stock.data.decision.downgraded_from}; last downgrade reason: {stock.data.decision.downgrade_reason}
+                  <p>Was {stock.data.decision.downgraded_from}; last downgrade reason: {stock.data.decision.downgrade_reason && withoutScorePercent(stock.data.decision.downgrade_reason)}
                     <br /><span className="tm-dim">{stock.data.decision.downgrade_label}</span></p>
                 )}
                 <h4>Recorded decision path</h4>
@@ -555,7 +556,7 @@ function ScoreBars({ rows, sealed = false }: { rows: ObsScoreBand[]; sealed?: bo
             : `${b.ideas} ideas · none finished`
         return (
           <div key={b.band} className="tm-hbar" style={{ gridTemplateColumns: '110px 1fr 150px' }} data-band={b.band}>
-            <span className="tm-dim">Score {b.band}</span>
+            <span className="tm-dim">Score {scoreBandText(b.band)}</span>
             <div className="tm-hbar-track">
               <div className="tm-hbar-fill tm-violet" style={{ width: `${width}%` }} />
             </div>

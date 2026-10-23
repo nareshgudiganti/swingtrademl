@@ -7,7 +7,7 @@ import { Link } from 'react-router-dom'
 
 import type { BrainRun, IdeaWord } from '../../api/types'
 import LiveIdeaCard from '../beginner/LiveIdeaCard'
-import { withoutScorePercent } from '../beginner/cardText'
+import { withoutScorePercent } from '../scoreText'
 import { CapFlag, useSymbolCaps } from '../cap'
 import { noTradeReason } from '../emptyReasons'
 import { HorizonSelector, HorizonUnavailable } from '../HorizonSelector'

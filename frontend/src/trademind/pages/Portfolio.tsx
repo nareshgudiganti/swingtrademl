@@ -11,6 +11,7 @@ import { PageState, QueryNotice } from '../PageState'
 import { HoldingsHealthCard } from '../HoldingsHealth'
 import { usePlan } from '../../lib/plan'
 import { UpcomingEventsLive } from '../beginner/UpcomingEvents'
+import { withoutScorePercent } from '../scoreText'
 
 // Purely a colour wheel for the donut — never a data value, so cycling a
 // fixed palette by rank is fine even though the sectors themselves are real.
@@ -290,7 +291,7 @@ export default function Portfolio() {
                         </td>
                         <td>
                           <WordTag word={finalWord(h)} />
-                          {h.reasons[0] && <div className="tm-dim" style={{ fontSize: '0.75rem', marginTop: 2 }}>{h.reasons[0]}</div>}
+                          {h.reasons[0] && <div className="tm-dim" style={{ fontSize: '0.75rem', marginTop: 2 }}>{withoutScorePercent(h.reasons[0])}</div>}
                         </td>
                       </tr>
                     )
@@ -316,7 +317,7 @@ export default function Portfolio() {
               return flagged.map((h) =>
                 h.reasons[0] ? (
                   <CheckItem key={h.id} tone={wordTone(finalWord(h))}>
-                    {h.symbol}: {h.reasons[0]}
+                    {h.symbol}: {withoutScorePercent(h.reasons[0])}
                   </CheckItem>
                 ) : null,
               )

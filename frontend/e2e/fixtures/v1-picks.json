@@ -1,0 +1,50 @@
+{
+  "buyList": [
+    {
+      "symbol": "INFY",
+      "name": "Infosys",
+      "strategy_name": "ml_swing",
+      "price": 1490,
+      "confidence": 0.72,
+      "stop_loss": 1430,
+      "take_profit": 1610,
+      "reason": "Made-up test row.",
+      "generated_at": "2026-10-16T10:00:00+05:30"
+    },
+    {
+      "symbol": "ITC",
+      "name": "ITC",
+      "strategy_name": "ml_swing",
+      "price": 420,
+      "confidence": 0.61,
+      "stop_loss": 403,
+      "take_profit": 454,
+      "reason": "Made-up test row.",
+      "generated_at": "2026-10-16T10:00:00+05:30"
+    }
+  ],
+  "trackRecord": [
+    {
+      "signal_id": 1,
+      "symbol": "TCS",
+      "name": "Tata Consultancy Services",
+      "cap_tier": "large",
+      "strategy_name": "ml_swing",
+      "mode": "paper",
+      "generated_at": "2026-10-10T10:00:00+05:30",
+      "age_days": 6,
+      "price": 3900,
+      "stop_loss": 3744,
+      "take_profit": 4212,
+      "current_price": 3912,
+      "confidence": 0.72,
+      "outcome": null,
+      "outcome_pct": null,
+      "outcome_at": null,
+      "was_executed": false,
+      "reason": "Made-up test row.",
+      "trade_net_pnl": null,
+      "trade_return_pct": null
+    }
+  ]
+}

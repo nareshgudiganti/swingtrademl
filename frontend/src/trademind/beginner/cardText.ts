@@ -26,18 +26,8 @@ export function isCalibrated(d: BrainDecision): boolean {
   return !!h && (h.status === 'measured' || h.status === 'calibrated') && h.honest_chance != null
 }
 
-// "model scores this stock 72%", "Model score 72%", "scored 72%", "scored 70% to 80%",
-// "buy level of 60%", "buy level 60%": a raw model score written as a percentage.
-const RAW_SCORE_PCT =
-  /\b(model scores?(?: this stock)?|model score|scored|buy level(?: of)?) (\d+(?:\.\d+)?)%(?: to (\d+(?:\.\d+)?)%)?/gi
-
-/** A stored brain line with any raw model score written without its % sign (it is a ranking, not a
- *  chance). Measured hit rates and calibrated chances in the same line are left as they are. */
-export function withoutScorePercent(line: string): string {
-  return line.replace(RAW_SCORE_PCT, (_m, lead: string, a: string, b?: string) =>
-    b ? `${lead} ${a} to ${b}` : `${lead} ${a}`,
-  )
-}
+// The raw-score scrubber lives with the other score wording (ux10); re-exported here for the card.
+export { withoutScorePercent } from '../scoreText'
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']

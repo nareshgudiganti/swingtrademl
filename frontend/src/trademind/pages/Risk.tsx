@@ -5,6 +5,7 @@ import { BEFORE_TRIAL_NOTE, biggestSector, currentDrawdownPct, drawdownChartSeri
 import { useBrainStatus, useLatestRun } from '../live'
 import RiskEventLog from '../RiskEventLog'
 import { BrainOff, Card, CheckItem, GlowArea, Meter, NotConnected, Ring, inr } from '../ui'
+import { withoutScorePercent } from '../scoreText'
 
 // `hard` marks a check that actually stops new trades outright (the kill
 // switch, the drawdown halt, the market saying no new buys, or the broker
@@ -383,7 +384,7 @@ export default function Risk() {
             ) : (
               refusedDecisions(latest.data).map((dec) => (
                 <CheckItem key={dec.id} tone="warn">
-                  <span className="tm-strong">{dec.symbol}</span>: turned down — {dec.downgrade_reason}
+                  <span className="tm-strong">{dec.symbol}</span>: turned down — {dec.downgrade_reason && withoutScorePercent(dec.downgrade_reason)}
                 </CheckItem>
               ))
             )}

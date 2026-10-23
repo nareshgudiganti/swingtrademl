@@ -18,7 +18,8 @@ import { api } from '../../api/client'
 import type { BrainDecision, BrainRun, Candle } from '../../api/types'
 import { formatDateTime } from '../../lib/format'
 import { usePlan } from '../../lib/plan'
-import { EXPERIMENTAL, withoutScorePercent } from '../beginner/cardText'
+import { EXPERIMENTAL } from '../beginner/cardText'
+import { withoutScorePercent } from '../scoreText'
 import { chancePercent, chanceText, chanceTitle } from '../honest'
 import { HorizonSelector, HorizonUnavailable } from '../HorizonSelector'
 import { HORIZONS, horizonById, type HorizonId } from '../horizons'
@@ -465,7 +466,7 @@ function PickDetail({
   const word = finalWord(d)
   const mid = entryMid(d)
   const t1 = mid != null ? mid * (1 + FIRST_TARGET) : null
-  const risks = [d.downgrade_reason, d.overrule_reason].filter((r): r is string => !!r)
+  const risks = [d.downgrade_reason, d.overrule_reason].filter((r): r is string => !!r).map(withoutScorePercent)
 
   return (
     <div className="tm-grid tm-cols-3 tm-dash-detail" data-feature="pick-detail">

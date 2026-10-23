@@ -9,7 +9,7 @@
 import { useNavigate } from 'react-router-dom'
 
 import type { BrainDecision, BrainRun } from '../../api/types'
-import { withoutScorePercent } from '../beginner/cardText'
+import { withoutScorePercent } from '../scoreText'
 import { finalWord, holdingsFrom } from '../live'
 import { PageState } from '../PageState'
 import { WordTag } from '../term'

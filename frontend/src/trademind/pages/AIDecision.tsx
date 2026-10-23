@@ -8,6 +8,7 @@ import { TrackRecord, chancePercent, chanceText, chanceTitle } from '../honest'
 import { IdeaExplain } from '../IdeaExplain'
 import { BrainGate, Card, CheckItem, Icon, NotConnected, Tabs, inr } from '../ui'
 import { WhatWouldChange } from '../WhatWouldChange'
+import { withoutScorePercent } from '../scoreText'
 
 const OWNER_TABS = ['Summary', 'Evidence', 'Similar Cases', 'Model Output', 'Risk Analysis'] as const
 const PRO_TABS = ['Summary', 'Risk Analysis'] as const
@@ -172,7 +173,7 @@ function AIDecisionBody() {
                   {decision.reasons.length > 0 ? (
                     decision.reasons.map((r, i) => (
                       <div key={i} className="tm-row">
-                        <span>{r}</span>
+                        <span>{withoutScorePercent(r)}</span>
                       </div>
                     ))
                   ) : (
@@ -190,7 +191,7 @@ function AIDecisionBody() {
           {tab === 'Evidence' &&
             (decision.evidence_text ? (
               <p className="tm-dim" style={{ whiteSpace: 'pre-wrap' }}>
-                {decision.evidence_text}
+                {withoutScorePercent(decision.evidence_text)}
               </p>
             ) : (
               <p className="tm-dim">No evidence text recorded for this decision.</p>
@@ -198,7 +199,7 @@ function AIDecisionBody() {
 
           {tab === 'Similar Cases' &&
             (decision.evidence_text?.includes('Similar cases') ? (
-              <p className="tm-dim">{decision.evidence_text}</p>
+              <p className="tm-dim">{withoutScorePercent(decision.evidence_text)}</p>
             ) : (
               <NotConnected what="Similar cases" reason="The brain hasn't recorded similar-case evidence for this decision." />
             ))}
@@ -219,7 +220,7 @@ function AIDecisionBody() {
                 <CheckItem tone={decision.downgraded_from != null ? 'warn' : wordTone(finalWord(decision))}>
                   {decision.downgraded_from != null
                     ? `Brought down from ${decision.downgraded_from} to ${finalWord(decision)}${
-                        decision.downgrade_reason ? ` — ${decision.downgrade_reason}` : ''
+                        decision.downgrade_reason ? ` — ${withoutScorePercent(decision.downgrade_reason)}` : ''
                       }`
                     : `Passed the brain's risk check — stayed at ${finalWord(decision)}.`}
                 </CheckItem>

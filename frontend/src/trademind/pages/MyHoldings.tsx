@@ -11,6 +11,7 @@ import { SortTh, useSort } from '../sort'
 import { Card, PageHead, Tabs, Tag, inr, signed, toneClass } from '../ui'
 import { PageState, QueryNotice, StaleNotice } from '../PageState'
 import TaxExportCard from '../TaxExport'
+import { actionLabelText } from '../scoreText'
 
 const TABS = ['My holdings', 'Straight from Zerodha', 'Real-money report'] as const
 type TabId = (typeof TABS)[number]
@@ -609,7 +610,7 @@ function HoldingsTab() {
                   <Tag tone={VERDICT[p.action_code].tone}>{p.action_code === 'exit' ? 'Sell' : 'Review'}</Tag>
                 </div>
                 <div className="tm-strong" style={{ marginTop: '0.3rem' }}>{VERDICT[p.action_code].head}</div>
-                <div className="tm-dim" style={{ marginTop: '0.2rem', overflowWrap: 'anywhere' }}>{p.action_label}</div>
+                <div className="tm-dim" style={{ marginTop: '0.2rem', overflowWrap: 'anywhere' }}>{actionLabelText(p.action_label)}</div>
                 <div style={{ marginTop: '0.5rem' }}>
                   <ScoreTrail p={p} />
                 </div>

@@ -1450,7 +1450,7 @@ export interface ObsOutcomes {
     candidate: ObsFigure; every_stock: ObsFigure; random_5: ObsFigure; momentum_5: ObsFigure
     nifty_matched: ObsFigure; cash: ObsFigure; edge?: ObsEdge; costs: string; defs?: string; label?: string
   }
-  excluded?: { other_stage_days: number; other_book_runs: number }
+  excluded?: { other_stage_days: number | null; other_book_runs: number }
   label: string
   // The blind trial: figures above cover only `results_period` (null = none); `sealed` counts the trial days.
   results_period?: { from: string; to: string } | null

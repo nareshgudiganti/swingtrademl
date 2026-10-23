@@ -148,11 +148,14 @@ def flag_counts(rows: list[dict]) -> dict:
 
 
 def headline(status: str, rows: list[dict], fallbacks: list[dict]) -> str:
-    """The run's own status unless it finished; a finished run is 'completed' or 'degraded'."""
+    """The run's own status unless it finished; a finished run is 'completed' or 'degraded', or
+    'completed_unchecked' when it stored no module list, so a missing module could not be noticed."""
     if status != "done":
         return status
     bad = any(r["flags"]["failed"] or r["flags"]["not_observed"] or r["flags"]["conflicting"] for r in rows)
-    return "degraded" if bad or fallbacks else "completed"
+    if bad or fallbacks:
+        return "degraded"
+    return "completed_unchecked" if any(r["flags"]["unknown"] for r in rows) else "completed"
 
 
 def outside_rows(kind: str, live: bool, status: str, alerts_checked_at, alerts_sent: int) -> list[dict]:

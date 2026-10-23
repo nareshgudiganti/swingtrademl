@@ -1,7 +1,8 @@
 """Remove secrets from stored free text before the Observatory shows it (spec 3.4, R9).
 
-Only values under FREE_TEXT_KEYS are touched. Ids, symbols, words, numbers, timestamps and pagination
-cursors are typed fields and pass through unchanged. Text is never parsed for meaning, only redacted.
+Only values under FREE_TEXT_KEYS are touched, however deeply nested under one. Ids, symbols, words,
+numbers, timestamps and pagination cursors are typed fields and pass through unchanged. Text is never
+parsed for meaning, only redacted.
 """
 
 from __future__ import annotations
@@ -77,9 +78,19 @@ def _secret_values() -> list[str]:
     return sorted(values, key=len, reverse=True)
 
 
+_PATH_PART = re.compile(r"[a-z0-9_\-]{0,31}")
+
+
+def _is_path(token: str) -> bool:
+    """A file path such as /app/src/swing_trade_ml/brain: two or more slashes, every part short and
+    lower case. Random keys mix upper and lower case, so they are still masked."""
+    parts = token.split("/")
+    return len(parts) >= 3 and any(parts) and all(_PATH_PART.fullmatch(p) for p in parts)
+
+
 def _long(match: re.Match) -> str:
     token = match.group(0)
-    return token if _RUN_ID.match(token) else MASK
+    return token if _RUN_ID.match(token) or _is_path(token) else MASK
 
 
 def redact_text(s: str) -> str:
@@ -96,7 +107,8 @@ def redact_text(s: str) -> str:
 def _walk(value, path: str, free: bool, changed: list[str]):
     if isinstance(value, dict):
         return {
-            k: _walk(v, f"{path}.{k}" if path else k, k in FREE_TEXT_KEYS, changed) for k, v in value.items()
+            k: _walk(v, f"{path}.{k}" if path else k, free or k in FREE_TEXT_KEYS, changed)
+            for k, v in value.items()
         }
     if isinstance(value, list):
         return [_walk(v, f"{path}[{i}]", free, changed) for i, v in enumerate(value)]

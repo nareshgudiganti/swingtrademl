@@ -220,6 +220,13 @@ def test_cursor_pages_runs_with_equal_start_times(client, now_after_deadline):
     assert len(seen) == 3 and len(set(seen)) == 3
 
 
+def test_half_a_runs_cursor_is_refused_not_page_one(client, now_after_deadline):
+    """ob15: a cursor needs both parts; half of one used to return page 1 silently."""
+    for q in ("after_id=x", "after_started_at=2026-10-15T10:20:00Z"):
+        r = client.get(f"{BASE}/runs?date=2026-10-15&{q}", headers=OWNER)
+        assert r.status_code == 422, q
+
+
 def test_nightly_state_is_for_the_whole_day_not_the_page(client, now_after_deadline):
     early = make_run("i0", as_of=AS_OF, kind="intraday", started_at=AS_OF - timedelta(hours=6))
     nightly = make_run("n9", as_of=AS_OF, started_at=AS_OF)

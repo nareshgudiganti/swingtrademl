@@ -31,6 +31,7 @@ function PlainBrief({ symbol }: { symbol: string }) {
     </Card>
   )
 }
+import { SCORE_HINT, scoreLabel, scoreLabelLong, withoutScorePercent } from '../scoreText'
 
 const TABS = ['Overview', 'Technical', 'Fundamental', 'AI Analysis', 'Similar Cases', 'News', 'Options'] as const
 type TabId = (typeof TABS)[number]
@@ -133,6 +134,9 @@ function StockDetailBody() {
   const latest = useLatestRun()
   const run = latest.data
   const fromRun = run?.decisions.find((d) => d.symbol.toUpperCase() === symbol)
+  // ux10: an idea from today's run is shown by its place among today's ideas, never as a % chance.
+  const dayScores =
+    fromRun?.kind === 'idea' ? run?.decisions.filter((d) => d.kind === 'idea').map((d) => d.confidence) : undefined
   const why = useWhy(status === 'live' && !fromRun && symbol ? symbol : undefined)
 
   const [tab, setTab] = useState<TabId>('Overview')
@@ -256,7 +260,9 @@ function StockDetailBody() {
         )}
         {decision.confidence != null && (
           <Term k="model_score">
-            <Tag tone="violet">{Math.round(decision.confidence * 100)} model score</Tag>
+            <span title={SCORE_HINT}>
+              <Tag tone="violet">{scoreLabel(decision.confidence, dayScores)}</Tag>
+            </span>
           </Term>
         )}
       </div>
@@ -271,13 +277,13 @@ function StockDetailBody() {
               {decision.reasons.length > 0 ? (
                 decision.reasons.map((r, i) => (
                   <CheckItem key={i} tone={wordTone(finalWord(decision))}>
-                    {r}
+                    {withoutScorePercent(r)}
                   </CheckItem>
                 ))
               ) : (
                 <p className="tm-dim">No reasons recorded for this decision.</p>
               )}
-              {decision.evidence_text && <p className="tm-note" style={{ marginTop: '0.7rem' }}>{decision.evidence_text}</p>}
+              {decision.evidence_text && <p className="tm-note" style={{ marginTop: '0.7rem' }}>{withoutScorePercent(decision.evidence_text)}</p>}
               <WhatWouldChange decision={decision} />
               <Overrule decision={decision} />
               <div className="tm-grid tm-cols-2" style={{ marginTop: '0.9rem', gap: '0.7rem' }}>
@@ -404,13 +410,13 @@ function StockDetailBody() {
             {decision.reasons.length > 0 ? (
               decision.reasons.map((r, i) => (
                 <CheckItem key={i} tone={wordTone(finalWord(decision))}>
-                  {r}
+                  {withoutScorePercent(r)}
                 </CheckItem>
               ))
             ) : (
               <p className="tm-dim">No reasons recorded for this decision.</p>
             )}
-            {decision.evidence_text && <p className="tm-note" style={{ marginTop: '0.7rem' }}>{decision.evidence_text}</p>}
+            {decision.evidence_text && <p className="tm-note" style={{ marginTop: '0.7rem' }}>{withoutScorePercent(decision.evidence_text)}</p>}
           </Card>
           <Card title="In plain words">
             <p style={{ marginTop: 0 }}>
@@ -422,10 +428,7 @@ function StockDetailBody() {
               {decision.confidence != null && (
                 <>
                   {' '}
-                  with{' '}
-                  <strong>
-                    {Math.round(decision.confidence * 100)} <Term k="model_score">model score</Term>
-                  </strong>
+                  (<strong title={SCORE_HINT}>{scoreLabelLong(decision.confidence, dayScores)}</strong>)
                 </>
               )}
               .
@@ -442,7 +445,7 @@ function StockDetailBody() {
       {tab === 'Similar Cases' &&
         (decision.evidence_text?.includes('Similar cases') ? (
           <Card glow title="Times this looked the same before" sub="What the brain found in similar past situations">
-            <p className="tm-dim">{decision.evidence_text}</p>
+            <p className="tm-dim">{withoutScorePercent(decision.evidence_text)}</p>
           </Card>
         ) : (
           <NotConnected what="Similar cases" reason="The brain hasn't recorded similar-case evidence for this decision." />

@@ -33,6 +33,7 @@ import scoreBands from '../fixtures/score-bands.json' with { type: 'json' }
 import safetyState from '../fixtures/safety-state.json' with { type: 'json' }
 import status from '../fixtures/status.json' with { type: 'json' }
 import strategies from '../fixtures/strategies.json' with { type: 'json' }
+import v1Picks from '../fixtures/v1-picks.json' with { type: 'json' }
 
 export type Role = 'owner' | 'member'
 
@@ -175,6 +176,26 @@ function answer(role: Role, method: string, path: string, query: URLSearchParams
   }
   if (path === '/market/session') return { body: marketSession }
   if (path === '/strategies') return { body: strategies }
+
+  // Version 1's picks (Records page) and the watchlist, so the model score wording can be checked there (ux10).
+  if (path === '/signals/buy-list') return { body: v1Picks.buyList }
+  if (path === '/signals/track-record') return { body: v1Picks.trackRecord }
+  if (path === '/instruments/watchlist') {
+    return {
+      body: ['INFY', 'ITC'].map((s, i) => ({
+        id: i + 1,
+        instrument_token: 1000 + i,
+        tradingsymbol: s,
+        name: null,
+        exchange: 'NSE',
+        instrument_type: 'EQ',
+        lot_size: 1,
+        tick_size: 0.05,
+        is_watchlisted: true,
+        is_active: true,
+      })),
+    }
+  }
 
   // Prices and scores.
   if (path.startsWith('/market-data/candles/')) {

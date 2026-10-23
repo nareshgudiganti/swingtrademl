@@ -7,6 +7,7 @@ import { Card, PageHead, Seg, Tabs, Tag, inr, signed, toneClass } from '../ui'
 import { usePlan } from '../../lib/plan'
 import { EvidencePanelLive } from '../beginner/EvidencePanel'
 import { BrainProgressLive, InsightsLive } from '../beginner/InsightsPanel'
+import { SCORE_HINT, scoreLabel, scoreLabelLong } from '../scoreText'
 
 const TABS = ['Trade history', "Version 1's picks", 'Strategy results'] as const
 type TabName = (typeof TABS)[number]
@@ -349,9 +350,7 @@ function ScanTable({ rows }: { rows: TrackRecordSignal[] }) {
                 <tr>
                   <td colSpan={10} className="tm-wrap">
                     <div>Strategy: {strategyPlain(r.strategy_name)}</div>
-                    <div title="A ranking, not a chance">
-                      Model score: {r.confidence != null ? `${(r.confidence * 100).toFixed(0)}%` : '—'}
-                    </div>
+                    <div title={SCORE_HINT}>{scoreLabelLong(r.confidence)}</div>
                     <div>
                       {r.was_executed
                         ? `We bought this one. Actual result: ${
@@ -374,6 +373,7 @@ function ScanTable({ rows }: { rows: TrackRecordSignal[] }) {
 function Picks() {
   const buy = useQuery({ queryKey: ['buyList'], queryFn: api.buyList })
   const scan = useQuery({ queryKey: ['scanResults'], queryFn: api.scanResults })
+  const buyScores = (buy.data ?? []).map((r) => r.confidence)
 
   return (
     <div className="tm-grid">
@@ -397,8 +397,8 @@ function Picks() {
                   <th className="tm-right">Price</th>
                   <th className="tm-right">Sell if it falls to</th>
                   <th className="tm-right">Goal price</th>
-                  <th className="tm-right" title="A ranking, not a chance">
-                    Model score
+                  <th className="tm-right" title={SCORE_HINT}>
+                    Model score rank
                   </th>
                   <th>Why</th>
                 </tr>
@@ -413,7 +413,7 @@ function Picks() {
                     <td className="tm-right">₹{inr(r.price)}</td>
                     <td className="tm-right">{r.stop_loss != null ? `₹${inr(r.stop_loss)}` : '—'}</td>
                     <td className="tm-right">{r.take_profit != null ? `₹${inr(r.take_profit)}` : '—'}</td>
-                    <td className="tm-right">{r.confidence != null ? `${(r.confidence * 100).toFixed(0)}%` : '—'}</td>
+                    <td className="tm-right">{scoreLabel(r.confidence, buyScores)}</td>
                     <td className="tm-wrap">{r.reason ?? '—'}</td>
                   </tr>
                 ))}

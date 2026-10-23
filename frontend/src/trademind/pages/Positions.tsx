@@ -16,6 +16,7 @@ import { BrainGate, Card, CheckItem, Icon, Seg, Tabs, Tag, inr, signed, toneClas
 import { PositionBand } from '../PositionBand'
 import { Confirm } from '../Confirm'
 import ScoreTrail from '../ScoreTrail'
+import { SCORE_HINT, scoreLabel, withoutScorePercent } from '../scoreText'
 
 const TABS = ['Position Overview', 'Re-evaluation & Exit', 'Notes'] as const
 type TabId = (typeof TABS)[number]
@@ -226,7 +227,7 @@ function PositionsBody() {
         <div className="tm-rows">
           {selected.reasons.map((r, i) => (
             <CheckItem key={i} tone={wordTone(finalWord(selected))}>
-              {r}
+              {withoutScorePercent(r)}
             </CheckItem>
           ))}
         </div>
@@ -266,7 +267,9 @@ function PositionsBody() {
         <WordTag word={finalWord(selected)} />
         {selected.confidence != null && (
           <Term k="model_score">
-            <Tag tone="violet">{Math.round(selected.confidence * 100)} model score</Tag>
+            <span title={SCORE_HINT}>
+              <Tag tone="violet">{scoreLabel(selected.confidence)}</Tag>
+            </span>
           </Term>
         )}
       </div>

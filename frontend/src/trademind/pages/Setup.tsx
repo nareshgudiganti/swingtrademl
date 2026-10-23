@@ -442,7 +442,7 @@ function ModelsTab() {
     <div className="tm-grid">
       <Card
         title="Models in use"
-        sub="One model per company size. Each studies past prices and gives every stock a chance of rising. Here you can only see them."
+        sub="One model per company size. Each studies past prices and gives every stock a model score from 0 to 100 that ranks it against the others (a ranking, not a chance of rising). Here you can only see them."
       >
         {(status.isLoading || models.isLoading) && <p className="tm-dim">Loading…</p>}
         {(status.isError || models.isError) && <Problem what="the models" />}
@@ -507,8 +507,8 @@ function ModelsTab() {
       </Card>
 
       <Card
-        title="Is the model's confidence honest?"
-        sub="When the model says about 60%, does it really work out about 60% of the time?"
+        title="Does a higher model score really work out more often?"
+        sub="Past predictions grouped by their model score (0 to 100), and how often each group really went up. The score is a ranking, not a chance; the last column says whether a group did better or worse than its score suggests."
         action={
           <Seg
             small
@@ -534,7 +534,7 @@ function ModelsTab() {
               <table className="tm-table">
                 <thead>
                   <tr>
-                    <th>When it said</th>
+                    <th>Model score</th>
                     <th>It was right</th>
                     <th>Verdict</th>
                   </tr>
@@ -545,7 +545,7 @@ function ModelsTab() {
                     return (
                       <tr key={`${b.lower}-${b.upper}`}>
                         <td>
-                          {formatPercent(b.lower, 0)} to {formatPercent(b.upper, 0)}
+                          {Math.round(b.lower * 100)} to {Math.round(b.upper * 100)}
                         </td>
                         <td>
                           {b.observed_rate != null ? (

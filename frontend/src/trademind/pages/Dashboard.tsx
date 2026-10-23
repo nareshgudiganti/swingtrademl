@@ -26,6 +26,7 @@ import { DEFAULT_HORIZON, HORIZONS, horizonById, type HorizonId } from '../horiz
 import { MARKET_LABEL, MARKET_PLAIN, MARKET_TONE, wordTone } from '../vocab'
 import { Term, TermIf } from '../term'
 import { ActionPill, BrainArt, BrainGate, Card, CheckItem, GlowArea, Meter, Ring, StockLogo, Tag, inr } from '../ui'
+import { withoutScorePercent } from '../scoreText'
 
 const RANGES = [
   { id: '1W', bars: 5 },
@@ -450,7 +451,7 @@ function PickDetail({
   const word = finalWord(d)
   const mid = entryMid(d)
   const t1 = mid != null ? mid * (1 + FIRST_TARGET) : null
-  const risks = [d.downgrade_reason, d.overrule_reason].filter((r): r is string => !!r)
+  const risks = [d.downgrade_reason, d.overrule_reason].filter((r): r is string => !!r).map(withoutScorePercent)
 
   return (
     <div className="tm-grid tm-cols-3 tm-dash-detail">
@@ -534,7 +535,7 @@ function PickDetail({
           {d.reasons.length === 0 && <p className="tm-dim">The brain gave no reasons for this one.</p>}
           {d.reasons.map((r, i) => (
             <CheckItem key={i} tone={wordTone(word)}>
-              {r}
+              {withoutScorePercent(r)}
             </CheckItem>
           ))}
           {risks.length > 0 && (

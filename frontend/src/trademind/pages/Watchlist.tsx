@@ -9,6 +9,7 @@ import type { Action } from '../types'
 import { CapFlag, useSymbolCaps } from '../cap'
 import { ActionPill, BrainGate, Card, inr } from '../ui'
 import { QueryNotice } from '../PageState'
+import { SCORE_HINT, scoreLabel, withoutScorePercent } from '../scoreText'
 
 function entryZone(d: BrainDecision): string {
   if (d.entry_low != null && d.entry_high != null && d.entry_low !== d.entry_high) {
@@ -37,6 +38,7 @@ function WatchlistBody() {
 
   const ideas = latest.data ? ideasFrom(latest.data) : []
   const bySymbol = new Map(ideas.map((d) => [d.symbol.toUpperCase(), d]))
+  const dayScores = ideas.map((d) => d.confidence)
   const symbols = watchlist.data ?? []
 
   const buy = useMutation({
@@ -69,7 +71,9 @@ function WatchlistBody() {
                   <th>Stock</th>
                   <th>Size</th>
                   <th>Decision</th>
-                  <th className="tm-right">Model score</th>
+                  <th className="tm-right" title={SCORE_HINT}>
+                    Model score rank
+                  </th>
                   <th>Entry zone</th>
                   <th>Target</th>
                   <th>Stop</th>
@@ -93,12 +97,12 @@ function WatchlistBody() {
                       </td>
                       <td>{word ? <ActionPill action={word as Action} /> : <span className="tm-dim">—</span>}</td>
                       <td className="tm-right tm-num">
-                        {d?.confidence != null ? Math.round(d.confidence * 100) : '—'}
+                        {d ? scoreLabel(d.confidence, dayScores) : '—'}
                       </td>
                       <td className="tm-dim">{d ? entryZone(d) : '—'}</td>
                       <td className="tm-dim">{d?.target != null ? `₹${inr(d.target)}` : '—'}</td>
                       <td className="tm-dim">{d?.stop != null ? `₹${inr(d.stop)}` : '—'}</td>
-                      <td className="tm-dim tm-wrap">{d?.reasons[0] ?? '—'}</td>
+                      <td className="tm-dim tm-wrap">{d?.reasons[0] ? withoutScorePercent(d.reasons[0]) : '—'}</td>
                       <td onClick={(e) => e.stopPropagation()}>
                         <button
                           type="button"

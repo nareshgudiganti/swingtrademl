@@ -43,7 +43,7 @@ export default function Today({
     <div className="tm-page tm-grid tm-today" data-page="today" data-focus={focus}>
       <StatusStrip owner={owner} />
       <NeedsYou owner={owner} holdings={<HoldingsNeedsYou run={latest.data} />} />
-      <BrainGate>
+      <BrainGate inline>
         <TodayFromRun win={win} onWin={setWin} />
       </BrainGate>
     </div>

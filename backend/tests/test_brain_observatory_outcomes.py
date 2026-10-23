@@ -294,3 +294,30 @@ def test_stored_grades_are_broken_down_by_word_with_trade_apart():
 def test_no_trade_grades_is_unavailable_not_zero():
     g = o.stored_grades([("timeout", 0.01, None, "paper", "AVOID")])
     assert g["trade"]["available"] is False and g["trade"]["avg_gross_return"] is None
+
+
+def test_backtest_grades_count_each_replayed_day_once(db_session):
+    """ob15: the same day replayed twice is one backtest day, not two; the latest finished replay counts."""
+    days = trading_days(date(2026, 8, 3), date(2026, 8, 7))
+    for k, d in enumerate(days):
+        for rep in range(2):
+            db_session.add(
+                make_run(
+                    f"rp{k}-{rep}",
+                    as_of=nightly_as_of(d),
+                    live=False,
+                    started_at=nightly_as_of(d).replace(minute=rep),
+                )
+            )
+    db_session.flush()
+    for k in range(len(days)):
+        db_session.add(
+            make_decision(f"rp{k}-0", "ZZNOPRICE", word="WAIT", outcome="stop", outcome_return=-0.04)
+        )
+        db_session.add(
+            make_decision(f"rp{k}-1", "ZZNOPRICE", word="WAIT", outcome="target", outcome_return=0.08)
+        )
+    db_session.flush()
+    back = o.build(db_session, days[0], days[-1], "backtest")
+    assert back["stored_grades"]["count"] == len(days)
+    assert back["stored_grades"]["avg_gross_return"] == pytest.approx(0.08)

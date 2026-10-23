@@ -131,6 +131,14 @@ def test_headline():
     assert health.headline("failed", ok, []) == "failed"
 
 
+def test_finished_run_without_a_module_list_is_not_called_completed():
+    """ob15: with no module list nothing can be checked as missing, so 'Completed' would overclaim."""
+    rows = health.module_rows("nightly", {}, [line("M01", "used")], STEP_MAP)
+    assert health.headline("done", rows, []) == "completed_unchecked"
+    failed = health.module_rows("nightly", {}, [line("M01", "rejected")], STEP_MAP)
+    assert health.headline("done", failed, []) == "degraded"
+
+
 def test_m16_m17_m18_rows():
     stamp = datetime(2026, 10, 15, 10, 22, tzinfo=UTC)
     rows = {r["module_id"]: r for r in health.outside_rows("intraday", True, "done", stamp, 0)}

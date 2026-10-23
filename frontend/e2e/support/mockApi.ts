@@ -11,6 +11,7 @@ import type { Page, Route } from '@playwright/test'
 import adminPlans from '../fixtures/admin-plans.json' with { type: 'json' }
 import alertSettings from '../fixtures/alert-settings.json' with { type: 'json' }
 import authOptions from '../fixtures/auth-options.json' with { type: 'json' }
+import brainAlerts from '../fixtures/brain-alerts.json' with { type: 'json' }
 import brainChanges from '../fixtures/brain-changes.json' with { type: 'json' }
 import brainHealth from '../fixtures/brain-health.json' with { type: 'json' }
 import brainLatestRun from '../fixtures/brain-latest-run.json' with { type: 'json' }
@@ -164,6 +165,7 @@ function answer(role: Role, method: string, path: string, query: URLSearchParams
   // The stock brief the idea card reads its plan details and rupees at stake from (oa12). INFY is the TRADE.
   if (path === '/beginner/stock/INFY') return { body: beginnerStockInfy }
   if (path === '/brain/stage') return owner ? { body: brainStage } : { status: 403, body: { detail: 'Owner only.' } }
+  if (path === '/brain/alerts') return owner ? { body: brainAlerts } : { status: 403, body: { detail: 'Owner only.' } }
   if (path === '/brain/approvals') return owner ? { body: [] } : { status: 403, body: { detail: 'Owner only.' } }
   if (path === '/notifications/telegram/status') return { body: { ok: false, bot: null, error: 'Telegram is not set up on this server.' } }
   if (path === '/notifications/alert-settings') return owner ? { body: alertSettings } : { status: 403, body: { detail: 'Only the owner can do this.' } }

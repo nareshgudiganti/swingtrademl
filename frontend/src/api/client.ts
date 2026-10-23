@@ -21,6 +21,7 @@ import type {
   RealOrder,
   RealOrdersStatus,
   BrainAlertPreview,
+  BrainAlertRecord,
   BrainAlertSend,
   BrainApproval,
   BrainCompare,
@@ -604,6 +605,8 @@ export const api = {
   brainRunTrace: (runId: string) =>
     get<{ run_id: string; trace: BrainTraceEvent[] }>(`/brain/runs/${encodeURIComponent(runId)}/trace`),
   brainWhy: (symbol: string) => get<BrainWhy>(`/brain/why/${encodeURIComponent(symbol.trim().toUpperCase())}`),
+  // What the brain really sent, newest first (the top-bar bell). Read only; owner's area.
+  brainAlerts: (limit = 20) => get<BrainAlertRecord[]>(`/brain/alerts?limit=${limit}`),
   brainAlertPreview: (runId: string) =>
     get<BrainAlertPreview>(`/brain/runs/${encodeURIComponent(runId)}/alerts`),
   brainAlertSend: (runId: string) =>

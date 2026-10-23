@@ -1129,6 +1129,16 @@ export interface BrainAlertPreview {
   text: string | null
 }
 
+/** One alert the brain really sent (a brain_alerts row), for the top-bar bell. */
+export interface BrainAlertRecord {
+  id: number
+  kind: string
+  text: string
+  alert_date: string
+  sent_at: string
+  channel: string
+}
+
 export interface BrainAlertSend {
   sent: boolean
   count: number

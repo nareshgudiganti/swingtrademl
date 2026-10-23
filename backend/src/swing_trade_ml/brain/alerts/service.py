@@ -135,3 +135,21 @@ def send(db: Session, run_id: str, sender: Sender | None = None) -> dict:
         db.commit()
     log.info("brain.alerts", run_id=run_id, items=len(items), sent=sent)
     return {"sent": bool(sent), "count": len(items), "text": text}
+
+
+def recent(db: Session, limit: int = 20) -> list[dict]:
+    """What the brain really told the owner, newest first (the top-bar bell). Reads only."""
+    rows = db.execute(
+        select(BrainAlert).order_by(BrainAlert.sent_at.desc(), BrainAlert.id.desc()).limit(limit)
+    ).scalars()
+    return [
+        {
+            "id": a.id,
+            "kind": a.kind,
+            "text": a.text,
+            "alert_date": a.alert_date,
+            "sent_at": a.sent_at,
+            "channel": a.channel,
+        }
+        for a in rows
+    ]

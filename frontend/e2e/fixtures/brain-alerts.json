@@ -1,0 +1,18 @@
+[
+  {
+    "id": 42,
+    "kind": "holding",
+    "text": "TCS: the brain now says MONITOR (was HOLD).",
+    "alert_date": "2026-10-16",
+    "sent_at": "2026-10-16T10:25:00+00:00",
+    "channel": "telegram"
+  },
+  {
+    "id": 41,
+    "kind": "banner",
+    "text": "Market mode is now DEFENSIVE: buy less, be careful.",
+    "alert_date": "2026-10-16",
+    "sent_at": "2026-10-16T10:20:00+00:00",
+    "channel": "telegram"
+  }
+]

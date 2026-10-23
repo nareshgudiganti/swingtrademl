@@ -1,0 +1,152 @@
+/* oa8: top-bar alerts bell and trading-stage chip. New classes only; nothing in trademind.css changes. */
+
+.tm-stage-chip {
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  white-space: nowrap;
+  color: var(--tm-amber);
+  border: 1px solid rgba(255, 181, 71, 0.45);
+  background: rgba(255, 181, 71, 0.08);
+}
+.tm-stage-chip[data-stage='approval'] {
+  color: var(--tm-cyan);
+  border-color: rgba(51, 214, 255, 0.45);
+  background: rgba(51, 214, 255, 0.08);
+}
+.tm-stage-chip[data-stage='auto'] {
+  color: var(--tm-green);
+  border-color: rgba(46, 230, 138, 0.45);
+  background: rgba(46, 230, 138, 0.08);
+}
+
+/* Not positioned, so the panel lines up with the (sticky, full-width) top bar and never runs off a phone screen. */
+.tm-bell {
+  display: flex;
+}
+
+.tm-bell-btn {
+  position: relative;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  border: 1px solid var(--tm-line-strong);
+  background: rgba(139, 124, 255, 0.08);
+  color: var(--tm-text);
+  padding: 0;
+}
+.tm-bell-btn:hover,
+.tm-bell-btn[aria-expanded='true'] {
+  background: rgba(139, 124, 255, 0.2);
+}
+
+.tm-bell-count {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+  color: #050817;
+  background: var(--tm-red);
+}
+
+.tm-bell-panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 16px;
+  width: min(360px, calc(100vw - 32px));
+  max-height: min(70vh, 480px);
+  display: flex;
+  flex-direction: column;
+  border-radius: 10px;
+  background: var(--tm-bg-2);
+  border: 1px solid var(--tm-line-strong);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  z-index: 30;
+  overflow: hidden;
+}
+
+.tm-bell-head {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.7rem 0.85rem 0.55rem;
+  border-bottom: 1px solid var(--tm-line);
+}
+.tm-bell-head span {
+  color: var(--tm-dim);
+  font-size: 0.75rem;
+}
+
+.tm-bell-list {
+  list-style: none;
+  margin: 0;
+  padding: 0.3rem 0;
+  overflow-y: auto;
+}
+.tm-bell-list li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.5rem 0.85rem;
+  border-left: 3px solid transparent;
+}
+.tm-bell-list li.tm-bell-new {
+  border-left-color: var(--tm-violet);
+  background: rgba(139, 124, 255, 0.08);
+}
+.tm-bell-meta {
+  color: var(--tm-dim);
+  font-size: 0.72rem;
+}
+.tm-bell-newtag {
+  color: var(--tm-violet);
+  font-weight: 600;
+}
+.tm-bell-text {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.tm-bell-empty {
+  margin: 0;
+  padding: 0.85rem;
+  color: var(--tm-dim);
+}
+
+.tm-bell-foot {
+  display: block;
+  padding: 0.6rem 0.85rem;
+  min-height: 24px;
+  border-top: 1px solid var(--tm-line);
+  color: var(--tm-violet);
+  font-size: 0.78rem;
+  text-decoration: none;
+}
+.tm-bell-foot:hover,
+.tm-bell-foot:focus-visible {
+  text-decoration: underline;
+}
+
+/* Phone: the chip would push the top bar sideways, so it hides (like the Zerodha and market chips); the stage is
+   still shown at the top of the bell's list. */
+.tm-bell-stage {
+  color: var(--tm-text);
+  font-size: 0.75rem;
+}
+@media (max-width: 480px) {
+  .tm-stage-chip {
+    display: none;
+  }
+}

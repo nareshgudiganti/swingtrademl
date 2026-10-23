@@ -1,0 +1,80 @@
+{
+  "symbol": "INFY",
+  "as_of": "2026-10-16",
+  "q1_company": {
+    "answer": "Infosys Ltd, IT, large company",
+    "available": true,
+    "why": null
+  },
+  "q2_brain": {
+    "answer": "TRADE: Strong upward move with rising volume.",
+    "available": true,
+    "why": null,
+    "word": "TRADE",
+    "decision": {
+      "id": 101,
+      "run_id": "run-2026-10-16",
+      "symbol": "INFY",
+      "kind": "idea",
+      "word": "TRADE",
+      "reasons": [
+        "Strong upward move with rising volume."
+      ],
+      "entry_low": 1480,
+      "entry_high": 1495,
+      "target": 1610,
+      "stop": 1430,
+      "qty": 6,
+      "horizon_days": 15,
+      "confidence": 0.71,
+      "honest_score": {
+        "status": "not_measured",
+        "note": "Not measured on unseen days yet."
+      },
+      "evidence_text": "Price closed above the high of the last month.",
+      "downgraded_from": null,
+      "downgrade_reason": null,
+      "overruled_word": null,
+      "overrule_reason": null,
+      "overruled_by": null,
+      "overruled_at": null
+    }
+  },
+  "q3_plan": {
+    "answer": "Buy plan",
+    "available": true,
+    "why": null,
+    "buy_zone": [
+      1480,
+      1495
+    ],
+    "sell_half_price": 1561.88,
+    "sell_half_pct": 0.05,
+    "target": 1610,
+    "target_pct": 0.08,
+    "stop": 1430,
+    "stop_pct": 0.04,
+    "last_exit_day": "2026-11-09"
+  },
+  "q4_money": {
+    "answer": "Money",
+    "available": true,
+    "why": null,
+    "invested": 8925.0,
+    "loss_if_stop": 402.1,
+    "gain_if_target": 680.4,
+    "gain_if_half_out": 560.2,
+    "charges_round_trip": 28.3
+  },
+  "q5_events": {
+    "answer": "Nothing scheduled in the next 15 trading days",
+    "available": true,
+    "why": null,
+    "events": []
+  },
+  "q6_evidence": {
+    "answer": "Not proven yet",
+    "available": false,
+    "why": "The trial is still running"
+  }
+}

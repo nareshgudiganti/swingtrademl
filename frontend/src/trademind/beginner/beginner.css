@@ -23,6 +23,11 @@
   .tm { padding-bottom: 3.6rem; }
 }
 
+.bx-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); gap: 0.8rem; }
+.bx-reasons { margin: 0.2rem 0 0; padding-left: 1.1rem; }
+.bx-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.bx-card { min-width: 0; overflow-wrap: anywhere; }
+
 /* ---- wiring in the TradeMind shell and pages (fx8) ---- */
 .tm-topbar .bx-search { width: 15rem; max-width: 100%; }
 .tm-topbar .bx-search-input { padding: 0.32rem 0.6rem; font-size: 0.8rem; border-radius: 8px; border: 1px solid var(--tm-line-strong); background: var(--tm-card); color: var(--tm-text); }

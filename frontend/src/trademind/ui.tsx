@@ -212,30 +212,34 @@ export function BrainGate({
   children,
   what = 'the brain',
   allowNoRun = false,
+  inline = false,
 }: {
   children: ReactNode
   what?: string
   allowNoRun?: boolean
+  /** Inside a page that already draws its own `.tm-page` (Today): don't draw a second one. */
+  inline?: boolean
 }) {
+  const page = (node: ReactNode) => (inline ? node : <div className="tm-page">{node}</div>)
   const status = useBrainStatus()
   const latest = useLatestRun()
   const health = useQuery({ queryKey: ['brainHealth'], queryFn: api.brainHealth, retry: false })
 
-  if (status === 'off') return <div className="tm-page"><BrainOff /></div>
+  if (status === 'off') return page(<BrainOff />)
 
   if (status === 'loading') {
-    return (
-      <div className="tm-page">
+    return page(
+      <>
         <PageState kind={latest.fetchStatus === 'paused' ? 'offline' : 'loading'} what={what} />
-      </div>
+      </>,
     )
   }
 
   if (status === 'error') {
     const err = latest.isError ? latest.error : health.error
     const code = errorStatus(err)
-    return (
-      <div className="tm-page">
+    return page(
+      <>
         <Card title="Could not reach the brain">
           <PageState
             kind={code === 401 ? 'signed-out' : code === 403 ? 'forbidden' : 'error'}
@@ -244,20 +248,20 @@ export function BrainGate({
             onRetry={() => Promise.all([latest.refetch(), health.refetch()])}
           />
         </Card>
-      </div>
+      </>,
     )
   }
 
   if (status === 'no-run' && !allowNoRun) {
-    return (
-      <div className="tm-page">
+    return page(
+      <>
         <Card title="No run yet">
           <PageState
             kind="empty"
             reason="The brain has not finished a run yet, so there is nothing to show. It runs each evening after the market closes."
           />
         </Card>
-      </div>
+      </>,
     )
   }
 

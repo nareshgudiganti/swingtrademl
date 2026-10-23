@@ -1,0 +1,1040 @@
+{
+ "protocol": "pause-check-v1",
+ "label": "Diagnostic on development data, not proof.",
+ "stocks": 49,
+ "decision_days": [
+  "2022-01-03",
+  "2026-08-14",
+  1145
+ ],
+ "every_stock": {
+  "ideas": 56105,
+  "avg_net": -0.000998126795538052,
+  "loss_share": 0.5272079137331789
+ },
+ "starts": [
+  "2022-01-03",
+  "2022-02-01",
+  "2022-03-02",
+  "2022-04-01",
+  "2022-05-02",
+  "2022-06-01",
+  "2022-07-01",
+  "2022-08-01",
+  "2022-09-01",
+  "2022-10-03",
+  "2022-11-01",
+  "2022-12-01",
+  "2023-01-02",
+  "2023-02-01",
+  "2023-03-01",
+  "2023-04-03",
+  "2023-05-02",
+  "2023-06-01",
+  "2023-07-03",
+  "2023-08-01",
+  "2023-09-01",
+  "2023-10-03",
+  "2023-11-01",
+  "2023-12-01",
+  "2024-01-01",
+  "2024-02-01",
+  "2024-03-01",
+  "2024-04-01",
+  "2024-05-02",
+  "2024-06-03",
+  "2024-07-01",
+  "2024-08-01",
+  "2024-09-02",
+  "2024-10-01",
+  "2024-11-01",
+  "2024-12-02",
+  "2025-01-01",
+  "2025-02-01",
+  "2025-03-03",
+  "2025-04-01",
+  "2025-05-02",
+  "2025-06-02",
+  "2025-07-01",
+  "2025-08-01"
+ ],
+ "rules": {
+  "streak": 8,
+  "book_fall": 0.08,
+  "halt": 0.15
+ },
+ "thetas": {
+  "-0.01|5.0": -7.512426376342773,
+  "-0.005|5.0": -3.6028385162353516,
+  "0.0|5.0": 0.0,
+  "0.003|5.0": 2.314901351928711,
+  "0.01|5.0": 7.38987922668457,
+  "-0.01|0.64": -7.089662551879883,
+  "-0.005|0.64": -3.4830570220947266,
+  "0.0|0.64": 0.0,
+  "0.003|0.64": 2.018308639526367,
+  "0.01|0.64": 6.871461868286133
+ },
+ "real_days": {
+  "-0.01|5.0": {
+   "edge": -0.01,
+   "pace": 5.0,
+   "realised_edge": -0.009703981369058865,
+   "rule1": {
+    "within_3m": 0.9991,
+    "within_6m": 1.0,
+    "within_12m": 1.0,
+    "median_months": 0.5,
+    "paths": 2200
+   },
+   "rule2": {
+    "within_3m": 0.9941,
+    "within_6m": 1.0,
+    "within_12m": 1.0,
+    "median_months": 2.7,
+    "paths": 2200
+   },
+   "rule2_any": {
+    "within_3m": 0.9941,
+    "within_6m": 1.0,
+    "within_12m": 1.0,
+    "median_months": 2.7,
+    "paths": 2200
+   }
+  },
+  "-0.005|5.0": {
+   "edge": -0.005,
+   "pace": 5.0,
+   "realised_edge": -0.00478962995817043,
+   "rule1": {
+    "within_3m": 0.9905,
+    "within_6m": 1.0,
+    "within_12m": 1.0,
+    "median_months": 0.5,
+    "paths": 2200
+   },
+   "rule2": {
+    "within_3m": 0.8359,
+    "within_6m": 0.9927,
+    "within_12m": 1.0,
+    "median_months": 2.7,
+    "paths": 2200
+   },
+   "rule2_any": {
+    "within_3m": 0.8359,
+    "within_6m": 0.9995,
+    "within_12m": 1.0,
+    "median_months": 2.7,
+    "paths": 2200
+   }
+  },
+  "0.0|5.0": {
+   "edge": 0.0,
+   "pace": 5.0,
+   "realised_edge": 3.1435800178682186e-06,
+   "rule1": {
+    "within_3m": 0.9768,
+    "within_6m": 0.9995,
+    "within_12m": 1.0,
+    "median_months": 0.5,
+    "paths": 2200
+   },
+   "rule2": {
+    "within_3m": 0.2514,
+    "within_6m": 0.5877,
+    "within_12m": 0.885,
+    "median_months": 4.8,
+    "paths": 2200
+   },
+   "rule2_any": {
+    "within_3m": 0.2514,
+    "within_6m": 0.8064,
+    "within_12m": 0.995,
+    "median_months": 4.3,
+    "paths": 2200
+   }
+  },
+  "0.003|5.0": {
+   "edge": 0.003,
+   "pace": 5.0,
+   "realised_edge": 0.003163570850047561,
+   "rule1": {
+    "within_3m": 0.955,
+    "within_6m": 0.9964,
+    "within_12m": 1.0,
+    "median_months": 0.6,
+    "paths": 2200
+   },
+   "rule2": {
+    "within_3m": 0.035,
+    "within_6m": 0.1195,
+    "within_12m": 0.2705,
+    "median_months": null,
+    "paths": 2200
+   },
+   "rule2_any": {
+    "within_3m": 0.035,
+    "within_6m": 0.2359,
+    "within_12m": 0.64,
+    "median_months": 9.7,
+    "paths": 2200
+   }
+  },
+  "0.01|5.0": {
+   "edge": 0.01,
+   "pace": 5.0,
+   "realised_edge": 0.01012545191352281,
+   "rule1": {
+    "within_3m": 0.9123,
+    "within_6m": 0.985,
+    "within_12m": 1.0,
+    "median_months": 0.7,
+    "paths": 2200
+   },
+   "rule2": {
+    "within_3m": 0.0,
+    "within_6m": 0.0,
+    "within_12m": 0.0,
+    "median_months": null,
+    "paths": 2200
+   },
+   "rule2_any": {
+    "within_3m": 0.0,
+    "within_6m": 0.0,
+    "within_12m": 0.0014,
+    "median_months": null,
+    "paths": 2200
+   }
+  },
+  "-0.01|0.64": {
+   "edge": -0.01,
+   "pace": 0.64,
+   "realised_edge": -0.009535196577056385,
+   "rule1": {
+    "within_3m": 0.4977,
+    "within_6m": 0.765,
+    "within_12m": 0.9632,
+    "median_months": 3.0,
+    "paths": 2200
+   },
+   "rule2": {
+    "within_3m": 0.6732,
+    "within_6m": 0.9605,
+    "within_12m": 0.9986,
+    "median_months": 2.6,
+    "paths": 2200
+   },
+   "rule2_any": {
+    "within_3m": 0.6732,
+    "within_6m": 0.9941,
+    "within_12m": 1.0,
+    "median_months": 2.6,
+    "paths": 2200
+   }
+  },
+  "-0.005|0.64": {
+   "edge": -0.005,
+   "pace": 0.64,
+   "realised_edge": -0.0049536828999676135,
+   "rule1": {
+    "within_3m": 0.3864,
+    "within_6m": 0.6582,
+    "within_12m": 0.8936,
+    "median_months": 4.0,
+    "paths": 2200
+   },
+   "rule2": {
+    "within_3m": 0.4618,
+    "within_6m": 0.8455,
+    "within_12m": 0.9891,
+    "median_months": 3.4,
+    "paths": 2200
+   },
+   "rule2_any": {
+    "within_3m": 0.4618,
+    "within_6m": 0.9686,
+    "within_12m": 1.0,
+    "median_months": 3.3,
+    "paths": 2200
+   }
+  },
+  "0.0|0.64": {
+   "edge": 0.0,
+   "pace": 0.64,
+   "realised_edge": -2.2041891636186855e-05,
+   "rule1": {
+    "within_3m": 0.2968,
+    "within_6m": 0.51,
+    "within_12m": 0.7941,
+    "median_months": 5.8,
+    "paths": 2200
+   },
+   "rule2": {
+    "within_3m": 0.2623,
+    "within_6m": 0.61,
+    "within_12m": 0.8932,
+    "median_months": 4.6,
+    "paths": 2200
+   },
+   "rule2_any": {
+    "within_3m": 0.2623,
+    "within_6m": 0.8145,
+    "within_12m": 0.9959,
+    "median_months": 3.7,
+    "paths": 2200
+   }
+  },
+  "0.003|0.64": {
+   "edge": 0.003,
+   "pace": 0.64,
+   "realised_edge": 0.0028294105955481465,
+   "rule1": {
+    "within_3m": 0.2386,
+    "within_6m": 0.4332,
+    "within_12m": 0.7073,
+    "median_months": 7.2,
+    "paths": 2200
+   },
+   "rule2": {
+    "within_3m": 0.1595,
+    "within_6m": 0.4227,
+    "within_12m": 0.7418,
+    "median_months": 7.1,
+    "paths": 2200
+   },
+   "rule2_any": {
+    "within_3m": 0.1595,
+    "within_6m": 0.6627,
+    "within_12m": 0.9705,
+    "median_months": 4.7,
+    "paths": 2200
+   }
+  },
+  "0.01|0.64": {
+   "edge": 0.01,
+   "pace": 0.64,
+   "realised_edge": 0.00984142178432749,
+   "rule1": {
+    "within_3m": 0.1264,
+    "within_6m": 0.2418,
+    "within_12m": 0.4532,
+    "median_months": null,
+    "paths": 2200
+   },
+   "rule2": {
+    "within_3m": 0.0309,
+    "within_6m": 0.1,
+    "within_12m": 0.245,
+    "median_months": null,
+    "paths": 2200
+   },
+   "rule2_any": {
+    "within_3m": 0.0314,
+    "within_6m": 0.2132,
+    "within_12m": 0.6123,
+    "median_months": 10.2,
+    "paths": 2200
+   }
+  }
+ },
+ "shuffled": {
+  "-0.01|5.0": {
+   "edge": -0.01,
+   "pace": 5.0,
+   "rule1": {
+    "within_3m": 0.9605,
+    "within_6m": 0.99875,
+    "within_12m": 1.0,
+    "median_months": 0.7
+   },
+   "rule2": {
+    "within_3m": 0.9929,
+    "within_6m": 1.0,
+    "within_12m": 1.0,
+    "median_months": 2.0
+   },
+   "paths": 20000
+  },
+  "-0.005|5.0": {
+   "edge": -0.005,
+   "pace": 5.0,
+   "rule1": {
+    "within_3m": 0.82585,
+    "within_6m": 0.9703,
+    "within_12m": 0.99895,
+    "median_months": 1.2
+   },
+   "rule2": {
+    "within_3m": 0.8757,
+    "within_6m": 0.99515,
+    "within_12m": 0.99995,
+    "median_months": 2.0
+   },
+   "paths": 20000
+  },
+  "0.0|5.0": {
+   "edge": 0.0,
+   "pace": 5.0,
+   "rule1": {
+    "within_3m": 0.59415,
+    "within_6m": 0.83575,
+    "within_12m": 0.97225,
+    "median_months": 2.3
+   },
+   "rule2": {
+    "within_3m": 0.3832,
+    "within_6m": 0.67525,
+    "within_12m": 0.9084,
+    "median_months": 4.0
+   },
+   "paths": 20000
+  },
+  "0.003|5.0": {
+   "edge": 0.003,
+   "pace": 5.0,
+   "rule1": {
+    "within_3m": 0.43985,
+    "within_6m": 0.6858,
+    "within_12m": 0.9046,
+    "median_months": 3.6
+   },
+   "rule2": {
+    "within_3m": 0.09995,
+    "within_6m": 0.22155,
+    "within_12m": 0.4256,
+    "median_months": null
+   },
+   "paths": 20000
+  },
+  "0.01|5.0": {
+   "edge": 0.01,
+   "pace": 5.0,
+   "rule1": {
+    "within_3m": 0.16395,
+    "within_6m": 0.3071,
+    "within_12m": 0.5237,
+    "median_months": 11.2
+   },
+   "rule2": {
+    "within_3m": 0.0001,
+    "within_6m": 0.0005,
+    "within_12m": 0.00105,
+    "median_months": null
+   },
+   "paths": 20000
+  },
+  "-0.01|0.64": {
+   "edge": -0.01,
+   "pace": 0.64,
+   "rule1": {
+    "within_3m": 0.30305,
+    "within_6m": 0.54005,
+    "within_12m": 0.8004,
+    "median_months": 5.4
+   },
+   "rule2": {
+    "within_3m": 0.78655,
+    "within_6m": 0.9761,
+    "within_12m": 0.99975,
+    "median_months": 2.0
+   },
+   "paths": 20000
+  },
+  "-0.005|0.64": {
+   "edge": -0.005,
+   "pace": 0.64,
+   "rule1": {
+    "within_3m": 0.1772,
+    "within_6m": 0.3432,
+    "within_12m": 0.57905,
+    "median_months": 9.6
+   },
+   "rule2": {
+    "within_3m": 0.59885,
+    "within_6m": 0.88765,
+    "within_12m": 0.9904,
+    "median_months": 3.0
+   },
+   "paths": 20000
+  },
+  "0.0|0.64": {
+   "edge": 0.0,
+   "pace": 0.64,
+   "rule1": {
+    "within_3m": 0.0957,
+    "within_6m": 0.1952,
+    "within_12m": 0.36505,
+    "median_months": null
+   },
+   "rule2": {
+    "within_3m": 0.38255,
+    "within_6m": 0.6787,
+    "within_12m": 0.91115,
+    "median_months": 4.0
+   },
+   "paths": 20000
+  },
+  "0.003|0.64": {
+   "edge": 0.003,
+   "pace": 0.64,
+   "rule1": {
+    "within_3m": 0.06175,
+    "within_6m": 0.13155,
+    "within_12m": 0.2549,
+    "median_months": null
+   },
+   "rule2": {
+    "within_3m": 0.26525,
+    "within_6m": 0.511,
+    "within_12m": 0.7844,
+    "median_months": 6.0
+   },
+   "paths": 20000
+  },
+  "0.01|0.64": {
+   "edge": 0.01,
+   "pace": 0.64,
+   "rule1": {
+    "within_3m": 0.0212,
+    "within_6m": 0.0443,
+    "within_12m": 0.0871,
+    "median_months": null
+   },
+   "rule2": {
+    "within_3m": 0.0742,
+    "within_6m": 0.17335,
+    "within_12m": 0.3342,
+    "median_months": null
+   },
+   "paths": 20000
+  }
+ },
+ "accounts": {
+  "A|-0.01|5.0": {
+   "case": "A",
+   "edge": -0.01,
+   "pace": 5.0,
+   "draws_per_start": 10,
+   "rule3": {
+    "within_3m": 0.3864,
+    "within_6m": 0.6977,
+    "within_12m": 0.9523,
+    "median_months": 4.0,
+    "paths": 440
+   },
+   "halt": {
+    "within_3m": 0.0455,
+    "within_6m": 0.2636,
+    "within_12m": 0.6932,
+    "median_months": 8.8,
+    "paths": 440
+   },
+   "order": {
+    "paths": 440,
+    "halt_fired": 305,
+    "rule3_before": 305,
+    "rule3_same_day": 0,
+    "rule3_after": 0,
+    "rule3_never": 0,
+    "rule1_only_after_halt": 0,
+    "rule2_only_after_halt": 14,
+    "rule3_only_after_halt": 0
+   },
+   "brain_max_fall_median": 0.1614532578387747,
+   "account_max_fall_worst": 0.1817059957715263,
+   "brain_trades_median": 167.5
+  },
+  "A|-0.005|5.0": {
+   "case": "A",
+   "edge": -0.005,
+   "pace": 5.0,
+   "draws_per_start": 10,
+   "rule3": {
+    "within_3m": 0.2977,
+    "within_6m": 0.5,
+    "within_12m": 0.8068,
+    "median_months": 6.0,
+    "paths": 440
+   },
+   "halt": {
+    "within_3m": 0.0136,
+    "within_6m": 0.1386,
+    "within_12m": 0.3955,
+    "median_months": null,
+    "paths": 440
+   },
+   "order": {
+    "paths": 440,
+    "halt_fired": 174,
+    "rule3_before": 174,
+    "rule3_same_day": 0,
+    "rule3_after": 0,
+    "rule3_never": 0,
+    "rule1_only_after_halt": 0,
+    "rule2_only_after_halt": 3,
+    "rule3_only_after_halt": 0
+   },
+   "brain_max_fall_median": 0.13602337316456387,
+   "account_max_fall_worst": 0.1987102049768819,
+   "brain_trades_median": 181.0
+  },
+  "A|0.0|5.0": {
+   "case": "A",
+   "edge": 0.0,
+   "pace": 5.0,
+   "draws_per_start": 10,
+   "rule3": {
+    "within_3m": 0.1591,
+    "within_6m": 0.3455,
+    "within_12m": 0.6614,
+    "median_months": 8.7,
+    "paths": 440
+   },
+   "halt": {
+    "within_3m": 0.0045,
+    "within_6m": 0.0341,
+    "within_12m": 0.1386,
+    "median_months": null,
+    "paths": 440
+   },
+   "order": {
+    "paths": 440,
+    "halt_fired": 61,
+    "rule3_before": 61,
+    "rule3_same_day": 0,
+    "rule3_after": 0,
+    "rule3_never": 0,
+    "rule1_only_after_halt": 0,
+    "rule2_only_after_halt": 10,
+    "rule3_only_after_halt": 0
+   },
+   "brain_max_fall_median": 0.1016169056625191,
+   "account_max_fall_worst": 0.17466954387969974,
+   "brain_trades_median": 186.0
+  },
+  "A|0.003|5.0": {
+   "case": "A",
+   "edge": 0.003,
+   "pace": 5.0,
+   "draws_per_start": 10,
+   "rule3": {
+    "within_3m": 0.1136,
+    "within_6m": 0.2909,
+    "within_12m": 0.575,
+    "median_months": 10.4,
+    "paths": 440
+   },
+   "halt": {
+    "within_3m": 0.0,
+    "within_6m": 0.0136,
+    "within_12m": 0.0523,
+    "median_months": null,
+    "paths": 440
+   },
+   "order": {
+    "paths": 440,
+    "halt_fired": 23,
+    "rule3_before": 23,
+    "rule3_same_day": 0,
+    "rule3_after": 0,
+    "rule3_never": 0,
+    "rule1_only_after_halt": 0,
+    "rule2_only_after_halt": 7,
+    "rule3_only_after_halt": 0
+   },
+   "brain_max_fall_median": 0.08725682612774341,
+   "account_max_fall_worst": 0.17271001867939714,
+   "brain_trades_median": 187.0
+  },
+  "A|0.01|5.0": {
+   "case": "A",
+   "edge": 0.01,
+   "pace": 5.0,
+   "draws_per_start": 10,
+   "rule3": {
+    "within_3m": 0.0364,
+    "within_6m": 0.1068,
+    "within_12m": 0.3159,
+    "median_months": null,
+    "paths": 440
+   },
+   "halt": {
+    "within_3m": 0.0,
+    "within_6m": 0.0,
+    "within_12m": 0.0023,
+    "median_months": null,
+    "paths": 440
+   },
+   "order": {
+    "paths": 440,
+    "halt_fired": 1,
+    "rule3_before": 1,
+    "rule3_same_day": 0,
+    "rule3_after": 0,
+    "rule3_never": 0,
+    "rule1_only_after_halt": 0,
+    "rule2_only_after_halt": 0,
+    "rule3_only_after_halt": 0
+   },
+   "brain_max_fall_median": 0.06511211383200854,
+   "account_max_fall_worst": 0.16206070119726998,
+   "brain_trades_median": 189.0
+  },
+  "A|-0.01|0.64": {
+   "case": "A",
+   "edge": -0.01,
+   "pace": 0.64,
+   "draws_per_start": 10,
+   "rule3": {
+    "within_3m": 0.1341,
+    "within_6m": 0.4977,
+    "within_12m": 0.8841,
+    "median_months": 5.9,
+    "paths": 440
+   },
+   "halt": {
+    "within_3m": 0.0,
+    "within_6m": 0.0682,
+    "within_12m": 0.4318,
+    "median_months": null,
+    "paths": 440
+   },
+   "order": {
+    "paths": 440,
+    "halt_fired": 190,
+    "rule3_before": 190,
+    "rule3_same_day": 0,
+    "rule3_after": 0,
+    "rule3_never": 0,
+    "rule1_only_after_halt": 1,
+    "rule2_only_after_halt": 0,
+    "rule3_only_after_halt": 0
+   },
+   "brain_max_fall_median": 0.14111341196561408,
+   "account_max_fall_worst": 0.17857227171289747,
+   "brain_trades_median": 124.0
+  },
+  "A|-0.005|0.64": {
+   "case": "A",
+   "edge": -0.005,
+   "pace": 0.64,
+   "draws_per_start": 10,
+   "rule3": {
+    "within_3m": 0.0636,
+    "within_6m": 0.2932,
+    "within_12m": 0.6773,
+    "median_months": 8.7,
+    "paths": 440
+   },
+   "halt": {
+    "within_3m": 0.0,
+    "within_6m": 0.0136,
+    "within_12m": 0.1568,
+    "median_months": null,
+    "paths": 440
+   },
+   "order": {
+    "paths": 440,
+    "halt_fired": 69,
+    "rule3_before": 69,
+    "rule3_same_day": 0,
+    "rule3_after": 0,
+    "rule3_never": 0,
+    "rule1_only_after_halt": 2,
+    "rule2_only_after_halt": 1,
+    "rule3_only_after_halt": 0
+   },
+   "brain_max_fall_median": 0.10464073859115583,
+   "account_max_fall_worst": 0.17158307711721732,
+   "brain_trades_median": 128.0
+  },
+  "A|0.0|0.64": {
+   "case": "A",
+   "edge": 0.0,
+   "pace": 0.64,
+   "draws_per_start": 10,
+   "rule3": {
+    "within_3m": 0.0227,
+    "within_6m": 0.1955,
+    "within_12m": 0.4773,
+    "median_months": null,
+    "paths": 440
+   },
+   "halt": {
+    "within_3m": 0.0,
+    "within_6m": 0.0,
+    "within_12m": 0.0227,
+    "median_months": null,
+    "paths": 440
+   },
+   "order": {
+    "paths": 440,
+    "halt_fired": 10,
+    "rule3_before": 10,
+    "rule3_same_day": 0,
+    "rule3_after": 0,
+    "rule3_never": 0,
+    "rule1_only_after_halt": 0,
+    "rule2_only_after_halt": 0,
+    "rule3_only_after_halt": 0
+   },
+   "brain_max_fall_median": 0.07696494836080728,
+   "account_max_fall_worst": 0.16433664508926113,
+   "brain_trades_median": 128.0
+  },
+  "A|0.003|0.64": {
+   "case": "A",
+   "edge": 0.003,
+   "pace": 0.64,
+   "draws_per_start": 10,
+   "rule3": {
+    "within_3m": 0.0205,
+    "within_6m": 0.1205,
+    "within_12m": 0.3364,
+    "median_months": null,
+    "paths": 440
+   },
+   "halt": {
+    "within_3m": 0.0,
+    "within_6m": 0.0,
+    "within_12m": 0.0045,
+    "median_months": null,
+    "paths": 440
+   },
+   "order": {
+    "paths": 440,
+    "halt_fired": 2,
+    "rule3_before": 2,
+    "rule3_same_day": 0,
+    "rule3_after": 0,
+    "rule3_never": 0,
+    "rule1_only_after_halt": 0,
+    "rule2_only_after_halt": 0,
+    "rule3_only_after_halt": 0
+   },
+   "brain_max_fall_median": 0.06551998124861694,
+   "account_max_fall_worst": 0.1588411961766805,
+   "brain_trades_median": 128.0
+  },
+  "A|0.01|0.64": {
+   "case": "A",
+   "edge": 0.01,
+   "pace": 0.64,
+   "draws_per_start": 10,
+   "rule3": {
+    "within_3m": 0.0045,
+    "within_6m": 0.0182,
+    "within_12m": 0.0545,
+    "median_months": null,
+    "paths": 440
+   },
+   "halt": {
+    "within_3m": 0.0,
+    "within_6m": 0.0,
+    "within_12m": 0.0,
+    "median_months": null,
+    "paths": 440
+   },
+   "order": {
+    "paths": 440,
+    "halt_fired": 0,
+    "rule3_before": 0,
+    "rule3_same_day": 0,
+    "rule3_after": 0,
+    "rule3_never": 0,
+    "rule1_only_after_halt": 0,
+    "rule2_only_after_halt": 0,
+    "rule3_only_after_halt": 0
+   },
+   "brain_max_fall_median": 0.04788625213787234,
+   "account_max_fall_worst": 0.1343689009239471,
+   "brain_trades_median": 128.0
+  },
+  "B|-0.01|5.0": {
+   "case": "B",
+   "edge": -0.01,
+   "pace": 5.0,
+   "draws_per_start": 10,
+   "rule3": {
+    "within_3m": 0.5091,
+    "within_6m": 0.8114,
+    "within_12m": 0.9727,
+    "median_months": 3.0,
+    "paths": 440
+   },
+   "halt": {
+    "within_3m": 0.0341,
+    "within_6m": 0.1909,
+    "within_12m": 0.5023,
+    "median_months": 11.9,
+    "paths": 440
+   },
+   "order": {
+    "paths": 440,
+    "halt_fired": 221,
+    "rule3_before": 221,
+    "rule3_same_day": 0,
+    "rule3_after": 0,
+    "rule3_never": 0,
+    "rule1_only_after_halt": 0,
+    "rule2_only_after_halt": 9,
+    "rule3_only_after_halt": 0
+   },
+   "brain_max_fall_median": 0.18939140269965082,
+   "account_max_fall_worst": 0.18122916143751716,
+   "brain_trades_median": 154.0
+  },
+  "B|0.0|5.0": {
+   "case": "B",
+   "edge": 0.0,
+   "pace": 5.0,
+   "draws_per_start": 10,
+   "rule3": {
+    "within_3m": 0.2614,
+    "within_6m": 0.4614,
+    "within_12m": 0.7432,
+    "median_months": 6.8,
+    "paths": 440
+   },
+   "halt": {
+    "within_3m": 0.0114,
+    "within_6m": 0.0659,
+    "within_12m": 0.2159,
+    "median_months": null,
+    "paths": 440
+   },
+   "order": {
+    "paths": 440,
+    "halt_fired": 95,
+    "rule3_before": 95,
+    "rule3_same_day": 0,
+    "rule3_after": 0,
+    "rule3_never": 0,
+    "rule1_only_after_halt": 0,
+    "rule2_only_after_halt": 24,
+    "rule3_only_after_halt": 0
+   },
+   "brain_max_fall_median": 0.1172653594673485,
+   "account_max_fall_worst": 0.1830397594573074,
+   "brain_trades_median": 160.0
+  },
+  "B|0.003|5.0": {
+   "case": "B",
+   "edge": 0.003,
+   "pace": 5.0,
+   "draws_per_start": 10,
+   "rule3": {
+    "within_3m": 0.2091,
+    "within_6m": 0.3977,
+    "within_12m": 0.6818,
+    "median_months": 8.4,
+    "paths": 440
+   },
+   "halt": {
+    "within_3m": 0.0023,
+    "within_6m": 0.0636,
+    "within_12m": 0.1523,
+    "median_months": null,
+    "paths": 440
+   },
+   "order": {
+    "paths": 440,
+    "halt_fired": 67,
+    "rule3_before": 67,
+    "rule3_same_day": 0,
+    "rule3_after": 0,
+    "rule3_never": 0,
+    "rule1_only_after_halt": 0,
+    "rule2_only_after_halt": 18,
+    "rule3_only_after_halt": 0
+   },
+   "brain_max_fall_median": 0.1017455906555399,
+   "account_max_fall_worst": 0.1773611598079134,
+   "brain_trades_median": 161.0
+  }
+ },
+ "account_draws_per_start": 10,
+ "model_streams": [
+  {
+   "window": [
+    "2023-07-01",
+    "2025-01-31"
+   ],
+   "models": {
+    "reused": 21,
+    "trained": 0
+   },
+   "ideas": 1980,
+   "avg_net": -0.002038939548709073,
+   "edge": -0.001867325595543283,
+   "months_below": 12,
+   "months": 19,
+   "longest_losing_run": 27,
+   "rule1": "2023-07-11",
+   "rule2": "2023-12-21",
+   "rule2_any": "2023-11-21",
+   "rule3": "2024-11-13",
+   "halt": null,
+   "book_max_fall": 0.1250936492139176,
+   "book_trades": 331
+  },
+  {
+   "window": [
+    "2025-10-01",
+    "2026-08-15"
+   ],
+   "models": {
+    "reused": 12,
+    "trained": 0
+   },
+   "ideas": 1075,
+   "avg_net": -0.001037792271138147,
+   "edge": 0.0021526329749229126,
+   "months_below": 3,
+   "months": 11,
+   "longest_losing_run": 31,
+   "rule1": "2025-11-04",
+   "rule2": null,
+   "rule2_any": "2026-01-21",
+   "rule3": "2026-03-13",
+   "halt": null,
+   "book_max_fall": 0.10579521496633437,
+   "book_trades": 175
+  }
+ ],
+ "seconds": 1701,
+ "readings": {
+  "rule1": {
+   "false_alarm": "often by chance",
+   "stops_good": "often by chance",
+   "catches_bad": "catches it quickly",
+   "recommendation": "consider loosening"
+  },
+  "rule2": {
+   "false_alarm": "often by chance",
+   "stops_good": "sometimes",
+   "catches_bad": "catches it quickly",
+   "recommendation": "consider loosening"
+  },
+  "rule3": {
+   "false_alarm": "often by chance",
+   "stops_good": "often by chance",
+   "catches_bad": "catches it slowly",
+   "recommendation": "consider loosening"
+  }
+ },
+ "reproduction": "Reproduction check: both windows reused the stored `wf_h15_*` models (21 and 12 folds, none trained) and matched the stored walk-forward results exactly: 1,980 ideas at -0.204% a trade (wf_v1) and 1,075 ideas at -0.104% a trade (2025-10 to 2026-08).",
+ "what_this_means": [
+  "## What this means (plain English)",
+  "",
+  "- **Rule 1 (8 losses in a row) cannot tell good from bad.** About half of all trades under the +8% / -4% rule lose money (53% for every stock after costs), and ideas from the same day move together. At 5 ideas a day it fires within a month for every strategy we tried, even a good one (+1% a trade: 91% within 3 months). At the brain's slower pace (0.64 a day) it still fires within a year for 79% of no-skill strategies and 45% of good ones. Our real model hit 27 and 31 losses in a row. As written it would pause the brain almost at once, whatever its quality.",
+  "- **Rule 2 (two months in a row below every stock) is the only rule that separates skill from no skill**, but only at 5 ideas a day: a slightly good strategy (+0.3%) is stopped in 27% of years, a good one never, a bad one within about 3 months. A no-skill strategy is stopped in 88% of years - which is arguably what it should do (it is no better than buying everything). At 0.64 ideas a day (about 13 ideas a month) a month's average is too noisy: a slightly good strategy is still stopped in 74% of years.",
+  "- **Rule 3 (brain book 8% below its peak) fires on bad luck in 2 of 3 years** when the brain is the whole account at 5 a day (no skill: 66% within 12 months; slightly good: 57%). At 0.64 a day it fires in 48% of no-skill years. It catches a clearly bad strategy within a year in 95% of cases, but only 70% within 6 months.",
+  "- **Order with the 15% halt: no problem found.** In every account where the 15% halt fired (1,218 of 5,720 accounts), the brain book's 8% fall had already fired on an earlier day - never the same day, never after, never missing - in both Case A and Case B. No pause can give an order opposite to the halt (all of them only stop new buys). The only overlap: rule 2 (and very rarely rule 1) sometimes fires only after the halt had already stopped buying (up to 24 of 440 accounts); those fires add nothing but do no harm.",
+  "- **On our real model's picks** (development data): rule 1 would have paused it within days of each window, rule 2 after about 6 months in the first window and never in the second, rule 3 after 16 and 5 months. The 15% halt never fired.",
+  "",
+  "**Reading by the fixed rule (PROTOCOL.md): all three rules read 'consider loosening'** - each fires 'often by chance' for a no-skill strategy (over 33% within 12 months). Rule 1 also stops good strategies often. Suggestions for the owner, not changes (nothing was changed): rule 1 is the weakest - as a count of losses in a row it would need to be far longer (our real model reached 31), or be replaced by a rate over the last N ideas; rule 2 works only with enough ideas a month, so a minimum count per month (or a longer window) would make it usable at the brain's real pace; rule 3 always comes before the 15% halt, so it is safe in order, but 8% is inside normal bad-luck swings - a deeper level (for example 10% to 12%, still before 15%) would false-alarm less. Any new number would need its own check run before it is used. The owner decides.",
+  "",
+  "Diagnostic on development data, not proof."
+ ]
+}

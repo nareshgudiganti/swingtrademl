@@ -1614,18 +1614,33 @@ th[aria-sort='descending'] .tm-sort-arrow {
   }
 }
 
-/* The top bar on one line at laptop widths (1151-1720px; below that the section menu has its own row). The owner's
-   bar holds a lot, so it tightens up and drops lower-priority text step by step instead of squeezing the section
-   menu or wrapping:
-   - up to 1720px: a little less spacing, and the market part of the market and prices chip shows only its first
-     words ("Market closed"); the full text stays in the chip's tooltip;
-   - up to 1400px: no market part at all, and "Zerodha connected" is left out while it is fine (a "not logged in"
-     warning still shows; the control room is still in the account menu);
-   - up to 1100px and on a phone: no market part (the prices part is shortened on a phone). */
+/* The top bar, kept to one line of text at every width. The owner's bar holds a lot, so instead of squeezing the
+   section menu or wrapping words it shows less, step by step (text is drawn wider on some computers, so each step
+   leaves real room to spare):
+   - 1861px and up: everything, e.g. "Market closed · opens Mon 26 Oct, 9:15 am · Prices from today's close";
+   - 1531-1860px: a little less spacing, and the market part of that chip shows only its first words ("Market
+     closed"); the full text is always in the chip's tooltip;
+   - 1280-1530px: no market part, a narrower search box, and "Zerodha connected" is left out while it is fine
+     (a "not logged in" warning still shows; the control room is still in the account menu);
+   - up to 1279px: the section menu gets a row of its own (as on a tablet), and there is no market part;
+   - phone: the prices part is shortened, and "Brain: up to date" is left out (a brain warning still shows).
+   If text is ever wider than planned, the chips on the right move onto a second row rather than covering the
+   section menu or pushing the page sideways. */
 .tm-asof-market-short {
   display: none;
 }
-@media (min-width: 1151px) and (max-width: 1720px) {
+.tm-topbar-right {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  row-gap: 0.35rem;
+  min-width: 0;
+}
+@media (min-width: 1280px) {
+  .tm-topbar .tm-nav {
+    flex: 1 0 auto;
+  }
+}
+@media (min-width: 1280px) and (max-width: 1860px) {
   .tm-topbar {
     gap: 0.75rem;
   }
@@ -1643,14 +1658,28 @@ th[aria-sort='descending'] .tm-sort-arrow {
     display: inline;
   }
 }
-@media (min-width: 1151px) and (max-width: 1400px) {
-  .tm-asof-market,
+@media (min-width: 1280px) and (max-width: 1530px) {
   .tm-zerodha-chip.tm-zchip-ok {
     display: none;
   }
 }
-@media (max-width: 1100px) {
+@media (max-width: 1530px) {
   .tm-asof-market {
+    display: none;
+  }
+}
+@media (min-width: 1151px) and (max-width: 1279px) {
+  .tm-topbar {
+    flex-wrap: wrap;
+    gap: 0.5rem 0.75rem;
+  }
+  .tm-topbar .tm-nav {
+    order: 3;
+    flex-basis: 100%;
+  }
+}
+@media (max-width: 480px) {
+  .tm-status-chip-ok {
     display: none;
   }
 }

@@ -170,9 +170,10 @@ function wrappedText(page: Page) {
   })
 }
 
-// 1280 = a common laptop, 1880 = the owner's screen. 1152, 1401 and 1721 are the narrowest widths of each step where
-// the bar shows less (below 1151px the section menu gets a row of its own).
-for (const width of [1152, 1280, 1401, 1721, 1880]) {
+// 1280 = a common laptop, 1880 = the owner's screen. 1152, 1531 and 1861 are the narrowest widths of the other steps
+// where the bar shows more or less (see the top-bar note in trademind.css); below 1280px the section menu has a row
+// of its own.
+for (const width of [1152, 1280, 1531, 1861, 1880]) {
   test.describe(`top bar at ${width}px`, () => {
     test.use({ viewport: { width, height: 900 } })
 
@@ -184,14 +185,14 @@ for (const width of [1152, 1280, 1401, 1721, 1880]) {
       const prices = page.getByTestId('prices-badge')
       await expect(prices).toContainText("Prices from today's close")
       await expect(prices).toHaveAttribute('title', /Market closed · opens Mon 26 Oct, 9:15 am/) // always in the tooltip
-      if (width > 1720) await expect(prices).toContainText('Market closed · opens Mon 26 Oct, 9:15 am')
-      else if (width > 1400) await expect(prices.locator('.tm-asof-market-short')).toHaveText('Market closed')
+      if (width > 1860) await expect(prices).toContainText('Market closed · opens Mon 26 Oct, 9:15 am')
+      else if (width > 1530) await expect(prices.locator('.tm-asof-market-short')).toHaveText('Market closed')
       else await expect(page.getByTestId('market-part')).toBeHidden()
       await expect(page.getByTestId('brain-chip')).toHaveText('Brain: up to date')
       await expect(page.getByTestId('stage-chip')).toBeVisible()
       await expect(page.getByRole('button', { name: 'Help' })).toBeVisible()
       await expect(page.getByRole('button', { name: 'Your account and settings' })).toBeVisible()
-      if (width > 1400) await expect(bar.getByText('Zerodha connected')).toBeVisible()
+      if (width > 1530 || width < 1280) await expect(bar.getByText('Zerodha connected')).toBeVisible()
 
       expect(await wrappedText(page), 'top-bar text drawn on two lines').toEqual([])
       await expect(bar).not.toContainText(/\bLIVE\b/i)
@@ -219,7 +220,9 @@ for (const width of [1152, 1280, 1401, 1721, 1880]) {
         return { spare: el.clientWidth - pad - gap * (kids.length - 1) - need, navClipped: nav.scrollWidth - nav.clientWidth }
       })
       expect(room.navClipped, 'section menu cut off').toBeLessThanOrEqual(0)
-      expect(room.spare, 'spare width in the top bar').toBeGreaterThanOrEqual(48)
+      expect(await bar.evaluate((el) => el.scrollWidth - el.clientWidth), 'something sticks out of the bar').toBeLessThanOrEqual(0)
+      // From 1280px everything sits on one row, with room to spare (below that the section menu has its own row).
+      if (width >= 1280) expect(room.spare, 'spare width in the top bar').toBeGreaterThanOrEqual(48)
     })
   })
 }

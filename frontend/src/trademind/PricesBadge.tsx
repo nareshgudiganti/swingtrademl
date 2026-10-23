@@ -2,7 +2,7 @@
 // ("Market closed · opens Mon 26 Oct, 9:15 am") and whether the prices behind the page are fresh or out of date
 // ("Prices from today's close"). It used to be two chips side by side, which crowded the bar. Display only.
 // The prices wording and the trading-day counting live in pricesAge.ts; the market words come from the server.
-// Narrower screens show less: only the market's first words on a laptop, no market part below about 1400px, and the
+// Narrower screens show less: only the market's first words on a laptop, no market part below about 1530px, and the
 // short prices text on a phone (see trademind.css).
 import { useMarketSession } from './live'
 import { istToday, pricesAge } from './pricesAge'

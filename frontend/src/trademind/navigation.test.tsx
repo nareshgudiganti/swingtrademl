@@ -13,6 +13,7 @@ import { SECTIONS, findSection } from './menu'
 const PATHS = [
   '/trademind',
   ...SECTIONS.flatMap((s) => s.pages.map((p) => p.to)),
+  '/trademind/dashboard', // no longer a tab (Today is one page), still routed
   '/trademind/stock/INFY',
   '/trademind/ai/INFY',
   '/trademind/positions/INFY',

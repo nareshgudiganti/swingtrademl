@@ -8,11 +8,13 @@ import { usePlan } from '../lib/plan'
 
 import './trademind.css'
 import { api } from '../api/client'
-import { clearToken } from '../api/client'
 import { formatDateTime } from '../lib/format'
-import { useBrainStatus, useLatestRun, useMarketSession } from './live'
+import { useBrainStatus, useLatestRun } from './live'
+import { staleSince } from './stateRules'
+import { statusChip } from './statusChip'
 import { Card, Icon } from './ui'
 import { OfflineBanner } from './PageState'
+import { AccountMenuList, logOut } from './AccountMenu'
 import PricesBadge from './PricesBadge'
 import TopBarAlerts from './TopBarAlerts'
 import { Tour } from './Tour'
@@ -43,13 +45,7 @@ import { ADMIN_SECTION, matches, resolveSection, splitLabel, visiblePages, visib
 
 // The menu lives in ./menu.ts (five sections: Today, Discover, Portfolio, Insights, Admin).
 
-const STATUS_CHIP: Record<ReturnType<typeof useBrainStatus>, { label: string; title: string }> = {
-  live: { label: 'Live', title: "Connected to the brain's latest run" },
-  'no-run': { label: 'No run yet', title: 'The brain is on but has not run yet.' },
-  off: { label: 'Brain off', title: 'The brain is switched off on this server' },
-  loading: { label: 'Connecting…', title: 'Checking the connection to the brain' },
-  error: { label: 'Error', title: 'Could not reach the brain' },
-}
+// The brain chip's wording lives in ./statusChip.ts ("Brain: up to date", never "LIVE").
 
 type TradeMindAppProps = {
   /** Owner / full-app account: control room, go-live, Zerodha chip, setup. */
@@ -113,10 +109,10 @@ export default function TradeMindApp({ ownerConsole = false }: TradeMindAppProps
       document.removeEventListener('keydown', esc)
     }
   }, [menuOpen])
-  const market = useMarketSession()
-  const chip = STATUS_CHIP[status]
-  const chipTitle =
-    status === 'live' && latest.data ? `From the brain's run on ${formatDateTime(latest.data.started_at)}` : chip.title
+  const chip = statusChip(status, {
+    runAt: latest.data ? formatDateTime(latest.data.started_at) : null,
+    refreshFailing: staleSince(latest) != null,
+  })
 
   return (
     <div className="tm">
@@ -139,19 +135,12 @@ export default function TradeMindApp({ ownerConsole = false }: TradeMindAppProps
         </nav>
         {(ownerConsole || seesAll) && <StockSearch />}
         <div className="tm-topbar-right">
+          {/* One chip for the market clock and the prices' age (was two). */}
           <PricesBadge />
-          {market.data && (
-            <span
-              className={`tm-zchip tm-market-chip ${market.data.state === 'open' ? 'tm-zchip-ok' : ''}`}
-              title={market.data.calendar_warning ?? 'Indian stock market (NSE) hours, 9:15 am to 3:30 pm on trading days'}
-            >
-              {market.data.plain}
-            </span>
-          )}
           {ownerConsole && broker.data && (
             <Link
               to="/trademind/control"
-              className={`tm-zchip ${broker.data.broker_authenticated ? 'tm-zchip-ok' : ''}`}
+              className={`tm-zchip tm-zerodha-chip ${broker.data.broker_authenticated ? 'tm-zchip-ok' : ''}`}
               title="Open the control room"
             >
               {broker.data.broker_authenticated ? 'Zerodha connected' : 'Zerodha: not logged in'}
@@ -159,7 +148,7 @@ export default function TradeMindApp({ ownerConsole = false }: TradeMindAppProps
           )}
           {/* oa8: alerts bell + trading-stage chip, owner only (the server refuses everyone else). */}
           {ownerConsole && <TopBarAlerts />}
-          <span className="tm-status-chip" title={chipTitle}>
+          <span className={`tm-status-chip ${chip.ok ? 'tm-status-chip-ok' : ''}`} title={chip.title} data-testid="brain-chip">
             {chip.label}
           </span>
           {ownerConsole ? (
@@ -173,15 +162,8 @@ export default function TradeMindApp({ ownerConsole = false }: TradeMindAppProps
               >
                 <Icon.User />
               </button>
-              {menuOpen && (
-                <div className="tm-menu-list" role="menu">
-                  {ADMIN_SECTION.pages.map((pg) => (
-                    <Link key={pg.to} to={pg.to} role="menuitem">
-                      {pg.label}
-                    </Link>
-                  ))}
-                </div>
-              )}
+              {/* The Admin pages, then Log out (moved off the bar for the owner, so the bar stays on one line). */}
+              {menuOpen && <AccountMenuList pages={ADMIN_SECTION.pages} />}
             </div>
           ) : (
             <span className="tm-avatar" title="TradeMind Pro">
@@ -189,16 +171,11 @@ export default function TradeMindApp({ ownerConsole = false }: TradeMindAppProps
             </span>
           )}
           <Tour realAccount={ownerConsole && canSeeRealAccount} />
-          <button
-            className="tm-logout"
-            title="Log out of this app"
-            onClick={() => {
-              clearToken()
-              window.location.assign('/')
-            }}
-          >
-            Log out
-          </button>
+          {!ownerConsole && (
+            <button type="button" className="tm-logout" title="Log out of this app" onClick={logOut}>
+              Log out
+            </button>
+          )}
         </div>
       </header>
       {pages.length > 1 && (

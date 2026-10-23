@@ -112,9 +112,26 @@ describe('what a non-owner can see', () => {
 
   it('keeps the pages a non-owner could open before the redesign', () => {
     const shown = new Set(visibleSections(false).flatMap((s) => visiblePages(s, false).map((p) => p.to)))
-    for (const p of ['/trademind', '/trademind/dashboard', '/trademind/opportunities', '/trademind/market', '/trademind/ai', '/trademind/positions', '/trademind/portfolio', '/trademind/records', '/trademind/learn']) {
+    for (const p of ['/trademind', '/trademind/opportunities', '/trademind/market', '/trademind/ai', '/trademind/positions', '/trademind/portfolio', '/trademind/records', '/trademind/learn']) {
       expect(shown.has(p), p).toBe(true)
     }
+    // The old Swing Picks address is no longer a tab, but still opens (Today at the pick list) for everyone.
+    expect(resolveSection('/trademind/dashboard', false).id).toBe('today')
+  })
+})
+
+describe('Today is one page (the Swing Picks tab is gone)', () => {
+  const today = SECTIONS.find((s) => s.id === 'today')!
+
+  it('lists only Today, so no row of tabs shows under the bar', () => {
+    for (const owner of [true, false]) expect(visiblePages(today, owner).map((p) => p.to)).toEqual(['/trademind'])
+    expect(SECTIONS.flatMap((s) => s.pages.map((p) => p.label))).not.toContain('Swing Picks')
+  })
+
+  it('/trademind/dashboard still belongs to Today and is still routed', () => {
+    expect(findSection('/trademind/dashboard')?.id).toBe('today')
+    expect(findSection('/trademind/dashboard/')?.id).toBe('today')
+    expect(appSource).toContain('path="dashboard" element={<Today ')
   })
 })
 

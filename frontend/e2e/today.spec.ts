@@ -35,11 +35,14 @@ test.describe('Today (oa5)', () => {
     await expect(cards.first()).toBeVisible()
   })
 
-  test('the Swing Picks tab and /trademind/dashboard open Today at the pick list', async ({ page }) => {
+  test('Today is one page (no Swing Picks tab), and /trademind/dashboard still opens Today at the pick list', async ({ page }) => {
     await mockApi(page)
     await openPage(page, '/trademind')
-    await page.getByTestId('subnav').getByRole('link', { name: 'Swing Picks' }).click()
+    await expect(page.getByTestId('subnav')).toHaveCount(0)
+    await expect(page.getByRole('link', { name: 'Swing Picks', exact: true })).toHaveCount(0)
+    await openPage(page, '/trademind/dashboard')
     await expect(page).toHaveURL(/\/trademind\/dashboard$/)
+    await expect(page.getByTestId('subnav')).toHaveCount(0)
     await expect(page.getByTestId('status-strip')).toHaveCount(1)
     await expect(page.locator('#picks')).toBeInViewport()
   })

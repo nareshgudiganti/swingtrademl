@@ -19,11 +19,10 @@ export const SECTIONS: Section[] = [
   {
     id: 'today',
     label: 'Today',
-    pages: [
-      { to: '/trademind', label: 'Today', end: true },
-      // oa5: Swing Picks is part of the one Today page now; this tab opens Today at its full pick list.
-      { to: '/trademind/dashboard', label: 'Swing Picks' },
-    ],
+    // One page, so no row of tabs under the bar. oa5 folded Swing Picks into Today; its old tab is gone, but
+    // /trademind/dashboard still opens Today at the full pick list (the route is in TradeMindApp.tsx).
+    pages: [{ to: '/trademind', label: 'Today', end: true }],
+    also: ['/trademind/dashboard'],
   },
   {
     id: 'discover',

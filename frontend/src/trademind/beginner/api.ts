@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 
 import { BASE_URL, getPreviewPlan, getToken } from '../../api/client'
-import type { EventItem, EvidenceSummary, StockBriefData } from './types'
+import type { EventItem, EvidenceSummary, InsightsData, InsightsPeriod, StockBriefData } from './types'
 
 /** Read-only GET. Same headers as client.ts's private authHeaders (which client.ts does not export). */
 async function getJson<T>(path: string): Promise<T> {
@@ -47,5 +47,12 @@ export function useEvidence() {
   return useQuery({
     queryKey: ['beginner', 'evidence'],
     queryFn: () => getJson<EvidenceSummary>('/beginner/evidence'),
+  })
+}
+
+export function useInsights(period: InsightsPeriod) {
+  return useQuery({
+    queryKey: ['beginner', 'insights', period],
+    queryFn: () => getJson<InsightsData>(`/beginner/insights?period=${period}`),
   })
 }

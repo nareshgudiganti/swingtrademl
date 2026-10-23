@@ -6,6 +6,7 @@ import type { Trade, TrackRecordSignal } from '../../api/types'
 import { Card, PageHead, Seg, Tabs, Tag, inr, signed, toneClass } from '../ui'
 import { usePlan } from '../../lib/plan'
 import { EvidencePanelLive } from '../beginner/EvidencePanel'
+import { BrainProgressLive, InsightsLive } from '../beginner/InsightsPanel'
 
 const TABS = ['Trade history', "Version 1's picks", 'Strategy results'] as const
 type TabName = (typeof TABS)[number]
@@ -512,12 +513,31 @@ function Evidence() {
   )
 }
 
+// oa11: day / week / month results, practice and real side by side (never added together), against two
+// benchmarks after costs; and whether the brain is getting better (counts and frozen tests only). Owner only,
+// like the card above: the server refuses these figures to everyone else.
+function Insights() {
+  const { canManage } = usePlan()
+  if (!canManage) return null
+  return (
+    <>
+      <Card title="Day by day, week by week, month by month" sub="Practice money and real money are kept apart and never added together.">
+        <InsightsLive />
+      </Card>
+      <Card title="Is the brain getting better?" sub="Counts and frozen tests only. The brain's trial results stay sealed until its review.">
+        <BrainProgressLive />
+      </Card>
+    </>
+  )
+}
+
 export default function Records() {
   const [tab, setTab] = useState<TabName>('Trade history')
   return (
     <div className="tm-page tm-grid">
       <PageHead title="Records" sub="Everything that has already happened, for reading only" />
       <Evidence />
+      <Insights />
       <Tabs tabs={TABS} active={tab} onChange={setTab} />
       {tab === 'Trade history' && <TradeHistory />}
       {tab === "Version 1's picks" && <Picks />}

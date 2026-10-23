@@ -83,6 +83,8 @@ EXTRA = (  # the same routes again with the parameters that reach the sealed row
     "/api/v1/brain/runs/latest?include_replays=true",
     "/api/v1/brain/proposals?status=open",
     "/api/v1/brain/daily-checks?days=366",
+    "/api/v1/beginner/insights?period=day",
+    "/api/v1/beginner/insights?period=week",
 )
 
 

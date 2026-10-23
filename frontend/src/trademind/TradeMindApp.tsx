@@ -16,8 +16,7 @@ import { OfflineBanner } from './PageState'
 import PricesBadge from './PricesBadge'
 import TopBarAlerts from './TopBarAlerts'
 import { Tour } from './Tour'
-import Home from './pages/Home'
-import Dashboard from './pages/Dashboard'
+import Today from './pages/Today'
 import Market from './pages/Market'
 import Opportunities from './pages/Opportunities'
 import Watchlist from './pages/Watchlist'
@@ -227,8 +226,9 @@ export default function TradeMindApp({ ownerConsole = false }: TradeMindAppProps
       {/* Rendered outside any parent <Route>, so the paths are anchored here. */}
       <Routes>
         <Route path="/trademind">
-          <Route index element={<Home />} />
-          <Route path="dashboard" element={<Dashboard />} />
+          {/* oa5: one Today page (the old Home + Swing Picks). /trademind/dashboard keeps working: Today at the pick list. */}
+          <Route index element={<Today owner={ownerConsole} />} />
+          <Route path="dashboard" element={<Today owner={ownerConsole} focus="picks" />} />
           <Route path="market" element={<Market />} />
           <Route path="opportunities" element={<Opportunities />} />
           <Route path="watchlist" element={ownerConsole ? <Watchlist /> : <Navigate to="/trademind/opportunities" replace />} />

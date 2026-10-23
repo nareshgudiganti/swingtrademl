@@ -21,6 +21,7 @@ export const SECTIONS: Section[] = [
     label: 'Today',
     pages: [
       { to: '/trademind', label: 'Today', end: true },
+      // oa5: Swing Picks is part of the one Today page now; this tab opens Today at its full pick list.
       { to: '/trademind/dashboard', label: 'Swing Picks' },
     ],
   },

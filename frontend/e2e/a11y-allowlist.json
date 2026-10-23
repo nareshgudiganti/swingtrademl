@@ -10,6 +10,11 @@
       "rule": "color-contrast",
       "page": "portfolio-overview",
       "todo": "Table column headings (.tm-table th in src/trademind/trademind.css): --tm-faint #5d6590 on the card #131c31 is 3.01:1 at 11.5px, needs 4.5:1. Use --tm-dim or a lighter faint colour for headings. Affects every TradeMind table with a heading row."
+    },
+    {
+      "rule": "color-contrast",
+      "page": "today",
+      "todo": "Same table-heading colour as portfolio-overview: the Swing Picks table moved onto Today (oa5), so its .tm-table th headings (--tm-faint #5d6590 on #131c31, 3.01:1) are now scanned here. One fix to .tm-table th clears both."
     }
   ]
 }

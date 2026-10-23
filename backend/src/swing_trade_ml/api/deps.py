@@ -190,9 +190,11 @@ TESTER_WRITES: frozenset[tuple[str, str]] = frozenset(
     {("POST", "/portfolio/tester/buy"), ("POST", "/portfolio/positions/{position_id}/close")}
 )
 
-#: Owner-private areas a tester may not even read while plans are off: the
-#: owner's money, the Zerodha session, the safety switches, alerts and the
-#: brain's go-live controls. `/admin` already answers only the owner itself.
+#: Owner-private areas nobody but the owner may even read, whatever the plans
+#: switch says: a tester (who otherwise sees the shared app while plans are off)
+#: and a plain member alike. No plan feature opens any of them. The owner's
+#: money, the Zerodha session, the safety switches, alerts and the brain's
+#: go-live controls. `/admin` already answers only the owner itself.
 #: `/brain/compare` and `/brain/trial-journal` are the rest of the go-live
 #: router (endpoints/brain_golive.py), which has no `/brain/golive` prefix.
 TESTER_PRIVATE_PREFIXES: tuple[str, ...] = (
@@ -232,8 +234,9 @@ async def require_auth(
     """Gate for every route that can read positions or move money.
 
     Authenticates (see `get_principal`), then applies the caller's plan:
-    the owner passes, as does everyone while plans are switched off;
-    anyone else passes only a route that
+    the owner passes, as does a tester while plans are switched off (never
+    a member: "plans off" no longer opens the house book, S1); anyone else
+    passes only a route that
     core/plans.py::ROUTE_RULES opens with a feature their plan includes.
     Everything else — every write, the real account, safety, finance — is
     owner-only by default, so a new endpoint is never accidentally public.
@@ -250,8 +253,9 @@ async def require_auth(
         and not (principal.is_tester and (request.method, path) in TESTER_WRITES)
     ):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Only the owner can change this.")
-    # A tester sees the shared app while plans are off, never the owner's private areas.
-    if principal.is_tester and _is_private_area(path):
+    # Nobody but the owner reads the owner's private areas: not a tester (who sees the
+    # shared app while plans are off), not a member on any plan, plans on or off.
+    if not principal.is_owner and _is_private_area(path):
         raise HTTPException(status.HTTP_403_FORBIDDEN, PRIVATE_AREA)
     if access.unrestricted:
         return

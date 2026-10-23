@@ -515,6 +515,302 @@ def random_baseline(
     }
 
 
+# --- rules only (layer 2 protocol, section 3): the arm the brain must beat --------------------------------
+#
+# The same account (cash, ladder limits, sector cap, sizing, market-mode limit, 15% halt, exits, costs),
+# but the stocks are drawn at random from the ones the brain's rules left eligible that day, ignoring the
+# model's score. If the brain does not beat this, the score adds nothing and what remains is a discipline
+# layer. Offline evidence only; nothing here is read by a live run or counts toward the 30-idea gate.
+
+RULES_ONLY_DRAWS = 200  # evidence-defs-v1: 200 seeded runs
+RULES_ONLY_MIN_DAYS = 40  # protocol section 5 (proposed, owner to confirm)
+RULES_ONLY_MIN_TRADES = 60
+EXCLUDED_WORDS = ("AVOID",)  # an idea with this word was ruled out by the brain's rules: not eligible
+RULES_ONLY_LIMITS: tuple[str, ...] = (
+    "Rules only: the same account rules as the brain, with stocks drawn at random from those the brain "
+    "did not call AVOID that day. WATCH and WAIT ideas are eligible, though some of those words come "
+    "partly from the model's score, so the pool is not fully free of the model.",
+    "Rules only buys as many stocks a day as the brain did (matched count), so it tests which stocks "
+    "were picked, not how many.",
+)
+
+
+def rules_only_picks(
+    eligible: dict[date, Sequence[str]],
+    *,
+    seed: int,
+    buckets: dict[str, str | None],
+    per_day: dict[date, int] | None = None,
+) -> list[Pick]:
+    """Random picks from each day's eligible stocks (seeded). With `per_day`, exactly that many a day (or
+    all of them, when fewer are eligible); without it, every eligible stock in a random order, and the
+    account takes the first ones it can, up to the day's market-mode limit. The score is only the order."""
+    rng = random.Random(seed)
+    out: list[Pick] = []
+    for day in sorted(eligible):
+        syms = sorted(set(eligible[day]))
+        k = len(syms) if per_day is None else min(per_day.get(day, 0), len(syms))
+        chosen = rng.sample(syms, k)
+        out += [Pick(day, sym, float(k - n), buckets.get(sym)) for n, sym in enumerate(chosen)]
+    return out
+
+
+def _spread(values: list[float]) -> dict:
+    xs = sorted(values)
+    if not xs:
+        return {"median": None, "p5": None, "p95": None, "mean": None}
+
+    def at(q: float) -> float:
+        return xs[int(q * (len(xs) - 1))]
+
+    mid = len(xs) // 2
+    median = xs[mid] if len(xs) % 2 else (xs[mid - 1] + xs[mid]) / 2
+    return {"median": median, "p5": at(0.05), "p95": at(0.95), "mean": sum(xs) / len(xs)}
+
+
+def rules_only_baseline(
+    eligible: dict[date, Sequence[str]],
+    bars: dict[str, pd.DataFrame],
+    days: Sequence[date],
+    buckets: dict[str, str | None],
+    *,
+    capital: float,
+    per_day: dict[date, int] | None = None,
+    modes: dict[date, str] | None = None,
+    draws: int = RULES_ONLY_DRAWS,
+    seed: int = 11,
+    drawdown_policy: str = "halt",
+) -> dict:
+    """`draws` rules-only accounts (seeds seed..seed+draws-1) through `simulate`, and the spread of their
+    results. Average per trade is what protocol section 5 compares; draws with no finished trade have
+    none and are counted apart."""
+    results = [
+        simulate(
+            rules_only_picks(eligible, seed=seed + n, buckets=buckets, per_day=per_day),
+            bars,
+            days,
+            capital=capital,
+            modes=modes,
+            drawdown_policy=drawdown_policy,
+        )
+        for n in range(draws)
+    ]
+    per_trade = sorted(r.avg_trade_return for r in results if r.avg_trade_return is not None)
+    return {
+        "draws": draws,
+        "seeds": f"{seed}..{seed + draws - 1}",
+        "matched_count": per_day is not None,
+        "total_return": _spread([r.total_return for r in results]),
+        "avg_trade_return": {**_spread(per_trade), "draws_with_trades": len(per_trade), "values": per_trade},
+        "max_drawdown": _spread([r.max_drawdown for r in results]),
+        "trades": _spread([float(r.trades) for r in results]),
+    }
+
+
+def beats_rules_only(
+    brain: dict,
+    rules: dict,
+    *,
+    trading_days: int,
+    min_days: int = RULES_ONLY_MIN_DAYS,
+    min_trades: int = RULES_ONLY_MIN_TRADES,
+) -> dict:
+    """Protocol section 5, "beats rules only": the brain's average per trade (after costs) is above the
+    middle of the rules-only draws, and the draws' 5th percentile is below the brain. Fewer than
+    `min_days` decision days or `min_trades` finished brain trades reads "insufficient", never "fail".
+    `brain` is a `PortfolioResult.summary()`; `rules` is `rules_only_baseline`'s result."""
+    avg, trades = brain.get("avg_trade_return"), int(brain.get("trades") or 0)
+    dist = rules["avg_trade_return"]
+    values = dist.get("values") or []
+    out = {
+        "brain_avg_trade_return": avg,
+        "brain_trades": trades,
+        "trading_days": trading_days,
+        "rules_median": dist["median"],
+        "rules_p5": dist["p5"],
+        "rules_draws_with_trades": dist["draws_with_trades"],
+        # share of rules-only draws the brain's average per trade is above (shown, not part of the rule)
+        "brain_beats_share": (
+            sum(1 for v in values if v < avg) / len(values) if values and avg is not None else None
+        ),
+    }
+    if trading_days < min_days:
+        why = f"{trading_days} decision days; at least {min_days} are needed."
+    elif trades < min_trades:
+        why = f"{trades} finished brain trades; at least {min_trades} are needed."
+    elif avg is None or dist["median"] is None:
+        why = "No rules-only draw finished a trade, so there is nothing to compare with."
+    else:
+        why = None
+    if why is not None:
+        return {**out, "word": "insufficient", "why": why}
+    passed = avg > dist["median"] and dist["p5"] < avg
+    return {**out, "word": "pass" if passed else "fail", "why": None}
+
+
+def compare_with_rules_only(
+    brain_picks: Sequence[Pick],
+    eligible: dict[date, Sequence[str]],
+    bars: dict[str, pd.DataFrame],
+    days: Sequence[date],
+    buckets: dict[str, str | None],
+    *,
+    capital: float,
+    modes: dict[date, str] | None = None,
+    draws: int = RULES_ONLY_DRAWS,
+    seed: int = 11,
+    matched: bool = True,
+    drawdown_policy: str = "halt",
+) -> dict:
+    """The brain's picks and the rules-only draws through the same account, side by side, with the
+    section 5 answer. `matched` draws as many stocks a day as the brain picked (0 on days it picked
+    none); otherwise rules only fills up to the market-mode limit. Pure: no database."""
+    brain = simulate(
+        brain_picks, bars, days, capital=capital, modes=modes, drawdown_policy=drawdown_policy
+    ).summary()
+    per_day: dict[date, int] | None = None
+    if matched:
+        per_day = dict.fromkeys(eligible, 0)
+        for p in brain_picks:
+            per_day[p.day] = per_day.get(p.day, 0) + 1
+    rules = rules_only_baseline(
+        eligible,
+        bars,
+        days,
+        buckets,
+        capital=capital,
+        per_day=per_day,
+        modes=modes,
+        draws=draws,
+        seed=seed,
+        drawdown_policy=drawdown_policy,
+    )
+    limits = list(RULES_ONLY_LIMITS)
+    if not matched:
+        limits[1] = "Rules only fills up to the market-mode limit each day (not the brain's count)."
+    return {
+        "capital": capital,
+        "decision_days": len(eligible),
+        "brain": brain,
+        "rules_only": rules,
+        "verdict": beats_rules_only(brain, rules, trading_days=len(eligible)),
+        "limits": limits,
+    }
+
+
+def rules_only_inputs(db, start: date, end: date, *, replays: bool = False) -> dict:
+    """From stored nightly brain runs (one per IST day, `trial_journal.load_sessions`): the brain's TRADE
+    picks, each day's eligible stocks (every idea not in `EXCLUDED_WORDS`), the brain's count a day and
+    the banner. Refuses any window that touches the sealed blind trial (services/trial_seal.py)."""
+    from swing_trade_ml.brain.trial_journal import load_sessions
+    from swing_trade_ml.ml.sector_map import get_sector_bucket
+    from swing_trade_ml.services import trial_seal
+
+    if trial_seal.touches_seal(start, end):
+        raise ValueError(
+            f"{start}..{end} includes sealed trial days (from {trial_seal.SEALED_FROM}); "
+            "a rules-only comparison would reveal the trial's results."
+        )
+    sessions = load_sessions(db, start, end, live=not replays)
+    picks: list[Pick] = []
+    eligible: dict[date, list[str]] = {}
+    per_day: dict[date, int] = {}
+    banners: dict[date, str | None] = {}
+    for s in sessions:
+        trade = sorted((i for i in s.ideas if i.word == "TRADE"), key=lambda i: i.symbol)
+        picks += [Pick(s.day, i.symbol, i.score or 0.0, get_sector_bucket(i.symbol)) for i in trade]
+        eligible[s.day] = sorted({i.symbol for i in s.ideas if i.word not in EXCLUDED_WORDS})
+        per_day[s.day] = len(trade)
+        banners[s.day] = s.banner
+    return {"picks": picks, "eligible": eligible, "per_day": per_day, "banners": banners}
+
+
+def run_rules_only_comparison(
+    db,
+    *,
+    start: date,
+    end: date,
+    capitals: Sequence[float],
+    draws: int = RULES_ONLY_DRAWS,
+    replays: bool = False,
+    derive_modes: bool = True,
+) -> dict:
+    """Stored brain runs from `start` to `end` (not the sealed trial) against rules only, one account per
+    starting capital. Market mode per decision day: the recorded banner, else the point-in-time M10 mode
+    (`market_mode_history.history_for`), else NORMAL, and the result says how many of each."""
+    from datetime import timedelta
+
+    from swing_trade_ml.brain.market_mode_history import (
+        DERIVED_LIMITS,
+        history_for,
+        modes_only,
+        source_counts,
+    )
+    from swing_trade_ml.brain.replay_score import load_bars
+    from swing_trade_ml.ml.sector_map import get_sector_bucket
+
+    inp = rules_only_inputs(db, start, end, replays=replays)
+    decision_days = sorted(inp["eligible"])
+    symbols = sorted(
+        {s for syms in inp["eligible"].values() for s in syms} | {p.symbol for p in inp["picks"]}
+    )
+    bars = {s: df for s, df in load_bars(db, symbols, end + timedelta(days=60)).items() if len(df)}
+    buckets = {s: get_sector_bucket(s) for s in bars}
+    days = sorted({d for df in bars.values() for d in df["day"] if d >= start})
+    history = history_for(db, decision_days, derive=derive_modes)
+    counts = source_counts(history, decision_days)
+    modes = modes_only(history)
+    accounts = [
+        compare_with_rules_only(
+            inp["picks"], inp["eligible"], bars, days, buckets, capital=capital, modes=modes, draws=draws
+        )
+        for capital in capitals
+    ]
+    limits = [*RULES_ONLY_LIMITS, *(DERIVED_LIMITS if counts["derived"] else ())]
+    if counts["missing"]:
+        limits.append(f"{counts['missing']} decision days had no market mode and were treated as NORMAL.")
+    limits.append(LIMITS[0])
+    limits.append(LIMITS[4])
+    return {
+        "from": start.isoformat(),
+        "to": end.isoformat(),
+        "source": "replay" if replays else "live",
+        "decision_days": len(decision_days),
+        "brain_picks": len(inp["picks"]),
+        "stocks": len(bars),
+        "mode_days": counts,
+        "accounts": [{k: v for k, v in a.items() if k != "limits"} for a in accounts],
+        "limits": limits,
+    }
+
+
+def rules_only_report(result: dict) -> str:
+    def pct(x):
+        return "n/a" if x is None else f"{x * 100:+.2f}%"
+
+    m = result["mode_days"]
+    lines = [
+        f"Brain against rules only, {result['from']} to {result['to']} ({result['source']} runs): "
+        f"{result['decision_days']} decision days, {result['brain_picks']} brain TRADE picks, "
+        f"{result['stocks']} stocks. Market mode: {m['recorded']} recorded, {m['derived']} derived, "
+        f"{m['missing']} missing.",
+        "",
+        "| Start money | Brain: per trade | Brain trades | Rules only: per trade, middle (5th-95th) "
+        "| Brain above | Answer |",
+        "|---|---|---|---|---|---|",
+    ]
+    for a in result["accounts"]:
+        v, r = a["verdict"], a["rules_only"]["avg_trade_return"]
+        share = "n/a" if v["brain_beats_share"] is None else f"{v['brain_beats_share']:.0%} of draws"
+        answer = v["word"] + (f" ({v['why']})" if v["why"] else "")
+        lines.append(
+            f"| ₹{a['capital']:,.0f} | {pct(v['brain_avg_trade_return'])} | {v['brain_trades']} "
+            f"| {pct(r['median'])} ({pct(r['p5'])} to {pct(r['p95'])}) | {share} | {answer} |"
+        )
+    lines += ["", "Limits:"] + [f"- {t}" for t in result["limits"]]
+    return "\n".join(lines)
+
+
 def run_portfolio_walk_forward(
     db,
     *,
@@ -690,7 +986,36 @@ def main(argv: Sequence[str] | None = None) -> int:
     p.add_argument("--to", dest="end", default=None)
     p.add_argument("--capital", type=float, nargs="+", default=[100_000, 500_000, 1_000_000])
     p.add_argument("--out", default="docs/brain/evidence")
+    p.add_argument(
+        "--rules-only",
+        action="store_true",
+        help="compare stored brain runs with rules only (layer 2 protocol section 3) instead",
+    )
+    p.add_argument(
+        "--replays", action="store_true", help="with --rules-only: read replayed runs, not live ones"
+    )
+    p.add_argument("--draws", type=int, default=RULES_ONLY_DRAWS)
     a = p.parse_args(argv)
+    if a.rules_only:
+        if not a.end:
+            p.error("--rules-only needs --to (a window that ends before the sealed trial)")
+        with SessionLocal() as db:
+            result = run_rules_only_comparison(
+                db,
+                start=date.fromisoformat(a.start),
+                end=date.fromisoformat(a.end),
+                capitals=a.capital,
+                draws=a.draws,
+                replays=a.replays,
+            )
+        out = Path(a.out)
+        out.mkdir(parents=True, exist_ok=True)
+        stem = f"rules_only_{result['source']}_{result['from']}_{result['to']}"
+        (out / f"{stem}.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
+        text = rules_only_report(result)
+        (out / f"{stem}.md").write_text("# Brain against rules only\n\n" + text + "\n", encoding="utf-8")
+        print(text)
+        return 0
     end = (
         date.fromisoformat(a.end)
         if a.end

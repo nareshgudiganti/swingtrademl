@@ -1,0 +1,14 @@
+[
+  {
+    "id": 101, "strategy_id": 1, "instrument_id": 1, "tradingsymbol": "INFY", "name": "Infosys", "signal_type": "BUY",
+    "mode": "paper", "price": 1490, "confidence": 0.68, "suggested_quantity": 2, "stop_loss": 1430.4, "take_profit": 1609.2,
+    "reason": "Model confident", "features": { "model": "swing_classifier" }, "was_executed": false,
+    "rejection_reason": "Already holding this stock", "advisory_only": false, "generated_at": "2026-10-16T10:00:00Z"
+  },
+  {
+    "id": 102, "strategy_id": 1, "instrument_id": 2, "tradingsymbol": "TCS", "name": "TCS", "signal_type": "HOLD",
+    "mode": "paper", "price": 3912, "confidence": 0.47, "suggested_quantity": null, "stop_loss": null, "take_profit": null,
+    "reason": null, "features": null, "was_executed": false, "rejection_reason": null, "advisory_only": false,
+    "generated_at": "2026-10-16T10:00:00Z"
+  }
+]

@@ -225,7 +225,8 @@ describe('oa7: the old "Brain Logs" section is broken up', () => {
   })
 
   it('every old URL is still routed', () => {
-    for (const r of ['index element={<Home />}', 'path="ai" element', 'path="ai/:symbol" element', 'path="observatory" element']) {
+    // oa5: the index is Today (the old Home + Swing Picks), and /trademind/dashboard opens it at the pick list.
+    for (const r of ['index element={<Today ', 'path="dashboard" element={<Today ', 'path="ai" element', 'path="ai/:symbol" element', 'path="observatory" element']) {
       expect(appSource).toContain(r)
     }
   })

@@ -32,8 +32,17 @@ test.describe('1. Sign in', () => {
     expect(await page.evaluate(() => localStorage.getItem('stml.token'))).toBeNull()
   })
 
-  test('logging out returns to the sign-in screen', async ({ page }) => {
+  test('logging out returns to the sign-in screen (owner: from the account menu)', async ({ page }) => {
     await mockApi(page)
+    await openPage(page, '/trademind')
+    await expect(page.locator('.tm-topbar').getByRole('button', { name: 'Log out' })).toHaveCount(0)
+    await page.getByRole('button', { name: 'Your account and settings' }).click()
+    await page.getByRole('menuitem', { name: 'Log out' }).click()
+    await expect(page.getByText('Sign in to your account.')).toBeVisible()
+  })
+
+  test('logging out returns to the sign-in screen (member: the button on the bar)', async ({ page }) => {
+    await mockApi(page, { role: 'member' })
     await openPage(page, '/trademind')
     await page.getByRole('button', { name: 'Log out' }).click()
     await expect(page.getByText('Sign in to your account.')).toBeVisible()

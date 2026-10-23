@@ -136,14 +136,19 @@
 .tm-status-chip {
   font-size: 0.68rem;
   font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
   padding: 0.2rem 0.55rem;
   border-radius: 999px;
   color: var(--tm-amber);
   border: 1px solid rgba(255, 181, 71, 0.45);
   background: rgba(255, 181, 71, 0.08);
   white-space: nowrap;
+}
+
+/* The brain chip when the screens show the brain's latest run ("Brain: up to date"); amber otherwise. */
+.tm-status-chip-ok {
+  color: #3ddc97;
+  border-color: rgba(61, 220, 151, 0.45);
+  background: rgba(61, 220, 151, 0.08);
 }
 
 .tm-avatar {
@@ -1467,6 +1472,7 @@ th[aria-sort='descending'] .tm-sort-arrow {
   font-size: 0.75rem;
   cursor: pointer;
   padding: 0.3rem 0.4rem;
+  white-space: nowrap;
 }
 
 .tm-logout:hover {
@@ -1608,9 +1614,43 @@ th[aria-sort='descending'] .tm-sort-arrow {
   }
 }
 
-/* market clock chip (top bar); hidden on a phone like the Zerodha chip */
+/* The top bar on one line at laptop widths (1151-1720px; below that the section menu has its own row). The owner's
+   bar holds a lot, so it tightens up and drops lower-priority text step by step instead of squeezing the section
+   menu or wrapping:
+   - up to 1720px: a little less spacing, and the market part of the market and prices chip shows only its first
+     words ("Market closed"); the full text stays in the chip's tooltip;
+   - up to 1400px: no market part at all, and "Zerodha connected" is left out while it is fine (a "not logged in"
+     warning still shows; the control room is still in the account menu);
+   - up to 1100px and on a phone: no market part (the prices part is shortened on a phone). */
+.tm-asof-market-short {
+  display: none;
+}
+@media (min-width: 1151px) and (max-width: 1720px) {
+  .tm-topbar {
+    gap: 0.75rem;
+  }
+  .tm-topbar-right {
+    gap: 0.45rem;
+  }
+  .tm-topbar .tm-nav a {
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+  }
+  .tm-asof-market-full {
+    display: none;
+  }
+  .tm-asof-market-short {
+    display: inline;
+  }
+}
+@media (min-width: 1151px) and (max-width: 1400px) {
+  .tm-asof-market,
+  .tm-zerodha-chip.tm-zchip-ok {
+    display: none;
+  }
+}
 @media (max-width: 1100px) {
-  .tm-market-chip {
+  .tm-asof-market {
     display: none;
   }
 }
@@ -1855,6 +1895,23 @@ button.tm-avatar {
   text-decoration: none;
 }
 
+.tm-menu-list .tm-menu-logout {
+  margin-top: 0.25rem;
+  padding: 0.45rem 0.7rem;
+  border: 0;
+  border-top: 1px solid var(--tm-line);
+  border-radius: 0 0 7px 7px;
+  background: transparent;
+  color: var(--tm-dim);
+  font: inherit;
+  font-size: 0.82rem;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.tm-menu-list .tm-menu-logout:hover,
+.tm-menu-list .tm-menu-logout:focus-visible,
 .tm-menu-list a:hover,
 .tm-menu-list a:focus-visible {
   color: var(--tm-text);
@@ -1879,6 +1936,11 @@ button.tm-avatar {
   color: rgba(255, 255, 255, 0.85);
   border: 1px solid rgba(255, 255, 255, 0.25);
   background: rgba(255, 255, 255, 0.06);
+}
+.tm-asof-open {
+  color: #3ddc97;
+  border-color: rgba(61, 220, 151, 0.45);
+  background: rgba(61, 220, 151, 0.08);
 }
 .tm-asof-stale {
   color: var(--tm-amber);

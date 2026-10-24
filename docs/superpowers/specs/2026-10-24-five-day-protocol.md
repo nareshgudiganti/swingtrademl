@@ -131,6 +131,10 @@ Signed by the owner on 2026-10-24 ("go ahead" on the recommendations above):
 1. Owner signs section 9. **Done 2026-10-24.**
 2. Build: `walk_forward.py` needs a separate hold length from the label length (5-day label, 30-calendar-day
    hold) and the prod buy rule as a pick mode. Tests first; no live code touched.
+   **Built 2026-10-24:** `backend/src/swing_trade_ml/brain/five_day.py` (tests `backend/tests/test_brain_five_day.py`).
+   Run (backend/): `python -m swing_trade_ml.brain.five_day --from 2023-07-01 --to 2025-01-31`
+   (or `python -m swing_trade_ml.brain.walk_forward --protocol fd-protocol-v1 ...`). It refuses unless the tag
+   `fd-protocol-v1` is in HEAD's history, this file and the tool are unchanged since the tag, and no report exists yet.
 3. Merge this file and the tool change to main; tag that merge commit `fd-protocol-v1`.
 4. Run layer 1 once on the confirmation sample. Start the forward clock. No re-runs with changed settings.
 5. Any later change is `fd-protocol-v2`; old results stay on record. Output goes to `docs/brain/evidence/fd_v1/`.

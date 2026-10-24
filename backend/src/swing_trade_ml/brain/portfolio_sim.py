@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import math
 import random
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import date
 
@@ -59,6 +59,7 @@ class _Position:
     last_close: float = 0.0
     fill: float = 0.0  # the buy fill per share, slippage included
     exit_reason: str | None = None  # target | stop | timeout | forced, once fully sold
+    plan: tuple[date, float, str] | None = None  # (exit day, price, reason) when the exit is scripted
 
 
 @dataclass(frozen=True, slots=True)
@@ -160,6 +161,23 @@ def entry_budget(
     return min(budget, cash - limits.cash_floor_inr)
 
 
+ExitPlan = Callable[[str, date], tuple[date, float, str] | None]
+
+
+def _planned_step(pos: _Position, day: date, row) -> tuple[bool, float]:
+    """One bar for a position whose exit was worked out beforehand (`exit_plan`): marked at the
+    close until its exit day, then sold at the planned price. No plan = held to the end of the data."""
+    pos.last_close = float(row["close"])
+    pos.bars_held += 1
+    if pos.plan is None or day < pos.plan[0]:
+        return False, 0.0
+    got = _sell(pos.plan[1], pos.qty)
+    pos.qty = 0
+    pos.exit_reason = pos.plan[2]
+    pos.cash_back += got
+    return True, got
+
+
 class Book:
     """One account, stepped one trading day at a time. `simulate` runs it over a whole period; the
     point-in-time brain replay (`pit_replay.py`) steps it between brain runs, so each run sees the
@@ -178,6 +196,7 @@ class Book:
         max_drawdown_pct: float = MAX_DRAWDOWN,
         drawdown_policy: str = "halt",
         cooldown_days: int = 10,
+        exit_plan: ExitPlan | None = None,
     ) -> None:
         self.index = {s: df.set_index("day") for s, df in bars.items() if not df.empty}
         self.capital = float(capital)
@@ -186,6 +205,9 @@ class Book:
         self.max_drawdown_pct = max_drawdown_pct
         self.drawdown_policy = drawdown_policy
         self.cooldown_days = cooldown_days
+        # Optional scripted exits (fd-protocol-v1): `exit_plan(symbol, decision_day)` gives the exit
+        # day, price and reason the per-idea scoring found. None keeps the strict rule of `_step`.
+        self.exit_plan = exit_plan
         self.cash = self.peak = self.equity = self.control_peak = float(capital)
         self.open_: list[_Position] = []
         self.closed: list[ClosedTrade] = []
@@ -342,6 +364,7 @@ class Book:
                     fill * (1 + self.half_out),
                     last_close=fill,
                     fill=fill,
+                    plan=self.exit_plan(pick.symbol, pick.day) if self.exit_plan is not None else None,
                 )
             )
             bought += 1
@@ -353,7 +376,10 @@ class Book:
             if ix is None or day not in ix.index:
                 still.append(pos)
                 continue
-            closed, got = _step(pos, ix.loc[day], self.horizon)
+            if self.exit_plan is not None:
+                closed, got = _planned_step(pos, day, ix.loc[day])
+            else:
+                closed, got = _step(pos, ix.loc[day], self.horizon)
             self.cash += got
             if closed:
                 self._close(pos, day, pos.exit_reason or "timeout")
@@ -424,6 +450,7 @@ def simulate(
     max_drawdown_pct: float = MAX_DRAWDOWN,
     drawdown_policy: str = "halt",
     cooldown_days: int = 10,
+    exit_plan: ExitPlan | None = None,
 ) -> PortfolioResult:
     """Run `picks` through one account over `days` (every trading day, ascending, covering the
     picks and the time they need to finish). `modes` maps a decision day to NORMAL, DEFENSIVE or
@@ -435,7 +462,9 @@ def simulate(
       trading days, after which the peak is reset to the account's value that day.
     - "reduce": the same, but sell only half of each open position.
     The trigger is checked on closing equity, so the exit happens a day later and can gap past it.
-    `max_drawdown` in the result always uses the true running peak, never a reset one."""
+    `max_drawdown` in the result always uses the true running peak, never a reset one.
+    `exit_plan(symbol, decision_day)` optionally scripts each position's exit (day, price, reason)
+    instead of the strict +target / -stop / horizon rule; left out, nothing changes."""
     modes = modes or {}
     by_day: dict[date, list[Pick]] = {}
     for p in picks:
@@ -451,6 +480,7 @@ def simulate(
         max_drawdown_pct=max_drawdown_pct,
         drawdown_policy=drawdown_policy,
         cooldown_days=cooldown_days,
+        exit_plan=exit_plan,
     )
     for i, day in enumerate(days):
         # buys decided on the previous trading day, filled at today's open

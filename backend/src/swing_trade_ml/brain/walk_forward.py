@@ -513,6 +513,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     from swing_trade_ml.core.market_session import last_closed_trading_day
     from swing_trade_ml.db.session import SessionLocal
 
+    # `--protocol fd-protocol-v1` hands over to the 5-day protocol's own tool (brain/five_day.py).
+    # Without it nothing changes: this stays the frozen wf-protocol-v1 run.
+    pre = argparse.ArgumentParser(add_help=False)
+    pre.add_argument("--protocol", default=PROTOCOL_VERSION, choices=(PROTOCOL_VERSION, "fd-protocol-v1"))
+    known, argv = pre.parse_known_args(argv)
+    if known.protocol == "fd-protocol-v1":
+        from swing_trade_ml.brain import five_day
+
+        return five_day.main(argv)
+
     p = argparse.ArgumentParser(description="Walk-forward back-test of the model (read-only evidence)")
     p.add_argument("--from", dest="start", required=True, help="YYYY-MM-DD: first test day")
     p.add_argument(

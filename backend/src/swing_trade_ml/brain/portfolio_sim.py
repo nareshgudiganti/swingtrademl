@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import math
 import random
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import date
 
@@ -59,6 +59,7 @@ class _Position:
     last_close: float = 0.0
     fill: float = 0.0  # the buy fill per share, slippage included
     exit_reason: str | None = None  # target | stop | timeout | forced, once fully sold
+    horizon: int | None = None  # bars this position may be held; None = the book's own horizon
 
 
 @dataclass(frozen=True, slots=True)
@@ -178,6 +179,7 @@ class Book:
         max_drawdown_pct: float = MAX_DRAWDOWN,
         drawdown_policy: str = "halt",
         cooldown_days: int = 10,
+        hold_bars: Callable[[str, date], int | None] | None = None,
     ) -> None:
         self.index = {s: df.set_index("day") for s, df in bars.items() if not df.empty}
         self.capital = float(capital)
@@ -186,6 +188,9 @@ class Book:
         self.max_drawdown_pct = max_drawdown_pct
         self.drawdown_policy = drawdown_policy
         self.cooldown_days = cooldown_days
+        # Optional per-trade holding time (fd-protocol-v1: 30 calendar days = a different number of
+        # bars for each entry day). None keeps one fixed `horizon` for every position.
+        self.hold_bars = hold_bars
         self.cash = self.peak = self.equity = self.control_peak = float(capital)
         self.open_: list[_Position] = []
         self.closed: list[ClosedTrade] = []
@@ -342,6 +347,7 @@ class Book:
                     fill * (1 + self.half_out),
                     last_close=fill,
                     fill=fill,
+                    horizon=self.hold_bars(pick.symbol, day) if self.hold_bars is not None else None,
                 )
             )
             bought += 1
@@ -353,7 +359,7 @@ class Book:
             if ix is None or day not in ix.index:
                 still.append(pos)
                 continue
-            closed, got = _step(pos, ix.loc[day], self.horizon)
+            closed, got = _step(pos, ix.loc[day], pos.horizon or self.horizon)
             self.cash += got
             if closed:
                 self._close(pos, day, pos.exit_reason or "timeout")
@@ -424,6 +430,7 @@ def simulate(
     max_drawdown_pct: float = MAX_DRAWDOWN,
     drawdown_policy: str = "halt",
     cooldown_days: int = 10,
+    hold_bars: Callable[[str, date], int | None] | None = None,
 ) -> PortfolioResult:
     """Run `picks` through one account over `days` (every trading day, ascending, covering the
     picks and the time they need to finish). `modes` maps a decision day to NORMAL, DEFENSIVE or
@@ -435,7 +442,9 @@ def simulate(
       trading days, after which the peak is reset to the account's value that day.
     - "reduce": the same, but sell only half of each open position.
     The trigger is checked on closing equity, so the exit happens a day later and can gap past it.
-    `max_drawdown` in the result always uses the true running peak, never a reset one."""
+    `max_drawdown` in the result always uses the true running peak, never a reset one.
+    `hold_bars(symbol, entry_day)` optionally gives each position its own holding time in bars
+    (None from it = `horizon`); left out, every position uses `horizon`."""
     modes = modes or {}
     by_day: dict[date, list[Pick]] = {}
     for p in picks:
@@ -451,6 +460,7 @@ def simulate(
         max_drawdown_pct=max_drawdown_pct,
         drawdown_policy=drawdown_policy,
         cooldown_days=cooldown_days,
+        hold_bars=hold_bars,
     )
     for i, day in enumerate(days):
         # buys decided on the previous trading day, filled at today's open

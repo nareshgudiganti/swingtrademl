@@ -1,7 +1,9 @@
-# Five-day strategy protocol (fd-protocol-v1) — DRAFT for owner sign-off
+# Five-day strategy protocol (fd-protocol-v1) — SIGNED 2026-10-24, freezes at the tag
 
-Status: **draft, not frozen.** Nothing is run until the owner signs section 9 and the commit is tagged
-`fd-protocol-v1`. After that, the confirmation run happens once and no setting changes after seeing a result.
+Status: **signed by the owner on 2026-10-24** (section 9: D1–D5 and D7 as recommended; D6 agreed in
+principle, waiting for tv22). It is frozen when the commit holding this file and the tool change is tagged
+`fd-protocol-v1`. After that, the layer 1 confirmation run happens once and no setting changes after seeing
+a result. No 5-day result has been looked at for this protocol before the tag.
 
 Why this exists: the 15-day brain has frozen pass rules (`wf-protocol-v1`, evidence-defs-v2, Phase B). The
 5-day version 1 bot has none. It trades on paper every day, but nothing says in advance what result would
@@ -100,7 +102,7 @@ hit rate needed to break even, worst fold, worst fall, and the limits below.
   until D6 is decided.
 - A pass never justifies live trading. Manual approval and the owner's go-live call still come first.
 
-## 9. Owner decisions to sign (draft — nothing is run before these)
+## 9. Owner decisions (signed 2026-10-24)
 
 | # | Question | Recommendation |
 |---|---|---|
@@ -112,13 +114,23 @@ hit rate needed to break even, worst fold, worst fall, and the limits below.
 | D6 | Forward test in a book of its own (needs tv22 and a trial-change waiver, or waits until the trial ends)? | Own book; decide together with tv22 |
 | D7 | Stop date: verdict 6 months after the lock, one extension to 9 months only if under 100 trades, no early stop? | Yes (same as the 15-day plan) |
 
-- [ ] D1 · [ ] D2 · [ ] D3 · [ ] D4 · [ ] D5 · [ ] D6 · [ ] D7
+Signed by the owner on 2026-10-24 ("go ahead" on the recommendations above):
+
+- [x] D1 as prod runs (+2% / −4%, up to 30 calendar days) is the pass/fail rule; closed-at-day-5 reported alongside.
+- [x] D2 best 5 a day for skill; the prod buy rule for money.
+- [x] D3 confirmation sample 2023-07-01 to 2025-01-31, with the section 5 limit written in the report.
+- [x] D4 same thresholds as the 15-day protocol.
+- [x] D5 "rules only" added as a benchmark once tv7 names the official one; until then the report says it is missing.
+- [~] D6 own book for the forward test: **agreed in principle, not yet decided.** It changes slots and
+  sizing during the frozen trial, so it needs the owner's tv22 decision (and a trial-change waiver, or the
+  end of the trial). Layer 2 does not start until then; layer 1 can run.
+- [x] D7 verdict 6 months after the forward clock starts; one extension to 9 months only if under 100 trades; no early stop.
 
 ## 10. Freezing mechanics
 
-1. Owner signs section 9.
+1. Owner signs section 9. **Done 2026-10-24.**
 2. Build: `walk_forward.py` needs a separate hold length from the label length (5-day label, 30-calendar-day
    hold) and the prod buy rule as a pick mode. Tests first; no live code touched.
-3. Commit this file (renamed without `-DRAFT`) and the tool change; tag `fd-protocol-v1`.
+3. Merge this file and the tool change to main; tag that merge commit `fd-protocol-v1`.
 4. Run layer 1 once on the confirmation sample. Start the forward clock. No re-runs with changed settings.
 5. Any later change is `fd-protocol-v2`; old results stay on record. Output goes to `docs/brain/evidence/fd_v1/`.

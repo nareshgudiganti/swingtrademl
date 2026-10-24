@@ -43,58 +43,56 @@ def _bars(days, closes, *, volume=500_000.0, spread=0.001) -> pd.DataFrame:
     )
 
 
-# ---------------------------------------------------------------- 30 calendar days -> trading days
+# ---------------------------------------------------------------- 30 calendar days -> the time-stop day
 
 
-def test_hold_ends_on_day_30_when_it_is_a_trading_day():
+def test_time_stop_is_day_30_when_it_is_a_trading_day():
     cal = _weekdays(date(2024, 1, 1), 60)
-    assert fd.hold_end(date(2024, 1, 2), cal) == date(2024, 2, 1)  # Tue + 30 = Thu
+    assert fd.time_stop_day(date(2024, 1, 2), cal) == date(2024, 2, 1)  # Tue + 30 = Thu
 
 
-def test_a_weekend_day_30_moves_back_to_the_friday():
+def test_a_weekend_day_30_moves_on_to_the_monday():
     cal = _weekdays(date(2024, 1, 1), 60)
-    assert fd.hold_end(date(2024, 1, 4), cal) == date(2024, 2, 2)  # +30 is Saturday 3 Feb
+    assert fd.time_stop_day(date(2024, 1, 4), cal) == date(2024, 2, 5)  # +30 is Saturday 3 Feb
 
 
-def test_a_holiday_day_30_moves_back_to_the_last_trading_day_before_it():
+def test_a_holiday_day_30_moves_on_to_the_next_trading_day():
     cal = _weekdays(date(2023, 12, 1), 80)
     assert REPUBLIC_DAY not in cal
-    assert fd.hold_end(date(2023, 12, 27), cal) == date(2024, 1, 25)  # +30 is Republic Day
+    assert fd.time_stop_day(date(2023, 12, 27), cal) == date(2024, 1, 29)  # +30 is Republic Day (Fri)
 
 
-def test_hold_end_is_unknown_until_the_calendar_reaches_day_30():
+def test_time_stop_day_is_unknown_until_the_calendar_reaches_it():
     cal = _weekdays(date(2024, 1, 1), 20)
-    assert fd.hold_end(date(2024, 1, 2), cal) is None
+    assert fd.time_stop_day(date(2024, 1, 2), cal) is None
 
 
-def test_hold_bars_count_the_stocks_own_bars_through_the_end_day():
-    cal = _weekdays(date(2023, 12, 1), 80)
-    k = cal.index(date(2023, 12, 27))
-    n = fd.hold_bars(cal, k, cal)
-    assert cal[k + n - 1] == date(2024, 1, 25)
-    assert n == sum(
-        1 for d in cal if date(2023, 12, 27) <= d <= date(2024, 1, 25)
-    )  # holidays and weekends skipped
-    assert 16 <= n <= 22
-
-
-def test_the_time_stop_is_the_settled_30_calendar_days():
+def test_the_time_stop_and_exit_line_are_prods_code_defaults():
+    from swing_trade_ml.core.config import Settings
     from swing_trade_ml.services.exit_policy import DEFAULT_TIME_STOP_DAYS
 
     assert fd.TIME_STOP_DAYS == DEFAULT_TIME_STOP_DAYS == 30
+    assert fd.prod_exit_confidence() == Settings.model_fields["ML_EXIT_CONFIDENCE"].default == 0.35
 
 
-# ---------------------------------------------------------------- outcomes
+# ---------------------------------------------------------------- one trade, as prod manages it
 
 
-def test_a_flat_trade_is_sold_at_the_close_of_the_last_trading_day_within_30_days():
+def _one(df, decide, *, weak=None, variant="hold", cal=None):
+    cal = cal if cal is not None else list(df["day"])
+    outs, exits = fd.outcomes_prod({"A": df}, [decide], cal, {"A": weak or set()}, variant=variant)
+    return outs[("A", decide)], exits.get(("A", decide))
+
+
+def test_a_flat_trade_is_sold_at_the_open_of_the_time_stop_day():
     days = _weekdays(date(2023, 12, 20), 70)
     df = _bars(days, [100.0] * len(days))
-    decide = date(2023, 12, 26)  # enter at the next open, 27 Dec
-    out = fd.outcomes_hold({"A": df}, [decide], days)[("A", decide)]
-    assert out.status == "timeout" and out.exit_day == date(2024, 1, 25)
-    assert out.days == sum(1 for d in days if date(2023, 12, 27) <= d <= date(2024, 1, 25))
-    five = fd.outcomes_day5({"A": df}, [decide])[("A", decide)]
+    decide = date(2023, 12, 26)  # buy at the next open, 27 Dec; +30 = Republic Day -> Mon 29 Jan
+    out, ex = _one(df, decide)
+    assert out.status == "timeout" and out.exit_day == date(2024, 1, 29)
+    assert ex == fd.Exit(date(2024, 1, 29), 100.0, "timeout")  # the open price
+    assert out.days == sum(1 for d in days if date(2023, 12, 27) <= d <= date(2024, 1, 29))
+    five, _ = _one(df, decide, variant="day5")
     assert five.status == "timeout" and five.days == 5 and five.exit_day == days[days.index(decide) + 5]
 
 
@@ -102,18 +100,28 @@ def test_target_and_stop_on_the_same_day_count_as_the_stop():
     days = _weekdays(date(2024, 3, 1), 40)
     df = _bars(days, [100.0] * len(days))
     df.loc[3, ["high", "low"]] = [106.0, 94.0]  # both +2% and -4% touched on one day
-    out = fd.outcomes_hold({"A": df}, [days[0]], days)[("A", days[0])]
-    assert out.status == "stop" and out.exit_day == days[3] and out.net_return < -0.04
-    assert fd.outcomes_day5({"A": df}, [days[0]])[("A", days[0])].status == "stop"
+    out, ex = _one(df, days[0])
+    assert (
+        out.status == "stop" and out.exit_day == days[3] and ex.price == pytest.approx(96.05)
+    )  # trailed by the 100.1 highs
+    assert _one(df, days[0], variant="day5")[0].status == "stop"
+
+
+def test_levels_come_from_the_decision_days_close_not_the_fill():
+    days = _weekdays(date(2024, 3, 1), 40)
+    df = _bars(days, [100.0] * len(days))
+    df.loc[1, ["open", "high", "low", "close"]] = [101.0, 101.0, 100.5, 101.0]  # buy at 101
+    df.loc[2, ["open", "high", "low", "close"]] = [101.0, 102.0, 100.8, 101.0]  # 102 = close 100 x 1.02
+    out, ex = _one(df, days[0])
+    assert out.status == "target" and ex.price == pytest.approx(102.0) and ex.day == days[2]
 
 
 def test_the_hold_runs_past_day_5_while_the_day_5_variant_does_not():
     days = _weekdays(date(2024, 3, 1), 40)
-    closes = [100.0] * len(days)
-    df = _bars(days, closes)
+    df = _bars(days, [100.0] * len(days))
     df.loc[10, "high"] = 103.0  # +3% on the 10th bar after entry: only the 30-day hold sees it
-    hold = fd.outcomes_hold({"A": df}, [days[0]], days)[("A", days[0])]
-    five = fd.outcomes_day5({"A": df}, [days[0]])[("A", days[0])]
+    hold, _ = _one(df, days[0])
+    five, _ = _one(df, days[0], variant="day5")
     assert hold.status == "target" and hold.days == 10 and hold.net_return == pytest.approx(0.02, abs=0.004)
     assert five.status == "timeout" and five.days == 5
 
@@ -122,15 +130,65 @@ def test_no_half_out_the_2_percent_target_is_the_whole_exit():
     days = _weekdays(date(2024, 3, 1), 40)
     df = _bars(days, [100.0] * len(days))
     df.loc[2, "high"] = 110.0  # a bar reaching +5% sells everything at +2%, nothing at +5%
-    out = fd.outcomes_hold({"A": df}, [days[0]], days)[("A", days[0])]
+    out, _ = _one(df, days[0])
     assert out.status == "target" and not out.half_out and out.net_return < 0.02
 
 
-def test_a_trade_whose_30_days_have_not_passed_is_open():
+def test_the_trailing_stop_follows_the_high_from_the_next_day():
+    days = _weekdays(date(2024, 3, 1), 40)
+    df = _bars(days, [100.0] * len(days))
+    df.loc[2, ["high", "low", "close"]] = [101.8, 99.0, 101.0]  # highest 101.8: stop rises to ~97.75
+    df.loc[3, ["open", "high", "low", "close"]] = [100.0, 100.0, 97.5, 98.0]
+    out, ex = _one(df, days[0])
+    fill = 100.0 * 1.0005  # 5 bps buy slippage
+    assert out.status == "stop" and ex.day == days[3]
+    assert ex.price == pytest.approx(101.8 - (fill - 96.0))  # above the first stop of 96
+
+
+def test_a_raised_trailing_stop_counts_the_same_day_only_when_the_close_is_below_it():
+    days = _weekdays(date(2024, 3, 1), 40)
+    df = _bars(days, [100.0] * len(days))
+    df.loc[2, ["high", "low", "close"]] = [101.9, 97.0, 99.0]  # low could be before the high: unknown
+    out, _ = _one(df, days[0])
+    assert out.exit_day != days[2]
+    df.loc[2, "close"] = 97.5  # the close is below the raised stop: it was surely crossed after the high
+    out, ex = _one(df, days[0])
+    assert out.status == "stop" and ex.day == days[2] and ex.price == pytest.approx(101.9 - (100.05 - 96.0))
+
+
+def test_a_weak_score_sells_at_the_next_open():
+    days = _weekdays(date(2024, 3, 1), 40)
+    df = _bars(days, [100.0] * len(days))
+    df.loc[5, "open"] = 100.5
+    out, ex = _one(df, days[0], weak={days[4]})  # the close of day 4 scores at or below 0.35
+    assert out.status == "confidence" and ex == fd.Exit(days[5], 100.5, "confidence")
+    five, _ = _one(df, days[0], weak={days[4]}, variant="day5")
+    assert five.status == "confidence" and five.exit_day == days[5]
+
+
+def test_a_weak_score_before_the_buy_or_after_the_time_stop_is_ignored():
+    days = _weekdays(date(2023, 12, 20), 70)
+    df = _bars(days, [100.0] * len(days))
+    decide = date(2023, 12, 26)
+    out, _ = _one(df, decide, weak={decide, date(2024, 1, 29), date(2024, 2, 5)})
+    assert out.status == "timeout" and out.exit_day == date(2024, 1, 29)
+
+
+def test_the_confidence_exit_uses_only_scores_known_at_each_close():
+    days = _weekdays(date(2024, 3, 1), 40)
+    df = _bars(days, [100.0] * len(days))
+    scores = {"A": {days[3]: 0.50, days[4]: 0.30, days[6]: 0.10}}
+    weak = fd.weak_days(scores)
+    assert weak == {"A": {days[4], days[6]}}
+    out, _ = _one(df, days[0], weak=weak["A"])
+    assert out.exit_day == days[5]  # sold after the first weak close, not later ones
+
+
+def test_a_trade_whose_time_stop_day_is_not_known_yet_is_open():
     days = _weekdays(date(2024, 3, 1), 15)
     df = _bars(days, [100.0] * len(days))
-    out = fd.outcomes_hold({"A": df}, [days[0]], days)[("A", days[0])]
-    assert out.status == "open" and out.net_return is None
+    out, ex = _one(df, days[0])
+    assert out.status == "open" and out.net_return is None and ex is None
 
 
 def test_breakeven_hit_rate_is_two_in_three_before_costs_and_more_after():
@@ -138,6 +196,46 @@ def test_breakeven_hit_rate_is_two_in_three_before_costs_and_more_after():
     assert be["before_costs"] == pytest.approx(2 / 3)
     assert be["after_costs"] > be["before_costs"]
     assert be["win_net"] < 0.02 and be["loss_net"] < -0.04
+
+
+# ---------------------------------------------------------------- the endpoint label (prod models 2, 16, 17)
+
+
+def test_fold_models_are_trained_on_the_endpoint_question(monkeypatch):
+    import swing_trade_ml.ml.train as train
+
+    seen = {}
+    monkeypatch.setattr(train, "train_model", lambda db, **kw: seen.update(kw) or "model")
+    assert fd._train(None, date(2023, 6, 30)) == "model"
+    assert seen["label_kind"] == "endpoint" and seen["stop_return"] is None
+    assert (seen["horizon_days"], seen["target_return"], seen["cutoff"]) == (5, 0.02, date(2023, 6, 30))
+
+
+def _dataset():
+    return pd.DataFrame(
+        {"target": [1, 0, 1, 0], "forward_return": [0.019, 0.02, -0.05, 0.03], "ts": range(4)}
+    )
+
+
+def test_endpoint_label_is_forward_return_at_least_the_target(monkeypatch):
+    import swing_trade_ml.ml.train as train
+
+    got = {}
+    monkeypatch.setattr(train, "build_training_dataset", lambda *a, **k: _dataset())
+
+    def stop_here(df, *a, **k):
+        got["target"] = list(df["target"])
+        raise RuntimeError("stop")
+
+    monkeypatch.setattr(train, "chronological_split", stop_here)
+    with pytest.raises(RuntimeError, match="stop"):
+        train.train_model(None, horizon_days=5, target_return=0.02, label_kind="endpoint")
+    assert got["target"] == [0, 1, 0, 1]  # the close 5 days later at least +2%; the barrier answer ignored
+    with pytest.raises(RuntimeError, match="stop"):
+        train.train_model(None, horizon_days=5, target_return=0.02)
+    assert got["target"] == [1, 0, 1, 0]  # default: the barrier label, unchanged
+    with pytest.raises(ValueError, match="label_kind"):
+        train.train_model(None, label_kind="other")
 
 
 # ---------------------------------------------------------------- the prod buy rule
@@ -394,30 +492,67 @@ def test_walk_forward_cli_hands_the_5_day_protocol_to_five_day(monkeypatch):
     assert seen == [["--from", "2023-07-01", "--to", "2025-01-31"]]
 
 
-def test_an_allowed_run_writes_once_then_refuses(tmp_path):
+LEDGER = """# Exposure ledger
+
+## Local data (development database)
+
+| Dates | Looked at | Used for / decided | Date of use | Source |
+|---|---|---|---|---|
+| 2023-07-01 to 2025-01-31 | wf | spent | 2026-10-12 | `wf_v1/` |
+
+## Prod
+"""
+
+
+def test_an_allowed_run_logs_the_ledger_first_writes_once_then_refuses(tmp_path):
     inp = _inputs()
+    ledger = tmp_path / "LEDGER.md"
+    ledger.write_text(LEDGER, encoding="utf-8")
+    out = tmp_path / "fd_v1"
     kw = {"random_draws": 5, "portfolio_draws": 1, "stresses": (NORMAL,)}
     first, last = inp.folds[0].start, inp.folds[-1].end
-    md, js = fd.run(
-        None,
-        first_start=first,
-        last_end=last,
-        out_dir=tmp_path,
-        state=(True, []),
-        collect_fn=lambda db, a, b: inp,
-        commit_fn=lambda: ("abc1234", False),
-        **kw,
-    )
-    assert md.exists() and js.exists() and "abc1234" in md.read_text(encoding="utf-8")
-    with pytest.raises(fd.RunRefusedError, match="runs once"):
-        fd.run(
+    order = []
+
+    def collect(db, a, b):
+        order.append("data")
+        return inp
+
+    real_evaluate = fd.evaluate
+
+    def evaluate(i, **k):
+        order.append(
+            "ledger row" if "fd-protocol-v1 layer 1" in ledger.read_text(encoding="utf-8") else "none"
+        )
+        return real_evaluate(i, **k)
+
+    import unittest.mock as um
+
+    with um.patch.object(fd, "evaluate", evaluate):
+        md, js = fd.run(
             None,
             first_start=first,
             last_end=last,
-            out_dir=tmp_path,
+            out_dir=out,
+            ledger_path=ledger,
             state=(True, []),
-            collect_fn=lambda *a: inp,
+            collect_fn=collect,
+            commit_fn=lambda: ("abc1234", False),
+            today=date(2026, 11, 1),
             **kw,
+        )
+    assert order == ["data", "ledger row"]  # the row is written before any result exists
+    assert md.exists() and js.exists() and "abc1234" in md.read_text(encoding="utf-8")
+    text = ledger.read_text(encoding="utf-8")
+    assert text.index("fd-protocol-v1 layer 1") < text.index("## Prod")  # inside the local-data table
+    with pytest.raises(fd.RunRefusedError, match="runs once"):
+        fd.run(
+            None, first_start=first, last_end=last, out_dir=out, ledger_path=ledger, state=(True, []), **kw
+        )
+    md.unlink()
+    js.unlink()
+    with pytest.raises(fd.RunRefusedError, match="ledger"):  # deleting the report does not allow a re-run
+        fd.run(
+            None, first_start=first, last_end=last, out_dir=out, ledger_path=ledger, state=(True, []), **kw
         )
 
 
@@ -453,32 +588,21 @@ def test_git_guard_needs_the_tag_in_heads_history_and_unchanged_files(tmp_path):
 # ---------------------------------------------------------------- the 15-day defaults are untouched
 
 
-def test_portfolio_sim_without_hold_bars_is_unchanged():
+def test_portfolio_sim_exit_plan_scripts_each_exit_and_none_holds_to_the_end():
     from swing_trade_ml.brain.portfolio_sim import Pick, simulate
 
     days = _weekdays(date(2024, 3, 1), 60)
-    bars = {"A": _bars(days, [100.0 * 1.003**i for i in range(60)], spread=0.01)}
-    picks = [Pick(days[0], "A", 1.0, "x"), Pick(days[20], "A", 1.0, "x")]
-    plain = simulate(picks, bars, days, capital=1_000_000.0)
-    same = simulate(picks, bars, days, capital=1_000_000.0, hold_bars=lambda s, d: None)
-    assert plain.summary() == same.summary() and plain.closed == same.closed
-
-
-def test_portfolio_sim_hold_bars_sets_each_positions_own_holding_time():
-    from swing_trade_ml.brain.portfolio_sim import Pick, simulate
-
-    days = _weekdays(date(2024, 3, 1), 60)
-    bars = {"A": _bars(days, [100.0] * 60)}
+    bars = {"A": _bars(days, [100.0] * 60), "B": _bars(days, [100.0] * 60)}
+    plans = {("A", days[0]): (days[7], 103.0, "target")}
     r = simulate(
-        [Pick(days[0], "A", 1.0, "x")],
+        [Pick(days[0], "A", 1.0, "x"), Pick(days[0], "B", 0.5, "y")],
         bars,
         days,
         capital=1_000_000.0,
-        horizon=fd.NEVER,
-        half_out=math.inf,
-        hold_bars=lambda s, d: 7,
+        exit_plan=lambda s, d: plans.get((s, d)),
     )
-    assert r.closed[0].status == "timeout" and r.closed[0].exit_day == days[7]
+    assert [(t.symbol, t.exit_day, t.status) for t in r.closed] == [("A", days[7], "target")]
+    assert r.closed[0].net_return > 0.02 and r.still_open == 1  # B has no plan: still held
 
 
 def test_walk_forward_defaults_are_the_frozen_15_day_rule():

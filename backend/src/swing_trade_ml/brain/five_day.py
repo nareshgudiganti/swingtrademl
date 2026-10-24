@@ -5,15 +5,18 @@
 Spec: `docs/superpowers/specs/2026-10-24-five-day-protocol.md` (signed 2026-10-24). Read-only evidence
 tool, the 5-day twin of `walk_forward` (wf-protocol-v1, which stays exactly as it was):
 
-- The model's question and the trade are kept apart. Each fold's model learns "+2% (before -4%)
-  within 5 trading days", as the prod models do. Every trade is scored the way prod runs it: enter at
-  the next day's open, +2% target / -4% stop, no half-out (the +2% target always comes first), held
-  up to the 30-calendar-day time stop, costs and slippage as today. The 30 calendar days become a
-  number of bars per trade: up to the last trading day on or before entry day + 30, from the days
-  the market really traded. Daily candles cannot say whether target or stop came first on one day:
-  that counts as the stop.
-- The same trade closed at the end of day 5 (what the label asks) is reported alongside, never
-  counted for pass or fail.
+- The model's question and the trade are kept apart. Each fold's model learns the ENDPOINT question
+  the active prod models (ids 2, 16, 17) were trained on: is the close 5 trading days later at least
+  +2% above today's close? (`ml/train.train_model(label_kind="endpoint")`.) Every trade is scored as
+  prod runs it (D1), on daily bars:
+  enter at the next day's open; target +2% and stop -4% from the decision day's close (as
+  `strategies/ml_swing.py` sets them); stop checked before target, so a day touching both is the
+  stop; prod's trailing stop; no half-out (the +2% target always comes first); sold at the next open
+  after a close where the fold model scores the stock at or below ML_EXIT_CONFIDENCE (0.35); time
+  stop at the open of the first trading day on or after entry + 30 calendar days (prod's first exit
+  check once 30 days have passed), from the days the market really traded; costs and slippage.
+  Every choice is written in the protocol's "Clarifications recorded before the tag".
+- The same trade sold at the close of day 5 at the latest is reported alongside, never counted.
 - Two pick modes (owner decision D2): the best 5 by model score for the skill part; the prod buy rule
   of `strategies/ml_swing.py` (score >= ML_MIN_CONFIDENCE, +0.10 when NIFTY is in a downtrend, the
   liquidity, volatility and falling-knife filters, all point-in-time) for the money part.
@@ -31,7 +34,6 @@ from __future__ import annotations
 
 import bisect
 import json
-import math
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date, timedelta
@@ -41,7 +43,7 @@ import pandas as pd
 
 from swing_trade_ml.brain import walk_forward as wf
 from swing_trade_ml.brain.horizon_grid import _group, _index_after, summarise, top_k_by_day
-from swing_trade_ml.brain.replay_scoring import NORMAL, CostStress, StrictOutcome, strict_score
+from swing_trade_ml.brain.replay_scoring import NORMAL, CostStress, StrictOutcome
 from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.services.exit_policy import DEFAULT_TIME_STOP_DAYS
 
@@ -50,7 +52,12 @@ log = get_logger(__name__)
 PROTOCOL_VERSION = "fd-protocol-v1"
 TAG = PROTOCOL_VERSION  # the owner tags the merge commit with this name; no real run before it
 SPEC = "docs/superpowers/specs/2026-10-24-five-day-protocol.md"
-FROZEN_FILES = ("backend/src/swing_trade_ml/brain/five_day.py", SPEC)  # must equal the tagged version
+# Must equal the tagged version: the tool, the protocol, and the trainer that builds the endpoint label.
+FROZEN_FILES = (
+    "backend/src/swing_trade_ml/brain/five_day.py",
+    SPEC,
+    "backend/src/swing_trade_ml/ml/train.py",
+)
 CONFIRMATION = (date(2023, 7, 1), date(2025, 1, 31))  # section 5: the only pass-or-fail sample
 OUT_DIR = "docs/brain/evidence/fd_v1"
 
@@ -63,7 +70,6 @@ HOLD_BLOCK = 21  # trading days per bootstrap block for the 30-calendar-day hold
 DAY5_BLOCK = 5  # ... and for the day-5 variant
 LOAD_EXTRA_DAYS = 60  # calendar days of prices loaded after the last test day so its trades can finish
 PORTFOLIO_CAPITAL = 1_000_000.0  # as phase_b (evidence-defs-v2)
-NEVER = 10**9  # "no fixed bar count": the per-trade hold decides
 RULES_ONLY_MISSING = "missing: waits for tv7 to name the official 'rules only' yardstick (D5)"
 
 
@@ -178,9 +184,25 @@ def buy_rule_picks(
     return picks, {"days": len(days), "bear_days": bear_days, "nifty_unknown_days": unknown}
 
 
-# ---------------------------------------------------------------- holding time and outcomes
+# ---------------------------------------------------------------- holding time and outcomes (as prod runs)
 
 OPEN = StrictOutcome("open", None, None, False, False, None)
+
+
+@dataclass(frozen=True, slots=True)
+class Exit:
+    day: date
+    price: float  # before the sell's slippage and charges
+    reason: str  # target | stop | timeout (time stop) | confidence (model score fell)
+
+
+def prod_exit_confidence() -> float:
+    """The score at or below which prod's ml_swing sells a held stock: `exit_policy.exit_confidence_for`
+    -> `real_question.exit_confidence()` -> ML_EXIT_CONFIDENCE with the real-question switch off (prod),
+    read as the code default (0.35) so a local .env cannot move it. Prod strategy rows set no override."""
+    from swing_trade_ml.core.config import Settings
+
+    return float(Settings.model_fields["ML_EXIT_CONFIDENCE"].default)
 
 
 def trading_calendar(bars: Mapping[str, pd.DataFrame], *extra: pd.DataFrame) -> list[date]:
@@ -190,104 +212,151 @@ def trading_calendar(bars: Mapping[str, pd.DataFrame], *extra: pd.DataFrame) -> 
     return sorted(seen)
 
 
-def hold_end(entry: date, calendar: Sequence[date], days: int = TIME_STOP_DAYS) -> date | None:
-    """Last trading day on or before `entry` + `days` calendar days; None while the calendar does
-    not yet reach that date (the trade cannot be finished yet)."""
-    limit = entry + timedelta(days=days)
-    if not calendar or calendar[-1] < limit:
-        return None
-    i = bisect.bisect_right(calendar, limit) - 1
-    return max(calendar[i], entry)
+def time_stop_day(entry: date, calendar: Sequence[date], days: int = TIME_STOP_DAYS) -> date | None:
+    """Prod's time stop: the first exit check once `days` calendar days have passed since the buy,
+    i.e. the first trading day on or after `entry` + `days`; the sale is at that day's open. None
+    while the calendar does not reach that far."""
+    i = bisect.bisect_left(calendar, entry + timedelta(days=days))
+    return calendar[i] if i < len(calendar) else None
 
 
-def hold_bars(bar_days: Sequence[date], k: int, calendar: Sequence[date]) -> int | None:
-    """Bars a trade entering at `bar_days[k]` may be held: that day through `hold_end`."""
-    end = hold_end(bar_days[k], calendar)
-    if end is None:
-        return None
-    return bisect.bisect_right(bar_days, end) - k
+def weak_days(scores: Mapping[str, Mapping[date, float]], line: float | None = None) -> dict[str, set[date]]:
+    """Per stock, the days whose close-of-day model score is at or below the exit line."""
+    line = prod_exit_confidence() if line is None else line
+    return {s: {d for d, p in per.items() if p <= line} for s, per in scores.items()}
 
 
-def outcomes_hold(
+def score_trade(
+    df: pd.DataFrame,
+    k: int,
+    *,
+    ref_close: float,
+    sell_open_at: int | None = None,
+    open_reason: str = "timeout",
+    sell_close_at: int | None = None,
+    stress: CostStress = NORMAL,
+    trail: bool = True,
+) -> tuple[StrictOutcome, Exit | None]:
+    """One trade as prod manages it, on daily bars. Buy at the open of bar `k` (the day after the
+    decision). Levels come from the decision day's close (`ref_close`), as `strategies/ml_swing.py`
+    sets them: target +2%, stop -4%. Each bar, in prod's order (`services/execution.check_exits`):
+    the stop (a gap fills at the open), then the target; a bar touching both is the stop. Then the
+    trailing stop (`execution.trail_stop`): it rises to the highest price so far minus the starting
+    distance (fill - first stop). A daily bar cannot say whether its low came before its high, so a
+    raised stop counts as hit that day only when the close is at or below it (certain), and from the
+    next day otherwise. `sell_open_at`: sell everything at that bar's open (time stop or confidence
+    exit; reported as stop or target if the open is already past one). `sell_close_at`: sell at that
+    bar's close (the day-5 variant). Neither reached before the data ends = still open."""
+    from swing_trade_ml.brain.replay_scoring import POSITION_INR, _sell
+    from swing_trade_ml.services.costs import apply_slippage, compute_charges
+
+    fill = apply_slippage(float(df.iloc[k]["open"]), "BUY") * (1 + stress.extra_slip)
+    qty = POSITION_INR / fill
+    brokerage, taxes = compute_charges(fill * qty, "BUY")
+    cash_in = fill * qty + (brokerage + taxes) * stress.charges_x
+    stop_px, target_px = ref_close * (1 - STOP), ref_close * (1 + TARGET)
+    distance = fill - stop_px
+    highest = fill
+
+    def done(status: str, price: float, i: int, gap: bool) -> tuple[StrictOutcome, Exit]:
+        day = df.iloc[i]["day"]
+        net = _sell(price, qty, stress) / cash_in - 1.0
+        return StrictOutcome(status, net, i - k + 1, False, gap, day), Exit(day, price, status)
+
+    for i in range(k, len(df)):
+        row = df.iloc[i]
+        o, h, lo, c = float(row["open"]), float(row["high"]), float(row["low"]), float(row["close"])
+        if sell_open_at is not None and i == sell_open_at and i > k:
+            status = "stop" if o <= stop_px else "target" if o >= target_px else open_reason
+            return done(status, o, i, status != open_reason)
+        if lo <= stop_px:
+            return done("stop", o if o <= stop_px else stop_px, i, o <= stop_px)
+        if h >= target_px:
+            return done("target", o if o >= target_px else target_px, i, o >= target_px)
+        if trail and distance > 0:
+            highest = max(highest, h)
+            if highest - distance > stop_px:
+                stop_px = highest - distance
+                if c <= stop_px:
+                    return done("stop", stop_px, i, False)
+        if sell_close_at is not None and i == sell_close_at:
+            return done("timeout", c, i, False)
+    return OPEN, None
+
+
+def _first_weak(bar_days: Sequence[date], k: int, weak: set[date], upto: int) -> int | None:
+    """First bar index from `k` (before `upto`) whose close scored at or below the exit line."""
+    for i in range(k, min(upto, len(bar_days))):
+        if bar_days[i] in weak:
+            return i
+    return None
+
+
+def outcomes_prod(
     bars: Mapping[str, pd.DataFrame],
     days: Sequence[date],
     calendar: Sequence[date],
+    weak: Mapping[str, set[date]],
     *,
-    target: float = TARGET,
-    stop: float = STOP,
+    variant: str = "hold",
     stress: CostStress = NORMAL,
-) -> dict[tuple[str, date], StrictOutcome]:
-    """Prod's trade for every stock and decision day: next open, +target / -stop, no half-out,
-    held up to the 30-calendar-day time stop (then sold at that day's close)."""
-    out: dict[tuple[str, date], StrictOutcome] = {}
+) -> tuple[dict[tuple[str, date], StrictOutcome], dict[tuple[str, date], Exit]]:
+    """Every stock and decision day. `variant="hold"`: prod's trade, up to the 30-calendar-day time
+    stop (sold at the open of the first trading day on or after entry + 30) or the model-confidence
+    exit (sold at the next open after a close scoring at or below 0.35), whichever comes first.
+    `variant="day5"`: the same trade, sold at the close of day 5 at the latest (reported only)."""
+    outs: dict[tuple[str, date], StrictOutcome] = {}
+    exits: dict[tuple[str, date], Exit] = {}
     for sym, df in bars.items():
         bar_days = list(df["day"])
-        have = set(bar_days)
+        pos = {d: i for i, d in enumerate(bar_days)}
+        w = weak.get(sym, set())
         for day in days:
-            if day not in have:
+            if day not in pos:
                 continue
             k = _index_after(bar_days, day)
             if k is None:
                 continue
-            n = hold_bars(bar_days, k, calendar)
-            if n is None:
-                out[(sym, day)] = OPEN
-                continue
-            out[(sym, day)] = strict_score(
-                df.iloc[k : k + n], horizon=n, target=target, stop=stop, half_out=None, stress=stress
-            )
-    return out
-
-
-def outcomes_day5(
-    bars: Mapping[str, pd.DataFrame],
-    days: Sequence[date],
-    *,
-    target: float = TARGET,
-    stop: float = STOP,
-    stress: CostStress = NORMAL,
-) -> dict[tuple[str, date], StrictOutcome]:
-    """The reported-only variant: the same trade, closed at the end of day 5 at the latest."""
-    out: dict[tuple[str, date], StrictOutcome] = {}
-    for sym, df in bars.items():
-        bar_days = list(df["day"])
-        have = set(bar_days)
-        for day in days:
-            if day not in have:
-                continue
-            k = _index_after(bar_days, day)
-            if k is not None:
-                out[(sym, day)] = strict_score(
-                    df.iloc[k : k + DAY5_BARS],
-                    horizon=DAY5_BARS,
-                    target=target,
-                    stop=stop,
-                    half_out=None,
-                    stress=stress,
-                )
-    return out
+            ref = float(df.iloc[pos[day]]["close"])
+            if variant == "day5":
+                last = k + DAY5_BARS - 1
+                j = _first_weak(bar_days, k, w, last)
+                if j is not None:
+                    o, e = score_trade(
+                        df, k, ref_close=ref, sell_open_at=j + 1, open_reason="confidence", stress=stress
+                    )
+                else:
+                    o, e = score_trade(df, k, ref_close=ref, sell_close_at=last, stress=stress)
+            else:
+                t = time_stop_day(bar_days[k], calendar)
+                jt = bisect.bisect_left(bar_days, t) if t is not None else None
+                if jt is not None and jt >= len(bar_days):
+                    jt = None
+                j = _first_weak(bar_days, k, w, jt if jt is not None else len(bar_days))
+                if j is not None and (jt is None or j + 1 < jt):
+                    o, e = score_trade(
+                        df, k, ref_close=ref, sell_open_at=j + 1, open_reason="confidence", stress=stress
+                    )
+                else:
+                    o, e = score_trade(df, k, ref_close=ref, sell_open_at=jt, stress=stress)
+            outs[(sym, day)] = o
+            if e is not None:
+                exits[(sym, day)] = e
+    return outs, exits
 
 
 def breakeven_hit_rate(stress: CostStress = NORMAL) -> dict:
     """Share of trades that must reach +2% (the rest hitting -4%) to break even: before costs, and
     after costs and slippage at the cost model's rates."""
-    entry = pd.DataFrame(
-        [{"day": date(2024, 1, 1), "open": 100.0, "high": 100.0, "low": 100.0, "close": 100.0}]
-    )
 
     def one(high: float, low: float) -> float:
-        bar = pd.DataFrame(
-            [{"day": date(2024, 1, 2), "open": 100.0, "high": high, "low": low, "close": 100.0}]
+        df = pd.DataFrame(
+            [
+                {"day": date(2024, 1, 1), "open": 100.0, "high": 100.0, "low": 100.0, "close": 100.0},
+                {"day": date(2024, 1, 2), "open": 100.0, "high": high, "low": low, "close": 100.0},
+            ]
         )
-        o = strict_score(
-            pd.concat([entry, bar], ignore_index=True),
-            horizon=2,
-            target=TARGET,
-            stop=STOP,
-            half_out=None,
-            stress=stress,
-        )
-        return o.net_return
+        return score_trade(df, 1, ref_close=100.0, stress=stress, trail=False)[0].net_return
 
     win, loss = one(110.0, 99.9), one(100.0, 90.0)
     return {
@@ -429,7 +498,8 @@ def _fold_part(picks, everyone, momentum, hold, d5, everyone5, nifty, *, block_d
     }
 
 
-def _account(picks: Mapping[date, list[str]], scores, bars, pdays, calendar, buckets, *, seed_picks=None):
+def _account(picks: Mapping[date, list[str]], scores, bars, pdays, buckets, exits, *, seed_picks=None):
+    """One account (portfolio_sim) whose positions leave exactly when the per-idea scoring says."""
     from swing_trade_ml.brain.phase_b import _risk
     from swing_trade_ml.brain.portfolio_sim import Pick, simulate
 
@@ -440,28 +510,18 @@ def _account(picks: Mapping[date, list[str]], scores, bars, pdays, calendar, buc
             for d, syms in sorted(picks.items())
             for i, s in enumerate(syms)
         ]
-    days_of = {s: list(df["day"]) for s, df in bars.items()}
 
-    def hold_for(sym: str, entry: date) -> int | None:
-        bd = days_of.get(sym, [])
-        k = bisect.bisect_left(bd, entry)
-        return hold_bars(bd, k, calendar) if k < len(bd) and bd[k] == entry else None
+    def plan(sym: str, day: date):
+        e = exits.get((sym, day))
+        return None if e is None else (e.day, e.price, e.reason)
 
-    r = simulate(
-        chosen,
-        dict(bars),
-        list(pdays),
-        capital=PORTFOLIO_CAPITAL,
-        horizon=NEVER,
-        target=TARGET,
-        stop=STOP,
-        half_out=math.inf,  # no half-out: the +2% target always comes before +5%
-        hold_bars=hold_for,
-    )
+    r = simulate(chosen, dict(bars), list(pdays), capital=PORTFOLIO_CAPITAL, exit_plan=plan)
     return _risk(r)
 
 
-def portfolio_level(inp: Inputs, top5, rule, momentum, everyone, days, calendar, *, draws: int) -> dict:
+def portfolio_level(
+    inp: Inputs, top5, rule, momentum, everyone, days, calendar, exits, *, draws: int
+) -> dict:
     """Reported only: each pick mode and the evidence-defs-v2 accounts through one account each
     (ladder limits, sector cap, top-5-a-day, 15% halt, costs), with the 5-day trade rule."""
     import statistics
@@ -477,17 +537,17 @@ def portfolio_level(inp: Inputs, top5, rule, momentum, everyone, days, calendar,
             {},
             inp.bars,
             pdays,
-            calendar,
             inp.buckets,
+            exits,
             seed_picks=random_picks(pool, dict.fromkeys(pool, TOP_K), RANDOM_SEED + n, dict(inp.buckets)),
         )
         for n in range(draws)
     ]
     rets = [r["final_net_return"] for r in runs]
     return {
-        "best_5": _account(top5, inp.scores, inp.bars, pdays, calendar, inp.buckets),
-        "buy_rule": _account(rule, inp.scores, inp.bars, pdays, calendar, inp.buckets),
-        "momentum_5": _account(momentum, {}, inp.bars, pdays, calendar, inp.buckets),
+        "best_5": _account(top5, inp.scores, inp.bars, pdays, inp.buckets, exits),
+        "buy_rule": _account(rule, inp.scores, inp.bars, pdays, inp.buckets, exits),
+        "momentum_5": _account(momentum, {}, inp.bars, pdays, inp.buckets, exits),
         "random_5_accounts": {
             "runs": draws,
             "final_net_return_median": statistics.median(rets) if rets else None,
@@ -522,8 +582,9 @@ def evaluate(
     first, last = inp.folds[0].start, inp.folds[-1].end
     days = sorted({d for df in inp.bars.values() for d in df["day"] if first <= d <= last})
     calendar = trading_calendar(inp.bars, inp.nifty)
-    hold = outcomes_hold(inp.bars, days, calendar)
-    d5 = outcomes_day5(inp.bars, days)
+    weak = weak_days(inp.scores)
+    hold, exits = outcomes_prod(inp.bars, days, calendar, weak)
+    d5, _ = outcomes_prod(inp.bars, days, calendar, weak, variant="day5")
     everyone = {d: sorted(s for (s, dd) in hold if dd == d) for d in days}
     everyone5 = {d: sorted(s for (s, dd) in d5 if dd == d) for d in days}
     top5 = top_k_by_day(inp.scores, days, TOP_K)
@@ -587,7 +648,7 @@ def evaluate(
 
     stress_rows = []
     for st in stresses:
-        h = hold if st == NORMAL else outcomes_hold(inp.bars, days, calendar, stress=st)
+        h = hold if st == NORMAL else outcomes_prod(inp.bars, days, calendar, weak, stress=st)[0]
         stress_rows.append(
             {
                 "costs": st.label,
@@ -609,9 +670,14 @@ def evaluate(
         "counts_for_pass_fail": confirmation,
         "window": [first.isoformat(), last.isoformat()],
         "rule": {
-            "label": f"+{TARGET:.0%} (before -{STOP:.0%}) within {LABEL_HORIZON} trading days",
-            "trade": f"next open, +{TARGET:.0%} / -{STOP:.0%}, no half-out, held up to {TIME_STOP_DAYS} calendar days (last trading day on or before entry + {TIME_STOP_DAYS}), costs and slippage",
-            "variant": f"the same trade closed at the end of day {DAY5_BARS} (reported only)",
+            "label": f"endpoint: close {LABEL_HORIZON} trading days later at least +{TARGET:.0%} above the decision day's close (as prod models 2, 16, 17)",
+            "trade": (
+                f"next open; +{TARGET:.0%} target / -{STOP:.0%} stop from the decision day's close; trailing stop; "
+                f"no half-out; sold at the next open after a close scoring at or below {prod_exit_confidence():.2f}; "
+                f"time stop at the open of the first trading day on or after entry + {TIME_STOP_DAYS} calendar days; "
+                "costs and slippage"
+            ),
+            "variant": f"the same trade sold at the close of day {DAY5_BARS} at the latest (reported only)",
             "same_day": "target and stop on the same day count as the stop",
             "blocks": {"hold": HOLD_BLOCK, "day5": DAY5_BLOCK},
             "buy_rule": _rule_dict(prod_buy_rule()),
@@ -626,10 +692,22 @@ def evaluate(
         "breakeven": breakeven_hit_rate(),
         "cost_stress": stress_rows,
         "portfolio": portfolio_level(
-            inp, top5, rule, momentum, everyone, days, calendar, draws=portfolio_draws
+            inp, top5, rule, momentum, everyone, days, calendar, exits, draws=portfolio_draws
         ),
+        "exit_reasons": _reasons(top5, rule, hold),
         "layer2": "not built: the forward test waits for the owner's D6 / tv22 decision",
     }
+
+
+def _reasons(top5, rule, hold) -> dict:
+    """How the finished trades ended, per pick mode (target, stop, timeout, confidence)."""
+    from collections import Counter
+
+    out = {}
+    for name, picks in (("best_5", top5), ("buy_rule", rule)):
+        c = Counter(hold[(s, d)].status for d, syms in picks.items() for s in syms if (s, d) in hold)
+        out[name] = dict(sorted(c.items()))
+    return out
 
 
 def _rule_dict(r: BuyRule) -> dict:
@@ -645,10 +723,12 @@ LIMITS = (
     "Daily candles cannot say whether target or stop came first on the same day: counted as the stop.",
     "Layer 1 has no account: every buy-rule idea is scored on its own (no slot limit, no 'already held', "
     "no risk sizing). The account replay below is reported only.",
-    "Not modelled from prod: the trailing stop, the model-confidence exit (score at or below 0.35), "
-    "stop and target set from the decision day's close rather than the fill, and the time stop firing at "
-    "the first check after 30 days (here: the close of the last trading day on or before day 30).",
-    "The tested model is retrained per fold on the same question; it is not the exact model in prod.",
+    "Daily candles only: prod checks exits every minute; here a raised trailing stop counts on the day it "
+    "rises only when the close is at or below it, and exits at an open use the open price.",
+    "Prod scores with 3 cap-tier models (main, midcap, smallcap); this tool trains one endpoint model per "
+    "fold on the 49 stocks, like the 15-day protocol. It is not the exact model in prod.",
+    "A trade decided near a fold's end is watched for the confidence exit by the next fold's model (the "
+    "last fold's model after the sample ends), as prod watches with whichever model is active.",
     "The v1 bot and the brain share the paper account's slots, so forward results are not independent until D6.",
     "A pass never justifies live trading. Layer 2, manual approval and the owner's go-live call come first.",
 )
@@ -740,7 +820,10 @@ def plain_report(result: dict, manifest: dict | None = None) -> str:
         f"Buy rule: {mo['days_with_picks']} days with picks; {mo['days']['bear_days']} of {mo['days']['days']} "
         f"days with the +10-point NIFTY downtrend boost ({mo['days']['nifty_unknown_days']} with NIFTY unknown, counted as downtrend).",
         "",
-        "## Reported only: the same 5-day trade closed at the end of day 5 (never in pass or fail)",
+        "How the finished 5-day trades ended (target / stop incl. trailing / time stop / confidence exit): "
+        f"best 5 {result['exit_reasons']['best_5']}; buy rule {result['exit_reasons']['buy_rule']}.",
+        "",
+        "## Reported only: the same 5-day trade sold at the close of day 5 at the latest (never in pass or fail)",
         "",
         "| 5-day, closed at day 5 | Picks: trades | avg per trade | Every stock avg | Edge per day | Lower bound (5-day blocks) |",
         "|---|---|---|---|---|---|",
@@ -926,8 +1009,9 @@ def _train(db, cutoff: date):
         cutoff=cutoff,
         horizon_days=LABEL_HORIZON,
         target_return=TARGET,
-        stop_return=STOP,
+        stop_return=None,
         auto_activate=False,
+        label_kind="endpoint",
     )
 
 
@@ -985,8 +1069,11 @@ def collect(
         for i in instruments:
             if i.tradingsymbol not in scores:
                 continue
+            # Picks use only the fold's own days. The last fold's model also scores the days after
+            # the sample, so trades still open then can meet the confidence exit as in prod.
+            hi = fold.end if fold is not folds[-1] else upto
             for d, p in score_fn(db, i, model, fold.cutoff).items():
-                if fold.start <= d <= fold.end:
+                if fold.start <= d <= hi:
                     scores[i.tradingsymbol][d] = p
     return Inputs(
         bars=bars,
@@ -1004,20 +1091,62 @@ def _commit() -> tuple[str, bool]:
     return git_commit()
 
 
+LEDGER_MARKER = "fd-protocol-v1 layer 1, {first} to {last}"
+
+
+def ledger_row(first: date, last: date, *, run_day: date, report_name: str) -> str:
+    return (
+        f"| {first.isoformat()} to {last.isoformat()} (49 stocks) | "
+        f"{LEDGER_MARKER.format(first=first, last=last)}: 5-day model (endpoint label) and prod trade rule, "
+        "best 5 and prod buy rule, benchmarks; run once | Owner's decision: to be written after reading | "
+        f"{run_day.isoformat()} | `fd_v1/{report_name}` |"
+    )
+
+
+def add_ledger_row(path: Path, first: date, last: date, *, run_day: date, report_name: str) -> None:
+    """Add the run's row to the ledger's local-data table before any result exists (protocol C13).
+    A window that already has a row has had its one run: refuse."""
+    text = path.read_text(encoding="utf-8")
+    if LEDGER_MARKER.format(first=first, last=last) in text:
+        raise RunRefusedError(
+            f"{PROTOCOL_VERSION} refused: {first} to {last} already has a row in the exposure ledger, "
+            "so it has had its one run."
+        )
+    lines = text.splitlines()
+    start = next(i for i, ln in enumerate(lines) if ln.startswith("## Local data"))
+    end = next((i for i in range(start + 1, len(lines)) if lines[i].startswith("## ")), len(lines))
+    last_row = max(i for i in range(start, end) if lines[i].startswith("|"))
+    lines.insert(last_row + 1, ledger_row(first, last, run_day=run_day, report_name=report_name))
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+
+
 def run(
     db,
     *,
     first_start: date,
     last_end: date,
     out_dir: Path,
+    ledger_path: Path | None = None,
     state: tuple[bool, list[str]] | None = None,
     collect_fn: Callable = collect,
     commit_fn: Callable = _commit,
+    today: date | None = None,
     **eval_kw,
 ) -> tuple[Path, Path]:
-    """The one real run: guard first, then data, models and scoring, then the report."""
+    """The one real run: guard, data and fold models, the exposure-ledger row, and only then the
+    scoring and the report."""
+    from swing_trade_ml.brain.phase_b import ist_today
+    from swing_trade_ml.core.config import REPO_ROOT
+
     check_run_allowed(out_dir, first_start, last_end, state=state)
+    ledger_path = ledger_path or REPO_ROOT / "docs" / "brain" / "EXPOSURE-LEDGER.md"
+    if LEDGER_MARKER.format(first=first_start, last=last_end) in ledger_path.read_text(encoding="utf-8"):
+        raise RunRefusedError(
+            f"{PROTOCOL_VERSION} refused: the exposure ledger shows this window already ran."
+        )
     inp = collect_fn(db, first_start, last_end)
+    md_name = output_paths(out_dir, first_start, last_end)[0].name
+    add_ledger_row(ledger_path, first_start, last_end, run_day=today or ist_today(), report_name=md_name)
     result = evaluate(inp, **eval_kw)
     commit, dirty = commit_fn()
     manifest = {
@@ -1055,8 +1184,10 @@ def dry_run_plan(
             else "not the confirmation sample (reported only)."
         ),
         f"{len(folds)} folds: " + ", ".join(f"{f.start}..{f.end}" for f in folds),
-        f"Label +{TARGET:.0%} before -{STOP:.0%} within {LABEL_HORIZON} trading days; trade +{TARGET:.0%} / -{STOP:.0%}, "
-        f"held up to {TIME_STOP_DAYS} calendar days; day-{DAY5_BARS} close reported only.",
+        f"Label (endpoint): close {LABEL_HORIZON} trading days later at least +{TARGET:.0%} above today's close. "
+        f"Trade +{TARGET:.0%} / -{STOP:.0%} from the decision close, trailing stop, confidence exit at or below "
+        f"{prod_exit_confidence():.2f}, time stop at the open on or after entry + {TIME_STOP_DAYS} calendar days; "
+        f"day-{DAY5_BARS} close reported only.",
         f"Buy rule: {_rule_dict(prod_buy_rule())}",
         "A real run is "
         + ("allowed." if not reasons else "refused:\n" + "\n".join(f"- {r}" for r in reasons)),

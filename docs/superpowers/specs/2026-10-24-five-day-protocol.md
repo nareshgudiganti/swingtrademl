@@ -46,9 +46,9 @@ Passing either part never counts toward the brain's M18 gate, and never makes tr
 
 | Setting | Proposed value |
 |---|---|
-| Trade rule scored (D1) | next-day open entry, **+2% target / −4% stop, held up to 30 calendar days**, costs and slippage (= what prod runs) |
+| Trade rule scored (D1) | next-day open entry, **+2% target / −4% stop, held up to 30 calendar days**, costs and slippage (= what prod runs; exact reading in section 11) |
 | Also reported, never counted (D1) | the same trade closed at the end of day 5 (= what the model's question says) |
-| Model labels | +2% within 5 trading days (as the prod models) |
+| Model labels | **endpoint**: the close 5 trading days later is at least +2% above the decision day's close, no stop in the label (as the active prod models 2, 16, 17; section 11) |
 | Picks per day (D2) | **best 5 by model score** for the skill part; the prod buy rule (≥ 60% + filters) for the money part |
 | Fold length / retrain | 28 calendar days / once per fold (as 15-day) |
 | Confidence blocks | 5 trading days for the 5-day exit; 21 trading days for the 30-calendar-day hold |
@@ -101,6 +101,12 @@ hit rate needed to break even, worst fold, worst fall, and the limits below.
 - The v1 bot and the brain share the paper account's slots today, so forward results are not independent
   until D6 is decided.
 - A pass never justifies live trading. Manual approval and the owner's go-live call still come first.
+- Prod scores with 3 cap-tier models (`ml_swing_main`, `ml_swing_midcap`, `ml_swing_smallcap`); the tool
+  trains one endpoint model per fold on the 49 stocks, like the 15-day protocol. It is not the exact model in
+  prod, and it uses today's feature set, which may differ from the one the prod models were trained with.
+- Layer 1 scores every buy-rule idea on its own: no slot limit, no "already held", no risk sizing. The account
+  replay in the report is reported only.
+- Daily candles only: prod checks exits every minute. Section 11 says how each exit is read from a daily bar.
 
 ## 9. Owner decisions (signed 2026-10-24)
 
@@ -134,7 +140,29 @@ Signed by the owner on 2026-10-24 ("go ahead" on the recommendations above):
    **Built 2026-10-24:** `backend/src/swing_trade_ml/brain/five_day.py` (tests `backend/tests/test_brain_five_day.py`).
    Run (backend/): `python -m swing_trade_ml.brain.five_day --from 2023-07-01 --to 2025-01-31`
    (or `python -m swing_trade_ml.brain.walk_forward --protocol fd-protocol-v1 ...`). It refuses unless the tag
-   `fd-protocol-v1` is in HEAD's history, this file and the tool are unchanged since the tag, and no report exists yet.
+   `fd-protocol-v1` is in HEAD's history, this file, the tool and `ml/train.py` are unchanged since the tag, and
+   neither a report nor an exposure-ledger row exists yet for the window. Settings as run: section 11.
 3. Merge this file and the tool change to main; tag that merge commit `fd-protocol-v1`.
 4. Run layer 1 once on the confirmation sample. Start the forward clock. No re-runs with changed settings.
 5. Any later change is `fd-protocol-v2`; old results stay on record. Output goes to `docs/brain/evidence/fd_v1/`.
+
+## 11. Clarifications recorded before the tag (2026-10-24)
+
+Written after the tool was built and checked against prod (read-only, 24 Oct), before any 5-day result
+exists. They make D1 ("as prod runs") exact. They are part of the frozen protocol.
+
+| # | Item | Fixed as |
+|---|---|---|
+| C1 | Model label | **Endpoint**, as the 3 active prod models (ids 2, 16, 17: `label_kind` endpoint, horizon 5, target 0.02, no stop): the close 5 trading days later at least +2% above the decision day's close. Built with `ml/train.train_model(label_kind="endpoint")`: same features, rows and cutoff as the barrier label, answer = `forward_return >= 0.02` (the endpoint rule `ml/predict.py` evaluates). One model per 28-day fold, cutoff = the day before the fold. |
+| C2 | Trade levels | Target +2%, stop −4%, measured from the **decision day's close**, as `strategies/ml_swing.py` sets them (not from the fill). Bought at the next day's open (with slippage). No half-out: the +2% target always comes before +5%. |
+| C3 | Order inside a day | As `services/execution.check_exits`: stop first (a gap below it fills at the open), then target (a gap above fills at the open). A day touching both target and stop is the **stop**. |
+| C4 | Trailing stop | Mirrored (`execution.trail_stop`): the stop rises to the highest price so far minus the starting distance (fill − first stop). A daily bar cannot say whether its low came before its high, so a stop raised by a day's high counts as hit that day only if that day's **close** is at or below it (then it was surely crossed); otherwise it applies from the next day. Sold at the raised stop. |
+| C5 | Model-confidence exit | Mirrored: when the fold's model scores a held stock at or below **0.35** at a close (`ML_EXIT_CONFIDENCE`, via `exit_policy.exit_confidence_for` / `real_question.exit_confidence` with the real-question switch off, as in prod), the stock is sold at the **next open**. Each day is scored by its own fold's model; days after the sample by the last fold's model. Applied to every stock, so every-stock and the other benchmarks follow the same rule. |
+| C6 | Time stop | Sold at the **open of the first trading day on or after entry day + 30 calendar days** (prod's first exit check once 30 days have passed). If that open is already past the stop or target it is recorded as stop or target. |
+| C7 | Day-5 variant (reported only) | The same trade (C2–C5), sold at the close of day 5 at the latest. Confidence blocks of 5 trading days. |
+| C8 | Trading calendar | The days the market really traded, from the candles (any of the 49 stocks or NIFTY has a bar). The app's NSE holiday list starts in 2025 and is not used. |
+| C9 | Buy rule numbers | The code defaults of `MLSwingStrategy.default_params` and `ML_MIN_CONFIDENCE`: score ≥ 0.60, +0.10 when NIFTY's 50-day average is below its 200-day average, 20-day average volume ≥ 100,000, 20-day volatility ≤ 6%, ATR above zero, 5-day fall not 8% or more, at least 260 bars. Prod strategy rows 1, 4 and 5 carry only `model_name`: no overrides, so these are what prod runs. Read from code, so a local `.env` cannot change them. |
+| C10 | Missing NIFTY bar | A day without a NIFTY bar counts as a downtrend (the 0.70 line applies; cautious). The report counts such days. |
+| C11 | Fold eligibility per part | Each part counts its own picks: a fold is eligible for skill with ≥ 20 finished best-5 trades, for money with ≥ 20 finished buy-rule trades; both need ≥ 10 test days, where test days = trading days in the fold (as wf-protocol-v1), not days with picks. |
+| C12 | Benchmarks for the money part | Every stock, strongest risers and random 5 are compared on the days the buy rule picked something; NIFTY over the same holding periods as its trades. The skill part compares on every test day. |
+| C13 | Exposure ledger | The tool writes a row to `docs/brain/EXPOSURE-LEDGER.md` at the confirmation run, after the fold models are trained and before any result is scored; a window with a row cannot run again. |

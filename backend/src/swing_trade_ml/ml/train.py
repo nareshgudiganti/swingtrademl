@@ -299,17 +299,10 @@ def train_model(
     walk_forward_folds: int = 0,
     calibrate: bool = False,
     cutoff: date | None = None,
-    label_kind: str = "barrier",
 ) -> MLModel:
     """Train, evaluate on a held-out future window, and register the result.
 
     The returned model is TRAINED, not ACTIVE, unless `auto_activate` is set.
-
-    `label_kind="endpoint"` (evidence tools only, e.g. brain/five_day.py) trains the older
-    question the active 5-day prod models were trained on: is the close at the horizon at least
-    `target_return` above today's close? Same features, rows and cutoff; only the answer column
-    is `forward_return >= target_return` (the endpoint rule `ml/predict.py` evaluates), and the
-    model is recorded as "endpoint" with no stop. The default is unchanged.
     Promotion stays a deliberate act — during the paper phase a new model
     should be inspected before it starts generating signals.
 
@@ -339,11 +332,6 @@ def train_model(
             "No training data. Ingest historical candles first: "
             "POST /api/v1/market-data/backfill"
         )
-    if label_kind == "endpoint":
-        dataset = dataset.assign(target=(dataset["forward_return"] >= target_return).astype(int))
-        stop_return = None
-    elif label_kind != "barrier":
-        raise ValueError(f"label_kind must be 'barrier' or 'endpoint', got {label_kind!r}")
     if len(dataset) < 1000:
         log.warning("train.small_dataset", rows=len(dataset))
 
@@ -395,7 +383,7 @@ def train_model(
             "horizon_days": horizon_days,
             "target_return": target_return,
             "stop_return": stop_return,
-            "label_kind": label_kind,
+            "label_kind": "barrier",
             "calibrated": calibrate,
         },
     )
@@ -415,7 +403,7 @@ def train_model(
         prediction_horizon_days=horizon_days,
         target_return_pct=target_return,
         stop_return_pct=stop_return,
-        label_kind=label_kind,
+        label_kind="barrier",
         accuracy=metrics["accuracy"],
         precision=metrics["precision"],
         recall=metrics["recall"],

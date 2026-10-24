@@ -140,7 +140,7 @@ Signed by the owner on 2026-10-24 ("go ahead" on the recommendations above):
    **Built 2026-10-24:** `backend/src/swing_trade_ml/brain/five_day.py` (tests `backend/tests/test_brain_five_day.py`).
    Run (backend/): `python -m swing_trade_ml.brain.five_day --from 2023-07-01 --to 2025-01-31`
    (or `python -m swing_trade_ml.brain.walk_forward --protocol fd-protocol-v1 ...`). It refuses unless the tag
-   `fd-protocol-v1` is in HEAD's history, this file, the tool and `ml/train.py` are unchanged since the tag, and
+   `fd-protocol-v1` is in HEAD's history, this file, the tool (`five_day.py`, `five_day_train.py`) and `portfolio_sim.py` are unchanged since the tag, and
    neither a report nor an exposure-ledger row exists yet for the window. Settings as run: section 11.
 3. Merge this file and the tool change to main; tag that merge commit `fd-protocol-v1`.
 4. Run layer 1 once on the confirmation sample. Start the forward clock. No re-runs with changed settings.
@@ -153,7 +153,7 @@ exists. They make D1 ("as prod runs") exact. They are part of the frozen protoco
 
 | # | Item | Fixed as |
 |---|---|---|
-| C1 | Model label | **Endpoint**, as the 3 active prod models (ids 2, 16, 17: `label_kind` endpoint, horizon 5, target 0.02, no stop): the close 5 trading days later at least +2% above the decision day's close. Built with `ml/train.train_model(label_kind="endpoint")`: same features, rows and cutoff as the barrier label, answer = `forward_return >= 0.02` (the endpoint rule `ml/predict.py` evaluates). One model per 28-day fold, cutoff = the day before the fold. |
+| C1 | Model label | **Endpoint**, as the 3 active prod models (ids 2, 16, 17: `label_kind` endpoint, horizon 5, target 0.02, no stop): the close 5 trading days later at least +2% above the decision day's close. The label is built in the evidence tool (`brain/five_day_train.py`), not in v1 (`ml/` builds only the barrier label and stays untouched): the old endpoint rule `forward_return >= target` (0.02), as `ml/predict.py` grades endpoint predictions, on v1's own dataset (same features, rows, cutoff and embargo, imported from `ml/dataset.py`), fitted with v1's `ml/train.fit_and_score` (LightGBM, no calibration, test share 0.2). One model per 28-day fold, cutoff = the day before the fold. |
 | C2 | Trade levels | Target +2%, stop −4%, measured from the **decision day's close**, as `strategies/ml_swing.py` sets them (not from the fill). Bought at the next day's open (with slippage). No half-out: the +2% target always comes before +5%. |
 | C3 | Order inside a day | As `services/execution.check_exits`: stop first (a gap below it fills at the open), then target (a gap above fills at the open). A day touching both target and stop is the **stop**. |
 | C4 | Trailing stop | Mirrored (`execution.trail_stop`): the stop rises to the highest price so far minus the starting distance (fill − first stop). A daily bar cannot say whether its low came before its high, so a stop raised by a day's high counts as hit that day only if that day's **close** is at or below it (then it was surely crossed); otherwise it applies from the next day. Sold at the raised stop. |

@@ -202,13 +202,13 @@ def test_breakeven_hit_rate_is_two_in_three_before_costs_and_more_after():
 
 
 def test_fold_models_are_trained_on_the_endpoint_question(monkeypatch):
-    import swing_trade_ml.ml.train as train
+    from swing_trade_ml.brain import five_day_train as fdt
 
     seen = {}
-    monkeypatch.setattr(train, "train_model", lambda db, **kw: seen.update(kw) or "model")
+    monkeypatch.setattr(fdt, "train_endpoint_model", lambda db, **kw: seen.update(kw) or "model")
     assert fd._train(None, date(2023, 6, 30)) == "model"
-    assert seen["label_kind"] == "endpoint" and seen["stop_return"] is None
     assert (seen["horizon_days"], seen["target_return"], seen["cutoff"]) == (5, 0.02, date(2023, 6, 30))
+    assert seen["name"] == "fd_h5_20230630"
 
 
 def _dataset():
@@ -217,25 +217,42 @@ def _dataset():
     )
 
 
-def test_endpoint_label_is_forward_return_at_least_the_target(monkeypatch):
-    import swing_trade_ml.ml.train as train
+def test_endpoint_label_is_forward_return_at_least_the_target():
+    from swing_trade_ml.brain.five_day_train import endpoint_target
+
+    out = endpoint_target(_dataset(), 0.02)
+    assert list(out["target"]) == [0, 1, 0, 1]  # close 5 days later at least +2%; the barrier answer ignored
+    assert list(_dataset()["target"]) == [1, 0, 1, 0]
+
+
+def test_the_wrapper_reuses_v1_dataset_and_split_and_trains_on_the_endpoint_answer(monkeypatch):
+    import swing_trade_ml.ml.dataset as dataset_mod
+    from swing_trade_ml.brain.five_day_train import train_endpoint_model
 
     got = {}
-    monkeypatch.setattr(train, "build_training_dataset", lambda *a, **k: _dataset())
 
-    def stop_here(df, *a, **k):
-        got["target"] = list(df["target"])
+    def build(db, **kw):
+        got["build"] = kw
+        return _dataset()
+
+    def split(df, test_size, embargo_days):
+        got["target"], got["split"] = list(df["target"]), (test_size, embargo_days)
         raise RuntimeError("stop")
 
-    monkeypatch.setattr(train, "chronological_split", stop_here)
+    monkeypatch.setattr(dataset_mod, "build_training_dataset", build)
+    monkeypatch.setattr(dataset_mod, "chronological_split", split)
     with pytest.raises(RuntimeError, match="stop"):
-        train.train_model(None, horizon_days=5, target_return=0.02, label_kind="endpoint")
-    assert got["target"] == [0, 1, 0, 1]  # the close 5 days later at least +2%; the barrier answer ignored
-    with pytest.raises(RuntimeError, match="stop"):
-        train.train_model(None, horizon_days=5, target_return=0.02)
-    assert got["target"] == [1, 0, 1, 0]  # default: the barrier label, unchanged
-    with pytest.raises(ValueError, match="label_kind"):
-        train.train_model(None, label_kind="other")
+        train_endpoint_model(None, name="t", cutoff=date(2023, 6, 30), horizon_days=5, target_return=0.02)
+    assert got["build"]["cutoff"] == date(2023, 6, 30) and got["build"]["horizon_days"] == 5
+    assert got["target"] == [0, 1, 0, 1] and got["split"] == (0.2, 5)
+
+
+def test_v1_training_code_is_untouched():
+    import inspect
+
+    from swing_trade_ml.ml.train import train_model
+
+    assert "label_kind" not in inspect.signature(train_model).parameters
 
 
 # ---------------------------------------------------------------- the prod buy rule

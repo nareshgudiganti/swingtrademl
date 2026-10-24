@@ -7,7 +7,7 @@ tool, the 5-day twin of `walk_forward` (wf-protocol-v1, which stays exactly as i
 
 - The model's question and the trade are kept apart. Each fold's model learns the ENDPOINT question
   the active prod models (ids 2, 16, 17) were trained on: is the close 5 trading days later at least
-  +2% above today's close? (`ml/train.train_model(label_kind="endpoint")`.) Every trade is scored as
+  +2% above today's close? (`brain/five_day_train.py`, next to v1: `forward_return >= target`.) Every trade is scored as
   prod runs it (D1), on daily bars:
   enter at the next day's open; target +2% and stop -4% from the decision day's close (as
   `strategies/ml_swing.py` sets them); stop checked before target, so a day touching both is the
@@ -52,11 +52,12 @@ log = get_logger(__name__)
 PROTOCOL_VERSION = "fd-protocol-v1"
 TAG = PROTOCOL_VERSION  # the owner tags the merge commit with this name; no real run before it
 SPEC = "docs/superpowers/specs/2026-10-24-five-day-protocol.md"
-# Must equal the tagged version: the tool, the protocol, and the trainer that builds the endpoint label.
+# Must equal the tagged version: the tool, its endpoint-label trainer, the account replay and the protocol.
 FROZEN_FILES = (
     "backend/src/swing_trade_ml/brain/five_day.py",
+    "backend/src/swing_trade_ml/brain/five_day_train.py",
+    "backend/src/swing_trade_ml/brain/portfolio_sim.py",
     SPEC,
-    "backend/src/swing_trade_ml/ml/train.py",
 )
 CONFIRMATION = (date(2023, 7, 1), date(2025, 1, 31))  # section 5: the only pass-or-fail sample
 OUT_DIR = "docs/brain/evidence/fd_v1"
@@ -1001,17 +1002,14 @@ def load_bars_with_volume(db, symbols: Sequence[str], upto: date) -> dict[str, p
 
 
 def _train(db, cutoff: date):
-    from swing_trade_ml.ml.train import train_model
+    from swing_trade_ml.brain.five_day_train import train_endpoint_model
 
-    return train_model(
+    return train_endpoint_model(
         db,
         name=f"fd_h{LABEL_HORIZON}_{cutoff:%Y%m%d}",
         cutoff=cutoff,
         horizon_days=LABEL_HORIZON,
         target_return=TARGET,
-        stop_return=None,
-        auto_activate=False,
-        label_kind="endpoint",
     )
 
 

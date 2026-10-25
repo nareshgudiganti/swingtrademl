@@ -22,6 +22,10 @@ import Today from './pages/Today'
 import NewLookShell from './NewLookShell'
 import { useLook, type Look } from './look'
 import Market from './pages/Market'
+import MarketNew from './pages/MarketNew'
+import EvidenceNew from './pages/EvidenceNew'
+import HistoryNew from './pages/HistoryNew'
+import AdminHome from './pages/AdminHome'
 import Opportunities from './pages/Opportunities'
 import Watchlist from './pages/Watchlist'
 import PaperPositions from './pages/PaperPositions'
@@ -277,7 +281,7 @@ export function TradeMindRoutes({
         {/* oa5: one Today page (the old Home + Swing Picks). /trademind/dashboard keeps working: Today at the pick list. */}
         <Route index element={<Today owner={ownerConsole} answerFirst={look === 'new'} />} />
         <Route path="dashboard" element={<Today owner={ownerConsole} focus="picks" />} />
-        <Route path="market" element={<Market />} />
+        <Route path="market" element={look === 'new' ? <MarketNew /> : <Market />} />
         <Route path="opportunities" element={<Opportunities />} />
         <Route path="watchlist" element={ownerConsole ? <Watchlist /> : <Navigate to="/trademind/opportunities" replace />} />
         <Route path="stock/:symbol" element={look === 'new' ? <StockNew /> : <StockDetail />} />
@@ -307,11 +311,13 @@ export function TradeMindRoutes({
         <Route path="ai/:symbol" element={<AIDecision />} />
         <Route path="observatory" element={ownerConsole ? <Observatory /> : <Navigate to="/trademind" replace />} />
         <Route path="risk" element={ownerConsole ? <Risk /> : <Navigate to="/trademind" replace />} />
-        <Route path="learn" element={<Learn />} />
+        <Route path="learn" element={look === 'new' ? <EvidenceNew owner={ownerConsole} /> : <Learn />} />
         <Route path="system" element={ownerConsole ? <System /> : <Navigate to="/trademind" replace />} />
+        {/* New look only: the Admin home (status + safety switches, read only). Classic goes to Control. */}
+        <Route path="admin" element={!ownerConsole ? <Navigate to="/trademind" replace /> : look === 'new' ? <AdminHome /> : <Navigate to="/trademind/control" replace />} />
         <Route path="control" element={ownerConsole ? <Control /> : <Navigate to="/trademind" replace />} />
         <Route path="golive" element={ownerConsole ? <GoLive /> : <Navigate to="/trademind" replace />} />
-        <Route path="records" element={<Records />} />
+        <Route path="records" element={look === 'new' ? <HistoryNew owner={ownerConsole} /> : <Records />} />
         <Route path="holdings" element={ownerConsole && realAccount ? <MyHoldings /> : <Navigate to="/trademind/portfolio" replace />} />
         <Route path="setup" element={ownerConsole ? <Setup /> : <Navigate to="/trademind" replace />} />
         <Route path="jobs" element={ownerConsole ? <Jobs /> : <Navigate to="/trademind" replace />} />

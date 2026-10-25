@@ -39,7 +39,8 @@ export const NAV: NavItem[] = [
     ],
   },
   { id: 'history', label: 'History', pages: [{ to: '/trademind/records', label: 'History' }] },
-  { id: 'admin', label: 'Admin', pages: ADMIN_SECTION.pages, ownerOnly: true },
+  // Wave 3: the new look opens Admin on its status page (/trademind/admin); the classic Admin pages follow.
+  { id: 'admin', label: 'Admin', pages: [{ to: '/trademind/admin', label: 'Status' }, ...ADMIN_SECTION.pages], ownerOnly: true },
 ]
 
 function holds(item: NavItem, path: string): boolean {

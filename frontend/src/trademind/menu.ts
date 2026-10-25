@@ -57,6 +57,8 @@ export const SECTIONS: Section[] = [
     id: 'admin',
     label: 'Admin',
     ownerOnly: true,
+    // The new look's Admin status page (/trademind/admin); the classic look sends it on to Control.
+    also: ['/trademind/admin'],
     pages: [
       { to: '/trademind/control', label: 'Control' },
       { to: '/trademind/golive', label: 'Go-live' },

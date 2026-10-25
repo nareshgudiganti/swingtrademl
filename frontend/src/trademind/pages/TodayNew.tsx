@@ -18,14 +18,13 @@ import { noTradeReason } from '../emptyReasons'
 import { ideasFrom, finalWord, useLatestRun } from '../live'
 import { QueryNotice } from '../PageState'
 import { rankText, scoreRank, SCORE_HINT } from '../scoreText'
-import { WordTag } from '../term'
 import { currentDrawdownPct } from '../live-system'
 import { greeting, oneReason, safetySummary, stoppedByRoom, todayHeadline } from '../today/answerRules'
 import { holdingsNeedingAttention } from '../today/HoldingsNeedsYou'
 import { waitingItems } from '../today/NeedsYou'
 import { ideaCounts } from '../today/TodayIdeas'
 import { BrainGate, inr, StockLogo, Tag } from '../ui'
-import { MARKET_LABEL, MARKET_PLAIN, MARKET_TONE } from '../vocab'
+import { MARKET_LABEL, MARKET_PLAIN, MARKET_TONE, wordTagColor } from '../vocab'
 
 /** The new Today shows the top 3 ideas (owner brief: short, answer first); Discover lists every one. */
 export const TOP_IDEAS_NEW = 3
@@ -157,7 +156,7 @@ function TopIdeas({ run }: { run: BrainRun }) {
                   </span>
                 </span>
                 <span className="tmn-idea-side">
-                  <WordTag word={finalWord(d)} />
+                  <span className={`tm-tag tm-tag-${wordTagColor(finalWord(d))}`}>{finalWord(d)}</span>
                   {rank && (
                     <span className="tmn-small tm-dim" title={SCORE_HINT}>
                       {rankText(rank)}

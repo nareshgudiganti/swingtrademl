@@ -282,6 +282,24 @@
   border-color: #f0d29b;
 }
 
+.tm-new .tm-asof {
+  color: var(--tm-dim);
+  border-color: var(--tm-line-strong);
+  background: #ffffff;
+}
+
+.tm-new .tm-asof-open {
+  color: var(--tm-green);
+  border-color: #bfe5cd;
+  background: var(--tmn-accent-soft);
+}
+
+.tm-new .tm-asof-stale {
+  color: var(--tm-amber);
+  border-color: #f0d29b;
+  background: #fff7e8;
+}
+
 .tm-new .tm-zchip-ok,
 .tm-new .tm-status-chip-ok {
   color: var(--tm-green);

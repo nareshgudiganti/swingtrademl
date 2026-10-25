@@ -19,13 +19,16 @@ import { ideasFrom, finalWord, useLatestRun } from '../live'
 import { QueryNotice } from '../PageState'
 import { rankText, scoreRank, SCORE_HINT } from '../scoreText'
 import { WordTag } from '../term'
-import { greeting, oneReason, stoppedByRoom, todayHeadline } from '../today/answerRules'
+import { currentDrawdownPct } from '../live-system'
+import { greeting, oneReason, safetySummary, stoppedByRoom, todayHeadline } from '../today/answerRules'
 import { holdingsNeedingAttention } from '../today/HoldingsNeedsYou'
 import { waitingItems } from '../today/NeedsYou'
-import { ideaCounts, TOP_IDEAS } from '../today/TodayIdeas'
+import { ideaCounts } from '../today/TodayIdeas'
 import { BrainGate, inr, StockLogo, Tag } from '../ui'
 import { MARKET_LABEL, MARKET_PLAIN, MARKET_TONE } from '../vocab'
-import Today from './Today'
+
+/** The new Today shows the top 3 ideas (owner brief: short, answer first); Discover lists every one. */
+export const TOP_IDEAS_NEW = 3
 
 export default function TodayNew({ owner = false }: { owner?: boolean }) {
   const today = new Intl.DateTimeFormat('en-IN', {
@@ -45,10 +48,6 @@ export default function TodayNew({ owner = false }: { owner?: boolean }) {
       <BrainGate inline>
         <Answer owner={owner} />
       </BrainGate>
-      <details className="tmn-more" data-testid="today-full-details">
-        <summary>Full details: safety, all ideas, what changed, every pick</summary>
-        <Today owner={owner} />
-      </details>
       <p className="tmn-foot">
         Practice mode: everything here is paper trading. The 15-day model is experimental and not yet proven.
       </p>
@@ -98,6 +97,8 @@ function Answer({ owner }: { owner: boolean }) {
         <PortfolioSummary />
         <RoomNote run={run} ideaCount={ideas.length} tradeCount={counts.TRADE} />
       </div>
+
+      <SafetyLine owner={owner} />
     </>
   )
 }
@@ -122,7 +123,7 @@ function TopIdeas({ run }: { run: BrainRun }) {
   const navigate = useNavigate()
   const caps = useSymbolCaps()
   const ideas = ideasFrom(run)
-  const top = ideas.slice(0, TOP_IDEAS)
+  const top = ideas.slice(0, TOP_IDEAS_NEW)
   const dayScores = ideas.map((d) => d.confidence)
 
   return (
@@ -130,7 +131,7 @@ function TopIdeas({ run }: { run: BrainRun }) {
       <div className="tmn-card-head">
         <span className="tmn-card-title">Top ideas</span>
         <Link className="tm-link" to="/trademind/opportunities">
-          View all
+          View all {ideas.length}
         </Link>
       </div>
       {top.length === 0 ? (
@@ -151,7 +152,9 @@ function TopIdeas({ run }: { run: BrainRun }) {
                   <span className="tmn-idea-sym">
                     {d.symbol} <CapFlag tier={caps.get(d.symbol.toUpperCase())} />
                   </span>
-                  <span className="tmn-idea-why">{oneReason(d)}</span>
+                  <span className="tmn-idea-why">
+                    {oneReason(d)} <span className="tmn-ailink">AI analysis →</span>
+                  </span>
                 </span>
                 <span className="tmn-idea-side">
                   <WordTag word={finalWord(d)} />
@@ -239,5 +242,31 @@ function RoomNote({ run, ideaCount, tradeCount }: { run: BrainRun; ideaCount: nu
         </p>
       )}
     </section>
+  )
+}
+
+/** One line: is the safety net on? Owner: kill switch and the account's fall from its peak against the halt level
+ *  (owner-only answers on the server). Everyone else: the rules every trade follows. Links to Portfolio. */
+function SafetyLine({ owner }: { owner: boolean }) {
+  const limits = useQuery({ queryKey: ['riskLimits'], queryFn: api.riskLimits, enabled: owner })
+  const equity = useQuery({ queryKey: ['equityCurve', 400], queryFn: () => api.equityCurve(400), enabled: owner })
+  const safety = useQuery({ queryKey: ['safetyState'], queryFn: api.safetyState, enabled: owner, retry: false })
+  const s = safetySummary({
+    owner,
+    paused: safety.data ? !safety.data.new_entries_enabled : null,
+    ddPct: equity.data ? currentDrawdownPct(equity.data) : null,
+    haltPct: limits.data?.max_drawdown_pct != null ? limits.data.max_drawdown_pct * 100 : null,
+  })
+  return (
+    <Link to="/trademind/portfolio" className="tmn-card tmn-safety" data-tone={s.tone} data-testid="safety-line">
+      <span className="tmn-safety-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z" />
+          <path d="M9 12l2 2 4-4" />
+        </svg>
+      </span>
+      <span className="tmn-grow">{s.text}</span>
+      <span className="tm-link">See the rules →</span>
+    </Link>
   )
 }

@@ -26,6 +26,7 @@ import Opportunities from './pages/Opportunities'
 import Watchlist from './pages/Watchlist'
 import PaperPositions from './pages/PaperPositions'
 import StockDetail from './pages/StockDetail'
+import StockNew from './pages/StockNew'
 import Portfolio from './pages/Portfolio'
 import Positions from './pages/Positions'
 import AIDecision from './pages/AIDecision'
@@ -279,7 +280,7 @@ export function TradeMindRoutes({
         <Route path="market" element={<Market />} />
         <Route path="opportunities" element={<Opportunities />} />
         <Route path="watchlist" element={ownerConsole ? <Watchlist /> : <Navigate to="/trademind/opportunities" replace />} />
-        <Route path="stock/:symbol" element={<StockDetail />} />
+        <Route path="stock/:symbol" element={look === 'new' ? <StockNew /> : <StockDetail />} />
         <Route path="portfolio" element={<Portfolio />} />
         <Route path="positions" element={<Positions />} />
         <Route path="positions/:symbol" element={<Positions />} />

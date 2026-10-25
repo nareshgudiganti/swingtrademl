@@ -65,6 +65,7 @@ QUERY = {
     "horizon_days": "15",
     "symbol": "SEALX",
     "symbols": "SEALX",
+    "q": "SEALX",
 }
 EXTRA = (  # the same routes again with the parameters that reach the sealed rows
     "/api/v1/brain/compare?since=2026-10-01",

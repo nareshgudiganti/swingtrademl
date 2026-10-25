@@ -71,6 +71,9 @@ import type {
   FinanceRecurringBill,
   Holding,
   Instrument,
+  MyWatchlist,
+  MyWatchlistItem,
+  WatchlistHit,
   KiteLoginResponse,
   LatestSignal,
   HorizonAccuracy,
@@ -452,6 +455,13 @@ export const api = {
   syncInstruments: () => post<MessageResponse>('/instruments/sync'),
   instruments: (search: string, limit = 8) =>
     get<Instrument[]>(`/instruments?search=${encodeURIComponent(search)}&limit=${limit}`),
+
+  // ---------------------------------------------- my watchlist (per person) --
+  // Each signed-in person's own list (any role). Not the bot's global watchlist above.
+  myWatchlist: () => get<MyWatchlist>('/me/watchlist'),
+  myWatchlistSearch: (q: string) => get<WatchlistHit[]>(`/me/watchlist/search?q=${encodeURIComponent(q)}`),
+  myWatchlistAdd: (symbol: string, note?: string) => post<MyWatchlistItem>('/me/watchlist', { symbol, note }),
+  myWatchlistRemove: (symbol: string) => del<MyWatchlistItem>(`/me/watchlist/${encodeURIComponent(symbol)}`),
 
   // -------------------------------------------------------- market data --
   candles: (symbol: string, limit = 11) =>

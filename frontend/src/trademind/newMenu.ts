@@ -16,7 +16,12 @@ export type NavItem = {
   ownerOnly?: boolean
 }
 
-const portfolioPages = SECTIONS.find((s) => s.id === 'portfolio')!.pages
+// Wave 2: the new Portfolio screen (/trademind/portfolio) comes first; the Bot / Testing / My Zerodha tabs follow.
+const classicPortfolio = SECTIONS.find((s) => s.id === 'portfolio')!.pages
+const portfolioPages: Page[] = [
+  { to: '/trademind/portfolio', label: 'Overview (Paper)' },
+  ...classicPortfolio.filter((p) => p.to !== '/trademind/portfolio'),
+]
 
 export const NAV: NavItem[] = [
   { id: 'today', label: 'Today', pages: [{ to: '/trademind', label: 'Today', end: true }], also: ['/trademind/dashboard'] },
@@ -27,8 +32,8 @@ export const NAV: NavItem[] = [
     also: ['/trademind/stock', '/trademind/ai'],
   },
   { id: 'portfolio', label: 'Portfolio', pages: portfolioPages },
-  // The shared watchlist is owner-only today; everyone gets their own list in wave 2.
-  { id: 'watchlist', label: 'Watchlist', pages: [{ to: '/trademind/watchlist', label: 'Watchlist' }], ownerOnly: true },
+  // Wave 2: everyone's own list (/me/watchlist), so the item is no longer owner-only.
+  { id: 'watchlist', label: 'Watchlist', pages: [{ to: '/trademind/watchlist', label: 'My Watchlist' }] },
   { id: 'market', label: 'Market', pages: [{ to: '/trademind/market', label: 'Market' }] },
   {
     id: 'evidence',

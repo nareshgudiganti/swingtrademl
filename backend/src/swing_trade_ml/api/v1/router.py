@@ -20,6 +20,7 @@ from swing_trade_ml.api.v1.endpoints import (
     market_data,
     ml,
     mutual_funds,
+    my_watchlist,
     notifications,
     orders,
     plans,
@@ -72,3 +73,6 @@ api_router.include_router(brain_observatory.router, dependencies=protected)
 api_router.include_router(experiments.router, dependencies=protected)
 api_router.include_router(jobs.router, dependencies=protected)
 api_router.include_router(beginner.router, dependencies=protected)
+# Each person's own watchlist: require_auth opens these few routes to every signed-in person
+# (deps.SELF_SERVICE_ROUTES); the handlers only touch the caller's own rows.
+api_router.include_router(my_watchlist.router, dependencies=protected)

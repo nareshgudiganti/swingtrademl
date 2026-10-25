@@ -1,0 +1,763 @@
+/* TradeMind "new look": light theme + left sidebar (NewLookShell.tsx, pages/TodayNew.tsx).
+   Everything is scoped under .tm.tm-new, so the classic dark look is untouched. The colour tokens of
+   trademind.css are redefined for a light page; the rules below only undo the dark look's glows and dark fills. */
+
+.tm.tm-new {
+  --tm-bg: #f4f6fa;
+  --tm-bg-2: #ffffff;
+  --tm-card: #ffffff;
+  --tm-card-2: #ffffff;
+  --tm-line: #e3e7ef;
+  --tm-line-strong: #c9d0de;
+  --tm-text: #172033;
+  --tm-dim: #5a6478;
+  --tm-faint: #8790a3;
+  --tm-green: #15934a;
+  --tm-green-2: #0f7a3c;
+  --tm-red: #d2364c;
+  --tm-amber: #b86e00;
+  --tm-blue: #2d6ae3;
+  --tm-cyan: #0a8fb0;
+  --tm-purple: #6d44d4;
+  --tm-violet: #5b44c9;
+  --tm-pink: #b8389f;
+  --tmn-accent: #16a34a;
+  --tmn-accent-soft: #e8f6ee;
+  --tmn-side-w: 228px;
+
+  color-scheme: light;
+  /* The sidebar's white column runs the full page height, however long the page is. */
+  background: linear-gradient(to right, #ffffff var(--tmn-side-w), var(--tm-line) var(--tmn-side-w), var(--tm-line) calc(var(--tmn-side-w) + 1px), var(--tm-bg) calc(var(--tmn-side-w) + 1px));
+  display: grid;
+  grid-template-columns: var(--tmn-side-w) minmax(0, 1fr);
+  align-items: start;
+}
+
+.tm.tm-new * {
+  text-shadow: none;
+}
+
+/* ---------------------------------------------------------------- sidebar -- */
+
+.tmn-side {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: calc(1rem + env(safe-area-inset-top)) 0.8rem 1rem;
+  background: #ffffff;
+  border-right: 1px solid var(--tm-line);
+  overflow-y: auto;
+}
+
+.tmn-logo {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--tm-text);
+  text-decoration: none;
+  padding: 0 0.4rem;
+}
+
+.tm-new .tm-logo-mark {
+  box-shadow: none;
+}
+
+.tmn-practice {
+  align-self: flex-start;
+  margin: 0 0.4rem 0.4rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--tmn-accent);
+  background: var(--tmn-accent-soft);
+  border: 1px solid #bfe5cd;
+  border-radius: 999px;
+  padding: 0.1rem 0.55rem;
+}
+
+.tmn-nav {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.tmn-sec-link {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.6rem;
+  border-radius: 8px;
+  color: var(--tm-dim);
+  font-weight: 500;
+  font-size: 0.86rem;
+  text-decoration: none;
+}
+
+.tmn-sec-link svg {
+  width: 17px;
+  height: 17px;
+  flex-shrink: 0;
+}
+
+.tmn-sec-link:hover {
+  background: #f1f4f9;
+  color: var(--tm-text);
+}
+
+.tmn-sec-link.active {
+  background: #eaf1ff;
+  color: var(--tm-blue);
+  font-weight: 600;
+}
+
+.tmn-pages {
+  display: grid;
+  gap: 0.05rem;
+  margin: 0.15rem 0 0.35rem 1.55rem;
+  padding-left: 0.6rem;
+  border-left: 1px solid var(--tm-line);
+}
+
+.tmn-pages a {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.5rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  color: var(--tm-dim);
+  text-decoration: none;
+}
+
+.tmn-pages a:hover {
+  color: var(--tm-text);
+  background: #f1f4f9;
+}
+
+.tmn-pages a.active {
+  color: var(--tm-text);
+  font-weight: 600;
+  background: #f1f4f9;
+}
+
+.tmn-tag {
+  font-size: 0.62rem;
+  font-weight: 600;
+  border-radius: 999px;
+  padding: 0 0.4rem;
+  border: 1px solid;
+}
+
+.tmn-tag-paper {
+  color: var(--tm-blue);
+  border-color: #c6d6f7;
+  background: #f0f5ff;
+}
+
+.tmn-tag-real {
+  color: var(--tm-red);
+  border-color: #f2c4cb;
+  background: #fff1f3;
+}
+
+.tmn-side-foot {
+  margin-top: auto;
+  display: grid;
+  gap: 0.35rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--tm-line);
+}
+
+.tmn-switch,
+.tmn-logout {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  border-radius: 8px;
+  border: 1px solid var(--tm-line);
+  background: #ffffff;
+  color: var(--tm-text) !important;
+  font-size: 0.8rem;
+  text-align: left;
+}
+
+.tmn-switch svg {
+  width: 15px;
+  height: 15px;
+}
+
+.tmn-switch:hover,
+.tmn-logout:hover {
+  background: #f1f4f9;
+}
+
+.tmn-logout {
+  border-color: transparent;
+  color: var(--tm-dim) !important;
+}
+
+/* ------------------------------------------------------------- top header -- */
+
+.tmn-main {
+  min-width: 0;
+  min-height: 100vh;
+}
+
+.tmn-top {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: calc(0.7rem + env(safe-area-inset-top)) 1.5rem 0.7rem;
+  background: rgba(244, 246, 250, 0.92);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--tm-line);
+}
+
+.tmn-title {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.tmn-top-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* ---------------------------------------- the shared pages, light versions -- */
+
+.tm-new .tm-page {
+  max-width: 1280px;
+  padding: 1.25rem 1.5rem 2.5rem;
+}
+
+.tm-new .tm-card,
+.tm-new .tm-card.tm-glow,
+.tm-new .tm-card.tm-glow-green {
+  background: #ffffff;
+  border: 1px solid var(--tm-line);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 4px 14px rgba(16, 24, 40, 0.04);
+}
+
+.tm-new .tm-link {
+  color: var(--tm-blue);
+}
+
+.tm-new .tm-link:hover {
+  color: #1b4fb8;
+  text-decoration: underline;
+}
+
+.tm-new .tm-input,
+.tm-new .tm-select,
+.tm-new input,
+.tm-new select,
+.tm-new textarea {
+  background: #ffffff;
+  color: var(--tm-text);
+  border-color: var(--tm-line-strong);
+}
+
+.tm-new .tm-stock-logo {
+  background: linear-gradient(135deg, #3b6fe0, #2450b8);
+  box-shadow: none;
+}
+
+.tm-new .tm-zchip,
+.tm-new .tm-status-chip {
+  background: #fff7e8;
+  border-color: #f0d29b;
+}
+
+.tm-new .tm-zchip-ok,
+.tm-new .tm-status-chip-ok {
+  color: var(--tm-green);
+  background: var(--tmn-accent-soft);
+  border-color: #bfe5cd;
+}
+
+.tm-new .tm-tag-green {
+  background: #e8f6ee;
+  border-color: #bfe5cd;
+}
+
+.tm-new .tm-tag-amber {
+  background: #fff4e0;
+  border-color: #f0d29b;
+}
+
+.tm-new .tm-tag-red {
+  background: #fdecee;
+  border-color: #f2c4cb;
+}
+
+.tm-new .tm-tag-blue {
+  background: #edf3ff;
+  border-color: #c6d6f7;
+}
+
+.tm-new .tm-row {
+  border-bottom-color: var(--tm-line);
+}
+
+.tm-new .tm-bookstrip {
+  background: #ffffff;
+  padding-left: 1.5rem;
+}
+
+/* --------------------------- text the dark look writes in fixed white -- */
+/* trademind.css hard-codes white/near-white text in a few places (it assumes a dark page); on the light page
+   those are made dark again. Buttons with a solid coloured fill (.tm-btn, .tm-pill-avoid) keep white text. */
+
+.tm.tm-new {
+  /* the classic app's tokens, read by shared tables (styles.css th/td) and the stock picker */
+  --bg: #f4f6fa;
+  --surface: #ffffff;
+  --surface-2: #f1f4f9;
+  --border: #e3e7ef;
+  --text: #172033;
+  --text-dim: #5a6478;
+  --accent: #5b44c9;
+  --neg: #d2364c;
+}
+
+.tm-new .tm-card-title,
+.tm-new .tm-strong,
+.tm-new .tm-tabs button.active,
+.tm-new .tm-chain-step.tm-active .tm-chain-title,
+.tm-new .tm-picker,
+.tm-new .tm-picker input,
+.tm-new .tm-picker .chip,
+.tm-new .tm-picker .symbol-picker-option,
+.tm-new .tm-sort:hover,
+.tm-new .tm-sort:focus-visible {
+  color: var(--tm-text);
+}
+
+.tm-new .tm-seg button.active {
+  color: var(--tm-blue);
+  background: #edf3ff;
+  border-color: #9fbaf2;
+  box-shadow: none;
+}
+
+.tm-new .tm-btn-ghost {
+  color: var(--tm-blue);
+  background: #edf3ff;
+}
+
+.tm-new .tm-btn {
+  box-shadow: none;
+}
+
+.tm-new .tm-tag-blue,
+.tm-new .tm-pill-wait {
+  color: var(--tm-blue);
+}
+
+.tm-new .tm-pill-wait {
+  background: #edf3ff;
+  border-color: #9fbaf2;
+}
+
+.tm-new .tm-tag-violet {
+  color: var(--tm-violet);
+  background: #f2efff;
+  border-color: #d5cdf7;
+  box-shadow: none;
+}
+
+.tm-new .tm-cap-large {
+  color: var(--tm-blue);
+}
+
+.tm-new .tm-cap-midcap {
+  color: var(--tm-violet);
+}
+
+.tm-new .tm-cap-smallcap {
+  color: #0b7f73;
+}
+
+.tm-new .tm-tooltip {
+  background: #172033;
+  color: #ffffff;
+}
+
+.tm-new .tm-subnav {
+  background: #ffffff;
+}
+
+.tm-new th {
+  background: #f8fafd;
+  color: var(--tm-faint);
+}
+
+/* -------------------------------------------------------------- new Today -- */
+
+.tmn-today {
+  display: grid;
+  gap: 1rem;
+  max-width: 1100px;
+}
+
+.tmn-hello {
+  display: flex;
+  align-items: baseline;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+}
+
+.tmn-hello h2 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--tm-text);
+  text-transform: none;
+  letter-spacing: -0.01em;
+}
+
+.tmn-headline {
+  margin: -0.4rem 0 0;
+  font-size: 1.02rem;
+  font-weight: 500;
+  color: var(--tm-text);
+}
+
+.tmn-card {
+  background: #ffffff;
+  border: 1px solid var(--tm-line);
+  border-radius: 12px;
+  padding: 1rem 1.1rem;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 4px 14px rgba(16, 24, 40, 0.04);
+  min-width: 0;
+}
+
+.tmn-card p {
+  margin: 0.35rem 0 0;
+}
+
+.tmn-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin-bottom: 0.6rem;
+}
+
+.tmn-card-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-weight: 700;
+  font-size: 0.92rem;
+}
+
+.tmn-small {
+  font-size: 0.74rem;
+}
+
+.tmn-market {
+  border-left: 4px solid var(--tm-blue);
+}
+
+.tmn-market[data-tone='green'] {
+  border-left-color: var(--tm-green);
+  background: #f7fcf9;
+}
+
+.tmn-market[data-tone='amber'] {
+  border-left-color: #e6a23c;
+  background: #fffaf0;
+}
+
+.tmn-market[data-tone='red'] {
+  border-left-color: var(--tm-red);
+  background: #fff6f7;
+}
+
+.tmn-market-word .tm-tag {
+  font-size: 0.78rem;
+  padding: 0.18rem 0.7rem;
+}
+
+.tmn-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.tmn-tiles-4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.tmn-tile {
+  display: grid;
+  justify-items: center;
+  gap: 0.2rem;
+  padding: 0.9rem 0.5rem;
+  background: #ffffff;
+  border: 1px solid var(--tm-line);
+  border-radius: 12px;
+  text-decoration: none;
+  color: var(--tm-text);
+  text-align: center;
+}
+
+.tmn-tile:hover {
+  border-color: var(--tm-line-strong);
+  background: #fbfcfe;
+}
+
+.tmn-tile-n {
+  font-size: 1.7rem;
+  font-weight: 700;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.tmn-tile[data-tone='green'] .tmn-tile-n {
+  color: var(--tm-green);
+}
+
+.tmn-tile[data-tone='amber'] .tmn-tile-n {
+  color: var(--tm-amber);
+}
+
+.tmn-tile[data-tone='red'] .tmn-tile-n {
+  color: var(--tm-red);
+}
+
+.tmn-tile-label {
+  font-size: 0.76rem;
+  color: var(--tm-dim);
+}
+
+.tmn-ideas {
+  display: grid;
+}
+
+.tmn-idea {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.6rem 0.2rem;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--tm-line);
+  text-align: left;
+}
+
+.tmn-idea:last-child {
+  border-bottom: 0;
+}
+
+.tmn-idea:hover {
+  background: #f8fafd;
+}
+
+.tmn-idea .tm-stock-logo {
+  width: 36px;
+  height: 36px;
+  font-size: 0.72rem;
+}
+
+.tmn-idea-main {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.tmn-idea-sym {
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.tmn-idea-why {
+  font-size: 0.78rem;
+  color: var(--tm-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tmn-idea-side {
+  display: grid;
+  justify-items: end;
+  gap: 0.15rem;
+  flex-shrink: 0;
+}
+
+.tmn-row-2 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1rem;
+}
+
+.tmn-money {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
+.tmn-money-n {
+  font-size: 1.2rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.tmn-bar {
+  height: 8px;
+  margin-top: 0.7rem;
+  border-radius: 999px;
+  background: #e9edf4;
+  overflow: hidden;
+}
+
+.tmn-bar span {
+  display: block;
+  height: 100%;
+  background: var(--tmn-accent);
+  border-radius: 999px;
+}
+
+.tmn-note {
+  background: #fff8f8;
+  border-color: #f4d3d8;
+}
+
+.tmn-more {
+  border: 1px solid var(--tm-line);
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.tmn-more > summary {
+  cursor: pointer;
+  padding: 0.8rem 1.1rem;
+  font-weight: 600;
+  font-size: 0.86rem;
+  color: var(--tm-blue);
+}
+
+.tmn-more > .tm-page {
+  padding: 0 1rem 1rem;
+  max-width: none;
+}
+
+.tmn-foot {
+  margin: 0;
+  font-size: 0.74rem;
+  color: var(--tm-faint);
+}
+
+/* ------------------------------------------------------------------ phone -- */
+
+@media (max-width: 900px) {
+  .tm.tm-new {
+    grid-template-columns: minmax(0, 1fr);
+    background: var(--tm-bg);
+  }
+
+  .tmn-side {
+    position: static;
+    height: auto;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    padding: calc(0.6rem + env(safe-area-inset-top)) 16px 0.6rem;
+    border-right: 0;
+    border-bottom: 1px solid var(--tm-line);
+    overflow: visible;
+  }
+
+  .tmn-practice {
+    margin: 0;
+    align-self: center;
+  }
+
+  .tmn-nav {
+    order: 3;
+    flex-basis: 100%;
+    display: flex;
+    gap: 0.25rem;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .tmn-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .tmn-sec {
+    display: contents;
+  }
+
+  .tmn-sec-link {
+    white-space: nowrap;
+    padding: 0.4rem 0.6rem;
+  }
+
+  .tmn-pages {
+    order: 4;
+    display: flex;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    overflow-x: auto;
+  }
+
+  .tmn-pages a {
+    white-space: nowrap;
+  }
+
+  .tmn-side-foot {
+    margin: 0 0 0 auto;
+    padding: 0;
+    border: 0;
+    display: flex;
+  }
+
+  .tmn-switch,
+  .tmn-logout {
+    width: auto;
+    padding: 0.3rem 0.55rem;
+  }
+
+  .tmn-top {
+    position: static;
+    flex-wrap: wrap;
+    padding: 0.6rem 16px;
+  }
+
+  .tm-new .tm-page {
+    padding: 1rem 16px 2rem;
+  }
+
+  .tmn-tiles,
+  .tmn-tiles-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tmn-money-n {
+    font-size: 1.02rem;
+  }
+}

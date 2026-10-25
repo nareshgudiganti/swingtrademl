@@ -2270,3 +2270,19 @@ button.tm-avatar {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* The "New look" button in the top bar (look.ts): switches to the light sidebar look; it switches back from there. */
+.tm-look-switch {
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  white-space: nowrap;
+  color: var(--tm-cyan);
+  border: 1px solid rgba(51, 214, 255, 0.45);
+  background: rgba(51, 214, 255, 0.08);
+}
+
+.tm-look-switch:hover {
+  background: rgba(51, 214, 255, 0.16);
+}

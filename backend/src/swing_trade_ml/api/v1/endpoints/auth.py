@@ -10,15 +10,17 @@ from urllib.parse import urlencode
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from swing_trade_ml.api.deps import CurrentUser, DbSession, require_auth
 from swing_trade_ml.api.rate_limit import auth_limit, public_limit
+from swing_trade_ml.api.v1.endpoints.invites import code_matches, normalise_email
 from swing_trade_ml.brokers.kite import kite_broker
 from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.core.security import create_access_token, hash_password, verify_password
+from swing_trade_ml.db.models.invites import InviteRequest
 from swing_trade_ml.db.models.session import BrokerSession, User
 from swing_trade_ml.schemas import (
     CurrentUserOut,
@@ -47,8 +49,14 @@ def issue_token(user: User) -> TokenResponse:
 
 @router.get("/options", dependencies=[Depends(public_limit)])
 def auth_options() -> dict[str, bool]:
-    """What the login page may offer. Public: it is read before anyone is signed in."""
-    return {"signup_allowed": settings.ALLOW_SIGNUP}
+    """What the login page may offer. Public: it is read before anyone is signed in.
+    `invites`: people may ask for an invite (sign-up with an approved invite code works even
+    while `signup_allowed` is off). `google`: the Google button will work."""
+    return {
+        "signup_allowed": settings.ALLOW_SIGNUP,
+        "invites": True,
+        "google": settings.google_oauth_configured,
+    }
 
 
 LOCKOUT_THRESHOLD = 5
@@ -135,6 +143,20 @@ def login(payload: LoginRequest, db: DbSession, request: Request) -> TokenRespon
     user = db.execute(
         select(User).where(User.username == payload.username).with_for_update()
     ).scalar_one_or_none()
+    if user is None and "@" in payload.username:
+        # Sign in with the account's email too. Only when exactly one account has it (emails
+        # are unique, but older rows were stored with their original capitals).
+        matches = (
+            db.execute(
+                select(User)
+                .where(func.lower(User.email) == payload.username.lower())
+                .with_for_update()
+                .limit(2)
+            )
+            .scalars()
+            .all()
+        )
+        user = matches[0] if len(matches) == 1 else None
     now = datetime.now(UTC)
     who = payload.username[:128]
 
@@ -182,35 +204,112 @@ def login(payload: LoginRequest, db: DbSession, request: Request) -> TokenRespon
     status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(auth_limit)],
 )
-def signup(payload: SignupRequest, db: DbSession) -> TokenResponse:
+def signup(payload: SignupRequest, db: DbSession, request: Request) -> TokenResponse:
     """Self-registration.
 
     Gated by ALLOW_SIGNUP because this system can place real trades once
     TRADING_MODE=live is set — an open registration endpoint on that is an
     account-takeover surface, not a convenience. Turn it off in .env once
     everyone who should have an account does.
+
+    With ALLOW_SIGNUP off, the only way in is an invite: an `invite_code` the owner
+    approved in Admin > Invites, for the same email, used once. Either way the new
+    account is an ordinary member: never owner, never tester, never the real account.
     """
-    if not settings.ALLOW_SIGNUP:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Sign-up is disabled on this instance")
+    invite: InviteRequest | None = None
+    code = (payload.invite_code or "").strip()
+    email = payload.email.strip() if payload.email and payload.email.strip() else None
+    if code:
+        email = normalise_email(email or "")
+        invite = _claim_invite(db, email, code)
+        if invite is None:
+            audit.record(
+                db,
+                "auth.signup_invite_refused",
+                actor_label=payload.username[:128],
+                target_type="invite",
+                request=request,
+            )
+            db.commit()
+            raise HTTPException(status.HTTP_403_FORBIDDEN, INVITE_REFUSED)
+    elif not settings.ALLOW_SIGNUP:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, SIGNUP_CLOSED)
 
     exists = db.execute(select(User).where(User.username == payload.username)).scalar_one_or_none()
     if exists:
         raise HTTPException(status.HTTP_409_CONFLICT, "That username is already taken")
+    if email is not None:
+        email_taken = db.execute(
+            select(User.id).where(func.lower(User.email) == email.lower()).limit(1)
+        ).first()
+        if email_taken:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT, "An account with this email already exists. Please sign in instead."
+            )
 
+    now = datetime.now(UTC)
     user = User(
         username=payload.username,
-        email=payload.email,
+        email=email,
         hashed_password=hash_password(payload.password),
         auth_provider="local",
         is_active=True,
-        last_login_at=datetime.now(UTC),
+        # Spelled out, never inferred: a self-made account is an ordinary member on the default plan.
+        role="member",
+        is_superuser=False,
+        last_login_at=now,
     )
     db.add(user)
+    db.flush()
+    if invite is not None:
+        invite.used_at = now
+        invite.user_id = user.id
+        invite.code_hash = None  # used once; the code can never be spent again
+    audit.record(
+        db,
+        "auth.signup",
+        actor=user,
+        target_type="user",
+        target_id=user.id,
+        after={"via": "invite" if invite is not None else "open", "invite_id": invite.id if invite else None},
+        request=request,
+    )
     db.commit()
     db.refresh(user)
 
-    log.info("auth.signup", username=user.username)
+    log.info("auth.signup", username=user.username, via="invite" if invite is not None else "open")
     return issue_token(user)
+
+
+SIGNUP_CLOSED = "Sign-up is by invite only. Ask for an invite on the front page."
+INVITE_REFUSED = (
+    "This invite link doesn't match that email, or it has already been used. "
+    "Check the link the owner sent you, or ask for a new one."
+)
+
+
+def _claim_invite(db: Session, email: str, code: str) -> InviteRequest | None:
+    """The approved, unused invite for this email whose code matches; locked for this sign-up."""
+    if not email:
+        return None
+    rows = (
+        db.execute(
+            select(InviteRequest)
+            .where(
+                InviteRequest.email == email,
+                InviteRequest.status == "approved",
+                InviteRequest.used_at.is_(None),
+                InviteRequest.code_hash.is_not(None),
+            )
+            .with_for_update()
+        )
+        .scalars()
+        .all()
+    )
+    for row in rows:
+        if code_matches(code, row.code_hash):
+            return row
+    return None
 
 
 @router.get("/me", response_model=CurrentUserOut)
@@ -280,7 +379,7 @@ def kite_auto_login(db: DbSession, check_only: bool = False) -> dict[str, object
 
     try:
         session = kite_broker.auto_login(db)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         log.error("auth.kite.auto_login_failed", error=str(exc))
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 

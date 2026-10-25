@@ -85,7 +85,10 @@ class LoginRequest(BaseModel):
 class SignupRequest(BaseModel):
     username: str = Field(..., min_length=3, max_length=64)
     password: str = Field(..., min_length=8)
-    email: str | None = None
+    email: str | None = Field(None, max_length=254)
+    # The one-time code from an approved invite (Admin > Invites). With it, sign-up works for
+    # that invite's email even while ALLOW_SIGNUP is off.
+    invite_code: str | None = Field(None, max_length=64)
 
     # mode="before" so a padded string like "  ab  " is stripped to "ab"
     # ahead of the min_length=3 check above, not after it.

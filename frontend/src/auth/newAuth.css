@@ -1,0 +1,656 @@
+/* Signed-out pages (auth/PublicSite.tsx): the light front page, split sign-in, invite request and sign-up.
+   Same colours as the new look (trademind/newlook.css). Everything is scoped under .na, so the global dark
+   styles.css rules for body, input and button never leak in, and nothing here leaks out. */
+
+.na {
+  --na-bg: #f5f7fb;
+  --na-card: #ffffff;
+  --na-line: #e4e8f0;
+  --na-input-line: #c9d0de;
+  --na-text: #172033;
+  --na-dim: #4b5567;
+  --na-fine: #5a6478;
+  --na-green: #16a34a;
+  --na-green-dark: #15803d;
+  --na-link: #1d5fd6;
+  --na-panel: #0f2a1c;
+
+  color-scheme: light;
+  min-height: 100vh;
+  background: var(--na-bg);
+  color: var(--na-text);
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+  overflow-x: hidden;
+}
+
+.na *,
+.na *::before,
+.na *::after {
+  box-sizing: border-box;
+}
+
+.na a {
+  color: var(--na-link);
+  text-decoration: none;
+}
+.na a:hover {
+  text-decoration: underline;
+}
+
+.na-ic {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex-shrink: 0;
+}
+
+.na-fine {
+  color: var(--na-fine);
+  font-size: 13px;
+  margin: 0;
+}
+.na-body {
+  margin: 0;
+  color: var(--na-dim);
+  font-size: 14.5px;
+}
+.na-center {
+  text-align: center;
+}
+.na-grow {
+  flex: 1;
+}
+
+/* ---------------------------------------------------------------- brand and top bar -- */
+
+.na .na-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 21px;
+  font-weight: 800;
+  color: var(--na-text);
+  text-decoration: none;
+}
+.na .na-brand-dark {
+  color: #ffffff;
+}
+.na-mark {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: var(--na-green);
+  display: grid;
+  place-items: center;
+  color: #ffffff;
+}
+.na-brand-dark .na-mark {
+  background: #22c55e;
+  color: #06210f;
+}
+
+.na-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 48px;
+  background: var(--na-card);
+  border-bottom: 1px solid var(--na-line);
+  flex-wrap: wrap;
+}
+
+/* ---------------------------------------------------------------- buttons and inputs -- */
+
+.na .na-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 10px;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: none;
+  transform: none;
+}
+.na .na-ghost {
+  border: 1px solid #d5dbe6;
+  background: #ffffff;
+  color: var(--na-text);
+}
+.na .na-ghost:hover {
+  background: #f1f4f9;
+  text-decoration: none;
+}
+.na .na-cta,
+.na .na-go {
+  border: 0;
+  background: var(--na-green);
+  color: #ffffff;
+}
+.na .na-cta:hover,
+.na .na-go:hover:not(:disabled) {
+  background: var(--na-green-dark);
+  text-decoration: none;
+}
+.na .na-go {
+  min-height: 48px;
+  width: 100%;
+  font-size: 16px;
+}
+.na .na-wide {
+  width: 100%;
+}
+.na .na-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.na .na-btn:focus-visible,
+.na .na-input:focus-visible,
+.na a:focus-visible {
+  outline: 3px solid #93c5fd;
+  outline-offset: 2px;
+}
+
+.na-label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--na-text);
+}
+.na .na-input {
+  width: 100%;
+  height: 46px;
+  border-radius: 9px;
+  border: 1px solid var(--na-input-line);
+  background: #ffffff;
+  color: var(--na-text);
+  padding: 0 12px;
+  font: inherit;
+  font-weight: 400;
+}
+.na .na-input:focus {
+  outline: 2px solid var(--na-green);
+  outline-offset: -1px;
+}
+
+.na .na-sso {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 48px;
+  border-radius: 10px;
+  border: 1px solid #d5dbe6;
+  background: #ffffff;
+  color: var(--na-text);
+  font-weight: 600;
+  text-decoration: none;
+}
+.na .na-sso:hover {
+  background: #f1f4f9;
+  text-decoration: none;
+}
+.na-or {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #6b7488;
+  font-size: 12px;
+}
+.na-or::before,
+.na-or::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--na-line);
+}
+
+.na-error {
+  border: 1px solid #f5c2c7;
+  background: #fdecee;
+  color: #8a1c2b;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 14px;
+}
+
+/* ---------------------------------------------------------------- B: front page -- */
+
+.na-hero {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 48px;
+  padding: 56px 48px 32px;
+  align-items: center;
+  max-width: 1340px;
+  width: 100%;
+  margin: 0 auto;
+}
+.na-left {
+  flex: 999 1 520px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.na-tag {
+  align-self: flex-start;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: #eaf7ef;
+  border: 1px solid #bfe5cd;
+  color: var(--na-green-dark);
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.na .na-h1 {
+  margin: 0;
+  font-size: 54px;
+  line-height: 1.08;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: var(--na-text);
+}
+.na-h1 span {
+  color: var(--na-green);
+}
+.na .na-h1-md {
+  font-size: 46px;
+  line-height: 1.1;
+}
+.na .na-h1-sm {
+  font-size: 28px;
+  letter-spacing: -0.02em;
+}
+.na .na-h2 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--na-text);
+  text-transform: none;
+  letter-spacing: normal;
+}
+.na-lead {
+  margin: 0;
+  color: var(--na-dim);
+  font-size: 18px;
+  max-width: 600px;
+}
+
+.na-preview {
+  background: var(--na-card);
+  border: 1px solid var(--na-line);
+  border-radius: 16px;
+  padding: 18px;
+  box-shadow: 0 10px 30px rgba(16, 24, 40, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 620px;
+}
+.na-preview-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+.na-prow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid #eef1f6;
+}
+.na-prow:last-child {
+  border-bottom: 0;
+}
+.na-prow-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.na-logo {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  color: #ffffff;
+  font-weight: 800;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+.na-word {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 64px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.na-watch {
+  background: #fef3c7;
+  color: #854d0e;
+}
+.na-wait {
+  background: #e0ecff;
+  color: #1e40af;
+}
+.na-avoid {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.na-three {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  max-width: 620px;
+}
+.na-t {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.na-t > span:last-child,
+.na-s {
+  display: flex;
+  flex-direction: column;
+}
+.na-ti {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.na-card {
+  background: var(--na-card);
+  border: 1px solid var(--na-line);
+  border-radius: 18px;
+  padding: 28px;
+  box-shadow: 0 20px 50px rgba(16, 24, 40, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.na-join {
+  flex: 1 1 320px;
+  max-width: 400px;
+}
+.na-badge {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: #fff7e6;
+  border: 1px solid #f3d39a;
+  color: #8a5300;
+  font-size: 13.5px;
+  font-weight: 700;
+}
+
+.na-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  padding: 8px 48px 32px;
+  max-width: 1340px;
+  width: 100%;
+  margin: 0 auto;
+}
+.na-s {
+  background: var(--na-card);
+  border: 1px solid var(--na-line);
+  border-radius: 14px;
+  padding: 16px;
+}
+.na-foot {
+  text-align: center;
+  color: var(--na-fine);
+  font-size: 13px;
+  padding: 0 16px 32px;
+}
+
+/* ---------------------------------------------------------------- C: split sign-in / sign-up -- */
+
+.na-split {
+  display: flex;
+  flex-wrap: wrap;
+  background: #ffffff;
+}
+.na-panel {
+  flex: 1 1 460px;
+  min-width: 0;
+  background: var(--na-panel);
+  color: #e9f7ef;
+  padding: 56px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  justify-content: space-between;
+}
+.na-panel-mid {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.na-quote {
+  font-size: 34px;
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  margin: 0;
+  color: #ffffff;
+}
+.na-pts {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.na-pt {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  color: #bfe3cc;
+}
+.na-pt b {
+  color: #ffffff;
+}
+.na-dot {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: #14532d;
+  color: #86efac;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.na-panel-foot {
+  margin: 0;
+  color: #9fd0b1;
+  font-size: 13px;
+}
+.na-formside {
+  flex: 1 1 460px;
+  min-width: 0;
+  display: grid;
+  place-items: center;
+  padding: 48px 24px;
+  background: var(--na-bg);
+}
+.na-form {
+  width: 100%;
+  max-width: 380px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* ---------------------------------------------------------------- H: invite request -- */
+
+.na-page {
+  display: flex;
+  flex-direction: column;
+}
+.na-main {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 48px;
+  padding: 56px 48px;
+  max-width: 1240px;
+  width: 100%;
+  margin: 0 auto;
+  align-items: flex-start;
+}
+.na-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 560px;
+}
+.na-step {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  background: var(--na-card);
+  border: 1px solid var(--na-line);
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+.na-step > span:last-child {
+  display: flex;
+  flex-direction: column;
+}
+.na-n {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: #dcfce7;
+  color: #166534;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+.na-form-card {
+  flex: 1 1 340px;
+  max-width: 420px;
+}
+.na-done {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #dcfce7;
+  color: #166534;
+  display: grid;
+  place-items: center;
+}
+
+/* ---------------------------------------------------------------- phone (F) -- */
+
+@media (max-width: 760px) {
+  .na-bar,
+  .na-hero,
+  .na-main,
+  .na-strip {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  .na-bar {
+    padding-top: 12px;
+    padding-bottom: 12px;
+    gap: 8px;
+  }
+  .na .na-btn {
+    padding: 0 14px;
+  }
+  .na-hero,
+  .na-main {
+    padding-top: 28px;
+    gap: 28px;
+  }
+  .na .na-h1 {
+    font-size: 36px;
+  }
+  .na .na-h1-md {
+    font-size: 30px;
+  }
+  .na .na-h1-sm {
+    font-size: 26px;
+  }
+  .na-lead {
+    font-size: 16px;
+  }
+  .na-three,
+  .na-strip {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .na-join,
+  .na-form-card {
+    max-width: none;
+    padding: 22px;
+  }
+  .na .na-hide-phone {
+    display: none;
+  }
+  /* Sign-in on a phone: a short green top (brand, one line), then the form straight away. */
+  .na-split {
+    align-content: flex-start;
+    background: var(--na-bg);
+  }
+  .na-panel {
+    flex-basis: 100%;
+    padding: 24px 16px 22px;
+    gap: 16px;
+    justify-content: flex-start;
+  }
+  .na-quote {
+    font-size: 24px;
+  }
+  .na-pts,
+  .na-panel-foot {
+    display: none;
+  }
+  .na-formside {
+    flex-basis: 100%;
+    padding: 24px 16px 36px;
+    place-items: start center;
+  }
+}
+
+@media (max-width: 380px) {
+  .na .na-brand {
+    font-size: 18px;
+  }
+  .na-bar .na-btn {
+    padding: 0 10px;
+    font-size: 14px;
+  }
+}

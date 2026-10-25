@@ -3,7 +3,7 @@ import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { ApiError, api, clearToken, getToken, setPreviewPlan, setToken, takeLoginCodeFromRedirect } from './api/client'
-import AuthScreen from './components/AuthScreen'
+import PublicSite from './auth/PublicSite'
 import { Loading } from './components/Loading'
 import Dashboard from './pages/Dashboard'
 import Finance from './pages/Finance'
@@ -244,7 +244,7 @@ export default function App() {
   if (exchanging) return <div style={{ padding: '2rem' }}>Signing you in…</div>
 
   if (!hasToken) {
-    return <AuthScreen initialError={loginError} />
+    return <PublicSite initialError={loginError} />
   }
 
   if (status?.live_trading_enabled && !liveAcked) {

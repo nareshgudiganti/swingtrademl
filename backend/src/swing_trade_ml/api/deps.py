@@ -190,6 +190,23 @@ TESTER_WRITES: frozenset[tuple[str, str]] = frozenset(
     {("POST", "/portfolio/tester/buy"), ("POST", "/portfolio/positions/{position_id}/close")}
 )
 
+#: Self-service routes any signed-in PERSON may call, whatever their role or
+#: plan: their own watchlist (endpoints/my_watchlist.py), and nothing else.
+#: These are the only writes open to a member. They are safe to open because the
+#: handlers only ever read or change the caller's own rows, keyed by the user id
+#: from the credential itself (never from the body or the path), and they touch
+#: no money, order, position, limit or the bot's global watchlist. An API-key
+#: caller has no person behind it, so it is refused here (and again in the handler).
+SELF_SERVICE_ROUTES: frozenset[tuple[str, str]] = frozenset(
+    {
+        ("GET", "/me/watchlist"),
+        ("GET", "/me/watchlist/search"),
+        ("POST", "/me/watchlist"),
+        ("DELETE", "/me/watchlist/{symbol}"),
+    }
+)
+SELF_SERVICE_NEEDS_PERSON = "Sign in with your own account to use your watchlist."
+
 #: Owner-private areas nobody but the owner may even read, whatever the plans
 #: switch says: a tester (who otherwise sees the shared app while plans are off)
 #: and a plain member alike. No plan feature opens any of them. The owner's
@@ -247,6 +264,11 @@ async def require_auth(
     safety switch, which it silently allowed before (audit F-17).
     """
     path = _route_path(request)
+    # A person's own watchlist: open to every signed-in person (no plan needed), never to the API key.
+    if (request.method, path) in SELF_SERVICE_ROUTES:
+        if principal.user is None:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, SELF_SERVICE_NEEDS_PERSON)
+        return
     if (
         request.method not in READ_METHODS
         and not principal.is_owner

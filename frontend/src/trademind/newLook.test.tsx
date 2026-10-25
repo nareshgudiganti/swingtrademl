@@ -140,9 +140,9 @@ describe('the new Today', () => {
 })
 
 describe('the 8-item menu', () => {
-  it('owner sees 8 items, others never Watchlist (until wave 2) or Admin', () => {
+  it('owner sees 8 items, everyone else all but Admin (wave 2: everyone has their own watchlist)', () => {
     expect(visibleNav(true).map((n) => n.id)).toEqual(['today', 'discover', 'portfolio', 'watchlist', 'market', 'evidence', 'history', 'admin'])
-    expect(visibleNav(false).map((n) => n.id)).toEqual(['today', 'discover', 'portfolio', 'market', 'evidence', 'history'])
+    expect(visibleNav(false).map((n) => n.id)).toEqual(['today', 'discover', 'portfolio', 'watchlist', 'market', 'evidence', 'history'])
   })
 
   it('a stock page belongs to Discover; owner-only and real pages stay hidden', () => {

@@ -531,6 +531,27 @@ export interface Instrument {
   is_active: boolean
 }
 
+/** One stock on a person's own watchlist (GET /me/watchlist). Not the bot's global watchlist. */
+export interface MyWatchlistItem {
+  symbol: string
+  name: string | null
+  added_at: string
+  /** Set when the person took it off the list (shown under "Removed"). */
+  removed_at: string | null
+  note: string | null
+}
+
+export interface MyWatchlist {
+  items: MyWatchlistItem[]
+  /** Most stocks one list may hold at a time. */
+  limit: number
+}
+
+export interface WatchlistHit {
+  symbol: string
+  name: string | null
+}
+
 export interface PredictionRun {
   symbol: string
   instrument_id: number

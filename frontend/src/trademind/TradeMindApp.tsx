@@ -31,6 +31,9 @@ import Watchlist from './pages/Watchlist'
 import PaperPositions from './pages/PaperPositions'
 import StockDetail from './pages/StockDetail'
 import StockNew from './pages/StockNew'
+import DiscoverNew from './pages/DiscoverNew'
+import PortfolioNew from './pages/PortfolioNew'
+import WatchlistNew from './pages/WatchlistNew'
 import Portfolio from './pages/Portfolio'
 import Positions from './pages/Positions'
 import AIDecision from './pages/AIDecision'
@@ -282,10 +285,14 @@ export function TradeMindRoutes({
         <Route index element={<Today owner={ownerConsole} answerFirst={look === 'new'} />} />
         <Route path="dashboard" element={<Today owner={ownerConsole} focus="picks" />} />
         <Route path="market" element={look === 'new' ? <MarketNew /> : <Market />} />
-        <Route path="opportunities" element={<Opportunities />} />
-        <Route path="watchlist" element={ownerConsole ? <Watchlist /> : <Navigate to="/trademind/opportunities" replace />} />
+        <Route path="opportunities" element={look === 'new' ? <DiscoverNew /> : <Opportunities />} />
+        {/* New look: everyone's own list (/me/watchlist). Classic: the owner's shared watchlist, unchanged. */}
+        <Route
+          path="watchlist"
+          element={look === 'new' ? <WatchlistNew /> : ownerConsole ? <Watchlist /> : <Navigate to="/trademind/opportunities" replace />}
+        />
         <Route path="stock/:symbol" element={look === 'new' ? <StockNew /> : <StockDetail />} />
-        <Route path="portfolio" element={<Portfolio />} />
+        <Route path="portfolio" element={look === 'new' ? <PortfolioNew owner={ownerConsole} /> : <Portfolio />} />
         <Route path="positions" element={<Positions />} />
         <Route path="positions/:symbol" element={<Positions />} />
         <Route

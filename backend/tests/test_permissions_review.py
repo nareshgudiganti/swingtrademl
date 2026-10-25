@@ -30,6 +30,8 @@ OPEN_WRITES: dict[tuple[str, str], str] = {
     ("POST", "/auth/password"): "a signed-in person changes their own password, nobody else's",
     ("POST", "/auth/logout-all"): "a signed-in person ends their own sessions, nobody else's",
     ("POST", "/auth/google/exchange"): "finishes Google sign-in; the one-time code is the credential",
+    ("POST", "/me/watchlist"): "a signed-in person adds a stock to their own watchlist, nobody else's",
+    ("DELETE", "/me/watchlist/{symbol}"): "a signed-in person removes a stock from their own watchlist only",
 }
 
 # Routes anyone may call without credentials, and why. Everything else must answer 401/403.

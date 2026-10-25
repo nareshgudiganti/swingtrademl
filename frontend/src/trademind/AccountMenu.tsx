@@ -11,7 +11,16 @@ export function logOut(): void {
   window.location.assign('/')
 }
 
-export function AccountMenuList({ pages, onLogOut = logOut }: { pages: Page[]; onLogOut?: () => void }) {
+export function AccountMenuList({
+  pages,
+  onLogOut = logOut,
+  onNewLook,
+}: {
+  pages: Page[]
+  onLogOut?: () => void
+  /** The owner's way into the new look (look.ts): kept in this menu so the top bar keeps its room. */
+  onNewLook?: () => void
+}) {
   return (
     <div className="tm-menu-list" role="menu">
       {pages.map((pg) => (
@@ -19,6 +28,11 @@ export function AccountMenuList({ pages, onLogOut = logOut }: { pages: Page[]; o
           {pg.label}
         </Link>
       ))}
+      {onNewLook && (
+        <button type="button" role="menuitem" className="tm-menu-logout" onClick={onNewLook} data-testid="look-switch">
+          Try the new look
+        </button>
+      )}
       <button type="button" role="menuitem" className="tm-menu-logout" title="Log out of this app" onClick={onLogOut}>
         Log out
       </button>

@@ -79,11 +79,12 @@ describe('the look switch', () => {
     expect(store.get(LOOK_KEY)).toBe('classic')
   })
 
-  it('the classic look is unchanged and offers the new look', () => {
-    const html = render('/trademind', true)
-    expect(html).toContain('tm-topbar')
-    expect(html).not.toContain('tmn-side')
-    expect(html).toContain('data-testid="look-switch"')
+  it('the classic look is unchanged and offers the new look (on the bar for members, in the account menu for the owner)', () => {
+    const member = render('/trademind', false)
+    expect(member).toContain('tm-topbar')
+    expect(member).not.toContain('tmn-side')
+    expect(member).toContain('data-testid="look-switch"')
+    expect(render('/trademind', true)).not.toContain('class="tm-look-switch"') // the owner's bar keeps its room
   })
 })
 

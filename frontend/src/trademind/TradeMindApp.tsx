@@ -212,22 +212,25 @@ function ClassicShell({ ownerConsole }: { ownerConsole: boolean }) {
                 <Icon.User />
               </button>
               {/* The Admin pages, then Log out (moved off the bar for the owner, so the bar stays on one line). */}
-              {menuOpen && <AccountMenuList pages={ADMIN_SECTION.pages} />}
+              {menuOpen && <AccountMenuList pages={ADMIN_SECTION.pages} onNewLook={() => setLook('new')} />}
             </div>
           ) : (
             <span className="tm-avatar" title="TradeMind Pro">
               <Icon.User />
             </span>
           )}
-          <button
-            type="button"
-            className="tm-look-switch"
-            title="Switch to the new light look. You can switch back at any time; nothing else changes."
-            onClick={() => setLook('new')}
-            data-testid="look-switch"
-          >
-            New look
-          </button>
+          {/* The owner switches look from the account menu (the bar is full); everyone else from the bar. */}
+          {!ownerConsole && (
+            <button
+              type="button"
+              className="tm-look-switch"
+              title="Switch to the new light look. You can switch back at any time; nothing else changes."
+              onClick={() => setLook('new')}
+              data-testid="look-switch"
+            >
+              New look
+            </button>
+          )}
           <Tour realAccount={ownerConsole && canSeeRealAccount} />
           {!ownerConsole && (
             <button type="button" className="tm-logout" title="Log out of this app" onClick={logOut}>

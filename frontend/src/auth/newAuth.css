@@ -10,7 +10,7 @@
   --na-text: #172033;
   --na-dim: #4b5567;
   --na-fine: #5a6478;
-  --na-green: #16a34a;
+  --na-green: #15803d;
   --na-green-dark: #15803d;
   --na-link: #1d5fd6;
   --na-panel: #0f2a1c;
@@ -653,4 +653,11 @@
     padding: 0 10px;
     font-size: 14px;
   }
+}
+
+/* Links inside a sentence are underlined, so they stand out from the text around them (not only by colour). */
+.na-fine a,
+.na-body a {
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }

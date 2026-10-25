@@ -16,6 +16,7 @@ from swing_trade_ml.api.v1.endpoints import (
     experiments,
     finance,
     instruments,
+    invites,
     jobs,
     market_data,
     ml,
@@ -42,6 +43,9 @@ api_router = APIRouter()
 #    cannot send custom headers.
 api_router.include_router(system.router)
 api_router.include_router(auth.router)
+# Asking for an invite is public (rate-limited); /admin/invites/* checks for the signed-in owner itself.
+api_router.include_router(invites.router)
+api_router.include_router(invites.admin)
 # /me/plan must answer every signed-in user whatever their plan (it is how
 # the app learns what to show), and /admin/* checks for the owner itself.
 api_router.include_router(plans.router)

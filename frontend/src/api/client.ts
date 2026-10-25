@@ -98,6 +98,8 @@ import type {
 } from './types'
 import type { AlertSettings, AlertSettingsUpdate } from '../trademind/alerts'
 import type { AdminJobs } from '../trademind/jobs'
+import type { AuthOptions, InviteForm } from '../auth/authRules'
+import type { InviteDecision, InviteRequestRow } from '../trademind/invites'
 import type { BrainChanges } from '../trademind/changes'
 import type { RealTaxExport } from '../trademind/taxRecords'
 
@@ -303,9 +305,18 @@ export const api = {
   changePassword: (current_password: string, new_password: string) =>
     post<{ access_token: string }>('/auth/password', { current_password, new_password }),
   logoutEverywhere: () => post<{ message: string }>('/auth/logout-all'),
-  signup: (username: string, password: string, email?: string) =>
-    post<{ access_token: string }>('/auth/signup', { username, password, email }),
-  authOptions: () => get<{ signup_allowed: boolean }>('/auth/options'),
+  signup: (username: string, password: string, email?: string, inviteCode?: string) =>
+    postPublic<{ access_token: string }>('/auth/signup', {
+      username,
+      password,
+      email,
+      ...(inviteCode ? { invite_code: inviteCode } : {}),
+    }),
+  authOptions: () => get<AuthOptions>('/auth/options'),
+  requestInvite: (body: InviteForm) => {
+    const phone = body.phone.trim()
+    return postPublic<{ message: string }>('/auth/invite-request', { ...body, phone: phone || null })
+  },
   me: () => get<CurrentUser>('/auth/me'),
   kiteLogin: () => get<KiteLoginResponse>('/auth/kite/login'),
 
@@ -322,6 +333,14 @@ export const api = {
 
   // ---------------------------------------- scheduled jobs (owner, read-only) --
   adminJobs: () => get<AdminJobs>('/admin/jobs'),
+
+  // ------------------------------------------- invites (signed-in owner only) --
+  adminInvites: () => get<InviteRequestRow[]>('/admin/invites'),
+  approveInvite: (id: number, note?: string) =>
+    post<InviteDecision>(`/admin/invites/${id}/approve`, { note: note || null }),
+  rejectInvite: (id: number, note?: string) =>
+    post<InviteRequestRow>(`/admin/invites/${id}/reject`, { note: note || null }),
+  newInviteCode: (id: number) => post<InviteDecision>(`/admin/invites/${id}/new-code`, {}),
 
   // ---------------------------------------------------------- portfolio --
   // Everything below asks for `book=bot`: the bot's own book, in whichever

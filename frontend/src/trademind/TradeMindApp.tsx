@@ -39,6 +39,7 @@ import Records from './pages/Records'
 import MyHoldings from './pages/MyHoldings'
 import Setup from './pages/Setup'
 import Observatory from './pages/Observatory'
+import Invites from './pages/Invites'
 import Jobs from './pages/Jobs'
 import Alerts from './pages/Alerts'
 import PlansManager from '../pages/PlansManager'
@@ -315,6 +316,7 @@ export function TradeMindRoutes({
         <Route path="holdings" element={ownerConsole && realAccount ? <MyHoldings /> : <Navigate to="/trademind/portfolio" replace />} />
         <Route path="setup" element={ownerConsole ? <Setup /> : <Navigate to="/trademind" replace />} />
         <Route path="jobs" element={ownerConsole ? <Jobs /> : <Navigate to="/trademind" replace />} />
+        <Route path="invites" element={ownerConsole ? <Invites /> : <Navigate to="/trademind" replace />} />
         <Route path="alerts" element={ownerConsole ? <Alerts /> : <Navigate to="/trademind" replace />} />
         {/* Admin > Plans: the existing Plans manager, unchanged (it keeps its own owner check too). */}
         <Route path="plans" element={ownerConsole ? <div className="tm-page"><PlansManager /></div> : <Navigate to="/trademind" replace />} />

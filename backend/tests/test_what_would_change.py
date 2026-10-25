@@ -324,6 +324,47 @@ def test_allocator_room_quotes_the_stored_amounts():
     ]
 
 
+def _defensive_items(verdict: c.RiskVerdict) -> list[dict]:
+    d = decide_idea(_facts(verdict=replace(verdict, symbol="ABC")), POLICY)
+    return what_would_change(_row(d), banner_mode="DEFENSIVE")
+
+
+def test_careful_market_room_needs_about_twice_the_minimum():
+    # M07 fits the buy to the free room first and halves it after, but still compares it with the
+    # full minimum: in a careful market about twice the minimum must be free, not the minimum.
+    cands = [Candidate("ABC", 100.0, 0.9, None)]
+    v = _allocated(cands, _account(deploy_room=15_000.0), MarketMode.DEFENSIVE, qty=1000)["ABC"]
+    assert _defensive_items(v) == [
+        {
+            "key": "room_after_stronger",
+            "text": "Needs about ₹20,000 of free room under the market-conditions limit: in a careful market "
+            "each buy is cut to half size, so the room must be about twice the ₹10,000 minimum "
+            "(today a half-size buy would be ₹7,500).",
+        }
+    ]
+
+
+def test_careful_market_half_size_alone_below_the_minimum():
+    # Plenty of room; the risk-sized buy (₹15,000) halved to ₹7,500 is what falls short.
+    v = _allocated([Candidate("ABC", 100.0, 0.9, None)], _account(), MarketMode.DEFENSIVE, qty=150)["ABC"]
+    assert _defensive_items(v) == [
+        {
+            "key": "defensive_half_size",
+            "text": "The market would need to return to NORMAL: in a careful market each buy is cut to half "
+            "size, and half of this one (₹7,500) is below the ₹10,000 minimum.",
+        }
+    ]
+
+
+def test_normal_market_room_line_is_unchanged():
+    cands = [Candidate("A1", 100.0, 0.9, None), Candidate("ABC", 100.0, 0.5, None)]
+    v = _allocated(cands, _account(deploy_room=15_000.0))["ABC"]
+    d = decide_idea(_facts(verdict=replace(v, symbol="ABC")), POLICY)
+    assert what_would_change(_row(d), banner_mode="NORMAL")[0]["text"] == (
+        "Needs about ₹10,000 of free room under the market-conditions limit (today ₹5,000)."
+    )
+
+
 # --- version 1's risk.check_entry refusals (texts copied from services/risk.py) ----------
 
 V1_REFUSALS = [

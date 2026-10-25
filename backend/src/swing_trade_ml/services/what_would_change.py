@@ -28,6 +28,8 @@ from dataclasses import dataclass
 from typing import Any
 
 from swing_trade_ml.brain.constitution import BAD_PLAN, DATA_NOT_CHECKED, NO_RISK_GATE, NOT_APPROVED
+from swing_trade_ml.brain.modules.m07_risk.module import DEFENSIVE_SIZE_FACTOR
+from swing_trade_ml.services.limits import format_inr
 
 UNKNOWN = "Not known from the stored record."
 RISK_PREFIX = "Good idea, but the risk check said no: "
@@ -35,6 +37,14 @@ NO_DECISION = "No decision was produced for this stock."
 EXPLAINED_WORDS = frozenset({"WATCH", "WAIT", "AVOID"})
 
 _INR = r"-?₹[\d,]+"
+#: M07's label for a buy that only the careful-market halving pushed below the minimum.
+_HALF_SIZE = "half size in a defensive market"
+
+
+def _rupees(text: str) -> float:
+    return float(text.replace("₹", "").replace(",", ""))
+
+
 _DATE = r"\d{2} [A-Z][a-z]{2}"
 
 
@@ -91,9 +101,13 @@ def _below_buy_level_line(rank: ModelRank | None) -> str:
 # --- risk-check refusals (the text after RISK_PREFIX) --------------------------------
 
 
-def _risk_line(why: str) -> tuple[str, str]:
+def _risk_line(why: str, banner_mode: str | None = None) -> tuple[str, str]:
     """(key, line) for one risk-check refusal. Unrecognised refusals fall back to the
-    general limits line — the stored record says only that the limits said no."""
+    general limits line — the stored record says only that the limits said no.
+
+    In a careful (DEFENSIVE) market M07 fits a buy to the free room first and halves it
+    after, but still compares it with the full minimum, so the room needed is the minimum
+    divided by the halving factor (about twice the minimum), not the minimum itself."""
     w = why.strip()
     if w.startswith("The market mode is NO NEW TRADES"):
         return "market_no_new_trades", "The market mode would need to leave NO NEW TRADES."
@@ -133,9 +147,20 @@ def _risk_line(why: str) -> tuple[str, str]:
         w,
     )
     if m:
-        return "room_after_stronger", (
-            f"Needs about {m.group(3)} of free room under the {m.group(1)} (today {m.group(2)})."
-        )
+        limit, today, minimum = m.group(1), m.group(2), m.group(3)
+        if limit == _HALF_SIZE:
+            return "defensive_half_size", (
+                "The market would need to return to NORMAL: in a careful market each buy is cut to half "
+                f"size, and half of this one ({today}) is below the {minimum} minimum."
+            )
+        if banner_mode == "DEFENSIVE":
+            need = format_inr(_rupees(minimum) / DEFENSIVE_SIZE_FACTOR)
+            return "room_after_stronger", (
+                f"Needs about {need} of free room under the {limit}: in a careful market each buy is cut "
+                f"to half size, so the room must be about twice the {minimum} minimum "
+                f"(today a half-size buy would be {today})."
+            )
+        return "room_after_stronger", f"Needs about {minimum} of free room under the {limit} (today {today})."
     m = re.search(rf"leaving ({_INR}) — less than the ({_INR}) minimum position", w)
     if m:
         return "deployable_room", (
@@ -222,7 +247,7 @@ def _line(reason: str, rank: ModelRank | None, banner_mode: str | None, banner_h
     (the plan, the model's own reasons, context notes) or a reason not recognised."""
     r = reason.strip()
     if r.startswith(RISK_PREFIX):
-        return _risk_line(r[len(RISK_PREFIX) :])
+        return _risk_line(r[len(RISK_PREFIX) :], banner_mode)
 
     # rules.py
     m = re.match(r"^On the exchange's watch list \((.+)\), so the brain stays away\.$", r)

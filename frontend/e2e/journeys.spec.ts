@@ -5,12 +5,12 @@ import { expect, openPage, test } from './support/test'
 test.describe('1. Sign in', () => {
   test('signing in with a username and password lands on Today', async ({ page }) => {
     await mockApi(page, { signedIn: false })
-    await page.goto('/')
-    await expect(page.getByText('Sign in to your account.')).toBeVisible()
-    // This server has sign-up switched off, and the screen says so.
-    await expect(page.getByText('Sign-up is closed on this server.')).toBeVisible()
+    await page.goto('/signin')
+    await expect(page.getByText('Welcome back')).toBeVisible()
+    // Sign-up is by invite only: the sign-in page offers to ask for one.
+    await expect(page.getByRole('link', { name: 'Ask for an invite' }).first()).toBeVisible()
 
-    await page.getByLabel('Username').fill('owner')
+    await page.getByLabel('Email or username').fill('owner')
     await page.getByLabel('Password').fill('a-test-password')
     const login = page.waitForRequest((r) => r.url().endsWith('/api/v1/auth/login') && r.method() === 'POST')
     await page.getByRole('button', { name: 'Sign in', exact: true }).click()
@@ -23,29 +23,29 @@ test.describe('1. Sign in', () => {
 
   test('a wrong password shows a plain message and stays on the sign-in screen', async ({ page }) => {
     await mockApi(page, { signedIn: false })
-    await page.goto('/')
-    await page.getByLabel('Username').fill('owner')
+    await page.goto('/signin')
+    await page.getByLabel('Email or username').fill('owner')
     await page.getByLabel('Password').fill(WRONG_PASSWORD)
     await page.getByRole('button', { name: 'Sign in', exact: true }).click()
     await expect(page.getByText('Incorrect username or password')).toBeVisible()
-    await expect(page.getByLabel('Username')).toBeVisible()
+    await expect(page.getByLabel('Email or username')).toBeVisible()
     expect(await page.evaluate(() => localStorage.getItem('stml.token'))).toBeNull()
   })
 
-  test('logging out returns to the sign-in screen (owner: from the account menu)', async ({ page }) => {
+  test('logging out returns to the front page (owner: from the account menu)', async ({ page }) => {
     await mockApi(page)
     await openPage(page, '/trademind')
     await expect(page.locator('.tm-topbar').getByRole('button', { name: 'Log out' })).toHaveCount(0)
     await page.getByRole('button', { name: 'Your account and settings' }).click()
     await page.getByRole('menuitem', { name: 'Log out' }).click()
-    await expect(page.getByText('Sign in to your account.')).toBeVisible()
+    await expect(page.getByText('Join the trial')).toBeVisible()
   })
 
-  test('logging out returns to the sign-in screen (member: the button on the bar)', async ({ page }) => {
+  test('logging out returns to the front page (member: the button on the bar)', async ({ page }) => {
     await mockApi(page, { role: 'member' })
     await openPage(page, '/trademind')
     await page.getByRole('button', { name: 'Log out' }).click()
-    await expect(page.getByText('Sign in to your account.')).toBeVisible()
+    await expect(page.getByText('Join the trial')).toBeVisible()
   })
 })
 

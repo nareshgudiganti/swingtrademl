@@ -19,11 +19,21 @@ import PricesBadge from './PricesBadge'
 import TopBarAlerts from './TopBarAlerts'
 import { Tour } from './Tour'
 import Today from './pages/Today'
+import NewLookShell from './NewLookShell'
+import { useLook, type Look } from './look'
 import Market from './pages/Market'
+import MarketNew from './pages/MarketNew'
+import EvidenceNew from './pages/EvidenceNew'
+import HistoryNew from './pages/HistoryNew'
+import AdminHome from './pages/AdminHome'
 import Opportunities from './pages/Opportunities'
 import Watchlist from './pages/Watchlist'
 import PaperPositions from './pages/PaperPositions'
 import StockDetail from './pages/StockDetail'
+import StockNew from './pages/StockNew'
+import DiscoverNew from './pages/DiscoverNew'
+import PortfolioNew from './pages/PortfolioNew'
+import WatchlistNew from './pages/WatchlistNew'
 import Portfolio from './pages/Portfolio'
 import Positions from './pages/Positions'
 import AIDecision from './pages/AIDecision'
@@ -36,6 +46,7 @@ import Records from './pages/Records'
 import MyHoldings from './pages/MyHoldings'
 import Setup from './pages/Setup'
 import Observatory from './pages/Observatory'
+import Invites from './pages/Invites'
 import Jobs from './pages/Jobs'
 import Alerts from './pages/Alerts'
 import PlansManager from '../pages/PlansManager'
@@ -68,7 +79,14 @@ function TabLabel({ label }: { label: string }) {
   )
 }
 
+/** Both looks: the classic dark top-menu app (default) or the new light sidebar app. Same pages, same API. */
 export default function TradeMindApp({ ownerConsole = false }: TradeMindAppProps) {
+  const [look] = useLook()
+  return look === 'new' ? <NewLookShell ownerConsole={ownerConsole} /> : <ClassicShell ownerConsole={ownerConsole} />
+}
+
+/** What both shells show around the pages: the menu for this viewer, the Paper/Real strip, the brain chip. */
+export function useShell(ownerConsole: boolean) {
   const status = useBrainStatus()
   const latest = useLatestRun()
   // Only the account named in REAL_ACCOUNT_USERS may see the real Zerodha tab (the server enforces it too).
@@ -94,6 +112,41 @@ export default function TradeMindApp({ ownerConsole = false }: TradeMindAppProps
     !matches(location.pathname, '/trademind/testing') &&
     broker.data != null &&
     broker.data.trading_mode !== 'paper'
+  const chip = statusChip(status, {
+    runAt: latest.data ? formatDateTime(latest.data.started_at) : null,
+    refreshFailing: staleSince(latest) != null,
+  })
+  return {
+    canSeeRealAccount,
+    seesAll,
+    location,
+    book,
+    broker,
+    sections,
+    section,
+    testingOn,
+    pages,
+    showBook,
+    paperButNotPaper,
+    chip,
+  }
+}
+
+function ClassicShell({ ownerConsole }: { ownerConsole: boolean }) {
+  const [, setLook] = useLook()
+  const {
+    canSeeRealAccount,
+    seesAll,
+    location,
+    book,
+    broker,
+    sections,
+    section,
+    pages,
+    showBook,
+    paperButNotPaper,
+    chip,
+  } = useShell(ownerConsole)
   const [menuOpen, setMenuOpen] = useState(false)
   useEffect(() => setMenuOpen(false), [location.pathname])
   useEffect(() => {
@@ -109,10 +162,6 @@ export default function TradeMindApp({ ownerConsole = false }: TradeMindAppProps
       document.removeEventListener('keydown', esc)
     }
   }, [menuOpen])
-  const chip = statusChip(status, {
-    runAt: latest.data ? formatDateTime(latest.data.started_at) : null,
-    refreshFailing: staleSince(latest) != null,
-  })
 
   return (
     <div className="tm">
@@ -163,12 +212,24 @@ export default function TradeMindApp({ ownerConsole = false }: TradeMindAppProps
                 <Icon.User />
               </button>
               {/* The Admin pages, then Log out (moved off the bar for the owner, so the bar stays on one line). */}
-              {menuOpen && <AccountMenuList pages={ADMIN_SECTION.pages} />}
+              {menuOpen && <AccountMenuList pages={ADMIN_SECTION.pages} onNewLook={() => setLook('new')} />}
             </div>
           ) : (
             <span className="tm-avatar" title="TradeMind Pro">
               <Icon.User />
             </span>
+          )}
+          {/* The owner switches look from the account menu (the bar is full); everyone else from the bar. */}
+          {!ownerConsole && (
+            <button
+              type="button"
+              className="tm-look-switch"
+              title="Switch to the new light look. You can switch back at any time; nothing else changes."
+              onClick={() => setLook('new')}
+              data-testid="look-switch"
+            >
+              New look
+            </button>
           )}
           <Tour realAccount={ownerConsole && canSeeRealAccount} />
           {!ownerConsole && (
@@ -200,56 +261,84 @@ export default function TradeMindApp({ ownerConsole = false }: TradeMindAppProps
       )}
       <OfflineBanner />
 
-      {/* Rendered outside any parent <Route>, so the paths are anchored here. */}
-      <Routes>
-        <Route path="/trademind">
-          {/* oa5: one Today page (the old Home + Swing Picks). /trademind/dashboard keeps working: Today at the pick list. */}
-          <Route index element={<Today owner={ownerConsole} />} />
-          <Route path="dashboard" element={<Today owner={ownerConsole} focus="picks" />} />
-          <Route path="market" element={<Market />} />
-          <Route path="opportunities" element={<Opportunities />} />
-          <Route path="watchlist" element={ownerConsole ? <Watchlist /> : <Navigate to="/trademind/opportunities" replace />} />
-          <Route path="stock/:symbol" element={<StockDetail />} />
-          <Route path="portfolio" element={<Portfolio />} />
-          <Route path="positions" element={<Positions />} />
-          <Route path="positions/:symbol" element={<Positions />} />
-          <Route
-            path="testing"
-            element={
-              !ownerConsole ? (
-                <Navigate to="/trademind/positions" replace />
-              ) : broker.data?.paper_tester_enabled === false ? (
-                <div className="tm-page tm-grid">
-                  <Card glow title="Testing is switched off" sub="Paper testing is not turned on for this server.">
-                    <p>
-                      Nothing is broken. The owner switch for manual paper trades (PAPER_TESTER_ENABLED) is off on the
-                      server, so buying here is refused. Your real Positions tab is not affected.
-                    </p>
-                  </Card>
-                </div>
-              ) : (
-                <PaperPositions />
-              )
-            }
-          />
-          <Route path="ai" element={<AIDecision />} />
-          <Route path="ai/:symbol" element={<AIDecision />} />
-          <Route path="observatory" element={ownerConsole ? <Observatory /> : <Navigate to="/trademind" replace />} />
-          <Route path="risk" element={ownerConsole ? <Risk /> : <Navigate to="/trademind" replace />} />
-          <Route path="learn" element={<Learn />} />
-          <Route path="system" element={ownerConsole ? <System /> : <Navigate to="/trademind" replace />} />
-          <Route path="control" element={ownerConsole ? <Control /> : <Navigate to="/trademind" replace />} />
-          <Route path="golive" element={ownerConsole ? <GoLive /> : <Navigate to="/trademind" replace />} />
-          <Route path="records" element={<Records />} />
-          <Route path="holdings" element={ownerConsole && canSeeRealAccount ? <MyHoldings /> : <Navigate to="/trademind/portfolio" replace />} />
-          <Route path="setup" element={ownerConsole ? <Setup /> : <Navigate to="/trademind" replace />} />
-          <Route path="jobs" element={ownerConsole ? <Jobs /> : <Navigate to="/trademind" replace />} />
-          <Route path="alerts" element={ownerConsole ? <Alerts /> : <Navigate to="/trademind" replace />} />
-          {/* Admin > Plans: the existing Plans manager, unchanged (it keeps its own owner check too). */}
-          <Route path="plans" element={ownerConsole ? <div className="tm-page"><PlansManager /></div> : <Navigate to="/trademind" replace />} />
-          <Route path="*" element={<Navigate to="/trademind" replace />} />
-        </Route>
-      </Routes>
+      <TradeMindRoutes ownerConsole={ownerConsole} testingOff={broker.data?.paper_tester_enabled === false} realAccount={canSeeRealAccount} look="classic" />
     </div>
+  )
+}
+
+/** The page routes, shared by both looks. Only Today differs: the new look opens the answer-first Today. */
+export function TradeMindRoutes({
+  ownerConsole,
+  testingOff,
+  realAccount,
+  look,
+}: {
+  ownerConsole: boolean
+  /** Paper testing switched off on the server (PAPER_TESTER_ENABLED). */
+  testingOff: boolean
+  /** This account may see the real Zerodha account (REAL_ACCOUNT_USERS). */
+  realAccount: boolean
+  look: Look
+}) {
+  return (
+    <>
+    {/* Rendered outside any parent <Route>, so the paths are anchored here. */}
+    <Routes>
+      <Route path="/trademind">
+        {/* oa5: one Today page (the old Home + Swing Picks). /trademind/dashboard keeps working: Today at the pick list. */}
+        <Route index element={<Today owner={ownerConsole} answerFirst={look === 'new'} />} />
+        <Route path="dashboard" element={<Today owner={ownerConsole} focus="picks" />} />
+        <Route path="market" element={look === 'new' ? <MarketNew /> : <Market />} />
+        <Route path="opportunities" element={look === 'new' ? <DiscoverNew /> : <Opportunities />} />
+        {/* New look: everyone's own list (/me/watchlist). Classic: the owner's shared watchlist, unchanged. */}
+        <Route
+          path="watchlist"
+          element={look === 'new' ? <WatchlistNew /> : ownerConsole ? <Watchlist /> : <Navigate to="/trademind/opportunities" replace />}
+        />
+        <Route path="stock/:symbol" element={look === 'new' ? <StockNew /> : <StockDetail />} />
+        <Route path="portfolio" element={look === 'new' ? <PortfolioNew owner={ownerConsole} /> : <Portfolio />} />
+        <Route path="positions" element={<Positions />} />
+        <Route path="positions/:symbol" element={<Positions />} />
+        <Route
+          path="testing"
+          element={
+            !ownerConsole ? (
+              <Navigate to="/trademind/positions" replace />
+            ) : testingOff ? (
+              <div className="tm-page tm-grid">
+                <Card glow title="Testing is switched off" sub="Paper testing is not turned on for this server.">
+                  <p>
+                    Nothing is broken. The owner switch for manual paper trades (PAPER_TESTER_ENABLED) is off on the
+                    server, so buying here is refused. Your real Positions tab is not affected.
+                  </p>
+                </Card>
+              </div>
+            ) : (
+              <PaperPositions />
+            )
+          }
+        />
+        <Route path="ai" element={<AIDecision />} />
+        <Route path="ai/:symbol" element={<AIDecision />} />
+        <Route path="observatory" element={ownerConsole ? <Observatory /> : <Navigate to="/trademind" replace />} />
+        <Route path="risk" element={ownerConsole ? <Risk /> : <Navigate to="/trademind" replace />} />
+        <Route path="learn" element={look === 'new' ? <EvidenceNew owner={ownerConsole} /> : <Learn />} />
+        <Route path="system" element={ownerConsole ? <System /> : <Navigate to="/trademind" replace />} />
+        {/* New look only: the Admin home (status + safety switches, read only). Classic goes to Control. */}
+        <Route path="admin" element={!ownerConsole ? <Navigate to="/trademind" replace /> : look === 'new' ? <AdminHome /> : <Navigate to="/trademind/control" replace />} />
+        <Route path="control" element={ownerConsole ? <Control /> : <Navigate to="/trademind" replace />} />
+        <Route path="golive" element={ownerConsole ? <GoLive /> : <Navigate to="/trademind" replace />} />
+        <Route path="records" element={look === 'new' ? <HistoryNew owner={ownerConsole} /> : <Records />} />
+        <Route path="holdings" element={ownerConsole && realAccount ? <MyHoldings /> : <Navigate to="/trademind/portfolio" replace />} />
+        <Route path="setup" element={ownerConsole ? <Setup /> : <Navigate to="/trademind" replace />} />
+        <Route path="jobs" element={ownerConsole ? <Jobs /> : <Navigate to="/trademind" replace />} />
+        <Route path="invites" element={ownerConsole ? <Invites /> : <Navigate to="/trademind" replace />} />
+        <Route path="alerts" element={ownerConsole ? <Alerts /> : <Navigate to="/trademind" replace />} />
+        {/* Admin > Plans: the existing Plans manager, unchanged (it keeps its own owner check too). */}
+        <Route path="plans" element={ownerConsole ? <div className="tm-page"><PlansManager /></div> : <Navigate to="/trademind" replace />} />
+        <Route path="*" element={<Navigate to="/trademind" replace />} />
+      </Route>
+    </Routes>
+    </>
   )
 }

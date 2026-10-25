@@ -1,0 +1,545 @@
+/* TradeMind "new look", wave 2: Discover, Portfolio and My Watchlist (pages/DiscoverNew.tsx, PortfolioNew.tsx,
+   WatchlistNew.tsx). Everything is scoped under .tm-new, so the classic dark look is untouched. Colour tokens come
+   from newlook.css. */
+
+.tm-new .tmn-w2 {
+  display: grid;
+  gap: 1rem;
+  max-width: 1180px;
+  min-width: 0;
+}
+
+.tm-new .tmn-w2 > * {
+  min-width: 0;
+}
+
+.tm-new .tmn-w2-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+}
+
+.tm-new .tmn-w2-h1 {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  text-transform: none;
+  color: var(--tm-text);
+}
+
+.tm-new .tmn-w2-intro {
+  margin: 0.25rem 0 0;
+}
+
+.tm-new .tmn-w2-sub {
+  display: block;
+  font-weight: 400;
+}
+
+.tm-new .tmn-w2-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.tm-new .tmn-w2-pad {
+  padding: 0.6rem 0.9rem 0;
+}
+
+/* ------------------------------------------------------------ toolbar -- */
+
+.tm-new .tmn-w2-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.tm-new .tmn-w2-pills {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.tm-new .tmn-w2-pill {
+  min-height: 36px;
+  padding: 0 0.85rem;
+  border-radius: 999px;
+  border: 1px solid var(--tm-line);
+  background: #ffffff;
+  color: var(--tm-dim);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tm-new .tmn-w2-pill:hover {
+  border-color: var(--tm-line-strong);
+  color: var(--tm-text);
+}
+
+.tm-new .tmn-w2-pill.on {
+  background: var(--tm-blue);
+  border-color: var(--tm-blue);
+  color: #ffffff;
+}
+
+.tm-new .tmn-w2-count {
+  margin-left: 0.2rem;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
+}
+
+.tm-new .tmn-w2-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.tm-new .tmn-w2-select select {
+  min-height: 36px;
+  max-width: 220px;
+  border-radius: 9px;
+}
+
+.tm-new .tmn-w2-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 36px;
+  padding: 0 0.6rem;
+  border: 1px solid var(--tm-line-strong);
+  border-radius: 9px;
+  background: #ffffff;
+  color: var(--tm-faint);
+  min-width: 0;
+}
+
+.tm-new .tmn-w2-search input {
+  border: 0;
+  padding: 0.35rem 0;
+  min-width: 0;
+  width: 160px;
+  background: transparent;
+  outline: none;
+}
+
+.tm-new .tmn-w2-search-wide {
+  display: flex;
+}
+
+.tm-new .tmn-w2-search-wide input {
+  flex: 1;
+  width: auto;
+}
+
+.tm-new .tmn-w2-note {
+  margin: 0;
+  padding: 0.6rem 0.8rem;
+  border-radius: 10px;
+  background: #fff7e6;
+  border: 1px solid #f3d39a;
+  color: #6b4200;
+  font-size: 0.85rem;
+}
+
+/* -------------------------------------------------------------- tables -- */
+
+.tm-new .tmn-w2-tablecard {
+  padding: 0.35rem 0.4rem;
+}
+
+.tm-new .tmn-w2-tablebox {
+  overflow-x: auto;
+  /* Keeps the screen-reader-only text of word tags inside the scroll box, so a wide table never widens the page. */
+  position: relative;
+}
+
+.tm-new .tmn-w2-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 760px;
+  font-size: 0.86rem;
+}
+
+.tm-new .tmn-w2-table th {
+  text-align: left;
+  font-size: 0.74rem;
+  font-weight: 600;
+  padding: 0.6rem 0.7rem;
+  border-bottom: 1px solid var(--tm-line);
+  white-space: nowrap;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.tm-new .tmn-w2-table td {
+  padding: 0.65rem 0.7rem;
+  border-bottom: 1px solid #eef1f6;
+  vertical-align: middle;
+  color: var(--tm-text);
+}
+
+.tm-new .tmn-w2-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.tm-new .tmn-w2-num {
+  width: 2.5rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.tm-new .tmn-w2-r {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.tm-new .tmn-w2-stock {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--tm-text);
+  text-decoration: none;
+}
+
+.tm-new .tmn-w2-stock:hover b {
+  text-decoration: underline;
+}
+
+.tm-new .tmn-w2-why {
+  min-width: 200px;
+  max-width: 340px;
+  white-space: normal;
+  color: var(--tm-dim);
+}
+
+.tm-new .tmn-w2-stop {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.tm-new .tmn-w2-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #64748b;
+}
+
+.tm-new .tmn-w2-stop[data-tone='pass'] .tmn-w2-dot { background: var(--tm-green); }
+.tm-new .tmn-w2-stop[data-tone='late'] .tmn-w2-dot { background: #d97706; }
+.tm-new .tmn-w2-stop[data-tone='early'] .tmn-w2-dot { background: var(--tm-blue); }
+.tm-new .tmn-w2-stop[data-tone='none'] { color: var(--tm-faint); font-weight: 500; }
+
+.tm-new .tmn-w2-ai {
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.tm-new .tmn-w2-empty {
+  text-align: center;
+  padding: 1.5rem 1rem;
+  margin: 0;
+}
+
+.tm-new .tmn-w2-foot {
+  margin: 0;
+}
+
+.tm-new .tmn-w2-classic {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.tm-new .tmn-w2-back {
+  padding: 1rem 1.5rem 0;
+}
+
+/* ----------------------------------------------------------- portfolio -- */
+
+.tm-new .tmn-w2-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.tm-new .tmn-w2-stat {
+  font-size: 1.35rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--tm-text);
+}
+
+.tm-new .tmn-w2-attn-list {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.tm-new .tmn-w2-attn {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.7rem 0.9rem;
+  border-radius: 12px;
+  background: #fff6f6;
+  border: 1px solid #f5d0d5;
+  color: var(--tm-text);
+  text-decoration: none;
+}
+
+.tm-new .tmn-w2-grid2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  align-items: start;
+}
+
+.tm-new .tmn-w2-rules {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.tm-new .tmn-w2-rule {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.55rem 0;
+  border-bottom: 1px solid #eef1f6;
+  font-size: 0.86rem;
+}
+
+.tm-new .tmn-w2-rule:last-child {
+  border-bottom: 0;
+}
+
+.tm-new .tmn-w2-state {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 0.55rem;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+  background: #f1f5f9;
+  color: #334155;
+}
+
+.tm-new .tmn-w2-state[data-state='on'] { background: #dcfce7; color: #166534; }
+.tm-new .tmn-w2-state[data-state='off'] { background: #f1f5f9; color: #334155; }
+.tm-new .tmn-w2-state[data-state='paused'] { background: #fee2e2; color: #991b1b; }
+.tm-new .tmn-w2-state[data-state='warn'] { background: #fef3c7; color: #854d0e; }
+.tm-new .tmn-w2-state[data-state='every'] { background: #e0ecff; color: #1e40af; }
+
+.tm-new .tmn-w2-room[data-full='true'] {
+  background: #fffaf0;
+  border-color: #f3d39a;
+}
+
+.tm-new .tmn-w2-track {
+  height: 10px;
+  border-radius: 999px;
+  background: #eef1f6;
+  overflow: hidden;
+  margin: 0.6rem 0 0.3rem;
+}
+
+.tm-new .tmn-w2-track span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--tm-blue);
+}
+
+.tm-new .tmn-w2-room .tmn-w2-track span {
+  background: #d97706;
+}
+
+.tm-new .tmn-w2-track[data-over='true'] span {
+  background: var(--tm-red);
+}
+
+.tm-new .tmn-w2-ends {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.tm-new .tmn-w2-bar {
+  display: grid;
+  grid-template-columns: minmax(80px, 160px) minmax(0, 1fr) 3rem;
+  gap: 0.7rem;
+  align-items: center;
+  padding: 0.25rem 0;
+  font-size: 0.86rem;
+}
+
+.tm-new .tmn-w2-bar .tmn-w2-track {
+  margin: 0;
+}
+
+.tm-new .tmn-w2-bar b {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.tm-new .tmn-w2-range {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.tm-new .tmn-w2-range button {
+  min-height: 32px;
+  padding: 0 0.7rem;
+  border-radius: 8px;
+  border: 1px solid var(--tm-line);
+  background: #ffffff;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--tm-dim);
+  cursor: pointer;
+}
+
+.tm-new .tmn-w2-range button.on {
+  background: #e9f0ff;
+  border-color: #bcd0f7;
+  color: var(--tm-blue);
+}
+
+/* ----------------------------------------------------------- watchlist -- */
+
+.tm-new .tmn-w2-primary:hover,
+.tm-new .tmn-w2-primary:focus-visible {
+  background: #1f56c4;
+  color: #ffffff;
+}
+
+.tm-new .tmn-w2-primary {
+  min-height: 42px;
+  padding: 0 1rem;
+  border-radius: 10px;
+  border: 0;
+  background: var(--tm-blue);
+  color: #ffffff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tm-new .tmn-w2-ghost {
+  min-height: 36px;
+  padding: 0 0.8rem;
+  border-radius: 9px;
+  border: 1px solid var(--tm-line);
+  background: #ffffff;
+  color: var(--tm-text);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.tm-new .tmn-w2-x {
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  border: 1px solid var(--tm-line);
+  background: #ffffff;
+  color: var(--tm-dim);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.tm-new .tmn-w2-x:hover,
+.tm-new .tmn-w2-ghost:hover {
+  border-color: var(--tm-line-strong);
+  color: var(--tm-text);
+}
+
+.tm-new .tmn-w2-x:disabled,
+.tm-new .tmn-w2-ghost:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.tm-new .tmn-w2-close {
+  display: inline-block;
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  background: #dcfce7;
+  color: #166534;
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+
+.tm-new .tmn-w2-add {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.tm-new .tmn-w2-hits {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.tm-new .tmn-w2-hits li {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid #eef1f6;
+}
+
+.tm-new .tmn-w2-hits li:last-child {
+  border-bottom: 0;
+}
+
+/* ------------------------------------------------------------- phone -- */
+
+@media (max-width: 900px) {
+  .tm-new .tmn-w2-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tm-new .tmn-w2-grid2 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .tm-new .tmn-w2-stat {
+    font-size: 1.1rem;
+  }
+
+  .tm-new .tmn-w2-search,
+  .tm-new .tmn-w2-search input {
+    flex: 1;
+    width: auto;
+  }
+
+  .tm-new .tmn-w2-bar {
+    grid-template-columns: minmax(70px, 110px) minmax(0, 1fr) 2.6rem;
+  }
+
+  .tm-new .tmn-w2-back {
+    padding: 1rem 16px 0;
+  }
+}

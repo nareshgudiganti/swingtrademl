@@ -13,12 +13,19 @@ const ALLOWED = allowlist.allowed as Allowed[]
 
 /** page key -> how to open it and the text that proves it finished drawing. */
 const SCANNED: Record<string, { open: (page: Page) => Promise<void>; ready: string }> = {
-  'sign-in': {
+  'front-page': {
     open: async (page) => {
       await mockApi(page, { signedIn: false })
       await page.goto('/')
     },
-    ready: 'Sign in to your account.',
+    ready: 'Join the trial',
+  },
+  'sign-in': {
+    open: async (page) => {
+      await mockApi(page, { signedIn: false })
+      await page.goto('/signin')
+    },
+    ready: 'Welcome back',
   },
   today: { open: (page) => signedIn(page, '/trademind'), ready: 'Market Mode' },
   stock: { open: (page) => signedIn(page, '/trademind/stock/INFY'), ready: 'TradeMind Decision' },

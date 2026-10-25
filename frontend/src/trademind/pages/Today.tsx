@@ -18,11 +18,13 @@ import { StatusStrip } from '../today/StatusStrip'
 import { HowItWorks, SwingPicksList } from '../today/SwingPicks'
 import { TodayChanges, TodayIdeas, TodayInsights } from '../today/TodayIdeas'
 import { BrainGate } from '../ui'
+import TodayNew from './TodayNew'
 
 export default function Today({
   owner = false,
   focus,
   initialHorizon = DEFAULT_HORIZON,
+  answerFirst = false,
 }: {
   /** The owner console: adds the safety picture and what waits for the owner's decision. */
   owner?: boolean
@@ -30,7 +32,14 @@ export default function Today({
   focus?: 'picks'
   /** Tests only: the window chosen when the page opens (15 days otherwise). */
   initialHorizon?: HorizonId
+  /** The new look (look.ts): the answer-first Today, which shows this page whole under "Full details". */
+  answerFirst?: boolean
 }) {
+  if (answerFirst) return <TodayNew owner={owner} />
+  return <ClassicToday owner={owner} focus={focus} initialHorizon={initialHorizon} />
+}
+
+function ClassicToday({ owner, focus, initialHorizon }: { owner: boolean; focus?: 'picks'; initialHorizon: HorizonId }) {
   const latest = useLatestRun()
   const [win, setWin] = useState<HorizonId>(initialHorizon)
   const runId = latest.data?.run_id

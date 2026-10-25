@@ -22,14 +22,19 @@ WRITE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 PREFIX = settings.API_V1_PREFIX
 
 _SIGN_IN = "signing in cannot require being signed in"
+_SIGNUP = "creates an ordinary account only when sign-up is open or with an approved invite; never an owner"
+_INVITE = "asking for an invite happens before having an account; it only stores a request for the owner"
 
 # Writes a signed-in non-owner may make, and why. Everything else must answer 401/403.
 OPEN_WRITES: dict[tuple[str, str], str] = {
     ("POST", "/auth/login"): _SIGN_IN,
-    ("POST", "/auth/signup"): "creates an ordinary account only when sign-up is open; never an owner",
+    ("POST", "/auth/signup"): _SIGNUP,
     ("POST", "/auth/password"): "a signed-in person changes their own password, nobody else's",
     ("POST", "/auth/logout-all"): "a signed-in person ends their own sessions, nobody else's",
     ("POST", "/auth/google/exchange"): "finishes Google sign-in; the one-time code is the credential",
+    ("POST", "/me/watchlist"): "a signed-in person adds a stock to their own watchlist, nobody else's",
+    ("DELETE", "/me/watchlist/{symbol}"): "a signed-in person removes a stock from their own watchlist only",
+    ("POST", "/auth/invite-request"): _INVITE,
 }
 
 # Routes anyone may call without credentials, and why. Everything else must answer 401/403.
@@ -40,9 +45,10 @@ PUBLIC: dict[tuple[str, str], str] = {
     ("GET", "/ready"): "uptime checks; says only that the database answers",
     ("GET", "/auth/options"): "the sign-in page asks which sign-in options are open",
     ("POST", "/auth/login"): _SIGN_IN,
-    ("POST", "/auth/signup"): "creates an ordinary account only when sign-up is open; never an owner",
+    ("POST", "/auth/signup"): _SIGNUP,
     ("POST", "/auth/google/exchange"): "finishes Google sign-in; the one-time code is the credential",
     ("GET", "/auth/google/login"): "starts Google sign-in",
+    ("POST", "/auth/invite-request"): _INVITE,
     ("GET", "/auth/google/callback"): "Google sends the browser back here and cannot add our credentials",
     ("GET", "/auth/kite/login"): "starts Zerodha login; the token is only kept for the owner's own client ID",
     (

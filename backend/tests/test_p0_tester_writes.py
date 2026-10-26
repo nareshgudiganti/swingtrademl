@@ -87,3 +87,43 @@ def test_member_cannot_use_tester_routes(client, db_session):
         headers=member,
     )
     assert r.status_code == 403
+
+
+# tr3 (2026-10-25): the tester buy route carries its own role check, not only the router-wide gate.
+_BUY = {"symbol": "NOPE", "quantity": 1, "cap_tier": "large"}
+
+
+def test_owner_buy_route_passes_the_guard(client, db_session):
+    r = client.post("/api/v1/portfolio/tester/buy", json=_BUY, headers=_as(db_session, "o-buy", "owner"))
+    assert r.status_code not in (401, 403), r.text  # 404 unknown symbol / disabled is fine
+
+
+def test_signed_out_buy_is_401(client):
+    assert client.post("/api/v1/portfolio/tester/buy", json=_BUY).status_code == 401
+
+
+def test_buy_route_declares_the_owner_or_tester_check():
+    from swing_trade_ml.api.deps import require_owner_or_tester
+    from swing_trade_ml.api.v1.endpoints.portfolio import router
+
+    route = next(r for r in router.routes if getattr(r, "path", "").endswith("/tester/buy"))
+    assert any(d.call is require_owner_or_tester for d in route.dependant.dependencies)
+
+
+def test_owner_or_tester_check_refuses_a_member():
+    import asyncio
+
+    import pytest
+    from fastapi import HTTPException
+
+    from swing_trade_ml.api.deps import Principal, require_owner_or_tester
+
+    def user(role: str) -> User:
+        return User(username=f"u-{role}", hashed_password="x", is_active=True, role=role, plan="free")
+
+    assert asyncio.run(require_owner_or_tester(Principal(user=user("tester")))).is_tester
+    assert asyncio.run(require_owner_or_tester(Principal(user=user("owner")))).is_owner
+    assert asyncio.run(require_owner_or_tester(Principal(user=None, via_api_key=True))).is_owner
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(require_owner_or_tester(Principal(user=user("member"))))
+    assert exc.value.status_code == 403

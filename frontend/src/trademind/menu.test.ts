@@ -167,6 +167,7 @@ describe('Phase 2: the four Portfolio tabs', () => {
     expect(portfolio.pages.map((p) => [p.to, p.label])).toEqual([
       ['/trademind/positions', 'Bot (Paper)'],
       ['/trademind/testing', 'Testing (Paper)'],
+      ['/trademind/manual-test', 'Manual test (Paper)'],
       ['/trademind/holdings', 'My Zerodha (Real)'],
       ['/trademind/portfolio', 'Paper Overview'],
     ])
@@ -174,6 +175,14 @@ describe('Phase 2: the four Portfolio tabs', () => {
 
   it('keep Testing and My Zerodha owner-only', () => {
     expect(visiblePages(portfolio, false).map((p) => p.to)).toEqual(['/trademind/positions', '/trademind/portfolio'])
+  })
+
+  it('show Manual test to the owner and a tester only, never a plain member (tr3)', () => {
+    expect(visiblePages(portfolio, true).map((p) => p.to)).toContain('/trademind/manual-test')
+    expect(visiblePages(portfolio, false, { manualTest: true }).map((p) => p.to)).toContain('/trademind/manual-test')
+    expect(visiblePages(portfolio, false).map((p) => p.to)).not.toContain('/trademind/manual-test')
+    expect(visiblePages(portfolio, true, { testingOn: false }).map((p) => p.to)).not.toContain('/trademind/manual-test')
+    expect(appSource).toMatch(/path="manual-test"\s+element=\{<ManualTestRoute/)
   })
 
   it('hide My Zerodha (Real) from an owner who is not the real-account user', () => {

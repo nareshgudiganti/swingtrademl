@@ -66,11 +66,16 @@ export function activeNav(path: string, owner: boolean): NavItem {
 export function navPages(
   item: NavItem,
   owner: boolean,
-  opts: { testingOn?: boolean; realAccount?: boolean } = {},
+  opts: { testingOn?: boolean; realAccount?: boolean; manualTest?: boolean } = {},
 ): Page[] {
   const testingOn = opts.testingOn ?? true
   const realAccount = opts.realAccount ?? true
+  const manualTest = opts.manualTest ?? owner
   return item.pages.filter(
-    (p) => (owner || !p.ownerOnly) && (testingOn || !p.needsTesting) && (realAccount || !p.realAccount),
+    (p) =>
+      (owner || !p.ownerOnly) &&
+      (testingOn || !p.needsTesting) &&
+      (realAccount || !p.realAccount) &&
+      (manualTest || !p.manualTest),
   )
 }

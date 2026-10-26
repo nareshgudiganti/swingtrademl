@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 
 import { api } from '../../api/client'
@@ -23,30 +23,13 @@ export default function Opportunities() {
 }
 
 function OpportunitiesBody() {
-  const queryClient = useQueryClient()
   const latest = useLatestRun()
   const [filter, setFilter] = useState<Filter>('ALL')
   const [query, setQuery] = useState('')
-  const [buying, setBuying] = useState<string | null>(null)
-  const [qty, setQty] = useState('1')
   const caps = useSymbolCaps()
   // oa5: the version 1 per-strategy signals, read only. Their endpoints are open to no plan, so only accounts
   // that see the whole app (the owner, or a tester while plans are off) get the list.
   const { seesAll } = usePlan()
-
-  const buy = useMutation({
-    mutationFn: (symbol: string) =>
-      api.testerPaperBuy({
-        symbol,
-        quantity: Number(qty),
-        cap_tier: caps.get(symbol.toUpperCase()) ?? 'large',
-      }),
-    onSuccess: () => {
-      setBuying(null)
-      queryClient.invalidateQueries({ queryKey: ['testerPositions'] })
-      queryClient.invalidateQueries({ queryKey: ['testerSummary'] })
-    },
-  })
 
   const run = latest.data!
   const ideas = ideasFrom(run)
@@ -112,47 +95,6 @@ function OpportunitiesBody() {
               compact
               dayScores={dayScores}
               tags={<CapFlag tier={caps.get(i.symbol.toUpperCase())} />}
-              actions={
-                <>
-                  <button
-                    type="button"
-                    className="tm-btn"
-                    onClick={() => {
-                      setBuying(buying === i.symbol ? null : i.symbol)
-                      setQty('1')
-                    }}
-                  >
-                    {buying === i.symbol ? 'Close' : 'Buy'}
-                  </button>
-                  {buying === i.symbol && (
-                    <form
-                      className="tm-flex tm-wrap"
-                      style={{ gap: '0.5rem', alignItems: 'center', padding: '0.35rem 0' }}
-                      onSubmit={(e) => {
-                        e.preventDefault()
-                        buy.mutate(i.symbol)
-                      }}
-                    >
-                      <span className="tm-strong">Paper buy {i.symbol}</span>
-                      <input
-                        className="tm-input"
-                        type="number"
-                        min={1}
-                        value={qty}
-                        onChange={(e) => setQty(e.target.value)}
-                        aria-label="Quantity"
-                        style={{ width: 90 }}
-                      />
-                      <button className="tm-btn" type="submit" disabled={!Number(qty) || buy.isPending}>
-                        {buy.isPending ? 'Buying…' : 'Paper buy'}
-                      </button>
-                      {buy.isError && buying === i.symbol && (
-                        <span className="tm-neg">{(buy.error as Error).message}</span>
-                      )}
-                    </form>
-                  )}
-                </>
-              }
             />
           ))}
           {rows.length === 0 && (
@@ -161,11 +103,6 @@ function OpportunitiesBody() {
             </p>
           )}
         </div>
-        {buy.isSuccess && (
-          <p className="tm-pos" style={{ marginTop: '0.6rem' }}>
-            Paper buy placed for {String(buy.variables)}. It is under Portfolio → Testing.
-          </p>
-        )}
       </Card>
 
       {/* Featured idea: the top TRADE, or the top WATCH if there is no TRADE */}

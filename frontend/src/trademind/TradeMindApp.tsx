@@ -29,6 +29,7 @@ import AdminHome from './pages/AdminHome'
 import Opportunities from './pages/Opportunities'
 import Watchlist from './pages/Watchlist'
 import PaperPositions from './pages/PaperPositions'
+import ManualTest from './pages/ManualTest'
 import StockDetail from './pages/StockDetail'
 import StockNew from './pages/StockNew'
 import DiscoverNew from './pages/DiscoverNew'
@@ -98,18 +99,22 @@ export function useShell(ownerConsole: boolean) {
   // Also read for everyone on a Portfolio screen, so the Paper strip can warn a non-owner if the server is ever not
   // in paper mode. Everything else that uses it stays owner-only (each use checks ownerConsole).
   const broker = useQuery({ queryKey: ['status'], queryFn: api.status, enabled: ownerConsole || book != null })
+  // tr3: manual practice buys are for the owner or a tester only (the server checks the role too).
+  const me = useQuery({ queryKey: ['me'], queryFn: api.me, retry: false, enabled: !ownerConsole })
+  const manualTest = ownerConsole || me.data?.role === 'tester'
   const sections = visibleSections(ownerConsole)
   const section = resolveSection(location.pathname, ownerConsole)
   // The row under the bar lists only pages this account can open.
   // Testing is left out of the row while paper testing is off; its URL is still routed (see the testing Route).
   const testingOn = broker.data?.paper_tester_enabled !== false
-  const pages = visiblePages(section, ownerConsole, { testingOn, realAccount: canSeeRealAccount })
+  const pages = visiblePages(section, ownerConsole, { testingOn, realAccount: canSeeRealAccount, manualTest })
   // One strip per Portfolio screen this viewer may open (a non-owner on an owner-only URL is being redirected, so
   // no Real strip flashes first). Testing is always paper money, so it never gets the real-money warning.
-  const showBook = book != null && visiblePages(section, ownerConsole, { realAccount: canSeeRealAccount }).some((p) => matches(location.pathname, p.to))
+  const showBook = book != null && visiblePages(section, ownerConsole, { realAccount: canSeeRealAccount, manualTest }).some((p) => matches(location.pathname, p.to))
   const paperButNotPaper =
     book?.kind === 'paper' &&
     !matches(location.pathname, '/trademind/testing') &&
+    !matches(location.pathname, '/trademind/manual-test') &&
     broker.data != null &&
     broker.data.trading_mode !== 'paper'
   const chip = statusChip(status, {
@@ -118,6 +123,7 @@ export function useShell(ownerConsole: boolean) {
   })
   return {
     canSeeRealAccount,
+    manualTest,
     seesAll,
     location,
     book,
@@ -136,6 +142,7 @@ function ClassicShell({ ownerConsole }: { ownerConsole: boolean }) {
   const [, setLook] = useLook()
   const {
     canSeeRealAccount,
+    manualTest,
     seesAll,
     location,
     book,
@@ -174,7 +181,7 @@ function ClassicShell({ ownerConsole }: { ownerConsole: boolean }) {
           {sections.map((sec) => (
             <Link
               key={sec.id}
-              to={visiblePages(sec, ownerConsole, { realAccount: canSeeRealAccount })[0]!.to}
+              to={visiblePages(sec, ownerConsole, { realAccount: canSeeRealAccount, manualTest })[0]!.to}
               className={sec.id === section.id ? 'active' : ''}
               data-testid={`nav-${sec.id}`}
             >
@@ -266,6 +273,13 @@ function ClassicShell({ ownerConsole }: { ownerConsole: boolean }) {
   )
 }
 
+/** Manual practice buys: the owner or a tester. Anyone else goes back to Today (the server refuses them too). */
+function ManualTestRoute({ ownerConsole }: { ownerConsole: boolean }) {
+  const me = useQuery({ queryKey: ['me'], queryFn: api.me, retry: false, enabled: !ownerConsole })
+  if (ownerConsole || me.data?.role === 'tester') return <ManualTest />
+  return me.isLoading ? null : <Navigate to="/trademind" replace />
+}
+
 /** The page routes, shared by both looks. Only Today differs: the new look opens the answer-first Today. */
 export function TradeMindRoutes({
   ownerConsole,
@@ -318,6 +332,7 @@ export function TradeMindRoutes({
             )
           }
         />
+        <Route path="manual-test" element={<ManualTestRoute ownerConsole={ownerConsole} />} />
         <Route path="ai" element={<AIDecision />} />
         <Route path="ai/:symbol" element={<AIDecision />} />
         <Route path="observatory" element={ownerConsole ? <Observatory /> : <Navigate to="/trademind" replace />} />

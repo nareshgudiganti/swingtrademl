@@ -25,6 +25,14 @@ const BOOKS: { to: string; book: Book }[] = [
     },
   },
   {
+    to: '/trademind/manual-test',
+    book: {
+      kind: 'paper',
+      name: 'Manual test (Paper)',
+      note: 'Your own practice buys, kept in the Testing book. Not the bot\u2019s picks and not real money.',
+    },
+  },
+  {
     to: '/trademind/holdings',
     book: {
       kind: 'real',

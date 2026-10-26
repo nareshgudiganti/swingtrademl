@@ -16,6 +16,7 @@ from swing_trade_ml.api.deps import (
     PlanAccessDep,
     PrincipalDep,
     book_for,
+    require_owner_or_tester,
     require_real_account,
 )
 from swing_trade_ml.brokers import get_broker
@@ -675,7 +676,9 @@ def import_real_holdings(db: DbSession, strategy_id: int | None = None) -> list[
     return results
 
 
-@router.post("/tester/buy", status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/tester/buy", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_owner_or_tester)]
+)
 def tester_paper_buy(payload: TesterPaperBuyRequest, db: DbSession) -> dict[str, Any]:
     """Manual paper buy for the tester book — never touches live Kite or the bot book."""
     from swing_trade_ml.services import tester_paper as tester_paper_service

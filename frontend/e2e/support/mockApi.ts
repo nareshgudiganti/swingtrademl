@@ -140,6 +140,12 @@ function answer(role: Role, method: string, path: string, query: URLSearchParams
       if (password === WRONG_PASSWORD) return { status: 401, body: { detail: 'Incorrect username or password' } }
       return { body: { access_token: FAKE_TOKEN } }
     }
+    // tr3: manual practice buys, owner or tester only (the real server checks the role).
+    if (method === 'POST' && path === '/portfolio/tester/buy') {
+      if (!owner && role !== 'tester') return { status: 403, body: { detail: 'Only the owner or a tester can make practice test buys.' } }
+      const b = (body ?? {}) as { symbol?: string; quantity?: number; cap_tier?: string }
+      return { status: 201, body: { position_id: 901, symbol: b.symbol, quantity: b.quantity, entry_price: 1500, cap_tier: b.cap_tier } }
+    }
     return { status: 403, body: { detail: 'Changes are switched off in browser tests.' } }
   }
 

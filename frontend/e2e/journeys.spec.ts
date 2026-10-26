@@ -138,6 +138,7 @@ test.describe('4. Portfolio', () => {
     const tabs: { name: RegExp; url: RegExp; book: 'paper' | 'real'; shows: string }[] = [
       { name: /^Bot/, url: /\/trademind\/positions$/, book: 'paper', shows: 'Position Details' },
       { name: /^Testing/, url: /\/trademind\/testing$/, book: 'paper', shows: 'Closed trades' },
+      { name: /^Manual test/, url: /\/trademind\/manual-test$/, book: 'paper', shows: 'Practice money only. This is your own test, not a brain pick.' },
       { name: /^My Zerodha/, url: /\/trademind\/holdings$/, book: 'real', shows: 'Your Zerodha account' },
       { name: /^Paper Overview/, url: /\/trademind\/portfolio$/, book: 'paper', shows: 'Portfolio Overview' },
     ]

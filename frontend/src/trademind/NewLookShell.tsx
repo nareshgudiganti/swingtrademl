@@ -37,10 +37,10 @@ const NAV_ICON: Record<NavId, ReactNode> = {
 export default function NewLookShell({ ownerConsole }: { ownerConsole: boolean }) {
   const [, setLook] = useLook()
   const location = useLocation()
-  const { canSeeRealAccount, seesAll, book, broker, testingOn, showBook, paperButNotPaper, chip } = useShell(ownerConsole)
+  const { canSeeRealAccount, manualTest, seesAll, book, broker, testingOn, showBook, paperButNotPaper, chip } = useShell(ownerConsole)
   const items = visibleNav(ownerConsole)
   const active = activeNav(location.pathname, ownerConsole)
-  const opts = { testingOn, realAccount: canSeeRealAccount }
+  const opts = { testingOn, realAccount: canSeeRealAccount, manualTest }
   const activePages = navPages(active, ownerConsole, opts)
 
   return (

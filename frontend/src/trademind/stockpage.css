@@ -281,3 +281,5 @@
 .sp-meter i { display: block; height: 100%; background: #e0a72b; border-radius: 99px; }
 .sp-figs { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
 .sp-figs > div { display: grid; gap: 2px; padding: 12px; }
+.sp-step-tap { background: none; border: 0; padding: 0; font: inherit; text-align: left; cursor: pointer; }
+.sp-step-tap[data-open='true'] { -webkit-line-clamp: unset; display: block; }

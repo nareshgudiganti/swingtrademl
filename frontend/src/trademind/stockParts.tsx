@@ -88,6 +88,9 @@ const WORD_SAY: Record<string, string> = {
 
 export const wordSay = (word: string): string => WORD_SAY[word] ?? word
 
+/** Owner decision (ss11): no Buy on ideas the brain says WAIT or AVOID. */
+export const brainAllowsBuy = (word: string): boolean => word !== 'AVOID' && word !== 'WAIT'
+
 export function wordTone(word: string): 'green' | 'amber' | 'red' | 'grey' {
   const c = wordTagColor(word)
   return c === 'green' ? 'green' : c === 'amber' ? 'amber' : c === 'red' ? 'red' : 'grey'
@@ -190,6 +193,7 @@ export function StockHeader({
 }) {
   const [buying, setBuying] = useState(false)
   const up = (change ?? 0) >= 0
+  const buyOk = brainAllowsBuy(finalWord(d))
   return (
     <>
       <div className="sp-head">
@@ -225,7 +229,12 @@ export function StockHeader({
               )}
             </div>
           )}
-          {withBuy && (
+          {withBuy && !buyOk && (
+            <span className="sp-small" data-testid="no-buy-note" style={{ maxWidth: 190 }}>
+              The brain says {finalWord(d)}, so there is no Buy here.
+            </span>
+          )}
+          {withBuy && buyOk && (
             <div className="sp-btnbox">
               <button className="sp-btn sp-btn-buy" type="button" onClick={() => setBuying((v) => !v)} data-testid="buy-button">
                 Buy
@@ -242,7 +251,7 @@ export function StockHeader({
           )}
         </div>
       </div>
-      {withBuy && <BuyBox symbol={d.symbol} open={buying} onClose={() => setBuying(false)} />}
+      {withBuy && buyOk && <BuyBox symbol={d.symbol} open={buying} onClose={() => setBuying(false)} />}
     </>
   )
 }
@@ -371,6 +380,7 @@ export function BrainFlow({
   const passed = pass.filter((p) => p === 'yes').length
   const lastIdx = pass.reduce((acc, p, i) => (p === 'yes' || p === 'stop' ? i : acc), 0)
   const changes = (d.what_would_change ?? []).filter((c) => c.text.trim() !== '')
+  const [openStep, setOpenStep] = useState<number | null>(null)
 
   return (
     <section className="sp-card" aria-label={`How the brain thought about ${d.symbol}`} data-testid="brain-steps">
@@ -401,7 +411,19 @@ export function BrainFlow({
             <li key={s.n} className="sp-step" data-pass={pass[i]} data-state={s.state}>
               <span className="sp-step-n">{s.n}</span>
               <b className="sp-step-t">{SHORT[i]}</b>
-              <span className="sp-step-l" title={s.line}>{withoutScorePercent(s.line)}</span>
+              {full ? (
+                <span className="sp-step-l">{withoutScorePercent(s.line)}</span>
+              ) : (
+                <button
+                  type="button"
+                  className="sp-step-l sp-step-tap"
+                  data-open={openStep === s.n}
+                  aria-expanded={openStep === s.n}
+                  onClick={() => setOpenStep(openStep === s.n ? null : s.n)}
+                >
+                  {withoutScorePercent(s.line)}
+                </button>
+              )}
               <span className="sp-chip" data-state={s.state}>{s.tag}</span>
             </li>
           ))}
@@ -765,11 +787,13 @@ export function PeekCard({ decision: d, run, reason }: { decision: BrainDecision
         <Link className="sp-btn sp-btn-ai" to={to}>
           Full analysis ›
         </Link>
-        <button className="sp-btn sp-btn-buy" type="button" onClick={() => setBuying((v) => !v)}>
-          Buy
-        </button>
+        {brainAllowsBuy(word) && (
+          <button className="sp-btn sp-btn-buy" type="button" onClick={() => setBuying((v) => !v)}>
+            Buy
+          </button>
+        )}
       </div>
-      <BuyBox symbol={d.symbol} open={buying} onClose={() => setBuying(false)} />
+      {brainAllowsBuy(word) && <BuyBox symbol={d.symbol} open={buying} onClose={() => setBuying(false)} />}
     </aside>
   )
 }

@@ -158,8 +158,10 @@ describe('the 8-item menu', () => {
     const html = render('/trademind/stock/BBBROOM', false, true)
     expect(html).toContain('data-testid="brain-steps"')
     expect(html).toContain('Stopped here')
-    // The short page: Buy, the brain's steps with an AI analysis button, and the way into the full analysis.
-    expect(html).toContain('data-testid="buy-button"')
+    // The short page: the brain's steps with an AI analysis button, and the way into the full analysis.
+    // BBBROOM is a WAIT, so there is no Buy (owner decision ss11), only a note saying why.
+    expect(html).not.toContain('data-testid="buy-button"')
+    expect(html).toContain('data-testid="no-buy-note"')
     expect(html).toContain('data-testid="ai-analysis-button"')
     expect(html).toContain('data-testid="full-analysis-cta"')
     expect(html).toContain('/trademind/stock/BBBROOM/analysis')

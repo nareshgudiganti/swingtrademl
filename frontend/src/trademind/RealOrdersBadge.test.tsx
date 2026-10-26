@@ -85,7 +85,7 @@ describe('RealOrdersBadge (with the server)', () => {
   })
 })
 
-describe('the top bar badge', () => {
+describe('the badge under the top bar', () => {
   function render(path: string, opts: { ownerConsole: boolean; realAccount: boolean; enabled?: boolean }): string {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     client.setQueryData(['status'], { paper_tester_enabled: true, trading_mode: 'paper', broker_authenticated: true })
@@ -100,29 +100,32 @@ describe('the top bar badge', () => {
     )
   }
   const topbar = (html: string) => /<header class="tm-topbar">[\s\S]*?<\/header>/.exec(html)![0]
+  // The strip comes right after the bar's closing tag; the bar itself is full and must not hold the badge.
+  const strip = (html: string) => /<\/header>(<div class="tm-realorders-strip">[\s\S]*?<\/div>)/.exec(html)?.[1] ?? ''
 
   it.each(['/trademind', '/trademind/opportunities', '/trademind/portfolio', '/trademind/holdings', '/trademind/risk'])(
-    'when ON, the top bar says so: %s',
+    'when ON, the strip under the top bar says so: %s',
     (path) => {
-      const bar = topbar(render(path, { ownerConsole: true, realAccount: true, enabled: true }))
-      expect(bar).toContain('Real orders: ON')
-      expect(bar).toContain('tm-realorders-on')
+      const html = render(path, { ownerConsole: true, realAccount: true, enabled: true })
+      expect(strip(html)).toContain('Real orders: ON')
+      expect(strip(html)).toContain('tm-realorders-on')
+      expect(topbar(html)).not.toContain('real-orders-badge')
     },
   )
 
-  it('when OFF, the top bar shows the grey badge', () => {
-    const bar = topbar(render('/trademind', { ownerConsole: true, realAccount: true, enabled: false }))
-    expect(bar).toContain('Real orders: OFF')
-    expect(bar).not.toContain('Real orders: ON')
+  it('when OFF, the strip shows the grey badge', () => {
+    const html = render('/trademind', { ownerConsole: true, realAccount: true, enabled: false })
+    expect(strip(html)).toContain('Real orders: OFF')
+    expect(strip(html)).not.toContain('Real orders: ON')
   })
 
   it('an owner-console account that is not the real account never sees it', () => {
-    const bar = topbar(render('/trademind', { ownerConsole: true, realAccount: false, enabled: true }))
-    expect(bar).not.toContain('real-orders-badge')
+    const html = render('/trademind', { ownerConsole: true, realAccount: false, enabled: true })
+    expect(html).not.toContain('real-orders-badge')
   })
 
   it('a member (not the owner console) never sees it', () => {
-    const bar = topbar(render('/trademind', { ownerConsole: false, realAccount: true, enabled: true }))
-    expect(bar).not.toContain('real-orders-badge')
+    const html = render('/trademind', { ownerConsole: false, realAccount: true, enabled: true })
+    expect(html).not.toContain('real-orders-badge')
   })
 })

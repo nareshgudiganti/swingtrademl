@@ -1,4 +1,4 @@
-// tr5: the top bar says whether REAL Zerodha orders from My Holdings are switched on, on every page, for the real
+// tr5: a thin strip under the top bar says whether REAL Zerodha orders from My Holdings are switched on, on every page, for the real
 // account's owner only. A failed answer shows nothing (never a wrong "OFF").
 import realAccount from './fixtures/real-account.json' with { type: 'json' }
 import { mockApi } from './support/mockApi'
@@ -6,15 +6,16 @@ import { expect, openPage, test } from './support/test'
 
 const PAGES = ['/trademind', '/trademind/opportunities', '/trademind/portfolio', '/trademind/risk']
 
-test('OFF: a grey badge in the top bar', async ({ page }) => {
+test('OFF: a grey badge on the strip under the top bar', async ({ page }) => {
   await mockApi(page)
   await openPage(page, '/trademind')
-  const badge = page.locator('.tm-topbar').getByTestId('real-orders-badge')
+  const badge = page.locator('.tm-realorders-strip').getByTestId('real-orders-badge')
   await expect(badge).toHaveText(/Real orders: OFF/i)
+  await expect(page.locator('.tm-topbar').getByTestId('real-orders-badge')).toHaveCount(0) // the bar itself is full
   await expect(badge).toHaveAttribute('data-on', 'false')
 })
 
-test('ON: the top bar says so on every page', async ({ page }) => {
+test('ON: the strip under the top bar says so on every page', async ({ page }) => {
   await mockApi(page)
   // Registered after mockApi, so it answers this one path first.
   await page.route('**/api/v1/portfolio/real/orders-status', (r) =>
@@ -22,7 +23,7 @@ test('ON: the top bar says so on every page', async ({ page }) => {
   )
   for (const path of PAGES) {
     await openPage(page, path)
-    const badge = page.locator('.tm-topbar').getByTestId('real-orders-badge')
+    const badge = page.locator('.tm-realorders-strip').getByTestId('real-orders-badge')
     await expect(badge, path).toHaveText(/Real orders: ON/i)
     await expect(badge, path).toHaveAttribute('data-on', 'true')
   }

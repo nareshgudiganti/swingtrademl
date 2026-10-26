@@ -429,6 +429,11 @@ class ManualExitRequest(BaseModel):
     taxes: float | None = None
 
 
+class CapitalAddedRequest(BaseModel):
+    amount: float = Field(gt=0, le=1_000_000_000)
+    note: str | None = Field(default=None, max_length=200)
+
+
 class TesterPaperBuyRequest(BaseModel):
     symbol: str = Field(min_length=1, max_length=32)
     quantity: int = Field(gt=0)

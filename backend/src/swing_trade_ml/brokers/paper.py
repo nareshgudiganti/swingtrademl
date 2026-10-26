@@ -149,7 +149,10 @@ class PaperBroker(Broker):
                 )
             ).scalar_one()
         )
-        return settings.PAPER_STARTING_CAPITAL + realized - locked_in_open
+        from swing_trade_ml.services.capital import deposited
+
+        funded = settings.PAPER_STARTING_CAPITAL + deposited(db, TradingMode.PAPER)
+        return funded + realized - locked_in_open
 
     # ------------------------------------------------------------- orders --
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, time, timedelta
+from itertools import pairwise
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -17,6 +18,7 @@ from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.core.strategy_policy import outside_tester_book
 from swing_trade_ml.db.models.market import Instrument, Quote
 from swing_trade_ml.db.models.trading import PortfolioSnapshot, Position, Strategy, Trade
+from swing_trade_ml.services import capital
 
 log = get_logger(__name__)
 
@@ -209,15 +211,23 @@ def take_snapshot(db: Session, mode: str | None = None) -> PortfolioSnapshot:
         .limit(1)
     ).scalar_one_or_none()
 
-    starting = settings.PAPER_STARTING_CAPITAL if mode == TradingMode.PAPER else total_value
-    day_pnl = total_value - previous.total_value if previous else total_value - starting
+    # Money the owner added since the last snapshot raised the account value without being profit,
+    # so it comes off the day's P&L and lifts the peak by the same amount (services/capital.py).
+    deposits = _deposits(db, mode)
+    starting = (
+        settings.PAPER_STARTING_CAPITAL + sum(a for _, a in deposits)
+        if mode == TradingMode.PAPER
+        else total_value
+    )
+    flow = capital.added_between(deposits, previous.ts, now) if previous else 0.0
+    day_pnl = total_value - previous.total_value - flow if previous else total_value - starting
     if trial_start(mode) is not None:
         # The stored peak_value of earlier rows carries the replaced run's high
         # (see drawdown_peak), so the trial's peak is rebuilt from its values.
         prior_peak = drawdown_peak(db, mode)
         peak = max(total_value, prior_peak if prior_peak is not None else starting)
     else:
-        peak = max(total_value, previous.peak_value if previous else starting)
+        peak = max(total_value, previous.peak_value + flow if previous else starting)
     drawdown = (peak - total_value) / peak if peak else 0.0
 
     today = now.date()
@@ -226,6 +236,8 @@ def take_snapshot(db: Session, mode: str | None = None) -> PortfolioSnapshot:
         existing = previous
 
     if existing:
+        # Moved to now so a top-up made after the row was first written is counted once, not twice.
+        existing.ts = now
         existing.cash = cash
         existing.holdings_value = holdings_value
         existing.total_value = total_value
@@ -261,6 +273,11 @@ def take_snapshot(db: Session, mode: str | None = None) -> PortfolioSnapshot:
         drawdown=round(drawdown, 4),
     )
     return snapshot
+
+
+def _deposits(db: Session, mode: str) -> list[tuple[datetime, float]]:
+    """Top-ups to the paper account. Live money is the broker's own figure, so it has none here."""
+    return capital.list_deposits(db, mode) if mode == TradingMode.PAPER else []
 
 
 def trial_start(mode: str) -> datetime | None:
@@ -309,19 +326,23 @@ def _trial_peak(db: Session, mode: str, since: datetime, until: datetime | None 
     """The high-water mark of a trial: the equity it opened with, or any
     higher value recorded from `since` (up to `until`, when given). None when
     there is no snapshot at all to take a peak from."""
+    # Every point is restated to today's capital, so a top-up neither creates nor hides a drawdown.
+    deposits = _deposits(db, mode)
     opening = db.execute(
-        select(PortfolioSnapshot.total_value)
+        select(PortfolioSnapshot.ts, PortfolioSnapshot.total_value)
         .where(PortfolioSnapshot.mode == mode, PortfolioSnapshot.ts < since)
         .order_by(PortfolioSnapshot.ts.desc())
         .limit(1)
-    ).scalar_one_or_none()
-    stmt = select(func.max(PortfolioSnapshot.total_value)).where(
+    ).first()
+    stmt = select(PortfolioSnapshot.ts, PortfolioSnapshot.total_value).where(
         PortfolioSnapshot.mode == mode, PortfolioSnapshot.ts >= since
     )
     if until is not None:
         stmt = stmt.where(PortfolioSnapshot.ts < until)
-    highest = db.execute(stmt).scalar()
-    values = [float(v) for v in (opening, highest) if v is not None]
+    rows = list(db.execute(stmt).all())
+    if opening is not None:
+        rows.append(opening)
+    values = [capital.restate(float(v), ts, deposits) for ts, v in rows]
     return max(values) if values else None
 
 
@@ -336,10 +357,14 @@ def drawdown_peak(db: Session, mode: str) -> float | None:
     before."""
     since = trial_start(mode)
     if since is None:
-        peak = db.execute(
-            select(func.max(PortfolioSnapshot.peak_value)).where(PortfolioSnapshot.mode == mode)
-        ).scalar()
-        return float(peak) if peak else None
+        deposits = _deposits(db, mode)
+        rows = db.execute(
+            select(PortfolioSnapshot.ts, PortfolioSnapshot.peak_value).where(
+                PortfolioSnapshot.mode == mode
+            )
+        ).all()
+        peak = max((capital.restate(float(pv), ts, deposits) for ts, pv in rows if pv), default=0.0)
+        return peak or None
     return _trial_peak(db, mode, since)
 
 
@@ -406,9 +431,17 @@ def performance_stats(
     total_value, cash = portfolio_value_and_cash(db, mode, bot_book_only=bot_book_only)
     open_positions = list(db.execute(positions_stmt).scalars().all())
 
+    deposits = _deposits(db, mode)
     starting = settings.PAPER_STARTING_CAPITAL if mode == TradingMode.PAPER else total_value
     if since is not None:
-        starting = _opening_equity(db, mode, since, starting)
+        # Top-ups made before the trial opened are already inside the opening equity.
+        starting = _opening_equity(
+            db, mode, since, starting + sum(a for t, a in deposits if t <= since)
+        )
+        added = capital.added_since(deposits, since)
+    else:
+        added = sum(a for _, a in deposits)
+    money_in = starting + added
     unrealized = sum(p.unrealized_pnl for p in open_positions)
     realized = sum(t.net_pnl for t in trades)
 
@@ -418,13 +451,17 @@ def performance_stats(
         # implying they are all-time. None means they genuinely are.
         "measured_since": since.date().isoformat() if since else None,
         "starting_capital": starting,
+        # Top-ups since the figures began; they are never counted as profit.
+        "money_added": added,
+        "money_in": money_in,
         "total_value": total_value,
         "cash": cash,
         "holdings_value": total_value - cash,
         "realized_pnl": realized,
         "unrealized_pnl": unrealized,
         "total_pnl": realized + unrealized,
-        "total_return_pct": (total_value / starting - 1) if starting else 0.0,
+        # Profit divided by all the money put in (a late top-up dilutes it).
+        "total_return_pct": (total_value / money_in - 1) if money_in else 0.0,
         "open_positions": len(open_positions),
         "total_trades": len(trades),
     }
@@ -474,12 +511,21 @@ def performance_stats(
     snapshots = list(db.execute(snapshots_stmt).scalars().all())
     if len(snapshots) > 1:
         values = np.array([s.total_value for s in snapshots], dtype=float)
-        daily_returns = np.diff(values) / values[:-1]
+        # Each step's return leaves out the money added during that step.
+        flows = np.array(
+            [capital.added_between(deposits, a.ts, b.ts) for a, b in pairwise(snapshots)], dtype=float
+        )
+        daily_returns = (values[1:] - flows) / values[:-1] - 1
+        # The fair measure of the bot itself: steps chained, so a top-up cannot change it.
+        stats["time_weighted_return_pct"] = float(
+            capital.time_weighted_return([(s.ts, s.total_value) for s in snapshots], deposits)
+        )
         if since is not None:
             # Rebuilt from the trial's own values: stored drawdown_pct was
             # measured against the replaced run's peak.
             drawdowns = _running_drawdowns(
-                [s.total_value for s in snapshots], _trial_peak(db, mode, since, until=since)
+                [capital.restate(s.total_value, s.ts, deposits) for s in snapshots],
+                _trial_peak(db, mode, since, until=since),
             )
         else:
             drawdowns = [s.drawdown_pct for s in snapshots]
@@ -489,7 +535,9 @@ def performance_stats(
         if since is None and boundary is not None:
             # All-time view: the figure above includes the replaced run, so label it, and
             # also give the clean trial's own worst fall (rebuilt from the trial's values).
-            trial_values = [s.total_value for s in snapshots if s.ts >= boundary]
+            trial_values = [
+                capital.restate(s.total_value, s.ts, deposits) for s in snapshots if s.ts >= boundary
+            ]
             trial_peak = _trial_peak(db, mode, boundary, until=boundary)
             stats["max_drawdown_since_trial_pct"] = float(
                 max(_running_drawdowns(trial_values, trial_peak), default=0.0)
@@ -520,7 +568,7 @@ def performance_stats(
     else:
         stats |= {
             "max_drawdown_pct": 0.0, "current_drawdown_pct": 0.0,
-            "day_pnl": 0.0, "day_pnl_pct": 0.0,
+            "day_pnl": 0.0, "day_pnl_pct": 0.0, "time_weighted_return_pct": 0.0,
             "sharpe_ratio": 0.0, "sortino_ratio": 0.0,
         }
 

@@ -52,6 +52,7 @@ from swing_trade_ml.db.models.mutual_funds import MutualFund, MutualFundHolding,
 from swing_trade_ml.db.models.safety import RiskEvent, SystemState
 from swing_trade_ml.db.models.session import BrokerSession, PlanSettings, SubscriptionPlan, User
 from swing_trade_ml.db.models.trading import (
+    CapitalDeposit,
     Order,
     PortfolioSnapshot,
     Position,
@@ -78,6 +79,7 @@ __all__ = [
     "Candle",
     "CandleArrival",
     "CandleCorrection",
+    "CapitalDeposit",
     "DailyDelivery",
     "ExperimentCohort",
     "ExperimentJobRun",

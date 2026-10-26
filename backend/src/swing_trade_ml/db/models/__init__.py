@@ -14,6 +14,7 @@ from swing_trade_ml.db.models.brain import (
     FeatureSnapshot,
 )
 from swing_trade_ml.db.models.brain_golive import BrainApproval, BrainStageChange
+from swing_trade_ml.db.models.company import CompanyAnnouncement, CompanyShareholding
 from swing_trade_ml.db.models.experiments import (
     ExperimentCohort,
     ExperimentJobRun,
@@ -80,6 +81,8 @@ __all__ = [
     "CandleArrival",
     "CandleCorrection",
     "CapitalDeposit",
+    "CompanyAnnouncement",
+    "CompanyShareholding",
     "DailyDelivery",
     "ExperimentCohort",
     "ExperimentJobRun",

@@ -169,6 +169,13 @@ def start_scheduler() -> None:
         id="daily_market_feeds_morning",
         replace_existing=True,
     )
+    # What each tracked company filed (Company and news tab): display only, after the evening feeds.
+    scheduler.add_job(
+        jobs.job_company_filings,
+        CronTrigger(day_of_week=WEEKDAYS, hour=19, minute=40, timezone=IST),
+        id="company_filings",
+        replace_existing=True,
+    )
     scheduler.add_job(
         jobs.job_daily_market_feeds_final,
         CronTrigger(day_of_week=WEEKDAYS, hour=22, minute=5, timezone=IST),

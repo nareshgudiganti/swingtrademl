@@ -337,6 +337,34 @@ export interface TrackRecordSignal {
   sealed?: boolean
 }
 
+/** One block of the Company and news tab: where it came from, as of when, and whether it can be trusted. */
+export interface CompanyBlock {
+  state: 'ok' | 'out_of_date' | 'not_available'
+  source: string
+  as_of: string | null
+  text?: string | null
+  why?: string
+}
+
+export interface CompanyAnnouncementItem {
+  at: string
+  category: string
+  summary: string
+  attachment_url: string | null
+}
+
+/** What a company has filed, in plain words. Display only; never changes the brain's call. */
+export interface CompanyView {
+  symbol: string
+  headline: string | null
+  price_position: CompanyBlock
+  ownership: CompanyBlock
+  announcements: CompanyBlock & { items: CompanyAnnouncementItem[] }
+  results: CompanyBlock
+  coming_soon: string[]
+  note: string
+}
+
 /** Stored market candle used for short-term price-performance summaries. */
 /** A current price with its own timestamp; independent of any stored brain decision. */
 export interface PriceSnapshot {

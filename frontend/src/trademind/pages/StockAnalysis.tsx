@@ -3,7 +3,7 @@
 // full answers (money, coming up, worked before), the company, what changed since yesterday and the price chart.
 // Display only: reads the brain's latest run and stored data.
 
-import { Link, Navigate, useParams } from 'react-router-dom'
+import { Link, Navigate, useParams, useSearchParams } from 'react-router-dom'
 
 import type { BrainDecision, BrainRun } from '../../api/types'
 import { usePlan } from '../../lib/plan'
@@ -30,6 +30,7 @@ import {
   type TrailPoint,
 } from '../stockParts'
 import { brainSteps, stopOf } from '../brainSteps'
+import { CompanyTab } from '../CompanyTab'
 import { CAP_LABEL } from './StockNew'
 import { Overrule } from './StockDetail'
 
@@ -53,6 +54,8 @@ function StockAnalysisView({ decision: d, run }: { decision: BrainDecision; run:
   const caps = useSymbolCaps()
   const { canManage } = usePlan()
   const data = useStockData(d, run)
+  const [params, setParams] = useSearchParams()
+  const tab = params.get('tab') === 'company' ? 'company' : 'brain'
   const word = finalWord(d)
   const back = `/trademind/stock/${encodeURIComponent(d.symbol)}`
   const cap = caps.get(d.symbol.toUpperCase())
@@ -83,6 +86,31 @@ function StockAnalysisView({ decision: d, run }: { decision: BrainDecision; run:
         cap={cap ? CAP_LABEL[cap] : undefined}
       />
 
+      <div className="sp-tabs" role="tablist" aria-label="Full analysis sections">
+        {(
+          [
+            ['brain', 'Brain’s decision'],
+            ['company', 'Company and news'],
+          ] as const
+        ).map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={tab === id}
+            data-testid={`tab-${id}`}
+            className="sp-tab"
+            onClick={() => setParams(id === 'brain' ? {} : { tab: id }, { replace: true })}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'company' ? (
+        <CompanyTab symbol={d.symbol} />
+      ) : (
+        <>
       <section className="sp-answer" data-tone={wordTone(word)} data-testid="analysis-answer">
         <div className="sp-row" style={{ gap: 16, flexWrap: 'wrap' }}>
           <span className="sp-answer-word">{word}</span>
@@ -134,6 +162,8 @@ function StockAnalysisView({ decision: d, run }: { decision: BrainDecision; run:
           <h2 className="sp-h2">Disagree with the brain?</h2>
           <Overrule decision={d} />
         </section>
+      )}
+        </>
       )}
     </div>
   )

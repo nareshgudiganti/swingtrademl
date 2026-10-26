@@ -8,6 +8,7 @@ import type { BrainDecision, BrainRun } from '../../api/types'
 import { formatDateTime } from '../../lib/format'
 import { useSymbolCaps } from '../cap'
 import { useLatestRun } from '../live'
+import { CompanyTeaser } from '../CompanyTab'
 import { BrainGate } from '../ui'
 import {
   BrainFlow,
@@ -77,6 +78,7 @@ function StockNewView({ decision, run }: { decision: BrainDecision; run: BrainRu
         <CompanyCard brief={data.brief} />
       </div>
       <QuickAnswers brief={data.brief} />
+      <CompanyTeaser symbol={decision.symbol} to={`${analysisTo}?tab=company`} />
       <FullCta to={analysisTo} />
     </div>
   )

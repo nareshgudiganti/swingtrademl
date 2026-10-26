@@ -42,6 +42,7 @@ import type {
   BrainTraceEvent,
   BrainWhy,
   Candle,
+  CompanyView,
   PriceSnapshot,
   CurrentUser,
   AdminUser,
@@ -495,6 +496,7 @@ export const api = {
   // -------------------------------------------------------- market data --
   candles: (symbol: string, limit = 11) =>
     get<Candle[]>(`/market-data/candles/${encodeURIComponent(symbol)}?interval=day&limit=${limit}`),
+  company: (symbol: string) => get<CompanyView>(`/company/${encodeURIComponent(symbol)}`),
   priceSnapshot: (symbol: string) =>
     get<PriceSnapshot>(`/market-data/snapshot/${encodeURIComponent(symbol)}`),
   backfill: (body: Record<string, unknown>) => post<MessageResponse>('/market-data/backfill', body),

@@ -283,3 +283,8 @@
 .sp-figs > div { display: grid; gap: 2px; padding: 12px; }
 .sp-step-tap { background: none; border: 0; padding: 0; font: inherit; text-align: left; cursor: pointer; }
 .sp-step-tap[data-open='true'] { -webkit-line-clamp: unset; display: block; }
+
+/* Full analysis: Brain's decision | Company and news */
+.sp-tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+.sp-tab { font: inherit; font-size: 14px; font-weight: 700; padding: 8px 16px; border-radius: 999px; border: 1px solid #d9dcea; background: #fff; color: #4a4f66; cursor: pointer; }
+.sp-tab[aria-selected='true'] { background: #1a1f36; color: #fff; border-color: #1a1f36; }

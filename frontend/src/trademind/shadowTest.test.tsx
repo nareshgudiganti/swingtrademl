@@ -13,18 +13,19 @@ const view = (over: Partial<ShadowTestView> = {}): ShadowTestView => ({
   as_of: '2026-10-23',
   label: 'Exploring, not part of the sealed 6-month test. Passive tracking only: nothing here places an order.',
   verdict: { state: 'too_early', headline: 'Too early to tell', detail: 'Only 12 top-ranked ideas have finished. The ranking is not proven.', days_done: 9, days_needed: 30 },
+  sealed: false,
   totals: { running: 2, finished: 140, target: 19, stop: 58 },
   groups: [
-    { group: 'Top 5', finished: 12, target: 3, stop: 5, average_pct: 0.9 },
-    { group: 'Ranks 6-20', finished: 38, target: 6, stop: 15, average_pct: -0.2 },
-    { group: 'Rank 21+', finished: 90, target: 10, stop: 38, average_pct: -0.6 },
+    { group: 'Top 5', sealed: false, finished: 12, target: 3, stop: 5, average_pct: 0.9 },
+    { group: 'Ranks 6-20', sealed: false, finished: 38, target: 6, stop: 15, average_pct: -0.2 },
+    { group: 'Rank 21+', sealed: false, finished: 90, target: 10, stop: 38, average_pct: -0.6 },
   ],
   running: [
-    { symbol: 'KEI', rank: 1, group: 'Top 5', score: 95, word: 'WATCH', ranked_on: '2026-10-22', paper_bought: true, day: 4, today_pct: 1.8, since_pct: 3.1, position: 0.59, price_not_updated: false },
-    { symbol: 'RBLBANK', rank: 8, group: 'Ranks 6-20', score: 89, word: 'WATCH', ranked_on: '2026-10-21', paper_bought: false, day: 5, today_pct: null, since_pct: -2.3, position: 0.14, price_not_updated: true },
+    { symbol: 'KEI', rank: 1, group: 'Top 5', score: 95, word: 'WATCH', ranked_on: '2026-10-22', paper_bought: true, sealed: false, day: 4, today_pct: 1.8, since_pct: 3.1, position: 0.59, price_not_updated: false },
+    { symbol: 'RBLBANK', rank: 8, group: 'Ranks 6-20', score: 89, word: 'WATCH', ranked_on: '2026-10-21', paper_bought: false, sealed: false, day: 5, today_pct: null, since_pct: -2.3, position: 0.14, price_not_updated: true },
   ],
   finished: [
-    { symbol: 'GALAXYSURF', rank: 7, group: 'Ranks 6-20', ranked_on: '2026-10-06', ended_on: '2026-10-15', outcome: 'target', result_pct: 8, days: 9, paper_bought: false },
+    { symbol: 'GALAXYSURF', rank: 7, group: 'Ranks 6-20', ranked_on: '2026-10-06', ended_on: '2026-10-15', sealed: false, outcome: 'target', result_pct: 8, days: 9, paper_bought: false },
   ],
   how: ['Rank recorded: a stock enters from the brain’s nightly ranking.', 'Count outcome: it is added to the results of its original rank group.'],
   ...over,
@@ -90,6 +91,35 @@ describe('Shadow Test page', () => {
     const html = render(view({ running: [], finished: [], totals: { running: 0, finished: 0, target: 0, stop: 0 } }))
     expect(html).toContain('data-testid="shadow-empty"')
     expect(html).not.toContain('data-testid="shadow-running"')
+  })
+
+  it('sealed: shows counts only, never an outcome, a hit rate or a move since ranked', () => {
+    const sealed = view({
+      sealed: true,
+      verdict: { state: 'sealed', headline: 'Counting only: results are sealed', detail: "Sealed until the trial's evaluation (blind test): counts only. 140 ideas have finished so far.", days_done: 9, days_needed: 30 },
+      totals: { running: 2, finished: 140, target: null, stop: null },
+      groups: [
+        { group: 'Top 5', sealed: true, finished: 12, target: null, stop: null, average_pct: null },
+        { group: 'Ranks 6-20', sealed: true, finished: 38, target: null, stop: null, average_pct: null },
+        { group: 'Rank 21+', sealed: true, finished: 90, target: null, stop: null, average_pct: null },
+      ],
+      running: [
+        { symbol: 'KEI', rank: 1, group: 'Top 5', score: 95, word: 'WATCH', ranked_on: '2026-10-22', paper_bought: true, sealed: true, day: 4, today_pct: 1.8, since_pct: null, position: null, price_not_updated: false },
+      ],
+      finished: [
+        { symbol: 'GALAXYSURF', rank: 7, group: 'Ranks 6-20', ranked_on: '2026-10-16', ended_on: null, sealed: true, outcome: null, result_pct: null, days: null, paper_bought: false },
+      ],
+    })
+    const html = render(sealed)
+    expect(html).toContain('Counting only: results are sealed')
+    expect(html).toContain('data-testid="shadow-sealed-tile"')
+    expect(html).toContain('data-testid="shadow-group-sealed"')
+    expect(html).toContain('4 / 15')
+    expect(html).toContain('+1.8%') // today's price move is not a result
+    expect(html).not.toContain('+0.9%')
+    expect(html).not.toContain('3.1%')
+    expect(html).not.toContain('Reached +8%')
+    expect(html).not.toContain('sh-rng-stop') // no stop-to-target position while sealed
   })
 
   it('the menu entry is owner only', () => {

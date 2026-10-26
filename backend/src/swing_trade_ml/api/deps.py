@@ -338,6 +338,16 @@ def book_for(principal: Principal, book: str) -> str:
     return "bot" if book == "all" else book
 
 
+async def require_owner_or_tester(principal: Annotated[Principal, Depends(get_principal)]) -> Principal:
+    """The manual paper-testing book: the owner (or the API key) and testers only.
+    Uses the two existing roles; a plain member is refused whatever their plan."""
+    if not (principal.is_owner or principal.is_tester):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "Only the owner or a tester can make practice test buys."
+        )
+    return principal
+
+
 async def require_owner(principal: Annotated[Principal, Depends(get_principal)]) -> Principal:
     """Owner-only screens such as the Plans Manager. Checks the real
     account, never a preview, so the owner can always get back out."""

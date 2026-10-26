@@ -1,6 +1,7 @@
 # tv22: one reserved paper slot for the brain — change note for owner approval
 
-Status: **DRAFT, awaiting owner approval. Nothing is built.** Written 2026-10-24.
+Status: **APPROVED by the owner on 2026-10-25 (A–F, F = option (i)). Built on branch
+`feature/tv22-reserved-slot`, not yet merged or deployed.** Written 2026-10-24.
 Owner decision (2026-10-24): tv22 option (a) — reserve one paper-trading slot for the brain and one for
 v1 for the rest of the trial, with the six conditions in section 5.
 
@@ -219,12 +220,32 @@ ones (condition 3).
 
 ## 7. What the owner needs to approve
 
-- [ ] A. The change in section 2 (frozen-file change during the trial).
-- [ ] B. The trial-journal amendment: record the change date, report before/after separately (section 3).
-- [ ] C. fx2 counting rule in section 4 (or another rule).
-- [ ] D. 5-day protocol D6 = "shared paper account, one slot reserved for the brain" (section 3).
-- [ ] E. Deploy timing: outside 09:00–16:30 IST, after CI and the after-deploy smoke test are green.
-- [ ] F. Sizing choice (section 2a): **(i)** reserve 2× minimum on DEFENSIVE days, accepting that v1 makes
+- [x] A. The change in section 2 (frozen-file change during the trial).
+- [x] B. The trial-journal amendment: record the change date, report before/after separately (section 3).
+- [x] C. fx2 counting rule in section 4 (or another rule).
+- [x] D. 5-day protocol D6 = "shared paper account, one slot reserved for the brain" (section 3).
+- [x] E. Deploy timing: outside 09:00–16:30 IST, after CI and the after-deploy smoke test are green.
+- [x] F. Sizing choice (section 2a): **(i)** reserve 2× minimum on DEFENSIVE days, accepting that v1 makes
       no new buys while stressed and DEFENSIVE (recommended); or (ii) change M07's halving (owner-only,
       bolder); or reserve on NORMAL days only. Also: before the stage moves past practice, cap a brain order
       at M07's half-size quantity on DEFENSIVE days.
+
+**Approved by the owner on 2026-10-25:** A, B, C, D and E as written; F = option **(i)** (reserve minimum +
+one share on NORMAL days and 2 × minimum + headroom on DEFENSIVE days, accepting that v1 makes no new buys
+while stressed and DEFENSIVE), plus the cap of a brain order at M07's half-size quantity on DEFENSIVE days
+before the stage moves past practice (built with the change).
+
+Build notes (decided while building, for the owner's review):
+
+- DEFENSIVE headroom is one share **per half**: reservation = (minimum + one share) ÷ M07's factor = 2 ×
+  minimum + 2 shares. With only one share, M07's round-down halving can still land under the minimum
+  (e.g. a ₹3,000 share: 27 shares fit, half is 13 = ₹39,000 < ₹39,734). Tested.
+- The day's mode comes from the brain's latest finished live nightly run (`brain_runs.banner_mode`). No
+  run, or NO NEW TRADES, is read as DEFENSIVE (the larger, cautious reservation). v1's 15:45 scan reads the
+  previous day's banner, the brain's 15:50 checks read that day's.
+- Nothing is reserved when no brain strategy is active in that book (e.g. the live book).
+- "One share" is the share price of the idea being checked (v1's own stock for a v1 buy).
+- `engine._buy_slot_budget` caps buys at the rupee room ÷ minimum, without the one-share headroom (it has
+  no price yet), and always tries at least one candidate so check_entry still records the real refusal.
+- Trial journal change date: `TV22_CHANGE_DATE = 2026-10-26` (`brain/trial_journal.py`); move it to the
+  first session after the real deploy if the deploy slips, before any trial result is read.

@@ -346,6 +346,8 @@ export interface ShadowRunning {
   word: string
   ranked_on: string
   paper_bought: boolean
+  /** Ranked on a trial day: how it is doing so far is sealed (since_pct and position are null). */
+  sealed: boolean
   day: number
   today_pct: number | null
   since_pct: number | null
@@ -358,23 +360,27 @@ export interface ShadowFinished {
   group: string
   ranked_on: string
   ended_on: string | null
-  outcome: 'target' | 'stop' | 'timeout'
-  result_pct: number
+  sealed: boolean
+  outcome: 'target' | 'stop' | 'timeout' | null
+  result_pct: number | null
   days: number | null
   paper_bought: boolean
 }
 export interface ShadowGroup {
   group: string
   finished: number
-  target: number
-  stop: number
+  sealed: boolean
+  target: number | null
+  stop: number | null
   average_pct: number | null
 }
 export interface ShadowTestView {
   as_of: string
   label: string
-  verdict: { state: 'too_early' | 'reviewable'; headline: string; detail: string; days_done: number; days_needed: number }
-  totals: { running: number; finished: number; target: number; stop: number }
+  verdict: { state: 'too_early' | 'reviewable' | 'sealed'; headline: string; detail: string; days_done: number; days_needed: number }
+  /** The blind trial's seal: counts only, no outcome, result, hit rate or average. */
+  sealed: boolean
+  totals: { running: number; finished: number; target: number | null; stop: number | null }
   groups: ShadowGroup[]
   running: ShadowRunning[]
   finished: ShadowFinished[]

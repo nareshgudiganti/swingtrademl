@@ -164,11 +164,11 @@ export default function PaperPositions() {
 
       <Card
         title="Open positions"
-        sub="Buy new stocks from Opportunities. Buy more or sell here. Click a column name to sort, click a stock to see its score day by day."
+        sub="Buy new stocks on Portfolio → Manual test. Buy more or sell here. Click a column name to sort, click a stock to see its score day by day."
       >
         {close.isError && <p className="tm-dim">Could not sell that position.</p>}
         {positionsState === 'empty' && (
-          <PageState kind="empty" reason="Nothing held yet. Open Swing Picks → Watchlist and use Buy." />
+          <PageState kind="empty" reason="Nothing held yet. Make a practice buy on Portfolio → Manual test." />
         )}
         {rows.length > 0 && (
           <OpenTable

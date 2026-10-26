@@ -112,6 +112,17 @@ def seal_journal(j: dict) -> dict:
     out["summaries"] = {
         name: (counts_only(row) if isinstance(row, dict) else row) for name, row in j["summaries"].items()
     }
+    # The before / from-tv22 periods (trial_journal, item B) are sealed the same way: counts only.
+    out["periods"] = [
+        {
+            **p,
+            "summaries": {
+                name: (counts_only(row) if isinstance(row, dict) else row)
+                for name, row in (p.get("summaries") or {}).items()
+            },
+        }
+        for p in j.get("periods") or []
+    ]
     days = []
     for d in j.get("days", []):
         if is_sealed_day(date.fromisoformat(d["day"])):

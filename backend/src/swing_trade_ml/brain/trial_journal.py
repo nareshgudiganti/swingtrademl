@@ -40,6 +40,12 @@ GATE_MIN_IDEAS = GATE_IDEAS
 CLEARLY_WORSE = -0.01  # an average daily gap below every stock beyond this is called out first
 SCORE_LINE = 0.80  # the owner reads scores of 80 and above
 TOP_N = 5  # at most five ideas a day (owner decision 2026-10-09)
+# tv22 (owner approved item B, 2026-10-25): from this session on, one paper slot is reserved for the brain
+# and at most one brain idea a day counts (docs/superpowers/specs/2026-10-24-tv22-brain-reserved-slot.md).
+# Sessions before and from it were judged under different room rules, so the journal also reports the two
+# periods separately. The gate's numbers are unchanged. It is the first trading day after the deploy; if the
+# deploy slips, move it to the first session after the deploy before any trial result is read.
+TV22_CHANGE_DATE = date(2026, 10, 26)
 SETS = ("brain_trade", "brain_blocked", "brain_top5", "brain_over_80", "v1_buys")
 SET_NAMES = {
     "brain_trade": "Brain says TRADE",
@@ -143,27 +149,51 @@ def build_journal(
         for name, syms in picks_for(s, v1_by_day.get(s.day, ())).items():
             picks_by_set[name][s.day] = syms
 
-    summaries: dict[str, dict] = {}
-    for name in SETS:
-        grouped: dict[date, list[StrictOutcome]] = {}
-        open_n = 0
-        for d, syms in picks_by_set[name].items():
-            outs = [outcomes[(sym, d)] for sym in syms if (sym, d) in outcomes]
-            grouped[d] = outs
-            open_n += sum(1 for o in outs if o.net_return is None)
-        row = summarise(grouped)
-        edge = daily_edge(picks_by_set[name], everyone, outcomes)
-        row.update(
-            picked=sum(len(v) for v in picks_by_set[name].values()),
-            still_open=open_n,
-            edge_vs_every_stock=sum(edge) / len(edge) if edge else None,
-            edge_days=len(edge),
+    def summaries_for(keep: set[date]) -> dict[str, dict]:
+        out: dict[str, dict] = {}
+        for name in SETS:
+            chosen = {d: syms for d, syms in picks_by_set[name].items() if d in keep}
+            grouped: dict[date, list[StrictOutcome]] = {}
+            open_n = 0
+            for d, syms in chosen.items():
+                outs = [outcomes[(sym, d)] for sym in syms if (sym, d) in outcomes]
+                grouped[d] = outs
+                open_n += sum(1 for o in outs if o.net_return is None)
+            row = summarise(grouped)
+            edge = daily_edge(chosen, {d: v for d, v in everyone.items() if d in keep}, outcomes)
+            row.update(
+                picked=sum(len(v) for v in chosen.values()),
+                still_open=open_n,
+                edge_vs_every_stock=sum(edge) / len(edge) if edge else None,
+                edge_days=len(edge),
+            )
+            out[name] = row
+        out["every_stock"] = summarise(
+            {
+                d: [outcomes[(sym, d)] for sym in syms if (sym, d) in outcomes]
+                for d, syms in everyone.items()
+                if d in keep
+            }
         )
-        summaries[name] = row
-    summaries["every_stock"] = summarise(
-        {d: [outcomes[(sym, d)] for sym in syms if (sym, d) in outcomes] for d, syms in everyone.items()}
-    )
+        return out
+
+    summaries = summaries_for(set(days))
     summaries["nifty"] = index_baseline(index_bars, days, horizon)
+    periods = []
+    for label, keep in (
+        ("before_tv22", [d for d in days if d < TV22_CHANGE_DATE]),
+        ("from_tv22", [d for d in days if d >= TV22_CHANGE_DATE]),
+    ):
+        if keep:
+            periods.append(
+                {
+                    "label": label,
+                    "first_day": keep[0].isoformat(),
+                    "last_day": keep[-1].isoformat(),
+                    "sessions": len(keep),
+                    "summaries": summaries_for(set(keep)),
+                }
+            )
 
     journal_days = []
     for s in sessions:
@@ -190,6 +220,9 @@ def build_journal(
         "last_day": days[-1].isoformat() if days else None,
         "enough_sessions": n >= MIN_SESSIONS,
         "summaries": summaries,
+        # Reported apart, never used by the gate (item B): the gate reads `summaries` above.
+        "change_date": TV22_CHANGE_DATE.isoformat(),
+        "periods": periods,
         "days": journal_days,
     }
 
@@ -324,6 +357,7 @@ def plain_report(j: dict) -> str:
             f"{nifty['open']} | - | {_pct(nifty['avg'])} | - |"
         )
     lines.append("| Cash | - | - | - | - | 0.00% | - |")
+    lines += _periods_lines(j, sealed=False)
     brain_finished = s["brain_trade"]["ideas"]
     lines += [
         "",
@@ -382,6 +416,7 @@ def _sealed_report(j: dict) -> str:
         lines.append(
             f"| {SET_NAMES[name]} | {row.get('picked', '')} | {row['ideas']} | {row.get('still_open', '')} |"
         )
+    lines += _periods_lines(j, sealed=True)
     lines += [
         "",
         f"Brain TRADE ideas finished: {s['brain_trade']['ideas']} of {GATE_IDEAS} the go-live gate asks for.",
@@ -400,6 +435,45 @@ def _sealed_report(j: dict) -> str:
         )
     lines += ["", "Nothing here changes a rule. Results are shown at the trial's evaluation."]
     return "\n".join(lines) + "\n"
+
+
+PERIOD_NAMES = {"before_tv22": "Before the reserved slot", "from_tv22": "With the brain's reserved slot"}
+
+
+def _periods_lines(j: dict, *, sealed: bool) -> list[str]:
+    """Before / from the tv22 change, each period on its own (item B). Counts only when sealed."""
+    periods = j.get("periods") or []
+    if not periods:
+        return []
+    lines = [
+        "",
+        f"## Before and after the reserved slot (changed {j.get('change_date')})",
+        "The two periods were judged under different room rules, so read them apart. The gate "
+        "uses the whole range, unchanged.",
+        "",
+    ]
+    if sealed:
+        lines += [
+            "| Period | Sessions | Followed | Picked | Finished | Still open |",
+            "|---|---|---|---|---|---|",
+        ]
+    else:
+        lines += [
+            "| Period | Sessions | Followed | Picked | Finished | Still open | Hit target | Average |",
+            "|---|---|---|---|---|---|---|---|",
+        ]
+    for p in periods:
+        for name in SETS:
+            row = p["summaries"][name]
+            line = (
+                f"| {PERIOD_NAMES.get(p['label'], p['label'])} ({p['first_day']} to {p['last_day']}) | "
+                f"{p['sessions']} | {SET_NAMES[name]} | {row.get('picked', '')} | {row['ideas']} | "
+                f"{row.get('still_open', '')} |"
+            )
+            if not sealed:
+                line += f" {_pct(row.get('hit_rate'), 0)} | {_pct(row.get('avg_net'))} |"
+            lines.append(line)
+    return lines
 
 
 def _gate_text(g: dict) -> str:

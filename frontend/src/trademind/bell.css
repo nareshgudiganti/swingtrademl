@@ -150,3 +150,42 @@
     display: none;
   }
 }
+
+/* tr5: "Real orders: ON/OFF" on a thin strip under the top bar. ON is red and stays on a phone (it is the one that matters);
+   OFF is grey and hides on a phone like the stage chip. */
+.tm-realorders-strip {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0.3rem 1.25rem 0;
+}
+@media (max-width: 480px) {
+  .tm-realorders-strip {
+    padding: 0.3rem 16px 0;
+  }
+  .tm-realorders-strip:has(.tm-realorders-off) {
+    display: none;
+  }
+}
+.tm-realorders-chip {
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  padding: 0.2rem 0.45rem;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.tm-realorders-off {
+  color: var(--tm-dim);
+  border: 1px solid rgba(143, 151, 192, 0.35);
+  background: rgba(143, 151, 192, 0.06);
+}
+.tm-realorders-on {
+  color: #fff;
+  border: 1px solid var(--tm-red);
+  background: rgba(255, 77, 106, 0.85);
+}
+@media (max-width: 480px) {
+  .tm-realorders-off {
+    display: none;
+  }
+}

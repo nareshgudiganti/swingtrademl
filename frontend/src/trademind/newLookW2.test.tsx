@@ -259,6 +259,7 @@ describe('Portfolio: money, held stocks, room and the safety net', () => {
       '/trademind/portfolio',
       '/trademind/positions',
       '/trademind/testing',
+      '/trademind/manual-test',
       '/trademind/holdings',
     ])
     expect(navPages(portfolio, false, { realAccount: false }).map((p) => p.to)).toEqual(['/trademind/portfolio', '/trademind/positions'])

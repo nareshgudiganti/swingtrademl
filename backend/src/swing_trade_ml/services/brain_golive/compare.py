@@ -30,6 +30,9 @@ MIN_FINISHED_TO_COMPARE = 10
 # have been placed do. Flip this one switch (owner's call) to count them toward the gate as well.
 COUNT_BLOCKED_TOWARD_GATE = False
 BLOCKED_KEY = "blocked_by_risk_limit"  # == services.execution.BLOCKED_BY_RISK_KEY (not imported: cycle)
+# tv22 / fx2: practice ideas beyond the brain's one counted slot a day (services.execution.BEYOND_SLOT_KEY).
+# Recorded and scored, reported on their own, never counted toward the gate (not even with the switch above).
+BEYOND_SLOT_KEY = "beyond_reserved_slot"
 EXCLUDED_TYPES = ("long_term_value",)  # a one-year horizon is not comparable
 # Stocks a person chose (evidence plan amendment 1, A3) are never the brain's, nor version 1's baseline:
 # the manual paper-testing book and the My Holdings / Real Trading book are left out by type and by name.
@@ -47,6 +50,7 @@ class Row:
     outcome: str | None
     outcome_pct: float | None
     blocked: bool = False  # brain idea refused by a v1 risk limit (practice evidence only)
+    beyond_slot: bool = False  # brain idea past its one counted slot that day (tv22 / fx2)
     # The rule this idea was scored on, from the Signal's own price / target / stop / horizon.
     target_pct: float | None = None
     stop_pct: float | None = None
@@ -159,8 +163,9 @@ def compare(
     """`sealed_from` (the blind trial, services/trial_seal.py): any brain group holding an idea from
     that day on shows counts only, and `brain_before_trial` gives the brain's results before it."""
     rows = [r for r in one_per_day(rows) if r.day in brain_days]
-    brain = [r for r in rows if r.is_brain and not r.blocked]
+    brain = [r for r in rows if r.is_brain and not r.blocked and not r.beyond_slot]
     blocked = [r for r in rows if r.is_brain and r.blocked]
+    beyond = [r for r in rows if r.is_brain and r.beyond_slot and not r.blocked]
     v1 = [r for r in rows if not r.is_brain]
     names = sorted({r.strategy for r in brain}) + sorted({r.strategy for r in v1})
     brain_names = {r.strategy for r in brain}
@@ -183,6 +188,7 @@ def compare(
         ],
         "brain": {**b, "scored_on": scored_on([r for r in rows if r.is_brain])},
         "brain_blocked": brain_summary(blocked),
+        "brain_beyond_slot": brain_summary(beyond),
         "version1": {**v, "scored_on": scored_on(v1)},
         "scored_on_warning": SCORED_ON_WARNING,
         "by_week": [
@@ -194,7 +200,7 @@ def compare(
             for w in sorted({_week(r.day) for r in rows})
         ],
         "note": _note(len(days), b, v, min_finished),
-        "sealed": sealed(brain + blocked),
+        "sealed": sealed(brain + blocked + beyond),
     }
     if out["sealed"]:
         before = [r for r in brain if r.day < sealed_from]
@@ -250,6 +256,9 @@ def load(db: Session, since: date | None = None) -> tuple[list[Row], set[date]]:
             outcome=outcome,
             outcome_pct=pct,
             blocked=bool(stype in STAGED_TYPES and isinstance(features, dict) and features.get(BLOCKED_KEY)),
+            beyond_slot=bool(
+                stype in STAGED_TYPES and isinstance(features, dict) and features.get(BEYOND_SLOT_KEY)
+            ),
             target_pct=(tp - price) / price if price and tp is not None else None,
             stop_pct=(sl - price) / price if price and sl is not None else None,
             horizon_days=horizon,
@@ -259,19 +268,27 @@ def load(db: Session, since: date | None = None) -> tuple[list[Row], set[date]]:
     return rows, {d for (d,) in db.execute(days_stmt)}
 
 
-def _finished_brain(db: Session, blocked: bool) -> int:
+def _finished_brain(db: Session, group: str) -> int:
+    def kind(r: Row) -> str:
+        return "blocked" if r.blocked else "beyond" if r.beyond_slot else "placeable"
+
     rows, _ = load(db)
-    return sum(1 for r in one_per_day(rows) if r.is_brain and r.outcome is not None and r.blocked == blocked)
+    return sum(1 for r in one_per_day(rows) if r.is_brain and r.outcome is not None and kind(r) == group)
 
 
 def finished_placeable_brain_ideas(db: Session) -> int:
-    """Finished brain ideas that could really have been placed (not blocked by a risk limit)."""
-    return _finished_brain(db, False)
+    """Finished brain ideas that could really have been placed (not blocked, not beyond the one slot)."""
+    return _finished_brain(db, "placeable")
 
 
 def finished_blocked_brain_ideas(db: Session) -> int:
     """Finished practice ideas that a v1 risk limit blocked (shown separately)."""
-    return _finished_brain(db, True)
+    return _finished_brain(db, "blocked")
+
+
+def finished_beyond_slot_brain_ideas(db: Session) -> int:
+    """Finished practice ideas past the brain's one counted slot that day (shown separately)."""
+    return _finished_brain(db, "beyond")
 
 
 def finished_brain_ideas(db: Session) -> int:
@@ -289,5 +306,6 @@ def report(db: Session, since: date | None = None) -> dict:
         "brain_finished": finished_brain_ideas(db),
         "brain_finished_placeable": finished_placeable_brain_ideas(db),
         "brain_finished_blocked": finished_blocked_brain_ideas(db),
+        "brain_finished_beyond_slot": finished_beyond_slot_brain_ideas(db),
         "needed": NEEDED_FINISHED,
     }

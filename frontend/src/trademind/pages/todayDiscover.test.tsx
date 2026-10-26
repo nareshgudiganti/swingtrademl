@@ -96,7 +96,7 @@ describe('the same ideas as before', () => {
     expect(symbols(render('today'))).toEqual(ordered.slice(0, 5))
   })
 
-  it('Discover lists every idea, then the featured one, keeps the counts and the paper Buy button', () => {
+  it('Discover lists every idea, then the featured one, and keeps the counts', () => {
     const html = render('discover')
     const featured = ideasFrom(run).find((d) => finalWord(d) === 'TRADE')!.symbol
     expect(symbols(html)).toEqual([...ordered, featured])
@@ -106,8 +106,16 @@ describe('the same ideas as before', () => {
     expect(t).toContain('Watch (2)')
     expect(t).toContain('Wait (1)')
     expect(t).toContain('Avoid (2)')
-    expect(html.match(/>Buy</g)?.length).toBe(6)
+    // tr3: idea cards carry no Buy button any more; practice buys live on Portfolio -> Manual test.
+    expect(html).not.toMatch(/>Buy<|Paper buy/)
     expect(t).not.toContain('HOLDME')
+  })
+
+  it('an AVOID card has no Buy button', () => {
+    const c = cards(render('discover')).find((x) => x.startsWith(' data-symbol="DDDAVOID"'))!
+    expect(c).toBeDefined()
+    expect(text(c)).toContain('DDDAVOID')
+    expect(c).not.toMatch(/>Buy<|Paper buy/)
   })
 
   it("Discover shows the overruled idea with the owner's word and no buy zone", () => {

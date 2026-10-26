@@ -90,7 +90,9 @@ export function ShadowView({ v }: { v: ShadowTestView }) {
 
       <section className="sp-card sh-verdict" data-testid="shadow-verdict" data-state={v.verdict.state}>
         <div>
-          <span className="sp-label">{v.verdict.state === 'too_early' ? 'Evidence building' : 'Ready to review'}</span>
+          <span className="sp-label">
+            {v.verdict.state === 'sealed' ? 'Counting only' : v.verdict.state === 'too_early' ? 'Evidence building' : 'Ready to review'}
+          </span>
           <div className="sp-big" style={{ fontSize: 28 }}>
             {v.verdict.headline}
           </div>
@@ -113,20 +115,30 @@ export function ShadowView({ v }: { v: ShadowTestView }) {
       <div className="sh-tiles" data-testid="shadow-totals">
         <Tile n={v.totals.running} k="Running" s="Currently being tracked." />
         <Tile n={v.totals.finished} k="Finished" s="Completed tracking (target, stop or day 15)." />
-        <Tile
-          n={v.totals.target}
-          of={v.totals.finished}
-          k={`Target reached${share(v.totals.target, v.totals.finished)}`}
-          s="Finished ideas that hit +8%."
-          tone="up"
-        />
-        <Tile
-          n={v.totals.stop}
-          of={v.totals.finished}
-          k={`Stop reached${share(v.totals.stop, v.totals.finished)}`}
-          s="Finished ideas that hit −4%."
-          tone="down"
-        />
+        {v.totals.target == null || v.totals.stop == null ? (
+          <div className="sp-card sp-stat" data-testid="shadow-sealed-tile" style={{ gridColumn: 'span 2' }}>
+            <div className="sp-big" style={{ fontSize: 28 }}>Sealed</div>
+            <div style={{ fontWeight: 700 }}>Target and stop results</div>
+            <div className="sp-small">Hidden until the trial’s evaluation (blind test): counts only.</div>
+          </div>
+        ) : (
+          <>
+            <Tile
+              n={v.totals.target}
+              of={v.totals.finished}
+              k={`Target reached${share(v.totals.target, v.totals.finished)}`}
+              s="Finished ideas that hit +8%."
+              tone="up"
+            />
+            <Tile
+              n={v.totals.stop}
+              of={v.totals.finished}
+              k={`Stop reached${share(v.totals.stop, v.totals.finished)}`}
+              s="Finished ideas that hit −4%."
+              tone="down"
+            />
+          </>
+        )}
       </div>
 
       <GroupsTable groups={v.groups} />
@@ -238,17 +250,25 @@ function GroupsTable({ groups }: { groups: ShadowGroup[] }) {
                   <b>{g.group}</b>
                 </td>
                 <td>{g.finished}</td>
-                <td className="sp-pos">
-                  {g.target} / {g.finished}
-                  {share(g.target, g.finished)}
-                </td>
-                <td className="sp-neg">
-                  {g.stop} / {g.finished}
-                  {share(g.stop, g.finished)}
-                </td>
-                <td className={tone(g.average_pct)}>
-                  <b>{pct(g.average_pct)}</b>
-                </td>
+                {g.sealed || g.target == null || g.stop == null ? (
+                  <td colSpan={3} className="sp-small" data-testid="shadow-group-sealed">
+                    Sealed until the trial’s evaluation (counts only)
+                  </td>
+                ) : (
+                  <>
+                    <td className="sp-pos">
+                      {g.target} / {g.finished}
+                      {share(g.target, g.finished)}
+                    </td>
+                    <td className="sp-neg">
+                      {g.stop} / {g.finished}
+                      {share(g.stop, g.finished)}
+                    </td>
+                    <td className={tone(g.average_pct)}>
+                      <b>{pct(g.average_pct)}</b>
+                    </td>
+                  </>
+                )}
               </tr>
             ))}
           </tbody>
@@ -305,9 +325,11 @@ function RunningTable({ rows, caps }: { rows: ShadowRunning[]; caps: Map<string,
               <td className={tone(r.today_pct)}>
                 {r.price_not_updated ? <span className="sp-small">price not updated</span> : pct(r.today_pct)}
               </td>
-              <td className={tone(r.since_pct)}>{pct(r.since_pct)}</td>
+              <td className={tone(r.since_pct)}>{r.sealed ? <span className="sp-small">Sealed</span> : pct(r.since_pct)}</td>
               <td>
-                {r.position == null ? (
+                {r.sealed ? (
+                  <span className="sp-small">Sealed until the trial’s evaluation</span>
+                ) : r.position == null ? (
                   '—'
                 ) : (
                   <div className="sh-rng" role="img" aria-label={`${pct(r.since_pct)} since ranked, between the −4% stop and the +8% target`}>
@@ -364,9 +386,9 @@ function FinishedTable({ rows, caps }: { rows: ShadowFinished[]; caps: Map<strin
               <td>#{r.rank}</td>
               <td>{shortDate(r.ranked_on)}</td>
               <td>{shortDate(r.ended_on)}</td>
-              <td>{OUTCOME_TEXT[r.outcome]}</td>
+              <td>{r.outcome ? OUTCOME_TEXT[r.outcome] : <span className="sp-small">Sealed</span>}</td>
               <td className={tone(r.result_pct)}>
-                <b>{pct(r.result_pct)}</b>
+                {r.result_pct == null ? <span className="sp-small">Sealed</span> : <b>{pct(r.result_pct)}</b>}
               </td>
               <td>{r.days != null ? `${r.days} days` : '—'}</td>
               <td>

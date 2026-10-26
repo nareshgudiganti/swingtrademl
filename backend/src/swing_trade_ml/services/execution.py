@@ -9,6 +9,7 @@ attributable to the strategy rather than to the plumbing.
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import requests
 from sqlalchemy import func, select
@@ -1007,6 +1008,57 @@ def _mark_blocked_by_risk(signal: Signal, rule: str | None, reason: str | None) 
     signal.rejection_reason = f"{BLOCKED_BY_RISK_PREFIX}: {reason}" if reason else BLOCKED_BY_RISK_PREFIX
 
 
+# tv22 / fx2 (owner approved C on 2026-10-25): in practice stage the brain has one reserved slot, so at
+# most one idea a day counts toward the 30 — the highest-ranked TRADE that passes every risk check (the
+# scan tries BUYs strongest first) — and a stock that is already a counted, unfinished idea does not count
+# again. The rest are still recorded and scored, tagged with this key, and reported apart
+# (services/brain_golive/compare.py). Never counted toward the gate.
+BEYOND_SLOT_KEY = "beyond_reserved_slot"
+_IST = ZoneInfo("Asia/Kolkata")
+BEYOND_SLOT_PREFIX = "Beyond the brain's one reserved slot (practice evidence only)"
+
+
+def _counted_brain_ideas(db: Session, strategy: Strategy, exclude_id: int) -> list[Signal]:
+    """This strategy's practice BUY ideas that count toward the gate (no tag, not refused)."""
+    rows = db.execute(
+        select(Signal).where(
+            Signal.strategy_id == strategy.id,
+            Signal.signal_type == SignalType.BUY,
+            Signal.rejection_reason.is_(None),
+            Signal.id != exclude_id,
+        )
+    ).scalars()
+    return [
+        s
+        for s in rows
+        if not (s.features or {}).get(BLOCKED_BY_RISK_KEY) and not (s.features or {}).get(BEYOND_SLOT_KEY)
+    ]
+
+
+def _beyond_reserved_slot(db: Session, strategy: Strategy, signal: Signal) -> str | None:
+    """Why this passing practice idea does not take the brain's one counted slot, or None if it does."""
+    today = signal.generated_at.astimezone(_IST).date()
+    counted = _counted_brain_ideas(db, strategy, signal.id)
+    todays = [s for s in counted if s.generated_at.astimezone(_IST).date() == today]
+    if any(s.instrument_id == signal.instrument_id for s in todays):
+        return None  # the same idea recorded again today: one_per_day keeps one of them
+    if todays:
+        return "ONE_PER_DAY"
+    if any(s.instrument_id == signal.instrument_id and s.outcome is None for s in counted):
+        return "ALREADY_COUNTED"
+    return None
+
+
+def _mark_beyond_slot(signal: Signal, why: str) -> None:
+    signal.features = {**(signal.features or {}), BEYOND_SLOT_KEY: why}
+    detail = (
+        "a stronger idea already took today's counted slot"
+        if why == "ONE_PER_DAY"
+        else "this stock is already a counted idea that has not finished"
+    )
+    signal.rejection_reason = f"{BEYOND_SLOT_PREFIX}: {detail}"
+
+
 def process_decision(
     db: Session,
     strategy: Strategy,
@@ -1200,6 +1252,14 @@ def process_decision(
 
     if is_advisory(strategy):
         signal.advisory_only = True
+        if (
+            decision.signal == SignalType.BUY
+            and _is_practice_brain(db, strategy)
+            and not (signal.features or {}).get(BLOCKED_BY_RISK_KEY)
+        ):
+            why = _beyond_reserved_slot(db, strategy, signal)
+            if why is not None:
+                _mark_beyond_slot(signal, why)
         db.commit()
         # A staged (brain) strategy's ideas are announced by its approvals
         # service instead; in practice mode they are not announced at all, so

@@ -41,6 +41,8 @@ class TelegramNotifier:
 
     @property
     def enabled(self) -> bool:
+        if settings.ENVIRONMENT != "production" and not settings.TELEGRAM_SEND_OUTSIDE_PRODUCTION:
+            return False
         return bool(settings.TELEGRAM_ENABLED and self._token and self._chat_id)
 
     def _should_send(self, event: NotificationEvent | str) -> bool:

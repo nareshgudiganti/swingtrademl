@@ -33,9 +33,16 @@ beforeAll(() => {
 
 // realAccount: whether this account may see the real Zerodha account (REAL_ACCOUNT_USERS). By default the owner
 // may and nobody else may, which is how prod is set up (sudeeksha).
-function render(path: string, ownerConsole: boolean, status?: Record<string, unknown>, realAccount = ownerConsole): string {
+function render(
+  path: string,
+  ownerConsole: boolean,
+  status?: Record<string, unknown>,
+  realAccount = ownerConsole,
+  role?: 'owner' | 'tester' | 'member',
+): string {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   if (status) client.setQueryData(['status'], status)
+  if (role) client.setQueryData(['me'], { id: 1, username: 'u', role, is_superuser: role === 'owner' })
   client.setQueryData(['plan'], { can_see_real_account: realAccount, unrestricted: ownerConsole, features: [] })
   return renderToString(
     <QueryClientProvider client={client}>
@@ -88,13 +95,21 @@ describe('Phase 2: Portfolio tabs and the Paper/Real strip', () => {
     }
   })
 
-  it('the owner sees the four approved tab names', () => {
-    expect(tabs(render('/trademind/positions', true))).toEqual(['Bot (Paper)', 'Testing (Paper)', 'My Zerodha (Real)', 'Paper Overview'])
+  it('the owner sees the approved tab names', () => {
+    expect(tabs(render('/trademind/positions', true))).toEqual(['Bot (Paper)', 'Testing (Paper)', 'Manual test (Paper)', 'My Zerodha (Real)', 'Paper Overview'])
   })
 
   it('an owner who is not the real-account user never sees My Zerodha, its tab or its strip', () => {
-    expect(tabs(render('/trademind/positions', true, undefined, false))).toEqual(['Bot (Paper)', 'Testing (Paper)', 'Paper Overview'])
+    expect(tabs(render('/trademind/positions', true, undefined, false))).toEqual(['Bot (Paper)', 'Testing (Paper)', 'Manual test (Paper)', 'Paper Overview'])
     expect(strips(render('/trademind/holdings', true, undefined, false))).toEqual([])
+  })
+
+  it('tr3: a tester gets the Manual test tab and page; a plain member gets neither', () => {
+    expect(tabs(render('/trademind/positions', false, undefined, false, 'tester'))).toEqual(['Bot (Paper)', 'Manual test (Paper)', 'Paper Overview'])
+    const page = render('/trademind/manual-test', false, undefined, false, 'tester')
+    expect(page).toContain('Practice money only. This is your own test, not a brain pick.')
+    expect(tabs(render('/trademind/positions', false, undefined, false, 'member'))).toEqual(['Bot (Paper)', 'Paper Overview'])
+    expect(render('/trademind/manual-test', false, undefined, false, 'member')).not.toContain('Practice money only')
   })
 
   it('a non-owner sees only the paper tabs, never My Zerodha', () => {

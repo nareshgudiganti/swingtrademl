@@ -27,6 +27,7 @@ const NAV_ICON: Record<NavId, ReactNode> = {
   today: svg(<path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z" />),
   discover: svg(<><circle cx="11" cy="11" r="7" /><path d="M20 20l-4-4" /></>),
   portfolio: svg(<><rect x="3" y="7" width="18" height="13" rx="2" /><path d="M8 7V5h8v2" /></>),
+  shadow: svg(<><circle cx="12" cy="12" r="3" /><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z" /></>),
   watchlist: svg(<path d="M12 3l2.8 5.8 6.2.9-4.5 4.4 1 6.3L12 17.5 6.5 20.4l1-6.3L3 9.7l6.2-.9z" />),
   market: svg(<><path d="M3 17l6-6 4 4 8-8" /><path d="M15 7h6v6" /></>),
   evidence: svg(<><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z" /><path d="M9 12l2 2 4-4" /></>),

@@ -141,8 +141,8 @@ describe('the new Today', () => {
 })
 
 describe('the 8-item menu', () => {
-  it('owner sees 8 items, everyone else all but Admin (wave 2: everyone has their own watchlist)', () => {
-    expect(visibleNav(true).map((n) => n.id)).toEqual(['today', 'discover', 'portfolio', 'watchlist', 'market', 'evidence', 'history', 'admin'])
+  it('owner sees 9 items (Shadow Test is owner only), everyone else all but Admin (wave 2: everyone has their own watchlist)', () => {
+    expect(visibleNav(true).map((n) => n.id)).toEqual(['today', 'discover', 'portfolio', 'shadow', 'watchlist', 'market', 'evidence', 'history', 'admin'])
     expect(visibleNav(false).map((n) => n.id)).toEqual(['today', 'discover', 'portfolio', 'watchlist', 'market', 'evidence', 'history'])
   })
 

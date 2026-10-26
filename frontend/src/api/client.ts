@@ -43,6 +43,7 @@ import type {
   BrainWhy,
   Candle,
   CompanyView,
+  ShadowTestView,
   PriceSnapshot,
   CurrentUser,
   AdminUser,
@@ -496,6 +497,7 @@ export const api = {
   // -------------------------------------------------------- market data --
   candles: (symbol: string, limit = 11) =>
     get<Candle[]>(`/market-data/candles/${encodeURIComponent(symbol)}?interval=day&limit=${limit}`),
+  shadowTest: () => get<ShadowTestView>('/brain/shadow-test'),
   company: (symbol: string) => get<CompanyView>(`/company/${encodeURIComponent(symbol)}`),
   priceSnapshot: (symbol: string) =>
     get<PriceSnapshot>(`/market-data/snapshot/${encodeURIComponent(symbol)}`),

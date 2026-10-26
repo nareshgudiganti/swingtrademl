@@ -337,6 +337,50 @@ export interface TrackRecordSignal {
   sealed?: boolean
 }
 
+/** Shadow Test: every ranked stock followed for 15 trading days, bought or not. Owner only, read only. */
+export interface ShadowRunning {
+  symbol: string
+  rank: number
+  group: string
+  score: number
+  word: string
+  ranked_on: string
+  paper_bought: boolean
+  day: number
+  today_pct: number | null
+  since_pct: number | null
+  position: number | null
+  price_not_updated: boolean
+}
+export interface ShadowFinished {
+  symbol: string
+  rank: number
+  group: string
+  ranked_on: string
+  ended_on: string | null
+  outcome: 'target' | 'stop' | 'timeout'
+  result_pct: number
+  days: number | null
+  paper_bought: boolean
+}
+export interface ShadowGroup {
+  group: string
+  finished: number
+  target: number
+  stop: number
+  average_pct: number | null
+}
+export interface ShadowTestView {
+  as_of: string
+  label: string
+  verdict: { state: 'too_early' | 'reviewable'; headline: string; detail: string; days_done: number; days_needed: number }
+  totals: { running: number; finished: number; target: number; stop: number }
+  groups: ShadowGroup[]
+  running: ShadowRunning[]
+  finished: ShadowFinished[]
+  how: string[]
+}
+
 /** One block of the Company and news tab: where it came from, as of when, and whether it can be trusted. */
 export interface CompanyBlock {
   state: 'ok' | 'out_of_date' | 'not_available'

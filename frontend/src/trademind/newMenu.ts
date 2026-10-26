@@ -5,7 +5,7 @@
 
 import { ADMIN_SECTION, SECTIONS, matches, type Page } from './menu'
 
-export type NavId = 'today' | 'discover' | 'portfolio' | 'watchlist' | 'market' | 'evidence' | 'history' | 'admin'
+export type NavId = 'today' | 'discover' | 'portfolio' | 'shadow' | 'watchlist' | 'market' | 'evidence' | 'history' | 'admin'
 export type NavItem = {
   id: NavId
   label: string
@@ -32,6 +32,8 @@ export const NAV: NavItem[] = [
     also: ['/trademind/stock', '/trademind/ai'],
   },
   { id: 'portfolio', label: 'Portfolio', pages: portfolioPages },
+  // Owner only while it is an exploration: every ranked stock followed for 15 days, bought or not.
+  { id: 'shadow', label: 'Shadow Test', pages: [{ to: '/trademind/shadow-test', label: 'Shadow Test' }], ownerOnly: true },
   // Wave 2: everyone's own list (/me/watchlist), so the item is no longer owner-only.
   { id: 'watchlist', label: 'Watchlist', pages: [{ to: '/trademind/watchlist', label: 'My Watchlist' }] },
   { id: 'market', label: 'Market', pages: [{ to: '/trademind/market', label: 'Market' }] },

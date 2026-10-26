@@ -280,6 +280,121 @@ def open_holdings(db: Session, mode: str) -> list[Holding]:
     return holdings + in_flight_buy_holdings(db, mode)
 
 
+# ------------------------------------------------- tv22: the brain's slot --
+# One paper slot is kept for the brain under the market-conditions limit
+# (docs/superpowers/specs/2026-10-24-tv22-brain-reserved-slot.md, owner
+# approved A-F on 2026-10-25, F = option (i)). Only the paper risk check
+# reads this: it never makes a position bigger, never lowers a floor, never
+# lets the account go over today's ceiling, and never sells anything.
+
+# == brain/modules/m07_risk/module.py DEFENSIVE_SIZE_FACTOR (not imported:
+# M07 imports this module). tests/test_tv22_reserved_slot.py fails if the two
+# ever differ.
+RESERVATION_DEFENSIVE_SIZE_FACTOR = 0.5
+
+
+def brain_reservation(min_position: float, price: float, banner_mode: str | None) -> float:
+    """Rupees kept for the brain's one slot.
+
+    NORMAL day: the minimum position plus one share (whole shares round
+    down, so exactly the minimum would land a few rupees under it).
+    Any other day (DEFENSIVE, NO NEW TRADES or unknown — the cautious read):
+    that amount divided by M07's defensive size factor, because M07 fits the idea to
+    the room, then halves it (rounding down), then still demands the full
+    minimum. Halving rounds down too, so the headroom is one share per half.
+    """
+    one = min_position + max(price, 0.0)
+    if banner_mode == "NORMAL":
+        return one
+    return one / RESERVATION_DEFENSIVE_SIZE_FACTOR
+
+
+def brain_banner(db: Session, mode: str) -> str | None:
+    """The banner of the brain's latest finished live nightly run for this book
+    (read from the stored run; this module never imports the brain package)."""
+    from swing_trade_ml.db.models.brain import BrainRun
+
+    return db.execute(
+        select(BrainRun.banner_mode)
+        .where(
+            BrainRun.kind == "nightly",
+            BrainRun.live.is_(True),
+            BrainRun.status == "done",
+            BrainRun.book == mode,
+        )
+        .order_by(BrainRun.started_at.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+
+
+def _brain_strategy_active(db: Session, mode: str) -> bool:
+    return bool(
+        db.execute(
+            select(func.count(Strategy.id)).where(
+                Strategy.is_active.is_(True),
+                Strategy.mode == mode,
+                Strategy.strategy_type.in_(sorted(STAGED_TYPES)),
+            )
+        ).scalar_one()
+    )
+
+
+def brain_holdings_value(db: Session, mode: str) -> float:
+    """Rupees the brain (staged strategies) holds in this book, filled or in flight."""
+    rows = db.execute(
+        select(Position, Strategy.id)
+        .join(Strategy, Strategy.id == Position.strategy_id)
+        .where(
+            Position.mode == mode,
+            Position.status == PositionStatus.OPEN,
+            Strategy.strategy_type.in_(sorted(STAGED_TYPES)),
+        )
+    ).all()
+    value = sum((p.current_price or p.entry_price) * p.quantity for p, _ in rows)
+    staged_ids = db.execute(
+        select(Strategy.id).where(Strategy.strategy_type.in_(sorted(STAGED_TYPES)))
+    ).scalars()
+    for sid in staged_ids:
+        value += sum(h.value for h in in_flight_buy_holdings(db, mode, sid))
+    return float(value)
+
+
+@dataclass(slots=True)
+class MarketRoom:
+    """Room under today's market-conditions limit for one caller."""
+
+    ceiling: float
+    invested: float
+    room: float
+    reserved: float = 0.0  # rupees kept out of this caller's room for the brain
+
+
+def market_room(
+    db: Session,
+    mode: str,
+    strategy: Strategy | None,
+    ceiling: float,
+    invested: float,
+    min_position: float,
+    price: float,
+) -> MarketRoom:
+    """tv22 layer 1. No strategy (M07's own call): ceiling - invested, as always.
+    A named v1 strategy: that minus the brain's reservation, unless the brain
+    already holds a position. The brain: the lesser of (reservation - what the
+    brain holds) and (ceiling - invested), so the account never goes over the
+    ceiling. No active brain strategy in this book: no reservation."""
+    whole = ceiling - invested
+    if strategy is None or not _brain_strategy_active(db, mode):
+        return MarketRoom(ceiling, invested, whole)
+    reservation = brain_reservation(min_position, price, brain_banner(db, mode))
+    held = brain_holdings_value(db, mode)
+    if strategy.strategy_type in STAGED_TYPES:
+        return MarketRoom(ceiling, invested, min(reservation - held, whole))
+    if held > 0:
+        return MarketRoom(ceiling, invested, whole)
+    return MarketRoom(ceiling, invested, whole - reservation, reserved=reservation)
+
+
 def average_daily_traded_value(
     db: Session, instrument_id: int, days: int = ADV_LOOKBACK_DAYS
 ) -> float | None:
@@ -671,13 +786,19 @@ def check_entry(
     invested = sum(h.value for h in holdings)
     context = deployable.current_deployable(db)
     ceiling = context.fraction * portfolio_value
-    room = ceiling - invested
+    market = market_room(db, mode, strategy, ceiling, invested, min_position, price)
+    room = market.room
     if room < min_position:
+        kept = (
+            f", after keeping {format_inr(market.reserved)} aside for the brain's one reserved slot"
+            if market.reserved > 0
+            else ""
+        )
         return _reject(
             "DEPLOYABLE",
             f"The market looks {context.plain_regime} right now, so the bot keeps at most "
             f"{_pct(context.fraction)} of your money invested ({format_inr(ceiling)}). You already "
-            f"have {format_inr(invested)} invested, leaving {format_inr(max(room, 0.0))} — less "
+            f"have {format_inr(invested)} invested, leaving {format_inr(max(room, 0.0))}{kept} — less "
             f"than the {format_inr(min_position)} minimum position",
             ceiling,
         )

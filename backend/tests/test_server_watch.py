@@ -97,8 +97,10 @@ def test_sample_converts_to_mb():
     assert s["swap_total_mb"] == 4096
 
 
-def test_sample_without_proc_has_no_figures():
-    s = sw.take_sample("api", meminfo={}, rss=None)
+def test_sample_without_proc_has_no_figures(monkeypatch):
+    # A machine without /proc (Windows, macOS). The build machine is Linux and has one, so say there is none.
+    monkeypatch.setattr(sw, "process_rss", lambda: None)
+    s = sw.take_sample("api", meminfo={})
     assert s["rss_mb"] is None and s["mem_total_mb"] is None
 
 

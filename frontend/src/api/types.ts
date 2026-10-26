@@ -176,6 +176,12 @@ export interface PortfolioSummary {
   unrealized_pnl: number
   total_pnl: number
   total_return_pct: number
+  /** Money the owner added to the paper account since these figures began (never counted as profit). */
+  money_added?: number
+  /** Starting money plus every top-up: what total_return_pct is measured against. */
+  money_in?: number
+  /** How the bot itself did, with the size and timing of top-ups taken out. */
+  time_weighted_return_pct?: number
   open_positions: number
   total_trades: number
   winning_trades: number

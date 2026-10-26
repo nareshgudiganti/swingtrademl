@@ -418,6 +418,15 @@ export const api = {
       '/portfolio/tester/buy',
       body,
     ),
+  capitalAdded: () =>
+    get<{ starting_capital: number; added: { at: string; amount: number }[]; total_added: number }>(
+      '/portfolio/capital-added',
+    ),
+  addCapital: (amount: number, note?: string) =>
+    post<{ added: number; at: string; account_value: number; cash: number }>('/portfolio/capital-added', {
+      amount,
+      note,
+    }),
   equityCurve: (days = 180) => get<EquityPoint[]>(`/portfolio/equity-curve?days=${days}`),
   snapshot: () => post<MessageResponse>('/portfolio/snapshot'),
 

@@ -10,7 +10,8 @@ Startup order matters and is deliberate:
 
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
+import asyncio
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import Depends, FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -62,6 +63,19 @@ def _seed_watchlist() -> None:
         db.close()
 
 
+async def _watch_api_memory() -> None:
+    """Housekeeping loop for the API process. Each round runs in a thread (it reads files and Redis) and
+    a failure is only logged; the loop never stops on an error."""
+    from swing_trade_ml.services import server_watch
+
+    while True:
+        await asyncio.sleep(server_watch.SAMPLE_EVERY_SECONDS)
+        try:
+            await asyncio.to_thread(server_watch.run_watch, "api")
+        except Exception as exc:  # noqa: BLE001
+            log.warning("server_watch.api_round_failed", error_kind=type(exc).__name__)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     assert_secrets_safe(settings)
@@ -101,9 +115,18 @@ async def lifespan(app: FastAPI):
         # Loud on purpose. This is the one state where a bug costs real money.
         log.warning("app.LIVE_TRADING_ENABLED")
 
+    # The worker watches itself through the scheduler (job_server_watch); the API has no scheduler, so
+    # it watches itself with this task: a memory sample every five minutes, and a safe restart if it
+    # has grown too big (services/server_watch.py).
+    watch_task = None if settings.ENABLE_SCHEDULER else asyncio.create_task(_watch_api_memory())
+
     yield
 
     log.info("app.stopping")
+    if watch_task is not None:
+        watch_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await watch_task
     stop_scheduler()
     await notifier.send("🛑 <b>Swing Trade ML stopped</b>", "system", kind=APP_STATUS)
 

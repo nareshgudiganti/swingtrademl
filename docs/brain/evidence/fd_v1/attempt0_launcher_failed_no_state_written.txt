@@ -1,0 +1,140 @@
+start 2026-10-26T10:16:43Z
+commit 271eb1cb1cc9b42cf0c9422712cd7a717f67ec8f
+Traceback (most recent call last):
+  File "D:\machine learning\swing-trade-bot\backend\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 149, in __init__
+    self._dbapi_connection = engine.raw_connection()
+                             ^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\machine learning\swing-trade-bot\backend\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 3299, in raw_connection
+    return self.pool.connect()
+           ^^^^^^^^^^^^^^^^^^^
+  File "D:\machine learning\swing-trade-bot\backend\.venv\Lib\site-packages\sqlalchemy\pool\base.py", line 445, in connect
+    return _ConnectionFairy._checkout(self)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\machine learning\swing-trade-bot\backend\.venv\Lib\site-packages\sqlalchemy\pool\base.py", line 1324, in _checkout
+    fairy = _ConnectionRecord.checkout(pool)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\machine learning\swing-trade-bot\backend\.venv\Lib\site-packages\sqlalchemy\pool\base.py", line 709, in checkout
+    rec = pool._do_get()
+          ^^^^^^^^^^^^^^
+  File "D:\machine learning\swing-trade-bot\backend\.venv\Lib\site-packages\sqlalchemy\pool\impl.py", line 176, in _do_get
+    with util.safe_reraise():
+         ^^^^^^^^^^^^^^^^^^^
+  File "D:\machine learning\swing-trade-bot\backend\.venv\Lib\site-packages\sqlalchemy\util\langhelpers.py", line 166, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "D:\machine learning\swing-trade-bot\backend\.venv\Lib\site-packages\sqlalchemy\pool\impl.py", line 174, in _do_get
+    return self._create_connection()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\machine learning\swing-trade-bot\backend\.venv\Lib\site-packages\sqlalchemy\pool\base.py", line 386, in _create_connection
+    return _ConnectionRecord(self)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\machine learning\swing-trade-bot\backend\.venv\Lib\site-packages\sqlalchemy\pool\base.py", line 671, in __init__
+    self.__connect()
+  File "D:\machine learning\swing-trade-bot\backend\.venv\Lib\site-packages\sqlalchemy\pool\base.py", line 916, in __connect
+    with util.safe_reraise():
+         ^^^^^^^^^^^^^^^^^^^
+  File "D:\machine learning\swing-trade-bot\backend\.venv\Lib\site-packages\sqlalchemy\util\langhelpers.py", line 166, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "D:\machine learning\swing-trade-bot\backend\.venv\Lib\site-packages\sqlalchemy\pool\base.py", line 912, in __connect
+    self.dbapi_connection = connection = pool._invoke_creator(self)
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\machine learning\swing-trade-bot\backend\.venv\Lib\site-packages\sqlalchemy\engine\create.py", line 645, in connect
+    return dialect.connect(*cargs_tup, **cparams)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\machine learning\swing-trade-bot\backend\.venv\Lib\site-packages\sqlalchemy\engine\default.py", line 869, in connect
+    return self.loaded_dbapi.connect(*cargs, **cparams)  # type: ignore[no-any-return]  # NOQA: E501
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\machine learning\swing-trade-bot\backend\.venv\Lib\site-packages\psycopg\connection.py", line 134, in connect
+    raise new_ex.with_traceback(None)
+psycopg.OperationalError: connection failed: connection to server at "127.0.0.1", port 5432 failed: FATAL:  password authentication failed for user "swingtrade"
+Multiple connection attempts failed. All failures were:
+- host: 'localhost', port: 5432, hostaddr: '::1': connection failed: connection to server at "::1", port 5432 failed: FATAL:  password authentication failed for user "swingtrade"
+- host: 'localhost', port: 5432, hostaddr: '127.0.0.1': connection failed: connection to server at "127.0.0.1", port 5432 failed: FATAL:  password authentication failed for user "swingtrade"
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Users\nares\AppData\Local\Temp\claude\d--machine-learning-swing-trade-bot\fe2b45d0-b4e3-4d51-b13f-226f58ea3584\scratchpad\run_fd.py", line 5, in <module>
+    raise SystemExit(main(["--from", "2023-07-01", "--to", "2025-01-31"]))
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\machine learning\swing-trade-bot\.claude\worktrees\fd-tag\backend\src\swing_trade_ml\brain\five_day.py", line 1223, in main
+    md, js = run(db, first_start=first, last_end=last, out_dir=out_dir)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\machine learning\swing-trade-bot\.claude\worktrees\fd-tag\backend\src\swing_trade_ml\brain\five_day.py", line 1145, in run
+    inp = collect_fn(db, first_start, last_end)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\machine learning\swing-trade-bot\.claude\worktrees\fd-tag\backend\src\swing_trade_ml\brain\five_day.py", line 1039, in collect
+    db.execute(
+  File "D:\machine learning\swing-trade-bot\backend\.venv\Lib\site-packages\sqlalchemy\orm\session.py", line 2473, in execute
+    return self._execute_internal(
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\machine learning\swing-trade-bot\backend\.venv\Lib\site-packages\sqlalchemy\orm\session.py", line 2350, in _execute_internal
+    conn = self._connection_for_bind(bind)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\machine learning\swing-trade-bot\backend\.venv\Lib\site-packages\sqlalchemy\orm\session.py", line 2173, in _connection_for_bind
+    return trans._connection_for_bind(engine, execution_options)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<sqlalchemy generated _go() wrapper for sqlalchemy.orm.session.SessionTransaction._connection_for_bind>", line 2, in _connection_for_bind
+  File "D:\machine learning\swing-trade-bot\backend\.venv\Lib\site-packages\sqlalchemy\orm\state_changes.py", line 137, in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+  File "D:\machine learning\swing-trade-bot\backend\.venv\Lib\site-packages\sqlalchemy\orm\session.py", line 1203, in _connection_for_bind
+    conn = bind.connect()
+           ^^^^^^^^^^^^^^
+  File "D:\machine learning\swing-trade-bot\backend\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 3275, in connect
+    return self._connection_cls(self)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\machine learning\swing-trade-bot\backend\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 151, in __init__
+    Connection._handle_dbapi_exception_noconnection(
+  File "D:\machine learning\swing-trade-bot\backend\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 2432, in _handle_dbapi_exception_noconnection
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+  File "D:\machine learning\swing-trade-bot\backend\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 149, in __init__
+    self._dbapi_connection = engine.raw_connection()
+                             ^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\machine learning\swing-trade-bot\backend\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 3299, in raw_connection
+    return self.pool.connect()
+           ^^^^^^^^^^^^^^^^^^^
+  File "D:\machine learning\swing-trade-bot\backend\.venv\Lib\site-packages\sqlalchemy\pool\base.py", line 445, in connect
+    return _ConnectionFairy._checkout(self)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\machine learning\swing-trade-bot\backend\.venv\Lib\site-packages\sqlalchemy\pool\base.py", line 1324, in _checkout
+    fairy = _ConnectionRecord.checkout(pool)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\machine learning\swing-trade-bot\backend\.venv\Lib\site-packages\sqlalchemy\pool\base.py", line 709, in checkout
+    rec = pool._do_get()
+          ^^^^^^^^^^^^^^
+  File "D:\machine learning\swing-trade-bot\backend\.venv\Lib\site-packages\sqlalchemy\pool\impl.py", line 176, in _do_get
+    with util.safe_reraise():
+         ^^^^^^^^^^^^^^^^^^^
+  File "D:\machine learning\swing-trade-bot\backend\.venv\Lib\site-packages\sqlalchemy\util\langhelpers.py", line 166, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "D:\machine learning\swing-trade-bot\backend\.venv\Lib\site-packages\sqlalchemy\pool\impl.py", line 174, in _do_get
+    return self._create_connection()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\machine learning\swing-trade-bot\backend\.venv\Lib\site-packages\sqlalchemy\pool\base.py", line 386, in _create_connection
+    return _ConnectionRecord(self)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\machine learning\swing-trade-bot\backend\.venv\Lib\site-packages\sqlalchemy\pool\base.py", line 671, in __init__
+    self.__connect()
+  File "D:\machine learning\swing-trade-bot\backend\.venv\Lib\site-packages\sqlalchemy\pool\base.py", line 916, in __connect
+    with util.safe_reraise():
+         ^^^^^^^^^^^^^^^^^^^
+  File "D:\machine learning\swing-trade-bot\backend\.venv\Lib\site-packages\sqlalchemy\util\langhelpers.py", line 166, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "D:\machine learning\swing-trade-bot\backend\.venv\Lib\site-packages\sqlalchemy\pool\base.py", line 912, in __connect
+    self.dbapi_connection = connection = pool._invoke_creator(self)
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\machine learning\swing-trade-bot\backend\.venv\Lib\site-packages\sqlalchemy\engine\create.py", line 645, in connect
+    return dialect.connect(*cargs_tup, **cparams)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\machine learning\swing-trade-bot\backend\.venv\Lib\site-packages\sqlalchemy\engine\default.py", line 869, in connect
+    return self.loaded_dbapi.connect(*cargs, **cparams)  # type: ignore[no-any-return]  # NOQA: E501
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\machine learning\swing-trade-bot\backend\.venv\Lib\site-packages\psycopg\connection.py", line 134, in connect
+    raise new_ex.with_traceback(None)
+sqlalchemy.exc.OperationalError: (psycopg.OperationalError) connection failed: connection to server at "127.0.0.1", port 5432 failed: FATAL:  password authentication failed for user "swingtrade"
+Multiple connection attempts failed. All failures were:
+- host: 'localhost', port: 5432, hostaddr: '::1': connection failed: connection to server at "::1", port 5432 failed: FATAL:  password authentication failed for user "swingtrade"
+- host: 'localhost', port: 5432, hostaddr: '127.0.0.1': connection failed: connection to server at "127.0.0.1", port 5432 failed: FATAL:  password authentication failed for user "swingtrade"
+(Background on this error at: https://sqlalche.me/e/21/e3q8)
+exit=1
+end 2026-10-26T10:16:49Z

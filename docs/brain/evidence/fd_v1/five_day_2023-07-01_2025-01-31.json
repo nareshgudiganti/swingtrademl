@@ -1,0 +1,2331 @@
+{
+ "protocol": "fd-protocol-v1",
+ "horizon": "5-day",
+ "sample": "confirmation (pass or fail, layer 1)",
+ "counts_for_pass_fail": true,
+ "window": [
+  "2023-07-01",
+  "2025-01-31"
+ ],
+ "rule": {
+  "label": "endpoint: close 5 trading days later at least +2% above the decision day's close (as prod models 2, 16, 17)",
+  "trade": "next open; +2% target / -4% stop from the decision day's close; trailing stop; no half-out; sold at the next open after a close scoring at or below 0.35; time stop at the open of the first trading day on or after entry + 30 calendar days; costs and slippage",
+  "variant": "the same trade sold at the close of day 5 at the latest (reported only)",
+  "same_day": "target and stop on the same day count as the stop",
+  "blocks": {
+   "hold": 21,
+   "day5": 5
+  },
+  "buy_rule": {
+   "min_confidence": 0.6,
+   "bear_boost": 0.1,
+   "min_avg_volume": 100000.0,
+   "max_volatility": 0.06,
+   "falling_knife": -0.08,
+   "min_bars": 260
+  }
+ },
+ "stocks": 49,
+ "models": [
+  {
+   "name": "fd_h5_20230630",
+   "cutoff": "2023-06-30",
+   "auc": 0.5722313371616079
+  },
+  {
+   "name": "fd_h5_20230728",
+   "cutoff": "2023-07-28",
+   "auc": 0.5439078501882111
+  },
+  {
+   "name": "fd_h5_20230825",
+   "cutoff": "2023-08-25",
+   "auc": 0.5387915078704054
+  },
+  {
+   "name": "fd_h5_20230922",
+   "cutoff": "2023-09-22",
+   "auc": 0.6150588850946354
+  },
+  {
+   "name": "fd_h5_20231020",
+   "cutoff": "2023-10-20",
+   "auc": 0.5451452488465814
+  },
+  {
+   "name": "fd_h5_20231117",
+   "cutoff": "2023-11-17",
+   "auc": 0.5237300205728754
+  },
+  {
+   "name": "fd_h5_20231215",
+   "cutoff": "2023-12-15",
+   "auc": 0.49975839426752444
+  },
+  {
+   "name": "fd_h5_20240112",
+   "cutoff": "2024-01-12",
+   "auc": 0.5125882582613619
+  },
+  {
+   "name": "fd_h5_20240209",
+   "cutoff": "2024-02-09",
+   "auc": 0.4978225538996694
+  },
+  {
+   "name": "fd_h5_20240308",
+   "cutoff": "2024-03-08",
+   "auc": 0.5063419158847889
+  },
+  {
+   "name": "fd_h5_20240405",
+   "cutoff": "2024-04-05",
+   "auc": 0.4797403439389274
+  },
+  {
+   "name": "fd_h5_20240503",
+   "cutoff": "2024-05-03",
+   "auc": 0.4925760477162141
+  },
+  {
+   "name": "fd_h5_20240531",
+   "cutoff": "2024-05-31",
+   "auc": 0.5248833292005226
+  },
+  {
+   "name": "fd_h5_20240628",
+   "cutoff": "2024-06-28",
+   "auc": 0.5567136100307892
+  },
+  {
+   "name": "fd_h5_20240726",
+   "cutoff": "2024-07-26",
+   "auc": 0.5193814355854789
+  },
+  {
+   "name": "fd_h5_20240823",
+   "cutoff": "2024-08-23",
+   "auc": 0.5362510633297697
+  },
+  {
+   "name": "fd_h5_20240920",
+   "cutoff": "2024-09-20",
+   "auc": 0.5452055870940591
+  },
+  {
+   "name": "fd_h5_20241018",
+   "cutoff": "2024-10-18",
+   "auc": 0.5233946860363441
+  },
+  {
+   "name": "fd_h5_20241115",
+   "cutoff": "2024-11-15",
+   "auc": 0.5132995552963476
+  },
+  {
+   "name": "fd_h5_20241213",
+   "cutoff": "2024-12-13",
+   "auc": 0.5331648854961832
+  },
+  {
+   "name": "fd_h5_20250110",
+   "cutoff": "2025-01-10",
+   "auc": 0.5379142648113917
+  }
+ ],
+ "folds": [
+  {
+   "start": "2023-07-01",
+   "end": "2023-07-28",
+   "cutoff": "2023-06-30",
+   "days": 20,
+   "regime": {
+    "label": "sideways",
+    "avg_move": 0.019836399869633314
+   },
+   "skill": {
+    "model": {
+     "ideas": 100,
+     "days": 20,
+     "hit_rate": 0.44,
+     "avg_net": 0.0030658724292235073,
+     "avg_net_by_day": 0.0030658724292235073
+    },
+    "every_stock": {
+     "ideas": 980,
+     "days": 20,
+     "hit_rate": 0.19591836734693877,
+     "avg_net": -0.0027672023887530574,
+     "avg_net_by_day": -0.002767202388753058
+    },
+    "momentum": {
+     "ideas": 100,
+     "days": 20,
+     "hit_rate": 0.21,
+     "avg_net": -0.004894366193529441,
+     "avg_net_by_day": -0.004894366193529441
+    },
+    "nifty_matched": -0.003593936900138206,
+    "day5_model": {
+     "ideas": 100,
+     "days": 20,
+     "hit_rate": 0.42,
+     "avg_net": 0.002824124904255676,
+     "avg_net_by_day": 0.002824124904255676
+    },
+    "day5_every_stock": {
+     "ideas": 980,
+     "days": 20,
+     "hit_rate": 0.19387755102040816,
+     "avg_net": -0.0027918705035456935,
+     "avg_net_by_day": -0.002791870503545694
+    },
+    "eligible": true,
+    "won": true
+   },
+   "money": {
+    "model": {
+     "ideas": 10,
+     "days": 7,
+     "hit_rate": 0.8,
+     "avg_net": 0.008930178890263119,
+     "avg_net_by_day": 0.009923436149732717
+    },
+    "every_stock": {
+     "ideas": 343,
+     "days": 7,
+     "hit_rate": 0.21865889212827988,
+     "avg_net": -0.0011513794546552868,
+     "avg_net_by_day": -0.0011513794546552868
+    },
+    "momentum": {
+     "ideas": 35,
+     "days": 7,
+     "hit_rate": 0.14285714285714285,
+     "avg_net": -0.0062241901135913465,
+     "avg_net_by_day": -0.0062241901135913465
+    },
+    "nifty_matched": -0.00271984903999094,
+    "day5_model": {
+     "ideas": 10,
+     "days": 7,
+     "hit_rate": 0.7,
+     "avg_net": 0.007757546221976164,
+     "avg_net_by_day": 0.009085841386670606
+    },
+    "day5_every_stock": {
+     "ideas": 343,
+     "days": 7,
+     "hit_rate": 0.21574344023323616,
+     "avg_net": -0.0011855669960047607,
+     "avg_net_by_day": -0.0011855669960047607
+    },
+    "eligible": false,
+    "won": true
+   },
+   "model_auc": 0.5722313371616079
+  },
+  {
+   "start": "2023-07-29",
+   "end": "2023-08-25",
+   "cutoff": "2023-07-28",
+   "days": 19,
+   "regime": {
+    "label": "sideways",
+    "avg_move": -0.02040294085118648
+   },
+   "skill": {
+    "model": {
+     "ideas": 95,
+     "days": 19,
+     "hit_rate": 0.24210526315789474,
+     "avg_net": -0.0027985712477227725,
+     "avg_net_by_day": -0.0027985712477227725
+    },
+    "every_stock": {
+     "ideas": 931,
+     "days": 19,
+     "hit_rate": 0.11815252416756176,
+     "avg_net": -0.004588066463318596,
+     "avg_net_by_day": -0.004588066463318596
+    },
+    "momentum": {
+     "ideas": 95,
+     "days": 19,
+     "hit_rate": 0.22105263157894736,
+     "avg_net": -0.005010574295668383,
+     "avg_net_by_day": -0.005010574295668383
+    },
+    "nifty_matched": -0.006317675554202447,
+    "day5_model": {
+     "ideas": 95,
+     "days": 19,
+     "hit_rate": 0.22105263157894736,
+     "avg_net": -0.003746710167091813,
+     "avg_net_by_day": -0.003746710167091813
+    },
+    "day5_every_stock": {
+     "ideas": 931,
+     "days": 19,
+     "hit_rate": 0.11493018259935553,
+     "avg_net": -0.004699217471394127,
+     "avg_net_by_day": -0.004699217471394127
+    },
+    "eligible": true,
+    "won": true
+   },
+   "money": {
+    "model": {
+     "ideas": 16,
+     "days": 12,
+     "hit_rate": 0.5,
+     "avg_net": 0.0020914595305841846,
+     "avg_net_by_day": 0.0013654605400858638
+    },
+    "every_stock": {
+     "ideas": 588,
+     "days": 12,
+     "hit_rate": 0.09693877551020408,
+     "avg_net": -0.005991547448544211,
+     "avg_net_by_day": -0.005991547448544211
+    },
+    "momentum": {
+     "ideas": 60,
+     "days": 12,
+     "hit_rate": 0.18333333333333332,
+     "avg_net": -0.008449222351737593,
+     "avg_net_by_day": -0.008449222351737593
+    },
+    "nifty_matched": -0.006702053279385292,
+    "day5_model": {
+     "ideas": 16,
+     "days": 12,
+     "hit_rate": 0.4375,
+     "avg_net": -0.002189031028081753,
+     "avg_net_by_day": -0.004341860204802053
+    },
+    "day5_every_stock": {
+     "ideas": 588,
+     "days": 12,
+     "hit_rate": 0.0935374149659864,
+     "avg_net": -0.006130826768470938,
+     "avg_net_by_day": -0.006130826768470939
+    },
+    "eligible": false,
+    "won": true
+   },
+   "model_auc": 0.5439078501882111
+  },
+  {
+   "start": "2023-08-26",
+   "end": "2023-09-22",
+   "cutoff": "2023-08-25",
+   "days": 19,
+   "regime": {
+    "label": "rising",
+    "avg_move": 0.03560018696034971
+   },
+   "skill": {
+    "model": {
+     "ideas": 95,
+     "days": 19,
+     "hit_rate": 0.3894736842105263,
+     "avg_net": -0.003122126492016299,
+     "avg_net_by_day": -0.003122126492016299
+    },
+    "every_stock": {
+     "ideas": 931,
+     "days": 19,
+     "hit_rate": 0.20945220193340494,
+     "avg_net": -0.0023949768713685655,
+     "avg_net_by_day": -0.0023949768713685655
+    },
+    "momentum": {
+     "ideas": 95,
+     "days": 19,
+     "hit_rate": 0.28421052631578947,
+     "avg_net": -0.0031991964692666005,
+     "avg_net_by_day": -0.0031991964692666005
+    },
+    "nifty_matched": -0.003887979746636589,
+    "day5_model": {
+     "ideas": 95,
+     "days": 19,
+     "hit_rate": 0.3684210526315789,
+     "avg_net": -0.002608145705844163,
+     "avg_net_by_day": -0.002608145705844163
+    },
+    "day5_every_stock": {
+     "ideas": 931,
+     "days": 19,
+     "hit_rate": 0.20515574650912996,
+     "avg_net": -0.00236938623997778,
+     "avg_net_by_day": -0.0023693862399777805
+    },
+    "eligible": true,
+    "won": false
+   },
+   "money": {
+    "model": {
+     "ideas": 37,
+     "days": 11,
+     "hit_rate": 0.3783783783783784,
+     "avg_net": -0.005334412631426809,
+     "avg_net_by_day": -0.008179734670502632
+    },
+    "every_stock": {
+     "ideas": 539,
+     "days": 11,
+     "hit_rate": 0.21335807050092764,
+     "avg_net": -0.002767877728429972,
+     "avg_net_by_day": -0.0027678777284299723
+    },
+    "momentum": {
+     "ideas": 55,
+     "days": 11,
+     "hit_rate": 0.2727272727272727,
+     "avg_net": -0.003178364717098506,
+     "avg_net_by_day": -0.003178364717098506
+    },
+    "nifty_matched": -0.008048291144482805,
+    "day5_model": {
+     "ideas": 37,
+     "days": 11,
+     "hit_rate": 0.3783783783783784,
+     "avg_net": -0.004305928951903401,
+     "avg_net_by_day": -0.00571836185109644
+    },
+    "day5_every_stock": {
+     "ideas": 539,
+     "days": 11,
+     "hit_rate": 0.20964749536178107,
+     "avg_net": -0.0027963055621855813,
+     "avg_net_by_day": -0.0027963055621855813
+    },
+    "eligible": true,
+    "won": false
+   },
+   "model_auc": 0.5387915078704054
+  },
+  {
+   "start": "2023-09-23",
+   "end": "2023-10-20",
+   "cutoff": "2023-09-22",
+   "days": 19,
+   "regime": {
+    "label": "sideways",
+    "avg_move": -0.0008374610220907292
+   },
+   "skill": {
+    "model": {
+     "ideas": 95,
+     "days": 19,
+     "hit_rate": 0.23157894736842105,
+     "avg_net": -0.008118689900218176,
+     "avg_net_by_day": -0.008118689900218176
+    },
+    "every_stock": {
+     "ideas": 931,
+     "days": 19,
+     "hit_rate": 0.16004296455424274,
+     "avg_net": -0.005288913402499318,
+     "avg_net_by_day": -0.005288913402499319
+    },
+    "momentum": {
+     "ideas": 95,
+     "days": 19,
+     "hit_rate": 0.14736842105263157,
+     "avg_net": -0.005607442537146536,
+     "avg_net_by_day": -0.005607442537146537
+    },
+    "nifty_matched": -0.009088459677397978,
+    "day5_model": {
+     "ideas": 95,
+     "days": 19,
+     "hit_rate": 0.22105263157894736,
+     "avg_net": -0.0066594051792675255,
+     "avg_net_by_day": -0.006659405179267526
+    },
+    "day5_every_stock": {
+     "ideas": 931,
+     "days": 19,
+     "hit_rate": 0.15789473684210525,
+     "avg_net": -0.005144789209701674,
+     "avg_net_by_day": -0.005144789209701674
+    },
+    "eligible": true,
+    "won": false
+   },
+   "money": {
+    "model": {
+     "ideas": 13,
+     "days": 8,
+     "hit_rate": 0.15384615384615385,
+     "avg_net": -0.014549350108492436,
+     "avg_net_by_day": -0.016212198503363983
+    },
+    "every_stock": {
+     "ideas": 392,
+     "days": 8,
+     "hit_rate": 0.16071428571428573,
+     "avg_net": -0.0036236504259797,
+     "avg_net_by_day": -0.0036236504259797
+    },
+    "momentum": {
+     "ideas": 40,
+     "days": 8,
+     "hit_rate": 0.125,
+     "avg_net": -0.004753254620032163,
+     "avg_net_by_day": -0.004753254620032163
+    },
+    "nifty_matched": -0.008707634675828912,
+    "day5_model": {
+     "ideas": 13,
+     "days": 8,
+     "hit_rate": 0.15384615384615385,
+     "avg_net": -0.01181287410782479,
+     "avg_net_by_day": -0.012645196831102651
+    },
+    "day5_every_stock": {
+     "ideas": 392,
+     "days": 8,
+     "hit_rate": 0.15816326530612246,
+     "avg_net": -0.0033888732420432163,
+     "avg_net_by_day": -0.0033888732420432163
+    },
+    "eligible": false,
+    "won": false
+   },
+   "model_auc": 0.6150588850946354
+  },
+  {
+   "start": "2023-10-21",
+   "end": "2023-11-17",
+   "cutoff": "2023-10-20",
+   "days": 19,
+   "regime": {
+    "label": "rising",
+    "avg_move": 0.0372288825153353
+   },
+   "skill": {
+    "model": {
+     "ideas": 95,
+     "days": 19,
+     "hit_rate": 0.4421052631578947,
+     "avg_net": 0.003006255903689772,
+     "avg_net_by_day": 0.0030062559036897717
+    },
+    "every_stock": {
+     "ideas": 931,
+     "days": 19,
+     "hit_rate": 0.24812030075187969,
+     "avg_net": -0.00042830891637613667,
+     "avg_net_by_day": -0.0004283089163761368
+    },
+    "momentum": {
+     "ideas": 95,
+     "days": 19,
+     "hit_rate": 0.22105263157894736,
+     "avg_net": -0.0029437129495650327,
+     "avg_net_by_day": -0.0029437129495650327
+    },
+    "nifty_matched": 0.003870231499530188,
+    "day5_model": {
+     "ideas": 95,
+     "days": 19,
+     "hit_rate": 0.3157894736842105,
+     "avg_net": 0.0006557923020368365,
+     "avg_net_by_day": 0.0006557923020368364
+    },
+    "day5_every_stock": {
+     "ideas": 931,
+     "days": 19,
+     "hit_rate": 0.22019334049409237,
+     "avg_net": -0.0010301099053941542,
+     "avg_net_by_day": -0.0010301099053941542
+    },
+    "eligible": true,
+    "won": true
+   },
+   "money": {
+    "model": {
+     "ideas": 30,
+     "days": 9,
+     "hit_rate": 0.43333333333333335,
+     "avg_net": 0.0038851131417217263,
+     "avg_net_by_day": 0.003210485634062857
+    },
+    "every_stock": {
+     "ideas": 441,
+     "days": 9,
+     "hit_rate": 0.2834467120181406,
+     "avg_net": 0.0013300205093481135,
+     "avg_net_by_day": 0.0013300205093481135
+    },
+    "momentum": {
+     "ideas": 45,
+     "days": 9,
+     "hit_rate": 0.3111111111111111,
+     "avg_net": 0.00021607200948952322,
+     "avg_net_by_day": 0.00021607200948952325
+    },
+    "nifty_matched": 0.007028580695930065,
+    "day5_model": {
+     "ideas": 30,
+     "days": 9,
+     "hit_rate": 0.3,
+     "avg_net": 0.001574320909571425,
+     "avg_net_by_day": 0.0001665601294556277
+    },
+    "day5_every_stock": {
+     "ideas": 441,
+     "days": 9,
+     "hit_rate": 0.24036281179138322,
+     "avg_net": 0.00037138242057868306,
+     "avg_net_by_day": 0.0003713824205786831
+    },
+    "eligible": true,
+    "won": true
+   },
+   "model_auc": 0.5451452488465814
+  },
+  {
+   "start": "2023-11-18",
+   "end": "2023-12-15",
+   "cutoff": "2023-11-17",
+   "days": 19,
+   "regime": {
+    "label": "rising",
+    "avg_move": 0.08911540355562984
+   },
+   "skill": {
+    "model": {
+     "ideas": 95,
+     "days": 19,
+     "hit_rate": 0.6,
+     "avg_net": 0.005823038812360777,
+     "avg_net_by_day": 0.005823038812360777
+    },
+    "every_stock": {
+     "ideas": 931,
+     "days": 19,
+     "hit_rate": 0.35553168635875404,
+     "avg_net": 0.0013295546162902204,
+     "avg_net_by_day": 0.0013295546162902206
+    },
+    "momentum": {
+     "ideas": 95,
+     "days": 19,
+     "hit_rate": 0.4,
+     "avg_net": -0.0021167853090223684,
+     "avg_net_by_day": -0.0021167853090223684
+    },
+    "nifty_matched": 0.007611431268700445,
+    "day5_model": {
+     "ideas": 95,
+     "days": 19,
+     "hit_rate": 0.5368421052631579,
+     "avg_net": 0.004251672188913704,
+     "avg_net_by_day": 0.004251672188913704
+    },
+    "day5_every_stock": {
+     "ideas": 931,
+     "days": 19,
+     "hit_rate": 0.3308270676691729,
+     "avg_net": 0.0008464281428529224,
+     "avg_net_by_day": 0.0008464281428529224
+    },
+    "eligible": true,
+    "won": true
+   },
+   "money": {
+    "model": {
+     "ideas": 77,
+     "days": 11,
+     "hit_rate": 0.6753246753246753,
+     "avg_net": 0.008841587221072884,
+     "avg_net_by_day": 0.007845181439285677
+    },
+    "every_stock": {
+     "ideas": 539,
+     "days": 11,
+     "hit_rate": 0.3784786641929499,
+     "avg_net": 0.0020056466760615967,
+     "avg_net_by_day": 0.002005646676061597
+    },
+    "momentum": {
+     "ideas": 55,
+     "days": 11,
+     "hit_rate": 0.4,
+     "avg_net": -0.003986164470053484,
+     "avg_net_by_day": -0.003986164470053484
+    },
+    "nifty_matched": 0.011464930746170481,
+    "day5_model": {
+     "ideas": 77,
+     "days": 11,
+     "hit_rate": 0.6103896103896104,
+     "avg_net": 0.007467575938843445,
+     "avg_net_by_day": 0.005973202064527872
+    },
+    "day5_every_stock": {
+     "ideas": 539,
+     "days": 11,
+     "hit_rate": 0.3432282003710575,
+     "avg_net": 0.0012891991176415898,
+     "avg_net_by_day": 0.0012891991176415898
+    },
+    "eligible": true,
+    "won": true
+   },
+   "model_auc": 0.5237300205728754
+  },
+  {
+   "start": "2023-12-16",
+   "end": "2024-01-12",
+   "cutoff": "2023-12-15",
+   "days": 19,
+   "regime": {
+    "label": "rising",
+    "avg_move": 0.03002911880045952
+   },
+   "skill": {
+    "model": {
+     "ideas": 95,
+     "days": 19,
+     "hit_rate": 0.3684210526315789,
+     "avg_net": -0.003699263805665332,
+     "avg_net_by_day": -0.003699263805665332
+    },
+    "every_stock": {
+     "ideas": 931,
+     "days": 19,
+     "hit_rate": 0.2588614393125671,
+     "avg_net": -0.0032533411480644534,
+     "avg_net_by_day": -0.0032533411480644534
+    },
+    "momentum": {
+     "ideas": 95,
+     "days": 19,
+     "hit_rate": 0.35789473684210527,
+     "avg_net": -0.0023038898814032533,
+     "avg_net_by_day": -0.0023038898814032533
+    },
+    "nifty_matched": -0.0029815256518003243,
+    "day5_model": {
+     "ideas": 95,
+     "days": 19,
+     "hit_rate": 0.3684210526315789,
+     "avg_net": -0.003522611895362,
+     "avg_net_by_day": -0.0035226118953619995
+    },
+    "day5_every_stock": {
+     "ideas": 931,
+     "days": 19,
+     "hit_rate": 0.2588614393125671,
+     "avg_net": -0.0031214924002404055,
+     "avg_net_by_day": -0.003121492400240406
+    },
+    "eligible": true,
+    "won": false
+   },
+   "money": {
+    "model": {
+     "ideas": 11,
+     "days": 6,
+     "hit_rate": 0.36363636363636365,
+     "avg_net": -0.003870214095939623,
+     "avg_net_by_day": -0.001364414832940956
+    },
+    "every_stock": {
+     "ideas": 294,
+     "days": 6,
+     "hit_rate": 0.24829931972789115,
+     "avg_net": -0.0010630100457529191,
+     "avg_net_by_day": -0.0010630100457529191
+    },
+    "momentum": {
+     "ideas": 30,
+     "days": 6,
+     "hit_rate": 0.4,
+     "avg_net": 0.0014974182912063907,
+     "avg_net_by_day": 0.0014974182912063907
+    },
+    "nifty_matched": -0.0015319157680372397,
+    "day5_model": {
+     "ideas": 11,
+     "days": 6,
+     "hit_rate": 0.36363636363636365,
+     "avg_net": -0.003969318754383161,
+     "avg_net_by_day": -0.0014111694772745694
+    },
+    "day5_every_stock": {
+     "ideas": 294,
+     "days": 6,
+     "hit_rate": 0.24829931972789115,
+     "avg_net": -0.0009079300413841166,
+     "avg_net_by_day": -0.0009079300413841166
+    },
+    "eligible": false,
+    "won": false
+   },
+   "model_auc": 0.49975839426752444
+  },
+  {
+   "start": "2024-01-13",
+   "end": "2024-02-09",
+   "cutoff": "2024-01-12",
+   "days": 19,
+   "regime": {
+    "label": "sideways",
+    "avg_move": 0.01287495267742437
+   },
+   "skill": {
+    "model": {
+     "ideas": 95,
+     "days": 19,
+     "hit_rate": 0.6210526315789474,
+     "avg_net": -0.001729207465680951,
+     "avg_net_by_day": -0.0017292074656809508
+    },
+    "every_stock": {
+     "ideas": 931,
+     "days": 19,
+     "hit_rate": 0.3963480128893663,
+     "avg_net": -0.004872325959791959,
+     "avg_net_by_day": -0.004872325959791958
+    },
+    "momentum": {
+     "ideas": 95,
+     "days": 19,
+     "hit_rate": 0.35789473684210527,
+     "avg_net": -0.005203145687161392,
+     "avg_net_by_day": -0.005203145687161392
+    },
+    "nifty_matched": -0.004222606009938277,
+    "day5_model": {
+     "ideas": 95,
+     "days": 19,
+     "hit_rate": 0.5578947368421052,
+     "avg_net": -0.0034829614499814355,
+     "avg_net_by_day": -0.003482961449981435
+    },
+    "day5_every_stock": {
+     "ideas": 931,
+     "days": 19,
+     "hit_rate": 0.37808807733619765,
+     "avg_net": -0.005230413199582958,
+     "avg_net_by_day": -0.005230413199582958
+    },
+    "eligible": true,
+    "won": true
+   },
+   "money": {
+    "model": {
+     "ideas": 54,
+     "days": 14,
+     "hit_rate": 0.6111111111111112,
+     "avg_net": -0.003668598466937275,
+     "avg_net_by_day": -0.000734363662654244
+    },
+    "every_stock": {
+     "ideas": 686,
+     "days": 14,
+     "hit_rate": 0.4139941690962099,
+     "avg_net": -0.005139460945233426,
+     "avg_net_by_day": -0.005139460945233426
+    },
+    "momentum": {
+     "ideas": 70,
+     "days": 14,
+     "hit_rate": 0.4,
+     "avg_net": -0.00823948489682398,
+     "avg_net_by_day": -0.00823948489682398
+    },
+    "nifty_matched": -0.004694036189469784,
+    "day5_model": {
+     "ideas": 54,
+     "days": 14,
+     "hit_rate": 0.48148148148148145,
+     "avg_net": -0.008330825023381816,
+     "avg_net_by_day": -0.003714940723475934
+    },
+    "day5_every_stock": {
+     "ideas": 686,
+     "days": 14,
+     "hit_rate": 0.39212827988338195,
+     "avg_net": -0.005589975275750818,
+     "avg_net_by_day": -0.005589975275750818
+    },
+    "eligible": true,
+    "won": false
+   },
+   "model_auc": 0.5125882582613619
+  },
+  {
+   "start": "2024-02-10",
+   "end": "2024-03-08",
+   "cutoff": "2024-02-09",
+   "days": 20,
+   "regime": {
+    "label": "rising",
+    "avg_move": 0.03877515241434026
+   },
+   "skill": {
+    "model": {
+     "ideas": 100,
+     "days": 20,
+     "hit_rate": 0.45,
+     "avg_net": -0.0012307760601954153,
+     "avg_net_by_day": -0.0012307760601954153
+    },
+    "every_stock": {
+     "ideas": 980,
+     "days": 20,
+     "hit_rate": 0.3295918367346939,
+     "avg_net": -0.0025547824468654017,
+     "avg_net_by_day": -0.0025547824468654017
+    },
+    "momentum": {
+     "ideas": 100,
+     "days": 20,
+     "hit_rate": 0.28,
+     "avg_net": -0.005587966909029177,
+     "avg_net_by_day": -0.005587966909029177
+    },
+    "nifty_matched": 4.061400781422475e-05,
+    "day5_model": {
+     "ideas": 100,
+     "days": 20,
+     "hit_rate": 0.4,
+     "avg_net": -0.001809928908198697,
+     "avg_net_by_day": -0.001809928908198697
+    },
+    "day5_every_stock": {
+     "ideas": 980,
+     "days": 20,
+     "hit_rate": 0.3173469387755102,
+     "avg_net": -0.002484259770703619,
+     "avg_net_by_day": -0.002484259770703619
+    },
+    "eligible": true,
+    "won": true
+   },
+   "money": {
+    "model": {
+     "ideas": 42,
+     "days": 13,
+     "hit_rate": 0.40476190476190477,
+     "avg_net": -0.0038773238227619074,
+     "avg_net_by_day": -0.0069171666475011375
+    },
+    "every_stock": {
+     "ideas": 637,
+     "days": 13,
+     "hit_rate": 0.3516483516483517,
+     "avg_net": -0.001692753637193354,
+     "avg_net_by_day": -0.001692753637193354
+    },
+    "momentum": {
+     "ideas": 65,
+     "days": 13,
+     "hit_rate": 0.3230769230769231,
+     "avg_net": -0.003740774515218056,
+     "avg_net_by_day": -0.003740774515218056
+    },
+    "nifty_matched": 0.0007896393850868044,
+    "day5_model": {
+     "ideas": 42,
+     "days": 13,
+     "hit_rate": 0.38095238095238093,
+     "avg_net": -0.0038421167331949054,
+     "avg_net_by_day": -0.007016812302737449
+    },
+    "day5_every_stock": {
+     "ideas": 637,
+     "days": 13,
+     "hit_rate": 0.34222919937205654,
+     "avg_net": -0.0015318537447646713,
+     "avg_net_by_day": -0.0015318537447646713
+    },
+    "eligible": true,
+    "won": false
+   },
+   "model_auc": 0.4978225538996694
+  },
+  {
+   "start": "2024-03-09",
+   "end": "2024-04-05",
+   "cutoff": "2024-03-08",
+   "days": 18,
+   "regime": {
+    "label": "sideways",
+    "avg_move": 0.005445401447912943
+   },
+   "skill": {
+    "model": {
+     "ideas": 90,
+     "days": 18,
+     "hit_rate": 0.6222222222222222,
+     "avg_net": -0.0030242769118892887,
+     "avg_net_by_day": -0.0030242769118892883
+    },
+    "every_stock": {
+     "ideas": 882,
+     "days": 18,
+     "hit_rate": 0.4988662131519274,
+     "avg_net": -0.0017305101293197689,
+     "avg_net_by_day": -0.001730510129319769
+    },
+    "momentum": {
+     "ideas": 90,
+     "days": 18,
+     "hit_rate": 0.4111111111111111,
+     "avg_net": -0.002790191704556672,
+     "avg_net_by_day": -0.002790191704556672
+    },
+    "nifty_matched": -0.001032962546791722,
+    "day5_model": {
+     "ideas": 90,
+     "days": 18,
+     "hit_rate": 0.5555555555555556,
+     "avg_net": -0.0005841072048256198,
+     "avg_net_by_day": -0.0005841072048256196
+    },
+    "day5_every_stock": {
+     "ideas": 882,
+     "days": 18,
+     "hit_rate": 0.4671201814058957,
+     "avg_net": -0.0014401390748082217,
+     "avg_net_by_day": -0.0014401390748082215
+    },
+    "eligible": true,
+    "won": false
+   },
+   "money": {
+    "model": {
+     "ideas": 122,
+     "days": 18,
+     "hit_rate": 0.6311475409836066,
+     "avg_net": -0.001026203467535077,
+     "avg_net_by_day": -0.0015267433450966564
+    },
+    "every_stock": {
+     "ideas": 882,
+     "days": 18,
+     "hit_rate": 0.4988662131519274,
+     "avg_net": -0.0017305101293197689,
+     "avg_net_by_day": -0.001730510129319769
+    },
+    "momentum": {
+     "ideas": 90,
+     "days": 18,
+     "hit_rate": 0.4111111111111111,
+     "avg_net": -0.002790191704556672,
+     "avg_net_by_day": -0.002790191704556672
+    },
+    "nifty_matched": -0.00020634879405298558,
+    "day5_model": {
+     "ideas": 122,
+     "days": 18,
+     "hit_rate": 0.5737704918032787,
+     "avg_net": 0.00039279713903540186,
+     "avg_net_by_day": 0.000134477770417038
+    },
+    "day5_every_stock": {
+     "ideas": 882,
+     "days": 18,
+     "hit_rate": 0.4671201814058957,
+     "avg_net": -0.0014401390748082217,
+     "avg_net_by_day": -0.0014401390748082215
+    },
+    "eligible": true,
+    "won": false
+   },
+   "model_auc": 0.5063419158847889
+  },
+  {
+   "start": "2024-04-06",
+   "end": "2024-05-03",
+   "cutoff": "2024-04-05",
+   "days": 17,
+   "regime": {
+    "label": "sideways",
+    "avg_move": -0.003930121705680631
+   },
+   "skill": {
+    "model": {
+     "ideas": 85,
+     "days": 17,
+     "hit_rate": 0.611764705882353,
+     "avg_net": 0.0006174625456176961,
+     "avg_net_by_day": 0.0006174625456176959
+    },
+    "every_stock": {
+     "ideas": 833,
+     "days": 17,
+     "hit_rate": 0.3949579831932773,
+     "avg_net": -0.006879205565729646,
+     "avg_net_by_day": -0.006879205565729646
+    },
+    "momentum": {
+     "ideas": 85,
+     "days": 17,
+     "hit_rate": 0.4235294117647059,
+     "avg_net": -0.0058313401009640956,
+     "avg_net_by_day": -0.0058313401009640956
+    },
+    "nifty_matched": -0.0061628461735807015,
+    "day5_model": {
+     "ideas": 85,
+     "days": 17,
+     "hit_rate": 0.5411764705882353,
+     "avg_net": -0.000692752977652172,
+     "avg_net_by_day": -0.0006927529776521723
+    },
+    "day5_every_stock": {
+     "ideas": 833,
+     "days": 17,
+     "hit_rate": 0.37214885954381755,
+     "avg_net": -0.0069006669683036185,
+     "avg_net_by_day": -0.006900666968303619
+    },
+    "eligible": true,
+    "won": true
+   },
+   "money": {
+    "model": {
+     "ideas": 212,
+     "days": 15,
+     "hit_rate": 0.39622641509433965,
+     "avg_net": -0.010743427567278259,
+     "avg_net_by_day": -0.00719850137170122
+    },
+    "every_stock": {
+     "ideas": 735,
+     "days": 15,
+     "hit_rate": 0.3904761904761905,
+     "avg_net": -0.0075776413925392905,
+     "avg_net_by_day": -0.00757764139253929
+    },
+    "momentum": {
+     "ideas": 75,
+     "days": 15,
+     "hit_rate": 0.4,
+     "avg_net": -0.006835346986224028,
+     "avg_net_by_day": -0.006835346986224028
+    },
+    "nifty_matched": -0.011343167738901398,
+    "day5_model": {
+     "ideas": 212,
+     "days": 15,
+     "hit_rate": 0.3584905660377358,
+     "avg_net": -0.010907000062874298,
+     "avg_net_by_day": -0.0070562638744520725
+    },
+    "day5_every_stock": {
+     "ideas": 735,
+     "days": 15,
+     "hit_rate": 0.3687074829931973,
+     "avg_net": -0.007639763905296624,
+     "avg_net_by_day": -0.007639763905296624
+    },
+    "eligible": true,
+    "won": false
+   },
+   "model_auc": 0.4797403439389274
+  },
+  {
+   "start": "2024-05-04",
+   "end": "2024-05-31",
+   "cutoff": "2024-05-03",
+   "days": 20,
+   "regime": {
+    "label": "sideways",
+    "avg_move": 0.008271102177881783
+   },
+   "skill": {
+    "model": {
+     "ideas": 100,
+     "days": 20,
+     "hit_rate": 0.64,
+     "avg_net": -0.004201828230564631,
+     "avg_net_by_day": -0.004201828230564632
+    },
+    "every_stock": {
+     "ideas": 980,
+     "days": 20,
+     "hit_rate": 0.6316326530612245,
+     "avg_net": -0.001231353026106806,
+     "avg_net_by_day": -0.001231353026106806
+    },
+    "momentum": {
+     "ideas": 100,
+     "days": 20,
+     "hit_rate": 0.69,
+     "avg_net": 0.0015277024683432838,
+     "avg_net_by_day": 0.001527702468343284
+    },
+    "nifty_matched": -0.0027884368783326796,
+    "day5_model": {
+     "ideas": 100,
+     "days": 20,
+     "hit_rate": 0.58,
+     "avg_net": -0.002985297370036688,
+     "avg_net_by_day": -0.002985297370036688
+    },
+    "day5_every_stock": {
+     "ideas": 980,
+     "days": 20,
+     "hit_rate": 0.5479591836734694,
+     "avg_net": -0.0015375919257161572,
+     "avg_net_by_day": -0.0015375919257161574
+    },
+    "eligible": true,
+    "won": false
+   },
+   "money": {
+    "model": {
+     "ideas": 708,
+     "days": 20,
+     "hit_rate": 0.6596045197740112,
+     "avg_net": -0.0016210620952777943,
+     "avg_net_by_day": -0.0014906564079544013
+    },
+    "every_stock": {
+     "ideas": 980,
+     "days": 20,
+     "hit_rate": 0.6316326530612245,
+     "avg_net": -0.001231353026106806,
+     "avg_net_by_day": -0.001231353026106806
+    },
+    "momentum": {
+     "ideas": 100,
+     "days": 20,
+     "hit_rate": 0.69,
+     "avg_net": 0.0015277024683432838,
+     "avg_net_by_day": 0.001527702468343284
+    },
+    "nifty_matched": -0.001517110224766547,
+    "day5_model": {
+     "ideas": 708,
+     "days": 20,
+     "hit_rate": 0.5861581920903954,
+     "avg_net": -0.001646960743597596,
+     "avg_net_by_day": -0.0013154592015865048
+    },
+    "day5_every_stock": {
+     "ideas": 980,
+     "days": 20,
+     "hit_rate": 0.5479591836734694,
+     "avg_net": -0.0015375919257161572,
+     "avg_net_by_day": -0.0015375919257161574
+    },
+    "eligible": true,
+    "won": false
+   },
+   "model_auc": 0.4925760477162141
+  },
+  {
+   "start": "2024-06-01",
+   "end": "2024-06-28",
+   "cutoff": "2024-05-31",
+   "days": 19,
+   "regime": {
+    "label": "rising",
+    "avg_move": 0.033314106650496896
+   },
+   "skill": {
+    "model": {
+     "ideas": 95,
+     "days": 19,
+     "hit_rate": 0.7684210526315789,
+     "avg_net": 0.0010842926885897737,
+     "avg_net_by_day": 0.001084292688589774
+    },
+    "every_stock": {
+     "ideas": 931,
+     "days": 19,
+     "hit_rate": 0.6981740064446831,
+     "avg_net": 0.0018288462596924174,
+     "avg_net_by_day": 0.001828846259692417
+    },
+    "momentum": {
+     "ideas": 95,
+     "days": 19,
+     "hit_rate": 0.5263157894736842,
+     "avg_net": -0.0031240869780257857,
+     "avg_net_by_day": -0.0031240869780257857
+    },
+    "nifty_matched": 0.004129304166405556,
+    "day5_model": {
+     "ideas": 95,
+     "days": 19,
+     "hit_rate": 0.6210526315789474,
+     "avg_net": -0.0004081203681234944,
+     "avg_net_by_day": -0.0004081203681234942
+    },
+    "day5_every_stock": {
+     "ideas": 931,
+     "days": 19,
+     "hit_rate": 0.5596133190118152,
+     "avg_net": -0.0002625459396625147,
+     "avg_net_by_day": -0.0002625459396625146
+    },
+    "eligible": true,
+    "won": false
+   },
+   "money": {
+    "model": {
+     "ideas": 474,
+     "days": 19,
+     "hit_rate": 0.7932489451476793,
+     "avg_net": 0.003732430466897086,
+     "avg_net_by_day": 0.002449665490066482
+    },
+    "every_stock": {
+     "ideas": 931,
+     "days": 19,
+     "hit_rate": 0.6981740064446831,
+     "avg_net": 0.0018288462596924174,
+     "avg_net_by_day": 0.001828846259692417
+    },
+    "momentum": {
+     "ideas": 95,
+     "days": 19,
+     "hit_rate": 0.5263157894736842,
+     "avg_net": -0.0031240869780257857,
+     "avg_net_by_day": -0.0031240869780257857
+    },
+    "nifty_matched": 0.006138952622063561,
+    "day5_model": {
+     "ideas": 474,
+     "days": 19,
+     "hit_rate": 0.609704641350211,
+     "avg_net": 0.0009808997311655733,
+     "avg_net_by_day": 0.00015593250033025616
+    },
+    "day5_every_stock": {
+     "ideas": 931,
+     "days": 19,
+     "hit_rate": 0.5596133190118152,
+     "avg_net": -0.0002625459396625147,
+     "avg_net_by_day": -0.0002625459396625146
+    },
+    "eligible": true,
+    "won": true
+   },
+   "model_auc": 0.5248833292005226
+  },
+  {
+   "start": "2024-06-29",
+   "end": "2024-07-26",
+   "cutoff": "2024-06-28",
+   "days": 19,
+   "regime": {
+    "label": "rising",
+    "avg_move": 0.03929830553577268
+   },
+   "skill": {
+    "model": {
+     "ideas": 95,
+     "days": 19,
+     "hit_rate": 0.5789473684210527,
+     "avg_net": -0.006381544260720554,
+     "avg_net_by_day": -0.006381544260720554
+    },
+    "every_stock": {
+     "ideas": 931,
+     "days": 19,
+     "hit_rate": 0.602577873254565,
+     "avg_net": -0.0014100332162618402,
+     "avg_net_by_day": -0.00141003321626184
+    },
+    "momentum": {
+     "ideas": 95,
+     "days": 19,
+     "hit_rate": 0.631578947368421,
+     "avg_net": -0.001989919014260249,
+     "avg_net_by_day": -0.001989919014260249
+    },
+    "nifty_matched": 8.4508154690436e-05,
+    "day5_model": {
+     "ideas": 95,
+     "days": 19,
+     "hit_rate": 0.5263157894736842,
+     "avg_net": -0.0037851572494999675,
+     "avg_net_by_day": -0.003785157249499967
+    },
+    "day5_every_stock": {
+     "ideas": 931,
+     "days": 19,
+     "hit_rate": 0.5349087003222341,
+     "avg_net": -0.000928446010117966,
+     "avg_net_by_day": -0.0009284460101179658
+    },
+    "eligible": true,
+    "won": false
+   },
+   "money": {
+    "model": {
+     "ideas": 550,
+     "days": 19,
+     "hit_rate": 0.6472727272727272,
+     "avg_net": -0.001733468662015408,
+     "avg_net_by_day": -0.0015035093487207516
+    },
+    "every_stock": {
+     "ideas": 931,
+     "days": 19,
+     "hit_rate": 0.602577873254565,
+     "avg_net": -0.0014100332162618402,
+     "avg_net_by_day": -0.00141003321626184
+    },
+    "momentum": {
+     "ideas": 95,
+     "days": 19,
+     "hit_rate": 0.631578947368421,
+     "avg_net": -0.001989919014260249,
+     "avg_net_by_day": -0.001989919014260249
+    },
+    "nifty_matched": 0.000535604303685886,
+    "day5_model": {
+     "ideas": 550,
+     "days": 19,
+     "hit_rate": 0.5836363636363636,
+     "avg_net": -0.0010644632757350941,
+     "avg_net_by_day": -0.0005609279962573488
+    },
+    "day5_every_stock": {
+     "ideas": 931,
+     "days": 19,
+     "hit_rate": 0.5349087003222341,
+     "avg_net": -0.000928446010117966,
+     "avg_net_by_day": -0.0009284460101179658
+    },
+    "eligible": true,
+    "won": false
+   },
+   "model_auc": 0.5567136100307892
+  },
+  {
+   "start": "2024-07-27",
+   "end": "2024-08-23",
+   "cutoff": "2024-07-26",
+   "days": 19,
+   "regime": {
+    "label": "sideways",
+    "avg_move": 0.00689657405865487
+   },
+   "skill": {
+    "model": {
+     "ideas": 95,
+     "days": 19,
+     "hit_rate": 0.6105263157894737,
+     "avg_net": -0.006881282650429294,
+     "avg_net_by_day": -0.006881282650429294
+    },
+    "every_stock": {
+     "ideas": 931,
+     "days": 19,
+     "hit_rate": 0.47261009667024706,
+     "avg_net": -0.0023769176489763497,
+     "avg_net_by_day": -0.0023769176489763497
+    },
+    "momentum": {
+     "ideas": 95,
+     "days": 19,
+     "hit_rate": 0.5789473684210527,
+     "avg_net": -0.00035388803409980703,
+     "avg_net_by_day": -0.00035388803409980686
+    },
+    "nifty_matched": -0.004427206463390087,
+    "day5_model": {
+     "ideas": 95,
+     "days": 19,
+     "hit_rate": 0.5578947368421052,
+     "avg_net": -0.007156384126781203,
+     "avg_net_by_day": -0.007156384126781204
+    },
+    "day5_every_stock": {
+     "ideas": 931,
+     "days": 19,
+     "hit_rate": 0.42749731471535984,
+     "avg_net": -0.002501699336418727,
+     "avg_net_by_day": -0.0025016993364187275
+    },
+    "eligible": true,
+    "won": false
+   },
+   "money": {
+    "model": {
+     "ideas": 207,
+     "days": 19,
+     "hit_rate": 0.6086956521739131,
+     "avg_net": -0.004408759357728614,
+     "avg_net_by_day": -0.0038810941305144767
+    },
+    "every_stock": {
+     "ideas": 931,
+     "days": 19,
+     "hit_rate": 0.47261009667024706,
+     "avg_net": -0.0023769176489763497,
+     "avg_net_by_day": -0.0023769176489763497
+    },
+    "momentum": {
+     "ideas": 95,
+     "days": 19,
+     "hit_rate": 0.5789473684210527,
+     "avg_net": -0.00035388803409980703,
+     "avg_net_by_day": -0.00035388803409980686
+    },
+    "nifty_matched": -0.0023347574795822505,
+    "day5_model": {
+     "ideas": 207,
+     "days": 19,
+     "hit_rate": 0.5458937198067633,
+     "avg_net": -0.004725669732275122,
+     "avg_net_by_day": -0.004040456365851285
+    },
+    "day5_every_stock": {
+     "ideas": 931,
+     "days": 19,
+     "hit_rate": 0.42749731471535984,
+     "avg_net": -0.002501699336418727,
+     "avg_net_by_day": -0.0025016993364187275
+    },
+    "eligible": true,
+    "won": false
+   },
+   "model_auc": 0.5193814355854789
+  },
+  {
+   "start": "2024-08-24",
+   "end": "2024-09-20",
+   "cutoff": "2024-08-23",
+   "days": 20,
+   "regime": {
+    "label": "sideways",
+    "avg_move": 0.02937451352044598
+   },
+   "skill": {
+    "model": {
+     "ideas": 100,
+     "days": 20,
+     "hit_rate": 0.48,
+     "avg_net": -0.006276214080403189,
+     "avg_net_by_day": -0.006276214080403189
+    },
+    "every_stock": {
+     "ideas": 980,
+     "days": 20,
+     "hit_rate": 0.4744897959183674,
+     "avg_net": -0.0007525175401124895,
+     "avg_net_by_day": -0.0007525175401124895
+    },
+    "momentum": {
+     "ideas": 100,
+     "days": 20,
+     "hit_rate": 0.58,
+     "avg_net": 0.00492203975262669,
+     "avg_net_by_day": 0.004922039752626691
+    },
+    "nifty_matched": 8.867001465764468e-05,
+    "day5_model": {
+     "ideas": 100,
+     "days": 20,
+     "hit_rate": 0.45,
+     "avg_net": -0.005215885800546973,
+     "avg_net_by_day": -0.005215885800546973
+    },
+    "day5_every_stock": {
+     "ideas": 980,
+     "days": 20,
+     "hit_rate": 0.4336734693877551,
+     "avg_net": -0.0005755917621085816,
+     "avg_net_by_day": -0.0005755917621085815
+    },
+    "eligible": true,
+    "won": false
+   },
+   "money": {
+    "model": {
+     "ideas": 149,
+     "days": 18,
+     "hit_rate": 0.6241610738255033,
+     "avg_net": -0.0022506468253884293,
+     "avg_net_by_day": -0.002280930326004029
+    },
+    "every_stock": {
+     "ideas": 882,
+     "days": 18,
+     "hit_rate": 0.48072562358276644,
+     "avg_net": -0.001184770658547436,
+     "avg_net_by_day": -0.001184770658547436
+    },
+    "momentum": {
+     "ideas": 90,
+     "days": 18,
+     "hit_rate": 0.6222222222222222,
+     "avg_net": 0.005859615103890627,
+     "avg_net_by_day": 0.005859615103890627
+    },
+    "nifty_matched": -0.0008191541097319988,
+    "day5_model": {
+     "ideas": 149,
+     "days": 18,
+     "hit_rate": 0.5503355704697986,
+     "avg_net": -0.0013398549371397477,
+     "avg_net_by_day": -0.002237033456901157
+    },
+    "day5_every_stock": {
+     "ideas": 882,
+     "days": 18,
+     "hit_rate": 0.4387755102040816,
+     "avg_net": -0.0009791968540338446,
+     "avg_net_by_day": -0.0009791968540338444
+    },
+    "eligible": true,
+    "won": false
+   },
+   "model_auc": 0.5362510633297697
+  },
+  {
+   "start": "2024-09-21",
+   "end": "2024-10-18",
+   "cutoff": "2024-09-20",
+   "days": 19,
+   "regime": {
+    "label": "falling",
+    "avg_move": -0.035300542652455136
+   },
+   "skill": {
+    "model": {
+     "ideas": 95,
+     "days": 19,
+     "hit_rate": 0.42105263157894735,
+     "avg_net": -0.009968606619298794,
+     "avg_net_by_day": -0.009968606619298794
+    },
+    "every_stock": {
+     "ideas": 931,
+     "days": 19,
+     "hit_rate": 0.3297529538131042,
+     "avg_net": -0.01005861878437698,
+     "avg_net_by_day": -0.010058618784376982
+    },
+    "momentum": {
+     "ideas": 95,
+     "days": 19,
+     "hit_rate": 0.30526315789473685,
+     "avg_net": -0.01180020333508483,
+     "avg_net_by_day": -0.01180020333508483
+    },
+    "nifty_matched": -0.011672118429862832,
+    "day5_model": {
+     "ideas": 95,
+     "days": 19,
+     "hit_rate": 0.4105263157894737,
+     "avg_net": -0.00925728329018106,
+     "avg_net_by_day": -0.00925728329018106
+    },
+    "day5_every_stock": {
+     "ideas": 931,
+     "days": 19,
+     "hit_rate": 0.32116004296455425,
+     "avg_net": -0.009571555391257654,
+     "avg_net_by_day": -0.009571555391257654
+    },
+    "eligible": true,
+    "won": true
+   },
+   "money": {
+    "model": {
+     "ideas": 167,
+     "days": 14,
+     "hit_rate": 0.41317365269461076,
+     "avg_net": -0.010066674066761101,
+     "avg_net_by_day": -0.010309419096554098
+    },
+    "every_stock": {
+     "ideas": 686,
+     "days": 14,
+     "hit_rate": 0.32653061224489793,
+     "avg_net": -0.011485496930042754,
+     "avg_net_by_day": -0.011485496930042752
+    },
+    "momentum": {
+     "ideas": 70,
+     "days": 14,
+     "hit_rate": 0.32857142857142857,
+     "avg_net": -0.011558349842857162,
+     "avg_net_by_day": -0.01155834984285716
+    },
+    "nifty_matched": -0.009872591619114416,
+    "day5_model": {
+     "ideas": 167,
+     "days": 14,
+     "hit_rate": 0.39520958083832336,
+     "avg_net": -0.009773579344320616,
+     "avg_net_by_day": -0.009993220627937593
+    },
+    "day5_every_stock": {
+     "ideas": 686,
+     "days": 14,
+     "hit_rate": 0.3163265306122449,
+     "avg_net": -0.011105303369271333,
+     "avg_net_by_day": -0.011105303369271333
+    },
+    "eligible": true,
+    "won": false
+   },
+   "model_auc": 0.5452055870940591
+  },
+  {
+   "start": "2024-10-19",
+   "end": "2024-11-15",
+   "cutoff": "2024-10-18",
+   "days": 19,
+   "regime": {
+    "label": "falling",
+    "avg_move": -0.06514271527046987
+   },
+   "skill": {
+    "model": {
+     "ideas": 95,
+     "days": 19,
+     "hit_rate": 0.4842105263157895,
+     "avg_net": -0.01344166192799808,
+     "avg_net_by_day": -0.013441661927998082
+    },
+    "every_stock": {
+     "ideas": 931,
+     "days": 19,
+     "hit_rate": 0.40171858216971,
+     "avg_net": -0.014239045500083439,
+     "avg_net_by_day": -0.014239045500083439
+    },
+    "momentum": {
+     "ideas": 95,
+     "days": 19,
+     "hit_rate": 0.45263157894736844,
+     "avg_net": -0.01088656360276165,
+     "avg_net_by_day": -0.010886563602761648
+    },
+    "nifty_matched": -0.010402958843329892,
+    "day5_model": {
+     "ideas": 95,
+     "days": 19,
+     "hit_rate": 0.43157894736842106,
+     "avg_net": -0.013395678479794086,
+     "avg_net_by_day": -0.013395678479794086
+    },
+    "day5_every_stock": {
+     "ideas": 931,
+     "days": 19,
+     "hit_rate": 0.359828141783029,
+     "avg_net": -0.013466420219848525,
+     "avg_net_by_day": -0.013466420219848525
+    },
+    "eligible": true,
+    "won": true
+   },
+   "money": {
+    "model": {
+     "ideas": 570,
+     "days": 19,
+     "hit_rate": 0.39473684210526316,
+     "avg_net": -0.01514201184524731,
+     "avg_net_by_day": -0.01508605026903228
+    },
+    "every_stock": {
+     "ideas": 931,
+     "days": 19,
+     "hit_rate": 0.40171858216971,
+     "avg_net": -0.014239045500083439,
+     "avg_net_by_day": -0.014239045500083439
+    },
+    "momentum": {
+     "ideas": 95,
+     "days": 19,
+     "hit_rate": 0.45263157894736844,
+     "avg_net": -0.01088656360276165,
+     "avg_net_by_day": -0.010886563602761648
+    },
+    "nifty_matched": -0.011658031821317328,
+    "day5_model": {
+     "ideas": 570,
+     "days": 19,
+     "hit_rate": 0.3543859649122807,
+     "avg_net": -0.014744479185993276,
+     "avg_net_by_day": -0.014413393888053943
+    },
+    "day5_every_stock": {
+     "ideas": 931,
+     "days": 19,
+     "hit_rate": 0.359828141783029,
+     "avg_net": -0.013466420219848525,
+     "avg_net_by_day": -0.013466420219848525
+    },
+    "eligible": true,
+    "won": false
+   },
+   "model_auc": 0.5233946860363441
+  },
+  {
+   "start": "2024-11-16",
+   "end": "2024-12-13",
+   "cutoff": "2024-11-15",
+   "days": 19,
+   "regime": {
+    "label": "rising",
+    "avg_move": 0.03444248784986424
+   },
+   "skill": {
+    "model": {
+     "ideas": 95,
+     "days": 19,
+     "hit_rate": 0.5473684210526316,
+     "avg_net": -0.008660509678556876,
+     "avg_net_by_day": -0.008660509678556876
+    },
+    "every_stock": {
+     "ideas": 931,
+     "days": 19,
+     "hit_rate": 0.5821697099892589,
+     "avg_net": -0.005043389511842005,
+     "avg_net_by_day": -0.005043389511842005
+    },
+    "momentum": {
+     "ideas": 95,
+     "days": 19,
+     "hit_rate": 0.6210526315789474,
+     "avg_net": -0.0023584951919491037,
+     "avg_net_by_day": -0.0023584951919491037
+    },
+    "nifty_matched": -0.0035344455611740727,
+    "day5_model": {
+     "ideas": 95,
+     "days": 19,
+     "hit_rate": 0.4842105263157895,
+     "avg_net": -0.005571687460954531,
+     "avg_net_by_day": -0.005571687460954531
+    },
+    "day5_every_stock": {
+     "ideas": 931,
+     "days": 19,
+     "hit_rate": 0.4897959183673469,
+     "avg_net": -0.003530943925192367,
+     "avg_net_by_day": -0.0035309439251923675
+    },
+    "eligible": true,
+    "won": false
+   },
+   "money": {
+    "model": {
+     "ideas": 568,
+     "days": 19,
+     "hit_rate": 0.6197183098591549,
+     "avg_net": -0.004416852844592672,
+     "avg_net_by_day": -0.006961192388673254
+    },
+    "every_stock": {
+     "ideas": 931,
+     "days": 19,
+     "hit_rate": 0.5821697099892589,
+     "avg_net": -0.005043389511842005,
+     "avg_net_by_day": -0.005043389511842005
+    },
+    "momentum": {
+     "ideas": 95,
+     "days": 19,
+     "hit_rate": 0.6210526315789474,
+     "avg_net": -0.0023584951919491037,
+     "avg_net_by_day": -0.0023584951919491037
+    },
+    "nifty_matched": -0.0014814340020339006,
+    "day5_model": {
+     "ideas": 568,
+     "days": 19,
+     "hit_rate": 0.5387323943661971,
+     "avg_net": -0.0026881318690667334,
+     "avg_net_by_day": -0.004596047716328176
+    },
+    "day5_every_stock": {
+     "ideas": 931,
+     "days": 19,
+     "hit_rate": 0.4897959183673469,
+     "avg_net": -0.003530943925192367,
+     "avg_net_by_day": -0.0035309439251923675
+    },
+    "eligible": true,
+    "won": false
+   },
+   "model_auc": 0.5132995552963476
+  },
+  {
+   "start": "2024-12-14",
+   "end": "2025-01-10",
+   "cutoff": "2024-12-13",
+   "days": 19,
+   "regime": {
+    "label": "falling",
+    "avg_move": -0.0362051623939611
+   },
+   "skill": {
+    "model": {
+     "ideas": 95,
+     "days": 19,
+     "hit_rate": 0.47368421052631576,
+     "avg_net": -0.009779536690874072,
+     "avg_net_by_day": -0.009779536690874072
+    },
+    "every_stock": {
+     "ideas": 931,
+     "days": 19,
+     "hit_rate": 0.44253490870032225,
+     "avg_net": -0.007393055153620949,
+     "avg_net_by_day": -0.00739305515362095
+    },
+    "momentum": {
+     "ideas": 95,
+     "days": 19,
+     "hit_rate": 0.4631578947368421,
+     "avg_net": -0.007131453488961744,
+     "avg_net_by_day": -0.007131453488961744
+    },
+    "nifty_matched": -0.007453232502651889,
+    "day5_model": {
+     "ideas": 95,
+     "days": 19,
+     "hit_rate": 0.3894736842105263,
+     "avg_net": -0.010263335588642612,
+     "avg_net_by_day": -0.010263335588642614
+    },
+    "day5_every_stock": {
+     "ideas": 931,
+     "days": 19,
+     "hit_rate": 0.36305048335123524,
+     "avg_net": -0.008315456565900157,
+     "avg_net_by_day": -0.008315456565900157
+    },
+    "eligible": true,
+    "won": false
+   },
+   "money": {
+    "model": {
+     "ideas": 433,
+     "days": 19,
+     "hit_rate": 0.45496535796766746,
+     "avg_net": -0.00933833412240108,
+     "avg_net_by_day": -0.010642307852907545
+    },
+    "every_stock": {
+     "ideas": 931,
+     "days": 19,
+     "hit_rate": 0.44253490870032225,
+     "avg_net": -0.007393055153620949,
+     "avg_net_by_day": -0.00739305515362095
+    },
+    "momentum": {
+     "ideas": 95,
+     "days": 19,
+     "hit_rate": 0.4631578947368421,
+     "avg_net": -0.007131453488961744,
+     "avg_net_by_day": -0.007131453488961744
+    },
+    "nifty_matched": -0.00908089951097015,
+    "day5_model": {
+     "ideas": 433,
+     "days": 19,
+     "hit_rate": 0.371824480369515,
+     "avg_net": -0.010534571473839637,
+     "avg_net_by_day": -0.01066600688912553
+    },
+    "day5_every_stock": {
+     "ideas": 931,
+     "days": 19,
+     "hit_rate": 0.36305048335123524,
+     "avg_net": -0.008315456565900157,
+     "avg_net_by_day": -0.008315456565900157
+    },
+    "eligible": true,
+    "won": false
+   },
+   "model_auc": 0.5331648854961832
+  },
+  {
+   "start": "2025-01-11",
+   "end": "2025-01-31",
+   "cutoff": "2025-01-10",
+   "days": 15,
+   "regime": {
+    "label": "rising",
+    "avg_move": 0.0323321911221858
+   },
+   "skill": {
+    "model": {
+     "ideas": 75,
+     "days": 15,
+     "hit_rate": 0.7066666666666667,
+     "avg_net": -0.001288127894417072,
+     "avg_net_by_day": -0.0012881278944170721
+    },
+    "every_stock": {
+     "ideas": 735,
+     "days": 15,
+     "hit_rate": 0.6789115646258503,
+     "avg_net": -0.001540172822836897,
+     "avg_net_by_day": -0.0015401728228368967
+    },
+    "momentum": {
+     "ideas": 75,
+     "days": 15,
+     "hit_rate": 0.7466666666666667,
+     "avg_net": 0.0009968670353233343,
+     "avg_net_by_day": 0.0009968670353233346
+    },
+    "nifty_matched": -0.002635161931958147,
+    "day5_model": {
+     "ideas": 75,
+     "days": 15,
+     "hit_rate": 0.5733333333333334,
+     "avg_net": -0.0047484275610551975,
+     "avg_net_by_day": -0.0047484275610551975
+    },
+    "day5_every_stock": {
+     "ideas": 735,
+     "days": 15,
+     "hit_rate": 0.6027210884353742,
+     "avg_net": -0.002427162124775364,
+     "avg_net_by_day": -0.002427162124775364
+    },
+    "eligible": true,
+    "won": true
+   },
+   "money": {
+    "model": {
+     "ideas": 434,
+     "days": 15,
+     "hit_rate": 0.716589861751152,
+     "avg_net": 0.0001857856910774375,
+     "avg_net_by_day": -0.002025363340409115
+    },
+    "every_stock": {
+     "ideas": 735,
+     "days": 15,
+     "hit_rate": 0.6789115646258503,
+     "avg_net": -0.001540172822836897,
+     "avg_net_by_day": -0.0015401728228368967
+    },
+    "momentum": {
+     "ideas": 75,
+     "days": 15,
+     "hit_rate": 0.7466666666666667,
+     "avg_net": 0.0009968670353233343,
+     "avg_net_by_day": 0.0009968670353233346
+    },
+    "nifty_matched": -0.00268574026766766,
+    "day5_model": {
+     "ideas": 434,
+     "days": 15,
+     "hit_rate": 0.6336405529953917,
+     "avg_net": -0.0007561118911763026,
+     "avg_net_by_day": -0.0032121135291940666
+    },
+    "day5_every_stock": {
+     "ideas": 735,
+     "days": 15,
+     "hit_rate": 0.6027210884353742,
+     "avg_net": -0.002427162124775364,
+     "avg_net_by_day": -0.002427162124775364
+    },
+    "eligible": true,
+    "won": false
+   },
+   "model_auc": 0.5379142648113917
+  }
+ ],
+ "skill": {
+  "model": {
+   "ideas": 1980,
+   "days": 396,
+   "hit_rate": 0.5080808080808081,
+   "avg_net": -0.0036989944741157416,
+   "avg_net_by_day": -0.003698994474115742
+  },
+  "every_stock": {
+   "ideas": 19404,
+   "days": 396,
+   "hit_rate": 0.4008967223252938,
+   "avg_net": -0.003593178332413711,
+   "avg_net_by_day": -0.003593178332413711
+  },
+  "momentum": {
+   "ideas": 1980,
+   "days": 396,
+   "hit_rate": 0.4212121212121212,
+   "avg_net": -0.003615183897003764,
+   "avg_net_by_day": -0.003615183897003764
+  },
+  "random_5": {
+   "draws": 1000,
+   "avg_net_mean": -0.0035902254146207803,
+   "p5": -0.004235142621936053,
+   "p95": -0.002914454026581168,
+   "share_beaten": 0.401
+  },
+  "nifty_matched": {
+   "ideas": 1980,
+   "avg_net": -0.003044224415562053,
+   "candidate_avg_same_ideas": -0.0036989944741157416,
+   "candidate_minus_nifty": -0.0006547700585536886,
+   "note": "comparison only: its exits follow the candidate's trades, so no one could run it"
+  },
+  "cash": {
+   "avg_net": 0.0
+  },
+  "rules_only": "missing: waits for tv7 to name the official 'rules only' yardstick (D5)",
+  "edge_per_day": -0.00010581614170203088,
+  "edge_low": -0.0015508395052510689,
+  "edge_days": 396,
+  "day5": {
+   "model": {
+    "ideas": 1980,
+    "days": 396,
+    "hit_rate": 0.45202020202020204,
+    "avg_net": -0.003715422222611625,
+    "avg_net_by_day": -0.003715422222611625
+   },
+   "every_stock": {
+    "ideas": 19404,
+    "days": 396,
+    "hit_rate": 0.36198721913007625,
+    "avg_net": -0.003673289037085118,
+    "avg_net_by_day": -0.0036732890370851177
+   },
+   "edge_per_day": -4.213318552650666e-05,
+   "edge_low": -0.0009433849207176922,
+   "note": "reported only, never in pass or fail"
+  },
+  "days_with_picks": 396
+ },
+ "money": {
+  "model": {
+   "ideas": 4884,
+   "days": 305,
+   "hit_rate": 0.5904995904995906,
+   "avg_net": -0.004225296985926407,
+   "avg_net_by_day": -0.003885019159983805
+  },
+  "every_stock": {
+   "ideas": 14945,
+   "days": 305,
+   "hit_rate": 0.4477751756440281,
+   "avg_net": -0.0036865661716783986,
+   "avg_net_by_day": -0.0036865661716783986
+  },
+  "momentum": {
+   "ideas": 1525,
+   "days": 305,
+   "hit_rate": 0.46885245901639344,
+   "avg_net": -0.003506503943788158,
+   "avg_net_by_day": -0.0035065039437881585
+  },
+  "random_5": {
+   "draws": 1000,
+   "avg_net_mean": -0.0036992243871002087,
+   "p5": -0.004477442818453654,
+   "p95": -0.002928796350058973,
+   "share_beaten": 0.138
+  },
+  "nifty_matched": {
+   "ideas": 4884,
+   "avg_net": -0.003035782897355733,
+   "candidate_avg_same_ideas": -0.004225296985926407,
+   "candidate_minus_nifty": -0.0011895140885706743,
+   "note": "comparison only: its exits follow the candidate's trades, so no one could run it"
+  },
+  "cash": {
+   "avg_net": 0.0
+  },
+  "rules_only": "missing: waits for tv7 to name the official 'rules only' yardstick (D5)",
+  "edge_per_day": -0.0001984529883054066,
+  "edge_low": -0.0015508116047999341,
+  "edge_days": 305,
+  "day5": {
+   "model": {
+    "ideas": 4884,
+    "days": 305,
+    "hit_rate": 0.5135135135135135,
+    "avg_net": -0.004399015534367331,
+    "avg_net_by_day": -0.004076847586227868
+   },
+   "every_stock": {
+    "ideas": 14945,
+    "days": 305,
+    "hit_rate": 0.3993308798929408,
+    "avg_net": -0.0037958022584445466,
+    "avg_net_by_day": -0.0037958022584445466
+   },
+   "edge_per_day": -0.0002810453277833214,
+   "edge_low": -0.0012716151779317078,
+   "note": "reported only, never in pass or fail"
+  },
+  "days_with_picks": 305,
+  "days": {
+   "days": 396,
+   "bear_days": 11,
+   "nifty_unknown_days": 0
+  }
+ },
+ "verdict": {
+  "predictive": {
+   "word": "fail",
+   "eligible_folds": 21,
+   "folds_won": 10,
+   "share": 0.47619047619047616,
+   "check": "lower bound of the 5-day daily edge over every stock above zero (21-trading-day blocks)",
+   "trades": 1980
+  },
+  "economic": {
+   "word": "fail",
+   "eligible_folds": 17,
+   "folds_won": 3,
+   "share": 0.17647058823529413,
+   "check": "5-day average per trade after costs over all folds above zero",
+   "trades": 4884
+  },
+  "reading": "No evidence of skill and no profit for the 5-day strategy."
+ },
+ "worst_fold": {
+  "skill": {
+   "avg_net_by_day": -0.013441661927998082,
+   "fold_start": "2024-10-19"
+  },
+  "money": {
+   "avg_net_by_day": -0.01508605026903228,
+   "fold_start": "2024-10-19"
+  }
+ },
+ "breakeven": {
+  "before_costs": 0.6666666666666667,
+  "after_costs": 0.7272353129696093,
+  "win_net": 0.016313107417166073,
+  "loss_net": -0.04349341517477234
+ },
+ "cost_stress": [
+  {
+   "costs": "normal costs",
+   "best_5": -0.0036989944741157416,
+   "every_stock": -0.003593178332413711,
+   "buy_rule": -0.004225296985926407
+  },
+  {
+   "costs": "2x charges",
+   "best_5": -0.006315496080650452,
+   "every_stock": -0.006209915593750273,
+   "buy_rule": -0.006840626505555083
+  },
+  {
+   "costs": "fills 0.30% worse",
+   "best_5": -0.00965073359148964,
+   "every_stock": -0.00960049265200229,
+   "buy_rule": -0.010307723080237674
+  },
+  {
+   "costs": "2x charges, fills 0.30% worse",
+   "best_5": -0.012253980548215446,
+   "every_stock": -0.012203851496370651,
+   "buy_rule": -0.012909506907375681
+  }
+ ],
+ "portfolio": {
+  "best_5": {
+   "final_net_return": -0.14435740381180828,
+   "max_drawdown": 0.15811142874337736,
+   "halt_triggered": true,
+   "days_halted": 141,
+   "trades": 703,
+   "still_open": 0,
+   "skipped": {
+    "already_held": 578,
+    "no_free_slot": 161,
+    "too_small_or_no_cash": 28,
+    "drawdown_halt": 510
+   }
+  },
+  "buy_rule": {
+   "final_net_return": -0.1449600504218379,
+   "max_drawdown": 0.1578589028527554,
+   "halt_triggered": true,
+   "days_halted": 108,
+   "trades": 481,
+   "still_open": 0,
+   "skipped": {
+    "already_held": 593,
+    "top_5_limit": 191,
+    "no_free_slot": 1697,
+    "too_small_or_no_cash": 8,
+    "drawdown_halt": 1914
+   }
+  },
+  "momentum_5": {
+   "final_net_return": -0.1500273352217727,
+   "max_drawdown": 0.15062813771885608,
+   "halt_triggered": true,
+   "days_halted": 283,
+   "trades": 474,
+   "still_open": 0,
+   "skipped": {
+    "already_held": 265,
+    "too_small_or_no_cash": 21,
+    "drawdown_halt": 1220
+   }
+  },
+  "random_5_accounts": {
+   "runs": 200,
+   "final_net_return_median": -0.15474674434859198,
+   "p5": -0.16358082922304662,
+   "p95": -0.14875363980499667,
+   "max_drawdown_median": 0.15694254670393676,
+   "halt_triggered_runs": 200
+  },
+  "nifty_held": {
+   "final_net_return": 0.19935279307517417,
+   "max_drawdown": 0.15766677283572467,
+   "halt_triggered": null,
+   "days_halted": null
+  },
+  "cash": {
+   "final_net_return": 0.0,
+   "max_drawdown": 0.0,
+   "halt_triggered": false,
+   "days_halted": 0
+  },
+  "rules_only": "missing: waits for tv7 to name the official 'rules only' yardstick (D5)"
+ },
+ "exit_reasons": {
+  "best_5": {
+   "confidence": 464,
+   "stop": 509,
+   "target": 1006,
+   "timeout": 1
+  },
+  "buy_rule": {
+   "confidence": 311,
+   "stop": 1687,
+   "target": 2884,
+   "timeout": 2
+  }
+ },
+ "layer2": "not built: the forward test waits for the owner's D6 / tv22 decision",
+ "manifest": {
+  "Protocol": "fd-protocol-v1",
+  "Tag": "fd-protocol-v1 (in this commit's history)",
+  "Code commit": "271eb1c (uncommitted changes present)",
+  "Sample": "confirmation (pass or fail, layer 1)",
+  "Folds": "21 of 28 calendar days, model retrained once per fold",
+  "Universe": "49 watchlisted stocks (today's list: survivor bias)"
+ }
+}

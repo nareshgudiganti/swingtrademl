@@ -53,7 +53,7 @@ Multiple connection attempts failed. All failures were:
 The above exception was the direct cause of the following exception:
 
 Traceback (most recent call last):
-  File "C:\Users\nares\AppData\Local\Temp\claude\d--machine-learning-swing-trade-bot\fe2b45d0-b4e3-4d51-b13f-226f58ea3584\scratchpad\run_fd.py", line 5, in <module>
+  File "C:\Users<user>\AppData\Local\Temp\claude\d--machine-learning-swing-trade-bot\fe2b45d0-b4e3-4d51-b13f-226f58ea3584\scratchpad\run_fd.py", line 5, in <module>
     raise SystemExit(main(["--from", "2023-07-01", "--to", "2025-01-31"]))
                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   File "D:\machine learning\swing-trade-bot\.claude\worktrees\fd-tag\backend\src\swing_trade_ml\brain\five_day.py", line 1223, in main

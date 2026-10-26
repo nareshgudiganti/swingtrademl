@@ -1,0 +1,40 @@
+{
+ "descriptive_only": true,
+ "note": "Descriptive only. Approved and blocked ideas are different stocks on different days, so this comparison does not by itself show that the brain improves returns.",
+ "groups": {
+  "approved": {
+   "signals": 0,
+   "completed": 0,
+   "open": 0,
+   "same_day": 0,
+   "target": 0,
+   "stop": 0,
+   "time_limit": 0,
+   "avg_net": null,
+   "thin": true,
+   "sources": {}
+  },
+  "blocked": {
+   "signals": 561,
+   "completed": 561,
+   "open": 0,
+   "same_day": 0,
+   "target": 106,
+   "stop": 317,
+   "time_limit": 138,
+   "avg_net": -0.009860173622198022,
+   "thin": false,
+   "sources": {
+    "model": 561
+   }
+  }
+ },
+ "sealed_days_counts_only": {},
+ "reasons": [
+  {
+   "kind": "blocked",
+   "reason": "risk check (replay used today's account - an artifact of replays)",
+   "ideas": 561
+  }
+ ]
+}

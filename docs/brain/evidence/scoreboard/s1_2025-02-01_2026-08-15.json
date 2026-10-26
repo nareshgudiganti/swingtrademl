@@ -1,0 +1,104 @@
+{
+ "meta": {
+  "first_start": "2025-02-01",
+  "last_end": "2026-08-15",
+  "folds": 20,
+  "integrity": {
+   "stocks_in_universe": 49,
+   "duplicate_stock_days": 0,
+   "folds_whose_model_cutoff_is_missing_or_not_before_the_fold": [],
+   "survivorship": "universe is today's watchlist: stocks dropped earlier are absent"
+  }
+ },
+ "result": {
+  "days_ranked": 379,
+  "days_dropped_too_few_stocks": 0,
+  "groups": [
+   {
+    "signals": 1895,
+    "completed": 1895,
+    "open": 0,
+    "same_day": 0,
+    "target": 357,
+    "stop": 807,
+    "time_limit": 731,
+    "avg_net": -0.0013754584208758528,
+    "thin": false,
+    "group": "top5",
+    "label": "Top 5",
+    "avg_gap_vs_all": 0.0013619780293914591,
+    "gap_days": 379,
+    "gap_lower_bound": -0.0009480491669057133
+   },
+   {
+    "signals": 1895,
+    "completed": 1895,
+    "open": 0,
+    "same_day": 0,
+    "target": 303,
+    "stop": 831,
+    "time_limit": 761,
+    "avg_net": -0.0032316678847207204,
+    "thin": false,
+    "group": "r06_10",
+    "label": "Ranks 6-10",
+    "avg_gap_vs_all": -0.000494231434453408,
+    "gap_days": 379,
+    "gap_lower_bound": -0.0025231394662722974
+   },
+   {
+    "signals": 1895,
+    "completed": 1895,
+    "open": 0,
+    "same_day": 0,
+    "target": 295,
+    "stop": 845,
+    "time_limit": 755,
+    "avg_net": -0.004147631317753388,
+    "thin": false,
+    "group": "r11_15",
+    "label": "Ranks 11-15",
+    "avg_gap_vs_all": -0.0014101948674860763,
+    "gap_days": 379,
+    "gap_lower_bound": -0.0029170164151073917
+   },
+   {
+    "signals": 1895,
+    "completed": 1895,
+    "open": 0,
+    "same_day": 0,
+    "target": 318,
+    "stop": 833,
+    "time_limit": 744,
+    "avg_net": -0.001998399959829632,
+    "thin": false,
+    "group": "r16_20",
+    "label": "Ranks 16-20",
+    "avg_gap_vs_all": 0.0007390364904376805,
+    "gap_days": 379,
+    "gap_lower_bound": -0.0005492709826323415
+   },
+   {
+    "signals": 18565,
+    "completed": 18565,
+    "open": 0,
+    "same_day": 0,
+    "target": 2957,
+    "stop": 8041,
+    "time_limit": 7567,
+    "avg_net": -0.002737163973298475,
+    "thin": false,
+    "group": "all",
+    "label": "All eligible stocks",
+    "avg_gap_vs_all": 0.0,
+    "gap_days": null,
+    "gap_lower_bound": null
+   }
+  ],
+  "monotone_top_to_r16_20": false,
+  "folds_top5_beat_all": {
+   "folds_with_enough_ideas": 20,
+   "top5_beat_all": 11
+  }
+ }
+}

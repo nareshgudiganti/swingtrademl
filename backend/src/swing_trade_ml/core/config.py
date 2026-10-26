@@ -305,6 +305,10 @@ class Settings(BaseSettings):
     TELEGRAM_BOT_TOKEN: str = ""
     TELEGRAM_CHAT_ID: str = ""
     TELEGRAM_NOTIFY_ON: str = "signal,order,fill,error,daily_summary,system"
+    # Telegram messages come from production only (ENVIRONMENT=production). A laptop running
+    # with the real token in its .env would otherwise send its own paper-trading messages to the
+    # same chat. Set true only for a deliberate local test of the messages themselves.
+    TELEGRAM_SEND_OUTSIDE_PRODUCTION: bool = False
 
     # ------------------------------------------------------------ derived --
 

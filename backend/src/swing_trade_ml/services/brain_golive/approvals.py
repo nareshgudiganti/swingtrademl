@@ -337,7 +337,16 @@ def _check(db: Session, a: BrainApproval, now: datetime, automatic: bool, live: 
     )
     if not verdict.allowed or verdict.quantity <= 0:
         raise ApprovalRefused(f"The safety check says no right now: {verdict.reason}")
-    return _Ready(strategy, instrument, signal, verdict.quantity, automatic)
+    run = db.get(BrainRun, d.run_id)
+    quantity = brain_strategy.capped_order_quantity(
+        verdict.quantity, d, run.banner_mode if run is not None else None
+    )
+    if quantity <= 0:
+        raise ApprovalRefused(
+            "The market is defensive and the brain's risk check approved no shares for this stock, "
+            "so nothing was bought."
+        )
+    return _Ready(strategy, instrument, signal, quantity, automatic)
 
 
 def _order_status(db: Session, signal: Signal) -> str | None:

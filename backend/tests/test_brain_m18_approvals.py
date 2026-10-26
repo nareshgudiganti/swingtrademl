@@ -65,7 +65,8 @@ def fx(db_session, monkeypatch):
     )
     strategy = brain_strategy(db_session)
     inst = instrument(db_session, "M18APR", 918301)
-    run(db_session, "m18-apr")
+    # A NORMAL day: v1's risk service sizes the order (on other days it is capped at M07's qty, tv22 F).
+    run(db_session, "m18-apr").banner_mode = "NORMAL"
     dec = decision(db_session, "m18-apr", "M18APR", "TRADE")
     dec.entry_low, dec.entry_high = 98.0, 103.0  # the brain's buy range; the stop is 96
     db_session.flush()
@@ -866,3 +867,14 @@ def test_a_plan_without_usable_prices_is_never_bought(fx, broken):
     with pytest.raises(approvals.ApprovalRefused, match="no usable stop, buy price or target"):
         approvals.approve(fx.db, a.id, by="owner")
     assert fx.opened == []
+
+
+def test_defensive_day_order_is_capped_at_the_brains_own_quantity(fx):
+    """tv22 item F: on a DEFENSIVE day the order is never bigger than M07's half-size quantity."""
+    from swing_trade_ml.db.models.brain import BrainRun
+
+    fx.db.get(BrainRun, "m18-apr").banner_mode = "DEFENSIVE"
+    fx.db.flush()
+    a = _pending(fx)
+    approvals.approve(fx.db, a.id, by="owner", note="go")
+    assert fx.opened == [(fx.signal.id, 7)]  # decision qty 7, v1 sizing would give 12

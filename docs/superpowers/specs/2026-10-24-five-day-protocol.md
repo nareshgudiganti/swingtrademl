@@ -1,7 +1,7 @@
 # Five-day strategy protocol (fd-protocol-v1) — SIGNED 2026-10-24, freezes at the tag
 
-Status: **signed by the owner on 2026-10-24** (section 9: D1–D5 and D7 as recommended; D6 agreed in
-principle, waiting for tv22). It is frozen when the commit holding this file and the tool change is tagged
+Status: **signed by the owner on 2026-10-24** (section 9: D1–D5 and D7 as recommended); **D6 signed
+2026-10-25** with tv22: shared paper account, one slot reserved for the brain. It is frozen when the commit holding this file and the tool change is tagged
 `fd-protocol-v1`. After that, the layer 1 confirmation run happens once and no setting changes after seeing
 a result. No 5-day result has been looked at for this protocol before the tag.
 
@@ -37,8 +37,8 @@ never added together.
 
 - **Layer 1 (history):** the 5-day model's ranking, retrained every fold, scored on the trade rule in
   section 3, against the benchmarks in section 4.
-- **Layer 2 (forward):** the version 1 paper bot itself, from the lock date, in a book of its own
-  (see D6), against the same benchmarks over the same days.
+- **Layer 2 (forward):** the version 1 paper bot itself, from the lock date, in the shared paper account
+  with one slot reserved for the brain (D6, tv22), against the same benchmarks over the same days.
 
 Passing either part never counts toward the brain's M18 gate, and never makes trading more aggressive.
 
@@ -98,8 +98,9 @@ hit rate needed to break even, worst fold, worst fall, and the limits below.
 
 - Survivor bias: today's 49 stocks.
 - Daily candles cannot say whether target or stop came first on the same day (counted as the stop, cautious).
-- The v1 bot and the brain share the paper account's slots today, so forward results are not independent
-  until D6 is decided.
+- The v1 bot and the brain share one paper account (D6): one slot's room is reserved for the brain (tv22),
+  so v1's forward results are measured with that smaller room. In a stressed and DEFENSIVE market v1 makes
+  no new buys (the reservation takes about twice the minimum position); this is part of what is measured.
 - A pass never justifies live trading. Manual approval and the owner's go-live call still come first.
 - Prod scores with 3 cap-tier models (`ml_swing_main`, `ml_swing_midcap`, `ml_swing_smallcap`); the tool
   trains one endpoint model per fold on the 49 stocks, like the 15-day protocol. It is not the exact model in
@@ -117,7 +118,7 @@ hit rate needed to break even, worst fold, worst fall, and the limits below.
 | D3 | Accept 2023-07 to 2025-01 as the confirmation sample for the 5-day rule? | Yes, with the limit in section 5 written in the report |
 | D4 | Same thresholds as 15-day (60% of folds, 12 folds, 100 trades, lower bound above zero)? | Yes, so the two horizons are judged the same way |
 | D5 | Add "rules only" as a benchmark once tv7 names the official one? | Yes; until then the report says it is missing |
-| D6 | Forward test in a book of its own (needs tv22 and a trial-change waiver, or waits until the trial ends)? | Own book; decide together with tv22 |
+| D6 | Forward test in a book of its own (needs tv22 and a trial-change waiver, or waits until the trial ends)? | Own book; decide together with tv22 (signed 2026-10-25: shared account, reserved slot) |
 | D7 | Stop date: verdict 6 months after the lock, one extension to 9 months only if under 100 trades, no early stop? | Yes (same as the 15-day plan) |
 
 Signed by the owner on 2026-10-24 ("go ahead" on the recommendations above):
@@ -127,9 +128,9 @@ Signed by the owner on 2026-10-24 ("go ahead" on the recommendations above):
 - [x] D3 confirmation sample 2023-07-01 to 2025-01-31, with the section 5 limit written in the report.
 - [x] D4 same thresholds as the 15-day protocol.
 - [x] D5 "rules only" added as a benchmark once tv7 names the official one; until then the report says it is missing.
-- [~] D6 own book for the forward test: **agreed in principle, not yet decided.** It changes slots and
-  sizing during the frozen trial, so it needs the owner's tv22 decision (and a trial-change waiver, or the
-  end of the trial). Layer 2 does not start until then; layer 1 can run.
+- [x] D6 = **shared paper account, one slot reserved for the brain (tv22), owner signed 2026-10-25.**
+  The tv22 change (docs/superpowers/specs/2026-10-24-tv22-brain-reserved-slot.md, items A–F) is recorded
+  as an owner-approved trial change in `tests/trial_freeze.json`.
 - [x] D7 verdict 6 months after the forward clock starts; one extension to 9 months only if under 100 trades; no early stop.
 
 ## 10. Freezing mechanics

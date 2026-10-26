@@ -229,6 +229,7 @@ for (const width of [1152, 1280, 1531, 1861, 1880]) {
       expect(room.navClipped, 'section menu cut off').toBeLessThanOrEqual(0)
       expect(await bar.evaluate((el) => el.scrollWidth - el.clientWidth), 'something sticks out of the bar').toBeLessThanOrEqual(0)
       // From 1280px everything sits on one row, with room to spare (below that the section menu has its own row).
+      console.log('SPARE', width, Math.round(room.spare))
       if (width >= 1280) expect(room.spare, 'spare width in the top bar').toBeGreaterThanOrEqual(48)
     })
   })

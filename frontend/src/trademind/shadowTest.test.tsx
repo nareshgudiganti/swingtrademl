@@ -52,6 +52,7 @@ describe('Shadow Test page', () => {
   it('is labelled exploring and passive, with the last-close note', () => {
     const html = render(view())
     expect(html).toContain('Tracking only')
+    expect(html).toContain('Paper stage · practice money')
     expect(html).toContain('not part of the sealed 6-month test')
     expect(html).toContain('updated after market close')
   })

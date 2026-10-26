@@ -75,9 +75,14 @@ export function ShadowView({ v }: { v: ShadowTestView }) {
           </h2>
           <div className="sp-sub">We follow ranked stocks for up to 15 trading days, bought or skipped.</div>
         </div>
-        <span className="sp-pill sp-pill-amber" data-testid="shadow-label">
-          Tracking only
-        </span>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <span className="sp-pill sp-pill-amber" data-testid="shadow-label">
+            Tracking only
+          </span>
+          <span className="sp-pill" data-testid="shadow-paper" title="Everything here is paper trading">
+            Paper stage · practice money
+          </span>
+        </div>
       </header>
       <p className="sp-small" data-testid="shadow-note">
         {v.label} Last close, not live: updated after market close ({shortDate(v.as_of)}).

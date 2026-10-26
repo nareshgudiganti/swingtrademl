@@ -192,6 +192,22 @@ class QuoteOut(BaseModel):
     ts: datetime
 
 
+class PriceSnapshotOut(BaseModel):
+    """A current price with its own timestamp, separate from any brain decision."""
+
+    symbol: str
+    state: str
+    price: float | None
+    price_ts: datetime | None
+    price_date: date | None
+    prev_close: float | None
+    prev_close_date: date | None
+    change_pct: float | None
+    age_seconds: int | None
+    prev_close_mismatch: bool
+    note: str
+
+
 # -------------------------------------------------------------- strategies --
 
 

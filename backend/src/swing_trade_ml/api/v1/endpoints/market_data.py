@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import asdict
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -14,8 +15,15 @@ from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.db.models.market import Candle, Instrument, Quote
 from swing_trade_ml.db.session import session_scope
 from swing_trade_ml.ml.market_context import current_regime
-from swing_trade_ml.schemas import BackfillRequest, CandleOut, MessageResponse, QuoteOut
+from swing_trade_ml.schemas import (
+    BackfillRequest,
+    CandleOut,
+    MessageResponse,
+    PriceSnapshotOut,
+    QuoteOut,
+)
 from swing_trade_ml.services import ingestion, market_feeds
+from swing_trade_ml.services.quote_snapshot import QuotePoint, build_snapshot, candle_points
 
 IST = ZoneInfo("Asia/Kolkata")
 log = get_logger(__name__)
@@ -73,6 +81,39 @@ def get_quote(symbol: str, db: DbSession, exchange: str = "NSE") -> Quote:
             "or call POST /market-data/refresh-quotes",
         )
     return quote
+
+
+@router.get("/snapshot/{symbol}", response_model=PriceSnapshotOut)
+def get_price_snapshot(symbol: str, db: DbSession, exchange: str = "NSE") -> PriceSnapshotOut:
+    """The price to show for a stock, labelled with what it is and as of when.
+
+    Read-only. A stored brain decision keeps the price it was made on; this is
+    the separate, current price. A stale or mismatched quote is flagged here,
+    never silently shown as live.
+    """
+    instrument = _resolve(db, symbol, exchange)
+    quote_row = db.execute(
+        select(Quote).where(Quote.instrument_id == instrument.id)
+    ).scalar_one_or_none()
+    candle_rows = list(
+        db.execute(
+            select(Candle)
+            .where(Candle.instrument_id == instrument.id, Candle.interval == "day")
+            .order_by(Candle.ts.desc())
+            .limit(10)
+        )
+        .scalars()
+        .all()
+    )
+    quote = (
+        QuotePoint(last_price=quote_row.last_price, prev_close=quote_row.close, ts=quote_row.ts)
+        if quote_row is not None
+        else None
+    )
+    snap = build_snapshot(
+        datetime.now(IST), quote, candle_points(list(reversed(candle_rows)))
+    )
+    return PriceSnapshotOut(symbol=instrument.tradingsymbol, **{**asdict(snap), "state": snap.state.value})
 
 
 @router.get("/ltp", response_model=dict[str, float])

@@ -6,7 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 
 import { api } from '../api/client'
-import type { BrainDecision, BrainRun } from '../api/types'
+import type { BrainDecision, BrainRun, PriceSnapshot } from '../api/types'
 import { useStockBrief } from './beginner/api'
 import { NO_EVENTS } from './beginner/UpcomingEvents'
 import type { StockBriefData } from './beginner/types'
@@ -35,15 +35,27 @@ export function useStockData(decision: BrainDecision, run: BrainRun) {
   const brief = useStockBrief(symbol)
   const changes = useChanges(decision.kind === 'idea' ? run.run_id : undefined)
 
+  // The current price is its own, separately timestamped read. The brain's decision stays frozen
+  // to its run; only this number moves. Without a snapshot we fall back to the stored closes.
+  const snap = useQuery({
+    queryKey: ['price-snapshot', symbol],
+    queryFn: () => api.priceSnapshot(symbol),
+    refetchInterval: 60_000,
+    retry: false,
+  })
+  const snapshot = snap.data && snap.data.price != null ? snap.data : undefined
+
   const rows = candles.data ?? []
-  const last = rows.at(-1)?.close
-  const prev = rows.at(-2)?.close
-  const change = last != null && prev ? last - prev : null
+  const last = snapshot ? snapshot.price! : rows.at(-1)?.close
+  const prev = snapshot ? (snapshot.prev_close ?? undefined) : rows.at(-2)?.close
+  const change =
+    snapshot ? (snapshot.change_pct != null && prev ? last! - prev : null) : last != null && prev ? last - prev : null
   const row = changes.data?.ideas.find((r) => r.symbol.toUpperCase() === symbol.toUpperCase())
   const idea: IdeaChange | null = row ? ideaChange(row) : null
 
   return {
     candleRows: rows,
+    snapshot,
     last,
     prev,
     change,
@@ -164,6 +176,7 @@ export function StockHeader({
   prev,
   cap,
   analysisTo,
+  snapshot,
   withBuy = true,
 }: {
   decision: BrainDecision
@@ -172,6 +185,7 @@ export function StockHeader({
   prev?: number
   cap?: string
   analysisTo?: string
+  snapshot?: PriceSnapshot
   withBuy?: boolean
 }) {
   const [buying, setBuying] = useState(false)
@@ -197,9 +211,18 @@ export function StockHeader({
               <b>₹{inr(last)}</b>
               {change != null && prev ? (
                 <span className={up ? 'sp-pos' : 'sp-neg'}>
-                  {up ? '▲' : '▼'} ₹{inr(Math.abs(change))} ({Math.abs((change / prev) * 100).toFixed(2)}%) at last close
+                  {up ? '▲' : '▼'} ₹{inr(Math.abs(change))} ({Math.abs((change / prev) * 100).toFixed(2)}%){snapshot ? '' : ' at last close'}
                 </span>
               ) : null}
+              {snapshot && (
+                <span
+                  className={`sp-small${snapshot.state === 'stale' || snapshot.state === 'delayed' ? ' sp-neg' : ''}`}
+                  data-testid="price-note"
+                  data-state={snapshot.state}
+                >
+                  {snapshot.note}
+                </span>
+              )}
             </div>
           )}
           {withBuy && (

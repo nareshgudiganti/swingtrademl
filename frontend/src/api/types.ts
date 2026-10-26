@@ -338,6 +338,21 @@ export interface TrackRecordSignal {
 }
 
 /** Stored market candle used for short-term price-performance summaries. */
+/** A current price with its own timestamp; independent of any stored brain decision. */
+export interface PriceSnapshot {
+  symbol: string
+  state: 'live' | 'delayed' | 'stale' | 'close_only' | 'closed' | 'holiday' | 'no_data'
+  price: number | null
+  price_ts: string | null
+  price_date: string | null
+  prev_close: number | null
+  prev_close_date: string | null
+  change_pct: number | null
+  age_seconds: number | null
+  prev_close_mismatch: boolean
+  note: string
+}
+
 export interface Candle {
   ts: string
   open: number

@@ -78,6 +78,7 @@ function StockAnalysisView({ decision: d, run }: { decision: BrainDecision; run:
         last={data.last}
         prev={data.prev}
         change={data.change}
+        snapshot={data.snapshot}
         cap={cap ? CAP_LABEL[cap] : undefined}
       />
 

@@ -151,8 +151,21 @@
   }
 }
 
-/* tr5: "Real orders: ON/OFF" next to the stage chip. ON is red and stays on a phone (it is the one that matters);
+/* tr5: "Real orders: ON/OFF" on a thin strip under the top bar. ON is red and stays on a phone (it is the one that matters);
    OFF is grey and hides on a phone like the stage chip. */
+.tm-realorders-strip {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0.3rem 1.25rem 0;
+}
+@media (max-width: 480px) {
+  .tm-realorders-strip {
+    padding: 0.3rem 16px 0;
+  }
+  .tm-realorders-strip:has(.tm-realorders-off) {
+    display: none;
+  }
+}
 .tm-realorders-chip {
   font-size: 0.68rem;
   font-weight: 600;

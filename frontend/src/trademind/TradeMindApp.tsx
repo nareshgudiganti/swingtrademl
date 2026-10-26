@@ -205,8 +205,6 @@ function ClassicShell({ ownerConsole }: { ownerConsole: boolean }) {
           )}
           {/* oa8: alerts bell + trading-stage chip, owner only (the server refuses everyone else). */}
           {ownerConsole && <TopBarAlerts />}
-          {/* tr5: are real Zerodha orders from My Holdings switched on? Real-account owner only. */}
-          {ownerConsole && canSeeRealAccount && <RealOrdersBadge />}
           <span className={`tm-status-chip ${chip.ok ? 'tm-status-chip-ok' : ''}`} title={chip.title} data-testid="brain-chip">
             {chip.label}
           </span>
@@ -249,6 +247,9 @@ function ClassicShell({ ownerConsole }: { ownerConsole: boolean }) {
           )}
         </div>
       </header>
+      {/* tr5: are real Zerodha orders from My Holdings switched on? Real-account owner only. It sits on a thin strip
+          right under the bar, because the bar has no room left for it (CI measured 0px spare with it inside). */}
+      {ownerConsole && canSeeRealAccount && <RealOrdersBadge />}
       {pages.length > 1 && (
         <nav className="tm-subnav" aria-label={`${section.label} pages`} data-testid="subnav">
           {pages.map((pg) => (

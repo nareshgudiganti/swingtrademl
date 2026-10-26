@@ -1,4 +1,4 @@
-// tr5: a small badge next to the trading-stage chip that says whether REAL Zerodha orders from My Holdings are
+// tr5: a small badge on a thin strip under the top bar (the bar itself is full) that says whether REAL Zerodha orders from My Holdings are
 // switched on. "Real orders: ON" is red and stays visible on a phone; "Real orders: OFF" is grey.
 //
 // Only the real account's owner sees it (GET /portfolio/real/orders-status is refused for everyone else, and the
@@ -14,18 +14,20 @@ export function RealOrdersBadgeView({ status }: { status: RealOrdersStatus | und
   if (!status) return null
   const on = status.enabled === true
   return (
-    <span
-      className={`tm-realorders-chip ${on ? 'tm-realorders-on' : 'tm-realorders-off'}`}
-      data-testid="real-orders-badge"
-      data-on={on ? 'true' : 'false'}
-      title={
-        on
-          ? 'Real orders are ON: buying or selling from My Holdings sends a real order to Zerodha with real money.'
-          : 'Real orders are OFF: My Holdings cannot send orders to Zerodha. The bot itself always uses practice money.'
-      }
-    >
-      {on ? 'Real orders: ON' : 'Real orders: OFF'}
-    </span>
+    <div className="tm-realorders-strip">
+      <span
+        className={`tm-realorders-chip ${on ? 'tm-realorders-on' : 'tm-realorders-off'}`}
+        data-testid="real-orders-badge"
+        data-on={on ? 'true' : 'false'}
+        title={
+          on
+            ? 'Real orders are ON: buying or selling from My Holdings sends a real order to Zerodha with real money.'
+            : 'Real orders are OFF: My Holdings cannot send orders to Zerodha. The bot itself always uses practice money.'
+        }
+      >
+        {on ? 'Real orders: ON' : 'Real orders: OFF'}
+      </span>
+    </div>
   )
 }
 

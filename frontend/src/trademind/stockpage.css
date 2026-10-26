@@ -279,3 +279,5 @@
 .sp-money { flex: 1 1 320px; min-width: 0; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
 .sp-meter { height: 12px; border-radius: 99px; background: #e4e6f0; overflow: hidden; }
 .sp-meter i { display: block; height: 100%; background: #e0a72b; border-radius: 99px; }
+.sp-figs { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.sp-figs > div { display: grid; gap: 2px; padding: 12px; }

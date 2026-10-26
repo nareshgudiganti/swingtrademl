@@ -21,6 +21,7 @@ import {
   buyLevel,
   CompanyCard,
   PlanLadder,
+  SafetyInWords,
   StockHeader,
   stepPasses,
   useStockData,
@@ -91,6 +92,7 @@ function StockAnalysisView({ decision: d, run }: { decision: BrainDecision; run:
       </section>
 
       <BrainFlow decision={d} run={run} full />
+      <SafetyInWords decision={d} />
 
       <div className="sp-split">
         <ScoreChart decision={d} trail={data.trail} />

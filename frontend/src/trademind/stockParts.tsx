@@ -469,6 +469,37 @@ export function MoneyMeter() {
   )
 }
 
+/** Step 6 in plain words (full-analysis page): the four money figures behind "no room", from today's limits. */
+export function SafetyInWords({ decision: d }: { decision: BrainDecision }) {
+  const limits = useQuery({ queryKey: ['riskLimits'], queryFn: api.riskLimits, retry: false })
+  const l = limits.data
+  if (stopOf(d)?.why.kind !== 'risk_no_room' || !l) return null
+  const pct = Math.round(l.deployable_fraction * 100)
+  const figures: [string, number, boolean][] = [
+    ['Allowed to invest', l.deployable_ceiling_inr, false],
+    ['Already invested', l.invested_inr, false],
+    ['Room left', Math.max(0, l.room_inr), l.room_inr < l.min_position_inr],
+    ['Smallest buy', l.min_position_inr, false],
+  ]
+  return (
+    <section className="sp-card sp-stack" aria-label="Step 6 in plain words" data-testid="safety-in-words">
+      <h2 className="sp-h2">Step 6 in plain words</h2>
+      <p className="sp-bigtext" style={{ fontSize: 17 }}>
+        {l.plain_regime ? `${l.plain_regime}: ` : ''}only {pct}% of your money may be invested right now.
+      </p>
+      <div className="sp-figs">
+        {figures.map(([k, v, bad]) => (
+          <div key={k} className="sp-card sp-card-flat">
+            <span className="sp-small">{k}</span>
+            <b className={bad ? 'sp-neg' : undefined} style={{ fontSize: 20 }}>₹{inr(v, 0)}</b>
+          </div>
+        ))}
+      </div>
+      <p className="sp-small">Today’s limits, not the 15:50 run’s. They change when the account or the market changes.</p>
+    </section>
+  )
+}
+
 // ----------------------------------------------------------------- plan ---
 
 export function PlanLadder({ decision: d }: { decision: BrainDecision }) {

@@ -258,6 +258,7 @@ export function Glance({
   trail,
   idea,
   runAt,
+  snapshot,
 }: {
   decision: BrainDecision
   run: BrainRun
@@ -267,6 +268,7 @@ export function Glance({
   trail: TrailPoint[]
   idea: IdeaChange | null
   runAt?: string
+  snapshot?: PriceSnapshot
 }) {
   const word = finalWord(d)
   const pts = scorePoints(d.confidence)
@@ -329,7 +331,7 @@ export function Glance({
         <div className="sp-big" style={{ fontSize: 34 }}>{last != null ? `₹${inr(last)}` : '—'}</div>
         {pctMove != null && (
           <span className={`sp-pill ${pctMove >= 0 ? 'sp-pill-up' : 'sp-pill-down'}`}>
-            {pctMove >= 0 ? '▲' : '▼'} {Math.abs(pctMove).toFixed(2)}% at last close
+            {pctMove >= 0 ? '▲' : '▼'} {Math.abs(pctMove).toFixed(2)}%{snapshot ? '' : ' at last close'}
           </span>
         )}
         {d.entry_low != null && (
@@ -412,6 +414,7 @@ export function BrainFlow({
             <div className="sp-why-text">{withoutScorePercent(stop.why.text)}</div>
             {stop.why.detail && <p className="sp-small" style={{ marginTop: 6 }}>What the brain recorded: {withoutScorePercent(stop.why.detail)}</p>}
           </div>
+          {stop.why.kind === 'risk_no_room' && <MoneyMeter />}
           {changes.length > 0 && (
             <div className="sp-why-more">
               <b>What would change it</b>
@@ -434,6 +437,35 @@ export function BrainFlow({
         </p>
       )}
     </section>
+  )
+}
+
+/** "Room left to invest" against the smallest buy, from today's limits (not the 15:50 run's), so it says "right now". */
+export function MoneyMeter() {
+  const limits = useQuery({ queryKey: ['riskLimits'], queryFn: api.riskLimits, retry: false })
+  const l = limits.data
+  if (!l || !l.min_position_inr) return null
+  const room = Math.max(0, l.room_inr)
+  const need = l.min_position_inr
+  const short = Math.max(0, need - room)
+  const pct = Math.min(100, Math.round((room / need) * 100))
+  return (
+    <div className="sp-money" data-testid="money-meter">
+      <div className="sp-between">
+        <span>Room left to invest, right now</span>
+        <span>smallest buy needs ₹{inr(need, 0)}</span>
+      </div>
+      <div className="sp-meter" role="img" aria-label={`₹${inr(room, 0)} free of ₹${inr(need, 0)} needed`}>
+        <i style={{ width: `${pct}%` }} />
+      </div>
+      <div className="sp-between">
+        <span><b>₹{inr(room, 0)}</b> free</span>
+        {short > 0 ? <b className="sp-neg">₹{inr(short, 0)} short</b> : <b className="sp-pos">Enough room now</b>}
+      </div>
+      <p className="sp-small">
+        Today’s limits (₹{inr(l.invested_inr, 0)} of ₹{inr(l.deployable_ceiling_inr, 0)} allowed is already invested). The brain’s 15:50 run may have seen different numbers.
+      </p>
+    </div>
   )
 }
 

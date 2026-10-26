@@ -68,6 +68,7 @@ function StockNewView({ decision, run }: { decision: BrainDecision; run: BrainRu
         change={data.change}
         trail={data.trail}
         idea={data.idea}
+        snapshot={data.snapshot}
         runAt={`Brain’s run on ${formatDateTime(run.started_at)}`}
       />
       <BrainFlow decision={decision} run={run} analysisTo={analysisTo} />

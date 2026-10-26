@@ -28,6 +28,7 @@ from swing_trade_ml.core.market_session import last_closed_trading_day
 from swing_trade_ml.db.models.brain import BrainDecision, BrainRun
 from swing_trade_ml.db.models.market import Candle, Instrument
 from swing_trade_ml.db.models.trading import Position
+from swing_trade_ml.services import trial_seal
 
 IST = ZoneInfo("Asia/Kolkata")
 
@@ -252,6 +253,10 @@ def build_view(db: Session, now: datetime) -> dict:
     records = build_records(_load_ideas(db))
     running = [r for r in records if r.outcome is None]
     finished = [r for r in records if r.outcome is not None]
+    # The trial seal: ideas ranked on or after SEALED_FROM show COUNTS ONLY (how many, never how they did).
+    # Everything that is a result (finished outcome, return, group average, target/stop counts, a running idea's
+    # move since ranking, the verdict's averages) is computed from unsealed days only.
+    finished_open = [r for r in finished if not trial_seal.is_sealed_day(r.day)]
 
     symbols = {r.symbol for r in records}
     since = min((r.day for r in running), default=last_closed)
@@ -273,6 +278,8 @@ def build_view(db: Session, now: datetime) -> dict:
             if entry
             else {"day": 0, "today_pct": None, "since_pct": None, "position": None, "price_not_updated": True}
         )
+        if trial_seal.is_sealed_day(r.day):
+            prog = {**prog, "today_pct": None, "since_pct": None, "position": None}
         running_rows.append(
             {
                 "symbol": r.symbol,
@@ -298,20 +305,27 @@ def build_view(db: Session, now: datetime) -> dict:
             "days": r.days,
             "paper_bought": bought(r),
         }
-        for r in sorted(finished, key=lambda x: x.resolved_on or x.day, reverse=True)[:FINISHED_SHOWN]
+        for r in sorted(finished_open, key=lambda x: x.resolved_on or x.day, reverse=True)[:FINISHED_SHOWN]
     ]
 
-    groups = group_table(finished)
-    days_done = len({r.day for r in finished})
+    groups = group_table(finished_open)
+    days_done = len({r.day for r in finished_open})
+    sealed_finished = len(finished) - len(finished_open)
     return {
         "as_of": last_closed,
         "label": LABEL,
-        "verdict": verdict(finished, days_done, groups),
+        "verdict": verdict(finished_open, days_done, groups),
+        "sealed": {
+            "active": trial_seal.active(),
+            "from": trial_seal.sealed_from(),
+            "finished_counts_only": sealed_finished,
+            "text": trial_seal.SEALED_TEXT if sealed_finished or trial_seal.active() else None,
+        },
         "totals": {
             "running": len(running),
             "finished": len(finished),
-            "target": sum(1 for r in finished if r.outcome == "target"),
-            "stop": sum(1 for r in finished if r.outcome == "stop"),
+            "target": sum(1 for r in finished_open if r.outcome == "target"),
+            "stop": sum(1 for r in finished_open if r.outcome == "stop"),
         },
         "groups": groups,
         "running": running_rows,

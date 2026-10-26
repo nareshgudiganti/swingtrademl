@@ -828,6 +828,16 @@ def job_brain_daily_check() -> None:
             notifier.send_sync(message)
     except Exception as exc:  # noqa: BLE001
         _report_error("brain_daily_check", exc)
+    # ps7: only ever steps the brain back to practice; does nothing while it is in practice.
+    try:
+        from swing_trade_ml.services.brain_golive import pause_rules
+
+        with session_scope() as db:
+            paused = pause_rules.apply(db)
+        if paused:
+            notifier.send_sync(paused)
+    except Exception as exc:  # noqa: BLE001
+        _report_error("brain_pause_rules", exc)
 
 
 def job_brain_weekly_health() -> None:

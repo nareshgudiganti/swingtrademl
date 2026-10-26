@@ -208,6 +208,11 @@ class Settings(BaseSettings):
     # Optional M08 gates (Phase 3 playbook / sector experiments). Off by default.
     BRAIN_SECTOR_GATE_TOP_N: int = 0  # 0 = off; e.g. 5 = only top 5 sectors by M11 rank
     BRAIN_PLAYBOOK_GATE: bool = False  # require M12-style setup when on
+    # ps7: rules that put the brain back into practice by themselves once it is in the approval or
+    # automatic stage (services/brain_golive/pause_rules.py). 0 = off; the owner sets the numbers.
+    BRAIN_PAUSE_LOSING_STREAK: int = 0
+    BRAIN_PAUSE_BEHIND_AFTER_IDEAS: int = 0
+    BRAIN_PAUSE_FAILED_NIGHTLY_RUNS: int = 0
 
     # --------------------------------------------------------------- risk --
     # MAX_POSITION_PCT and MAX_OPEN_POSITIONS are no longer read by the entry

@@ -102,6 +102,17 @@ def blocked_by_risk(d: BrainDecision) -> bool:
     )
 
 
+def capped_order_quantity(quantity: int, d: BrainDecision, banner_mode: str | None) -> int:
+    """tv22 item F: on any day that is not NORMAL (DEFENSIVE, NO NEW TRADES, or
+    unknown — the cautious read) a brain order is never bigger than the half-size
+    quantity M07 approved (`d.qty`). The reserved room is twice the minimum on
+    such days, and the order is otherwise sized by version 1's risk service,
+    which does not halve. Only ever makes an order smaller."""
+    if banner_mode == "NORMAL":
+        return quantity
+    return max(0, min(quantity, int(d.qty or 0)))
+
+
 def to_signal(
     d: BrainDecision | None, run: BrainRun | None, price: float, *, practice: bool = False
 ) -> SignalDecision:
@@ -114,7 +125,9 @@ def to_signal(
         "brain_run_id": run.id,
         "brain_decision_id": d.id,
         "brain_word": word,
-        "brain_qty": d.qty,  # informational only: version 1's risk service sizes the order
+        # Version 1's risk service sizes the order; on a non-NORMAL day the order is
+        # capped at this quantity (capped_order_quantity, tv22 item F).
+        "brain_qty": d.qty,
         "brain_entry_low": d.entry_low,
         "brain_entry_high": d.entry_high,
     }

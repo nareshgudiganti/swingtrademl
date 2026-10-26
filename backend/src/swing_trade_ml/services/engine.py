@@ -14,7 +14,7 @@ from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.db.models.market import Instrument
 from swing_trade_ml.db.models.trading import Strategy
 from swing_trade_ml.ml.dataset import load_candles
-from swing_trade_ml.services import risk, score_history
+from swing_trade_ml.services import deployable, risk, score_history
 from swing_trade_ml.services.execution import process_decision
 from swing_trade_ml.services.exit_policy import exit_confidence_for
 from swing_trade_ml.services.limits import limits_for
@@ -73,7 +73,30 @@ def _buy_slot_budget(db: Session, strategy: Strategy, mode: str) -> int:
     share = max(1, slot_budget // max(risk.active_strategy_count(db, mode), 1))
     strategy_room = share - risk.open_position_count(db, mode, strategy.id)
     room = max(min(slot_budget - open_count, strategy_room), 0)
+    if room > 0:
+        room = min(room, _market_room_slots(db, strategy, mode, total_value))
     return min(strategy.max_daily_buys, room) if strategy.max_daily_buys is not None else room
+
+
+def _market_room_slots(db: Session, strategy: Strategy, mode: str, total_value: float) -> int:
+    """tv22: the rupee room under the market-conditions limit (with the brain's
+    reserved slot taken off for version 1), in minimum positions — the same
+    rule check_entry applies. The reservation's one-share headroom is left out
+    here (no price yet), so this is never stricter than check_entry, which
+    stays the final gate. At least one candidate is always tried, so a refusal
+    is still recorded with check_entry's own reason (and as a risk event)
+    instead of turning into an unexamined "ranked out"."""
+    limits = limits_for(total_value, strategy)
+    if limits.min_position_inr <= 0:
+        return 10**6
+    try:
+        ceiling = deployable.current_deployable(db).fraction * total_value
+        invested = sum(h.value for h in risk.open_holdings(db, mode))
+        market = risk.market_room(db, mode, strategy, ceiling, invested, limits.min_position_inr, 0.0)
+    except Exception as exc:  # noqa: BLE001 - only an estimate: check_entry is still the gate
+        log.warning("engine.market_room_estimate_failed", strategy=strategy.name, error=str(exc))
+        return 10**6
+    return max(int(market.room // limits.min_position_inr), 1)
 
 
 def _no_slot_left_reason(position: int, total: int, slots: int) -> str:

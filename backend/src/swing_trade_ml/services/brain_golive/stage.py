@@ -1,7 +1,9 @@
 """M18: the owner's switch between practice (shadow), approval and automatic.
 
-Only `set_stage` writes a change, and only the owner endpoint calls it
-(PUT /brain/stage). Nothing switches the brain on by itself
+Only `set_stage` writes a change. The owner endpoint (PUT /brain/stage) is the
+only caller that can move the brain forward; switching the brain strategy off and
+the owner's pause rules (pause_rules.py, ps7) can only move it back to practice.
+Nothing switches the brain on by itself
 (test_nothing_but_the_stage_service_writes_a_stage_change)."""
 
 from __future__ import annotations

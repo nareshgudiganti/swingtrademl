@@ -65,6 +65,15 @@ def start_scheduler() -> None:
         replace_existing=True,
     )
 
+    # Always-on: memory record, early warning and a safe restart of a bloated worker
+    # (services/server_watch.py). Housekeeping only; it never trades.
+    scheduler.add_job(
+        jobs.job_server_watch,
+        IntervalTrigger(minutes=5),
+        id="server_watch",
+        replace_existing=True,
+    )
+
     # Unattended login, timed just after Zerodha expires the previous day's
     # token (~06:00 IST) and well before market open — see
     # job_kite_auto_login's docstring. No-ops if credentials aren't set.

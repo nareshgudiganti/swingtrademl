@@ -1,5 +1,4 @@
-import { useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 
 import { api } from '../../api/client'
@@ -29,11 +28,8 @@ export default function Watchlist() {
 
 function WatchlistBody() {
   const navigate = useNavigate()
-  const queryClient = useQueryClient()
   const latest = useLatestRun()
   const watchlist = useQuery({ queryKey: ['watchlist'], queryFn: api.watchlist })
-  const [buying, setBuying] = useState<string | null>(null)
-  const [qty, setQty] = useState('1')
   const caps = useSymbolCaps()
 
   const ideas = latest.data ? ideasFrom(latest.data) : []
@@ -41,28 +37,13 @@ function WatchlistBody() {
   const dayScores = ideas.map((d) => d.confidence)
   const symbols = watchlist.data ?? []
 
-  const buy = useMutation({
-    mutationFn: (symbol: string) =>
-      api.testerPaperBuy({
-        symbol,
-        quantity: Number(qty),
-        cap_tier: caps.get(symbol.toUpperCase()) ?? 'large',
-      }),
-    onSuccess: () => {
-      setBuying(null)
-      queryClient.invalidateQueries({ queryKey: ['testerPositions'] })
-      queryClient.invalidateQueries({ queryKey: ['testerSummary'] })
-    },
-  })
-
   return (
     <div className="tm-page tm-grid">
-      <Card glow title="Watchlist" sub="Buy only from here. The paper position shows under Portfolio → Testing.">
+      <Card glow title="Watchlist" sub="What the brain says about each stock you follow. Practice buys are on Portfolio → Manual test.">
         <QueryNotice q={watchlist} what="the watchlist" />
         {symbols.length === 0 && watchlist.data !== undefined && (
           <p className="tm-dim">No symbols on the watchlist yet. Add them in Settings.</p>
         )}
-        {buy.isError && <p className="tm-dim">{(buy.error as Error).message}</p>}
         {symbols.length > 0 && (
           <div className="tm-table-wrap" tabIndex={0} role="region" aria-label="Table, scroll sideways to see more">
             <table className="tm-table">
@@ -78,7 +59,6 @@ function WatchlistBody() {
                   <th>Target</th>
                   <th>Stop</th>
                   <th>Why</th>
-                  <th />
                 </tr>
               </thead>
               <tbody>
@@ -103,54 +83,12 @@ function WatchlistBody() {
                       <td className="tm-dim">{d?.target != null ? `₹${inr(d.target)}` : '—'}</td>
                       <td className="tm-dim">{d?.stop != null ? `₹${inr(d.stop)}` : '—'}</td>
                       <td className="tm-dim tm-wrap">{d?.reasons[0] ? withoutScorePercent(d.reasons[0]) : '—'}</td>
-                      <td onClick={(e) => e.stopPropagation()}>
-                        <button
-                          type="button"
-                          className="tm-btn"
-                          onClick={() => {
-                            setBuying(inst.tradingsymbol)
-                            setQty('1')
-                          }}
-                        >
-                          Buy
-                        </button>
-                      </td>
                     </tr>
                   )
                 })}
               </tbody>
             </table>
           </div>
-        )}
-        {buying && (
-          <form
-            className="tm-callout"
-            style={{ marginTop: '0.8rem' }}
-            onSubmit={(e) => {
-              e.preventDefault()
-              buy.mutate(buying)
-            }}
-          >
-            <div className="tm-strong" style={{ marginBottom: '0.4rem' }}>
-              Paper buy {buying}
-            </div>
-            <div className="tm-flex tm-wrap" style={{ gap: '0.5rem' }}>
-              <input
-                className="tm-input"
-                type="number"
-                min={1}
-                value={qty}
-                onChange={(e) => setQty(e.target.value)}
-                aria-label="Quantity"
-              />
-              <button className="tm-btn" type="submit" disabled={!Number(qty) || buy.isPending}>
-                {buy.isPending ? 'Buying…' : 'Paper buy'}
-              </button>
-              <button className="tm-btn" type="button" onClick={() => setBuying(null)}>
-                Cancel
-              </button>
-            </div>
-          </form>
         )}
       </Card>
     </div>

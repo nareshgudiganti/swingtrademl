@@ -22,6 +22,16 @@
     },
     {
       "date": "2026-10-26",
+      "commit": "a25efa3",
+      "why": "tv22: one reserved paper slot for the brain; owner approved A-F (F=option i) on 2026-10-25 (rebuilt 2026-10-26)",
+      "files": [
+        "services/engine.py",
+        "services/risk.py",
+        "strategies/brain.py"
+      ]
+    },
+    {
+      "date": "2026-10-26",
       "commit": null,
       "why": "Owner 2026-10-26: raise stressed-market invested cap from 10% to 20% so ideas like KEI can trade; owner accepts this changes trial conditions from this date",
       "files": [
@@ -117,13 +127,13 @@
     "ml/sector_map.py": "8fb86130f4989377",
     "services/avoid.py": "ffe731384584f74d",
     "services/deployable.py": "c2bbd2b0fd317f55",
-    "services/engine.py": "03b49cbc13062483",
+    "services/engine.py": "9cbbe8b5f34dedf5",
     "services/exit_policy.py": "3d0d14e73e7cb4c5",
     "services/limits.py": "b794c8f14288e8d8",
-    "services/risk.py": "09b3475866ae4c43",
+    "services/risk.py": "77269646b0823c06",
     "strategies/__init__.py": "8bf7f26a6e0ff92d",
     "strategies/base.py": "5ccf03c51881485a",
-    "strategies/brain.py": "7a9068d52c991df5",
+    "strategies/brain.py": "1eb0486baf34e29c",
     "strategies/long_term_value.py": "771f015f26c84281",
     "strategies/ml_swing.py": "ee5e761ce3b2a74a",
     "strategies/sma_crossover.py": "0d877a247d648215",

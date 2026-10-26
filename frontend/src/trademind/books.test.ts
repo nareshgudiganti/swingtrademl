@@ -7,6 +7,7 @@ describe('which money book a Portfolio screen shows', () => {
     ['/trademind/positions', 'paper', 'Bot (Paper)'],
     ['/trademind/positions/INFY', 'paper', 'Bot (Paper)'],
     ['/trademind/testing', 'paper', 'Testing (Paper)'],
+    ['/trademind/manual-test', 'paper', 'Manual test (Paper)'],
     ['/trademind/holdings', 'real', 'My Zerodha (Real)'],
     ['/trademind/portfolio', 'paper', 'Paper Overview'],
   ])('%s is %s money (%s)', (path, kind, name) => {

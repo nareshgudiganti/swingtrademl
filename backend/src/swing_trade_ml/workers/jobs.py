@@ -172,6 +172,20 @@ def job_flush_alerts() -> None:
         job_runs.note_failure(exc)
 
 
+def job_server_watch() -> None:
+    """Every five minutes, any hour: record the worker's and the server's memory, warn on Telegram when
+    the server is short of it, and restart the worker at a quiet moment if it has grown too big
+    (services/server_watch.py). Housekeeping only; it never touches trading. A failure is logged, never
+    sent as a message (it would repeat every five minutes)."""
+    try:
+        from swing_trade_ml.services import server_watch
+
+        server_watch.run_watch("worker")
+    except Exception as exc:  # noqa: BLE001 - monitoring must never disturb anything else
+        log.error("job.server_watch.failed", error=str(exc))
+        job_runs.note_failure(exc)
+
+
 def job_check_kite_login() -> None:
     """Always-on, any hour — confirms a completed Kite login over Telegram
     immediately, rather than only noticing it during market hours.
@@ -848,6 +862,16 @@ def job_brain_daily_check() -> None:
             notifier.send_sync(message)
     except Exception as exc:  # noqa: BLE001
         _report_error("brain_daily_check", exc)
+    # ps7: only ever steps the brain back to practice; does nothing while it is in practice.
+    try:
+        from swing_trade_ml.services.brain_golive import pause_rules
+
+        with session_scope() as db:
+            paused = pause_rules.apply(db)
+        if paused:
+            notifier.send_sync(paused)
+    except Exception as exc:  # noqa: BLE001
+        _report_error("brain_pause_rules", exc)
 
 
 def job_brain_weekly_health() -> None:

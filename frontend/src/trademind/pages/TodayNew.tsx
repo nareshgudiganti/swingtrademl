@@ -7,8 +7,9 @@
 //   5. "Full details": the whole classic Today, unchanged, so nothing it shows is lost
 // The experimental-model note appears once, at the foot.
 
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 
 import { api } from '../../api/client'
 import type { BrainRun } from '../../api/types'
@@ -23,6 +24,7 @@ import { greeting, oneReason, safetySummary, stoppedByRoom, todayHeadline } from
 import { holdingsNeedingAttention } from '../today/HoldingsNeedsYou'
 import { waitingItems } from '../today/NeedsYou'
 import { ideaCounts } from '../today/TodayIdeas'
+import { IdeaFigures, PeekCard } from '../stockParts'
 import { BrainGate, inr, StockLogo, Tag } from '../ui'
 import { MARKET_LABEL, MARKET_PLAIN, MARKET_TONE, wordTagColor } from '../vocab'
 
@@ -119,11 +121,13 @@ function WaitingTile() {
 }
 
 function TopIdeas({ run }: { run: BrainRun }) {
-  const navigate = useNavigate()
   const caps = useSymbolCaps()
   const ideas = ideasFrom(run)
   const top = ideas.slice(0, TOP_IDEAS_NEW)
   const dayScores = ideas.map((d) => d.confidence)
+  // Tapping a stock opens a quick look right here (score, rank, price, buy zone, Buy); the full analysis is one tap on.
+  const [open, setOpen] = useState<number | null>(null)
+  const opened = top.find((d) => d.id === open)
 
   return (
     <section className="tmn-card" aria-label="Top ideas">
@@ -144,7 +148,8 @@ function TopIdeas({ run }: { run: BrainRun }) {
                 type="button"
                 key={d.id}
                 className="tmn-idea"
-                onClick={() => navigate(`/trademind/stock/${encodeURIComponent(d.symbol)}`)}
+                aria-expanded={open === d.id}
+                onClick={() => setOpen(open === d.id ? null : d.id)}
               >
                 <StockLogo symbol={d.symbol} />
                 <span className="tmn-idea-main">
@@ -155,6 +160,7 @@ function TopIdeas({ run }: { run: BrainRun }) {
                     {oneReason(d)} <span className="tmn-ailink">AI analysis →</span>
                   </span>
                 </span>
+                <IdeaFigures d={d} />
                 <span className="tmn-idea-side">
                   <span className={`tm-tag tm-tag-${wordTagColor(finalWord(d))}`}>{finalWord(d)}</span>
                   {rank && (
@@ -168,6 +174,7 @@ function TopIdeas({ run }: { run: BrainRun }) {
           })}
         </div>
       )}
+      {opened && <PeekCard decision={opened} run={run} reason={oneReason(opened)} />}
     </section>
   )
 }

@@ -29,6 +29,7 @@ import AdminHome from './pages/AdminHome'
 import Opportunities from './pages/Opportunities'
 import Watchlist from './pages/Watchlist'
 import PaperPositions from './pages/PaperPositions'
+import StockAnalysis from './pages/StockAnalysis'
 import StockDetail from './pages/StockDetail'
 import StockNew from './pages/StockNew'
 import DiscoverNew from './pages/DiscoverNew'
@@ -296,6 +297,10 @@ export function TradeMindRoutes({
           element={look === 'new' ? <WatchlistNew /> : ownerConsole ? <Watchlist /> : <Navigate to="/trademind/opportunities" replace />}
         />
         <Route path="stock/:symbol" element={look === 'new' ? <StockNew /> : <StockDetail />} />
+        <Route
+          path="stock/:symbol/analysis"
+          element={look === 'new' ? <StockAnalysis /> : <StockDetail />}
+        />
         <Route path="portfolio" element={look === 'new' ? <PortfolioNew owner={ownerConsole} /> : <Portfolio />} />
         <Route path="positions" element={<Positions />} />
         <Route path="positions/:symbol" element={<Positions />} />

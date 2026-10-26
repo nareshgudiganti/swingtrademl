@@ -56,7 +56,7 @@ const WORD_PLAIN: Record<string, string> = {
   EXIT: 'Sell it all',
 }
 
-function Overrule({ decision }: { decision: BrainDecision }) {
+export function Overrule({ decision }: { decision: BrainDecision }) {
   const queryClient = useQueryClient()
   const order = decision.kind === 'idea' ? IDEA_ORDER : HOLDING_ORDER
   const options = order.slice(0, order.indexOf(finalWord(decision)))

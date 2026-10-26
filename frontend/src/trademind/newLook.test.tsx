@@ -158,7 +158,27 @@ describe('the 8-item menu', () => {
     const html = render('/trademind/stock/BBBROOM', false, true)
     expect(html).toContain('data-testid="brain-steps"')
     expect(html).toContain('Stopped here')
-    expect(html).toContain('Chart, company and news')
+    // The short page: Buy, the brain's steps with an AI analysis button, and the way into the full analysis.
+    expect(html).toContain('data-testid="buy-button"')
+    expect(html).toContain('data-testid="ai-analysis-button"')
+    expect(html).toContain('data-testid="full-analysis-cta"')
+    expect(html).toContain('/trademind/stock/BBBROOM/analysis')
+    expect(html).toContain('data-testid="stock-glance"')
+    expect(html).not.toContain('Chart, company and news')
+  })
+
+  it('the full-analysis page has the whole story and a way back', () => {
+    store.set(LOOK_KEY, 'new')
+    const html = render('/trademind/stock/BBBROOM/analysis', false, true)
+    expect(html).toContain('data-page="stock-analysis"')
+    expect(html).toContain('data-testid="analysis-answer"')
+    expect(html).toContain('data-testid="brain-steps"')
+    expect(html).toContain('data-testid="score-chart"')
+    expect(html).toContain('data-testid="what-ai-sees"')
+    expect(html).toContain('data-testid="story-cards"')
+    expect(html).toContain('data-testid="what-changed"')
+    expect(html).toContain('Back to ')
+    expect(html).toContain('href="/trademind/stock/BBBROOM"')
   })
 })
 

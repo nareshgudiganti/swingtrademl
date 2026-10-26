@@ -44,6 +44,19 @@ export default function PaperPositions() {
     },
   })
 
+  // "Buy more" adds a second lot of a stock already held, in the same practice book.
+  const [buyingId, setBuyingId] = useState<number | null>(null)
+  const [buyQty, setBuyQty] = useState('1')
+  const buyMore = useMutation({
+    mutationFn: (p: DetailedPosition) =>
+      api.testerPaperBuy({ symbol: p.symbol, quantity: Number(buyQty), cap_tier: p.cap_tier ?? 'large' }),
+    onSuccess: () => {
+      setBuyingId(null)
+      queryClient.invalidateQueries({ queryKey: ['testerSummary'] })
+      queryClient.invalidateQueries({ queryKey: ['testerPositions'] })
+    },
+  })
+
   const rows = positions.data ?? []
   const positionsState = pickState(positions, rows.length === 0)
   const tradesState = pickState(trades)
@@ -151,7 +164,7 @@ export default function PaperPositions() {
 
       <Card
         title="Open positions"
-        sub="Buy on Portfolio → Manual test. Sell here. Click a column name to sort, click a stock to see its score day by day."
+        sub="Buy new stocks on Portfolio → Manual test. Buy more or sell here. Click a column name to sort, click a stock to see its score day by day."
       >
         {close.isError && <p className="tm-dim">Could not sell that position.</p>}
         {positionsState === 'empty' && (
@@ -163,6 +176,19 @@ export default function PaperPositions() {
             selling={close.isPending}
             onSell={(p) => {
               if (confirm(`Paper sell all ${p.quantity} × ${p.symbol}?`)) close.mutate(p.id)
+            }}
+            buy={{
+              openId: buyingId,
+              qty: buyQty,
+              pending: buyMore.isPending,
+              error: buyMore.isError ? (buyMore.error as Error).message : null,
+              toggle: (p) => {
+                setBuyingId(buyingId === p.id ? null : p.id)
+                setBuyQty('1')
+                buyMore.reset()
+              },
+              setQty: setBuyQty,
+              confirm: (p) => buyMore.mutate(p),
             }}
           />
         )}
@@ -213,14 +239,26 @@ function Stat({
 
 type OpenKey = 'symbol' | 'sector' | 'day' | 'bought' | 'score' | 'suggestion' | 'value' | 'pnl'
 
+type BuyMore = {
+  openId: number | null
+  qty: string
+  pending: boolean
+  error: string | null
+  toggle: (p: DetailedPosition) => void
+  setQty: (v: string) => void
+  confirm: (p: DetailedPosition) => void
+}
+
 function OpenTable({
   rows,
   selling,
   onSell,
+  buy,
 }: {
   rows: DetailedPosition[]
   selling: boolean
   onSell: (p: DetailedPosition) => void
+  buy: BuyMore
 }) {
   const [open, setOpen] = useState<number | null>(null)
   const { sorted, sorter } = useSort<DetailedPosition, OpenKey>(
@@ -282,19 +320,61 @@ function OpenTable({
                 <td className="tm-right tm-num">₹{inr(p.current_value, 0)}</td>
                 <td className={`tm-right tm-num ${toneClass(p.unrealized_pnl)}`}>{signed(p.unrealized_pnl_pct * 100)}</td>
                 <td>
-                  <button
-                    type="button"
-                    className="tm-btn tm-btn-danger"
-                    disabled={selling}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      onSell(p)
-                    }}
-                  >
-                    Paper sell
-                  </button>
+                  <div className="tm-flex tm-wrap" style={{ gap: '0.4rem' }}>
+                    <button
+                      type="button"
+                      className="tm-btn"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        buy.toggle(p)
+                      }}
+                    >
+                      {buy.openId === p.id ? 'Close' : 'Buy more'}
+                    </button>
+                    <button
+                      type="button"
+                      className="tm-btn tm-btn-danger"
+                      disabled={selling}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onSell(p)
+                      }}
+                    >
+                      Paper sell
+                    </button>
+                  </div>
                 </td>
               </tr>
+              {buy.openId === p.id && (
+                <tr>
+                  <td colSpan={11}>
+                    <form
+                      className="tm-flex tm-wrap"
+                      style={{ gap: '0.5rem', alignItems: 'center', padding: '0.35rem 0' }}
+                      onSubmit={(e) => {
+                        e.preventDefault()
+                        buy.confirm(p)
+                      }}
+                    >
+                      <span className="tm-strong">Paper buy more {p.symbol}</span>
+                      <input
+                        className="tm-input"
+                        type="number"
+                        min={1}
+                        value={buy.qty}
+                        onChange={(e) => buy.setQty(e.target.value)}
+                        aria-label="Quantity"
+                        style={{ width: 90 }}
+                      />
+                      <button className="tm-btn" type="submit" disabled={!Number(buy.qty) || buy.pending}>
+                        {buy.pending ? 'Buying…' : 'Paper buy'}
+                      </button>
+                      <span className="tm-dim">Added as a separate lot at today's price.</span>
+                      {buy.error && <span className="tm-neg">{buy.error}</span>}
+                    </form>
+                  </td>
+                </tr>
+              )}
               {open === p.id && (
                 <tr>
                   <td colSpan={11} className="tm-wrap">

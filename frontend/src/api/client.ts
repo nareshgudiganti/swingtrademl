@@ -42,6 +42,9 @@ import type {
   BrainTraceEvent,
   BrainWhy,
   Candle,
+  CompanyView,
+  ShadowTestView,
+  PriceSnapshot,
   CurrentUser,
   AdminUser,
   MyPlan,
@@ -418,6 +421,15 @@ export const api = {
       '/portfolio/tester/buy',
       body,
     ),
+  capitalAdded: () =>
+    get<{ starting_capital: number; added: { at: string; amount: number }[]; total_added: number }>(
+      '/portfolio/capital-added',
+    ),
+  addCapital: (amount: number, note?: string) =>
+    post<{ added: number; at: string; account_value: number; cash: number }>('/portfolio/capital-added', {
+      amount,
+      note,
+    }),
   equityCurve: (days = 180) => get<EquityPoint[]>(`/portfolio/equity-curve?days=${days}`),
   snapshot: () => post<MessageResponse>('/portfolio/snapshot'),
 
@@ -485,6 +497,10 @@ export const api = {
   // -------------------------------------------------------- market data --
   candles: (symbol: string, limit = 11) =>
     get<Candle[]>(`/market-data/candles/${encodeURIComponent(symbol)}?interval=day&limit=${limit}`),
+  shadowTest: () => get<ShadowTestView>('/brain/shadow-test'),
+  company: (symbol: string) => get<CompanyView>(`/company/${encodeURIComponent(symbol)}`),
+  priceSnapshot: (symbol: string) =>
+    get<PriceSnapshot>(`/market-data/snapshot/${encodeURIComponent(symbol)}`),
   backfill: (body: Record<string, unknown>) => post<MessageResponse>('/market-data/backfill', body),
   coverage: () =>
     get<{ symbol: string; candles: number; from: string | null; to: string | null }[]>(

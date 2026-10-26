@@ -141,8 +141,8 @@ describe('the new Today', () => {
 })
 
 describe('the 8-item menu', () => {
-  it('owner sees 8 items, everyone else all but Admin (wave 2: everyone has their own watchlist)', () => {
-    expect(visibleNav(true).map((n) => n.id)).toEqual(['today', 'discover', 'portfolio', 'watchlist', 'market', 'evidence', 'history', 'admin'])
+  it('owner sees 9 items (Shadow Test is owner only), everyone else all but Admin (wave 2: everyone has their own watchlist)', () => {
+    expect(visibleNav(true).map((n) => n.id)).toEqual(['today', 'discover', 'portfolio', 'shadow', 'watchlist', 'market', 'evidence', 'history', 'admin'])
     expect(visibleNav(false).map((n) => n.id)).toEqual(['today', 'discover', 'portfolio', 'watchlist', 'market', 'evidence', 'history'])
   })
 
@@ -158,7 +158,29 @@ describe('the 8-item menu', () => {
     const html = render('/trademind/stock/BBBROOM', false, true)
     expect(html).toContain('data-testid="brain-steps"')
     expect(html).toContain('Stopped here')
-    expect(html).toContain('Chart, company and news')
+    // The short page: the brain's steps with an AI analysis button, and the way into the full analysis.
+    // BBBROOM is a WAIT, so there is no Buy (owner decision ss11), only a note saying why.
+    expect(html).not.toContain('data-testid="buy-button"')
+    expect(html).toContain('data-testid="no-buy-note"')
+    expect(html).toContain('data-testid="ai-analysis-button"')
+    expect(html).toContain('data-testid="full-analysis-cta"')
+    expect(html).toContain('/trademind/stock/BBBROOM/analysis')
+    expect(html).toContain('data-testid="stock-glance"')
+    expect(html).not.toContain('Chart, company and news')
+  })
+
+  it('the full-analysis page has the whole story and a way back', () => {
+    store.set(LOOK_KEY, 'new')
+    const html = render('/trademind/stock/BBBROOM/analysis', false, true)
+    expect(html).toContain('data-page="stock-analysis"')
+    expect(html).toContain('data-testid="analysis-answer"')
+    expect(html).toContain('data-testid="brain-steps"')
+    expect(html).toContain('data-testid="score-chart"')
+    expect(html).toContain('data-testid="what-ai-sees"')
+    expect(html).toContain('data-testid="story-cards"')
+    expect(html).toContain('data-testid="what-changed"')
+    expect(html).toContain('Back to ')
+    expect(html).toContain('href="/trademind/stock/BBBROOM"')
   })
 })
 

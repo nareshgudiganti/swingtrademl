@@ -14,6 +14,7 @@ from swing_trade_ml.db.models.brain import (
     FeatureSnapshot,
 )
 from swing_trade_ml.db.models.brain_golive import BrainApproval, BrainStageChange
+from swing_trade_ml.db.models.company import CompanyAnnouncement, CompanyShareholding
 from swing_trade_ml.db.models.experiments import (
     ExperimentCohort,
     ExperimentJobRun,
@@ -52,6 +53,7 @@ from swing_trade_ml.db.models.mutual_funds import MutualFund, MutualFundHolding,
 from swing_trade_ml.db.models.safety import RiskEvent, SystemState
 from swing_trade_ml.db.models.session import BrokerSession, PlanSettings, SubscriptionPlan, User
 from swing_trade_ml.db.models.trading import (
+    CapitalDeposit,
     Order,
     PortfolioSnapshot,
     Position,
@@ -78,6 +80,9 @@ __all__ = [
     "Candle",
     "CandleArrival",
     "CandleCorrection",
+    "CapitalDeposit",
+    "CompanyAnnouncement",
+    "CompanyShareholding",
     "DailyDelivery",
     "ExperimentCohort",
     "ExperimentJobRun",

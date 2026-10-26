@@ -30,6 +30,8 @@ import AdminHome from './pages/AdminHome'
 import Opportunities from './pages/Opportunities'
 import Watchlist from './pages/Watchlist'
 import PaperPositions from './pages/PaperPositions'
+import ShadowTest from './pages/ShadowTest'
+import StockAnalysis from './pages/StockAnalysis'
 import ManualTest from './pages/ManualTest'
 import StockDetail from './pages/StockDetail'
 import StockNew from './pages/StockNew'
@@ -314,6 +316,10 @@ export function TradeMindRoutes({
           element={look === 'new' ? <WatchlistNew /> : ownerConsole ? <Watchlist /> : <Navigate to="/trademind/opportunities" replace />}
         />
         <Route path="stock/:symbol" element={look === 'new' ? <StockNew /> : <StockDetail />} />
+        <Route
+          path="stock/:symbol/analysis"
+          element={look === 'new' ? <StockAnalysis /> : <StockDetail />}
+        />
         <Route path="portfolio" element={look === 'new' ? <PortfolioNew owner={ownerConsole} /> : <Portfolio />} />
         <Route path="positions" element={<Positions />} />
         <Route path="positions/:symbol" element={<Positions />} />
@@ -347,6 +353,7 @@ export function TradeMindRoutes({
         <Route path="admin" element={!ownerConsole ? <Navigate to="/trademind" replace /> : look === 'new' ? <AdminHome /> : <Navigate to="/trademind/control" replace />} />
         <Route path="control" element={ownerConsole ? <Control /> : <Navigate to="/trademind" replace />} />
         <Route path="golive" element={ownerConsole ? <GoLive /> : <Navigate to="/trademind" replace />} />
+        <Route path="shadow-test" element={look === 'new' && ownerConsole ? <ShadowTest /> : <Navigate to="/trademind" replace />} />
         <Route path="records" element={look === 'new' ? <HistoryNew owner={ownerConsole} /> : <Records />} />
         <Route path="holdings" element={ownerConsole && realAccount ? <MyHoldings /> : <Navigate to="/trademind/portfolio" replace />} />
         <Route path="setup" element={ownerConsole ? <Setup /> : <Navigate to="/trademind" replace />} />

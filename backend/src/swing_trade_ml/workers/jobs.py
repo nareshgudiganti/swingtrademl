@@ -350,6 +350,26 @@ def job_daily_market_feeds(final: bool = False) -> None:
         _report_error("daily_market_feeds", exc)
 
 
+def job_company_filings() -> None:
+    """Save what each tracked company has filed (announcements, shareholding) for the Company and news
+    tab. Display only. A rejected filing is logged by the service; a failed download is reported."""
+    try:
+        from swing_trade_ml.services import company_filings
+
+        with session_scope() as db:
+            for symbol in company_filings.COMPANY_SYMBOLS:
+                result = company_filings.refresh_company(db, symbol)
+                log.info(
+                    "job.company_filings.done",
+                    symbol=symbol,
+                    announcements=result.announcements_added,
+                    shareholding=result.shareholding_added,
+                    rejected=len(result.rejected),
+                )
+    except Exception as exc:  # noqa: BLE001
+        _report_error("company_filings", exc)
+
+
 def job_daily_market_feeds_final() -> None:
     job_daily_market_feeds(final=True)
 

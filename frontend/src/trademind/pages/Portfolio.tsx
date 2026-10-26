@@ -8,6 +8,7 @@ import { wordTone } from '../vocab'
 import { Term, WordTag } from '../term'
 import { BrainOff, Card, CheckItem, Donut, GlowArea, inr, signed, toneClass } from '../ui'
 import { PageState, QueryNotice } from '../PageState'
+import AddMoneyCard from '../AddMoney'
 import { HoldingsHealthCard } from '../HoldingsHealth'
 import { usePlan } from '../../lib/plan'
 import { UpcomingEventsLive } from '../beginner/UpcomingEvents'
@@ -134,6 +135,13 @@ export default function Portfolio() {
                   {signed(summary.data.total_return_pct * 100)} (
                   {summary.data.total_pnl >= 0 ? '+' : '−'}₹{inr(Math.abs(summary.data.total_pnl), 0)})
                 </div>
+                {(summary.data.money_added ?? 0) > 0 && (
+                  <p className="tm-dim" style={{ fontSize: 12, margin: '6px 0 0' }}>
+                    Includes ₹{inr(summary.data.money_added ?? 0, 0)} you added, which is not counted as profit.
+                    {summary.data.time_weighted_return_pct != null &&
+                      ` The bot's own return, whatever the top-ups: ${signed(summary.data.time_weighted_return_pct * 100)}.`}
+                  </p>
+                )}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <QueryNotice q={equity} what="the value history" />
@@ -191,6 +199,8 @@ export default function Portfolio() {
           )}
         </Card>
       </div>
+
+      {canManage && <AddMoneyCard />}
 
       <div className="tm-grid tm-cols-2">
         <Card

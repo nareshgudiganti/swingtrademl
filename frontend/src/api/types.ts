@@ -176,6 +176,12 @@ export interface PortfolioSummary {
   unrealized_pnl: number
   total_pnl: number
   total_return_pct: number
+  /** Money the owner added to the paper account since these figures began (never counted as profit). */
+  money_added?: number
+  /** Starting money plus every top-up: what total_return_pct is measured against. */
+  money_in?: number
+  /** How the bot itself did, with the size and timing of top-ups taken out. */
+  time_weighted_return_pct?: number
   open_positions: number
   total_trades: number
   winning_trades: number
@@ -331,7 +337,94 @@ export interface TrackRecordSignal {
   sealed?: boolean
 }
 
+/** Shadow Test: every ranked stock followed for 15 trading days, bought or not. Owner only, read only. */
+export interface ShadowRunning {
+  symbol: string
+  rank: number
+  group: string
+  score: number
+  word: string
+  ranked_on: string
+  paper_bought: boolean
+  day: number
+  today_pct: number | null
+  since_pct: number | null
+  position: number | null
+  price_not_updated: boolean
+}
+export interface ShadowFinished {
+  symbol: string
+  rank: number
+  group: string
+  ranked_on: string
+  ended_on: string | null
+  outcome: 'target' | 'stop' | 'timeout'
+  result_pct: number
+  days: number | null
+  paper_bought: boolean
+}
+export interface ShadowGroup {
+  group: string
+  finished: number
+  target: number
+  stop: number
+  average_pct: number | null
+}
+export interface ShadowTestView {
+  as_of: string
+  label: string
+  verdict: { state: 'too_early' | 'reviewable'; headline: string; detail: string; days_done: number; days_needed: number }
+  totals: { running: number; finished: number; target: number; stop: number }
+  groups: ShadowGroup[]
+  running: ShadowRunning[]
+  finished: ShadowFinished[]
+  how: string[]
+}
+
+/** One block of the Company and news tab: where it came from, as of when, and whether it can be trusted. */
+export interface CompanyBlock {
+  state: 'ok' | 'out_of_date' | 'not_available'
+  source: string
+  as_of: string | null
+  text?: string | null
+  why?: string
+}
+
+export interface CompanyAnnouncementItem {
+  at: string
+  category: string
+  summary: string
+  attachment_url: string | null
+}
+
+/** What a company has filed, in plain words. Display only; never changes the brain's call. */
+export interface CompanyView {
+  symbol: string
+  headline: string | null
+  price_position: CompanyBlock
+  ownership: CompanyBlock
+  announcements: CompanyBlock & { items: CompanyAnnouncementItem[] }
+  results: CompanyBlock
+  coming_soon: string[]
+  note: string
+}
+
 /** Stored market candle used for short-term price-performance summaries. */
+/** A current price with its own timestamp; independent of any stored brain decision. */
+export interface PriceSnapshot {
+  symbol: string
+  state: 'live' | 'delayed' | 'stale' | 'close_only' | 'closed' | 'holiday' | 'no_data'
+  price: number | null
+  price_ts: string | null
+  price_date: string | null
+  prev_close: number | null
+  prev_close_date: string | null
+  change_pct: number | null
+  age_seconds: number | null
+  prev_close_mismatch: boolean
+  note: string
+}
+
 export interface Candle {
   ts: string
   open: number

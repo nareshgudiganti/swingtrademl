@@ -476,3 +476,23 @@ class PortfolioSnapshot(Base, TimestampMixin):
 
     def __repr__(self) -> str:
         return f"<PortfolioSnapshot {self.mode} {self.ts:%Y-%m-%d} value={self.total_value:.2f}>"
+
+
+class CapitalDeposit(Base, TimestampMixin):
+    """Money the owner added to the paper account after it was first funded.
+
+    The first funding is the PAPER_STARTING_CAPITAL setting; every later top-up is a row here.
+    It keeps a top-up from being read as profit: cash grows by the amount, while day P&L,
+    returns and the drawdown peak all take it out (services/capital.py).
+    """
+
+    __tablename__ = "capital_deposits"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    mode: Mapped[str] = mapped_column(String(8), default=TradingMode.PAPER, index=True)
+    ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    amount: Mapped[float] = mapped_column(Float)
+    note: Mapped[str | None] = mapped_column(String(200), nullable=True)
+
+    def __repr__(self) -> str:
+        return f"<CapitalDeposit {self.mode} {self.ts:%Y-%m-%d} ₹{self.amount:,.0f}>"

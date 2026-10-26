@@ -16,6 +16,7 @@ from swing_trade_ml.api.deps import (
     PlanAccessDep,
     PrincipalDep,
     book_for,
+    require_owner,
     require_owner_or_tester,
     require_real_account,
 )
@@ -35,6 +36,7 @@ from swing_trade_ml.db.models.trading import Order, Position, Signal, Strategy, 
 from swing_trade_ml.ml.registry import get_active_model
 from swing_trade_ml.ml.sector_map import get_sector_bucket, sector_display_name
 from swing_trade_ml.schemas import (
+    CapitalAddedRequest,
     ClosePositionRequest,
     EquityPoint,
     ManualEntryRequest,
@@ -47,6 +49,7 @@ from swing_trade_ml.schemas import (
     TradeOut,
 )
 from swing_trade_ml.services import brain_position_score, held_read, real_orders, score_history
+from swing_trade_ml.services import capital as capital_service
 from swing_trade_ml.services import portfolio as portfolio_service
 from swing_trade_ml.services.execution import (
     close_position,
@@ -1104,6 +1107,39 @@ def equity_curve(
     starts where the reported return does. `all_time=true` shows the account's
     whole history."""
     return portfolio_service.equity_curve(db, mode, days, all_time=all_time)
+
+
+@router.get("/capital-added", dependencies=[Depends(require_owner)])
+def capital_added(db: DbSession) -> dict[str, Any]:
+    """Every top-up to the paper account (the first funding is the starting-capital setting)."""
+    rows = capital_service.list_deposits(db, TradingMode.PAPER)
+    return {
+        "starting_capital": settings.PAPER_STARTING_CAPITAL,
+        "added": [{"at": ts.isoformat(), "amount": amount} for ts, amount in rows],
+        "total_added": sum(amount for _, amount in rows),
+    }
+
+
+@router.post(
+    "/capital-added", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_owner)]
+)
+def add_capital(payload: CapitalAddedRequest, db: DbSession) -> dict[str, Any]:
+    """Record money added to the PAPER account so it is never counted as profit.
+
+    Paper only: live money is the broker's own balance. The equity-curve point is written straight
+    away, so the day's P&L and the drawdown peak already account for it.
+    """
+    if get_broker().mode != TradingMode.PAPER:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Money can only be added to the paper account.")
+    row = capital_service.add_deposit(db, payload.amount, note=payload.note)
+    portfolio_service.mark_to_market(db)
+    snap = portfolio_service.take_snapshot(db)
+    return {
+        "added": row.amount,
+        "at": row.ts.isoformat(),
+        "account_value": snap.total_value,
+        "cash": snap.cash,
+    }
 
 
 @router.post("/snapshot", response_model=MessageResponse)

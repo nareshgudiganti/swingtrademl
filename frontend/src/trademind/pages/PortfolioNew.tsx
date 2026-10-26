@@ -12,6 +12,7 @@ import { ApiError, api } from '../../api/client'
 import type { BrainRun, CurrentLimits, DetailedPosition, EquityPoint, PortfolioSummary } from '../../api/types'
 import { CapFlag, useSymbolCaps } from '../cap'
 import { noTradeReason } from '../emptyReasons'
+import AddMoneyCard from '../AddMoney'
 import { HoldingsHealthCard } from '../HoldingsHealth'
 import { currentDrawdownPct } from '../live-system'
 import { ideasFrom, useLatestRun } from '../live'
@@ -94,6 +95,8 @@ export default function PortfolioNew({ owner = false }: { owner?: boolean }) {
       )}
 
       <HeldTable rows={rows} positionsLoaded={positions.data !== undefined} positionsRefused={refused(positions)} runLoaded={!!run} />
+
+      {owner && <AddMoneyCard />}
 
       <HoldingsHealthCard />
 

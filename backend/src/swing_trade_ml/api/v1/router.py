@@ -13,6 +13,8 @@ from swing_trade_ml.api.v1.endpoints import (
     brain_changes,
     brain_golive,
     brain_observatory,
+    brain_shadow,
+    company,
     experiments,
     finance,
     instruments,
@@ -59,6 +61,7 @@ api_router.include_router(plans.admin)
 protected = [Depends(require_auth)]
 api_router.include_router(instruments.router, dependencies=protected)
 api_router.include_router(market_data.router, dependencies=protected)
+api_router.include_router(company.router, dependencies=protected)
 api_router.include_router(strategies.router, dependencies=protected)
 api_router.include_router(signals.router, dependencies=protected)
 api_router.include_router(orders.router, dependencies=protected)
@@ -75,6 +78,7 @@ api_router.include_router(brain.router, dependencies=protected)
 api_router.include_router(brain_changes.router, dependencies=protected)
 api_router.include_router(brain_golive.router, dependencies=protected)
 api_router.include_router(brain_observatory.router, dependencies=protected)
+api_router.include_router(brain_shadow.router, dependencies=protected)
 api_router.include_router(experiments.router, dependencies=protected)
 api_router.include_router(jobs.router, dependencies=protected)
 api_router.include_router(server_watch.router, dependencies=protected)

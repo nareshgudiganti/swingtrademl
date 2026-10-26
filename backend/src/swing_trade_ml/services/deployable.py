@@ -26,7 +26,7 @@ The mapping (first matching row wins):
 
 | Regime       | Rule                                                          | Deployable |
 | ------------ | ------------------------------------------------------------- | ---------- |
-| stressed     | falling trend AND (volatility elevated, VIX in top 20%, or    | 10%        |
+| stressed     | falling trend AND (volatility elevated, VIX in top 20%, or    | 20%        |
 |              | fewer than 30% of stocks above their 50-day average)          |            |
 | weak         | falling trend; or rising trend with fewer than 40% of stocks  | 30%        |
 |              | above their 50-day average                                    |            |
@@ -58,7 +58,7 @@ from swing_trade_ml.core.logging import get_logger
 log = get_logger(__name__)
 
 BANDS: dict[str, float] = {
-    "stressed": 0.10,
+    "stressed": 0.20,  # owner raised from 10% on 2026-10-26 so a stressed market still leaves room to trade
     "weak": 0.30,
     "normal": 0.55,
     "strong": 0.75,

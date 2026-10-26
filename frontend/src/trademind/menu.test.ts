@@ -80,7 +80,9 @@ describe('where every existing page lives', () => {
       .map((r) => `/trademind/${r.replace(/:[A-Za-z]+/g, 'X')}`)
     concrete.push('/trademind')
     expect(concrete.length).toBeGreaterThan(15) // the route table was actually read
-    const orphans = concrete.filter((p) => findSection(p) === undefined)
+    // New look only (owner): the classic menu has no Shadow Test; in the classic look the route goes back to Today.
+    const newLookOnly = ['/trademind/shadow-test']
+    const orphans = concrete.filter((p) => findSection(p) === undefined && !newLookOnly.includes(p))
     expect(orphans).toEqual([])
   })
 })

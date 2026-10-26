@@ -69,6 +69,7 @@ JOB_LABELS: dict[str, tuple[str, str]] = {
     "brain_daily_check": ("Brain: daily check", "Checks the brain's run and reports problems"),
     "backup_models": ("Model backup", "Copies trained models to the backup folder"),
     "daily_market_feeds": ("NSE evening files", "Delivery %, bulk deals, FII/DII"),
+    "company_filings": ("Company filings", "Saves what tracked companies filed: announcements, shareholding"),
     "capture_fills_evening": ("Save today's trades (evening)", "Second try, in case Zerodha was logged out"),
     "score_experiments": ("Research experiments", "Scores the research picks"),
     "sync_mutual_fund_navs": ("Mutual fund prices", "Downloads mutual fund NAVs"),

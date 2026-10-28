@@ -362,6 +362,62 @@ export function Glance({
   )
 }
 
+// ---------------------------------------------------------- score monitor --
+
+const MONITOR_DAYS = 7
+
+const dayMonth = (iso: string) =>
+  new Date(`${iso}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+
+/** Whole calendar days between two ISO dates. */
+function daysBetween(a: string, b: string): number {
+  return Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000)
+}
+
+/** The last few daily scores with their dates, so a falling or rising score is visible at a glance.
+ *  Days the model did not run are left out, and a longer-than-a-weekend jump is marked, never filled in. */
+export function ScoreMonitor({ trail, level }: { trail: TrailPoint[]; level?: number | string | null }) {
+  const days = trail.slice(-MONITOR_DAYS)
+  return (
+    <section className="sp-card sp-monitor" aria-label="Strength score, day by day" data-testid="score-monitor">
+      <div className="sp-flow-head" style={{ marginBottom: 0 }}>
+        <div>
+          <h2 className="sp-h2">Is the score holding up?</h2>
+          <div className="sp-sub">The strength score on each of the last days the model checked this stock.</div>
+        </div>
+        {level != null && <span className="sp-pill sp-pill-amber">Buy level: {level}</span>}
+      </div>
+      {days.length === 0 ? (
+        <p className="sp-small">No daily scores saved for this stock yet. The list starts with the next daily check.</p>
+      ) : (
+        <div className="sp-scroll">
+          <ol className="sp-monitor-days">
+            {days.map((t, i) => {
+              const before = days[i - 1]
+              const move = before ? Math.round((t.score - before.score) * 100) : null
+              const gap = before ? daysBetween(before.date, t.date) > 3 : false
+              return (
+                <li key={t.date} data-testid="score-monitor-day" className={i === days.length - 1 ? 'sp-monitor-now' : undefined}>
+                  <span className="sp-small">{dayMonth(t.date)}</span>
+                  <strong>{Math.round(t.score * 100)}</strong>
+                  {move != null && move !== 0 ? (
+                    <span className={move > 0 ? 'sp-pos' : 'sp-neg'}>
+                      {move > 0 ? '▲' : '▼'} {Math.abs(move)}
+                    </span>
+                  ) : (
+                    <span className="sp-small">{before ? 'same' : ' '}</span>
+                  )}
+                  {gap && <span className="sp-small">after a gap</span>}
+                </li>
+              )
+            })}
+          </ol>
+        </div>
+      )}
+    </section>
+  )
+}
+
 // ------------------------------------------------------------------ flow --
 
 export function BrainFlow({

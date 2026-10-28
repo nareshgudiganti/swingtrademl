@@ -197,3 +197,20 @@ export function whyKey(items: WhyItem[]): string {
 }
 
 export const NOTHING_STORED = 'The brain did not store a reason for this decision.'
+
+/**
+ * When the brain will look at this idea again, in words, only where the stored reason names a date
+ * ("Results on 02 Nov: ..."). Null when no date is stored: nothing is guessed.
+ */
+export function nextReview(items: WhyItem[]): string | null {
+  const event = items.find((i) => i.kind === 'results_or_event')
+  const day = event?.detail?.match(/(\d{1,2} [A-Z][a-z]{2})/)?.[1]
+  if (!event || !day) return null
+  return /^results/i.test(event.detail ?? '')
+    ? `After the results on ${day}. The brain looks again once they are out.`
+    : `After ${day}. The brain looks again once the event has passed.`
+}
+
+/** The one sentence that stops a high score being read as permission to buy. */
+export const SCORE_IS_NOT_PERMISSION =
+  'The score shows how strongly the model likes a stock. It does not mean a trade is allowed.'

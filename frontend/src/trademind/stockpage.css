@@ -316,3 +316,8 @@
 .sp-monitor-days li { flex: 1 0 74px; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 6px; border: 1px solid var(--sp-line); border-radius: 10px; background: #fff; }
 .sp-monitor-days li strong { font-size: 22px; }
 .sp-monitor-days li.sp-monitor-now { border-color: var(--sp-accent); }
+
+/* ------------------------------------------------------- why no trade ---- */
+.sp-whynot { display: flex; flex-direction: column; gap: 6px; border-left: 4px solid var(--sp-amber, #d9a400); }
+.sp-whynot-main { margin: 0; font-size: 16px; font-weight: 600; }
+.sp-illustrative { border-style: dashed; background: var(--sp-grey-bg, #f3f4f8); } /* not dimmed: faded text fails the contrast check */

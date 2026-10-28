@@ -11,6 +11,7 @@ import { useStockBrief } from './beginner/api'
 import { NO_EVENTS } from './beginner/UpcomingEvents'
 import type { StockBriefData } from './beginner/types'
 import { brainSteps, stopOf, type BrainStep } from './brainSteps'
+import { NOTHING_STORED, nextReview, SCORE_IS_NOT_PERMISSION, whyNotTrade } from './whyNotTrade'
 import { ideaChange, ordinal, useChanges, type IdeaChange } from './changes'
 import { useSymbolCaps } from './cap'
 import { finalWord } from './live'
@@ -362,6 +363,29 @@ export function Glance({
   )
 }
 
+// ------------------------------------------------------------ why no trade --
+
+/** Why a stock the brain scored is not a TRADE, in one place: the reason, that a score is not permission,
+ *  and when the brain looks again (only where the stored reason names a date). Nothing for a TRADE. */
+export function WhyNoTrade({ decision: d }: { decision: BrainDecision }) {
+  if (d.kind !== 'idea' || finalWord(d) === 'TRADE') return null
+  const items = whyNotTrade(d).filter((i) => i.kind !== 'owner_overrule')
+  const first = items[0]
+  const review = nextReview(items)
+  return (
+    <section className="sp-card sp-whynot" aria-label="Why no trade?" data-testid="why-no-trade">
+      <h2 className="sp-h2">Why no trade?</h2>
+      <p className="sp-whynot-main">{first ? first.text : NOTHING_STORED}</p>
+      <p className="sp-small">{SCORE_IS_NOT_PERMISSION}</p>
+      {review && (
+        <p className="sp-small" data-testid="next-review">
+          <b>Next review:</b> {review}
+        </p>
+      )}
+    </section>
+  )
+}
+
 // ---------------------------------------------------------- score monitor --
 
 const MONITOR_DAYS = 7
@@ -596,11 +620,19 @@ export function PlanLadder({ decision: d }: { decision: BrainDecision }) {
   const targetPct = ((d.target / mid - 1) * 100).toFixed(0)
 
   return (
-    <section className="sp-card" aria-label="The plan" data-testid="plan-ladder" style={{ flex: '2 1 600px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+    <section
+      className={`sp-card${word === 'TRADE' ? '' : ' sp-illustrative'}`}
+      aria-label="The plan"
+      data-testid="plan-ladder"
+      data-illustrative={word === 'TRADE' ? undefined : 'true'}
+      style={{ flex: '2 1 600px', display: 'flex', flexDirection: 'column', gap: 14 }}
+    >
       <div className="sp-flow-head" style={{ marginBottom: 0 }}>
         <div>
           <h2 className="sp-h2">What is the plan?</h2>
-          <div className="sp-sub">{word === 'TRADE' ? 'The plan for this trade.' : 'If it becomes a TRADE. Same rules every time.'}</div>
+          <div className="sp-sub">
+            {word === 'TRADE' ? 'The plan for this trade.' : 'Illustrative only: no buy is recommended today. This is the plan if it becomes a TRADE.'}
+          </div>
         </div>
         <span className="sp-pill sp-pill-amber">Sold within {d.horizon_days} trading days</span>
       </div>

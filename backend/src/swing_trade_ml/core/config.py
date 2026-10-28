@@ -237,6 +237,10 @@ class Settings(BaseSettings):
     # Owner decision (Sept 2026): halt new entries at 15% below peak
     # (−₹1,50,000 at ₹10 lakh). Never force-sells.
     MAX_PORTFOLIO_DRAWDOWN_PCT: float = 0.15
+    # Testing mode (owner, 2026-10-28): while the brain is in practice, its idea words ignore the
+    # account's money limits so the model score alone decides. Off by default; never in live mode.
+    # services/testing_mode.py.
+    TESTING_NO_LIMITS: bool = False
     # Blocks re-entering a symbol for this many days after it stopped this
     # same strategy out — added after the small-cap backtest showed the same
     # name (LATENTVIEW) getting stopped out three separate times in a few

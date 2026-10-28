@@ -165,3 +165,25 @@ def test_api_lists_m07_and_refuses_to_switch_it_off(client):
     assert m07["mandatory"] and m07["mode"] == "on"
     r = client.put("/api/v1/brain/modules/M07", json={"mode": "off"}, headers=HEADERS)
     assert r.status_code == 409
+
+
+def test_testing_mode_approves_what_a_tight_market_ceiling_would_refuse(db_session, liked_stock, monkeypatch):
+    from swing_trade_ml.core.config import settings
+    from swing_trade_ml.services import testing_mode
+
+    monkeypatch.setattr(
+        deployable,
+        "current_deployable",
+        lambda db: deployable.DeployableCapital(regime="stressed", fraction=0.0001, context_available=True),
+    )
+    refused = _run(db_session, _opinion_module(), _fresh()).verdicts["M07TEST"]
+    assert not refused.allowed
+
+    monkeypatch.setattr(settings, "TESTING_NO_LIMITS", True)
+    monkeypatch.setattr(testing_mode, "current_stage", lambda db: "shadow")
+    allowed = _run(db_session, _opinion_module(), _fresh()).verdicts["M07TEST"]
+    assert allowed.allowed and allowed.max_qty > 0
+
+    monkeypatch.setattr(testing_mode, "current_stage", lambda db: "approval")
+    back = _run(db_session, _opinion_module(), _fresh()).verdicts["M07TEST"]
+    assert not back.allowed

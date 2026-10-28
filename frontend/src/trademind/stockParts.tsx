@@ -15,6 +15,7 @@ import { ideaChange, ordinal, useChanges, type IdeaChange } from './changes'
 import { useSymbolCaps } from './cap'
 import { finalWord } from './live'
 import { scorePoints, scoreRank, withoutScorePercent, SCORE_HINT } from './scoreText'
+import { dayLabel } from './pricesAge'
 import { inr } from './ui'
 import { wordTagColor } from './vocab'
 import './stockpage.css'
@@ -679,6 +680,9 @@ export function IdeaFigures({ d }: { d: BrainDecision }) {
   const last = rows.at(-1)?.close
   const prev = rows.at(-2)?.close
   const pct = last != null && prev ? ((last - prev) / prev) * 100 : null
+  // Daily candles are stamped IST midnight (18:30 UTC the day before): read the date in India, not UTC.
+  const lastTs = rows.at(-1)?.ts
+  const closeDay = lastTs ? dayLabel(new Date(lastTs).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })) : null
   const week = (trail.data?.score_trail ?? []).slice(-5)
   const pts = scorePoints(d.confidence)
   const first = week[0]?.score
@@ -703,10 +707,12 @@ export function IdeaFigures({ d }: { d: BrainDecision }) {
         )}
       </span>
       <span className="spf-col">
-        <span className="spf-k">PRICE</span>
+        <span className="spf-k" title="The stock's last closing price, not a live price">
+          {closeDay ? `CLOSE · ${closeDay}` : 'LAST CLOSE'}
+        </span>
         <span className="spf-v">{last != null ? `₹${inr(last)}` : '—'}</span>
         {pct != null && (
-          <span className={`spf-s ${pct >= 0 ? 'sp-pos' : 'sp-neg'}`}>
+          <span className={`spf-s ${pct >= 0 ? 'sp-pos' : 'sp-neg'}`} title="Change on that day, not today">
             {pct >= 0 ? '▲' : '▼'} {Math.abs(pct).toFixed(2)}%
           </span>
         )}

@@ -31,7 +31,7 @@ from swing_trade_ml.db.models.trading import (
     Strategy,
 )
 from swing_trade_ml.ml.sector_map import get_sector_bucket, sector_display_name
-from swing_trade_ml.services import avoid, deployable, system_state
+from swing_trade_ml.services import avoid, deployable, system_state, testing_mode
 from swing_trade_ml.services.costs import apply_slippage, compute_charges
 from swing_trade_ml.services.limits import LARGE, SMALL, Limits, format_inr, limits_for
 from swing_trade_ml.services.portfolio import drawdown_peak, portfolio_value_and_cash
@@ -593,6 +593,7 @@ def check_entry(
     available_cash: float,
     strategy: Strategy | None = None,
     existing_exposure: float = 0.0,
+    waive_limits: bool = False,
 ) -> RiskDecision:
     """Gate an entry. Cheap checks run before portfolio-wide queries, and the
     kill switch runs before everything.
@@ -622,6 +623,9 @@ def check_entry(
         return _reject("HALTED", f"New buys are paused{why}. Existing positions still sell normally.")
 
     limits = limits_for(portfolio_value, strategy)
+    waive = waive_limits and not testing_mode.live_trading_possible()
+    if waive:
+        limits = testing_mode.relaxed(limits)
     strategy_id = strategy.id if strategy else None
     params = (strategy.params or {}) if strategy else {}
 
@@ -785,7 +789,7 @@ def check_entry(
     # ---- market conditions and cash reserve ----
     invested = sum(h.value for h in holdings)
     context = deployable.current_deployable(db)
-    ceiling = context.fraction * portfolio_value
+    ceiling = (1.0 if waive else context.fraction) * portfolio_value
     market = market_room(db, mode, strategy, ceiling, invested, min_position, price)
     room = market.room
     if room < min_position:

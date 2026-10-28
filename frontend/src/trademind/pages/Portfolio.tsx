@@ -2,11 +2,13 @@ import { useMemo, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 
 import { api } from '../../api/client'
-import type { BrainRun, DetailedPosition } from '../../api/types'
+import type { BrainDecision, BrainRun, DetailedPosition } from '../../api/types'
 import { finalWord, holdingsFrom, useBrainStatus, useLatestRun } from '../live'
 import { wordTone } from '../vocab'
+import { SortTh, useSort } from '../sort'
 import { Term, WordTag } from '../term'
 import { BrainOff, Card, CheckItem, Donut, GlowArea, inr, signed, toneClass } from '../ui'
+import StockLink from '../StockLink'
 import { PageState, QueryNotice } from '../PageState'
 import AddMoneyCard from '../AddMoney'
 import { HoldingsHealthCard } from '../HoldingsHealth'
@@ -119,6 +121,14 @@ export default function Portfolio() {
 
   const run = latest.data
   const holdings = run ? holdingsFrom(run) : []
+  const { sorted: sortedHoldings, sorter } = useSort(holdings, {
+    stock: (h: BrainDecision) => h.symbol,
+    qty: (h: BrainDecision) => posBySymbol.get(h.symbol)?.quantity,
+    avg: (h: BrainDecision) => posBySymbol.get(h.symbol)?.entry_price,
+    value: (h: BrainDecision) => posBySymbol.get(h.symbol)?.current_value,
+    pnl: (h: BrainDecision) => posBySymbol.get(h.symbol)?.unrealized_pnl,
+    says: (h: BrainDecision) => finalWord(h),
+  }, { key: null }, { stock: 'asc', says: 'asc' })
 
   return (
     <div className="tm-page tm-grid">
@@ -277,22 +287,22 @@ export default function Portfolio() {
               <table className="tm-table">
                 <thead>
                   <tr>
-                    <th>Stock</th>
-                    <th className="tm-right">Qty</th>
-                    <th className="tm-right">Avg price</th>
-                    <th className="tm-right">Value</th>
-                    <th className="tm-right">
+                    <SortTh sorter={sorter} k="stock">Stock</SortTh>
+                    <SortTh sorter={sorter} k="qty" right>Qty</SortTh>
+                    <SortTh sorter={sorter} k="avg" right>Avg price</SortTh>
+                    <SortTh sorter={sorter} k="value" right>Value</SortTh>
+                    <SortTh sorter={sorter} k="pnl" right>
                       <Term k="unrealised">P&amp;L</Term>
-                    </th>
-                    <th>Brain says</th>
+                    </SortTh>
+                    <SortTh sorter={sorter} k="says">Brain says</SortTh>
                   </tr>
                 </thead>
                 <tbody>
-                  {holdings.map((h) => {
+                  {sortedHoldings.map((h) => {
                     const p = posBySymbol.get(h.symbol)
                     return (
                       <tr key={h.id}>
-                        <td className="tm-strong">{h.symbol}</td>
+                        <td><StockLink symbol={h.symbol} /></td>
                         <td className="tm-right tm-num">{p ? p.quantity : '—'}</td>
                         <td className="tm-right tm-num">{p ? `₹${inr(p.entry_price)}` : '—'}</td>
                         <td className="tm-right tm-num">{p ? `₹${inr(p.current_value, 0)}` : '—'}</td>

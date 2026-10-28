@@ -8,6 +8,7 @@ import { DayCell, ScoreToday, SuggestionTag, scoreNow, suggestionRank } from '..
 import ScoreTrail from '../ScoreTrail'
 import { SortTh, useSort } from '../sort'
 import { Card, inr, signed, toneClass } from '../ui'
+import StockLink from '../StockLink'
 import { PageState, StaleNotice } from '../PageState'
 import { pickState } from '../stateRules'
 
@@ -301,7 +302,7 @@ function OpenTable({
             <Fragment key={p.id}>
               <tr className="tm-clickable" onClick={() => setOpen(open === p.id ? null : p.id)}>
                 <td className="tm-strong">
-                  {p.symbol}
+                  <StockLink symbol={p.symbol} withScore={false} />
                   <CapFlag tier={p.cap_tier} gap />
                 </td>
                 <td>

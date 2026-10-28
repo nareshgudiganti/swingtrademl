@@ -32,6 +32,7 @@ import {
 } from '../stockParts'
 import { brainSteps, stopOf } from '../brainSteps'
 import { CompanyTab } from '../CompanyTab'
+import { CaseAnalysis } from '../CaseAnalysis'
 import { CAP_LABEL } from './StockNew'
 import { Overrule } from './StockDetail'
 
@@ -121,6 +122,8 @@ function StockAnalysisView({ decision: d, run }: { decision: BrainDecision; run:
         </div>
         <span className="sp-small">Brain’s run on {formatDateTime(run.started_at)}</span>
       </section>
+
+      <CaseAnalysis decision={d} run={run} brief={data.brief} />
 
       <BrainFlow decision={d} run={run} full />
       <SafetyInWords decision={d} />

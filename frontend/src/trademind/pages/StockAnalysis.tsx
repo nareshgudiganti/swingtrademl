@@ -16,6 +16,7 @@ import { finalWord, stockSituations, useLatestRun } from '../live'
 import { barsFrom } from '../live-stock'
 import { scorePoints, SCORE_HINT } from '../scoreText'
 import { BrainGate, Candles, inr } from '../ui'
+import { wordLabel } from '../vocab'
 import {
   BrainFlow,
   buyLevel,
@@ -31,6 +32,7 @@ import {
 } from '../stockParts'
 import { brainSteps, stopOf } from '../brainSteps'
 import { CompanyTab } from '../CompanyTab'
+import { CaseAnalysis, ModelEvidence } from '../CaseAnalysis'
 import { CAP_LABEL } from './StockNew'
 import { Overrule } from './StockDetail'
 
@@ -59,11 +61,13 @@ function StockAnalysisView({ decision: d, run }: { decision: BrainDecision; run:
   const word = finalWord(d)
   const back = `/trademind/stock/${encodeURIComponent(d.symbol)}`
   const cap = caps.get(d.symbol.toUpperCase())
-  const steps = brainSteps(d, run)
-  const passed = stepPasses(d, steps).filter((p) => p === 'yes').length
-  const stop = stopOf(d)
+  const steps = brainSteps(d, run, canManage)
+  const passes = stepPasses(d, steps, canManage)
+  const passed = passes.filter((p) => p === 'yes').length
+  const applicable = steps.length
+  const stop = stopOf(d, canManage)
   const answer = stop
-    ? `Not a TRADE today. ${d.symbol} passed ${passed} of 8 steps and stopped at step ${stop.step}.`
+    ? `Not a BUY today. ${d.symbol} passed ${passed} of ${applicable} steps and stopped at step ${steps.findIndex((x) => x.n === stop.step) + 1}.`
     : word === 'TRADE'
       ? `Every check passed. ${wordSay(word)}`
       : wordSay(word)
@@ -113,11 +117,14 @@ function StockAnalysisView({ decision: d, run }: { decision: BrainDecision; run:
         <>
       <section className="sp-answer" data-tone={wordTone(word)} data-testid="analysis-answer">
         <div className="sp-row" style={{ gap: 16, flexWrap: 'wrap' }}>
-          <span className="sp-answer-word">{word}</span>
+          <span className="sp-answer-word">{wordLabel(word)}</span>
           <span className="sp-answer-text">{answer}</span>
         </div>
         <span className="sp-small">Brain’s run on {formatDateTime(run.started_at)}</span>
       </section>
+
+      <CaseAnalysis decision={d} run={run} brief={data.brief} />
+      <ModelEvidence decision={d} />
 
       <BrainFlow decision={d} run={run} full />
       <SafetyInWords decision={d} />

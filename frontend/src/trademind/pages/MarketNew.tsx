@@ -6,6 +6,7 @@
 import { useQuery } from '@tanstack/react-query'
 
 import { api } from '../../api/client'
+import { usePlan } from '../../lib/plan'
 import { formatDateTime } from '../../lib/format'
 import { marketSituation, useEpisodes, useLatestRun } from '../live'
 import { QueryNotice } from '../PageState'
@@ -46,7 +47,8 @@ function MarketBody() {
   const run = useLatestRun().data!
   const regime = useQuery({ queryKey: ['marketRegime'], queryFn: api.marketRegime })
   // The account's invested ceiling (version 1's limits). Refused for some plans: then the line is left out.
-  const limits = useQuery({ queryKey: ['riskLimits'], queryFn: api.riskLimits, retry: false })
+  const { canManage } = usePlan()
+  const limits = useQuery({ queryKey: ['riskLimits'], queryFn: api.riskLimits, retry: false, enabled: canManage })
   const mode = run.banner.mode
   const tone = (mode && MARKET_TONE[mode]) || 'blue'
   const situation = marketSituation(run)

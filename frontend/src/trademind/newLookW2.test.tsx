@@ -139,7 +139,8 @@ describe('Discover: where the brain stopped each idea', () => {
     expect(html).toContain('href="/trademind/stock/GOODCO"')
     expect(html).toContain(DISCOVER_FOOT.slice(0, 40))
     expect(html).not.toMatch(/\d+%\s*chance/i)
-    expect(html).not.toMatch(/>\s*BUY\s*</)
+    // owner decision 2026-10-28: a TRADE idea is shown to customers as BUY (the stored word stays TRADE)
+    expect(html).toMatch(/>\s*BUY\s*</)
     // the raw "30%" model score never shows
     expect(html).not.toContain('30%')
   })
@@ -291,11 +292,11 @@ describe('My Watchlist: each person’s own list with the brain’s read', () =>
   it('what it is waiting for: the stored "what would change" line first, else the short reason', () => {
     expect(waitingFor(LOW)).toBe('The model score would need to reach the buy level.')
     expect(waitingFor(ROOM)).toMatch(/safety limits had no room/)
-    expect(waitingFor(GOOD)).toMatch(/TRADE/)
+    expect(waitingFor(GOOD)).toMatch(/BUY/)
     expect(waitingFor(null)).toBe(NOT_CHECKED)
   })
 
-  it('tabs: All = on the list, split into Watching and Close to a TRADE; Removed apart', () => {
+  it('tabs: All = on the list, split into Watching and Close to a BUY; Removed apart', () => {
     const rows = watchRows(LIST.items, RUN)
     expect(tabCounts(rows)).toEqual({ all: 4, watching: 2, close: 2, removed: 1 })
     expect(rowsFor(rows, 'close').map((r) => r.item.symbol)).toEqual(['ROOMCO', 'GOODCO'])
@@ -313,7 +314,7 @@ describe('My Watchlist: each person’s own list with the brain’s read', () =>
     const html = render('/trademind/watchlist', false, (c) => c.setQueryData(['myWatchlist'], LIST))
     expect(html).toContain('data-page="watchlist-new"')
     expect(html).toContain('data-testid="watch-table"')
-    expect(html).toContain('Close to a TRADE')
+    expect(html).toContain('Close to a BUY')
     expect(html).toContain('aria-label="Remove ROOMCO"')
     expect(html).toContain('Not checked')
     expect(html).toContain('does not change which stocks the bot trades')

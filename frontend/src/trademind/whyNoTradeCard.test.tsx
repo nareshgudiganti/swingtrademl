@@ -57,7 +57,7 @@ describe('the plan for a stock that is not a TRADE', () => {
   it('is a normal plan for a TRADE', () => {
     const html = renderToStaticMarkup(<PlanLadder decision={dec('TRADE', [])} />)
     expect(html).not.toContain('data-illustrative')
-    expect(html).toContain('The plan for this trade.')
+    expect(html).toContain('The plan for this buy.')
   })
 })
 

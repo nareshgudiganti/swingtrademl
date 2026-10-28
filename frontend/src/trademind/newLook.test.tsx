@@ -52,10 +52,20 @@ const RUN = {
   ],
 } as unknown as BrainRun
 
-function render(path: string, owner: boolean, withRun = false): string {
+// The same run plus a TRADE and a WATCH that only the account's room held back (kept apart so Today's counts stay).
+const RUN_PUBLIC = {
+  ...(RUN as unknown as Record<string, unknown>),
+  decisions: [
+    ...(RUN as unknown as { decisions: BrainDecision[] }).decisions,
+    dec('CCCTRADE', 'TRADE', 0.9),
+    dec('DDDROOMONLY', 'WATCH', 0.8, { stock_verdict: 'TRADE', stock_verdict_restored: true }),
+  ],
+} as unknown as BrainRun
+
+function render(path: string, owner: boolean, withRun = false, run: BrainRun = RUN): string {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  client.setQueryData(['plan'], { can_see_real_account: owner, unrestricted: owner, features: [] })
-  if (withRun) client.setQueryData(['brainLatest', 'nightly'], RUN)
+  client.setQueryData(['plan'], { can_see_real_account: owner, unrestricted: owner, can_manage_plans: owner, features: [] })
+  if (withRun) client.setQueryData(['brainLatest', 'nightly'], run)
   return renderToString(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[path]}>
@@ -121,8 +131,8 @@ describe('the new Today', () => {
 
   it('headline wording', () => {
     const c = (TRADE: number, WATCH: number) => ({ TRADE, WATCH, WAIT: 0, AVOID: 0 })
-    expect(todayHeadline('NORMAL', c(2, 0), 0)).toBe('2 new trade ideas today.')
-    expect(todayHeadline('NORMAL', c(1, 3), 2)).toBe('1 new trade idea today. 3 stocks to watch, 2 holdings need a look.')
+    expect(todayHeadline('NORMAL', c(2, 0), 0)).toBe('2 new buy ideas today.')
+    expect(todayHeadline('NORMAL', c(1, 3), 2)).toBe('1 new buy idea today. 3 stocks to watch, 2 holdings need a look.')
     expect(todayHeadline('NO_NEW_TRADES', c(0, 0), 0)).toMatch(/^No new trades today: /)
     expect(todayHeadline(null, c(0, 0), 0)).toBe('No new trades today.')
   })
@@ -155,7 +165,7 @@ describe('the 8-item menu', () => {
 
   it('renders the new stock page with the 8 steps for a stock in the run', () => {
     store.set(LOOK_KEY, 'new')
-    const html = render('/trademind/stock/BBBROOM', false, true)
+    const html = render('/trademind/stock/BBBROOM', true, true)
     expect(html).toContain('data-testid="brain-steps"')
     expect(html).toContain('Stopped here')
     // The short page: the brain's steps with an AI analysis button, and the way into the full analysis.
@@ -167,6 +177,36 @@ describe('the 8-item menu', () => {
     expect(html).toContain('/trademind/stock/BBBROOM/analysis')
     expect(html).toContain('data-testid="stock-glance"')
     expect(html).not.toContain('Chart, company and news')
+  })
+
+  it('a customer gets the stock verdict as research: no Buy, no account safety pass, no limits, a research note', () => {
+    store.set(LOOK_KEY, 'new')
+    const html = render('/trademind/stock/CCCTRADE', false, true, RUN_PUBLIC)
+    expect(html).toContain('data-testid="brain-steps"')
+    expect(html).not.toContain('data-testid="buy-button"')
+    expect(html).not.toContain('data-testid="no-buy-note"')
+    expect(html).not.toContain('Paper buy')
+    expect(html).not.toContain('data-testid="money-meter"')
+    expect(html).toContain('data-testid="research-note"')
+    expect(html).toContain('not investment advice')
+    // Step 6 is never a manufactured pass for someone who has no account.
+    expect(html).not.toContain('PASSED')
+    expect(html).not.toContain('safety limits allow it')
+    expect(html).not.toContain('Safety check')
+    expect(html).not.toContain('NOT APPLICABLE')
+    expect(html).toMatch(/of 7 steps/)
+  })
+
+  it('the owner keeps Buy and the account safety pass, and sees both answers when they differ', () => {
+    store.set(LOOK_KEY, 'new')
+    const trade = render('/trademind/stock/CCCTRADE', true, true, RUN_PUBLIC)
+    expect(trade).toContain('data-testid="buy-button"')
+    expect(trade).toContain('PASSED')
+    expect(trade).not.toContain('data-testid="research-note"')
+    const two = render('/trademind/stock/DDDROOMONLY', true, true, RUN_PUBLIC)
+    expect(two).toContain('data-testid="two-answers"')
+    expect(two).toContain('Stock verdict')
+    expect(render('/trademind/stock/DDDROOMONLY', false, true, RUN_PUBLIC)).not.toContain('data-testid="two-answers"')
   })
 
   it('the full-analysis page has the whole story and a way back', () => {

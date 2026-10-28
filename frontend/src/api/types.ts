@@ -1081,6 +1081,10 @@ export interface BrainDecision {
   overruled_at: string | null
   /** Display-only (bx10): what would have to change for a TRADE; empty for TRADE and holdings. */
   what_would_change?: { key: string; text: string }[]
+  /** The stock-level verdict public screens show. For the owner `word` is the test portfolio's decision; this is the stock's. */
+  stock_verdict?: string
+  /** Owner only: true when `stock_verdict` is TRADE although `word` is WATCH because only the account's room held it back. */
+  stock_verdict_restored?: boolean
 }
 
 export interface BrainBanner {

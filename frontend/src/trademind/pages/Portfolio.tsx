@@ -291,8 +291,9 @@ export default function Portfolio() {
                     <SortTh sorter={sorter} k="qty" right>Qty</SortTh>
                     <SortTh sorter={sorter} k="avg" right>Avg price</SortTh>
                     <SortTh sorter={sorter} k="value" right>Value</SortTh>
-                    <SortTh sorter={sorter} k="pnl" right>
-                      <Term k="unrealised">P&amp;L</Term>
+                    {/* A glossary button inside a sort button is two buttons in one; the plain title says what it is. */}
+                    <SortTh sorter={sorter} k="pnl" right title="Profit or loss so far on shares still held (not locked in until sold)">
+                      P&amp;L
                     </SortTh>
                     <SortTh sorter={sorter} k="says">Brain says</SortTh>
                   </tr>

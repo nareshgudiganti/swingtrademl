@@ -84,7 +84,9 @@ const text = (html: string) =>
 function renderSection(id: HorizonId, owner = true) {
   return renderToString(
     <QueryClientProvider client={client(owner)}>
-      <ResearchExperiment horizon={horizonById(id)} />
+      <MemoryRouter>
+        <ResearchExperiment horizon={horizonById(id)} />
+      </MemoryRouter>
     </QueryClientProvider>,
   )
 }
@@ -209,7 +211,9 @@ describe('review fixes', () => {
     return text(
       renderToString(
         <QueryClientProvider client={c}>
-          <ResearchExperiment horizon={horizonById(id)} />
+          <MemoryRouter>
+            <ResearchExperiment horizon={horizonById(id)} />
+          </MemoryRouter>
         </QueryClientProvider>,
       ),
     )
@@ -248,7 +252,9 @@ describe('review fixes', () => {
     const c = client(true)
     const html = renderToString(
       <QueryClientProvider client={c}>
-        <ResearchExperiment horizon={horizonById('5d')} />
+        <MemoryRouter>
+          <ResearchExperiment horizon={horizonById('5d')} />
+        </MemoryRouter>
       </QueryClientProvider>,
     )
     expect(html).toMatch(/role="status"[^>]*aria-live="polite"|aria-live="polite"[^>]*role="status"/)

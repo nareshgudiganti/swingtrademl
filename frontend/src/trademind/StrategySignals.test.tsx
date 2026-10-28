@@ -74,7 +74,8 @@ describe('Version 1 strategy signals in Discover', () => {
     const html = render(true)
     expect(text(html)).toContain('Read only: nothing here buys or sells.')
     expect(text(html)).toContain("These are not the brain's ideas.")
-    expect(html).not.toMatch(/<button/)
+    // The only buttons are the column headers that sort; nothing here can buy or sell.
+    expect(html).not.toMatch(/<button(?![^>]*tm-sort)/)
   })
 
   it('says what happened to each signal in plain words', () => {

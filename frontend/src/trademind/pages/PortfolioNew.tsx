@@ -35,6 +35,7 @@ import { wordTagColor } from '../vocab'
 import { holdingsNeedingAttention } from '../today/HoldingsNeedsYou'
 import { stoppedByRoom } from '../today/answerRules'
 import { ideaCounts } from '../today/TodayIdeas'
+import { scorePoints } from '../scoreText'
 import { SortTh, useSort } from '../sort'
 import { GlowArea, inr, StockLogo, Tag } from '../ui'
 import '../newlook-w2.css'
@@ -269,7 +270,16 @@ function HeldTable({
                     {positionsLoaded && (
                       <td>
                         {r.score == null ? (
-                          <span className="tm-dim tmn-small">No score yet</span>
+                          // No stored day-by-day reading yet: show the brain's own score from its last run, labelled
+                          // as that, rather than leaving the stock without one.
+                          scorePoints(r.decision?.confidence) != null ? (
+                            <span title="The brain's score for this stock on its last run. The day-by-day list starts with the next daily check.">
+                              <b>{scorePoints(r.decision?.confidence)}</b>
+                              <span className="tm-dim tmn-small"> today</span>
+                            </span>
+                          ) : (
+                            <span className="tm-dim tmn-small">No score yet</span>
+                          )
                         ) : (
                           <>
                             <b>{r.score}</b>

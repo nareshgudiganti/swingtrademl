@@ -9,6 +9,8 @@ import type { RiskEvent } from '../api/types'
 import { formatCurrency, formatDateTime } from '../lib/format'
 import { RISK_EVENT_LIMIT, ruleLabel } from '../lib/riskRules'
 import { Card } from './ui'
+import { SortTh, useSort } from './sort'
+import StockLink from './StockLink'
 
 export default function RiskEventLog() {
   const events = useQuery({ queryKey: ['riskEvents'], queryFn: () => api.riskEvents(RISK_EVENT_LIMIT) })
@@ -16,7 +18,14 @@ export default function RiskEventLog() {
 }
 
 /** The panel itself, given the query's state (kept apart so each state can be tested). */
-export function RiskEventLogView({ loading, failed, rows }: { loading: boolean; failed: boolean; rows?: RiskEvent[] }) {
+export function RiskEventLogView({ loading, failed, rows: unsorted }: { loading: boolean; failed: boolean; rows?: RiskEvent[] }) {
+  const { sorted, sorter } = useSort(unsorted ?? [], {
+    when: (r: RiskEvent) => r.ts,
+    stock: (r: RiskEvent) => r.symbol,
+    why: (r: RiskEvent) => ruleLabel(r.rule),
+    amount: (r: RiskEvent) => r.amount_inr,
+  }, { key: null }, { stock: 'asc', why: 'asc' })
+  const rows = unsorted === undefined ? undefined : sorted
   return (
     <Card
       title="Everything the safety rules blocked"
@@ -36,18 +45,18 @@ export function RiskEventLogView({ loading, failed, rows }: { loading: boolean; 
               <table className="tm-table">
                 <thead>
                   <tr>
-                    <th>When</th>
-                    <th>Stock</th>
-                    <th>Why it was skipped</th>
+                    <SortTh sorter={sorter} k="when">When</SortTh>
+                    <SortTh sorter={sorter} k="stock">Stock</SortTh>
+                    <SortTh sorter={sorter} k="why">Why it was skipped</SortTh>
                     <th>Detail</th>
-                    <th>Amount</th>
+                    <SortTh sorter={sorter} k="amount">Amount</SortTh>
                   </tr>
                 </thead>
                 <tbody>
                   {rows.map((row) => (
                     <tr key={row.id} data-event={row.id}>
                       <td>{formatDateTime(row.ts)}</td>
-                      <td className="tm-strong">{row.symbol ?? '—'}</td>
+                      <td>{row.symbol ? <StockLink symbol={row.symbol} /> : '—'}</td>
                       <td className="tm-wrap">{ruleLabel(row.rule)}</td>
                       <td className="tm-wrap tm-dim">{row.reason}</td>
                       <td className="tm-num">{row.amount_inr != null ? formatCurrency(row.amount_inr) : '—'}</td>

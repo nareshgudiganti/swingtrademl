@@ -2,6 +2,7 @@
 // same period." Same API call, same query (key and limit), same rule wording, every row shown.
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { renderToString } from 'react-dom/server'
+import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
 
 import type { RiskEvent } from '../api/types'
@@ -22,7 +23,9 @@ function render(seed?: { data?: RiskEvent[] }): string {
   if (seed?.data) client.setQueryData(['riskEvents'], seed.data)
   return renderToString(
     <QueryClientProvider client={client}>
-      <RiskEventLog />
+      <MemoryRouter>
+        <RiskEventLog />
+      </MemoryRouter>
     </QueryClientProvider>,
   )
 }
@@ -64,7 +67,13 @@ describe('what it shows', () => {
 
   it('says when only the latest events are listed', () => {
     const many = Array.from({ length: RISK_EVENT_LIMIT }, (_, i) => ({ ...EVENTS[0]!, id: i + 10 }))
-    const html = renderToString(<RiskEventLogView loading={false} failed={false} rows={many} />)
+    const html = renderToString(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter>
+          <RiskEventLogView loading={false} failed={false} rows={many} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
     expect(html).toContain(`only the latest ${RISK_EVENT_LIMIT} are shown`)
     expect(render({ data: EVENTS })).not.toContain('only the latest')
   })

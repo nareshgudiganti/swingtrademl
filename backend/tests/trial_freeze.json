@@ -37,6 +37,15 @@
       "files": [
         "services/deployable.py"
       ]
+    },
+    {
+      "date": "2026-10-28",
+      "commit": "06fec51",
+      "why": "Owner asked for testing mode on 2026-10-28: while the brain is in practice (shadow) its idea words skip the account money limits (TESTING_NO_LIMITS, off by default, never in live mode, v1 order path untouched)",
+      "files": [
+        "brain/modules/m07_risk/module.py",
+        "services/risk.py"
+      ]
     }
   ],
   "files": {
@@ -75,7 +84,7 @@
     "brain/modules/m06_reason/training.py": "167204410a8ddf86",
     "brain/modules/m07_risk/__init__.py": "e3b0c44298fc1c14",
     "brain/modules/m07_risk/allocator.py": "a657ba29fb180921",
-    "brain/modules/m07_risk/module.py": "ae98eeb1a2059248",
+    "brain/modules/m07_risk/module.py": "509f8c88cb2c02c2",
     "brain/modules/m08_decide/__init__.py": "e3b0c44298fc1c14",
     "brain/modules/m08_decide/engine.py": "40ccb39480ea0a67",
     "brain/modules/m08_decide/module.py": "841d574f1864666b",
@@ -130,7 +139,7 @@
     "services/engine.py": "9cbbe8b5f34dedf5",
     "services/exit_policy.py": "3d0d14e73e7cb4c5",
     "services/limits.py": "b794c8f14288e8d8",
-    "services/risk.py": "77269646b0823c06",
+    "services/risk.py": "785da0b0c10bef06",
     "strategies/__init__.py": "8bf7f26a6e0ff92d",
     "strategies/base.py": "5ccf03c51881485a",
     "strategies/brain.py": "1eb0486baf34e29c",

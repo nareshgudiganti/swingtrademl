@@ -11,6 +11,8 @@ import { api } from '../api/client'
 import type { ExperimentOutcome, ExperimentSelection } from '../api/types'
 import type { Horizon } from './horizons'
 import { Card, Tag } from './ui'
+import { SortTh, useSort } from './sort'
+import StockLink from './StockLink'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
@@ -141,10 +143,23 @@ export function ResearchExperiment({ horizon: h }: { horizon: Horizon }) {
   const mine = (outcomes.data ?? []).filter((o) => o.horizon === h.days)
   const scoredIds = new Set(mine.map((o) => o.selection_id))
   // A pick is listed from the moment it is recorded, not only after the evening scoring writes its first row.
-  const rows: Row[] = [
+  const unsortedRows: Row[] = [
     ...active.filter((s) => !scoredIds.has(s.id)).map((s) => ({ kind: 'recorded' as const, s })),
     ...mine.map((o) => ({ kind: 'outcome' as const, o })),
   ]
+  // Picks that are not scored yet have no return, so they sort as "no value" and always stay last.
+  const scored = (r: Row, pick: (o: ExperimentOutcome) => number | null | undefined) =>
+    r.kind === 'outcome' && r.o.state !== 'data_issue' && r.o.state !== 'void' && r.o.state !== 'pending'
+      ? pick(r.o)
+      : null
+  const { sorted: rows, sorter } = useSort(unsortedRows, {
+    stock: (r: Row) => (r.kind === 'recorded' ? r.s.symbol : r.o.symbol),
+    started: (r: Row) => (r.kind === 'recorded' ? r.s.entry_session : r.o.entry_session),
+    state: (r: Row) => (r.kind === 'recorded' ? 'Recorded' : STATE_LABEL[r.o.state]),
+    ret: (r: Row) => scored(r, (o) => o.net_return),
+    nifty: (r: Row) => scored(r, (o) => o.excess_vs_nifty),
+    universe: (r: Row) => scored(r, (o) => o.excess_vs_universe),
+  }, { key: null }, { stock: 'asc', state: 'asc' })
 
   return (
     <div className="tm-grid" data-testid="research-experiment" style={{ marginTop: '0.8rem' }}>
@@ -306,19 +321,19 @@ export function ResearchExperiment({ horizon: h }: { horizon: Horizon }) {
             <table className="tm-table">
               <thead>
                 <tr>
-                  <th>Stock</th>
-                  <th>Started</th>
-                  <th>State</th>
-                  <th className="tm-right">Return after costs</th>
-                  <th className="tm-right">vs NIFTY</th>
-                  <th className="tm-right">vs average stock</th>
+                  <SortTh sorter={sorter} k="stock">Stock</SortTh>
+                  <SortTh sorter={sorter} k="started">Started</SortTh>
+                  <SortTh sorter={sorter} k="state">State</SortTh>
+                  <SortTh sorter={sorter} k="ret" right>Return after costs</SortTh>
+                  <SortTh sorter={sorter} k="nifty" right>vs NIFTY</SortTh>
+                  <SortTh sorter={sorter} k="universe" right>vs average stock</SortTh>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((row) =>
                   row.kind === 'recorded' ? (
                     <tr key={`s-${row.s.id}`}>
-                      <td className="tm-strong">{row.s.symbol}</td>
+                      <td><StockLink symbol={row.s.symbol} /></td>
                       <td>{day(row.s.entry_session)}</td>
                       <td>Recorded, waiting to start</td>
                       <td className="tm-dim" colSpan={3}>
@@ -327,7 +342,7 @@ export function ResearchExperiment({ horizon: h }: { horizon: Horizon }) {
                     </tr>
                   ) : (
                     <tr key={`${row.o.selection_id}-${row.o.horizon}`}>
-                      <td className="tm-strong">{row.o.symbol}</td>
+                      <td><StockLink symbol={row.o.symbol} /></td>
                       <td>{day(row.o.entry_session)}</td>
                       <td>
                         {STATE_LABEL[row.o.state]}

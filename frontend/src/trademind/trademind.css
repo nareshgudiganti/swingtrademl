@@ -2286,3 +2286,8 @@ button.tm-avatar {
 .tm-look-switch:hover {
   background: rgba(51, 214, 255, 0.16);
 }
+
+/* A stock name that opens its page, with the model score beside it. */
+.tm-stocklink { text-decoration: none; color: inherit; }
+.tm-stocklink:hover, .tm-stocklink:focus-visible { text-decoration: underline; }
+.tm-scorechip { display: inline-block; margin-left: 0.4rem; padding: 0 0.4rem; border-radius: 999px; font-size: 0.75em; font-weight: 600; font-variant-numeric: tabular-nums; background: rgba(99, 102, 241, 0.12); color: #4338ca; vertical-align: middle; }

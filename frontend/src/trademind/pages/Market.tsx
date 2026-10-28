@@ -7,6 +7,8 @@ import { MARKET_LABEL, MARKET_PLAIN, MARKET_TONE } from '../vocab'
 import { Term, TermIf } from '../term'
 import { BrainGate, Card, NotConnected, Tag, inr } from '../ui'
 import { QueryNotice } from '../PageState'
+import type { BrainSector } from '../../api/types'
+import { SortTh, useSort } from '../sort'
 
 const ROTATION: Record<string, string> = {
   leading: 'Leading — stronger for 1 and 3 months',
@@ -37,7 +39,12 @@ function MarketBody() {
 
   const run = latest.data!
   const situation = marketSituation(run)
-  const sectors = run.sectors ?? []
+  const { sorted: sectors, sorter } = useSort(run.sectors ?? [], {
+    rank: (s: BrainSector) => s.rank,
+    sector: (s: BrainSector) => s.name,
+    direction: (s: BrainSector) => ROTATION[s.rotation] ?? s.rotation,
+    strength: (s: BrainSector) => s.strength_20d,
+  }, { key: null }, { rank: 'asc', sector: 'asc', direction: 'asc' })
 
   return (
     <div className="tm-page tm-grid">
@@ -95,10 +102,10 @@ function MarketBody() {
               <table className="tm-table">
                 <thead>
                   <tr>
-                    <th>Rank</th>
-                    <th>Sector</th>
-                    <th>Direction</th>
-                    <th className="tm-right">20-day strength</th>
+                    <SortTh sorter={sorter} k="rank">Rank</SortTh>
+                    <SortTh sorter={sorter} k="sector">Sector</SortTh>
+                    <SortTh sorter={sorter} k="direction">Direction</SortTh>
+                    <SortTh sorter={sorter} k="strength" right>20-day strength</SortTh>
                   </tr>
                 </thead>
                 <tbody>

@@ -35,6 +35,8 @@ import { wordTagColor } from '../vocab'
 import { holdingsNeedingAttention } from '../today/HoldingsNeedsYou'
 import { stoppedByRoom } from '../today/answerRules'
 import { ideaCounts } from '../today/TodayIdeas'
+import { scorePoints } from '../scoreText'
+import { SortTh, useSort } from '../sort'
 import { GlowArea, inr, StockLogo, Tag } from '../ui'
 import '../newlook-w2.css'
 
@@ -190,6 +192,14 @@ function HeldTable({
   runLoaded: boolean
 }) {
   const caps = useSymbolCaps()
+  const { sorted, sorter } = useSort(rows, {
+    stock: (r: HeldRow) => r.symbol,
+    qty: (r: HeldRow) => r.position?.quantity,
+    price: (r: HeldRow) => r.position?.current_price,
+    pnl: (r: HeldRow) => r.position?.unrealized_pnl_pct,
+    tonight: (r: HeldRow) => r.word,
+    score: (r: HeldRow) => r.score,
+  }, { key: null }, { stock: 'asc', tonight: 'asc' })
   const summaryLine = wordSummary(rows)
   return (
     <section className="tmn-card tmn-w2-tablecard" aria-label="Your stocks" data-testid="held-table">
@@ -208,21 +218,25 @@ function HeldTable({
           <table className="tmn-w2-table">
             <thead>
               <tr>
-                <th>Stock</th>
-                {positionsLoaded && <th className="tmn-w2-r">Qty</th>}
-                {positionsLoaded && <th className="tmn-w2-r">Price</th>}
-                {positionsLoaded && <th className="tmn-w2-r">Gain / loss</th>}
-                <th>Tonight</th>
+                <SortTh sorter={sorter} k="stock">Stock</SortTh>
+                {positionsLoaded && <SortTh sorter={sorter} k="qty" right>Qty</SortTh>}
+                {positionsLoaded && <SortTh sorter={sorter} k="price" right>Price</SortTh>}
+                {positionsLoaded && <SortTh sorter={sorter} k="pnl" right>Gain / loss</SortTh>}
+                <SortTh sorter={sorter} k="tonight">Tonight</SortTh>
                 <th>Why, in a few words</th>
                 {positionsLoaded && (
-                  <th title="How strongly the model likes the stock today, out of 100. A ranking number, not a chance of profit. The change is since the previous daily reading.">
+                  <SortTh
+                    sorter={sorter}
+                    k="score"
+                    title="How strongly the model likes the stock today, out of 100. A ranking number, not a chance of profit. The change is since the previous daily reading."
+                  >
                     Score
-                  </th>
+                  </SortTh>
                 )}
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => {
+              {sorted.map((r) => {
                 const p = r.position
                 return (
                   <tr key={r.symbol}>
@@ -256,7 +270,16 @@ function HeldTable({
                     {positionsLoaded && (
                       <td>
                         {r.score == null ? (
-                          <span className="tm-dim tmn-small">No score yet</span>
+                          // No stored day-by-day reading yet: show the brain's own score from its last run, labelled
+                          // as that, rather than leaving the stock without one.
+                          scorePoints(r.decision?.confidence) != null ? (
+                            <span title="The brain's score for this stock on its last run. The day-by-day list starts with the next daily check.">
+                              <b>{scorePoints(r.decision?.confidence)}</b>
+                              <span className="tm-dim tmn-small"> today</span>
+                            </span>
+                          ) : (
+                            <span className="tm-dim tmn-small">No score yet</span>
+                          )
                         ) : (
                           <>
                             <b>{r.score}</b>

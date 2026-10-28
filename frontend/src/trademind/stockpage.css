@@ -309,3 +309,10 @@
 .sh-rng small { position: absolute; top: 14px; font-size: 11px; color: #5d6178; }
 .sh-l1 { left: 0; } .sh-l2 { left: 33.3%; transform: translateX(-50%); } .sh-l3 { right: 0; }
 .sh-how { display: grid; gap: 6px; margin: 8px 0; padding-left: 20px; }
+
+/* ------------------------------------------------------ score monitor ---- */
+.sp-monitor { display: flex; flex-direction: column; gap: 12px; }
+.sp-monitor-days { display: flex; gap: 10px; list-style: none; margin: 0; padding: 0; }
+.sp-monitor-days li { flex: 1 0 74px; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 6px; border: 1px solid var(--sp-line); border-radius: 10px; background: #fff; }
+.sp-monitor-days li strong { font-size: 22px; }
+.sp-monitor-days li.sp-monitor-now { border-color: var(--sp-accent); }

@@ -17,6 +17,7 @@ import {
   Glance,
   PlanLadder,
   QuickAnswers,
+  ScoreMonitor,
   StockHeader,
   useStockData,
 } from '../stockParts'
@@ -72,6 +73,7 @@ function StockNewView({ decision, run }: { decision: BrainDecision; run: BrainRu
         snapshot={data.snapshot}
         runAt={`Brain’s run on ${formatDateTime(run.started_at)}`}
       />
+      <ScoreMonitor trail={data.trail} />
       <BrainFlow decision={decision} run={run} analysisTo={analysisTo} />
       <div className="sp-split">
         <PlanLadder decision={decision} />

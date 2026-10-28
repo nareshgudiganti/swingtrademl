@@ -6,13 +6,14 @@
 
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
 
 import { api } from '../../api/client'
 import type { ShadowFinished, ShadowGroup, ShadowRunning, ShadowTestView } from '../../api/types'
 import { useSymbolCaps } from '../cap'
 import { shortDate } from '../CompanyTab'
 import { BrainGate } from '../ui'
+import { SortTh, useSort } from '../sort'
+import StockLink from '../StockLink'
 import '../stockpage.css'
 
 const pct = (n: number | null | undefined, digits = 1) =>
@@ -263,9 +264,9 @@ const CAP_NAME: Record<string, string> = { large: 'LARGE', midcap: 'MID', smallc
 function Stock({ symbol, caps }: { symbol: string; caps: Map<string, string> }) {
   const cap = caps.get(symbol.toUpperCase())
   return (
-    <Link to={`/trademind/stock/${encodeURIComponent(symbol)}`} style={{ textDecoration: 'none', color: 'inherit' }}>
-      <b>{symbol}</b> {cap && <span className="sp-cap">{CAP_NAME[cap]}</span>}
-    </Link>
+    <>
+      <StockLink symbol={symbol} /> {cap && <span className="sp-cap">{CAP_NAME[cap]}</span>}
+    </>
   )
 }
 
@@ -273,7 +274,15 @@ function Bought({ yes }: { yes: boolean }) {
   return <span className={`sh-chip ${yes ? 'sh-yes' : ''}`}>{yes ? 'Yes' : 'No'}</span>
 }
 
-function RunningTable({ rows, caps }: { rows: ShadowRunning[]; caps: Map<string, string> }) {
+function RunningTable({ rows: unsorted, caps }: { rows: ShadowRunning[]; caps: Map<string, string> }) {
+  const { sorted: rows, sorter } = useSort(unsorted, {
+    stock: (r: ShadowRunning) => r.symbol,
+    rank: (r: ShadowRunning) => r.rank,
+    today: (r: ShadowRunning) => (r.price_not_updated ? null : r.today_pct),
+    since: (r: ShadowRunning) => r.since_pct,
+    day: (r: ShadowRunning) => r.day,
+    bought: (r: ShadowRunning) => (r.paper_bought ? 1 : 0),
+  }, { key: null }, { stock: 'asc', rank: 'asc' })
   if (rows.length === 0) {
     return (
       <p className="sp-small" data-testid="shadow-empty">
@@ -286,13 +295,13 @@ function RunningTable({ rows, caps }: { rows: ShadowRunning[]; caps: Map<string,
       <table className="sh-table" data-testid="shadow-running">
         <thead>
           <tr>
-            <th>Stock</th>
-            <th>Original rank</th>
-            <th>Daily change</th>
-            <th>Since ranked</th>
+            <SortTh sorter={sorter} k="stock">Stock</SortTh>
+            <SortTh sorter={sorter} k="rank">Original rank</SortTh>
+            <SortTh sorter={sorter} k="today">Daily change</SortTh>
+            <SortTh sorter={sorter} k="since">Since ranked</SortTh>
             <th style={{ minWidth: 190 }}>Stop-to-target position</th>
-            <th>Trading days</th>
-            <th>Paper bought</th>
+            <SortTh sorter={sorter} k="day">Trading days</SortTh>
+            <SortTh sorter={sorter} k="bought">Paper bought</SortTh>
           </tr>
         </thead>
         <tbody>
@@ -332,7 +341,17 @@ function RunningTable({ rows, caps }: { rows: ShadowRunning[]; caps: Map<string,
   )
 }
 
-function FinishedTable({ rows, caps }: { rows: ShadowFinished[]; caps: Map<string, string> }) {
+function FinishedTable({ rows: unsorted, caps }: { rows: ShadowFinished[]; caps: Map<string, string> }) {
+  const { sorted: rows, sorter } = useSort(unsorted, {
+    stock: (r: ShadowFinished) => r.symbol,
+    rank: (r: ShadowFinished) => r.rank,
+    ranked: (r: ShadowFinished) => r.ranked_on,
+    ended: (r: ShadowFinished) => r.ended_on,
+    outcome: (r: ShadowFinished) => OUTCOME_TEXT[r.outcome],
+    result: (r: ShadowFinished) => r.result_pct,
+    took: (r: ShadowFinished) => r.days,
+    bought: (r: ShadowFinished) => (r.paper_bought ? 1 : 0),
+  }, { key: null }, { stock: 'asc', rank: 'asc', outcome: 'asc' })
   if (rows.length === 0) {
     return (
       <p className="sp-small" data-testid="shadow-empty">
@@ -345,14 +364,14 @@ function FinishedTable({ rows, caps }: { rows: ShadowFinished[]; caps: Map<strin
       <table className="sh-table" data-testid="shadow-finished">
         <thead>
           <tr>
-            <th>Stock</th>
-            <th>Original rank</th>
-            <th>Ranked</th>
-            <th>Ended</th>
-            <th>Outcome</th>
-            <th>Result</th>
-            <th>Took</th>
-            <th>Paper bought</th>
+            <SortTh sorter={sorter} k="stock">Stock</SortTh>
+            <SortTh sorter={sorter} k="rank">Original rank</SortTh>
+            <SortTh sorter={sorter} k="ranked">Ranked</SortTh>
+            <SortTh sorter={sorter} k="ended">Ended</SortTh>
+            <SortTh sorter={sorter} k="outcome">Outcome</SortTh>
+            <SortTh sorter={sorter} k="result">Result</SortTh>
+            <SortTh sorter={sorter} k="took">Took</SortTh>
+            <SortTh sorter={sorter} k="bought">Paper bought</SortTh>
           </tr>
         </thead>
         <tbody>

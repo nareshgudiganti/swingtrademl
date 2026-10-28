@@ -17,6 +17,8 @@ import { usePlan } from '../../lib/plan'
 import { useLearning, useMarketSession, useProposals } from '../live'
 import { QueryNotice } from '../PageState'
 import { istToday } from '../pricesAge'
+import { SortTh, useSort } from '../sort'
+import StockLink from '../StockLink'
 import { inr } from '../ui'
 import {
   cancelledRow,
@@ -94,7 +96,15 @@ export default function HistoryNew({ owner = false }: { owner?: boolean }) {
     ...(real ? [{ id: 'own' as const, label: 'My own trades' }] : []),
     ...(owner ? [{ id: 'cancelled' as const, label: 'Cancelled' }] : []),
   ]
-  const shown = rows.filter((r) => inTab(r, tab) && inPeriod(r, period, today))
+  const { sorted: shown, sorter } = useSort(rows.filter((r) => inTab(r, tab) && inPeriod(r, period, today)), {
+    date: (r: HistoryRow) => r.date,
+    stock: (r: HistoryRow) => r.symbol,
+    type: (r: HistoryRow) => KIND_LABEL[r.kind],
+    price: (r: HistoryRow) => (r.kind === 'cancelled' ? null : r.price),
+    ended: (r: HistoryRow) => r.ended,
+    // A sealed result must not leak through the order of the rows, so it sorts as "no result".
+    result: (r: HistoryRow) => (r.sealed ? null : r.resultPct),
+  }, { key: null }, { stock: 'asc', type: 'asc', ended: 'asc' })
   const loading = trades.isLoading || positions.isLoading
 
   return (
@@ -145,13 +155,13 @@ export default function HistoryNew({ owner = false }: { owner?: boolean }) {
             <table className="tmw3-table">
               <thead>
                 <tr>
-                  <th>Date</th>
-                  <th>Stock</th>
-                  <th>Type</th>
-                  <th className="tm-right">Bought at</th>
+                  <SortTh sorter={sorter} k="date">Date</SortTh>
+                  <SortTh sorter={sorter} k="stock">Stock</SortTh>
+                  <SortTh sorter={sorter} k="type">Type</SortTh>
+                  <SortTh sorter={sorter} k="price" right>Bought at</SortTh>
                   <th>Why it was bought</th>
-                  <th>How it ended</th>
-                  <th className="tm-right">Result</th>
+                  <SortTh sorter={sorter} k="ended">How it ended</SortTh>
+                  <SortTh sorter={sorter} k="result" right>Result</SortTh>
                 </tr>
               </thead>
               <tbody>
@@ -159,9 +169,7 @@ export default function HistoryNew({ owner = false }: { owner?: boolean }) {
                   <tr key={r.key}>
                     <td className="tm-dim">{shortDate(r.date)}</td>
                     <td>
-                      <Link to={`/trademind/stock/${encodeURIComponent(r.symbol)}`} className="tm-strong tmw3-sym">
-                        {r.symbol}
-                      </Link>
+                      <StockLink symbol={r.symbol} />
                     </td>
                     <td>
                       <span className={`tmw3-kind tmw3-kind-${r.kind}`}>{KIND_LABEL[r.kind]}</span>

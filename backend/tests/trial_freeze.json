@@ -46,6 +46,14 @@
         "brain/modules/m07_risk/module.py",
         "services/risk.py"
       ]
+    },
+    {
+      "date": "2026-10-28",
+      "commit": null,
+      "why": "Owner (2026-10-28): when testing mode skips the account limits, M07 says so on each approval so the stock page never claims the limits passed. Note text only; no decision changes.",
+      "files": [
+        "brain/modules/m07_risk/module.py"
+      ]
     }
   ],
   "files": {
@@ -84,7 +92,7 @@
     "brain/modules/m06_reason/training.py": "167204410a8ddf86",
     "brain/modules/m07_risk/__init__.py": "e3b0c44298fc1c14",
     "brain/modules/m07_risk/allocator.py": "a657ba29fb180921",
-    "brain/modules/m07_risk/module.py": "509f8c88cb2c02c2",
+    "brain/modules/m07_risk/module.py": "ed97f4a7b46d61bc",
     "brain/modules/m08_decide/__init__.py": "e3b0c44298fc1c14",
     "brain/modules/m08_decide/engine.py": "40ccb39480ea0a67",
     "brain/modules/m08_decide/module.py": "841d574f1864666b",

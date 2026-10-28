@@ -47,6 +47,9 @@ const STOP_STEP: Record<Exclude<WhyKind, 'owner_overrule' | 'other'>, number> = 
   bad_plan: 7,
 }
 
+/** M07 writes this on approvals made while testing mode skipped the limits (backend m07_risk LIMITS_OFF_NOTE). */
+const LIMITS_OFF = /switched off for testing/i
+
 export const NOT_RECORDED = 'Not recorded for this stock yet: the brain saves every step from 7 Nov.'
 
 const WORD_PLAIN: Record<string, string> = {
@@ -136,7 +139,9 @@ export function brainSteps(d: BrainDecision, run: BrainRun, owner = true): Brain
   if (stopAt === 6) stopped(6)
   else if (!owner) {
     // No account safety step for a customer: the account limits belong to a private test portfolio.
-  } else if (word === 'TRADE') push(6, 'Passed: the account’s safety limits allow it.', 'ok', 'PASSED')
+  } else if (word === 'TRADE' && d.reasons.some((r) => LIMITS_OFF.test(r)))
+    push(6, 'The account’s safety limits were switched off for testing, so none were applied.', 'warn', 'LIMITS OFF')
+  else if (word === 'TRADE') push(6, 'Passed: the account’s safety limits allow it.', 'ok', 'PASSED')
   else push(6, NOT_RECORDED, 'none', 'Not recorded')
 
   // 7 · decide

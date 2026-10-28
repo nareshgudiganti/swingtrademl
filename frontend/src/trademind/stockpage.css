@@ -335,3 +335,8 @@
 .sp-range-span { background: #bcc6f5; border-radius: 99px; }
 .sp-range-mark { width: 4px; margin-left: -2px; background: var(--sp-accent, #3f55d6); border-radius: 2px; top: -4px !important; bottom: -4px !important; }
 .sp-range-mark em { position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%); font-size: 12px; font-weight: 800; font-style: normal; color: var(--sp-accent, #3f55d6); }
+
+/* ------------------------------------------------------- why no trade ---- */
+.sp-whynot { display: flex; flex-direction: column; gap: 6px; border-left: 4px solid var(--sp-amber, #d9a400); }
+.sp-whynot-main { margin: 0; font-size: 16px; font-weight: 600; }
+.sp-illustrative { border-style: dashed; background: var(--sp-grey-bg, #f3f4f8); } /* not dimmed: faded text fails the contrast check */

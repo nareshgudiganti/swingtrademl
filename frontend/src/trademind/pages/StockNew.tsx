@@ -20,6 +20,7 @@ import {
   ScoreMonitor,
   StockHeader,
   useStockData,
+  WhyNoTrade,
 } from '../stockParts'
 import StockDetail from './StockDetail'
 
@@ -73,6 +74,7 @@ function StockNewView({ decision, run }: { decision: BrainDecision; run: BrainRu
         snapshot={data.snapshot}
         runAt={`Brain’s run on ${formatDateTime(run.started_at)}`}
       />
+      <WhyNoTrade decision={decision} />
       <ScoreMonitor trail={data.trail} />
       <BrainFlow decision={decision} run={run} analysisTo={analysisTo} />
       <div className="sp-split">

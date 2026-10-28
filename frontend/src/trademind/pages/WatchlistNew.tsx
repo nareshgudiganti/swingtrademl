@@ -24,7 +24,7 @@ const TABS: { id: WatchTab; label: string; hint?: string }[] = [
   { id: 'watching', label: 'Watching' },
   {
     id: 'close',
-    label: 'Close to a TRADE',
+    label: 'Close to a BUY',
     hint: 'A TRADE on the brain’s last run, or stopped only by the account’s safety limits after passing every other check.',
   },
   { id: 'removed', label: 'Removed' },
@@ -160,7 +160,7 @@ export default function WatchlistNew() {
 function emptyText(tab: WatchTab, onList: number): string {
   if (tab === 'removed') return 'Nothing removed.'
   if (onList === 0) return 'Your list is empty. Tap “Add a stock” to start.'
-  if (tab === 'close') return 'None of your stocks is close to a TRADE on the brain’s last run.'
+  if (tab === 'close') return 'None of your stocks is close to a BUY on the brain’s last run.'
   return 'Nothing here.'
 }
 

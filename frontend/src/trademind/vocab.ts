@@ -23,6 +23,11 @@ const WORD_TONE: Record<string, Tone> = {
   EXIT: 'neg',
 }
 
+/** What a screen prints for a brain word. The stored word stays TRADE; a customer reads BUY. */
+export function wordLabel(word: string): string {
+  return word === 'TRADE' ? 'BUY' : word
+}
+
 export function wordTone(word: string): Tone {
   return WORD_TONE[word] ?? 'neutral'
 }

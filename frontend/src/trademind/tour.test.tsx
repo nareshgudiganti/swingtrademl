@@ -165,7 +165,7 @@ describe('the screens', () => {
 
   it('screen 1 shows every decision word and market mode through the one glossary', () => {
     const t = text(view(0))
-    for (const w of ['TRADE', 'WATCH', 'WAIT', 'AVOID', 'HOLD', 'MONITOR', 'REDUCE', 'EXIT', 'Normal', 'Careful', 'No new trades'])
+    for (const w of ['BUY', 'WATCH', 'WAIT', 'AVOID', 'HOLD', 'MONITOR', 'REDUCE', 'EXIT', 'Normal', 'Careful', 'No new trades'])
       expect(t).toContain(w)
     expect(view(0)).toContain('tm-term-btn') // tappable explanations, not copied text
   })

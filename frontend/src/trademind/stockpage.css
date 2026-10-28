@@ -330,3 +330,8 @@
 .sp-track-score em { position: absolute; bottom: 26px; left: 50%; transform: translateX(-50%); font-size: 12px; font-weight: 800; font-style: normal; color: var(--sp-accent, #3f55d6); }
 .sp-record { height: 14px; border-radius: 99px; background: #e4e6f0; overflow: hidden; }
 .sp-record i { display: block; height: 100%; background: linear-gradient(90deg, #1f9d6b, #5ccf9c); }
+.sp-range { position: relative; height: 14px; border-radius: 99px; background: #e4e6f0; margin: 22px 4px 4px; }
+.sp-range i { position: absolute; top: 0; bottom: 0; font-style: normal; }
+.sp-range-span { background: #bcc6f5; border-radius: 99px; }
+.sp-range-mark { width: 4px; margin-left: -2px; background: var(--sp-accent, #3f55d6); border-radius: 2px; top: -4px !important; bottom: -4px !important; }
+.sp-range-mark em { position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%); font-size: 12px; font-weight: 800; font-style: normal; color: var(--sp-accent, #3f55d6); }

@@ -185,3 +185,93 @@ export function CaseAnalysis({
     </section>
   )
 }
+
+// ------------------------------------------------------------------ model evidence --
+
+export type EvidenceFigures =
+  | { kind: 'none'; text: string }
+  | {
+      kind: 'record'
+      hitPct: number
+      n: number
+      windows: number | null
+      lowPct: number | null
+      highPct: number | null
+      period: string | null
+      rule: string
+      enough: boolean
+    }
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+function monthYear(iso: string): string {
+  const [y, m] = iso.split('-')
+  const i = Number(m) - 1
+  return MONTHS[i] ? `${MONTHS[i]} ${y}` : iso
+}
+
+/** Pure: the model's measured record for scores like this one, from the stored `honest_score` only. */
+export function evidenceFigures(d: BrainDecision): EvidenceFigures {
+  const h = d.honest_score
+  const tr = h?.track_record
+  if (!h || h.status === 'no_score') return { kind: 'none', text: 'No score was stored for this stock, so there is no record to show.' }
+  if (h.status === 'not_measured' || !tr || tr.hit_rate == null || tr.n == null) {
+    return {
+      kind: 'none',
+      text: h.note ?? 'This score has not been measured against the +8% / −4% question yet, so no record is shown.',
+    }
+  }
+  return {
+    kind: 'record',
+    hitPct: Math.round(tr.hit_rate * 100),
+    n: tr.n,
+    windows: tr.windows ?? null,
+    lowPct: tr.lowest_window != null ? Math.round(tr.lowest_window * 100) : null,
+    highPct: tr.highest_window != null ? Math.round(tr.highest_window * 100) : null,
+    period: h.period ? `${monthYear(h.period.from)} to ${monthYear(h.period.to)}` : null,
+    rule: h.rule ?? '+8% target before the −4% stop, within 15 trading days',
+    enough: tr.enough_evidence,
+  }
+}
+
+/** "How far can the AI's score be trusted?": the model's measured record on past months it had not seen. Not the
+ * sealed live trial (its results stay hidden until its review): this is the earlier walk-forward test. */
+export function ModelEvidence({ decision: d }: { decision: BrainDecision }) {
+  if (d.kind !== 'idea') return null
+  const e = evidenceFigures(d)
+  return (
+    <section className="sp-card sp-stack" aria-label="How far the AI's score can be trusted" data-testid="model-evidence">
+      <div>
+        <h2 className="sp-h2">How far can the AI’s score be trusted?</h2>
+        <div className="sp-sub">The model’s record on past months it had not seen when it scored them.</div>
+      </div>
+      {e.kind === 'none' ? (
+        <p className="sp-small">{e.text}</p>
+      ) : (
+        <>
+          <p className="sp-bigtext">
+            In {e.n.toLocaleString('en-IN')} past cases with a score like this, {e.hitPct} in 100 reached the goal.
+          </p>
+          <div className="sp-range" role="img" aria-label={`Hit rate ${e.hitPct}%${e.lowPct != null && e.highPct != null ? `, between ${e.lowPct}% and ${e.highPct}% across market periods` : ''}`}>
+            {e.lowPct != null && e.highPct != null && (
+              <i className="sp-range-span" style={{ left: `${e.lowPct}%`, width: `${Math.max(1, e.highPct - e.lowPct)}%` }} />
+            )}
+            <i className="sp-range-mark" style={{ left: `${e.hitPct}%` }}><em>{e.hitPct}%</em></i>
+          </div>
+          <div className="sp-between">
+            <span>0 in 100</span>
+            <span>100 in 100</span>
+          </div>
+          <ul className="sp-list">
+            <li>The goal: {e.rule}.</li>
+            {e.period && <li>Tested on {e.period}{e.windows != null ? `, across ${e.windows} market periods` : ''}.</li>}
+            {e.lowPct != null && e.highPct != null && (
+              <li>It moved between {e.lowPct} and {e.highPct} in 100 from one market period to another, so treat it as a rough guide.</li>
+            )}
+            {!e.enough && <li>There are few cases for this score range, so the record is weak.</li>}
+          </ul>
+        </>
+      )}
+      <p className="sp-small">Past results do not guarantee future results. The score is a ranking, not a chance of profit.</p>
+    </section>
+  )
+}

@@ -32,7 +32,7 @@ import {
 } from '../stockParts'
 import { brainSteps, stopOf } from '../brainSteps'
 import { CompanyTab } from '../CompanyTab'
-import { CaseAnalysis } from '../CaseAnalysis'
+import { CaseAnalysis, ModelEvidence } from '../CaseAnalysis'
 import { CAP_LABEL } from './StockNew'
 import { Overrule } from './StockDetail'
 
@@ -124,6 +124,7 @@ function StockAnalysisView({ decision: d, run }: { decision: BrainDecision; run:
       </section>
 
       <CaseAnalysis decision={d} run={run} brief={data.brief} />
+      <ModelEvidence decision={d} />
 
       <BrainFlow decision={d} run={run} full />
       <SafetyInWords decision={d} />

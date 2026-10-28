@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { renderToString } from 'react-dom/server'
 
 import type { BrainDecision, BrainRun } from '../api/types'
-import { CaseAnalysis, caseFigures } from './CaseAnalysis'
+import { CaseAnalysis, caseFigures, evidenceFigures, ModelEvidence } from './CaseAnalysis'
 
 const dec = (over: Partial<BrainDecision> = {}): BrainDecision =>
   ({
@@ -48,5 +48,29 @@ describe('the AI’s case', () => {
   it('shows nothing for a holding', () => {
     const d = dec({ kind: 'holding', word: 'HOLD' })
     expect(renderToString(<CaseAnalysis decision={d} run={run([d])} />)).toBe('')
+  })
+
+  it('model evidence quotes only the stored record, with its period and its spread, and no chance of profit', () => {
+    const d = dec({
+      honest_score: {
+        status: 'measured', rule: '+8% target before the -4% stop, within 15 trading days',
+        period: { from: '2024-01-15', to: '2026-06-30' },
+        track_record: { enough_evidence: true, hit_rate: 0.14, n: 1250, windows: 9, lowest_window: 0.06, highest_window: 0.22 },
+      } as never,
+    })
+    expect(evidenceFigures(d)).toMatchObject({ kind: 'record', hitPct: 14, n: 1250, lowPct: 6, highPct: 22, period: 'Jan 2024 to Jun 2026' })
+    const html = renderToString(<ModelEvidence decision={d} />).replace(/<!-- -->/g, '')
+    expect(html).toContain('14 in 100 reached the goal')
+    expect(html).toContain('between 6 and 22 in 100')
+    expect(html).toContain('Past results do not guarantee')
+    expect(html).not.toMatch(/\d+%\s*chance/i)
+  })
+
+  it('model evidence says so, instead of guessing, when the score was not measured or there is none', () => {
+    const none = dec({ honest_score: { status: 'not_measured' } as never })
+    expect(evidenceFigures(none).kind).toBe('none')
+    expect(renderToString(<ModelEvidence decision={none} />)).toContain('has not been measured')
+    expect(evidenceFigures(dec({ honest_score: null })).kind).toBe('none')
+    expect(renderToString(<ModelEvidence decision={dec({ kind: 'holding', word: 'HOLD' })} />)).toBe('')
   })
 })

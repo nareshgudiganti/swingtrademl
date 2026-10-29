@@ -87,7 +87,7 @@ test.describe('first-time tour', () => {
     await openPage(page, '/trademind')
     await page.getByRole('button', { name: 'Help' }).click()
     const dialog = tour(page)
-    await dialog.getByRole('button', { name: /^TRADE/ }).click()
+    await dialog.getByRole('button', { name: /^BUY/ }).click()
     await expect(dialog.getByText(/Worth buying now, at the suggested size/)).toBeVisible()
     await page.keyboard.press('Escape')
     await expect(dialog.getByText(/Worth buying now, at the suggested size/)).toHaveCount(0)

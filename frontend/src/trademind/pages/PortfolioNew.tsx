@@ -30,13 +30,12 @@ import {
   type HeldRow,
 } from '../portfolioRules'
 import { withoutScorePercent } from '../scoreText'
-import { WordTag } from '../term'
 import { wordTagColor } from '../vocab'
 import { holdingsNeedingAttention } from '../today/HoldingsNeedsYou'
 import { stoppedByRoom } from '../today/answerRules'
 import { ideaCounts } from '../today/TodayIdeas'
 import { scorePoints } from '../scoreText'
-import { SortTh, useSort } from '../sort'
+import { useSort } from '../sort'
 import { GlowArea, inr, StockLogo, Tag } from '../ui'
 import '../newlook-w2.css'
 
@@ -98,6 +97,8 @@ export default function PortfolioNew({ owner = false }: { owner?: boolean }) {
 
       <HeldTable rows={rows} positionsLoaded={positions.data !== undefined} positionsRefused={refused(positions)} runLoaded={!!run} />
 
+      <Sectors owner={owner} limits={limits.data} positions={positions.data} total={summary.data?.total_value ?? null} />
+
       {owner && <AddMoneyCard />}
 
       <HoldingsHealthCard />
@@ -134,8 +135,6 @@ export default function PortfolioNew({ owner = false }: { owner?: boolean }) {
           )}
         </section>
       </div>
-
-      <Sectors owner={owner} limits={limits.data} positions={positions.data} total={summary.data?.total_value ?? null} />
 
       <ValueChart equity={equity} />
     </div>
@@ -201,8 +200,14 @@ function HeldTable({
     score: (r: HeldRow) => r.score,
   }, { key: null }, { stock: 'asc', tonight: 'asc' })
   const summaryLine = wordSummary(rows)
+  const sortChips: { k: 'stock' | 'pnl' | 'score' | 'tonight'; label: string }[] = [
+    ...(positionsLoaded ? [{ k: 'pnl' as const, label: 'Gain / loss' }] : []),
+    ...(positionsLoaded ? [{ k: 'score' as const, label: 'Score' }] : []),
+    { k: 'tonight', label: 'Tonight’s read' },
+    { k: 'stock', label: 'A – Z' },
+  ]
   return (
-    <section className="tmn-card tmn-w2-tablecard" aria-label="Your stocks" data-testid="held-table">
+    <section className="tmn-card tmn-w2-tablecard tmn-w2-railcard" aria-label="Your stocks" data-testid="held-table">
       <div className="tmn-card-head tmn-w2-pad">
         <span className="tmn-card-title">
           {positionsLoaded ? 'Your stocks' : 'The bot’s stocks'} — tonight’s read <Tag tone="blue">Paper</Tag>
@@ -214,92 +219,83 @@ function HeldTable({
           {positionsLoaded || runLoaded ? 'The bot holds no paper shares right now.' : 'The held stocks could not be loaded.'}
         </p>
       ) : (
-        <div className="tmn-w2-tablebox" role="region" aria-label="Table, scroll sideways to see more" tabIndex={0}>
-          <table className="tmn-w2-table">
-            <thead>
-              <tr>
-                <SortTh sorter={sorter} k="stock">Stock</SortTh>
-                {positionsLoaded && <SortTh sorter={sorter} k="qty" right>Qty</SortTh>}
-                {positionsLoaded && <SortTh sorter={sorter} k="price" right>Price</SortTh>}
-                {positionsLoaded && <SortTh sorter={sorter} k="pnl" right>Gain / loss</SortTh>}
-                <SortTh sorter={sorter} k="tonight">Tonight</SortTh>
-                <th>Why, in a few words</th>
-                {positionsLoaded && (
-                  <SortTh
-                    sorter={sorter}
-                    k="score"
-                    title="How strongly the model likes the stock today, out of 100. A ranking number, not a chance of profit. The change is since the previous daily reading."
-                  >
-                    Score
-                  </SortTh>
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {sorted.map((r) => {
-                const p = r.position
-                return (
-                  <tr key={r.symbol}>
-                    <td>
-                      <Link to={`/trademind/stock/${encodeURIComponent(r.symbol)}`} className="tmn-w2-stock">
-                        <StockLogo symbol={r.symbol} />
-                        <span>
-                          <b>{r.symbol}</b> <CapFlag tier={p?.cap_tier ?? caps.get(r.symbol.toUpperCase())} />
-                        </span>
-                      </Link>
-                    </td>
-                    {positionsLoaded && <td className="tmn-w2-r">{p ? p.quantity : '—'}</td>}
-                    {positionsLoaded && <td className="tmn-w2-r">{p ? `₹${inr(p.current_price)}` : '—'}</td>}
-                    {positionsLoaded && (
-                      <td className={`tmn-w2-r ${p ? (p.unrealized_pnl >= 0 ? 'tm-pos' : 'tm-neg') : ''}`}>
-                        {p ? (
-                          <>
-                            {p.unrealized_pnl_pct >= 0 ? '+' : '−'}
-                            {Math.abs(p.unrealized_pnl_pct * 100).toFixed(1)}%
-                            <span className="tmn-small tmn-w2-sub">
-                              {p.unrealized_pnl >= 0 ? '+' : '−'}₹{inr(Math.abs(p.unrealized_pnl), 0)}
-                            </span>
-                          </>
-                        ) : (
-                          '—'
-                        )}
-                      </td>
-                    )}
-                    <td>{r.word ? <WordTag word={r.word} /> : <span className="tm-dim tmn-small">Not read tonight</span>}</td>
-                    <td className="tmn-w2-why">{r.why ?? <span className="tm-dim">—</span>}</td>
-                    {positionsLoaded && (
-                      <td>
-                        {r.score == null ? (
-                          // No stored day-by-day reading yet: show the brain's own score from its last run, labelled
-                          // as that, rather than leaving the stock without one.
-                          scorePoints(r.decision?.confidence) != null ? (
-                            <span title="The brain's score for this stock on its last run. The day-by-day list starts with the next daily check.">
-                              <b>{scorePoints(r.decision?.confidence)}</b>
-                              <span className="tm-dim tmn-small"> today</span>
-                            </span>
-                          ) : (
-                            <span className="tm-dim tmn-small">No score yet</span>
-                          )
-                        ) : (
-                          <>
-                            <b>{r.score}</b>
-                            {r.change != null && r.change !== 0 && (
-                              <span className={`tmn-small ${r.change > 0 ? 'tm-pos' : 'tm-neg'}`}>
-                                {' '}
-                                {r.change > 0 ? '▲' : '▼'}
-                                {Math.abs(r.change)}
-                              </span>
-                            )}
-                          </>
-                        )}
-                      </td>
-                    )}
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+        <>
+        <div className="tmn-w2-sorttabs" role="group" aria-label="Sort your stocks">
+          {sortChips.map((c) => (
+            <button
+              key={c.k}
+              type="button"
+              className="tmn-w2-sorttab"
+              aria-pressed={sorter.key === c.k}
+              onClick={() => sorter.toggle(c.k)}
+            >
+              {c.label}
+              {sorter.key === c.k && <span aria-hidden="true">{sorter.dir === 'asc' ? ' ↑' : ' ↓'}</span>}
+            </button>
+          ))}
         </div>
+        <div className="tmn-w2-rail" role="region" aria-label="Your stocks, scroll sideways to see more" tabIndex={0}>
+          {sorted.map((r) => {
+            const p = r.position
+            const tone = p ? (p.unrealized_pnl >= 0 ? 'up' : 'down') : 'none'
+            return (
+              <Link key={r.symbol} to={`/trademind/stock/${encodeURIComponent(r.symbol)}`} className="tmn-w2-hcard" data-tone={tone}>
+                <span className="tmn-w2-hcard-top">
+                  <StockLogo symbol={r.symbol} />
+                  <span className="tmn-grow">
+                    <b>{r.symbol}</b> <CapFlag tier={p?.cap_tier ?? caps.get(r.symbol.toUpperCase())} />
+                    {p?.sector && <span className="tmn-small tm-dim tmn-w2-sub">{p.sector}</span>}
+                  </span>
+                  {r.word ? (
+                    <span className={`tm-tag tm-tag-${wordTagColor(r.word)}`}>{r.word}</span>
+                  ) : (
+                    <span className="tm-dim tmn-small">Not read tonight</span>
+                  )}
+                </span>
+                {positionsLoaded && (
+                  <span className="tmn-w2-hcard-money">
+                    <span className={`tmn-w2-hcard-pct ${p ? (p.unrealized_pnl >= 0 ? 'tm-pos' : 'tm-neg') : ''}`}>
+                      {p ? `${p.unrealized_pnl_pct >= 0 ? '+' : '−'}${Math.abs(p.unrealized_pnl_pct * 100).toFixed(1)}%` : '—'}
+                    </span>
+                    <span className="tmn-small tm-dim">
+                      {p ? `${p.unrealized_pnl >= 0 ? '+' : '−'}₹${inr(Math.abs(p.unrealized_pnl), 0)} · ${p.quantity} × ₹${inr(p.current_price)}` : ''}
+                    </span>
+                  </span>
+                )}
+                <span className="tmn-w2-hcard-why">{r.why ?? <span className="tm-dim">—</span>}</span>
+                {positionsLoaded && (
+                  <span className="tmn-w2-hcard-score" title="How strongly the model likes the stock today, out of 100. A ranking number, not a chance of profit.">
+                    {r.score == null ? (
+                      // No stored day-by-day reading yet: show the brain's own last-run score, labelled as that.
+                      scorePoints(r.decision?.confidence) != null ? (
+                        <span title="The brain's score for this stock on its last run. The day-by-day list starts with the next daily check.">
+                          <b>{scorePoints(r.decision?.confidence)}</b>
+                          <span className="tm-dim tmn-small"> today</span>
+                        </span>
+                      ) : (
+                        <span className="tm-dim tmn-small">No score yet</span>
+                      )
+                    ) : (
+                      <>
+                        <span className="tmn-w2-meter">
+                          <span style={{ width: `${Math.min(100, Math.max(0, r.score))}%` }} />
+                        </span>
+                        <b>{r.score}</b>
+                        {r.change != null && r.change !== 0 && (
+                          <span className={`tmn-small ${r.change > 0 ? 'tm-pos' : 'tm-neg'}`}>
+                            {r.change > 0 ? '▲' : '▼'}
+                            {Math.abs(r.change)}
+                          </span>
+                        )}
+                      </>
+                    )}
+                  </span>
+                )}
+              </Link>
+            )
+          })}
+        </div>
+        </>
       )}
       {positionsRefused && (
         <p className="tm-dim tmn-small tmn-w2-pad">Quantities and prices are not included for your account; the brain’s read is.</p>
@@ -364,6 +360,8 @@ function Room({ owner, run, limits }: { owner: boolean; run: BrainRun | undefine
   )
 }
 
+const SECTOR_COLORS = ['#3f55d6', '#1f9d6b', '#e0a72b', '#d9486a', '#7a4fd6', '#17a2b8', '#e8702a', '#5a6b8c']
+
 function Sectors({
   owner,
   limits,
@@ -382,6 +380,8 @@ function Sectors({
       : { positions, total },
   )
   if (bars.length === 0) return null
+  const bySector = new Map<string, string[]>()
+  for (const p of positions ?? []) bySector.set(p.sector || 'Unclassified', [...(bySector.get(p.sector || 'Unclassified') ?? []), p.symbol])
   const cap = owner && limits?.sector_cap_pct != null ? Math.round(limits.sector_cap_pct * 100) : 25
   return (
     <section className="tmn-card" aria-label="Invested by sector" data-testid="sectors">
@@ -389,15 +389,27 @@ function Sectors({
         <span className="tmn-card-title">Invested by sector</span>
         <span className="tm-dim tmn-small">{one ? 'One stock per sector at this account size' : `Bars measured against the ${cap}% limit`}</span>
       </div>
-      {bars.map((b) => (
-        <div key={b.sector} className="tmn-w2-bar">
-          <span>{b.sector}</span>
-          <div className="tmn-w2-track" data-over={b.over ? 'true' : undefined}>
-            <span style={{ width: `${one ? Math.min(100, b.pct) : b.ofCap}%` }} />
+      <div className="tmn-w2-sectors">
+        {bars.map((b, i) => (
+          <div key={b.sector} className="tmn-w2-sector" data-over={b.over ? 'true' : undefined} style={{ ['--sec' as string]: SECTOR_COLORS[i % SECTOR_COLORS.length] }}>
+            <div className="tmn-w2-sector-top">
+              <span className="tmn-w2-sector-name">{b.sector}</span>
+              <b>{b.pct.toFixed(0)}%</b>
+            </div>
+            <div className="tmn-w2-track" data-over={b.over ? 'true' : undefined}>
+              <span style={{ width: `${one ? Math.min(100, b.pct) : b.ofCap}%` }} />
+            </div>
+            <div className="tmn-w2-sector-stocks">
+              {(bySector.get(b.sector) ?? []).map((sym) => (
+                <Link key={sym} to={`/trademind/stock/${encodeURIComponent(sym)}`} className="tmn-w2-chip">
+                  <StockLogo symbol={sym} />
+                  {sym}
+                </Link>
+              ))}
+            </div>
           </div>
-          <b>{b.pct.toFixed(0)}%</b>
-        </div>
-      ))}
+        ))}
+      </div>
     </section>
   )
 }

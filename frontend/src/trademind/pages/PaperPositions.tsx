@@ -7,10 +7,12 @@ import { CapFlag } from '../cap'
 import { DayCell, ScoreToday, SuggestionTag, scoreNow, suggestionRank } from '../HeldRead'
 import ScoreTrail from '../ScoreTrail'
 import { SortTh, useSort } from '../sort'
-import { Card, inr, signed, toneClass } from '../ui'
+import { Card, inr, signed, StockLogo, toneClass } from '../ui'
 import StockLink from '../StockLink'
 import { PageState, StaleNotice } from '../PageState'
 import { pickState } from '../stateRules'
+
+const SECTOR_COLORS = ['#3f55d6', '#1f9d6b', '#e0a72b', '#d9486a', '#7a4fd6', '#17a2b8', '#e8702a', '#5a6b8c']
 
 type Period = 'day' | 'week' | 'month'
 
@@ -146,23 +148,6 @@ export default function PaperPositions() {
         </div>
       )}
 
-      {sectors.length > 0 && (
-        <Card title="By sector">
-          <div className="tm-rows">
-            {sectors.map((s) => (
-              <div key={s.name} className="tm-row">
-                <span>
-                  {s.name} <span className="tm-dim">{s.symbols.join(', ')}</span>
-                </span>
-                <span className="tm-strong">
-                  {money(s.value)} · {(s.pct * 100).toFixed(0)}%
-                </span>
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
-
       <Card
         title="Open positions"
         sub="Buy new stocks on Portfolio → Manual test. Buy more or sell here. Click a column name to sort, click a stock to see its score day by day."
@@ -194,6 +179,33 @@ export default function PaperPositions() {
           />
         )}
       </Card>
+
+      {sectors.length > 0 && (
+        <Card title="By sector">
+          <div className="tm-sector-rail" role="region" aria-label="Sectors, scroll sideways to see more" tabIndex={0}>
+            {sectors.map((s, i) => (
+              <div key={s.name} className="tm-sector-card" style={{ ['--sec' as string]: SECTOR_COLORS[i % SECTOR_COLORS.length] }}>
+                <div className="tm-sector-top">
+                  <b>{s.name}</b>
+                  <b>{(s.pct * 100).toFixed(0)}%</b>
+                </div>
+                <div className="tm-sector-bar">
+                  <span style={{ width: `${Math.min(100, s.pct * 100)}%` }} />
+                </div>
+                <div className="tm-dim">{money(s.value)}</div>
+                <div className="tm-sector-stocks">
+                  {s.symbols.map((sym) => (
+                    <span key={sym} className="tm-stock-cell">
+                      <StockLogo symbol={sym} />
+                      {sym}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       <Card title="Closed trades">
         <div className="tm-toolbar" style={{ marginBottom: '0.6rem' }}>
@@ -302,8 +314,11 @@ function OpenTable({
             <Fragment key={p.id}>
               <tr className="tm-clickable" onClick={() => setOpen(open === p.id ? null : p.id)}>
                 <td className="tm-strong">
-                  <StockLink symbol={p.symbol} withScore={false} />
-                  <CapFlag tier={p.cap_tier} gap />
+                  <span className="tm-stock-cell">
+                    <StockLogo symbol={p.symbol} />
+                    <StockLink symbol={p.symbol} withScore={false} />
+                    <CapFlag tier={p.cap_tier} gap />
+                  </span>
                 </td>
                 <td>
                   <SuggestionTag p={p} />
@@ -319,7 +334,9 @@ function OpenTable({
                 <td className="tm-right tm-num">{p.quantity}</td>
                 <td className="tm-right tm-num">₹{inr(p.entry_price)}</td>
                 <td className="tm-right tm-num">₹{inr(p.current_value, 0)}</td>
-                <td className={`tm-right tm-num ${toneClass(p.unrealized_pnl)}`}>{signed(p.unrealized_pnl_pct * 100)}</td>
+                <td className="tm-right tm-num">
+                  <span className={`tm-pnl-pill ${toneClass(p.unrealized_pnl)}`}>{signed(p.unrealized_pnl_pct * 100)}</span>
+                </td>
                 <td>
                   <div className="tm-flex tm-wrap" style={{ gap: '0.4rem' }}>
                     <button

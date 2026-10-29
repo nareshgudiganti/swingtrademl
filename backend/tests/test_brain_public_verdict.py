@@ -273,7 +273,7 @@ def seeded(db_session):
     )
     add("TRADECO", "TRADE", reasons=["Plan."], qty=40)
     add("HELDCO", "HOLD", kind="holding", reasons=["Holding steady."], qty=100)
-    db_session.commit()
+    db_session.flush()
     return RUN
 
 

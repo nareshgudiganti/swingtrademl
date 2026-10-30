@@ -299,7 +299,7 @@ export function Glance({
   const word = finalWord(d)
   const pts = scorePoints(d.confidence)
   const level = buyLevel(d)
-  const week = trail.slice(-5)
+  const week = trailWithToday(trail, scoreToday(d, run)).slice(-5)
   const first = week[0]?.score
   const latest = week.at(-1)?.score
   const delta = first != null && latest != null ? Math.round((latest - first) * 100) : null
@@ -405,6 +405,21 @@ export function WhyNoTrade({ decision: d }: { decision: BrainDecision }) {
 
 const MONITOR_DAYS = 7
 
+/** The brain's own score for this run, dated by the Indian calendar day the run belongs to. */
+export function scoreToday(d: BrainDecision, run: BrainRun): TrailPoint | null {
+  if (d.confidence == null || !run.started_at) return null
+  const date = new Date(run.started_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+  return { date, score: d.confidence }
+}
+
+/** The daily readings with today's headline score as the last point, so the list ends on the SAME number the
+ *  page headline shows. The earlier days are the daily model's readings; a reading dated today (or later) is
+ *  replaced by the headline rather than shown beside it. */
+export function trailWithToday(trail: TrailPoint[], today?: TrailPoint | null): TrailPoint[] {
+  if (!today) return trail
+  return [...trail.filter((t) => t.date < today.date), today]
+}
+
 const dayMonth = (iso: string) =>
   new Date(`${iso}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
 
@@ -415,14 +430,25 @@ function daysBetween(a: string, b: string): number {
 
 /** The last few daily scores with their dates, so a falling or rising score is visible at a glance.
  *  Days the model did not run are left out, and a longer-than-a-weekend jump is marked, never filled in. */
-export function ScoreMonitor({ trail, level }: { trail: TrailPoint[]; level?: number | string | null }) {
-  const days = trail.slice(-MONITOR_DAYS)
+export function ScoreMonitor({
+  trail,
+  level,
+  today,
+}: {
+  trail: TrailPoint[]
+  level?: number | string | null
+  today?: TrailPoint | null
+}) {
+  const days = trailWithToday(trail, today).slice(-MONITOR_DAYS)
   return (
     <section className="sp-card sp-monitor" aria-label="Strength score, day by day" data-testid="score-monitor">
       <div className="sp-flow-head" style={{ marginBottom: 0 }}>
         <div>
           <h2 className="sp-h2">Is the score holding up?</h2>
-          <div className="sp-sub">The strength score on each of the last days the model checked this stock.</div>
+          <div className="sp-sub">
+            The strength score on each of the last days the model checked this stock. The last one is today’s score, the same
+            number as the headline.
+          </div>
         </div>
         {level != null && <span className="sp-pill sp-pill-amber">Buy level: {level}</span>}
       </div>
@@ -470,10 +496,11 @@ export function BrainFlow({
   analysisTo?: string
   full?: boolean
 }) {
-  const { canManage: owner } = usePlan()
-  const steps = brainSteps(d, run, owner)
-  const pass = stepPasses(d, steps, owner)
-  const stop = stopOf(d, owner)
+  // No account-money step in the chain for anyone: a customer knows what they can invest, and the owner's own
+  // limits are a separate, later feature. Seven steps, display only.
+  const steps = brainSteps(d, run, false)
+  const pass = stepPasses(d, steps, false)
+  const stop = stopOf(d, false)
   const passed = pass.filter((p) => p === 'yes').length
   const applicable = steps.length
   const stepCount = steps.length
@@ -535,7 +562,6 @@ export function BrainFlow({
             <div className="sp-why-text">{withoutScorePercent(stop.why.text)}</div>
             {stop.why.detail && <p className="sp-small" style={{ marginTop: 6 }}>What the brain recorded: {withoutScorePercent(stop.why.detail)}</p>}
           </div>
-          {owner && stop.why.kind === 'risk_no_room' && <MoneyMeter />}
           {changes.length > 0 && (
             <div className="sp-why-more">
               <b>What would change it</b>

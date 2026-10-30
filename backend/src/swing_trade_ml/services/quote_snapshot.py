@@ -176,7 +176,15 @@ def build_snapshot(now: datetime, quote: QuotePoint | None, candles: list[Candle
     bars = sorted(candles, key=lambda c: c.day)
     in_session = sess.state is market_session.SessionState.OPEN
     if in_session and quote is not None:
-        return _from_quote(now, sess, quote, bars)
+        snap = _from_quote(now, sess, quote, bars)
+        # A stored quote from an earlier day must not hide a NEWER stored close: the close is the fresher fact.
+        if (
+            snap.state is SnapshotState.STALE
+            and bars
+            and bars[-1].day > quote.ts.astimezone(IST).date()
+        ):
+            return _from_close(now, sess, bars)
+        return snap
     if not bars:
         return Snapshot(
             SnapshotState.NO_DATA, None, None, None, None, None, None, None, False, "No price on file yet."

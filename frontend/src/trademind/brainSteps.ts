@@ -70,6 +70,9 @@ export function stopOf(d: BrainDecision, owner = true): { step: number; why: Why
   if (!first) return null
   const kind = first.kind
   const step = kind === 'other' || kind === 'owner_overrule' ? 7 : STOP_STEP[kind]
+  // The owner's own page runs without the account safety step too (the stock-level answer is what is shown): when
+  // the only thing that held the idea back was the account's room, the stock itself passed every check.
+  if (!owner && d.stock_verdict_restored) return null
   // A customer has no account safety step: a safety refusal is shown where the brain decided (step 7).
   return { step: !owner && step === 6 ? 7 : step, why: first }
 }

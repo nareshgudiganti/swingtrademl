@@ -40,6 +40,7 @@ from swing_trade_ml.db.models.finance import (
     FinanceTransaction,
 )
 from swing_trade_ml.db.models.invites import InviteRequest
+from swing_trade_ml.db.models.lanes import H05Event, H05GroupDay, H05Run, H05Signal
 from swing_trade_ml.db.models.market import (
     Candle,
     CandleArrival,
@@ -89,6 +90,10 @@ __all__ = [
     "ExperimentOutcome",
     "ExperimentProtocol",
     "ExperimentSelection",
+    "H05Event",
+    "H05GroupDay",
+    "H05Run",
+    "H05Signal",
     "FeatureSnapshot",
     "FinanceCustomRule",
     "FinanceDailyCategory",

@@ -833,22 +833,8 @@
   color: #fff;
 }
 
-/* ---- Discover as slides: a few rows of cards you swipe, instead of one long page to scroll. ---- */
-.tm-new .tmn-w2-rails {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.tm-new .tmn-w2-layouttabs {
-  padding: 0;
-}
-
-.tm-new .tmn-w2-seeall {
-  justify-content: center;
-  align-items: center;
-  text-align: center;
-  font: inherit;
-  cursor: pointer;
-  flex-basis: 200px;
+/* ---- A long list of stocks keeps to one table with its own scroll bar: the page itself does not scroll. ---- */
+.tm-new .tmn-w2-tablebox-tall {
+  max-height: max(420px, calc(100vh - 330px));
+  scrollbar-width: auto;
 }

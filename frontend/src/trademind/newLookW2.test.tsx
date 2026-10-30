@@ -129,22 +129,14 @@ describe('Discover: where the brain stopped each idea', () => {
     expect(discoverCounts([dec('X', 'WATCH', 0.5, { overruled_word: 'AVOID' })]).AVOID).toBe(1)
   })
 
-  it('opens as slides: rows of swipeable cards by word, not one long table', () => {
-    const html = render('/trademind/opportunities', false)
-    expect(html).toContain('data-testid="discover-slides"')
-    expect(html).toContain('data-testid="stock-rail"')
-    expect(html).toContain('swipe sideways')
-    expect(html).not.toContain('data-testid="discover-table"')
-    expect(html).toContain('href="/trademind/stock/GOODCO"')
-    expect(html).not.toContain('Safety check')
-  })
-
   it('renders the table in the new look: decision, score as a number, reason, where it stopped, AI analysis', () => {
-    const html = render('/trademind/opportunities?layout=table', false)
+    const html = render('/trademind/opportunities', false)
     expect(html).toContain('data-page="discover-new"')
     expect(html).toContain('data-testid="discover-table"')
     expect(html).toContain('Where it stopped')
     expect(html).not.toContain('Safety check')
+    expect(html).toContain('tmn-w2-tablebox-tall') // the list scrolls inside its own box, not the page
+    expect(html).not.toContain('data-testid="stock-rail"')
     expect(html).toContain('Passed')
     expect(html).toContain('AI analysis →')
     expect(html).toContain('href="/trademind/stock/GOODCO"')

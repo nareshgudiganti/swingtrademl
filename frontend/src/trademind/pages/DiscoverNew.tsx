@@ -8,39 +8,26 @@ import { useQuery } from '@tanstack/react-query'
 import { Link, useSearchParams } from 'react-router-dom'
 
 import { api } from '../../api/client'
-import type { BrainDecision } from '../../api/types'
 import { formatDateTime } from '../../lib/format'
-import { CapFlag, useSymbolCaps } from '../cap'
+import { useSymbolCaps } from '../cap'
 import {
   DISCOVER_FILTERS,
   DISCOVER_FOOT,
   discoverCounts,
   filterIdeas,
   sectorsIn,
-  whereItStopped,
   type DiscoverFilter,
 } from '../discoverRules'
 import { noTradeReason } from '../emptyReasons'
-import { ideasFrom, shownWord, useLatestRun } from '../live'
-import { scorePoints, scoreRank, SCORE_HINT } from '../scoreText'
-import { StockRail, type RailCard } from '../StockRail'
-import { WordTag } from '../term'
-import { oneReason } from '../today/answerRules'
-import { BrainGate, Icon, StockLogo } from '../ui'
-import { SortTh, useSort } from '../sort'
-import { wordLabel } from '../vocab'
+import { ideasFrom, useLatestRun } from '../live'
+import { scoreRank } from '../scoreText'
+import { IdeasTable, useIdeaSort } from '../IdeasTable'
+import { BrainGate, Icon } from '../ui'
 import '../newlook-w2.css'
 import Opportunities from './Opportunities'
 
 const FILTER_LABEL: Record<DiscoverFilter, string> = { ALL: 'All', TRADE: 'BUY', WATCH: 'WATCH', WAIT: 'WAIT', AVOID: 'AVOID' }
 
-// The rows of the sliding view, best word first, and the tone each row's cards carry.
-const RAILS = [
-  { word: 'TRADE', title: 'BUY', sub: 'Passed every check', tone: 'up' },
-  { word: 'WATCH', title: 'WATCH', sub: 'Good, but not a buy yet', tone: 'wait' },
-  { word: 'WAIT', title: 'WAIT', sub: 'Nothing to do today', tone: 'wait' },
-  { word: 'AVOID', title: 'AVOID', sub: 'Stay away for now', tone: 'down' },
-] as const
 
 export default function DiscoverNew() {
   const [params] = useSearchParams()
@@ -63,15 +50,12 @@ export default function DiscoverNew() {
 }
 
 function DiscoverBody() {
-  const [params] = useSearchParams()
   const run = useLatestRun().data!
   const ideas = ideasFrom(run)
   const caps = useSymbolCaps()
   const [filter, setFilter] = useState<DiscoverFilter>('ALL')
   const [sector, setSector] = useState<string>('')
   const [query, setQuery] = useState('')
-  // Slides (swipe through rows of cards) is the default; the table stays one tap away.
-  const [layout, setLayout] = useState<'slides' | 'table'>(params.get('layout') === 'table' ? 'table' : 'slides')
 
   // The sector map (ml/sector_map.py). Not every account may read it; without it the sector filter is hidden.
   const symbols = useMemo(() => ideas.map((d) => d.symbol.toUpperCase()).sort(), [ideas])
@@ -87,13 +71,7 @@ function DiscoverBody() {
 
   const counts = discoverCounts(ideas)
   const filtered = filterIdeas(ideas, { filter, sector: sector || null, query, sectorOf })
-  const { sorted: rows, sorter } = useSort(filtered, {
-    rank: (d) => d.confidence,
-    stock: (d) => d.symbol,
-    decision: (d) => shownWord(d),
-    score: (d) => d.confidence,
-    stopped: (d) => whereItStopped(d).label,
-  }, { key: null }, { stock: 'asc', decision: 'asc', stopped: 'asc' })
+  const { sorted: rows, sorter } = useIdeaSort(filtered)
   const dayScores = ideas.map((d) => d.confidence)
   const noTrade = noTradeReason(run.banner, ideas.length, counts.TRADE)
 
@@ -124,20 +102,6 @@ function DiscoverBody() {
           ))}
         </div>
         <span className="tmn-grow" />
-        <div className="tmn-w2-sorttabs tmn-w2-layouttabs" role="group" aria-label="How to show the list">
-          {(['slides', 'table'] as const).map((l) => (
-            <button
-              key={l}
-              type="button"
-              className="tmn-w2-sorttab"
-              aria-pressed={layout === l}
-              data-testid={`layout-${l}`}
-              onClick={() => setLayout(l)}
-            >
-              {l === 'slides' ? 'Slides' : 'Table'}
-            </button>
-          ))}
-        </div>
         {sectorList.length > 0 && (
           <label className="tmn-w2-select tm-dim tmn-small">
             Sector
@@ -169,73 +133,21 @@ function DiscoverBody() {
         </p>
       )}
 
-      {layout === 'slides' && rows.length > 0 && (
-        <div className="tmn-w2-rails" data-testid="discover-slides">
-          {RAILS.map((r) => {
-            const cards: RailCard[] = rows
-              .filter((d) => shownWord(d) === r.word)
-              .map((d) => ({
-                d,
-                rank: scoreRank(d.confidence, dayScores)?.rank ?? null,
-                tier: caps.get(d.symbol.toUpperCase()),
-                sector: sectorOf?.[d.symbol.toUpperCase()] ?? null,
-              }))
-            if (cards.length === 0) return null
-            return (
-              <StockRail
-                key={r.word}
-                title={wordLabel(r.word)}
-                sub={r.sub}
-                tone={r.tone}
-                cards={cards}
-                onSeeAll={() => {
-                  setFilter(r.word)
-                  setLayout('table')
-                }}
-              />
-            )
-          })}
-        </div>
-      )}
-
-      {(layout === 'table' || rows.length === 0) && (
       <section className="tmn-card tmn-w2-tablecard" aria-label="Stocks the brain checked">
         {rows.length === 0 ? (
           <p className="tm-dim tmn-w2-empty" data-state="empty">
             {ideas.length === 0 ? (noTrade ?? 'The brain checked no stocks on its last run.') : 'No stocks match these filters.'}
           </p>
         ) : (
-          <div className="tmn-w2-tablebox" role="region" aria-label="Table, scroll sideways to see more" tabIndex={0}>
-            <table className="tmn-w2-table" data-testid="discover-table">
-              <thead>
-                <tr>
-                  <SortTh sorter={sorter} k="rank" title="Place in today's ranking by score">#</SortTh>
-                  <SortTh sorter={sorter} k="stock">Stock</SortTh>
-                  <SortTh sorter={sorter} k="decision">Decision</SortTh>
-                  <SortTh sorter={sorter} k="score" title={SCORE_HINT}>Score</SortTh>
-                  <th>Why, in a few words</th>
-                  <SortTh sorter={sorter} k="stopped">Where it stopped</SortTh>
-                  <th>
-                    <span className="tmn-w2-sr">AI analysis</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((d) => (
-                  <IdeaRow
-                    key={d.id}
-                    d={d}
-                    rank={scoreRank(d.confidence, dayScores)?.rank ?? null}
-                    tier={caps.get(d.symbol.toUpperCase())}
-                    sector={sectorOf?.[d.symbol.toUpperCase()] ?? null}
-                  />
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <IdeasTable
+            rows={rows}
+            sorter={sorter}
+            rankOf={(d) => scoreRank(d.confidence, dayScores)?.rank ?? null}
+            tierOf={(d) => caps.get(d.symbol.toUpperCase())}
+            sectorOf={sectorOf}
+          />
         )}
       </section>
-      )}
 
       <p className="tm-dim tmn-small tmn-w2-foot" data-testid="discover-foot">
         {DISCOVER_FOOT}
@@ -246,43 +158,5 @@ function DiscoverBody() {
         </Link>
       </p>
     </div>
-  )
-}
-
-function IdeaRow({ d, rank, tier, sector }: { d: BrainDecision; rank: number | null; tier?: string; sector: string | null }) {
-  const stop = whereItStopped(d)
-  const pts = scorePoints(d.confidence)
-  const to = `/trademind/stock/${encodeURIComponent(d.symbol)}`
-  return (
-    <tr>
-      <td className="tm-dim tmn-w2-num">{rank ?? '—'}</td>
-      <td>
-        <Link to={to} className="tmn-w2-stock">
-          <StockLogo symbol={d.symbol} />
-          <span>
-            <b>{d.symbol}</b> <CapFlag tier={tier} />
-            {sector && <span className="tm-dim tmn-small tmn-w2-sub">{sector}</span>}
-          </span>
-        </Link>
-      </td>
-      <td>
-        <WordTag word={shownWord(d)} />
-      </td>
-      <td title={SCORE_HINT}>
-        <b>{pts ?? '—'}</b>
-      </td>
-      <td className="tmn-w2-why">{oneReason(d)}</td>
-      <td>
-        <span className="tmn-w2-stop" data-tone={stop.tone} title={stop.why ?? undefined}>
-          <span className="tmn-w2-dot" aria-hidden="true" />
-          {stop.label}
-        </span>
-      </td>
-      <td>
-        <Link to={to} className="tmn-ailink tmn-w2-ai">
-          AI analysis →
-        </Link>
-      </td>
-    </tr>
   )
 }

@@ -7,26 +7,25 @@
 //   5. "Full details": the whole classic Today, unchanged, so nothing it shows is lost
 // The experimental-model note appears once, at the foot.
 
-import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 
 import { api } from '../../api/client'
 import type { BrainRun } from '../../api/types'
 import { formatDateTime } from '../../lib/format'
-import { CapFlag, useSymbolCaps } from '../cap'
+import { useSymbolCaps } from '../cap'
+import { IdeasTable, useIdeaSort } from '../IdeasTable'
 import { noTradeReason } from '../emptyReasons'
-import { ideasFrom, finalWord, useLatestRun } from '../live'
+import { ideasFrom, useLatestRun } from '../live'
 import { QueryNotice } from '../PageState'
-import { rankText, scoreRank, SCORE_HINT } from '../scoreText'
+import { scoreRank } from '../scoreText'
 import { currentDrawdownPct } from '../live-system'
-import { greeting, oneReason, safetySummary, stoppedByRoom, todayHeadline } from '../today/answerRules'
+import { greeting, safetySummary, stoppedByRoom, todayHeadline } from '../today/answerRules'
 import { holdingsNeedingAttention } from '../today/HoldingsNeedsYou'
 import { waitingItems } from '../today/NeedsYou'
 import { ideaCounts } from '../today/TodayIdeas'
-import { IdeaFigures, PeekCard } from '../stockParts'
-import { BrainGate, inr, StockLogo, Tag } from '../ui'
-import { MARKET_LABEL, MARKET_PLAIN, MARKET_TONE, wordLabel, wordTagColor } from '../vocab'
+import { BrainGate, inr, Tag } from '../ui'
+import { MARKET_LABEL, MARKET_PLAIN, MARKET_TONE } from '../vocab'
 
 /** The new Today shows the top 3 ideas (owner brief: short, answer first); Discover lists every one. */
 export const TOP_IDEAS_NEW = 3
@@ -125,9 +124,7 @@ function TopIdeas({ run }: { run: BrainRun }) {
   const ideas = ideasFrom(run)
   const top = ideas.slice(0, TOP_IDEAS_NEW)
   const dayScores = ideas.map((d) => d.confidence)
-  // Tapping a stock opens a quick look right here (score, rank, price, buy zone, Buy); the full analysis is one tap on.
-  const [open, setOpen] = useState<number | null>(null)
-  const opened = top.find((d) => d.id === open)
+  const { sorted, sorter } = useIdeaSort(top)
 
   return (
     <section className="tmn-card" aria-label="Top ideas">
@@ -140,41 +137,15 @@ function TopIdeas({ run }: { run: BrainRun }) {
       {top.length === 0 ? (
         <p className="tm-dim">No ideas in the brain's last run.</p>
       ) : (
-        <div className="tmn-ideas" data-testid="top-ideas">
-          {top.map((d) => {
-            const rank = scoreRank(d.confidence, dayScores)
-            return (
-              <button
-                type="button"
-                key={d.id}
-                className="tmn-idea"
-                aria-expanded={open === d.id}
-                onClick={() => setOpen(open === d.id ? null : d.id)}
-              >
-                <StockLogo symbol={d.symbol} />
-                <span className="tmn-idea-main">
-                  <span className="tmn-idea-sym">
-                    {d.symbol} <CapFlag tier={caps.get(d.symbol.toUpperCase())} />
-                  </span>
-                  <span className="tmn-idea-why">
-                    {oneReason(d)} <span className="tmn-ailink">AI analysis →</span>
-                  </span>
-                </span>
-                <IdeaFigures d={d} />
-                <span className="tmn-idea-side">
-                  <span className={`tm-tag tm-tag-${wordTagColor(finalWord(d))}`}>{wordLabel(finalWord(d))}</span>
-                  {rank && (
-                    <span className="tmn-small tm-dim" title={SCORE_HINT}>
-                      {rankText(rank)}
-                    </span>
-                  )}
-                </span>
-              </button>
-            )
-          })}
-        </div>
+        <IdeasTable
+          rows={sorted}
+          sorter={sorter}
+          rankOf={(d) => scoreRank(d.confidence, dayScores)?.rank ?? null}
+          tierOf={(d) => caps.get(d.symbol.toUpperCase())}
+          withFigures
+          testId="top-ideas"
+        />
       )}
-      {opened && <PeekCard decision={opened} run={run} reason={oneReason(opened)} />}
     </section>
   )
 }

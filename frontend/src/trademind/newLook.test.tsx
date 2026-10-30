@@ -163,16 +163,16 @@ describe('the 8-item menu', () => {
     expect(navPages(portfolio, false, { realAccount: false }).map((p) => p.label).join()).not.toMatch(/Zerodha|Testing/)
   })
 
-  it('renders the new stock page with the 8 steps for a stock in the run', () => {
+  it('renders the short stock page: the answer and the plan, no explanations (they live in the full analysis)', () => {
     store.set(LOOK_KEY, 'new')
     const html = render('/trademind/stock/BBBROOM', true, true)
-    expect(html).toContain('data-testid="brain-steps"')
-    expect(html).toContain('Stopped here')
-    // The short page: the brain's steps with an AI analysis button, and the way into the full analysis.
+    expect(html).not.toContain('data-testid="brain-steps"')
+    expect(html).not.toContain('data-testid="why-no-trade"')
+    expect(html).not.toContain('data-testid="score-monitor"')
+    // The short page: the answer, and the way into the full analysis.
     // BBBROOM is a WAIT, so there is no Buy (owner decision ss11), only a note saying why.
     expect(html).not.toContain('data-testid="buy-button"')
     expect(html).toContain('data-testid="no-buy-note"')
-    expect(html).toContain('data-testid="ai-analysis-button"')
     expect(html).toContain('data-testid="full-analysis-cta"')
     expect(html).toContain('/trademind/stock/BBBROOM/analysis')
     expect(html).toContain('data-testid="stock-glance"')
@@ -181,7 +181,7 @@ describe('the 8-item menu', () => {
 
   it('a customer gets the stock verdict as research: no Buy, no account safety pass, no limits, a research note', () => {
     store.set(LOOK_KEY, 'new')
-    const html = render('/trademind/stock/CCCTRADE', false, true, RUN_PUBLIC)
+    const html = render('/trademind/stock/CCCTRADE/analysis', false, true, RUN_PUBLIC)
     expect(html).toContain('data-testid="brain-steps"')
     expect(html).not.toContain('data-testid="buy-button"')
     expect(html).not.toContain('data-testid="no-buy-note"')
@@ -197,11 +197,14 @@ describe('the 8-item menu', () => {
     expect(html).toMatch(/of 7 steps/)
   })
 
-  it('the owner keeps Buy and the account safety pass, and sees both answers when they differ', () => {
+  it('the owner keeps Buy and sees both answers when they differ; the chain has no account step for anyone', () => {
     store.set(LOOK_KEY, 'new')
     const trade = render('/trademind/stock/CCCTRADE', true, true, RUN_PUBLIC)
     expect(trade).toContain('data-testid="buy-button"')
-    expect(trade).toContain('PASSED')
+    const chain = render('/trademind/stock/CCCTRADE/analysis', true, true, RUN_PUBLIC)
+    expect(chain).toContain('data-testid="brain-steps"')
+    expect(chain).not.toContain('Safety check')
+    expect(chain).toMatch(/of 7 steps/)
     expect(trade).not.toContain('data-testid="research-note"')
     const two = render('/trademind/stock/DDDROOMONLY', true, true, RUN_PUBLIC)
     expect(two).toContain('data-testid="two-answers"')

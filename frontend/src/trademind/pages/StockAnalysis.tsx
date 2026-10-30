@@ -22,10 +22,12 @@ import {
   buyLevel,
   CompanyCard,
   PlanLadder,
-  SafetyInWords,
+  ScoreMonitor,
+  scoreToday,
   StockHeader,
   stepPasses,
   useStockData,
+  WhyNoTrade,
   wordSay,
   wordTone,
   type TrailPoint,
@@ -61,11 +63,11 @@ function StockAnalysisView({ decision: d, run }: { decision: BrainDecision; run:
   const word = finalWord(d)
   const back = `/trademind/stock/${encodeURIComponent(d.symbol)}`
   const cap = caps.get(d.symbol.toUpperCase())
-  const steps = brainSteps(d, run, canManage)
-  const passes = stepPasses(d, steps, canManage)
+  const steps = brainSteps(d, run, false)
+  const passes = stepPasses(d, steps, false)
   const passed = passes.filter((p) => p === 'yes').length
   const applicable = steps.length
-  const stop = stopOf(d, canManage)
+  const stop = stopOf(d, false)
   const answer = stop
     ? `Not a BUY today. ${d.symbol} passed ${passed} of ${applicable} steps and stopped at step ${steps.findIndex((x) => x.n === stop.step) + 1}.`
     : word === 'TRADE'
@@ -123,11 +125,12 @@ function StockAnalysisView({ decision: d, run }: { decision: BrainDecision; run:
         <span className="sp-small">Brain’s run on {formatDateTime(run.started_at)}</span>
       </section>
 
+      <BrainFlow decision={d} run={run} full />
+      <WhyNoTrade decision={d} />
+      <ScoreMonitor trail={data.trail} today={scoreToday(d, run)} />
+
       <CaseAnalysis decision={d} run={run} brief={data.brief} />
       <ModelEvidence decision={d} />
-
-      <BrainFlow decision={d} run={run} full />
-      <SafetyInWords decision={d} />
 
       <div className="sp-split">
         <ScoreChart decision={d} trail={data.trail} />

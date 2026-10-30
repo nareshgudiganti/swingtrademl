@@ -302,7 +302,7 @@ describe('My Watchlist: each person’s own list with the brain’s read', () =>
 
   it('what it is waiting for: the stored "what would change" line first, else the short reason', () => {
     expect(waitingFor(LOW)).toBe('The model score would need to reach the buy level.')
-    expect(waitingFor(ROOM)).toMatch(/safety limits had no room/)
+    expect(waitingFor(ROOM)).toMatch(/holding back on a new buy today/)
     expect(waitingFor(GOOD)).toMatch(/BUY/)
     expect(waitingFor(null)).toBe(NOT_CHECKED)
   })

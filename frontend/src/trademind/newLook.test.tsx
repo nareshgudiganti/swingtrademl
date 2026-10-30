@@ -139,7 +139,7 @@ describe('the new Today', () => {
 
   it('counts room-blocked ideas and gives one plain reason, never a raw score', () => {
     expect(stoppedByRoom(RUN.decisions)).toBe(1)
-    expect(oneReason(RUN.decisions[1]!)).toMatch(/safety limits had no room/)
+    expect(oneReason(RUN.decisions[1]!)).toMatch(/holding back on a new buy today/)
     expect(oneReason(dec('X', 'TRADE', 0.9, { reasons: ['Model score 82% and rising'] }))).not.toContain('%')
   })
 

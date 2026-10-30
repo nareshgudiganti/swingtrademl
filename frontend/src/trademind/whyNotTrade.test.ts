@@ -50,8 +50,8 @@ describe('classifyReason: every stored rule line gets a plain sentence', () => {
     expect(item.text).not.toMatch(/\d/)
   })
 
-  it('keeps the stored detail for a risk no, behind a tap', () => {
-    expect(classifyReason('Good idea, but the risk check said no: Sector cap reached.')?.detail).toContain('Sector cap reached')
+  it('never shows the account detail for a risk no (amounts, limits, minimum size)', () => {
+    expect(classifyReason('Good idea, but the risk check said no: Sector cap reached.')?.detail).toBeNull()
   })
 })
 

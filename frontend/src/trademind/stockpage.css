@@ -67,12 +67,12 @@
 }
 .sp-logo-mark img { width: 100%; height: 100%; object-fit: contain; background: #fff; }
 .sp-name { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.sp-sym { font-size: 32px; line-height: 1.1; font-weight: 800; }
+.sp-sym { font-size: 26px; line-height: 1.1; font-weight: 800; }
 .sp-cap { padding: 3px 10px; border-radius: 999px; background: #ece6fb; color: #4c2fa3; font-weight: 700; font-size: 12px; }
 .sp-tagline { margin-top: 4px; color: var(--sp-muted); font-size: 14px; }
 .sp-actions { display: flex; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
 .sp-price { text-align: right; }
-.sp-price b { display: block; font-size: 34px; font-weight: 800; line-height: 1.1; }
+.sp-price b { display: block; font-size: 28px; font-weight: 800; line-height: 1.1; }
 .sp-price span { font-weight: 600; font-size: 14px; }
 .sp-btnbox { display: flex; flex-direction: column; gap: 4px; align-items: stretch; }
 .sp-btn {
@@ -97,9 +97,9 @@
 .sp-buyform .sp-err { color: var(--sp-red-ink); font-weight: 600; font-size: 13px; }
 
 /* ------------------------------------------------------------- glance ---- */
-.sp-glance { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; }
-.sp-stat { display: flex; flex-direction: column; gap: 10px; padding: 20px; }
-.sp-big { font-size: 44px; font-weight: 800; line-height: 1; }
+.sp-glance { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.sp-stat { display: flex; flex-direction: column; gap: 6px; padding: 14px 16px; }
+.sp-big { font-size: 34px; font-weight: 800; line-height: 1; }
 .sp-row { display: flex; align-items: baseline; gap: 8px; }
 .sp-pill {
   display: inline-flex; align-self: flex-start; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px;
@@ -150,6 +150,8 @@
   display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden;
 }
 .sp-step[data-pass='stop'] .sp-step-l { color: var(--sp-ink); font-weight: 600; }
+.sp-flow-compact { min-width: 0; }
+.sp-flow-compact .sp-step { padding-bottom: 4px; }
 .sp-flow-full .sp-step-l { -webkit-line-clamp: unset; display: block; }
 .sp-chip { padding: 2px 9px; border-radius: 999px; font-weight: 700; font-size: 11px; background: var(--sp-grey-bg); color: #4a4f66; }
 .sp-chip[data-state='ok'] { background: var(--sp-green-bg); color: var(--sp-green-ink); }

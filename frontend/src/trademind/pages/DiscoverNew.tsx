@@ -21,16 +21,26 @@ import {
   type DiscoverFilter,
 } from '../discoverRules'
 import { noTradeReason } from '../emptyReasons'
-import { finalWord, ideasFrom, useLatestRun } from '../live'
+import { ideasFrom, shownWord, useLatestRun } from '../live'
 import { scorePoints, scoreRank, SCORE_HINT } from '../scoreText'
+import { StockRail, type RailCard } from '../StockRail'
 import { WordTag } from '../term'
 import { oneReason } from '../today/answerRules'
 import { BrainGate, Icon, StockLogo } from '../ui'
 import { SortTh, useSort } from '../sort'
+import { wordLabel } from '../vocab'
 import '../newlook-w2.css'
 import Opportunities from './Opportunities'
 
-const FILTER_LABEL: Record<DiscoverFilter, string> = { ALL: 'All', TRADE: 'TRADE', WATCH: 'WATCH', WAIT: 'WAIT', AVOID: 'AVOID' }
+const FILTER_LABEL: Record<DiscoverFilter, string> = { ALL: 'All', TRADE: 'BUY', WATCH: 'WATCH', WAIT: 'WAIT', AVOID: 'AVOID' }
+
+// The rows of the sliding view, best word first, and the tone each row's cards carry.
+const RAILS = [
+  { word: 'TRADE', title: 'BUY', sub: 'Passed every check', tone: 'up' },
+  { word: 'WATCH', title: 'WATCH', sub: 'Good, but not a buy yet', tone: 'wait' },
+  { word: 'WAIT', title: 'WAIT', sub: 'Nothing to do today', tone: 'wait' },
+  { word: 'AVOID', title: 'AVOID', sub: 'Stay away for now', tone: 'down' },
+] as const
 
 export default function DiscoverNew() {
   const [params] = useSearchParams()
@@ -53,12 +63,15 @@ export default function DiscoverNew() {
 }
 
 function DiscoverBody() {
+  const [params] = useSearchParams()
   const run = useLatestRun().data!
   const ideas = ideasFrom(run)
   const caps = useSymbolCaps()
   const [filter, setFilter] = useState<DiscoverFilter>('ALL')
   const [sector, setSector] = useState<string>('')
   const [query, setQuery] = useState('')
+  // Slides (swipe through rows of cards) is the default; the table stays one tap away.
+  const [layout, setLayout] = useState<'slides' | 'table'>(params.get('layout') === 'table' ? 'table' : 'slides')
 
   // The sector map (ml/sector_map.py). Not every account may read it; without it the sector filter is hidden.
   const symbols = useMemo(() => ideas.map((d) => d.symbol.toUpperCase()).sort(), [ideas])
@@ -77,7 +90,7 @@ function DiscoverBody() {
   const { sorted: rows, sorter } = useSort(filtered, {
     rank: (d) => d.confidence,
     stock: (d) => d.symbol,
-    decision: (d) => finalWord(d),
+    decision: (d) => shownWord(d),
     score: (d) => d.confidence,
     stopped: (d) => whereItStopped(d).label,
   }, { key: null }, { stock: 'asc', decision: 'asc', stopped: 'asc' })
@@ -111,6 +124,20 @@ function DiscoverBody() {
           ))}
         </div>
         <span className="tmn-grow" />
+        <div className="tmn-w2-sorttabs tmn-w2-layouttabs" role="group" aria-label="How to show the list">
+          {(['slides', 'table'] as const).map((l) => (
+            <button
+              key={l}
+              type="button"
+              className="tmn-w2-sorttab"
+              aria-pressed={layout === l}
+              data-testid={`layout-${l}`}
+              onClick={() => setLayout(l)}
+            >
+              {l === 'slides' ? 'Slides' : 'Table'}
+            </button>
+          ))}
+        </div>
         {sectorList.length > 0 && (
           <label className="tmn-w2-select tm-dim tmn-small">
             Sector
@@ -142,6 +169,36 @@ function DiscoverBody() {
         </p>
       )}
 
+      {layout === 'slides' && rows.length > 0 && (
+        <div className="tmn-w2-rails" data-testid="discover-slides">
+          {RAILS.map((r) => {
+            const cards: RailCard[] = rows
+              .filter((d) => shownWord(d) === r.word)
+              .map((d) => ({
+                d,
+                rank: scoreRank(d.confidence, dayScores)?.rank ?? null,
+                tier: caps.get(d.symbol.toUpperCase()),
+                sector: sectorOf?.[d.symbol.toUpperCase()] ?? null,
+              }))
+            if (cards.length === 0) return null
+            return (
+              <StockRail
+                key={r.word}
+                title={wordLabel(r.word)}
+                sub={r.sub}
+                tone={r.tone}
+                cards={cards}
+                onSeeAll={() => {
+                  setFilter(r.word)
+                  setLayout('table')
+                }}
+              />
+            )
+          })}
+        </div>
+      )}
+
+      {(layout === 'table' || rows.length === 0) && (
       <section className="tmn-card tmn-w2-tablecard" aria-label="Stocks the brain checked">
         {rows.length === 0 ? (
           <p className="tm-dim tmn-w2-empty" data-state="empty">
@@ -178,6 +235,7 @@ function DiscoverBody() {
           </div>
         )}
       </section>
+      )}
 
       <p className="tm-dim tmn-small tmn-w2-foot" data-testid="discover-foot">
         {DISCOVER_FOOT}
@@ -208,7 +266,7 @@ function IdeaRow({ d, rank, tier, sector }: { d: BrainDecision; rank: number | n
         </Link>
       </td>
       <td>
-        <WordTag word={finalWord(d)} />
+        <WordTag word={shownWord(d)} />
       </td>
       <td title={SCORE_HINT}>
         <b>{pts ?? '—'}</b>

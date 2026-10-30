@@ -163,10 +163,15 @@ describe('the 8-item menu', () => {
     expect(navPages(portfolio, false, { realAccount: false }).map((p) => p.label).join()).not.toMatch(/Zerodha|Testing/)
   })
 
-  it('renders the short stock page: the answer and the plan, no explanations (they live in the full analysis)', () => {
+  it('renders the short stock page: the answer and the seven steps as short tags, no sentences (they live in the full analysis)', () => {
     store.set(LOOK_KEY, 'new')
     const html = render('/trademind/stock/BBBROOM', true, true)
-    expect(html).not.toContain('data-testid="brain-steps"')
+    expect(html).toContain('data-testid="brain-steps"')
+    expect(html).toContain('sp-flow-compact')
+    expect(html).not.toContain('data-testid="why-stopped"')
+    expect(html).not.toContain('sp-step-l')
+    expect(html).not.toContain('If it becomes a BUY')
+    expect(html).not.toContain('data-testid="quick-answers"')
     expect(html).not.toContain('data-testid="why-no-trade"')
     expect(html).not.toContain('data-testid="score-monitor"')
     // The short page: the answer, and the way into the full analysis.

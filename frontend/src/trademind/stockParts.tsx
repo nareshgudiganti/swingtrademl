@@ -15,7 +15,7 @@ import { brainSteps, stopOf, type BrainStep } from './brainSteps'
 import { NOTHING_STORED, nextReview, SCORE_IS_NOT_PERMISSION, whyNotTrade } from './whyNotTrade'
 import { ideaChange, ordinal, useChanges, type IdeaChange } from './changes'
 import { useSymbolCaps } from './cap'
-import { finalWord } from './live'
+import { finalWord, shownWord } from './live'
 import { scorePoints, scoreRank, withoutScorePercent, SCORE_HINT } from './scoreText'
 import { dayLabel } from './pricesAge'
 import { inr } from './ui'
@@ -91,11 +91,7 @@ const WORD_SAY: Record<string, string> = {
 
 export const wordSay = (word: string): string => WORD_SAY[word] ?? word
 
-/** The word the stock page shows: the stock-level verdict when the account's room alone held the idea back
- *  (so the page, the chain and the answer agree), else the stored word. The stored decision is never changed. */
-export function shownWord(d: BrainDecision): string {
-  return d.stock_verdict_restored && d.stock_verdict ? d.stock_verdict : finalWord(d)
-}
+export { shownWord }
 
 /** Owner decision (ss11): no Buy on ideas the brain says WAIT or AVOID. */
 export const brainAllowsBuy = (word: string): boolean => word !== 'AVOID' && word !== 'WAIT'

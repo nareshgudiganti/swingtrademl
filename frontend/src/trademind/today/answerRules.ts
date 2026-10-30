@@ -32,6 +32,8 @@ export function stoppedByRoom(ideas: BrainDecision[]): number {
 
 /** The one short reason shown on an idea row: the first stored reason in plain words, never a raw score. */
 export function oneReason(d: BrainDecision): string {
+  // Held back only by the account's room: the stock itself passed, and the list says so (no account wording).
+  if (d.stock_verdict_restored && !d.overruled_word) return 'Passed every check about the stock.'
   const word = finalWord(d)
   if (word !== 'TRADE') {
     const why = whyNotTrade(d)[0]

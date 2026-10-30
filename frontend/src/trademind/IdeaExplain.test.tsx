@@ -57,15 +57,14 @@ const changes = (ideas: BrainChanges['ideas']): BrainChanges => ({
 })
 
 describe('WhyNotTradeView', () => {
-  it('shows the stored reasons in plain words, with the stored line behind a tap', () => {
+  it('shows the stored reasons in plain words, without the account detail', () => {
     const risk = 'Good idea, but the risk check said no: Bank sector is already near its limit.'
     const html = renderToString(
       <WhyNotTradeView decision={decision({ reasons: [risk], downgraded_from: 'TRADE', downgrade_reason: risk })} />,
     )
     expect(html).toContain('Why not a BUY?')
-    expect(html).toContain('safety limits had no room')
-    expect(html).toContain('<details')
-    expect(html).toContain('Bank sector is already near its limit.')
+    expect(html).toContain('holding back on a new buy today')
+    expect(html).not.toContain('Bank sector is already near its limit.')
   })
 
   it('says so when nothing is stored', () => {

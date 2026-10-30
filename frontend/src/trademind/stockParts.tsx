@@ -6,18 +6,20 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 
 import { api } from '../api/client'
+import { usePlan } from '../lib/plan'
 import type { BrainDecision, BrainRun, PriceSnapshot } from '../api/types'
 import { useStockBrief } from './beginner/api'
 import { NO_EVENTS } from './beginner/UpcomingEvents'
 import type { StockBriefData } from './beginner/types'
 import { brainSteps, stopOf, type BrainStep } from './brainSteps'
+import { NOTHING_STORED, nextReview, SCORE_IS_NOT_PERMISSION, whyNotTrade } from './whyNotTrade'
 import { ideaChange, ordinal, useChanges, type IdeaChange } from './changes'
 import { useSymbolCaps } from './cap'
 import { finalWord } from './live'
 import { scorePoints, scoreRank, withoutScorePercent, SCORE_HINT } from './scoreText'
 import { dayLabel } from './pricesAge'
-import { inr, logoGradient } from './ui'
-import { wordTagColor } from './vocab'
+import { inr } from './ui'
+import { wordLabel, wordTagColor } from './vocab'
 import './stockpage.css'
 
 // ------------------------------------------------------------------ data --
@@ -92,9 +94,6 @@ export const wordSay = (word: string): string => WORD_SAY[word] ?? word
 /** Owner decision (ss11): no Buy on ideas the brain says WAIT or AVOID. */
 export const brainAllowsBuy = (word: string): boolean => word !== 'AVOID' && word !== 'WAIT'
 
-/** Only TRADE is a buy the brain recommends. On WATCH the practice Buy stays, but as a plain "Buy anyway". */
-export const brainSaysBuy = (word: string): boolean => word === 'TRADE'
-
 export function wordTone(word: string): 'green' | 'amber' | 'red' | 'grey' {
   const c = wordTagColor(word)
   return c === 'green' ? 'green' : c === 'amber' ? 'amber' : c === 'red' ? 'red' : 'grey'
@@ -102,14 +101,15 @@ export function wordTone(word: string): 'green' | 'amber' | 'red' | 'grey' {
 
 const SHORT = ['Data', 'Market', 'Situation', 'Memory', 'Opinion', 'Safety check', 'Decide', 'Learn'] as const
 
-type Pass = 'yes' | 'stop' | 'no'
+type Pass = 'yes' | 'stop' | 'no' | 'na'
 
 /** For each of the eight steps: passed, stopped here, or not reached / not recorded. */
-export function stepPasses(d: BrainDecision, steps: BrainStep[]): Pass[] {
-  const stop = stopOf(d)
+export function stepPasses(d: BrainDecision, steps: BrainStep[], owner = true): Pass[] {
+  const stop = stopOf(d, owner)
   const stopAt = stop?.step ?? 99
   return steps.map((s) => {
     if (s.n === stopAt) return 'stop'
+    if (s.state === 'na' && s.n < stopAt) return 'na'
     if (s.n > stopAt) return 'no'
     return s.state === 'none' || s.state === 'later' ? 'no' : 'yes'
   })
@@ -124,9 +124,7 @@ function initials(symbol: string): string {
 export function StockMark({ symbol }: { symbol: string }) {
   return (
     <div className="sp-logo">
-      <div className="sp-logo-mark" style={{ background: logoGradient(symbol), color: '#fff' }}>
-        {initials(symbol)}
-      </div>
+      <div className="sp-logo-mark">{initials(symbol)}</div>
     </div>
   )
 }
@@ -200,6 +198,8 @@ export function StockHeader({
   const [buying, setBuying] = useState(false)
   const up = (change ?? 0) >= 0
   const buyOk = brainAllowsBuy(finalWord(d))
+  // Buy is a paper order in the owner's test book: customers analyse here and trade with their own broker.
+  const { canManage } = usePlan()
   return (
     <>
       <div className="sp-head">
@@ -235,25 +235,18 @@ export function StockHeader({
               )}
             </div>
           )}
-          {withBuy && !buyOk && (
+          {withBuy && canManage && !buyOk && (
             <span className="sp-small" data-testid="no-buy-note" style={{ maxWidth: 190 }}>
               The brain says {finalWord(d)}, so there is no Buy here.
             </span>
           )}
-          {withBuy && buyOk && (
+          {withBuy && canManage && buyOk && (
             <div className="sp-btnbox">
-              <button
-                className={`sp-btn ${brainSaysBuy(finalWord(d)) ? 'sp-btn-buy' : ''}`}
-                type="button"
-                onClick={() => setBuying((v) => !v)}
-                data-testid="buy-button"
-              >
-                {brainSaysBuy(finalWord(d)) ? 'Buy' : 'Buy anyway'}
+              <button className="sp-btn sp-btn-buy" type="button" onClick={() => setBuying((v) => !v)} data-testid="buy-button">
+                Buy
               </button>
-              <span className="sp-small" style={{ textAlign: 'center', maxWidth: 190 }}>
-                {brainSaysBuy(finalWord(d))
-                  ? 'Paper buy · practice money'
-                  : `The brain says ${finalWord(d)}, not a buy today. Practice money only.`}
+              <span className="sp-small" style={{ textAlign: 'center' }}>
+                Paper buy · practice money
               </span>
             </div>
           )}
@@ -264,31 +257,19 @@ export function StockHeader({
           )}
         </div>
       </div>
-      {withBuy && buyOk && <BuyBox symbol={d.symbol} open={buying} onClose={() => setBuying(false)} />}
+      {withBuy && canManage && buyOk && <BuyBox symbol={d.symbol} open={buying} onClose={() => setBuying(false)} />}
+      {!canManage && (
+        <p className="sp-small" data-testid="research-note">
+          AI research signal, not investment advice. The score is a ranking and past results are not a promise. You place any
+          trade yourself, with your own broker.
+        </p>
+      )}
+      {canManage && d.stock_verdict_restored && (
+        <p className="sp-small" data-testid="two-answers">
+          Stock verdict: <b>{d.stock_verdict}</b> · Test portfolio: <b>{d.word}</b> (only the account’s room held it back).
+        </p>
+      )}
     </>
-  )
-}
-
-// ------------------------------------------------------------------ tabs --
-
-export type StockTabId = 'overview' | 'brain' | 'company'
-
-/** Overview (short), AI Analysis (everything the brain did) and Company: the same strip on every stock screen. */
-export function StockTabs({ symbol, active }: { symbol: string; active: StockTabId }) {
-  const base = `/trademind/stock/${encodeURIComponent(symbol)}`
-  const tabs: [StockTabId, string, string][] = [
-    ['overview', 'Overview', base],
-    ['brain', 'AI Analysis', `${base}/analysis`],
-    ['company', 'Company & news', `${base}/analysis?tab=company`],
-  ]
-  return (
-    <nav className="sp-tabs sp-tabs-strip" role="tablist" aria-label="Stock sections">
-      {tabs.map(([id, label, to]) => (
-        <Link key={id} to={to} role="tab" aria-selected={active === id} data-testid={`tab-${id}`} className="sp-tab" replace={id !== 'overview' && active !== 'overview'}>
-          {label}
-        </Link>
-      ))}
-    </nav>
   )
 }
 
@@ -318,7 +299,7 @@ export function Glance({
   const word = finalWord(d)
   const pts = scorePoints(d.confidence)
   const level = buyLevel(d)
-  const week = trail.slice(-5)
+  const week = trailWithToday(trail, scoreToday(d, run)).slice(-5)
   const first = week[0]?.score
   const latest = week.at(-1)?.score
   const delta = first != null && latest != null ? Math.round((latest - first) * 100) : null
@@ -349,13 +330,8 @@ export function Glance({
         ) : (
           <p className="sp-small">The day-by-day list starts with the next daily check.</p>
         )}
-        {week.length >= 2 && (
-          <div className="sp-small" data-testid="score-days">
-            {week.map((t) => Math.round(t.score * 100)).join(' → ')}
-          </div>
-        )}
         <div className="sp-between">
-          <span>{week.length >= 2 ? `Last ${week.length} days, oldest first` : ' '}</span>
+          <span>{week.length >= 2 ? `Last ${week.length} days` : ' '}</span>
           {level != null && <span>Buy level: {level}</span>}
         </div>
       </div>
@@ -394,7 +370,7 @@ export function Glance({
 
       <div className="sp-card sp-stat sp-word" data-tone={wordTone(word)}>
         <div className="sp-label">The brain says</div>
-        <div className="sp-big">{word}</div>
+        <div className="sp-big">{wordLabel(word)}</div>
         <div className="sp-say">{wordSay(word)}</div>
         {runAt && <div className="sp-small">{runAt}</div>}
       </div>
@@ -402,9 +378,47 @@ export function Glance({
   )
 }
 
+// ------------------------------------------------------------ why no trade --
+
+/** Why a stock the brain scored is not a TRADE, in one place: the reason, that a score is not permission,
+ *  and when the brain looks again (only where the stored reason names a date). Nothing for a TRADE. */
+export function WhyNoTrade({ decision: d }: { decision: BrainDecision }) {
+  if (d.kind !== 'idea' || finalWord(d) === 'TRADE') return null
+  const items = whyNotTrade(d).filter((i) => i.kind !== 'owner_overrule')
+  const first = items[0]
+  const review = nextReview(items)
+  return (
+    <section className="sp-card sp-whynot" aria-label="Why no trade?" data-testid="why-no-trade">
+      <h2 className="sp-h2">Why no trade?</h2>
+      <p className="sp-whynot-main">{first ? first.text : NOTHING_STORED}</p>
+      <p className="sp-small">{SCORE_IS_NOT_PERMISSION}</p>
+      {review && (
+        <p className="sp-small" data-testid="next-review">
+          <b>Next review:</b> {review}
+        </p>
+      )}
+    </section>
+  )
+}
+
 // ---------------------------------------------------------- score monitor --
 
 const MONITOR_DAYS = 7
+
+/** The brain's own score for this run, dated by the Indian calendar day the run belongs to. */
+export function scoreToday(d: BrainDecision, run: BrainRun): TrailPoint | null {
+  if (d.confidence == null || !run.started_at) return null
+  const date = new Date(run.started_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+  return { date, score: d.confidence }
+}
+
+/** The daily readings with today's headline score as the last point, so the list ends on the SAME number the
+ *  page headline shows. The earlier days are the daily model's readings; a reading dated today (or later) is
+ *  replaced by the headline rather than shown beside it. */
+export function trailWithToday(trail: TrailPoint[], today?: TrailPoint | null): TrailPoint[] {
+  if (!today) return trail
+  return [...trail.filter((t) => t.date < today.date), today]
+}
 
 const dayMonth = (iso: string) =>
   new Date(`${iso}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
@@ -416,14 +430,25 @@ function daysBetween(a: string, b: string): number {
 
 /** The last few daily scores with their dates, so a falling or rising score is visible at a glance.
  *  Days the model did not run are left out, and a longer-than-a-weekend jump is marked, never filled in. */
-export function ScoreMonitor({ trail, level }: { trail: TrailPoint[]; level?: number | string | null }) {
-  const days = trail.slice(-MONITOR_DAYS)
+export function ScoreMonitor({
+  trail,
+  level,
+  today,
+}: {
+  trail: TrailPoint[]
+  level?: number | string | null
+  today?: TrailPoint | null
+}) {
+  const days = trailWithToday(trail, today).slice(-MONITOR_DAYS)
   return (
     <section className="sp-card sp-monitor" aria-label="Strength score, day by day" data-testid="score-monitor">
       <div className="sp-flow-head" style={{ marginBottom: 0 }}>
         <div>
           <h2 className="sp-h2">Is the score holding up?</h2>
-          <div className="sp-sub">The strength score on each of the last days the model checked this stock.</div>
+          <div className="sp-sub">
+            The strength score on each of the last days the model checked this stock. The last one is today’s score, the same
+            number as the headline.
+          </div>
         </div>
         {level != null && <span className="sp-pill sp-pill-amber">Buy level: {level}</span>}
       </div>
@@ -471,10 +496,14 @@ export function BrainFlow({
   analysisTo?: string
   full?: boolean
 }) {
-  const steps = brainSteps(d, run)
-  const pass = stepPasses(d, steps)
-  const stop = stopOf(d)
+  // No account-money step in the chain for anyone: a customer knows what they can invest, and the owner's own
+  // limits are a separate, later feature. Seven steps, display only.
+  const steps = brainSteps(d, run, false)
+  const pass = stepPasses(d, steps, false)
+  const stop = stopOf(d, false)
   const passed = pass.filter((p) => p === 'yes').length
+  const applicable = steps.length
+  const stepCount = steps.length
   const lastIdx = pass.reduce((acc, p, i) => (p === 'yes' || p === 'stop' ? i : acc), 0)
   const changes = (d.what_would_change ?? []).filter((c) => c.text.trim() !== '')
   const [openStep, setOpenStep] = useState<number | null>(null)
@@ -486,8 +515,8 @@ export function BrainFlow({
           <h2 className="sp-h2">What does the brain say today, and why?</h2>
           <div className="sp-sub">
             {stop
-              ? `${d.symbol} passed ${passed} of 8 steps and stopped at step ${stop.step}.`
-              : `${d.symbol} passed ${passed} of 8 steps.`}
+              ? `${d.symbol} passed ${passed} of ${applicable} steps and stopped at step ${steps.findIndex((x) => x.n === stop.step) + 1}.`
+              : `${d.symbol} passed ${passed} of ${applicable} steps.`}
           </div>
         </div>
         <div className="sp-legend">
@@ -502,12 +531,12 @@ export function BrainFlow({
         )}
       </div>
       <div className="sp-scroll">
-        <ol className={`sp-flow${full ? ' sp-flow-full' : ''}`}>
-          <li className="sp-flow-done" style={{ width: `${lastIdx * 12.5}%` }} aria-hidden="true" />
+        <ol className={`sp-flow${full ? ' sp-flow-full' : ''}`} style={{ ['--n' as string]: stepCount }}>
+          <li className="sp-flow-done" style={{ width: `${(lastIdx * 100) / stepCount}%` }} aria-hidden="true" />
           {steps.map((s, i) => (
             <li key={s.n} className="sp-step" data-pass={pass[i]} data-state={s.state}>
-              <span className="sp-step-n">{s.n}</span>
-              <b className="sp-step-t">{SHORT[i]}</b>
+              <span className="sp-step-n">{i + 1}</span>
+              <b className="sp-step-t">{SHORT[s.n - 1]}</b>
               {full ? (
                 <span className="sp-step-l">{withoutScorePercent(s.line)}</span>
               ) : (
@@ -529,11 +558,10 @@ export function BrainFlow({
       {stop ? (
         <div className="sp-why" data-testid="why-stopped">
           <div className="sp-why-main">
-            <div className="sp-why-kicker">Why it stopped · step {stop.step}, {SHORT[stop.step - 1]}</div>
+            <div className="sp-why-kicker">Why it stopped · step {steps.findIndex((x) => x.n === stop.step) + 1}, {SHORT[stop.step - 1]}</div>
             <div className="sp-why-text">{withoutScorePercent(stop.why.text)}</div>
             {stop.why.detail && <p className="sp-small" style={{ marginTop: 6 }}>What the brain recorded: {withoutScorePercent(stop.why.detail)}</p>}
           </div>
-          {stop.why.kind === 'risk_no_room' && <MoneyMeter />}
           {changes.length > 0 && (
             <div className="sp-why-more">
               <b>What would change it</b>
@@ -590,9 +618,10 @@ export function MoneyMeter() {
 
 /** Step 6 in plain words (full-analysis page): the four money figures behind "no room", from today's limits. */
 export function SafetyInWords({ decision: d }: { decision: BrainDecision }) {
-  const limits = useQuery({ queryKey: ['riskLimits'], queryFn: api.riskLimits, retry: false })
+  const { canManage } = usePlan()
+  const limits = useQuery({ queryKey: ['riskLimits'], queryFn: api.riskLimits, retry: false, enabled: canManage })
   const l = limits.data
-  if (stopOf(d)?.why.kind !== 'risk_no_room' || !l) return null
+  if (!canManage || stopOf(d)?.why.kind !== 'risk_no_room' || !l) return null
   const pct = Math.round(l.deployable_fraction * 100)
   const figures: [string, number, boolean][] = [
     ['Allowed to invest', l.deployable_ceiling_inr, false],
@@ -636,11 +665,19 @@ export function PlanLadder({ decision: d }: { decision: BrainDecision }) {
   const targetPct = ((d.target / mid - 1) * 100).toFixed(0)
 
   return (
-    <section className="sp-card" aria-label="The plan" data-testid="plan-ladder" style={{ flex: '2 1 600px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+    <section
+      className={`sp-card${word === 'TRADE' ? '' : ' sp-illustrative'}`}
+      aria-label="The plan"
+      data-testid="plan-ladder"
+      data-illustrative={word === 'TRADE' ? undefined : 'true'}
+      style={{ flex: '2 1 600px', display: 'flex', flexDirection: 'column', gap: 14 }}
+    >
       <div className="sp-flow-head" style={{ marginBottom: 0 }}>
         <div>
           <h2 className="sp-h2">What is the plan?</h2>
-          <div className="sp-sub">{word === 'TRADE' ? 'The plan for this trade.' : 'If it becomes a TRADE. Same rules every time.'}</div>
+          <div className="sp-sub">
+            {word === 'TRADE' ? 'The plan for this buy.' : 'Illustrative only: no buy is recommended today. This is the plan if it becomes a BUY.'}
+          </div>
         </div>
         <span className="sp-pill sp-pill-amber">Sold within {d.horizon_days} trading days</span>
       </div>
@@ -824,6 +861,7 @@ export function PeekCard({ decision: d, run, reason }: { decision: BrainDecision
   const caps = useSymbolCaps()
   const data = useStockData(d, run)
   const [buying, setBuying] = useState(false)
+  const { canManage } = usePlan()
   const word = finalWord(d)
   const pts = scorePoints(d.confidence)
   const scores = run.decisions.filter((x) => x.kind === 'idea').map((x) => x.confidence)
@@ -847,7 +885,7 @@ export function PeekCard({ decision: d, run, reason }: { decision: BrainDecision
           <div className="sp-small">{d.kind === 'holding' ? 'A stock the bot holds' : 'An idea from tonight’s run'}</div>
         </div>
         <span className="sp-chip" data-state={tone === 'green' ? 'ok' : tone === 'red' ? 'stop' : 'warn'}>
-          {word}
+          {wordLabel(word)}
         </span>
       </div>
       <div className="spf-tiles">
@@ -889,13 +927,13 @@ export function PeekCard({ decision: d, run, reason }: { decision: BrainDecision
         <Link className="sp-btn sp-btn-ai" to={to}>
           Full analysis ›
         </Link>
-        {brainAllowsBuy(word) && (
-          <button className={`sp-btn ${brainSaysBuy(word) ? 'sp-btn-buy' : ''}`} type="button" onClick={() => setBuying((v) => !v)}>
-            {brainSaysBuy(word) ? 'Buy' : 'Buy anyway'}
+        {canManage && brainAllowsBuy(word) && (
+          <button className="sp-btn sp-btn-buy" type="button" onClick={() => setBuying((v) => !v)}>
+            Buy
           </button>
         )}
       </div>
-      {brainAllowsBuy(word) && <BuyBox symbol={d.symbol} open={buying} onClose={() => setBuying(false)} />}
+      {canManage && brainAllowsBuy(word) && <BuyBox symbol={d.symbol} open={buying} onClose={() => setBuying(false)} />}
     </aside>
   )
 }

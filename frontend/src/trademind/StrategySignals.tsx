@@ -17,6 +17,7 @@ import type { StrategySignal } from '../api/types'
 import { formatDateTime } from '../lib/format'
 import { EXPERIMENTAL, withoutScorePercent } from './beginner/cardText'
 import { PageState } from './PageState'
+import { SortTh, useSort } from './sort'
 import { SCORE_NOTE, scoreLabel } from './scoreText'
 import { Card, Tag, inr } from './ui'
 
@@ -73,7 +74,15 @@ function SignalsBody() {
   if (strategies.isError) return <PageState kind="error" what="the strategies" error={strategies.error} onRetry={strategies.refetch} />
   if (!chosen) return <PageState kind="empty" reason="There is no version 1 strategy on this server." />
 
-  const rows = signals.data ?? []
+  const { sorted: rows, sorter } = useSort(signals.data ?? [], {
+    stock: (s: StrategySignal) => s.tradingsymbol,
+    signal: (s: StrategySignal) => s.signal_type,
+    score: (s: StrategySignal) => s.confidence,
+    price: (s: StrategySignal) => s.price,
+    stop: (s: StrategySignal) => s.stop_loss,
+    target: (s: StrategySignal) => s.take_profit,
+    when: (s: StrategySignal) => s.generated_at,
+  }, { key: null }, { stock: 'asc', signal: 'asc' })
   return (
     <div className="tm-grid" style={{ gap: '0.6rem', marginTop: '0.4rem' }}>
       <label className="tm-flex tm-wrap" style={{ gap: '0.5rem', alignItems: 'center' }}>
@@ -95,13 +104,13 @@ function SignalsBody() {
           <table className="tm-table" data-testid="strategy-signals">
             <thead>
               <tr>
-                <th>Stock</th>
-                <th>Signal</th>
-                <th className="tm-right">Model score</th>
-                <th className="tm-right">Price</th>
-                <th className="tm-right">Stop loss</th>
-                <th className="tm-right">Target</th>
-                <th>When</th>
+                <SortTh sorter={sorter} k="stock">Stock</SortTh>
+                <SortTh sorter={sorter} k="signal">Signal</SortTh>
+                <SortTh sorter={sorter} k="score" right>Model score</SortTh>
+                <SortTh sorter={sorter} k="price" right>Price</SortTh>
+                <SortTh sorter={sorter} k="stop" right>Stop loss</SortTh>
+                <SortTh sorter={sorter} k="target" right>Target</SortTh>
+                <SortTh sorter={sorter} k="when">When</SortTh>
                 <th>What happened</th>
               </tr>
             </thead>

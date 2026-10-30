@@ -36,7 +36,7 @@ export function isCloseToTrade(d: BrainDecision | null): boolean {
 export function waitingFor(d: BrainDecision | null): string {
   if (!d) return NOT_CHECKED
   const word = finalWord(d)
-  if (word === 'TRADE') return 'Nothing: it is a TRADE on the brain’s last run.'
+  if (word === 'TRADE') return 'Nothing: it is a BUY on the brain’s last run.'
   const first = changeLines(d)[0]
   return first ? first.text : oneReason(d)
 }

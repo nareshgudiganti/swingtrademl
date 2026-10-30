@@ -15,7 +15,7 @@ export function todayHeadline(
   holdingsToReview: number,
 ): string {
   let first: string
-  if (counts.TRADE > 0) first = `${plural(counts.TRADE, 'new trade idea', 'new trade ideas')} today.`
+  if (counts.TRADE > 0) first = `${plural(counts.TRADE, 'new buy idea', 'new buy ideas')} today.`
   else if (mode === 'NO_NEW_TRADES') first = 'No new trades today: the brain is not buying while the market is this risky.'
   else if (mode === 'DEFENSIVE') first = 'Careful market: no new trades today.'
   else first = 'No new trades today.'

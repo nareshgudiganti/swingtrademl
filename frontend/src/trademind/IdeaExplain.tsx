@@ -18,10 +18,10 @@ import {
 } from './changes'
 import { NOTHING_STORED, whyNotTrade, type WhyItem } from './whyNotTrade'
 import { Card, CheckItem } from './ui'
-import { wordTagColor } from './vocab'
+import { wordLabel, wordTagColor } from './vocab'
 
 function Word({ word }: { word: string }) {
-  return <span className={`tm-tag tm-tag-${wordTagColor(word)}`}>{word}</span>
+  return <span className={`tm-tag tm-tag-${wordTagColor(word)}`}>{wordLabel(word)}</span>
 }
 
 function dayName(day: string): string {
@@ -60,10 +60,10 @@ export function WhyNotTradeView({ decision }: { decision: BrainDecision }) {
   return (
     <div data-testid="why-not-trade">
       <div className="tm-strong" style={{ marginBottom: 4 }}>
-        Why not TRADE?
+        Why not a BUY?
       </div>
       <p className="tm-dim" style={{ margin: '0 0 0.4rem', fontSize: '0.78rem' }}>
-        The brain says <Word word={word} /> for {decision.symbol}, not TRADE. In plain words, the reasons it
+        The brain says <Word word={word} /> for {decision.symbol}, not a BUY. In plain words, the reasons it
         stored:
       </p>
       {items.length > 0 ? <WhyList items={items} /> : <p className="tm-dim">{NOTHING_STORED}</p>}

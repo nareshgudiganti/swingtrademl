@@ -9,9 +9,6 @@ Honesty rules (the Atlas Shadow Test tab):
   * one record per stock at a time: a stock that stays on the list is counted once, and a new record starts
     only after the previous one has finished;
   * rank groups are fixed up front (1-5, 6-20, 21+) and rank is the rank on the day the record started;
-  * the blind trial's seal applies (services/trial_seal.py): for ideas ranked on or after the seal date
-    no outcome, result, hit rate, average or move since ranked is shown, only counts, day numbers and
-    today's move;
   * fewer than 30 completed ranking days: no verdict, only "too early";
   * a stock whose last candle is not the last closed trading day says "price not updated" instead of showing
     an old move as today's.
@@ -124,21 +121,18 @@ def running_progress(
 
 
 def group_table(finished: list[Idea]) -> list[dict]:
-    """Per rank group: finished, reached +8%, hit -4%, average result. Finished ideas only. A group holding
-    any sealed idea shows its count only (target, stop and average are None: sealed)."""
+    """Per rank group: finished, reached +8%, hit -4%, average result. Finished ideas only."""
     rows = []
     for name, _, _ in GROUPS:
         mine = [i for i in finished if group_of(i.rank) == name]
         n = len(mine)
-        sealed = any(trial_seal.is_sealed_day(i.day) for i in mine)
         rows.append(
             {
                 "group": name,
                 "finished": n,
-                "sealed": sealed,
-                "target": None if sealed else sum(1 for i in mine if i.outcome == "target"),
-                "stop": None if sealed else sum(1 for i in mine if i.outcome == "stop"),
-                "average_pct": None if sealed or not n else round(sum(i.ret or 0 for i in mine) / n * 100, 2),
+                "target": sum(1 for i in mine if i.outcome == "target"),
+                "stop": sum(1 for i in mine if i.outcome == "stop"),
+                "average_pct": round(sum(i.ret or 0 for i in mine) / n * 100, 2) if n else None,
             }
         )
     return rows
@@ -148,13 +142,6 @@ def verdict(finished: list[Idea], days_done: int, groups: list[dict]) -> dict:
     """A plain sentence. Under 30 completed ranking days it only says it is too early."""
     top = groups[0]
     base = {"days_done": days_done, "days_needed": DAYS_NEEDED}
-    if any(trial_seal.is_sealed_day(i.day) for i in finished):
-        return {
-            **base,
-            "state": "sealed",
-            "headline": "Counting only: results are sealed",
-            "detail": f"{trial_seal.SEALED_TEXT} {len(finished)} ideas have finished so far.",
-        }
     if days_done < DAYS_NEEDED:
         return {
             **base,
@@ -266,6 +253,10 @@ def build_view(db: Session, now: datetime) -> dict:
     records = build_records(_load_ideas(db))
     running = [r for r in records if r.outcome is None]
     finished = [r for r in records if r.outcome is not None]
+    # The trial seal: ideas ranked on or after SEALED_FROM show COUNTS ONLY (how many, never how they did).
+    # Everything that is a result (finished outcome, return, group average, target/stop counts, a running idea's
+    # move since ranking, the verdict's averages) is computed from unsealed days only.
+    finished_open = [r for r in finished if not trial_seal.is_sealed_day(r.day)]
 
     symbols = {r.symbol for r in records}
     since = min((r.day for r in running), default=last_closed)
@@ -287,9 +278,8 @@ def build_view(db: Session, now: datetime) -> dict:
             if entry
             else {"day": 0, "today_pct": None, "since_pct": None, "position": None, "price_not_updated": True}
         )
-        sealed = trial_seal.is_sealed_day(r.day)
-        if sealed:  # how this idea is doing so far is a result: only its day count and today's move stay
-            prog = {**prog, "since_pct": None, "position": None}
+        if trial_seal.is_sealed_day(r.day):
+            prog = {**prog, "today_pct": None, "since_pct": None, "position": None}
         running_rows.append(
             {
                 "symbol": r.symbol,
@@ -299,44 +289,43 @@ def build_view(db: Session, now: datetime) -> dict:
                 "word": r.word,
                 "ranked_on": r.day,
                 "paper_bought": bought(r),
-                "sealed": sealed,
                 **prog,
             }
         )
 
-    def finished_row(r: Idea) -> dict:
-        sealed = trial_seal.is_sealed_day(r.day)
-        return {
+    finished_rows = [
+        {
             "symbol": r.symbol,
             "rank": r.rank,
             "group": group_of(r.rank),
             "ranked_on": r.day,
-            "sealed": sealed,
-            # outcome, result, the day it ended and how long it took all reveal the result: sealed
-            "ended_on": None if sealed else r.resolved_on,
-            "outcome": None if sealed else r.outcome,
-            "result_pct": None if sealed else round((r.ret or 0) * 100, 2),
-            "days": None if sealed else r.days,
+            "ended_on": r.resolved_on,
+            "outcome": r.outcome,
+            "result_pct": round((r.ret or 0) * 100, 2),
+            "days": r.days,
             "paper_bought": bought(r),
         }
+        for r in sorted(finished_open, key=lambda x: x.resolved_on or x.day, reverse=True)[:FINISHED_SHOWN]
+    ]
 
-    # Sealed rows are listed by ranking day: sorting by the day they ended would leak when they finished.
-    newest_first = sorted(finished, key=lambda x: (x.day, x.rank), reverse=True)
-    finished_rows = [finished_row(r) for r in newest_first[:FINISHED_SHOWN]]
-
-    groups = group_table(finished)
-    any_sealed = any(trial_seal.is_sealed_day(r.day) for r in finished)
-    days_done = len({r.day for r in finished})
+    groups = group_table(finished_open)
+    days_done = len({r.day for r in finished_open})
+    sealed_finished = len(finished) - len(finished_open)
     return {
         "as_of": last_closed,
         "label": LABEL,
-        "verdict": verdict(finished, days_done, groups),
-        "sealed": any(trial_seal.is_sealed_day(r.day) for r in finished),
+        "verdict": verdict(finished_open, days_done, groups),
+        "sealed": {
+            "active": trial_seal.active(),
+            "from": trial_seal.sealed_from(),
+            "finished_counts_only": sealed_finished,
+            "text": trial_seal.SEALED_TEXT if sealed_finished or trial_seal.active() else None,
+        },
         "totals": {
             "running": len(running),
             "finished": len(finished),
-            "target": None if any_sealed else sum(1 for r in finished if r.outcome == "target"),
-            "stop": None if any_sealed else sum(1 for r in finished if r.outcome == "stop"),
+            "target": sum(1 for r in finished_open if r.outcome == "target"),
+            "stop": sum(1 for r in finished_open if r.outcome == "stop"),
         },
         "groups": groups,
         "running": running_rows,

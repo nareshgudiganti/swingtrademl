@@ -8,6 +8,7 @@ import { DayCell, ScoreToday, SuggestionTag, scoreNow, suggestionRank } from '..
 import ScoreTrail from '../ScoreTrail'
 import { SortTh, useSort } from '../sort'
 import { Card, inr, signed, StockLogo, toneClass } from '../ui'
+import StockLink from '../StockLink'
 import { PageState, StaleNotice } from '../PageState'
 import { pickState } from '../stateRules'
 
@@ -315,7 +316,7 @@ function OpenTable({
                 <td className="tm-strong">
                   <span className="tm-stock-cell">
                     <StockLogo symbol={p.symbol} />
-                    {p.symbol}
+                    <StockLink symbol={p.symbol} withScore={false} />
                     <CapFlag tier={p.cap_tier} gap />
                   </span>
                 </td>

@@ -6,13 +6,14 @@
 
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
 
 import { api } from '../../api/client'
 import type { ShadowFinished, ShadowGroup, ShadowRunning, ShadowTestView } from '../../api/types'
 import { useSymbolCaps } from '../cap'
 import { shortDate } from '../CompanyTab'
 import { BrainGate } from '../ui'
+import { SortTh, useSort } from '../sort'
+import StockLink from '../StockLink'
 import '../stockpage.css'
 
 const pct = (n: number | null | undefined, digits = 1) =>
@@ -90,9 +91,7 @@ export function ShadowView({ v }: { v: ShadowTestView }) {
 
       <section className="sp-card sh-verdict" data-testid="shadow-verdict" data-state={v.verdict.state}>
         <div>
-          <span className="sp-label">
-            {v.verdict.state === 'sealed' ? 'Counting only' : v.verdict.state === 'too_early' ? 'Evidence building' : 'Ready to review'}
-          </span>
+          <span className="sp-label">{v.verdict.state === 'too_early' ? 'Evidence building' : 'Ready to review'}</span>
           <div className="sp-big" style={{ fontSize: 28 }}>
             {v.verdict.headline}
           </div>
@@ -115,30 +114,20 @@ export function ShadowView({ v }: { v: ShadowTestView }) {
       <div className="sh-tiles" data-testid="shadow-totals">
         <Tile n={v.totals.running} k="Running" s="Currently being tracked." />
         <Tile n={v.totals.finished} k="Finished" s="Completed tracking (target, stop or day 15)." />
-        {v.totals.target == null || v.totals.stop == null ? (
-          <div className="sp-card sp-stat" data-testid="shadow-sealed-tile" style={{ gridColumn: 'span 2' }}>
-            <div className="sp-big" style={{ fontSize: 28 }}>Sealed</div>
-            <div style={{ fontWeight: 700 }}>Target and stop results</div>
-            <div className="sp-small">Hidden until the trial’s evaluation (blind test): counts only.</div>
-          </div>
-        ) : (
-          <>
-            <Tile
-              n={v.totals.target}
-              of={v.totals.finished}
-              k={`Target reached${share(v.totals.target, v.totals.finished)}`}
-              s="Finished ideas that hit +8%."
-              tone="up"
-            />
-            <Tile
-              n={v.totals.stop}
-              of={v.totals.finished}
-              k={`Stop reached${share(v.totals.stop, v.totals.finished)}`}
-              s="Finished ideas that hit −4%."
-              tone="down"
-            />
-          </>
-        )}
+        <Tile
+          n={v.totals.target}
+          of={v.totals.finished}
+          k={`Target reached${share(v.totals.target, v.totals.finished)}`}
+          s="Finished ideas that hit +8%."
+          tone="up"
+        />
+        <Tile
+          n={v.totals.stop}
+          of={v.totals.finished}
+          k={`Stop reached${share(v.totals.stop, v.totals.finished)}`}
+          s="Finished ideas that hit −4%."
+          tone="down"
+        />
       </div>
 
       <GroupsTable groups={v.groups} />
@@ -250,25 +239,17 @@ function GroupsTable({ groups }: { groups: ShadowGroup[] }) {
                   <b>{g.group}</b>
                 </td>
                 <td>{g.finished}</td>
-                {g.sealed || g.target == null || g.stop == null ? (
-                  <td colSpan={3} className="sp-small" data-testid="shadow-group-sealed">
-                    Sealed until the trial’s evaluation (counts only)
-                  </td>
-                ) : (
-                  <>
-                    <td className="sp-pos">
-                      {g.target} / {g.finished}
-                      {share(g.target, g.finished)}
-                    </td>
-                    <td className="sp-neg">
-                      {g.stop} / {g.finished}
-                      {share(g.stop, g.finished)}
-                    </td>
-                    <td className={tone(g.average_pct)}>
-                      <b>{pct(g.average_pct)}</b>
-                    </td>
-                  </>
-                )}
+                <td className="sp-pos">
+                  {g.target} / {g.finished}
+                  {share(g.target, g.finished)}
+                </td>
+                <td className="sp-neg">
+                  {g.stop} / {g.finished}
+                  {share(g.stop, g.finished)}
+                </td>
+                <td className={tone(g.average_pct)}>
+                  <b>{pct(g.average_pct)}</b>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -283,9 +264,9 @@ const CAP_NAME: Record<string, string> = { large: 'LARGE', midcap: 'MID', smallc
 function Stock({ symbol, caps }: { symbol: string; caps: Map<string, string> }) {
   const cap = caps.get(symbol.toUpperCase())
   return (
-    <Link to={`/trademind/stock/${encodeURIComponent(symbol)}`} style={{ textDecoration: 'none', color: 'inherit' }}>
-      <b>{symbol}</b> {cap && <span className="sp-cap">{CAP_NAME[cap]}</span>}
-    </Link>
+    <>
+      <StockLink symbol={symbol} /> {cap && <span className="sp-cap">{CAP_NAME[cap]}</span>}
+    </>
   )
 }
 
@@ -293,7 +274,15 @@ function Bought({ yes }: { yes: boolean }) {
   return <span className={`sh-chip ${yes ? 'sh-yes' : ''}`}>{yes ? 'Yes' : 'No'}</span>
 }
 
-function RunningTable({ rows, caps }: { rows: ShadowRunning[]; caps: Map<string, string> }) {
+function RunningTable({ rows: unsorted, caps }: { rows: ShadowRunning[]; caps: Map<string, string> }) {
+  const { sorted: rows, sorter } = useSort(unsorted, {
+    stock: (r: ShadowRunning) => r.symbol,
+    rank: (r: ShadowRunning) => r.rank,
+    today: (r: ShadowRunning) => (r.price_not_updated ? null : r.today_pct),
+    since: (r: ShadowRunning) => r.since_pct,
+    day: (r: ShadowRunning) => r.day,
+    bought: (r: ShadowRunning) => (r.paper_bought ? 1 : 0),
+  }, { key: null }, { stock: 'asc', rank: 'asc' })
   if (rows.length === 0) {
     return (
       <p className="sp-small" data-testid="shadow-empty">
@@ -306,13 +295,13 @@ function RunningTable({ rows, caps }: { rows: ShadowRunning[]; caps: Map<string,
       <table className="sh-table" data-testid="shadow-running">
         <thead>
           <tr>
-            <th>Stock</th>
-            <th>Original rank</th>
-            <th>Daily change</th>
-            <th>Since ranked</th>
+            <SortTh sorter={sorter} k="stock">Stock</SortTh>
+            <SortTh sorter={sorter} k="rank">Original rank</SortTh>
+            <SortTh sorter={sorter} k="today">Daily change</SortTh>
+            <SortTh sorter={sorter} k="since">Since ranked</SortTh>
             <th style={{ minWidth: 190 }}>Stop-to-target position</th>
-            <th>Trading days</th>
-            <th>Paper bought</th>
+            <SortTh sorter={sorter} k="day">Trading days</SortTh>
+            <SortTh sorter={sorter} k="bought">Paper bought</SortTh>
           </tr>
         </thead>
         <tbody>
@@ -325,11 +314,9 @@ function RunningTable({ rows, caps }: { rows: ShadowRunning[]; caps: Map<string,
               <td className={tone(r.today_pct)}>
                 {r.price_not_updated ? <span className="sp-small">price not updated</span> : pct(r.today_pct)}
               </td>
-              <td className={tone(r.since_pct)}>{r.sealed ? <span className="sp-small">Sealed</span> : pct(r.since_pct)}</td>
+              <td className={tone(r.since_pct)}>{pct(r.since_pct)}</td>
               <td>
-                {r.sealed ? (
-                  <span className="sp-small">Sealed until the trial’s evaluation</span>
-                ) : r.position == null ? (
+                {r.position == null ? (
                   '—'
                 ) : (
                   <div className="sh-rng" role="img" aria-label={`${pct(r.since_pct)} since ranked, between the −4% stop and the +8% target`}>
@@ -354,7 +341,17 @@ function RunningTable({ rows, caps }: { rows: ShadowRunning[]; caps: Map<string,
   )
 }
 
-function FinishedTable({ rows, caps }: { rows: ShadowFinished[]; caps: Map<string, string> }) {
+function FinishedTable({ rows: unsorted, caps }: { rows: ShadowFinished[]; caps: Map<string, string> }) {
+  const { sorted: rows, sorter } = useSort(unsorted, {
+    stock: (r: ShadowFinished) => r.symbol,
+    rank: (r: ShadowFinished) => r.rank,
+    ranked: (r: ShadowFinished) => r.ranked_on,
+    ended: (r: ShadowFinished) => r.ended_on,
+    outcome: (r: ShadowFinished) => OUTCOME_TEXT[r.outcome],
+    result: (r: ShadowFinished) => r.result_pct,
+    took: (r: ShadowFinished) => r.days,
+    bought: (r: ShadowFinished) => (r.paper_bought ? 1 : 0),
+  }, { key: null }, { stock: 'asc', rank: 'asc', outcome: 'asc' })
   if (rows.length === 0) {
     return (
       <p className="sp-small" data-testid="shadow-empty">
@@ -367,14 +364,14 @@ function FinishedTable({ rows, caps }: { rows: ShadowFinished[]; caps: Map<strin
       <table className="sh-table" data-testid="shadow-finished">
         <thead>
           <tr>
-            <th>Stock</th>
-            <th>Original rank</th>
-            <th>Ranked</th>
-            <th>Ended</th>
-            <th>Outcome</th>
-            <th>Result</th>
-            <th>Took</th>
-            <th>Paper bought</th>
+            <SortTh sorter={sorter} k="stock">Stock</SortTh>
+            <SortTh sorter={sorter} k="rank">Original rank</SortTh>
+            <SortTh sorter={sorter} k="ranked">Ranked</SortTh>
+            <SortTh sorter={sorter} k="ended">Ended</SortTh>
+            <SortTh sorter={sorter} k="outcome">Outcome</SortTh>
+            <SortTh sorter={sorter} k="result">Result</SortTh>
+            <SortTh sorter={sorter} k="took">Took</SortTh>
+            <SortTh sorter={sorter} k="bought">Paper bought</SortTh>
           </tr>
         </thead>
         <tbody>
@@ -386,9 +383,9 @@ function FinishedTable({ rows, caps }: { rows: ShadowFinished[]; caps: Map<strin
               <td>#{r.rank}</td>
               <td>{shortDate(r.ranked_on)}</td>
               <td>{shortDate(r.ended_on)}</td>
-              <td>{r.outcome ? OUTCOME_TEXT[r.outcome] : <span className="sp-small">Sealed</span>}</td>
+              <td>{OUTCOME_TEXT[r.outcome]}</td>
               <td className={tone(r.result_pct)}>
-                {r.result_pct == null ? <span className="sp-small">Sealed</span> : <b>{pct(r.result_pct)}</b>}
+                <b>{pct(r.result_pct)}</b>
               </td>
               <td>{r.days != null ? `${r.days} days` : '—'}</td>
               <td>

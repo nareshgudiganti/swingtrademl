@@ -20,6 +20,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from swing_trade_ml.db.models.brain import BrainDecision, BrainRun
+from swing_trade_ml.services import public_verdict
 
 IST = ZoneInfo("Asia/Kolkata")
 
@@ -90,9 +91,19 @@ def _by_symbol(db: Session, run: BrainRun) -> tuple[dict[str, BrainDecision], se
     return ideas, held
 
 
-def _side(d: BrainDecision, rank: tuple[int, int, str | None] | None) -> dict:
-    """What the page needs to explain one day's decision — and nothing about results."""
-    return {
+def _side(
+    d: BrainDecision,
+    rank: tuple[int, int, str | None] | None,
+    *,
+    db: Session | None = None,
+    run: BrainRun | None = None,
+    owner: bool = True,
+) -> dict:
+    """What the page needs to explain one day's decision — and nothing about results.
+
+    For a non-owner the words are the stock-level verdict and the account's own room text is left out
+    (services/public_verdict.py), the same as on the run and stock endpoints."""
+    side = {
         "word": d.overruled_word or d.word,
         "brain_word": d.word,
         "overruled_word": d.overruled_word,
@@ -104,6 +115,23 @@ def _side(d: BrainDecision, rank: tuple[int, int, str | None] | None) -> dict:
         "rank_of": rank[1] if rank else None,
         "score_kind": rank[2] if rank else None,
     }
+    if owner:
+        return side
+    public = public_verdict.public_fields(
+        kind=d.kind,
+        word=d.word,
+        downgraded_from=d.downgraded_from,
+        downgrade_reason=d.downgrade_reason,
+        reasons=d.reasons or [],
+        overruled_word=d.overruled_word,
+        banner_mode=run.banner_mode if run is not None else None,
+        trend=public_verdict.trend_lookup(db, run, d.symbol) if db is not None else None,
+    )
+    side.update(public)
+    side["brain_word"] = public["word"]
+    side["word"] = d.overruled_word or public["word"]
+    side["overrule_reason"] = None
+    return side
 
 
 def _run_ref(run: BrainRun) -> dict:
@@ -115,7 +143,7 @@ def _run_ref(run: BrainRun) -> dict:
     }
 
 
-def changes(db: Session, run_id: str | None = None, book: str = "paper") -> dict:
+def changes(db: Session, run_id: str | None = None, book: str = "paper", owner: bool = True) -> dict:
     """Today's ideas next to the previous trading day's, for the run the page is showing
     (`run_id`) or else the newest live nightly run of `book`."""
     if run_id is not None:
@@ -154,10 +182,14 @@ def changes(db: Session, run_id: str | None = None, book: str = "paper") -> dict
         rows.append(
             {
                 "symbol": symbol,
-                "now": _side(now, now_rank.get(symbol)) if now is not None else None,
-                "before": _side(before, before_rank.get(symbol)) if before is not None else None,
+                "now": _side(now, now_rank.get(symbol), db=db, run=run, owner=owner)
+                if now is not None
+                else None,
+                "before": _side(before, before_rank.get(symbol), db=db, run=prev, owner=owner)
+                if before is not None
+                else None,
                 # Gone from today's ideas because the book now holds it, not because it was dropped.
-                "held_now": now is None and symbol in now_held,
+                "held_now": owner and now is None and symbol in now_held,
             }
         )
     return {

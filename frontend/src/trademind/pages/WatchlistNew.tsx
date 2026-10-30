@@ -14,6 +14,7 @@ import { useLatestRun } from '../live'
 import { QueryNotice } from '../PageState'
 import { rankText, SCORE_HINT, scorePoints } from '../scoreText'
 import { WordTag } from '../term'
+import { SortTh, useSort } from '../sort'
 import { Icon, StockLogo } from '../ui'
 import { addedDate, rowsFor, tabCounts, watchRows, type WatchRow, type WatchTab } from '../watchlistRules'
 import '../newlook-w2.css'
@@ -23,7 +24,7 @@ const TABS: { id: WatchTab; label: string; hint?: string }[] = [
   { id: 'watching', label: 'Watching' },
   {
     id: 'close',
-    label: 'Close to a TRADE',
+    label: 'Close to a BUY',
     hint: 'A TRADE on the brain’s last run, or stopped only by the account’s safety limits after passing every other check.',
   },
   { id: 'removed', label: 'Removed' },
@@ -57,7 +58,12 @@ export default function WatchlistNew() {
 
   const rows = list.data ? watchRows(list.data.items, run) : []
   const counts = tabCounts(rows)
-  const shown = rowsFor(rows, tab)
+  const { sorted: shown, sorter } = useSort(rowsFor(rows, tab), {
+    stock: (r: WatchRow) => r.item.symbol,
+    tonight: (r: WatchRow) => r.word ?? null,
+    score: (r: WatchRow) => (r.decision ? r.decision.confidence : null),
+    added: (r: WatchRow) => r.item.removed_at ?? r.item.added_at,
+  }, { key: null }, { stock: 'asc', tonight: 'asc' })
   const limit = list.data?.limit ?? null
 
   return (
@@ -111,11 +117,11 @@ export default function WatchlistNew() {
             <table className="tmn-w2-table" data-testid="watch-table">
               <thead>
                 <tr>
-                  <th>Stock</th>
-                  <th>Tonight</th>
-                  <th title={SCORE_HINT}>Score</th>
+                  <SortTh sorter={sorter} k="stock">Stock</SortTh>
+                  <SortTh sorter={sorter} k="tonight">Tonight</SortTh>
+                  <SortTh sorter={sorter} k="score" title={SCORE_HINT}>Score</SortTh>
                   <th>What it is waiting for</th>
-                  <th>{tab === 'removed' ? 'Removed' : 'Added'}</th>
+                  <SortTh sorter={sorter} k="added">{tab === 'removed' ? 'Removed' : 'Added'}</SortTh>
                   <th>
                     <span className="tmn-w2-sr">{tab === 'removed' ? 'Add back' : 'Remove'}</span>
                   </th>
@@ -154,7 +160,7 @@ export default function WatchlistNew() {
 function emptyText(tab: WatchTab, onList: number): string {
   if (tab === 'removed') return 'Nothing removed.'
   if (onList === 0) return 'Your list is empty. Tap “Add a stock” to start.'
-  if (tab === 'close') return 'None of your stocks is close to a TRADE on the brain’s last run.'
+  if (tab === 'close') return 'None of your stocks is close to a BUY on the brain’s last run.'
   return 'Nothing here.'
 }
 

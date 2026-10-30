@@ -6,6 +6,8 @@ import type { BrainDecision } from '../../api/types'
 import { finalWord, ideasFrom, useLatestRun } from '../live'
 import type { Action } from '../types'
 import { CapFlag, useSymbolCaps } from '../cap'
+import { SortTh, useSort } from '../sort'
+import StockLink from '../StockLink'
 import { ActionPill, BrainGate, Card, inr } from '../ui'
 import { QueryNotice } from '../PageState'
 import { SCORE_HINT, scoreLabel, withoutScorePercent } from '../scoreText'
@@ -35,7 +37,16 @@ function WatchlistBody() {
   const ideas = latest.data ? ideasFrom(latest.data) : []
   const bySymbol = new Map(ideas.map((d) => [d.symbol.toUpperCase(), d]))
   const dayScores = ideas.map((d) => d.confidence)
-  const symbols = watchlist.data ?? []
+  const { sorted: symbols, sorter } = useSort(watchlist.data ?? [], {
+    stock: (i: { tradingsymbol: string }) => i.tradingsymbol,
+    decision: (i: { tradingsymbol: string }) => {
+      const d = bySymbol.get(i.tradingsymbol.toUpperCase())
+      return d ? finalWord(d) : null
+    },
+    score: (i: { tradingsymbol: string }) => bySymbol.get(i.tradingsymbol.toUpperCase())?.confidence,
+    target: (i: { tradingsymbol: string }) => bySymbol.get(i.tradingsymbol.toUpperCase())?.target,
+    stop: (i: { tradingsymbol: string }) => bySymbol.get(i.tradingsymbol.toUpperCase())?.stop,
+  }, { key: null }, { stock: 'asc', decision: 'asc' })
 
   return (
     <div className="tm-page tm-grid">
@@ -49,15 +60,15 @@ function WatchlistBody() {
             <table className="tm-table">
               <thead>
                 <tr>
-                  <th>Stock</th>
+                  <SortTh sorter={sorter} k="stock">Stock</SortTh>
                   <th>Size</th>
-                  <th>Decision</th>
-                  <th className="tm-right" title={SCORE_HINT}>
+                  <SortTh sorter={sorter} k="decision">Decision</SortTh>
+                  <SortTh sorter={sorter} k="score" right title={SCORE_HINT}>
                     Model score rank
-                  </th>
+                  </SortTh>
                   <th>Entry zone</th>
-                  <th>Target</th>
-                  <th>Stop</th>
+                  <SortTh sorter={sorter} k="target">Target</SortTh>
+                  <SortTh sorter={sorter} k="stop">Stop</SortTh>
                   <th>Why</th>
                 </tr>
               </thead>
@@ -71,7 +82,7 @@ function WatchlistBody() {
                       className="tm-clickable"
                       onClick={() => navigate(`/trademind/stock/${encodeURIComponent(inst.tradingsymbol)}`)}
                     >
-                      <td className="tm-strong">{inst.tradingsymbol}</td>
+                      <td><StockLink symbol={inst.tradingsymbol} withScore={false} /></td>
                       <td>
                         <CapFlag tier={caps.get(inst.tradingsymbol.toUpperCase())} />
                       </td>

@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 from swing_trade_ml.db.models.brain import BrainDecision, BrainRun
 from swing_trade_ml.db.models.market import Candle, Instrument
 from swing_trade_ml.services import shadow_test as st
+from swing_trade_ml.services import trial_seal
 
 IST = ZoneInfo("Asia/Kolkata")
 
@@ -164,7 +165,7 @@ def _dec(db, run_id, symbol, score, outcome=None, ret=None, resolved=None):
     )
 
 
-def test_view_from_the_database_ranks_follows_and_leaves_out_superseded_runs(db_session, monkeypatch):
+def _seed_view(db_session, monkeypatch):
     monkeypatch.setattr(st, "last_closed_trading_day", lambda now: date(2026, 10, 23))
     kei, rbl = _inst(db_session, "KEI", 920001), _inst(db_session, "RBLBANK", 920002)
     for inst, closes in ((kei, (100, 102, 104)), (rbl, (100, 99, 97))):
@@ -179,43 +180,34 @@ def test_view_from_the_database_ranks_follows_and_leaves_out_superseded_runs(db_
     _dec(db_session, "r0", "OLDONE", 0.97, "target", 0.08, date(2026, 10, 6))
     db_session.flush()
 
-    v = st.build_view(db_session, datetime(2026, 10, 24, 6, 0, tzinfo=UTC))
+    return st.build_view(db_session, datetime(2026, 10, 24, 6, 0, tzinfo=UTC))
+
+
+def test_view_from_the_database_ranks_follows_and_leaves_out_superseded_runs(db_session, monkeypatch):
+    """The arithmetic, with the trial seal off (the days used here are inside the trial)."""
+    monkeypatch.setattr(trial_seal, "SEALED", False)
+    v = _seed_view(db_session, monkeypatch)
     assert v["totals"] == {"running": 2, "finished": 1, "target": 1, "stop": 0}
     by = {r["symbol"]: r for r in v["running"]}
     assert by["KEI"]["rank"] == 1 and by["RBLBANK"]["rank"] == 2
-    assert by["KEI"]["day"] == 2
-    # ranked on a trial day (on or after 14 Oct): how it is doing is sealed, only the day count stays
-    assert by["KEI"]["sealed"] is True and by["KEI"]["since_pct"] is None and by["KEI"]["position"] is None
-    assert by["KEI"]["today_pct"] == round((104 / 102 - 1) * 100, 2)
+    assert by["KEI"]["day"] == 2 and by["KEI"]["since_pct"] == 4.0
+    assert by["RBLBANK"]["since_pct"] == -3.0
     assert by["KEI"]["paper_bought"] is False
     assert v["verdict"]["state"] == "too_early"
     assert v["groups"][0]["finished"] == 1
     assert "not part of the sealed" in v["label"]
 
 
-def test_sealed_trial_ideas_show_counts_only_never_a_result(db_session, monkeypatch):
-    """The blind trial's seal (trial_seal.py): a finished idea ranked on a trial day shows no outcome, no
-    result, no end date, no hit rate and no average. Days before the trial are unaffected."""
-    monkeypatch.setattr(st, "last_closed_trading_day", lambda now: date(2026, 10, 23))
-    _run(db_session, "pre", date(2026, 10, 1))
-    _dec(db_session, "pre", "OLDONE", 0.97, "target", 0.08, date(2026, 10, 6))
-    _run(db_session, "trial", date(2026, 10, 15))
-    _dec(db_session, "trial", "NEWONE", 0.96, "stop", -0.04, date(2026, 10, 17))
-    db_session.flush()
-
-    v = st.build_view(db_session, datetime(2026, 10, 24, 6, 0, tzinfo=UTC))
-    rows = {r["symbol"]: r for r in v["finished"]}
-    assert rows["OLDONE"]["outcome"] == "target" and rows["OLDONE"]["result_pct"] == 8.0
-    sealed = rows["NEWONE"]
-    assert sealed["sealed"] is True
-    hidden = (sealed["outcome"], sealed["result_pct"], sealed["days"], sealed["ended_on"])
-    assert hidden == (None, None, None, None)
-    assert v["sealed"] is True and v["totals"]["finished"] == 2
-    assert v["totals"]["target"] is None and v["totals"]["stop"] is None
-    top = v["groups"][0]
-    assert top["finished"] == 2 and top["sealed"] is True
-    assert (top["target"], top["stop"], top["average_pct"]) == (None, None, None)
-    assert v["verdict"]["state"] == "sealed" and "counts only" in v["verdict"]["detail"]
+def test_sealed_days_show_counts_only_and_no_result(db_session, monkeypatch):
+    """Ideas ranked on or after the seal date: how many, never how they did (evidence plan amendment 1, A4)."""
+    monkeypatch.setattr(trial_seal, "SEALED", True)
+    v = _seed_view(db_session, monkeypatch)
+    assert v["totals"] == {"running": 2, "finished": 1, "target": 1, "stop": 0}  # the 1 finished idea is pre-trial
+    by = {r["symbol"]: r for r in v["running"]}
+    assert by["KEI"]["rank"] == 1 and by["RBLBANK"]["rank"] == 2 and by["KEI"]["day"] == 2  # counts and ranks stay
+    for sym in ("KEI", "RBLBANK"):
+        assert by[sym]["since_pct"] is None and by[sym]["today_pct"] is None and by[sym]["position"] is None
+    assert v["sealed"]["active"] is True
 
 
 def test_route_is_owner_only_and_read_only(client, db_session, monkeypatch):

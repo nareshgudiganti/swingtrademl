@@ -14,7 +14,7 @@ import { rankText, scorePoints, scoreRank } from './scoreText'
 import { MARKET_LABEL, MARKET_PLAIN } from './vocab'
 import { whyNotTrade, type WhyItem, type WhyKind } from './whyNotTrade'
 
-export type StepState = 'ok' | 'warn' | 'stop' | 'word' | 'none' | 'later'
+export type StepState = 'ok' | 'warn' | 'stop' | 'word' | 'none' | 'later' | 'na'
 export type BrainStep = { n: number; title: string; line: string; state: StepState; tag: string }
 
 export const STEP_TITLES = [
@@ -47,11 +47,14 @@ const STOP_STEP: Record<Exclude<WhyKind, 'owner_overrule' | 'other'>, number> = 
   bad_plan: 7,
 }
 
+/** M07 writes this on approvals made while testing mode skipped the limits (backend m07_risk LIMITS_OFF_NOTE). */
+const LIMITS_OFF = /switched off for testing/i
+
 export const NOT_RECORDED = 'Not recorded for this stock yet: the brain saves every step from 7 Nov.'
 
 const WORD_PLAIN: Record<string, string> = {
   TRADE: 'Buy it, with the usual plan (+8% target, −4% stop, out within 15 trading days).',
-  WATCH: 'Not a TRADE today. Keep an eye on it.',
+  WATCH: 'Not a BUY today. Keep an eye on it.',
   WAIT: 'Nothing to do today.',
   AVOID: 'Stay away for now.',
   HOLD: 'Keep it: the plan is working.',
@@ -61,16 +64,23 @@ const WORD_PLAIN: Record<string, string> = {
 }
 
 /** Where the brain stopped this idea, and why: null for a TRADE or when nothing stored says why. */
-export function stopOf(d: BrainDecision): { step: number; why: WhyItem } | null {
+export function stopOf(d: BrainDecision, owner = true): { step: number; why: WhyItem } | null {
   const brain = whyNotTrade(d).filter((w) => w.kind !== 'owner_overrule')
   const first = brain[0]
   if (!first) return null
   const kind = first.kind
-  return { step: kind === 'other' || kind === 'owner_overrule' ? 7 : STOP_STEP[kind], why: first }
+  const step = kind === 'other' || kind === 'owner_overrule' ? 7 : STOP_STEP[kind]
+  // The owner's own page runs without the account safety step too (the stock-level answer is what is shown): when
+  // the only thing that held the idea back was the account's room, the stock itself passed every check.
+  if (!owner && d.stock_verdict_restored) return null
+  // A customer has no account safety step: a safety refusal is shown where the brain decided (step 7).
+  return { step: !owner && step === 6 ? 7 : step, why: first }
 }
 
-export function brainSteps(d: BrainDecision, run: BrainRun): BrainStep[] {
-  const stop = stopOf(d)
+/** `owner` is false for everyone but the account owner: they get seven steps, without the account safety step.
+ * true keeps the owner's view exactly as before. */
+export function brainSteps(d: BrainDecision, run: BrainRun, owner = true): BrainStep[] {
+  const stop = stopOf(d, owner)
   const stopAt = stop?.step ?? 99
   const after = (n: number) => n > stopAt
   const word = finalWord(d)
@@ -130,6 +140,10 @@ export function brainSteps(d: BrainDecision, run: BrainRun): BrainStep[] {
 
   // 6 · safety check
   if (stopAt === 6) stopped(6)
+  else if (!owner) {
+    // No account safety step for a customer: the account limits belong to a private test portfolio.
+  } else if (word === 'TRADE' && d.reasons.some((r) => LIMITS_OFF.test(r)))
+    push(6, 'The account’s safety limits were switched off for testing, so none were applied.', 'warn', 'LIMITS OFF')
   else if (word === 'TRADE') push(6, 'Passed: the account’s safety limits allow it.', 'ok', 'PASSED')
   else push(6, NOT_RECORDED, 'none', 'Not recorded')
 

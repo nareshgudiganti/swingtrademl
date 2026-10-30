@@ -8,18 +8,20 @@ from __future__ import annotations
 
 from collections import Counter
 from datetime import date, datetime
+from typing import Annotated
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
 
-from swing_trade_ml.api.deps import DbSession
+from swing_trade_ml.api.deps import DbSession, Principal, get_principal
 from swing_trade_ml.brain import score_evidence, service
 from swing_trade_ml.brain.alerts import service as alerts
 from swing_trade_ml.brain.module import Mode
 from swing_trade_ml.core.config import settings
 from swing_trade_ml.db.models.brain import BrainDecision, BrainProposal, BrainRun
 from swing_trade_ml.db.models.market import Instrument
+from swing_trade_ml.services import public_verdict
 from swing_trade_ml.services.what_would_change import ModelRank, model_ranks, what_would_change
 
 
@@ -103,8 +105,12 @@ def _decision_out(
     *,
     run: BrainRun | None = None,
     rank: ModelRank | None = None,
+    owner: bool = True,
+    db=None,
 ) -> dict:
-    return {
+    banner_mode = run.banner_mode if run is not None else None
+    banner_headline = run.banner_headline if run is not None else None
+    out = {
         "id": d.id,
         "run_id": d.run_id,
         "overruled_word": d.overruled_word,
@@ -128,12 +134,37 @@ def _decision_out(
         "downgrade_reason": d.downgrade_reason,
         # Display-only (bx10): what would have to change for a TRADE, read from the stored reasons.
         "what_would_change": what_would_change(
-            d,
-            rank=rank,
-            banner_mode=run.banner_mode if run is not None else None,
-            banner_headline=run.banner_headline if run is not None else None,
+            d, rank=rank, banner_mode=banner_mode, banner_headline=banner_headline
         ),
     }
+    fields = {
+        "kind": d.kind,
+        "word": d.word,
+        "downgraded_from": d.downgraded_from,
+        "downgrade_reason": d.downgrade_reason,
+        "reasons": d.reasons or [],
+        "overruled_word": d.overruled_word,
+        "banner_mode": banner_mode,
+        "trend": public_verdict.trend_lookup(db, run, d.symbol) if db is not None else None,
+    }
+    if owner:
+        # Two answers kept apart: `word` is the test portfolio's decision (as stored), `stock_verdict` is the
+        # stock-level one the public screens show.
+        verdict = public_verdict.stock_verdict(**fields)
+        out["stock_verdict"] = verdict.word
+        out["stock_verdict_restored"] = verdict.restored
+        return out
+    # A non-owner gets the stock's verdict and nothing of the account: no size, no room, no limit text.
+    public = public_verdict.public_fields(**fields)
+    out.update(public)
+    out["qty"] = 0
+    out["overrule_reason"] = None
+    out["overruled_by"] = None
+    out["what_would_change"] = public_verdict.public_what_would_change(
+        public, kind=d.kind, banner_mode=banner_mode, banner_headline=banner_headline, rank=rank
+    )
+    out["stock_verdict"] = public["word"]
+    return out
 
 
 def _run_summary(db, run: BrainRun) -> dict:
@@ -153,15 +184,18 @@ def _run_summary(db, run: BrainRun) -> dict:
     }
 
 
-def _run_out(db, run: BrainRun) -> dict:
+def _run_out(db, run: BrainRun, owner: bool = True) -> dict:
     decisions = service.decisions_for(db, run.id)
+    if not owner:
+        # The bot's holdings are the test portfolio's: not part of the stock research a customer sees.
+        decisions = [d for d in decisions if d.kind != "holding"]
     evidence = _score_evidence(db)
     ranks = model_ranks(decisions)
     return {
         "quality": run.quality,
         "sectors": (run.context or {}).get("sectors", []),
         "situations": (run.context or {}).get("situations", []),
-        "portfolio": (run.context or {}).get("portfolio", {}),
+        "portfolio": (run.context or {}).get("portfolio", {}) if owner else {},
         "error": run.error,
         "run_id": run.id,
         "kind": run.kind,
@@ -177,7 +211,9 @@ def _run_out(db, run: BrainRun) -> dict:
         "banner": {"mode": run.banner_mode, "headline": run.banner_headline},
         "modules": run.modules,
         "counts": dict(Counter(d.word for d in decisions)),
-        "decisions": [_decision_out(d, evidence, run=run, rank=ranks.get(d.id)) for d in decisions],
+        "decisions": [
+            _decision_out(d, evidence, run=run, rank=ranks.get(d.id), owner=owner, db=db) for d in decisions
+        ],
     }
 
 
@@ -218,11 +254,16 @@ def start_run(payload: RunCreate, db: DbSession) -> dict:
 
 
 @router.get("/runs/latest")
-def latest(db: DbSession, kind: str | None = Query(None), include_replays: bool = Query(False)) -> dict:
+def latest(
+    db: DbSession,
+    principal: Annotated[Principal, Depends(get_principal)],
+    kind: str | None = Query(None),
+    include_replays: bool = Query(False),
+) -> dict:
     run = service.latest_run(db, kind, include_replays)
     if run is None:
         raise HTTPException(404, "The brain has not run yet.")
-    return _run_out(db, run)
+    return _run_out(db, run, owner=principal.is_owner)
 
 
 @router.get("/runs")
@@ -233,11 +274,11 @@ def list_runs(
 
 
 @router.get("/runs/{run_id}")
-def get_run(run_id: str, db: DbSession) -> dict:
+def get_run(run_id: str, db: DbSession, principal: Annotated[Principal, Depends(get_principal)]) -> dict:
     run = db.get(BrainRun, run_id)
     if run is None:
         raise HTTPException(404, "No such run.")
-    return _run_out(db, run)
+    return _run_out(db, run, owner=principal.is_owner)
 
 
 @router.post("/decisions/{decision_id}/overrule")
@@ -397,19 +438,35 @@ def run_trace(run_id: str, db: DbSession) -> dict:
 
 
 @router.get("/why/{symbol}")
-def why(symbol: str, db: DbSession, book: str = Query("paper", pattern="^(paper|live)$")) -> dict:
+def why(
+    symbol: str,
+    db: DbSession,
+    principal: Annotated[Principal, Depends(get_principal)],
+    book: str = Query("paper", pattern="^(paper|live)$"),
+) -> dict:
     known = db.query(Instrument.id).filter(Instrument.tradingsymbol == symbol.upper()).first()
     if known is None:
         # Not a real stock: answer at once instead of running (and storing) the whole brain.
         return {"run_id": None, "banner": {"mode": None, "headline": None}, "decision": None, "trace": []}
     _ctx, run_id = service.run_brain(db, kind="why", symbols=[symbol], book=book)
     run = db.get(BrainRun, run_id)
-    decision = next((d for d in service.decisions_for(db, run_id) if d.symbol == symbol.upper()), None)
+    owner = principal.is_owner
+    decision = next(
+        (
+            d
+            for d in service.decisions_for(db, run_id)
+            if d.symbol == symbol.upper() and (owner or d.kind != "holding")
+        ),
+        None,
+    )
     return {
         "run_id": run_id,
         "banner": {"mode": run.banner_mode, "headline": run.banner_headline},
-        "decision": _decision_out(decision, _score_evidence(db), run=run) if decision else None,
-        "trace": run.trace,
+        "decision": (
+            _decision_out(decision, _score_evidence(db), run=run, owner=owner, db=db) if decision else None
+        ),
+        # The step-by-step trace names the risk gate's own answers for the account: owner only.
+        "trace": run.trace if owner else [],
     }
 
 

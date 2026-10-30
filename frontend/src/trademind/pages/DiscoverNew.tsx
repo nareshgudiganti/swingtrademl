@@ -26,6 +26,7 @@ import { scorePoints, scoreRank, SCORE_HINT } from '../scoreText'
 import { WordTag } from '../term'
 import { oneReason } from '../today/answerRules'
 import { BrainGate, Icon, StockLogo } from '../ui'
+import { SortTh, useSort } from '../sort'
 import '../newlook-w2.css'
 import Opportunities from './Opportunities'
 
@@ -72,7 +73,14 @@ function DiscoverBody() {
   const sectorList = sectorsIn(ideas, sectorOf)
 
   const counts = discoverCounts(ideas)
-  const rows = filterIdeas(ideas, { filter, sector: sector || null, query, sectorOf })
+  const filtered = filterIdeas(ideas, { filter, sector: sector || null, query, sectorOf })
+  const { sorted: rows, sorter } = useSort(filtered, {
+    rank: (d) => d.confidence,
+    stock: (d) => d.symbol,
+    decision: (d) => finalWord(d),
+    score: (d) => d.confidence,
+    stopped: (d) => whereItStopped(d).label,
+  }, { key: null }, { stock: 'asc', decision: 'asc', stopped: 'asc' })
   const dayScores = ideas.map((d) => d.confidence)
   const noTrade = noTradeReason(run.banner, ideas.length, counts.TRADE)
 
@@ -144,12 +152,12 @@ function DiscoverBody() {
             <table className="tmn-w2-table" data-testid="discover-table">
               <thead>
                 <tr>
-                  <th className="tmn-w2-num">#</th>
-                  <th>Stock</th>
-                  <th>Decision</th>
-                  <th title={SCORE_HINT}>Score</th>
+                  <SortTh sorter={sorter} k="rank" title="Place in today's ranking by score">#</SortTh>
+                  <SortTh sorter={sorter} k="stock">Stock</SortTh>
+                  <SortTh sorter={sorter} k="decision">Decision</SortTh>
+                  <SortTh sorter={sorter} k="score" title={SCORE_HINT}>Score</SortTh>
                   <th>Why, in a few words</th>
-                  <th>Where it stopped</th>
+                  <SortTh sorter={sorter} k="stopped">Where it stopped</SortTh>
                   <th>
                     <span className="tmn-w2-sr">AI analysis</span>
                   </th>

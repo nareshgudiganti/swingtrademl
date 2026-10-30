@@ -142,3 +142,13 @@ def test_no_data_at_all():
     s = build_snapshot(NOW, None, [])
     assert s.state is SnapshotState.NO_DATA
     assert s.price is None
+
+
+def test_old_stored_quote_does_not_hide_a_newer_close():
+    # Prod case: a quote stored on 16 Oct while the daily close of 23 Oct is on file.
+    q = QuotePoint(last_price=100.0, prev_close=99.0, ts=ist(2026, 10, 16, 12, 12))
+    s = build_snapshot(NOW, q, BARS)
+    assert s.state is SnapshotState.CLOSE_ONLY
+    assert s.price == 123.57
+    assert s.price_date == D23
+    assert "Price on file is old" not in s.note

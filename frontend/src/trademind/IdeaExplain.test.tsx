@@ -62,7 +62,7 @@ describe('WhyNotTradeView', () => {
     const html = renderToString(
       <WhyNotTradeView decision={decision({ reasons: [risk], downgraded_from: 'TRADE', downgrade_reason: risk })} />,
     )
-    expect(html).toContain('Why not TRADE?')
+    expect(html).toContain('Why not a BUY?')
     expect(html).toContain('safety limits had no room')
     expect(html).toContain('<details')
     expect(html).toContain('Bank sector is already near its limit.')

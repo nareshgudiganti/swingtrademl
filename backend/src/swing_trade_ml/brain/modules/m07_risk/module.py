@@ -14,6 +14,7 @@ date is never approved.
 from __future__ import annotations
 
 from collections import defaultdict
+from dataclasses import replace
 
 from swing_trade_ml.brain import contracts as c
 from swing_trade_ml.brain.context import ContextView
@@ -27,6 +28,9 @@ from swing_trade_ml.services.limits import limits_for
 from swing_trade_ml.services.portfolio import portfolio_value_and_cash
 
 STOP_PCT = 0.04  # the locked -4% stop sizes the position
+# Said on every approval made while testing mode skipped the account limits, so the stock page never claims
+# the limits "passed" (the page matches "switched off for testing").
+LIMITS_OFF_NOTE = "Account limits were switched off for testing, so none were applied."
 DEFENSIVE_SIZE_FACTOR = 0.5
 DEFENSIVE_MAX_NEW = 2
 
@@ -183,4 +187,9 @@ class RiskGate(BrainModule):
         verdicts = allocate(
             candidates, account, _v1_check(db, book, account.portfolio_value, waive), policy, risk.buy_cost
         )
+        if waive:
+            verdicts = [
+                replace(v, note="; ".join(x for x in (v.note, LIMITS_OFF_NOTE) if x)) if v.allowed else v
+                for v in verdicts
+            ]
         return c.Contribution(verdicts=tuple(refusals + verdicts))

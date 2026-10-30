@@ -183,7 +183,9 @@ def test_testing_mode_approves_what_a_tight_market_ceiling_would_refuse(db_sessi
     monkeypatch.setattr(testing_mode, "current_stage", lambda db: "shadow")
     allowed = _run(db_session, _opinion_module(), _fresh()).verdicts["M07TEST"]
     assert allowed.allowed and allowed.max_qty > 0
+    assert "switched off for testing" in allowed.note  # the stock page must not say the limits passed
 
     monkeypatch.setattr(testing_mode, "current_stage", lambda db: "approval")
     back = _run(db_session, _opinion_module(), _fresh()).verdicts["M07TEST"]
     assert not back.allowed
+    assert "switched off for testing" not in back.note

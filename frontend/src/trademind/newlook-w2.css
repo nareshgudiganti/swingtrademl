@@ -797,3 +797,38 @@
 .tm-new .tm-table-wrap {
   max-height: 70vh;
 }
+
+/* ---- Swipeable sort tabs above a card rail: one thumb-swipe row, the chosen tab is filled in. ---- */
+.tm-new .tmn-w2-sorttabs {
+  display: flex;
+  gap: 0.4rem;
+  padding: 0 1rem 0.6rem;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.tm-new .tmn-w2-sorttabs::-webkit-scrollbar {
+  display: none;
+}
+
+.tm-new .tmn-w2-sorttab {
+  flex: 0 0 auto;
+  scroll-snap-align: start;
+  padding: 0.35rem 0.85rem;
+  border: 1px solid #d9deef;
+  border-radius: 99px;
+  background: #fff;
+  color: var(--tm-text);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tm-new .tmn-w2-sorttab[aria-pressed='true'] {
+  background: #3f55d6;
+  border-color: #3f55d6;
+  color: #fff;
+}

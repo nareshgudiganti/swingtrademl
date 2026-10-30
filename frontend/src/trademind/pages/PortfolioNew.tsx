@@ -34,6 +34,8 @@ import { wordTagColor } from '../vocab'
 import { holdingsNeedingAttention } from '../today/HoldingsNeedsYou'
 import { stoppedByRoom } from '../today/answerRules'
 import { ideaCounts } from '../today/TodayIdeas'
+import { scorePoints } from '../scoreText'
+import { useSort } from '../sort'
 import { GlowArea, inr, StockLogo, Tag } from '../ui'
 import '../newlook-w2.css'
 
@@ -189,7 +191,21 @@ function HeldTable({
   runLoaded: boolean
 }) {
   const caps = useSymbolCaps()
+  const { sorted, sorter } = useSort(rows, {
+    stock: (r: HeldRow) => r.symbol,
+    qty: (r: HeldRow) => r.position?.quantity,
+    price: (r: HeldRow) => r.position?.current_price,
+    pnl: (r: HeldRow) => r.position?.unrealized_pnl_pct,
+    tonight: (r: HeldRow) => r.word,
+    score: (r: HeldRow) => r.score,
+  }, { key: null }, { stock: 'asc', tonight: 'asc' })
   const summaryLine = wordSummary(rows)
+  const sortChips: { k: 'stock' | 'pnl' | 'score' | 'tonight'; label: string }[] = [
+    ...(positionsLoaded ? [{ k: 'pnl' as const, label: 'Gain / loss' }] : []),
+    ...(positionsLoaded ? [{ k: 'score' as const, label: 'Score' }] : []),
+    { k: 'tonight', label: 'Tonight’s read' },
+    { k: 'stock', label: 'A – Z' },
+  ]
   return (
     <section className="tmn-card tmn-w2-tablecard tmn-w2-railcard" aria-label="Your stocks" data-testid="held-table">
       <div className="tmn-card-head tmn-w2-pad">
@@ -203,8 +219,23 @@ function HeldTable({
           {positionsLoaded || runLoaded ? 'The bot holds no paper shares right now.' : 'The held stocks could not be loaded.'}
         </p>
       ) : (
+        <>
+        <div className="tmn-w2-sorttabs" role="group" aria-label="Sort your stocks">
+          {sortChips.map((c) => (
+            <button
+              key={c.k}
+              type="button"
+              className="tmn-w2-sorttab"
+              aria-pressed={sorter.key === c.k}
+              onClick={() => sorter.toggle(c.k)}
+            >
+              {c.label}
+              {sorter.key === c.k && <span aria-hidden="true">{sorter.dir === 'asc' ? ' ↑' : ' ↓'}</span>}
+            </button>
+          ))}
+        </div>
         <div className="tmn-w2-rail" role="region" aria-label="Your stocks, scroll sideways to see more" tabIndex={0}>
-          {rows.map((r) => {
+          {sorted.map((r) => {
             const p = r.position
             const tone = p ? (p.unrealized_pnl >= 0 ? 'up' : 'down') : 'none'
             return (
@@ -235,7 +266,15 @@ function HeldTable({
                 {positionsLoaded && (
                   <span className="tmn-w2-hcard-score" title="How strongly the model likes the stock today, out of 100. A ranking number, not a chance of profit.">
                     {r.score == null ? (
-                      <span className="tm-dim tmn-small">No score yet</span>
+                      // No stored day-by-day reading yet: show the brain's own last-run score, labelled as that.
+                      scorePoints(r.decision?.confidence) != null ? (
+                        <span title="The brain's score for this stock on its last run. The day-by-day list starts with the next daily check.">
+                          <b>{scorePoints(r.decision?.confidence)}</b>
+                          <span className="tm-dim tmn-small"> today</span>
+                        </span>
+                      ) : (
+                        <span className="tm-dim tmn-small">No score yet</span>
+                      )
                     ) : (
                       <>
                         <span className="tmn-w2-meter">
@@ -256,6 +295,7 @@ function HeldTable({
             )
           })}
         </div>
+        </>
       )}
       {positionsRefused && (
         <p className="tm-dim tmn-small tmn-w2-pad">Quantities and prices are not included for your account; the brain’s read is.</p>

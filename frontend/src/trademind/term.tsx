@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, ReactNode, Ref, SyntheticEvent } from 'react'
 
-import { GLOSSARY, GLOSSARY_GROUPS, isGlossaryKey, wordTagColor } from './vocab'
+import { GLOSSARY, GLOSSARY_GROUPS, isGlossaryKey, wordLabel, wordTagColor } from './vocab'
 import type { GlossaryKey } from './vocab'
 
 /** What a key press does while the explanation is open. */
@@ -166,7 +166,7 @@ export function Term({ k, children }: { k: GlossaryKey; children: ReactNode }) {
 
 /** A brain word (TRADE, HOLD, EXIT…) as a coloured tag that explains itself. Unknown words show as a plain tag. */
 export function WordTag({ word }: { word: string }) {
-  const tag = <span className={`tm-tag tm-tag-${wordTagColor(word)}`}>{word}</span>
+  const tag = <span className={`tm-tag tm-tag-${wordTagColor(word)}`}>{wordLabel(word)}</span>
   return isGlossaryKey(word) ? <Term k={word}>{tag}</Term> : tag
 }
 

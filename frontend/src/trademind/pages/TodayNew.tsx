@@ -26,7 +26,7 @@ import { waitingItems } from '../today/NeedsYou'
 import { ideaCounts } from '../today/TodayIdeas'
 import { IdeaFigures, PeekCard } from '../stockParts'
 import { BrainGate, inr, StockLogo, Tag } from '../ui'
-import { MARKET_LABEL, MARKET_PLAIN, MARKET_TONE, wordTagColor } from '../vocab'
+import { MARKET_LABEL, MARKET_PLAIN, MARKET_TONE, wordLabel, wordTagColor } from '../vocab'
 
 /** The new Today shows the top 3 ideas (owner brief: short, answer first); Discover lists every one. */
 export const TOP_IDEAS_NEW = 3
@@ -86,7 +86,7 @@ function Answer({ owner }: { owner: boolean }) {
       </section>
 
       <div className={`tmn-tiles ${owner ? 'tmn-tiles-4' : ''}`} data-testid="today-tiles">
-        <Tile n={counts.TRADE} label="New trades today" to="/trademind/opportunities" tone={counts.TRADE ? 'green' : undefined} />
+        <Tile n={counts.TRADE} label="New buys today" to="/trademind/opportunities" tone={counts.TRADE ? 'green' : undefined} />
         <Tile n={counts.WATCH} label="Watch closely" to="/trademind/opportunities" tone={counts.WATCH ? 'amber' : undefined} />
         <Tile n={attention.length} label="Holdings need review" to="/trademind/positions" tone={attention.length ? 'red' : undefined} />
         {owner && <WaitingTile />}
@@ -162,7 +162,7 @@ function TopIdeas({ run }: { run: BrainRun }) {
                 </span>
                 <IdeaFigures d={d} />
                 <span className="tmn-idea-side">
-                  <span className={`tm-tag tm-tag-${wordTagColor(finalWord(d))}`}>{finalWord(d)}</span>
+                  <span className={`tm-tag tm-tag-${wordTagColor(finalWord(d))}`}>{wordLabel(finalWord(d))}</span>
                   {rank && (
                     <span className="tmn-small tm-dim" title={SCORE_HINT}>
                       {rankText(rank)}

@@ -11,15 +11,12 @@ import { useLatestRun } from '../live'
 import { CompanyTeaser } from '../CompanyTab'
 import { BrainGate } from '../ui'
 import {
-  BrainFlow,
   CompanyCard,
   FullCta,
   Glance,
   PlanLadder,
   QuickAnswers,
-  ScoreMonitor,
   StockHeader,
-  StockTabs,
   useStockData,
 } from '../stockParts'
 import StockDetail from './StockDetail'
@@ -63,7 +60,6 @@ function StockNewView({ decision, run }: { decision: BrainDecision; run: BrainRu
         cap={cap ? CAP_LABEL[cap] : undefined}
         analysisTo={analysisTo}
       />
-      <StockTabs symbol={decision.symbol} active="overview" />
       <Glance
         decision={decision}
         run={run}
@@ -75,8 +71,6 @@ function StockNewView({ decision, run }: { decision: BrainDecision; run: BrainRu
         snapshot={data.snapshot}
         runAt={`Brain’s run on ${formatDateTime(run.started_at)}`}
       />
-      <ScoreMonitor trail={data.trail} />
-      <BrainFlow decision={decision} run={run} analysisTo={analysisTo} />
       <div className="sp-split">
         <PlanLadder decision={decision} />
         <CompanyCard brief={data.brief} />

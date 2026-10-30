@@ -116,7 +116,7 @@ export const LADDER: { mode: MarketMode; label: string; line: string; tone: 'gre
 export function meansForYou(mode: string | null, investedLimitPct: number | null): string[] {
   const out: string[] = []
   if (mode === 'NORMAL') {
-    out.push('Stocks that pass every check can become a TRADE.')
+    out.push('Stocks that pass every check can become a BUY.')
     out.push('Each new buy is the normal size.')
   } else if (mode === 'DEFENSIVE') {
     out.push('Fewer stocks will qualify as TRADE: at most two new ideas.')

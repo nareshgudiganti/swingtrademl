@@ -9,6 +9,7 @@ import { DayCell, ScoreToday, SuggestionTag, scoreNow, suggestionRank } from '..
 import ScoreTrail from '../ScoreTrail'
 import { SortTh, useSort } from '../sort'
 import { Card, PageHead, Tabs, Tag, inr, signed, toneClass } from '../ui'
+import StockLink from '../StockLink'
 import { PageState, QueryNotice, StaleNotice } from '../PageState'
 import TaxExportCard from '../TaxExport'
 import { actionLabelText } from '../scoreText'
@@ -378,7 +379,7 @@ function HoldingsTable({
             <Fragment key={p.id}>
               <tr className="tm-clickable" onClick={() => setOpen(open === p.id ? null : p.id)}>
                 <td className="tm-strong">
-                  {p.symbol}
+                  <StockLink symbol={p.symbol} withScore={false} />
                   <CapFlag tier={caps.get(p.symbol.toUpperCase())} gap />
                 </td>
                 <td>
@@ -606,7 +607,7 @@ function HoldingsTab() {
             {attention.map((p) => (
               <div key={p.id} className="tm-callout">
                 <div className="tm-flex tm-wrap" style={{ justifyContent: 'space-between', gap: '0.5rem' }}>
-                  <span className="tm-strong">{p.symbol}</span>
+                  <StockLink symbol={p.symbol} />
                   <Tag tone={VERDICT[p.action_code].tone}>{p.action_code === 'exit' ? 'Sell' : 'Review'}</Tag>
                 </div>
                 <div className="tm-strong" style={{ marginTop: '0.3rem' }}>{VERDICT[p.action_code].head}</div>
@@ -836,7 +837,7 @@ function ReportTab() {
                   <tbody>
                     {data.by_stock.map((r) => (
                       <tr key={r.symbol}>
-                        <td className="tm-strong">{r.symbol}</td>
+                        <td><StockLink symbol={r.symbol} /></td>
                         <td className="tm-right">{r.bought_qty ? `${r.bought_qty} · ${rupees(r.bought_value)}` : '—'}</td>
                         <td className="tm-right">{r.sold_qty ? `${r.sold_qty} · ${rupees(r.sold_value)}` : '—'}</td>
                         <td className={`tm-right ${r.sold_qty ? toneClass(r.realized_pnl) : ''}`}>
@@ -878,7 +879,7 @@ function ReportTab() {
                   <tbody>
                     {data.closed.map((c, i) => (
                       <tr key={`${c.symbol}-${c.sell_date}-${i}`}>
-                        <td className="tm-strong">{c.symbol}</td>
+                        <td><StockLink symbol={c.symbol} /></td>
                         <td>{day(c.buy_date)}</td>
                         <td>{day(c.sell_date)}</td>
                         <td className="tm-right">{c.quantity}</td>
@@ -919,7 +920,7 @@ function ReportTab() {
                         <td>
                           <Tag tone={f.side === 'BUY' ? 'green' : 'red'}>{f.side === 'BUY' ? 'Bought' : 'Sold'}</Tag>
                         </td>
-                        <td className="tm-strong">{f.symbol}</td>
+                        <td><StockLink symbol={f.symbol} /></td>
                         <td className="tm-right">{f.quantity}</td>
                         <td className="tm-right">{rupees(f.price)}</td>
                         <td className="tm-right">{rupees(f.value)}</td>
@@ -1017,7 +1018,7 @@ function ZerodhaTab() {
             <tbody>
               {holdings.data.map((h) => (
                 <tr key={`${h.exchange}:${h.symbol}`}>
-                  <td className="tm-strong">{h.symbol}</td>
+                  <td><StockLink symbol={h.symbol} /></td>
                   <td className="tm-right">{h.quantity}</td>
                   <td className="tm-right">{rupees(h.average_price)}</td>
                   <td className="tm-right">{rupees(h.last_price)}</td>

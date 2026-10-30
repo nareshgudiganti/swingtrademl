@@ -346,8 +346,6 @@ export interface ShadowRunning {
   word: string
   ranked_on: string
   paper_bought: boolean
-  /** Ranked on a trial day: how it is doing so far is sealed (since_pct and position are null). */
-  sealed: boolean
   day: number
   today_pct: number | null
   since_pct: number | null
@@ -360,27 +358,23 @@ export interface ShadowFinished {
   group: string
   ranked_on: string
   ended_on: string | null
-  sealed: boolean
-  outcome: 'target' | 'stop' | 'timeout' | null
-  result_pct: number | null
+  outcome: 'target' | 'stop' | 'timeout'
+  result_pct: number
   days: number | null
   paper_bought: boolean
 }
 export interface ShadowGroup {
   group: string
   finished: number
-  sealed: boolean
-  target: number | null
-  stop: number | null
+  target: number
+  stop: number
   average_pct: number | null
 }
 export interface ShadowTestView {
   as_of: string
   label: string
-  verdict: { state: 'too_early' | 'reviewable' | 'sealed'; headline: string; detail: string; days_done: number; days_needed: number }
-  /** The blind trial's seal: counts only, no outcome, result, hit rate or average. */
-  sealed: boolean
-  totals: { running: number; finished: number; target: number | null; stop: number | null }
+  verdict: { state: 'too_early' | 'reviewable'; headline: string; detail: string; days_done: number; days_needed: number }
+  totals: { running: number; finished: number; target: number; stop: number }
   groups: ShadowGroup[]
   running: ShadowRunning[]
   finished: ShadowFinished[]
@@ -1087,6 +1081,10 @@ export interface BrainDecision {
   overruled_at: string | null
   /** Display-only (bx10): what would have to change for a TRADE; empty for TRADE and holdings. */
   what_would_change?: { key: string; text: string }[]
+  /** The stock-level verdict public screens show. For the owner `word` is the test portfolio's decision; this is the stock's. */
+  stock_verdict?: string
+  /** Owner only: true when `stock_verdict` is TRADE although `word` is WATCH because only the account's room held it back. */
+  stock_verdict_restored?: boolean
 }
 
 export interface BrainBanner {

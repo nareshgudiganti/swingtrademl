@@ -22,7 +22,7 @@ from swing_trade_ml.brain.module import BrainModule, Manifest, Mode, Step, regis
 from swing_trade_ml.brain.modules.m07_risk.allocator import Account, Candidate, CheckResult, Policy, allocate
 from swing_trade_ml.brain.opinions import liked, pick_opinion, rank_strength
 from swing_trade_ml.ml.sector_map import get_sector_bucket
-from swing_trade_ml.services import deployable, risk
+from swing_trade_ml.services import deployable, risk, testing_mode
 from swing_trade_ml.services.limits import limits_for
 from swing_trade_ml.services.portfolio import portfolio_value_and_cash
 
@@ -79,9 +79,11 @@ def candidates_from(view: ContextView) -> tuple[list[Candidate], list[c.RiskVerd
     return candidates, refusals
 
 
-def account_snapshot(db, book: str) -> Account:
+def account_snapshot(db, book: str, waive: bool = False) -> Account:
     portfolio_value, cash = portfolio_value_and_cash(db, book)
     limits = limits_for(portfolio_value)
+    if waive:
+        limits = testing_mode.relaxed(limits)
     holdings = risk.open_holdings(db, book)
     exposure: dict[str, float] = defaultdict(float)
     for h in holdings:
@@ -89,7 +91,8 @@ def account_snapshot(db, book: str) -> Account:
         if bucket is not None:
             exposure[bucket] += h.value
     invested = sum(h.value for h in holdings)
-    deploy_ceiling = deployable.current_deployable(db).fraction * portfolio_value
+    fraction = 1.0 if waive else deployable.current_deployable(db).fraction
+    deploy_ceiling = fraction * portfolio_value
     return Account(
         portfolio_value=portfolio_value,
         cash=cash,
@@ -102,7 +105,7 @@ def account_snapshot(db, book: str) -> Account:
     )
 
 
-def _v1_check(db, book: str, portfolio_value: float):
+def _v1_check(db, book: str, portfolio_value: float, waive: bool = False):
     def check(cand: Candidate, cash_left: float) -> CheckResult:
         if cand.instrument_id is None:
             return CheckResult(
@@ -117,6 +120,7 @@ def _v1_check(db, book: str, portfolio_value: float):
             portfolio_value=portfolio_value,
             available_cash=cash_left,
             strategy=None,
+            waive_limits=waive,
         )
         return CheckResult(
             allowed=d.allowed, qty=d.quantity, rule=d.rule, reason=d.reason, amount_inr=d.amount_inr
@@ -164,7 +168,8 @@ class RiskGate(BrainModule):
 
         db = view.reader.db
         book = view.request.book
-        account = account_snapshot(db, book)
+        waive = testing_mode.limits_waived(db)
+        account = account_snapshot(db, book, waive)
         market = view.market
         policy = Policy(
             mode=effective_mode(market, view.situations)[0],
@@ -176,6 +181,6 @@ class RiskGate(BrainModule):
             ),
         )
         verdicts = allocate(
-            candidates, account, _v1_check(db, book, account.portfolio_value), policy, risk.buy_cost
+            candidates, account, _v1_check(db, book, account.portfolio_value, waive), policy, risk.buy_cost
         )
         return c.Contribution(verdicts=tuple(refusals + verdicts))

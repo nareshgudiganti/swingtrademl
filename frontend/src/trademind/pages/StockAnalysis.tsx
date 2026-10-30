@@ -23,6 +23,7 @@ import {
   PlanLadder,
   SafetyInWords,
   StockHeader,
+  StockTabs,
   stepPasses,
   useStockData,
   wordSay,
@@ -54,7 +55,7 @@ function StockAnalysisView({ decision: d, run }: { decision: BrainDecision; run:
   const caps = useSymbolCaps()
   const { canManage } = usePlan()
   const data = useStockData(d, run)
-  const [params, setParams] = useSearchParams()
+  const [params] = useSearchParams()
   const tab = params.get('tab') === 'company' ? 'company' : 'brain'
   const word = finalWord(d)
   const back = `/trademind/stock/${encodeURIComponent(d.symbol)}`
@@ -86,26 +87,7 @@ function StockAnalysisView({ decision: d, run }: { decision: BrainDecision; run:
         cap={cap ? CAP_LABEL[cap] : undefined}
       />
 
-      <div className="sp-tabs" role="tablist" aria-label="Full analysis sections">
-        {(
-          [
-            ['brain', 'Brain’s decision'],
-            ['company', 'Company and news'],
-          ] as const
-        ).map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            role="tab"
-            aria-selected={tab === id}
-            data-testid={`tab-${id}`}
-            className="sp-tab"
-            onClick={() => setParams(id === 'brain' ? {} : { tab: id }, { replace: true })}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      <StockTabs symbol={d.symbol} active={tab} />
 
       {tab === 'company' ? (
         <CompanyTab symbol={d.symbol} />

@@ -747,6 +747,19 @@ export function Meter({ pct, color }: { pct: number; color: string }) {
   )
 }
 
+/** A steady colour pair per symbol, so each stock keeps the same badge colour everywhere. */
+const LOGO_HUES = [220, 262, 330, 12, 32, 152, 178, 196]
+export function logoGradient(symbol: string): string {
+  let h = 0
+  for (const c of symbol) h = (h * 31 + c.charCodeAt(0)) % 997
+  const hue = LOGO_HUES[h % LOGO_HUES.length]!
+  return `linear-gradient(135deg, hsl(${hue} 78% 58%), hsl(${(hue + 28) % 360} 74% 42%))`
+}
+
 export function StockLogo({ symbol }: { symbol: string }) {
-  return <span className="tm-stock-logo">{symbol.replace(/[^A-Z]/g, '').slice(0, 2)}</span>
+  return (
+    <span className="tm-stock-logo" style={{ background: logoGradient(symbol) }}>
+      {symbol.replace(/[^A-Z]/g, '').slice(0, 2)}
+    </span>
+  )
 }

@@ -15,7 +15,8 @@ import { ideaChange, ordinal, useChanges, type IdeaChange } from './changes'
 import { useSymbolCaps } from './cap'
 import { finalWord } from './live'
 import { scorePoints, scoreRank, withoutScorePercent, SCORE_HINT } from './scoreText'
-import { inr } from './ui'
+import { dayLabel } from './pricesAge'
+import { inr, logoGradient } from './ui'
 import { wordTagColor } from './vocab'
 import './stockpage.css'
 
@@ -91,6 +92,9 @@ export const wordSay = (word: string): string => WORD_SAY[word] ?? word
 /** Owner decision (ss11): no Buy on ideas the brain says WAIT or AVOID. */
 export const brainAllowsBuy = (word: string): boolean => word !== 'AVOID' && word !== 'WAIT'
 
+/** Only TRADE is a buy the brain recommends. On WATCH the practice Buy stays, but as a plain "Buy anyway". */
+export const brainSaysBuy = (word: string): boolean => word === 'TRADE'
+
 export function wordTone(word: string): 'green' | 'amber' | 'red' | 'grey' {
   const c = wordTagColor(word)
   return c === 'green' ? 'green' : c === 'amber' ? 'amber' : c === 'red' ? 'red' : 'grey'
@@ -120,7 +124,9 @@ function initials(symbol: string): string {
 export function StockMark({ symbol }: { symbol: string }) {
   return (
     <div className="sp-logo">
-      <div className="sp-logo-mark">{initials(symbol)}</div>
+      <div className="sp-logo-mark" style={{ background: logoGradient(symbol), color: '#fff' }}>
+        {initials(symbol)}
+      </div>
     </div>
   )
 }
@@ -236,11 +242,18 @@ export function StockHeader({
           )}
           {withBuy && buyOk && (
             <div className="sp-btnbox">
-              <button className="sp-btn sp-btn-buy" type="button" onClick={() => setBuying((v) => !v)} data-testid="buy-button">
-                Buy
+              <button
+                className={`sp-btn ${brainSaysBuy(finalWord(d)) ? 'sp-btn-buy' : ''}`}
+                type="button"
+                onClick={() => setBuying((v) => !v)}
+                data-testid="buy-button"
+              >
+                {brainSaysBuy(finalWord(d)) ? 'Buy' : 'Buy anyway'}
               </button>
-              <span className="sp-small" style={{ textAlign: 'center' }}>
-                Paper buy · practice money
+              <span className="sp-small" style={{ textAlign: 'center', maxWidth: 190 }}>
+                {brainSaysBuy(finalWord(d))
+                  ? 'Paper buy · practice money'
+                  : `The brain says ${finalWord(d)}, not a buy today. Practice money only.`}
               </span>
             </div>
           )}
@@ -253,6 +266,29 @@ export function StockHeader({
       </div>
       {withBuy && buyOk && <BuyBox symbol={d.symbol} open={buying} onClose={() => setBuying(false)} />}
     </>
+  )
+}
+
+// ------------------------------------------------------------------ tabs --
+
+export type StockTabId = 'overview' | 'brain' | 'company'
+
+/** Overview (short), AI Analysis (everything the brain did) and Company: the same strip on every stock screen. */
+export function StockTabs({ symbol, active }: { symbol: string; active: StockTabId }) {
+  const base = `/trademind/stock/${encodeURIComponent(symbol)}`
+  const tabs: [StockTabId, string, string][] = [
+    ['overview', 'Overview', base],
+    ['brain', 'AI Analysis', `${base}/analysis`],
+    ['company', 'Company & news', `${base}/analysis?tab=company`],
+  ]
+  return (
+    <nav className="sp-tabs sp-tabs-strip" role="tablist" aria-label="Stock sections">
+      {tabs.map(([id, label, to]) => (
+        <Link key={id} to={to} role="tab" aria-selected={active === id} data-testid={`tab-${id}`} className="sp-tab" replace={id !== 'overview' && active !== 'overview'}>
+          {label}
+        </Link>
+      ))}
+    </nav>
   )
 }
 
@@ -313,8 +349,13 @@ export function Glance({
         ) : (
           <p className="sp-small">The day-by-day list starts with the next daily check.</p>
         )}
+        {week.length >= 2 && (
+          <div className="sp-small" data-testid="score-days">
+            {week.map((t) => Math.round(t.score * 100)).join(' → ')}
+          </div>
+        )}
         <div className="sp-between">
-          <span>{week.length >= 2 ? `Last ${week.length} days` : ' '}</span>
+          <span>{week.length >= 2 ? `Last ${week.length} days, oldest first` : ' '}</span>
           {level != null && <span>Buy level: {level}</span>}
         </div>
       </div>
@@ -358,6 +399,62 @@ export function Glance({
         {runAt && <div className="sp-small">{runAt}</div>}
       </div>
     </div>
+  )
+}
+
+// ---------------------------------------------------------- score monitor --
+
+const MONITOR_DAYS = 7
+
+const dayMonth = (iso: string) =>
+  new Date(`${iso}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+
+/** Whole calendar days between two ISO dates. */
+function daysBetween(a: string, b: string): number {
+  return Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000)
+}
+
+/** The last few daily scores with their dates, so a falling or rising score is visible at a glance.
+ *  Days the model did not run are left out, and a longer-than-a-weekend jump is marked, never filled in. */
+export function ScoreMonitor({ trail, level }: { trail: TrailPoint[]; level?: number | string | null }) {
+  const days = trail.slice(-MONITOR_DAYS)
+  return (
+    <section className="sp-card sp-monitor" aria-label="Strength score, day by day" data-testid="score-monitor">
+      <div className="sp-flow-head" style={{ marginBottom: 0 }}>
+        <div>
+          <h2 className="sp-h2">Is the score holding up?</h2>
+          <div className="sp-sub">The strength score on each of the last days the model checked this stock.</div>
+        </div>
+        {level != null && <span className="sp-pill sp-pill-amber">Buy level: {level}</span>}
+      </div>
+      {days.length === 0 ? (
+        <p className="sp-small">No daily scores saved for this stock yet. The list starts with the next daily check.</p>
+      ) : (
+        <div className="sp-scroll">
+          <ol className="sp-monitor-days">
+            {days.map((t, i) => {
+              const before = days[i - 1]
+              const move = before ? Math.round((t.score - before.score) * 100) : null
+              const gap = before ? daysBetween(before.date, t.date) > 3 : false
+              return (
+                <li key={t.date} data-testid="score-monitor-day" className={i === days.length - 1 ? 'sp-monitor-now' : undefined}>
+                  <span className="sp-small">{dayMonth(t.date)}</span>
+                  <strong>{Math.round(t.score * 100)}</strong>
+                  {move != null && move !== 0 ? (
+                    <span className={move > 0 ? 'sp-pos' : 'sp-neg'}>
+                      {move > 0 ? '▲' : '▼'} {Math.abs(move)}
+                    </span>
+                  ) : (
+                    <span className="sp-small">{before ? 'same' : ' '}</span>
+                  )}
+                  {gap && <span className="sp-small">after a gap</span>}
+                </li>
+              )
+            })}
+          </ol>
+        </div>
+      )}
+    </section>
   )
 }
 
@@ -679,6 +776,9 @@ export function IdeaFigures({ d }: { d: BrainDecision }) {
   const last = rows.at(-1)?.close
   const prev = rows.at(-2)?.close
   const pct = last != null && prev ? ((last - prev) / prev) * 100 : null
+  // Daily candles are stamped IST midnight (18:30 UTC the day before): read the date in India, not UTC.
+  const lastTs = rows.at(-1)?.ts
+  const closeDay = lastTs ? dayLabel(new Date(lastTs).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })) : null
   const week = (trail.data?.score_trail ?? []).slice(-5)
   const pts = scorePoints(d.confidence)
   const first = week[0]?.score
@@ -703,10 +803,12 @@ export function IdeaFigures({ d }: { d: BrainDecision }) {
         )}
       </span>
       <span className="spf-col">
-        <span className="spf-k">PRICE</span>
+        <span className="spf-k" title="The stock's last closing price, not a live price">
+          {closeDay ? `CLOSE · ${closeDay}` : 'LAST CLOSE'}
+        </span>
         <span className="spf-v">{last != null ? `₹${inr(last)}` : '—'}</span>
         {pct != null && (
-          <span className={`spf-s ${pct >= 0 ? 'sp-pos' : 'sp-neg'}`}>
+          <span className={`spf-s ${pct >= 0 ? 'sp-pos' : 'sp-neg'}`} title="Change on that day, not today">
             {pct >= 0 ? '▲' : '▼'} {Math.abs(pct).toFixed(2)}%
           </span>
         )}
@@ -788,8 +890,8 @@ export function PeekCard({ decision: d, run, reason }: { decision: BrainDecision
           Full analysis ›
         </Link>
         {brainAllowsBuy(word) && (
-          <button className="sp-btn sp-btn-buy" type="button" onClick={() => setBuying((v) => !v)}>
-            Buy
+          <button className={`sp-btn ${brainSaysBuy(word) ? 'sp-btn-buy' : ''}`} type="button" onClick={() => setBuying((v) => !v)}>
+            {brainSaysBuy(word) ? 'Buy' : 'Buy anyway'}
           </button>
         )}
       </div>

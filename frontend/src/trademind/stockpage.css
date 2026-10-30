@@ -73,7 +73,7 @@
 .sp-actions { display: flex; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
 .sp-price { text-align: right; }
 .sp-price b { display: block; font-size: 34px; font-weight: 800; line-height: 1.1; }
-.sp-price span { font-weight: 600; font-size: 14px; }
+.sp-price span { display: block; margin-top: 4px; font-weight: 600; font-size: 14px; }
 .sp-btnbox { display: flex; flex-direction: column; gap: 4px; align-items: stretch; }
 .sp-btn {
   padding: 12px 20px; border-radius: 12px; font: inherit; font-weight: 700; font-size: 14px; cursor: pointer;
@@ -252,7 +252,7 @@
 /* ------------------------------------------- Today rows and quick look ---- */
 .spf { display: inline-flex; gap: 1rem; flex-shrink: 0; font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; }
 .spf-col { display: grid; gap: 2px; justify-items: start; min-width: 74px; }
-.spf-k { font-size: 11px; font-weight: 600; color: #5d6178; letter-spacing: 0.3px; }
+.spf-k { font-size: 11px; font-weight: 600; color: #5d6178; letter-spacing: 0.3px; white-space: nowrap; }
 .spf-v { font-size: 17px; font-weight: 800; display: inline-flex; align-items: baseline; gap: 4px; }
 .spf-d { font-size: 11px; font-weight: 700; }
 .spf-s { font-size: 12px; font-weight: 700; }
@@ -309,3 +309,30 @@
 .sh-rng small { position: absolute; top: 14px; font-size: 11px; color: #5d6178; }
 .sh-l1 { left: 0; } .sh-l2 { left: 33.3%; transform: translateX(-50%); } .sh-l3 { right: 0; }
 .sh-how { display: grid; gap: 6px; margin: 8px 0; padding-left: 20px; }
+
+/* ------------------------------------------------------ score monitor ---- */
+.sp-monitor { display: flex; flex-direction: column; gap: 12px; }
+.sp-monitor-days { display: flex; gap: 10px; list-style: none; margin: 0; padding: 0; }
+.sp-monitor-days li { flex: 1 0 74px; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 6px; border: 1px solid var(--sp-line); border-radius: 10px; background: #fff; }
+.sp-monitor-days li strong { font-size: 22px; }
+.sp-monitor-days li.sp-monitor-now { border-color: var(--sp-accent); }
+
+/* ---- tab strip, and a more colourful Overview ---- */
+.sp-tabs-strip { border-bottom: 1px solid var(--sp-line, #e4e6f0); padding-bottom: 10px; overflow-x: auto; flex-wrap: nowrap; }
+.sp .sp-tab { text-decoration: none; white-space: nowrap; display: inline-block; }
+.sp a.sp-tab { color: #4a4f66; }
+.sp a.sp-tab[aria-selected='true'] { background: linear-gradient(135deg, #3f55d6, #7a4fd6); color: #fff; border-color: transparent; }
+.sp-logo-mark { box-shadow: 0 6px 14px rgba(40, 50, 110, 0.25); }
+.sp-glance { grid-auto-flow: column; grid-auto-columns: minmax(250px, 1fr); overflow-x: auto; scroll-snap-type: x proximity; padding-bottom: 6px; }
+.sp-glance > * { scroll-snap-align: start; }
+.sp-glance > .sp-card:nth-child(5n+1) { border-top: 4px solid #3f55d6; }
+.sp-glance > .sp-card:nth-child(5n+2) { border-top: 4px solid #7a4fd6; }
+.sp-glance > .sp-card:nth-child(5n+3) { border-top: 4px solid #1f9d6b; }
+.sp-glance > .sp-card:nth-child(5n+4) { border-top: 4px solid #e0a72b; }
+.sp-glance > .sp-card:nth-child(5n+5) { border-top: 4px solid #d9486a; }
+/* Wide screens: the four cards sit in one row (no lonely fourth card below); narrow screens still swipe. */
+@media (min-width: 1000px) {
+  .sp-glance { grid-auto-flow: row; grid-template-columns: repeat(4, minmax(0, 1fr)); overflow-x: visible; }
+}
+.sp-split > .sp-card:first-child { background: linear-gradient(180deg, #f5f7ff, #fff 55%); }
+.sp-split > .sp-card:last-child { background: linear-gradient(180deg, #f6fbf8, #fff 55%); }

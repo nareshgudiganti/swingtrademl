@@ -229,7 +229,7 @@ describe('Portfolio: money, held stocks, room and the safety net', () => {
     expect(pointsInRange(pts, 'ALL')).toHaveLength(4)
   })
 
-  it('renders for the owner in order: money, needs a decision, held stocks, room, safety net, sectors, chart last', () => {
+  it('renders for the owner in order: money, needs a decision, held stocks, sectors, room, safety net, chart last', () => {
     const html = render('/trademind/portfolio', true, (c) => {
       c.setQueryData(['summary'], SUMMARY)
       c.setQueryData(['positions'], [pos('HELDCO'), pos('KEPTCO', { sector: 'IT' })])
@@ -237,7 +237,7 @@ describe('Portfolio: money, held stocks, room and the safety net', () => {
       c.setQueryData(['status'], STATUS)
     })
     expect(html).toContain('data-page="portfolio-new"')
-    const order = ['data-testid="money"', 'data-testid="needs-decision"', 'data-testid="held-table"', 'data-testid="room"', 'data-testid="safety-net"', 'data-testid="sectors"', 'data-testid="value-chart"']
+    const order = ['data-testid="money"', 'data-testid="needs-decision"', 'data-testid="held-table"', 'data-testid="sectors"', 'data-testid="room"', 'data-testid="safety-net"', 'data-testid="value-chart"']
     const at = order.map((k) => html.indexOf(k))
     expect(at.every((i) => i > 0)).toBe(true)
     expect([...at].sort((a, b) => a - b)).toEqual(at)

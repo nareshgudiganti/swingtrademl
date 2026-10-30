@@ -543,3 +543,292 @@
     padding: 1rem 16px 0;
   }
 }
+
+/* ------------------------------------------- held stocks as a scrolling rail -- */
+
+.tm-new .tmn-w2-railcard {
+  padding: 0.35rem 0.4rem 0.7rem;
+}
+
+.tm-new .tmn-w2-rail {
+  display: flex;
+  gap: 0.8rem;
+  overflow-x: auto;
+  padding: 0.4rem 0.5rem 0.6rem;
+  scroll-snap-type: x proximity;
+  scrollbar-width: thin;
+}
+
+.tm-new .tmn-w2-hcard {
+  flex: 0 0 270px;
+  scroll-snap-align: start;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.9rem;
+  border-radius: 14px;
+  border: 1px solid var(--tm-line);
+  border-top: 4px solid #c9cfe0;
+  background: linear-gradient(180deg, #f8f9ff 0%, #ffffff 60%);
+  color: var(--tm-text);
+  text-decoration: none;
+  transition: transform 0.12s, box-shadow 0.12s;
+}
+
+.tm-new .tmn-w2-hcard[data-tone='up'] {
+  border-top-color: #1f9d6b;
+  background: linear-gradient(180deg, #effaf4 0%, #ffffff 60%);
+}
+
+.tm-new .tmn-w2-hcard[data-tone='down'] {
+  border-top-color: #d93a49;
+  background: linear-gradient(180deg, #fff1f2 0%, #ffffff 60%);
+}
+
+.tm-new .tmn-w2-hcard:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(40, 50, 110, 0.14);
+}
+
+.tm-new .tmn-w2-hcard-top {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.tm-new .tmn-w2-hcard-top .tmn-w2-sub {
+  display: block;
+}
+
+.tm-new .tmn-w2-hcard-money {
+  display: flex;
+  flex-direction: column;
+}
+
+.tm-new .tmn-w2-hcard-pct {
+  font-size: 1.5rem;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.tm-new .tmn-w2-hcard-why {
+  font-size: 0.82rem;
+  color: var(--tm-dim);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 3.6em;
+}
+
+.tm-new .tmn-w2-hcard-score {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.tm-new .tmn-w2-meter {
+  flex: 1;
+  height: 8px;
+  border-radius: 99px;
+  background: #e4e6f0;
+  overflow: hidden;
+}
+
+.tm-new .tmn-w2-meter span {
+  display: block;
+  height: 100%;
+  border-radius: 99px;
+  background: linear-gradient(90deg, #7a4fd6, #3f55d6);
+}
+
+/* ------------------------------------------------------------- sectors -- */
+
+.tm-new .tmn-w2-sectors {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 0.8rem;
+}
+
+.tm-new .tmn-w2-sector {
+  padding: 0.8rem 0.9rem;
+  border-radius: 12px;
+  border: 1px solid var(--tm-line);
+  border-left: 5px solid var(--sec, #3f55d6);
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.tm-new .tmn-w2-sector .tmn-w2-track > span {
+  background: var(--sec, #3f55d6);
+}
+
+.tm-new .tmn-w2-sector-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.tm-new .tmn-w2-sector-name {
+  font-weight: 700;
+}
+
+.tm-new .tmn-w2-sector-stocks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.tm-new .tmn-w2-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.15rem 0.5rem 0.15rem 0.2rem;
+  border-radius: 99px;
+  background: #f1f3fb;
+  color: var(--tm-text);
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.tm-new .tmn-w2-chip .tm-stock-logo {
+  width: 20px;
+  height: 20px;
+  font-size: 0.55rem;
+}
+
+/* ------------------------------------- Testing tab: open positions scroll -- */
+
+.tm-new .tm-table-wrap {
+  max-height: 460px;
+  overflow: auto;
+}
+
+.tm-new .tm-table-wrap thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f4f6fc;
+}
+
+.tm-new .tm-table-wrap tbody tr:hover td {
+  background: #f6f8ff;
+}
+
+.tm-new .tm-stock-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.tm-new .tm-pnl-pill {
+  display: inline-block;
+  padding: 0.15rem 0.55rem;
+  border-radius: 99px;
+  font-weight: 700;
+}
+
+.tm-new .tm-pnl-pill.tm-pos {
+  background: #dff5e9;
+}
+
+.tm-new .tm-pnl-pill.tm-neg {
+  background: #fde4e6;
+}
+
+.tm-new .tm-stock-cell .tm-stock-logo {
+  width: 28px;
+  height: 28px;
+  font-size: 0.65rem;
+  border-radius: 8px;
+}
+
+/* Testing tab: sectors scroll sideways inside their card, open positions scroll inside theirs. */
+.tm-new .tm-sector-rail {
+  display: flex;
+  gap: 0.8rem;
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
+  scroll-snap-type: x proximity;
+}
+
+.tm-new .tm-sector-card {
+  flex: 0 0 220px;
+  scroll-snap-align: start;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 0.8rem 0.9rem;
+  border: 1px solid var(--tm-line);
+  border-left: 5px solid var(--sec, #3f55d6);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.tm-new .tm-sector-top {
+  display: flex;
+  justify-content: space-between;
+}
+
+.tm-new .tm-sector-bar {
+  height: 8px;
+  border-radius: 99px;
+  background: #e4e6f0;
+  overflow: hidden;
+}
+
+.tm-new .tm-sector-bar span {
+  display: block;
+  height: 100%;
+  background: var(--sec, #3f55d6);
+}
+
+.tm-new .tm-sector-stocks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.7rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.tm-new .tm-table-wrap {
+  max-height: 70vh;
+}
+
+/* ---- Swipeable sort tabs above a card rail: one thumb-swipe row, the chosen tab is filled in. ---- */
+.tm-new .tmn-w2-sorttabs {
+  display: flex;
+  gap: 0.4rem;
+  padding: 0 1rem 0.6rem;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.tm-new .tmn-w2-sorttabs::-webkit-scrollbar {
+  display: none;
+}
+
+.tm-new .tmn-w2-sorttab {
+  flex: 0 0 auto;
+  scroll-snap-align: start;
+  padding: 0.35rem 0.85rem;
+  border: 1px solid #d9deef;
+  border-radius: 99px;
+  background: #fff;
+  color: var(--tm-text);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tm-new .tmn-w2-sorttab[aria-pressed='true'] {
+  background: #3f55d6;
+  border-color: #3f55d6;
+  color: #fff;
+}

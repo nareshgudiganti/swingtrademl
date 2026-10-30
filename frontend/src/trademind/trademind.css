@@ -2291,3 +2291,45 @@ button.tm-avatar {
 .tm-stocklink { text-decoration: none; color: inherit; }
 .tm-stocklink:hover, .tm-stocklink:focus-visible { text-decoration: underline; }
 .tm-scorechip { display: inline-block; margin-left: 0.4rem; padding: 0 0.4rem; border-radius: 999px; font-size: 0.75em; font-weight: 600; font-variant-numeric: tabular-nums; background: rgba(99, 102, 241, 0.12); color: #4338ca; vertical-align: middle; }
+
+/* ---- Every table in the app swipes: it scrolls sideways (and up/down inside its own box) instead of
+   stretching the page. Applies to both looks; the first column stays in view while you swipe. ---- */
+.tm-table-wrap,
+.tmn-w2-tablebox {
+  overflow: auto;
+  max-height: 70vh;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  scroll-snap-type: x proximity;
+  scrollbar-width: thin;
+  border-radius: 10px;
+  /* soft edge on the right says "there is more, swipe" */
+  background:
+    linear-gradient(90deg, #fff 30%, rgba(255, 255, 255, 0)) left center / 28px 100% no-repeat local,
+    linear-gradient(270deg, #fff 30%, rgba(255, 255, 255, 0)) right center / 28px 100% no-repeat local,
+    radial-gradient(farthest-side at 0 50%, rgba(40, 50, 110, 0.18), rgba(0, 0, 0, 0)) left center / 10px 100% no-repeat scroll,
+    radial-gradient(farthest-side at 100% 50%, rgba(40, 50, 110, 0.18), rgba(0, 0, 0, 0)) right center / 10px 100% no-repeat scroll;
+}
+
+.tm-table-wrap thead th,
+.tmn-w2-tablebox thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #f4f6fc;
+}
+
+.tm-table-wrap tbody td:first-child,
+.tmn-w2-tablebox tbody td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: #fff;
+  scroll-snap-align: start;
+}
+
+.tm-table-wrap thead th:first-child,
+.tmn-w2-tablebox thead th:first-child {
+  left: 0;
+  z-index: 3;
+}

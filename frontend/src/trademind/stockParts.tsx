@@ -91,6 +91,12 @@ const WORD_SAY: Record<string, string> = {
 
 export const wordSay = (word: string): string => WORD_SAY[word] ?? word
 
+/** The word the stock page shows: the stock-level verdict when the account's room alone held the idea back
+ *  (so the page, the chain and the answer agree), else the stored word. The stored decision is never changed. */
+export function shownWord(d: BrainDecision): string {
+  return d.stock_verdict_restored && d.stock_verdict ? d.stock_verdict : finalWord(d)
+}
+
 /** Owner decision (ss11): no Buy on ideas the brain says WAIT or AVOID. */
 export const brainAllowsBuy = (word: string): boolean => word !== 'AVOID' && word !== 'WAIT'
 
@@ -278,25 +284,17 @@ export function StockHeader({
 export function Glance({
   decision: d,
   run,
-  last,
-  change,
-  prev,
   trail,
   idea,
   runAt,
-  snapshot,
 }: {
   decision: BrainDecision
   run: BrainRun
-  last?: number
-  change: number | null
-  prev?: number
   trail: TrailPoint[]
   idea: IdeaChange | null
   runAt?: string
-  snapshot?: PriceSnapshot
 }) {
-  const word = finalWord(d)
+  const word = shownWord(d)
   const pts = scorePoints(d.confidence)
   const level = buyLevel(d)
   const week = trailWithToday(trail, scoreToday(d, run)).slice(-5)
@@ -306,7 +304,6 @@ export function Glance({
   const scores = run.decisions.filter((x) => x.kind === 'idea').map((x) => x.confidence)
   const rank = d.kind === 'idea' ? scoreRank(d.confidence, scores) : null
   const moved = idea?.placesMoved ?? null
-  const pctMove = change != null && prev ? (change / prev) * 100 : null
 
   return (
     <div className="sp-glance" data-testid="stock-glance">
@@ -350,22 +347,6 @@ export function Glance({
         <div className="sp-small">
           {idea?.rankBefore ? `Was ${ordinal(idea.rankBefore.rank)} yesterday. ` : ''}A ranking, not a chance of profit.
         </div>
-      </div>
-
-      <div className="sp-card sp-stat">
-        <div className="sp-label">Price</div>
-        <div className="sp-big" style={{ fontSize: 34 }}>{last != null ? `₹${inr(last)}` : '—'}</div>
-        {pctMove != null && (
-          <span className={`sp-pill ${pctMove >= 0 ? 'sp-pill-up' : 'sp-pill-down'}`}>
-            {pctMove >= 0 ? '▲' : '▼'} {Math.abs(pctMove).toFixed(2)}%{snapshot ? '' : ' at last close'}
-          </span>
-        )}
-        {d.entry_low != null && (
-          <div className="sp-small">
-            Plan buys between ₹{inr(d.entry_low, 0)}
-            {d.entry_high != null && d.entry_high !== d.entry_low ? ` and ₹${inr(d.entry_high, 0)}` : ''}.
-          </div>
-        )}
       </div>
 
       <div className="sp-card sp-stat sp-word" data-tone={wordTone(word)}>
@@ -490,11 +471,14 @@ export function BrainFlow({
   run,
   analysisTo,
   full = false,
+  compact = false,
 }: {
   decision: BrainDecision
   run: BrainRun
   analysisTo?: string
   full?: boolean
+  /** The short stock page: the seven steps with a short tag each (OK, CAREFUL, ...), no sentences. */
+  compact?: boolean
 }) {
   // No account-money step in the chain for anyone: a customer knows what they can invest, and the owner's own
   // limits are a separate, later feature. Seven steps, display only.
@@ -512,7 +496,7 @@ export function BrainFlow({
     <section className="sp-card" aria-label={`How the brain thought about ${d.symbol}`} data-testid="brain-steps">
       <div className="sp-flow-head">
         <div>
-          <h2 className="sp-h2">What does the brain say today, and why?</h2>
+          <h2 className="sp-h2">{compact ? 'How the brain decided' : 'What does the brain say today, and why?'}</h2>
           <div className="sp-sub">
             {stop
               ? `${d.symbol} passed ${passed} of ${applicable} steps and stopped at step ${steps.findIndex((x) => x.n === stop.step) + 1}.`
@@ -524,20 +508,20 @@ export function BrainFlow({
           <span><span className="sp-dot" style={{ background: 'var(--sp-red)' }} />Stopped here</span>
           <span><span className="sp-dot" style={{ background: '#c3c7d8' }} />Not reached</span>
         </div>
-        {analysisTo && (
+        {analysisTo && !compact && (
           <Link className="sp-btn sp-btn-ai" to={analysisTo} data-testid="ai-analysis-button">
             ✦ AI analysis ›
           </Link>
         )}
       </div>
       <div className="sp-scroll">
-        <ol className={`sp-flow${full ? ' sp-flow-full' : ''}`} style={{ ['--n' as string]: stepCount }}>
+        <ol className={`sp-flow${full ? ' sp-flow-full' : ''}${compact ? ' sp-flow-compact' : ''}`} style={{ ['--n' as string]: stepCount }}>
           <li className="sp-flow-done" style={{ width: `${(lastIdx * 100) / stepCount}%` }} aria-hidden="true" />
           {steps.map((s, i) => (
             <li key={s.n} className="sp-step" data-pass={pass[i]} data-state={s.state}>
               <span className="sp-step-n">{i + 1}</span>
               <b className="sp-step-t">{SHORT[s.n - 1]}</b>
-              {full ? (
+              {compact ? null : full ? (
                 <span className="sp-step-l">{withoutScorePercent(s.line)}</span>
               ) : (
                 <button
@@ -555,7 +539,7 @@ export function BrainFlow({
           ))}
         </ol>
       </div>
-      {stop ? (
+      {compact ? null : stop ? (
         <div className="sp-why" data-testid="why-stopped">
           <div className="sp-why-main">
             <div className="sp-why-kicker">Why it stopped · step {steps.findIndex((x) => x.n === stop.step) + 1}, {SHORT[stop.step - 1]}</div>

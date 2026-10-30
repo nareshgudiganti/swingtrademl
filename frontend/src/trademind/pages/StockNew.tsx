@@ -8,14 +8,11 @@ import type { BrainDecision, BrainRun } from '../../api/types'
 import { formatDateTime } from '../../lib/format'
 import { useSymbolCaps } from '../cap'
 import { useLatestRun } from '../live'
-import { CompanyTeaser } from '../CompanyTab'
 import { BrainGate } from '../ui'
 import {
-  CompanyCard,
   FullCta,
   Glance,
-  PlanLadder,
-  QuickAnswers,
+  BrainFlow,
   StockHeader,
   useStockData,
 } from '../stockParts'
@@ -63,20 +60,11 @@ function StockNewView({ decision, run }: { decision: BrainDecision; run: BrainRu
       <Glance
         decision={decision}
         run={run}
-        last={data.last}
-        prev={data.prev}
-        change={data.change}
         trail={data.trail}
         idea={data.idea}
-        snapshot={data.snapshot}
         runAt={`Brain’s run on ${formatDateTime(run.started_at)}`}
       />
-      <div className="sp-split">
-        <PlanLadder decision={decision} />
-        <CompanyCard brief={data.brief} />
-      </div>
-      <QuickAnswers brief={data.brief} />
-      <CompanyTeaser symbol={decision.symbol} to={`${analysisTo}?tab=company`} />
+      <BrainFlow decision={decision} run={run} analysisTo={analysisTo} compact />
       <FullCta to={analysisTo} />
     </div>
   )

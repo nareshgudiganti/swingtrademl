@@ -11,6 +11,7 @@ import type { BrainDecision, BrainRun, PriceSnapshot } from '../api/types'
 import { useStockBrief } from './beginner/api'
 import { NO_EVENTS } from './beginner/UpcomingEvents'
 import type { StockBriefData } from './beginner/types'
+import { safeChanges, stepDetail } from './stepDetails'
 import { brainSteps, stopOf, type BrainStep } from './brainSteps'
 import { NOTHING_STORED, nextReview, SCORE_IS_NOT_PERMISSION, whyNotTrade } from './whyNotTrade'
 import { ideaChange, ordinal, useChanges, type IdeaChange } from './changes'
@@ -462,6 +463,48 @@ export function ScoreMonitor({
 
 // ------------------------------------------------------------------ flow --
 
+const TONE_ICON: Record<string, string> = { ok: '✓', warn: '!', bad: '✕', info: '•' }
+
+/** The full reasoning for the chosen step: short bullets with a status icon each, and links to research further. */
+function StepPanel({ d, run, n, index, stoppedHere }: { d: BrainDecision; run: BrainRun; n: number; index: number; stoppedHere: boolean }) {
+  const detail = stepDetail(d, run, n)
+  const changes = n === 7 ? safeChanges(d).slice(0, 4) : []
+  return (
+    <div className="sp-detail" data-testid="step-detail" data-stopped={stoppedHere}>
+      <div className="sp-why-kicker">
+        {stoppedHere ? 'Where it stopped · ' : ''}Step {index}, {SHORT[n - 1]}: what the brain looked at
+      </div>
+      <ul className="sp-bul">
+        {detail.bullets.map((b, i) => (
+          <li key={`${i}:${b.text}`} data-tone={b.tone}>
+            <span className="sp-bul-i" aria-hidden="true">{TONE_ICON[b.tone]}</span>
+            <span>{b.text}</span>
+          </li>
+        ))}
+      </ul>
+      {changes.length > 0 && (
+        <div className="sp-detail-more">
+          <b>What would change it</b>
+          <ul>
+            {changes.map((t) => (
+              <li key={t}>{t}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {detail.links.length > 0 && (
+        <div className="sp-detail-links">
+          {detail.links.map((l) => (
+            <Link key={l.to + l.label} to={l.to}>
+              {l.label} ›
+            </Link>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function BrainFlow({
   decision: d,
   run,
@@ -487,6 +530,10 @@ export function BrainFlow({
   const lastIdx = pass.reduce((acc, p, i) => (p === 'yes' || p === 'stop' ? i : acc), 0)
   const changes = (d.what_would_change ?? []).filter((c) => c.text.trim() !== '')
   const [openStep, setOpenStep] = useState<number | null>(null)
+  // Full analysis: click any step circle to read the full reasoning for it; the step that stopped the idea opens first.
+  const [picked, setPicked] = useState<number | null>(null)
+  const shownN = picked ?? stop?.step ?? steps[steps.length - 1]?.n ?? 7
+  const shownIdx = Math.max(0, steps.findIndex((x) => x.n === shownN))
 
   return (
     <section className="sp-card" aria-label={`How the brain thought about ${d.symbol}`} data-testid="brain-steps">
@@ -515,8 +562,24 @@ export function BrainFlow({
           <li className="sp-flow-done" style={{ width: `${(lastIdx * 100) / stepCount}%` }} aria-hidden="true" />
           {steps.map((s, i) => (
             <li key={s.n} className="sp-step" data-pass={pass[i]} data-state={s.state}>
-              <span className="sp-step-n">{i + 1}</span>
-              <b className="sp-step-t">{SHORT[s.n - 1]}</b>
+              {full ? (
+                <button
+                  type="button"
+                  className="sp-step-btn"
+                  data-picked={shownN === s.n}
+                  aria-pressed={shownN === s.n}
+                  aria-label={`Step ${i + 1}, ${SHORT[s.n - 1]}: show the full reasoning`}
+                  onClick={() => setPicked(s.n)}
+                >
+                  <span className="sp-step-n">{i + 1}</span>
+                  <b className="sp-step-t">{SHORT[s.n - 1]}</b>
+                </button>
+              ) : (
+                <>
+                  <span className="sp-step-n">{i + 1}</span>
+                  <b className="sp-step-t">{SHORT[s.n - 1]}</b>
+                </>
+              )}
               {compact ? null : full ? (
                 <span className="sp-step-l">{withoutScorePercent(s.line)}</span>
               ) : (
@@ -535,7 +598,10 @@ export function BrainFlow({
           ))}
         </ol>
       </div>
-      {compact ? null : stop ? (
+      {full ? (
+        <StepPanel d={d} run={run} n={shownN} index={shownIdx + 1} stoppedHere={stop?.step === shownN} />
+      ) : null}
+      {compact || full ? null : stop ? (
         <div className="sp-why" data-testid="why-stopped">
           <div className="sp-why-main">
             <div className="sp-why-kicker">Why it stopped · step {steps.findIndex((x) => x.n === stop.step) + 1}, {SHORT[stop.step - 1]}</div>

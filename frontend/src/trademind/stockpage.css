@@ -342,3 +342,21 @@
 .sp-whynot { display: flex; flex-direction: column; gap: 6px; border-left: 4px solid var(--sp-amber, #d9a400); }
 .sp-whynot-main { margin: 0; font-size: 16px; font-weight: 600; }
 .sp-illustrative { border-style: dashed; background: var(--sp-grey-bg, #f3f4f8); } /* not dimmed: faded text fails the contrast check */
+
+/* Full analysis: a step you can click, and the panel with its full reasoning. */
+.sp-step-btn { display: contents; font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+.sp-step-btn:focus-visible .sp-step-n { outline: 3px solid var(--sp-ink, #1b2a6b); outline-offset: 2px; }
+.sp-step-btn[data-picked="true"] .sp-step-n { box-shadow: 0 0 0 4px rgba(27, 42, 107, 0.22); }
+.sp-step-btn[data-picked="true"] .sp-step-t { text-decoration: underline; text-underline-offset: 4px; }
+.sp-detail { margin-top: 18px; padding: 18px 20px; border: 1px solid var(--sp-line, #e3e6f0); border-radius: 14px; background: #fafbff; }
+.sp-detail[data-stopped="true"] { background: #fff6f6; border-color: #f0c8c8; }
+.sp-bul { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; font-size: 16px; line-height: 1.45; }
+.sp-bul li { display: flex; gap: 10px; align-items: flex-start; }
+.sp-bul-i { flex: 0 0 auto; width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 800; background: #e6e9f5; color: #38406a; }
+.sp-bul li[data-tone="ok"] .sp-bul-i { background: #dcf3e6; color: #0a5c38; }
+.sp-bul li[data-tone="warn"] .sp-bul-i { background: #fff0cc; color: #7a4a00; }
+.sp-bul li[data-tone="bad"] .sp-bul-i { background: #fbdcdc; color: #a3261f; }
+.sp-detail-more { margin-top: 14px; padding-top: 12px; border-top: 1px solid #e3e6f0; font-size: 15px; }
+.sp-detail-more ul { margin: 6px 0 0; padding-left: 20px; }
+.sp-detail-links { margin-top: 14px; display: flex; gap: 18px; flex-wrap: wrap; font-weight: 700; font-size: 15px; }
+.sp-detail-links a { text-decoration: none; }

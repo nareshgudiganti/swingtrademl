@@ -153,6 +153,15 @@ def _decision_out(
         verdict = public_verdict.stock_verdict(**fields)
         out["stock_verdict"] = verdict.word
         out["stock_verdict_restored"] = verdict.restored
+        # "What would change it" never quotes the account's room or minimum position, for the owner too: it is
+        # read from the scrubbed record (the stored decision and reasons are untouched).
+        out["what_would_change"] = public_verdict.public_what_would_change(
+            public_verdict.public_fields(**fields),
+            kind=d.kind,
+            banner_mode=banner_mode,
+            banner_headline=banner_headline,
+            rank=rank,
+        )
         return out
     # A non-owner gets the stock's verdict and nothing of the account: no size, no room, no limit text.
     public = public_verdict.public_fields(**fields)

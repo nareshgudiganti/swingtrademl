@@ -53,7 +53,7 @@ const RULES: Rule[] = [
   {
     kind: 'risk_no_room',
     test: /risk check said no/i,
-    text: 'The stock looked good, but the brain is holding back on a new buy today.',
+    text: 'Not a BUY today. Click this step for the full reasons.',
     showDetail: false,
   },
   {

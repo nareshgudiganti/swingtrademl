@@ -22,5 +22,15 @@
     "strategyTypes": { "status": "v2", "decision": "only feeds the create-strategy form (owner 2026-10-04)" },
     "scanAll": { "status": "deferred", "decision": "oa4: deferred after the trial; scanning never creates trades automatically (owner 2026-10-16)" },
     "positionsAllBooks": { "status": "planned", "task": "oa6", "note": "Portfolio > Overview, books labelled, never summed" }
+  },
+  "ModelRegistry": {
+    "modelRegistrySlots": { "status": "keep", "note": "owner-only classic-shell page by design (owner 2026-11-01: model registry phase 1); not part of TradeMind" },
+    "modelRegistryChange": { "status": "keep", "note": "owner-only classic-shell page by design (owner 2026-11-01: model registry phase 1); not part of TradeMind" },
+    "h05Report": { "status": "keep", "note": "owner-only classic-shell page by design (owner 2026-11-01: model registry phase 1); not part of TradeMind" }
+  },
+  "ModelRegistry.test": {
+    "modelRegistrySlots": { "status": "keep", "note": "owner-only classic-shell page by design (owner 2026-11-01: model registry phase 1); not part of TradeMind" },
+    "modelRegistryChange": { "status": "keep", "note": "owner-only classic-shell page by design (owner 2026-11-01: model registry phase 1); not part of TradeMind" },
+    "h05Report": { "status": "keep", "note": "owner-only classic-shell page by design (owner 2026-11-01: model registry phase 1); not part of TradeMind" }
   }
 }

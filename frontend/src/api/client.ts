@@ -49,6 +49,9 @@ import type {
   AdminUser,
   MyPlan,
   PlanCatalogue,
+  RegistrySlot,
+  RegistrySlotChange,
+  RegistrySlots,
   PlanConfig,
   PlanPick,
   TopPick,
@@ -331,6 +334,11 @@ export const api = {
   planSwitch: () => get<{ enabled: boolean }>('/admin/switch'),
   setPlanSwitch: (enabled: boolean) => put<{ enabled: boolean }>('/admin/switch', { enabled }),
   planCatalogue: () => get<PlanCatalogue>('/admin/features'),
+  // Model registry (phase 1, owner only): reads, plus one write that changes a slot's research notes.
+  modelRegistrySlots: () => get<RegistrySlots>('/model-registry/slots'),
+  modelRegistryChange: (slotKey: string, body: RegistrySlotChange) =>
+    patch<RegistrySlot>(`/model-registry/slots/${encodeURIComponent(slotKey)}`, body),
+  h05Report: () => get<{ runs: unknown[]; verdict?: { state?: string } }>('/research/h05/report'),
   plans: () => get<PlanConfig[]>('/admin/plans'),
   savePlan: (key: string, body: Pick<PlanConfig, 'features' | 'limits'>) =>
     put<PlanConfig>(`/admin/plans/${key}`, body),

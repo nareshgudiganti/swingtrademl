@@ -53,7 +53,7 @@ export const MARKET_LABEL: Record<string, string> = {
 
 export const MARKET_PLAIN: Record<string, string> = {
   NORMAL: 'New ideas are allowed at full size.',
-  DEFENSIVE: 'Careful market: at most two new ideas, at half size.',
+  DEFENSIVE: 'Careful market: at most two new ideas, and each needs extra proof.',
   NO_NEW_TRADES: 'No new buys today. Stocks you hold are still watched and sold as usual.',
 }
 

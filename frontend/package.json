@@ -17,7 +17,7 @@
     "cap:open:ios": "npm run cap:sync && cap open ios"
   },
   "dependencies": {
-    "@capacitor/core": "^8.5.1",
+    "@capacitor/core": "^8.6.0",
     "@tanstack/react-query": "^5.62.0",
     "clsx": "^2.1.1",
     "react": "^19.0.0",

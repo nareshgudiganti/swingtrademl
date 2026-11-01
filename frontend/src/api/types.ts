@@ -1685,3 +1685,74 @@ export interface ExperimentPickIn {
   note?: string | null
 }
 
+
+// ---- Model registry (phase 1, owner only) --------------------------------
+
+export interface RegistryEvidenceItem {
+  label: string
+  value: number | null
+  note?: string
+}
+
+export interface RegistryModel {
+  slot: string | null
+  provenance: {
+    model_id: number
+    name: string
+    version: string
+    algorithm: string
+    horizon_days: number
+    target_return_pct: number | null
+    stop_return_pct: number | null
+    label_kind: string | null
+    n_inputs: number | null
+    inputs_fingerprint: string | null
+    n_training_symbols: number | null
+    training_universe_fingerprint: string | null
+    n_samples: number | null
+    train_start: string | null
+    train_end: string | null
+    trained_at: string | null
+    calibration: string
+    model_file_fingerprint: string
+  }
+  registry_status: string
+  active_strategies: { strategy: string; mode: string; execution_mode: string }[] | null
+  active_strategies_note: string
+  evidence: {
+    historical: Record<
+      'held_out_auc' | 'precision_at_threshold' | 'top5_ranking' | 'net_return_after_costs' | 'drawdown',
+      RegistryEvidenceItem
+    >
+    forward: RegistryEvidenceItem
+  }
+}
+
+export interface RegistrySlot {
+  slot_key: string
+  horizon_days: number
+  cap_tier: 'large' | 'midcap' | 'smallcap'
+  research_status: string
+  priority: number | null
+  note: string | null
+  version: number
+  updated_at: string | null
+  updated_by: string | null
+  rank: number
+  models: RegistryModel[]
+}
+
+export interface RegistrySlots {
+  ordering: string
+  slots: RegistrySlot[]
+  unassigned: RegistryModel[]
+  statuses: string[]
+  status_note: string
+}
+
+export interface RegistrySlotChange {
+  expected_version: number
+  priority?: number | null
+  research_status?: string
+  note?: string | null
+}

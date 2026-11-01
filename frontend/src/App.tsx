@@ -17,6 +17,7 @@ import Safety from './pages/Safety'
 import Capital from './pages/Capital'
 import ModelLab from './pages/ModelLab'
 import PlanHome from './pages/PlanHome'
+import ModelRegistry from './pages/ModelRegistry'
 import PlansManager from './pages/PlansManager'
 import Settings from './pages/Settings'
 import Brain from './pages/Brain'
@@ -302,6 +303,30 @@ export default function App() {
         </header>
         <main className="content">
           <PlansManager />
+        </main>
+      </div>
+    )
+  }
+
+  // Model registry (phase 1): owner-only, reachable by URL in the classic shell whatever the brain switch says, the
+  // same way /plans is. Not in any menu; the page and the API both refuse everyone but the owner.
+  if (location.pathname === '/model-registry') {
+    if (planLoading) return <Loading />
+    return (
+      <div className="layout">
+        <header className="topbar">
+          <div className="topbar-inner between">
+            <NavLink to={isOwner && status?.brain_enabled ? '/trademind' : '/dashboard'} className="brand" title="Back">
+              <span className="brand-mark">←</span>
+              <span className="brand-label">
+                Swing Trade ML
+                <small>Model registry</small>
+              </span>
+            </NavLink>
+          </div>
+        </header>
+        <main className="content">
+          <ModelRegistry />
         </main>
       </div>
     )

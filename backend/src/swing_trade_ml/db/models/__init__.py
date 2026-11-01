@@ -51,6 +51,7 @@ from swing_trade_ml.db.models.market import (
 )
 from swing_trade_ml.db.models.ml import MLModel, Prediction
 from swing_trade_ml.db.models.mutual_funds import MutualFund, MutualFundHolding, MutualFundNav
+from swing_trade_ml.db.models.registry import ModelResearchSlot
 from swing_trade_ml.db.models.safety import RiskEvent, SystemState
 from swing_trade_ml.db.models.session import BrokerSession, PlanSettings, SubscriptionPlan, User
 from swing_trade_ml.db.models.trading import (
@@ -90,10 +91,6 @@ __all__ = [
     "ExperimentOutcome",
     "ExperimentProtocol",
     "ExperimentSelection",
-    "H05Event",
-    "H05GroupDay",
-    "H05Run",
-    "H05Signal",
     "FeatureSnapshot",
     "FinanceCustomRule",
     "FinanceDailyCategory",
@@ -102,11 +99,16 @@ __all__ = [
     "FinanceRecurringBill",
     "FinanceRecurringBillPayment",
     "FinanceTransaction",
+    "H05Event",
+    "H05GroupDay",
+    "H05Run",
+    "H05Signal",
     "InstitutionalFlow",
     "Instrument",
     "InviteRequest",
     "LoginCode",
     "MLModel",
+    "ModelResearchSlot",
     "MutualFund",
     "MutualFundHolding",
     "MutualFundNav",

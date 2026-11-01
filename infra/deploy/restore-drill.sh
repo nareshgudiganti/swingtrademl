@@ -73,7 +73,9 @@ cleanup() {
   [ -z "$upgrade_src" ] || rm -rf "$upgrade_src"
 }
 trap cleanup EXIT
-cleanup
+# Clear a leftover throwaway container from an earlier run. Only the container: calling cleanup here would also
+# delete $plain_copy (the unpacked nightly .gz dump) before it is read, which broke the drill on 2026-11-01.
+docker rm -f "$DRILL" >/dev/null 2>&1 || true
 
 # Throwaway server: random password, no published port, no network, no volume.
 docker run -d --name "$DRILL" --network none \

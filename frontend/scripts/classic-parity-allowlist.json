@@ -32,5 +32,11 @@
     "modelRegistrySlots": { "status": "keep", "note": "owner-only classic-shell page by design (owner 2026-11-01: model registry phase 1); not part of TradeMind" },
     "modelRegistryChange": { "status": "keep", "note": "owner-only classic-shell page by design (owner 2026-11-01: model registry phase 1); not part of TradeMind" },
     "h05Report": { "status": "keep", "note": "owner-only classic-shell page by design (owner 2026-11-01: model registry phase 1); not part of TradeMind" }
+  },
+  "HorizonPicks": {
+    "lanePicks": { "status": "keep", "note": "owner-only classic-shell page by design (owner 2026-11-01: horizon picks tab); not part of TradeMind" }
+  },
+  "HorizonPicks.test": {
+    "lanePicks": { "status": "keep", "note": "owner-only classic-shell page by design (owner 2026-11-01: horizon picks tab); not part of TradeMind" }
   }
 }

@@ -1773,3 +1773,31 @@ export interface RegistrySlotChange {
   research_status?: string
   note?: string | null
 }
+
+export interface LanePick {
+  horizon_days: number
+  lane: string
+  run_no: number
+  signal_day: string
+  symbol: string
+  cap: 'large' | 'mid' | 'small'
+  cap_label: string
+  rank: number | null
+  score: number | null
+  model_id: number | null
+  model_version: string | null
+  status: string
+  entry_day: string | null
+  entry_price: number | null
+  exit_day: string | null
+  exit_price: number | null
+  exit_reason: string | null
+  net_return: number | null
+}
+
+export interface LanePicks {
+  note: string
+  lanes: { horizon_days: number; lane: string; label: string; live: boolean }[]
+  summary: { picks: number; finished: number; open: number; wins: number; mean_net_return: number | null }
+  rows: LanePick[]
+}

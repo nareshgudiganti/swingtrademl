@@ -53,6 +53,7 @@ import type {
   RegistrySlot,
   RegistrySlotChange,
   RegistrySlots,
+  LanePicks,
   PlanConfig,
   PlanPick,
   TopPick,
@@ -339,6 +340,13 @@ export const api = {
   modelRegistrySlots: () => get<RegistrySlots>('/model-registry/slots'),
   modelRegistryChange: (slotKey: string, body: RegistrySlotChange) =>
     patch<RegistrySlot>(`/model-registry/slots/${encodeURIComponent(slotKey)}`, body),
+  lanePicks: (horizon?: number, cap?: string) => {
+    const q = new URLSearchParams()
+    if (horizon) q.set('horizon', String(horizon))
+    if (cap) q.set('cap', cap)
+    const qs = q.toString()
+    return get<LanePicks>(`/research/lane-picks${qs ? `?${qs}` : ''}`)
+  },
   h05Report: () => get<{ runs: unknown[]; verdict?: { state?: string } }>('/research/h05/report'),
   plans: () => get<PlanConfig[]>('/admin/plans'),
   savePlan: (key: string, body: Pick<PlanConfig, 'features' | 'limits'>) =>

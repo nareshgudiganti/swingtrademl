@@ -582,7 +582,9 @@ def test_the_migration_chains_from_the_h05_head_and_the_head_is_single():
     assert _migration().down_revision == "h05l4n3e1a2b"
     cfg = Config(str(MIGRATION.parents[2] / "alembic.ini"))
     cfg.set_main_option("script_location", str(MIGRATION.parents[1]))
-    assert ScriptDirectory.from_config(cfg).get_heads() == ["mrs5p1a8c3d2"]
+    script = ScriptDirectory.from_config(cfg)
+    assert len(script.get_heads()) == 1  # a later migration (lane tables) sits on top; the chain stays linear
+    assert "mrs5p1a8c3d2" in {r.revision for r in script.walk_revisions()}
 
 
 def test_the_downgrade_keeps_the_table_and_the_owners_notes(db_session):

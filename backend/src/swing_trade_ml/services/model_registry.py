@@ -46,6 +46,18 @@ VERIFIED_NAMES: dict[str, str] = {
     "swing_classifier_smallcap": "smallcap",
 }
 
+#: Shadow-lane model families: (name prefix, the one horizon it is valid for, cap tier). A name must START with the
+#: prefix (which ends in "_") and the model must be of that horizon. The mid-cap prefixes carry an "M".
+LANE_PREFIXES: tuple[tuple[str, int, str], ...] = (
+    ("td_h10_", 10, "large"),
+    ("sl1_S0_", 15, "large"),
+    ("sl1_S1_", 15, "large"),
+    ("sl1_S2_", 15, "large"),
+    ("sl1_S0M_", 15, "midcap"),
+    ("sl1_S1M_", 15, "midcap"),
+    ("sl1_S2M_", 15, "midcap"),
+)
+
 #: Descriptive labels. None of them means validated, and none of them starts or enables anything.
 RESEARCH_STATUSES = ("not_started", "researching", "paused", "dropped")
 MAX_NOTE = 2000
@@ -76,9 +88,14 @@ def all_slot_keys() -> list[str]:
 
 def slot_for(name: str | None, horizon: int | None) -> str | None:
     """The slot a model belongs to, or None (Unassigned). Strict: exact verified name and a known horizon."""
-    if name not in VERIFIED_NAMES or horizon not in HORIZONS:
+    if horizon not in HORIZONS or not name:
         return None
-    return slot_key(horizon, VERIFIED_NAMES[name])
+    if name in VERIFIED_NAMES:
+        return slot_key(horizon, VERIFIED_NAMES[name])
+    for prefix, lane_horizon, tier in LANE_PREFIXES:
+        if name.startswith(prefix) and horizon == lane_horizon:
+            return slot_key(horizon, tier)
+    return None
 
 
 def _fingerprint(values: list[Any]) -> str | None:

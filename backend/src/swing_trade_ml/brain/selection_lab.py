@@ -12,6 +12,7 @@ from __future__ import annotations
 import bisect
 import math
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from datetime import date
 
 import numpy as np
@@ -123,4 +124,134 @@ def label_frame(
         "days_labelled": len(days_ok),
         "days_without_labels": len(days_bad),
         "share_of_ones_by_year": share,
+    }
+
+
+# ---------------------------------------------------------------- the data-quality gate (design section 4.2)
+
+GAP_LINE = 0.20  # an overnight move beyond this is flagged for review, never removed on its own
+MAX_MISSING_SESSIONS = 10  # more missing sessions than this in a calendar year leaves that stock-year out
+AFTER_ERROR_SESSIONS = 252  # rows after a verified error whose inputs still use the bad prices
+FLAG_CLASSES = ("real_gap", "verified_error", "unresolved")
+
+
+@dataclass(frozen=True, slots=True)
+class OvernightFlag:
+    day: date
+    move: float  # open / previous close - 1
+
+
+def bad_bar_days(bars: pd.DataFrame) -> set[date]:
+    """Days with high below low, a close that is not positive, or zero volume."""
+    bad = (bars["high"] < bars["low"]) | (bars["close"] <= 0) | (bars["volume"] <= 0)
+    return {d for d, b in zip(bars["day"], bad, strict=True) if b}
+
+
+def overnight_flags(bars: pd.DataFrame, line: float = GAP_LINE) -> list[OvernightFlag]:
+    """Overnight moves (open against the previous close) larger than `line`. A flag is a question, not a verdict."""
+    prev = bars["close"].shift(1)
+    move = bars["open"] / prev - 1.0
+    return [
+        OvernightFlag(d, float(m))
+        for d, m in zip(bars["day"], move, strict=True)
+        if pd.notna(m) and abs(m) > line
+    ]
+
+
+def unclassified(
+    symbol: str, flags: Sequence[OvernightFlag], record: Mapping[tuple[str, date], str]
+) -> list[tuple[str, date]]:
+    """Flags with no written classification. A run must refuse while this list is not empty."""
+    for key, value in record.items():
+        if value not in FLAG_CLASSES:
+            raise ValueError(f"{key}: {value!r} is not one of {FLAG_CLASSES}")
+    return [(symbol, f.day) for f in flags if (symbol, f.day) not in record]
+
+
+def _spans(days: list[date], index: int, after: int) -> set[date]:
+    """Decision days whose 15-bar window contains bar `index` (the 15 before it), the bar itself, and `after - 1`
+    further sessions."""
+    lo, hi = max(0, index - HORIZON_BARS), min(len(days), index + after)
+    return set(days[lo:hi])
+
+
+def excluded_decision_days(
+    bars: pd.DataFrame, record: Mapping[tuple[str, date], str], symbol: str = ""
+) -> dict[str, set[date]]:
+    """Decision days to leave out of training, by reason. A real gap removes nothing; a verified error removes the
+    labels spanning it and the next 252 sessions; an unresolved anomaly has the same span but is only used by the
+    sensitivity run (`apply_gate(drop_unresolved=True)`)."""
+    days = list(bars["day"])
+    pos = {d: i for i, d in enumerate(days)}
+    out: dict[str, set[date]] = {"bad_bar": set(), "verified_error": set(), "unresolved": set()}
+    for d in bad_bar_days(bars):
+        out["bad_bar"] |= _spans(days, pos[d], 1)
+    for f in overnight_flags(bars):
+        kind = record.get((symbol, f.day))
+        if kind in ("verified_error", "unresolved"):
+            out[kind] |= _spans(days, pos[f.day], AFTER_ERROR_SESSIONS)
+    return out
+
+
+def sparse_years(
+    bars: pd.DataFrame, calendar: Sequence[date], max_missing: int = MAX_MISSING_SESSIONS
+) -> set[int]:
+    """Calendar years in which the stock lacks more than `max_missing` of the market's sessions, counted only
+    between its first and last bar (sessions before it listed are not missing)."""
+    if bars.empty:
+        return set()
+    first, last = bars["day"].iloc[0], bars["day"].iloc[-1]
+    have = set(bars["day"])
+    missing: dict[int, int] = {}
+    for d in calendar:
+        if first <= d <= last and d not in have:
+            missing[d.year] = missing.get(d.year, 0) + 1
+    return {y for y, n in missing.items() if n > max_missing}
+
+
+def apply_gate(
+    frame: pd.DataFrame,
+    bars: Mapping[str, pd.DataFrame],
+    record: Mapping[tuple[str, date], str],
+    *,
+    drop_unresolved: bool = False,
+    calendar: Sequence[date] | None = None,
+) -> tuple[pd.DataFrame, dict]:
+    """Filter a frame of (symbol, day) rows by the gate. Each removed row is counted once, under the first reason
+    that applies (bad bar, verified error, unresolved, sparse year). Genuine overnight gaps are always kept.
+    `drop_unresolved=True` is the sensitivity run; the main result keeps unresolved anomalies."""
+    cal = sorted({d for df in bars.values() for d in df["day"]}) if calendar is None else list(calendar)
+    reasons = {"bad_bar": 0, "verified_error": 0, "unresolved": 0, "sparse_year": 0}
+    keep = []
+    stock_years: list[tuple[str, int]] = []
+    flags_seen = {"real_gap_kept": 0, "unresolved_kept": 0}
+    for sym, grp in frame.groupby("symbol", sort=False):
+        df = bars[sym]
+        ex = excluded_decision_days(df, record, sym)
+        sp = sparse_years(df, cal)
+        stock_years += [(sym, y) for y in sorted(sp)]
+        for f in overnight_flags(df):
+            kind = record.get((sym, f.day))
+            if kind == "real_gap":
+                flags_seen["real_gap_kept"] += 1
+            elif kind == "unresolved" and not drop_unresolved:
+                flags_seen["unresolved_kept"] += 1
+        for idx, d in zip(grp.index, grp["day"], strict=True):
+            if d in ex["bad_bar"]:
+                reasons["bad_bar"] += 1
+            elif d in ex["verified_error"]:
+                reasons["verified_error"] += 1
+            elif drop_unresolved and d in ex["unresolved"]:
+                reasons["unresolved"] += 1
+            elif d.year in sp:
+                reasons["sparse_year"] += 1
+            else:
+                keep.append(idx)
+    out = frame.loc[keep]
+    return out, {
+        "rows_in": len(frame),
+        "rows_out": len(out),
+        "by_reason": {**reasons, **flags_seen},
+        "stock_years_left_out": stock_years,
+        "unresolved_dropped": drop_unresolved,
     }

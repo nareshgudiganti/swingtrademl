@@ -13,7 +13,7 @@ import bisect
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 
 import numpy as np
 import pandas as pd
@@ -255,3 +255,153 @@ def apply_gate(
         "stock_years_left_out": stock_years,
         "unresolved_dropped": drop_unresolved,
     }
+
+
+# ---------------------------------------------------------------- fold training (design sections 4 and 6.3)
+
+ALGORITHM = "lightgbm"  # train_model's default, as Phase B and wf-protocol-v1
+LABEL_KIND = "excess_top30"
+EMBARGO_DAYS = HORIZON_BARS
+
+
+@dataclass(frozen=True, slots=True)
+class FoldFit:
+    estimator: object
+    scaler: object
+    metrics: dict
+    train_df: pd.DataFrame
+    test_df: pd.DataFrame
+
+
+def _ist_date(ts: pd.Series) -> pd.Series:
+    return pd.to_datetime(ts, utc=True).dt.tz_convert(IST).dt.date
+
+
+def chronology_violations(train_df: pd.DataFrame, cutoff: date, first_test_day: date) -> list[str]:
+    """Problems that would make a fold look ahead (design rev 3, Stage 2): empty means chronological."""
+    problems: list[str] = []
+    if train_df.empty:
+        return problems
+    ends = _ist_date(train_df["label_end_ts"])
+    days = _ist_date(train_df["ts"])
+    if (ends > cutoff).any():
+        problems.append(
+            f"{int((ends > cutoff).sum())} training rows have a label ends after the cutoff {cutoff}"
+        )
+    if (days >= first_test_day).any():
+        problems.append(
+            f"{int((days >= first_test_day).sum())} training rows are dated on or after the first test day {first_test_day}"
+        )
+    return problems
+
+
+def fit_fold(frame: pd.DataFrame, test_size: float | None = None) -> FoldFit:
+    """Fit exactly as `train_model` does: chronological hold-back at the code default (0.2), embargo and
+    `label_end_ts` purge, LightGBM defaults, no calibration. `frame` carries the features, `target`, `ts`,
+    `label_end_ts`."""
+    from swing_trade_ml.core.config import Settings
+    from swing_trade_ml.ml.dataset import chronological_split
+    from swing_trade_ml.ml.train import fit_and_score
+
+    test_size = Settings.model_fields["ML_TRAIN_TEST_SPLIT"].default if test_size is None else test_size
+    train_df, test_df = chronological_split(frame, test_size, embargo_days=EMBARGO_DAYS)
+    if test_df.empty or train_df.empty or train_df["target"].nunique() < 2:
+        raise ValueError("Not enough history for the lab fold model (both classes are needed in training).")
+    estimator, scaler, metrics = fit_and_score(train_df, test_df, ALGORITHM, None, False)
+    metrics["embargo_days"] = EMBARGO_DAYS
+    metrics["label"] = (
+        f"excess: top {TOP_SHARE:.0%} of 15-day return over the reference median (selection lab)"
+    )
+    return FoldFit(estimator, scaler, metrics, train_df, test_df)
+
+
+def train_lab_model(
+    db,
+    *,
+    name: str,
+    cutoff: date,
+    symbols: Sequence[str],
+    candidates: Sequence[str],
+    bars: Mapping[str, pd.DataFrame],
+    record: Mapping[tuple[str, date], str] | None = None,
+    drop_unresolved: bool = False,
+):
+    """Train one lab fold model on `symbols` (always an explicit list: never today's watchlist), label it with
+    section 4.1 against `candidates` (the 49), apply the section 4.2 gate, and register it TRAINED, never
+    activated. Rows come from `ml.dataset.build_training_dataset`, which keeps only rows whose label had
+    resolved by `cutoff`."""
+    from datetime import UTC, datetime
+
+    from swing_trade_ml.core.enums import ModelStatus
+    from swing_trade_ml.db.models.ml import MLModel
+    from swing_trade_ml.ml import dataset as ds_mod
+    from swing_trade_ml.ml import registry
+    from swing_trade_ml.ml.features import FEATURE_COLUMNS
+    from swing_trade_ml.ml.train import _feature_importance
+
+    if not symbols:
+        raise ValueError("The lab needs an explicit symbol list; it never trains on today's watchlist.")
+    dataset = ds_mod.build_training_dataset(
+        db,
+        symbols=list(symbols),
+        horizon_days=HORIZON_BARS,
+        target_return=0.08,
+        stop_return=0.04,
+        cutoff=cutoff,
+    )
+    if dataset.empty:
+        raise ValueError("No training data for the lab fold model.")
+    labelled, label_report = label_frame(dataset, bars, candidates)
+    gated, gate_report = apply_gate(labelled, bars, record or {}, drop_unresolved=drop_unresolved)
+    problems = chronology_violations(gated, cutoff, cutoff + timedelta(days=1))
+    if problems:
+        raise ValueError("The fold is not chronological: " + "; ".join(problems))
+    fit = fit_fold(gated)
+    fit.metrics["asof_cutoff"] = cutoff.isoformat()
+    fit.metrics["label_report"] = label_report
+    fit.metrics["gate_report"] = {k: v for k, v in gate_report.items() if k != "stock_years_left_out"}
+    version = registry.next_version(db, name)
+    path = registry.save_artifact(
+        name,
+        version,
+        {
+            "estimator": fit.estimator,
+            "scaler": fit.scaler,
+            "feature_names": FEATURE_COLUMNS,
+            "algorithm": ALGORITHM,
+            "horizon_days": HORIZON_BARS,
+            "target_return": None,
+            "stop_return": None,
+            "label_kind": LABEL_KIND,
+            "calibrated": False,
+        },
+    )
+    model = MLModel(
+        name=name,
+        version=version,
+        algorithm=ALGORITHM,
+        status=ModelStatus.TRAINED,
+        artifact_path=path,
+        feature_names=FEATURE_COLUMNS,
+        hyperparameters={},
+        training_symbols=sorted(gated["symbol"].unique().tolist()),
+        train_start=pd.Timestamp(fit.train_df["ts"].min()).to_pydatetime(),
+        train_end=pd.Timestamp(fit.train_df["ts"].max()).to_pydatetime(),
+        n_samples=len(gated),
+        prediction_horizon_days=HORIZON_BARS,
+        target_return_pct=None,
+        stop_return_pct=None,
+        label_kind=LABEL_KIND,
+        accuracy=fit.metrics["accuracy"],
+        precision=fit.metrics["precision"],
+        recall=fit.metrics["recall"],
+        f1_score=fit.metrics["f1"],
+        roc_auc=fit.metrics["roc_auc"],
+        metrics=fit.metrics,
+        feature_importance=_feature_importance(fit.estimator),
+        trained_at=datetime.now(UTC),
+    )
+    db.add(model)
+    db.commit()
+    db.refresh(model)
+    return model

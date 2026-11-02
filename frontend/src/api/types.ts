@@ -409,6 +409,23 @@ export interface CompanyView {
   note: string
 }
 
+/** One stock in Stock Compare: its price change per period, from stored daily candles. Display only. */
+export interface CompareStock {
+  symbol: string
+  name: string | null
+  /** ok = has history; no_history = known stock with no stored candles; unknown = not a stock we know. */
+  state: 'ok' | 'no_history' | 'unknown'
+  as_of: string | null
+  last_close: number | null
+  /** Percent change per period label; null = not enough history for that period. */
+  returns: Record<string, number | null>
+}
+
+export interface CompareView {
+  periods: string[]
+  stocks: CompareStock[]
+}
+
 /** Stored market candle used for short-term price-performance summaries. */
 /** A current price with its own timestamp; independent of any stored brain decision. */
 export interface PriceSnapshot {

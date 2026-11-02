@@ -29,6 +29,7 @@ import HistoryNew from './pages/HistoryNew'
 import AdminHome from './pages/AdminHome'
 import Opportunities from './pages/Opportunities'
 import Watchlist from './pages/Watchlist'
+import Compare from './pages/Compare'
 import PaperPositions from './pages/PaperPositions'
 import ShadowTest from './pages/ShadowTest'
 import StockAnalysis from './pages/StockAnalysis'
@@ -315,6 +316,8 @@ export function TradeMindRoutes({
           path="watchlist"
           element={look === 'new' ? <WatchlistNew /> : ownerConsole ? <Watchlist /> : <Navigate to="/trademind/opportunities" replace />}
         />
+        {/* Stock Compare: price changes side by side. Owner only, like the Company tab it sits beside. */}
+        <Route path="compare" element={ownerConsole ? <Compare /> : <Navigate to="/trademind/opportunities" replace />} />
         <Route path="stock/:symbol" element={look === 'new' ? <StockNew /> : <StockDetail />} />
         <Route
           path="stock/:symbol/analysis"

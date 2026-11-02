@@ -366,9 +366,22 @@ def _benchmarks(
 
 
 def refusal_reasons(
-    *, tag_on_head: bool, changed_since_tag: Sequence[str], already_ran: Sequence[str]
+    *,
+    tag_on_head: bool,
+    changed_since_tag: Sequence[str],
+    already_ran: Sequence[str],
+    dirty: bool = False,
+    window_ok: bool = True,
 ) -> list[str]:
     reasons: list[str] = []
+    if not window_ok:
+        reasons.append(
+            f"The history gate runs only on the confirmation window {CONFIRMATION[0]} to {CONFIRMATION[1]}: one run, no other window."
+        )
+    if dirty:
+        reasons.append(
+            "The working tree has uncommitted changes: a run must come from a clean, committed tree."
+        )
     if not tag_on_head:
         reasons.append(
             f"The git tag {TAG} is not in this commit's history: the protocol is not frozen yet. "
@@ -379,8 +392,24 @@ def refusal_reasons(
             f"{path} differs from the tagged version: a changed setting is td-protocol-v2, not v1."
         )
     for path in already_ran:
-        reasons.append(f"{path} already exists: the history gate runs once, with no re-runs.")
+        reasons.append(
+            f"{path} already exists: the history gate runs once, whatever the window, with no re-runs."
+        )
     return reasons
+
+
+def git_dirty(repo_root: Path) -> bool:
+    import subprocess
+
+    out = subprocess.run(
+        ["git", "-C", str(repo_root), "status", "--porcelain"], capture_output=True, text=True, check=False
+    )
+    return bool(out.stdout.strip())
+
+
+def existing_reports(out_dir: Path) -> list[Path]:
+    """Any earlier report of this protocol, whatever its window: the gate runs once."""
+    return sorted(out_dir.glob("ten_day_*")) if out_dir.exists() else []
 
 
 def git_guard_state(repo_root: Path) -> tuple[bool, list[str]]:
@@ -400,13 +429,25 @@ def output_paths(out_dir: Path, first: date, last: date) -> tuple[Path, Path]:
 
 
 def check_run_allowed(
-    out_dir: Path, first: date, last: date, *, state: tuple[bool, list[str]] | None = None
+    out_dir: Path,
+    first: date,
+    last: date,
+    *,
+    state: tuple[bool, list[str]] | None = None,
+    dirty: bool | None = None,
 ) -> None:
     from swing_trade_ml.core.config import REPO_ROOT
 
     tag_on_head, changed = state if state is not None else git_guard_state(REPO_ROOT)
-    ran = [str(p) for p in output_paths(out_dir, first, last) if p.exists()]
-    reasons = refusal_reasons(tag_on_head=tag_on_head, changed_since_tag=changed, already_ran=ran)
+    if dirty is None:
+        dirty = git_dirty(REPO_ROOT) if state is None else False
+    reasons = refusal_reasons(
+        tag_on_head=tag_on_head,
+        changed_since_tag=changed,
+        already_ran=[str(p) for p in existing_reports(out_dir)],
+        dirty=dirty,
+        window_ok=(first, last) == CONFIRMATION,
+    )
     if reasons:
         raise RunRefusedError(
             f"{PROTOCOL_VERSION} refused: nothing was scored and no result was produced.\n"
@@ -421,8 +462,13 @@ def dry_run_plan(
     from swing_trade_ml.core.config import REPO_ROOT
 
     tag_on_head, changed = state if state is not None else git_guard_state(REPO_ROOT)
-    ran = [str(p) for p in output_paths(out_dir, first_start, last_end) if p.exists()]
-    reasons = refusal_reasons(tag_on_head=tag_on_head, changed_since_tag=changed, already_ran=ran)
+    reasons = refusal_reasons(
+        tag_on_head=tag_on_head,
+        changed_since_tag=changed,
+        already_ran=[str(p) for p in existing_reports(out_dir)],
+        dirty=git_dirty(REPO_ROOT) if state is None else False,
+        window_ok=(first_start, last_end) == CONFIRMATION,
+    )
     folds = make_folds(first_start, last_end)
     return "\n".join(
         [
@@ -445,12 +491,14 @@ def dry_run_plan(
 # ---------------------------------------------------------------- the real run (database; read-only)
 
 
-def _train(db, cutoff: date):
+def _train(db, cutoff: date, symbols: Sequence[str]):
+    """Train one fold model on an EXPLICIT stock list (the frozen 49), never on whatever the watchlist is today."""
     from swing_trade_ml.ml.train import train_model
 
     return train_model(
         db,
         name=f"td_h{HORIZON_BARS}_{cutoff:%Y%m%d}",
+        symbols=list(symbols),
         cutoff=cutoff,
         horizon_days=HORIZON_BARS,
         target_return=TARGET,
@@ -482,35 +530,120 @@ def collect(db, first_start: date, last_end: date):
     return instruments, bars, nifty
 
 
-def run(db, *, first_start: date, last_end: date, out_dir: Path) -> tuple[Path, Path]:
-    from swing_trade_ml.ml.asof import score_series
+EXPECTED_STOCKS = 49  # the frozen model stocks (protocol section 6): a different count means the list moved
+LEDGER_MARKER = "td-protocol-v1 history gate, {first} to {last}"
 
-    assert_costs_pinned()
-    check_run_allowed(out_dir, first_start, last_end)
+
+def add_ledger_row(path: Path, first: date, last: date, *, run_day: date, report_name: str) -> None:
+    """Write the run's exposure-ledger row BEFORE any result exists (protocol section 7). A window that already
+    has a row has had its one run."""
+    text = path.read_text(encoding="utf-8")
+    marker = LEDGER_MARKER.format(first=first, last=last)
+    if marker in text:
+        raise RunRefusedError(f"{marker} already has a row in the exposure ledger: it has had its one run.")
+    lines = text.splitlines()
+    start = next(i for i, ln in enumerate(lines) if ln.startswith("## Local data"))
+    end = next((i for i in range(start + 1, len(lines)) if lines[i].startswith("## ")), len(lines))
+    last_row = max(i for i in range(start, end) if lines[i].startswith("|"))
+    lines.insert(
+        last_row + 1,
+        f"| {first.isoformat()} to {last.isoformat()} (49 stocks) | {marker}: 10-day model, barrier label "
+        f"+6% / -3.5%, best 5 a day, benchmarks; run once | Owner's decision: to be written after reading | "
+        f"{run_day.isoformat()} | `td_v1/{report_name}` |",
+    )
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+
+
+def _commit(repo_root: Path) -> str:
+    import subprocess
+
+    out = subprocess.run(
+        ["git", "-C", str(repo_root), "rev-parse", "HEAD"], capture_output=True, text=True, check=False
+    )
+    return out.stdout.strip() or "unknown"
+
+
+def run(
+    db,
+    *,
+    first_start: date,
+    last_end: date,
+    out_dir: Path,
+    ledger_path: Path | None = None,
+    state: tuple[bool, list[str]] | None = None,
+    collect_fn: Callable | None = None,
+    scores_fn: Callable | None = None,
+    commit_fn: Callable[[], str] | None = None,
+    today: date | None = None,
+    eval_kw: dict | None = None,
+) -> tuple[Path, Path]:
+    """The one real run: guard, data, the exposure-ledger row (before any model is scored), fold models,
+    benchmarks, report and run record. `collect_fn() -> (instruments, bars, nifty)` and
+    `scores_fn(instruments) -> (fold -> scores)` are replaceable in tests."""
+    import hashlib
+    from datetime import datetime
+
+    from swing_trade_ml.core.config import REPO_ROOT
     from swing_trade_ml.ml.sector_map import get_sector_bucket
 
-    instruments, bars, nifty = collect(db, first_start, last_end)
+    assert_costs_pinned()
+    check_run_allowed(out_dir, first_start, last_end, state=state)
+    instruments, bars, nifty = (collect_fn or (lambda: collect(db, first_start, last_end)))()
+    symbols = sorted(i.tradingsymbol for i in instruments)
+    if len(symbols) != EXPECTED_STOCKS:
+        raise RunRefusedError(
+            f"{PROTOCOL_VERSION} refused: {len(symbols)} stocks are watchlisted, the protocol froze {EXPECTED_STOCKS}."
+        )
+    md, js = output_paths(out_dir, first_start, last_end)
+    add_ledger_row(
+        ledger_path or REPO_ROOT / "docs" / "brain" / "EXPOSURE-LEDGER.md",
+        first_start,
+        last_end,
+        run_day=today or date.today(),
+        report_name=md.name,
+    )
+    trained: list[dict] = []
 
-    def model_scores(fold: wf.Fold) -> dict[str, dict[date, float]]:
-        model = _train(db, fold.cutoff)
-        return {
-            i.tradingsymbol: {
-                d: p
-                for d, p in score_series(db, i, model, fold.cutoff).items()
-                if fold.start <= d <= fold.end
+    def default_scores(insts):
+        from swing_trade_ml.ml.asof import score_series
+
+        def model_scores(fold: wf.Fold) -> dict[str, dict[date, float]]:
+            model = _train(db, fold.cutoff, symbols)
+            trained.append(
+                {"name": model.name, "version": model.version, "auc": getattr(model, "roc_auc", None)}
+            )
+            return {
+                i.tradingsymbol: {
+                    d: p
+                    for d, p in score_series(db, i, model, fold.cutoff).items()
+                    if fold.start <= d <= fold.end
+                }
+                for i in insts
             }
-            for i in instruments
-        }
 
+        return model_scores
+
+    folds = make_folds(first_start, last_end)
     result = evaluate(
         bars,
-        make_folds(first_start, last_end),
-        model_scores,
+        folds,
+        (scores_fn or default_scores)(instruments),
         nifty=nifty,
         buckets={s: get_sector_bucket(s) for s in bars},
+        **(eval_kw or {}),
     )
+    result["manifest"] = {
+        "Protocol": PROTOCOL_VERSION,
+        "Tag": f"{TAG} (in this commit's history)",
+        "Code commit": (commit_fn or (lambda: _commit(REPO_ROOT)))(),
+        "Window": f"{first_start} to {last_end}",
+        "Folds": f"{len(folds)} of 28 calendar days, model retrained once per fold, never activated",
+        "Universe": f"{len(symbols)} stocks (today's list: survivor bias), sha256 {hashlib.sha256(','.join(symbols).encode()).hexdigest()}",
+        "Costs": result["costs"],
+        "Models trained": trained,
+        "Written": datetime.now().isoformat(timespec="seconds"),
+    }
     out_dir.mkdir(parents=True, exist_ok=True)
-    md, js = output_paths(out_dir, first_start, last_end)
     md.write_text(plain_report(result), encoding="utf-8")
     js.write_text(json.dumps(result, indent=1, default=str), encoding="utf-8")
     return md, js

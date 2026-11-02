@@ -17,6 +17,7 @@ import Safety from './pages/Safety'
 import Capital from './pages/Capital'
 import ModelLab from './pages/ModelLab'
 import PlanHome from './pages/PlanHome'
+import HorizonPicks from './pages/HorizonPicks'
 import ModelRegistry from './pages/ModelRegistry'
 import PlansManager from './pages/PlansManager'
 import Settings from './pages/Settings'
@@ -303,6 +304,29 @@ export default function App() {
         </header>
         <main className="content">
           <PlansManager />
+        </main>
+      </div>
+    )
+  }
+
+  // Horizon picks: owner-only, reachable by URL in the classic shell. Not in any menu; the API refuses non-owners.
+  if (location.pathname === '/horizon-picks') {
+    if (planLoading) return <Loading />
+    return (
+      <div className="layout">
+        <header className="topbar">
+          <div className="topbar-inner between">
+            <NavLink to={isOwner && status?.brain_enabled ? '/trademind' : '/dashboard'} className="brand" title="Back">
+              <span className="brand-mark">←</span>
+              <span className="brand-label">
+                Swing Trade ML
+                <small>Horizon picks</small>
+              </span>
+            </NavLink>
+          </div>
+        </header>
+        <main className="content">
+          <HorizonPicks />
         </main>
       </div>
     )

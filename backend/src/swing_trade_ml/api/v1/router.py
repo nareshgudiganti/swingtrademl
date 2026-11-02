@@ -21,6 +21,7 @@ from swing_trade_ml.api.v1.endpoints import (
     instruments,
     invites,
     jobs,
+    lane_picks,
     market_data,
     ml,
     model_registry,
@@ -84,6 +85,7 @@ api_router.include_router(brain_shadow.router, dependencies=protected)
 api_router.include_router(experiments.router, dependencies=protected)
 api_router.include_router(h05.router, dependencies=protected)
 api_router.include_router(model_registry.router, dependencies=protected)
+api_router.include_router(lane_picks.router, dependencies=protected)
 api_router.include_router(jobs.router, dependencies=protected)
 api_router.include_router(server_watch.router, dependencies=protected)
 api_router.include_router(beginner.router, dependencies=protected)

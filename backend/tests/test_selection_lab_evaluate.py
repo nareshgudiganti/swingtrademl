@@ -168,3 +168,57 @@ def test_the_lab_contains_no_money_management():
     names |= {n.name for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)}
     for word in ("capital", "position_inr", "slippage", "brokerage", "drawdown", "sector_cap", "net_return"):
         assert not [n for n in names if word in n.lower()], word
+
+
+# ---------------------------------------------------------------- cap groups, benchmark, limited sample
+
+
+def test_cap_groups_report_each_group_against_its_own_median_and_its_own_average():
+    bars = universe(20)
+    large, mid = list(bars)[:6], list(bars)[6:]  # 6 and 14 stocks
+    folds = sl.make_folds(date(2024, 5, 1), date(2024, 9, 30))
+    res = sl.evaluate_ranking(bars, folds, foresight(bars), list(bars), groups={"large": large, "mid": mid})
+    assert set(res["by_cap_group"]) == {"large", "mid"}
+    g = res["by_cap_group"]["mid"]
+    assert g["stocks_listed"] == 14 and g["stocks_scored"] == 14 and g["days"] > 0
+    assert g["top5_excess_over_median"] > 0 and g["top5_excess_over_group_average"] > 0
+    assert g["mean_ic"] > 0.9 and g["hit_share"] is not None
+    # a group of 6 stocks has fewer than the 10 needed on a day: no day is measured for it
+    assert res["by_cap_group"]["large"]["days"] == 0
+    assert "same group" in res["benchmark"] or "SAME group" in res["benchmark"]
+
+
+def test_the_group_average_benchmark_is_below_the_median_one_for_a_skewed_day():
+    scores = {f"A{i}": {date(2024, 1, 2): float(i)} for i in range(10)}
+    rets = {(f"A{i}", date(2024, 1, 2)): (0.5 if i == 9 else 0.0) for i in range(10)}
+    top = sl.top5_measures(scores, rets)
+    # best 5 = A9..A5 mean 0.1; median 0.0; group average 0.05
+    assert top["excess"] == pytest.approx(0.1) and top["excess_vs_mean"] == pytest.approx(0.05)
+
+
+def test_no_groups_given_means_an_empty_split_and_the_old_keys_stay():
+    bars = universe()
+    res = sl.evaluate_ranking(
+        bars, sl.make_folds(date(2024, 8, 1), date(2024, 9, 30)), foresight(bars), list(bars)
+    )
+    assert res["by_cap_group"] == {} and {"r1", "r2", "r3", "ranking_verdict", "ic_by_day", "top5"} <= set(
+        res
+    )
+
+
+def test_a_group_under_30_stocks_carries_the_warning_and_the_capped_label():
+    bars = universe(15)
+    res = sl.evaluate_ranking(
+        bars, sl.make_folds(date(2024, 8, 1), date(2024, 9, 30)), foresight(bars), list(bars)
+    )
+    assert res["sample_warning"] == (
+        "Limited experiment: 15 stocks. Wide uncertainty. Not a basis for trading approval on its own."
+    )
+    assert res["label"] == "NO WARNING (diagnostic, limited sample)" and res["qualifies_for_winner"] is False
+    assert sl.sample_warning(30) is None and sl.sample_warning(29) is not None
+
+
+def test_held_back_guard_names_the_list_and_the_stocks():
+    with pytest.raises(ValueError, match=r"Held-back stocks found in mid: R1"):
+        sl.assert_no_held_back(["R1", "R2"], used49=["A"], mid=["B", "R1"])
+    sl.assert_no_held_back(["R1"], used49=["A"], mid=["B"])

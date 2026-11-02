@@ -54,6 +54,8 @@ import type {
   RegistrySlotChange,
   RegistrySlots,
   LanePicks,
+  LanePickRow,
+  LanesResponse,
   PlanConfig,
   PlanPick,
   TopPick,
@@ -347,6 +349,9 @@ export const api = {
     const qs = q.toString()
     return get<LanePicks>(`/research/lane-picks${qs ? `?${qs}` : ''}`)
   },
+  lanes: () => get<LanesResponse>('/research/lanes'),
+  lanePickRows: (slotKey: string, limit = 100) =>
+    get<LanePickRow[]>(`/research/lanes/${encodeURIComponent(slotKey)}/picks?limit=${limit}`),
   h05Report: () => get<{ runs: unknown[]; verdict?: { state?: string } }>('/research/h05/report'),
   plans: () => get<PlanConfig[]>('/admin/plans'),
   savePlan: (key: string, body: Pick<PlanConfig, 'features' | 'limits'>) =>

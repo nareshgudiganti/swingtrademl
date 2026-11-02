@@ -1801,3 +1801,59 @@ export interface LanePicks {
   summary: { picks: number; finished: number; open: number; wins: number; mean_net_return: number | null }
   rows: LanePick[]
 }
+
+// Per-lane dashboard (owner only): history and forward results are kept apart.
+export type LaneStatus = 'history_only' | 'forward_watching' | 'review_due' | 'inconclusive'
+
+export interface LaneHistory {
+  available: boolean
+  label: string | null
+  ranking: { mean_ic: number | null; lower_bound: number | null; days: number | null }
+  after_cost: { mean_net_return: number | null; trades: number | null }
+  benchmark_excess: number | null
+  drawdown: number | null
+  note: string | null
+}
+
+export interface LaneForward {
+  picks: number
+  completed: number
+  open: number
+  hit_rate: number | null
+  mean_net_return: number | null
+  benchmark_excess: number | null
+  drawdown: number | null
+  uncertainty: { low: number | null; high: number | null }
+  sample_warning: string | null
+  review: { due_after_sessions: number; sessions_done: number; state: 'not_due' | 'due' | 'done' }
+}
+
+export interface LaneSummary {
+  slot_key: string
+  horizon_days: number
+  cap_group: 'large' | 'mid'
+  model: { id: number; name: string; version: string } | null
+  status: LaneStatus
+  started_on: string | null
+  sessions_recorded: number
+  history: LaneHistory
+  forward: LaneForward
+}
+
+export interface LanesResponse {
+  note: string
+  lanes: LaneSummary[]
+}
+
+export interface LanePickRow {
+  signal_day: string
+  symbol: string
+  cap_group: string
+  rank: number
+  score: number | null
+  model_version: string
+  recorded_at: string
+  status: string
+  net_return: number | null
+  excess_return: number | null
+}

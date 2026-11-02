@@ -87,6 +87,47 @@ def score_trade(bars: pd.DataFrame, stress: CostStress = STRESS) -> StrictOutcom
     return strict_score(bars, horizon=HORIZON_BARS, target=TARGET, stop=STOP, half_out=None, stress=stress)
 
 
+def trade_exit(bars: pd.DataFrame, stress: CostStress = STRESS) -> tuple[date, float, str] | None:
+    """(exit day, price before the sale's slippage and charges, reason) of the same trade `score_trade` scores,
+    for the account replay. None while the trade is unfinished. Mirrors `strict_score` with no half-out."""
+    from swing_trade_ml.services.costs import apply_slippage
+
+    if bars.empty:
+        return None
+    fill = apply_slippage(float(bars.iloc[0]["open"]), "BUY") * (1 + stress.extra_slip)
+    stop_px, target_px = fill * (1 - STOP), fill * (1 + TARGET)
+    n = min(len(bars), HORIZON_BARS)
+    for i in range(n):
+        row = bars.iloc[i]
+        o, h, lo = float(row["open"]), float(row["high"]), float(row["low"])
+        if lo <= stop_px:
+            return row["day"], (o if o <= stop_px else stop_px), "stop"
+        if h >= target_px:
+            return row["day"], (o if o >= target_px else target_px), "target"
+    if n < HORIZON_BARS:
+        return None
+    last = bars.iloc[HORIZON_BARS - 1]
+    return last["day"], float(last["close"]), "timeout"
+
+
+def exits_ten(
+    bars: dict[str, pd.DataFrame], days: Sequence[date], stress: CostStress = STRESS
+) -> dict[tuple[str, date], tuple[date, float, str]]:
+    out: dict[tuple[str, date], tuple[date, float, str]] = {}
+    for sym, df in bars.items():
+        bar_days = list(df["day"])
+        have = set(bar_days)
+        for day in days:
+            if day not in have:
+                continue
+            k = _index_after(bar_days, day)
+            if k is not None:
+                e = trade_exit(df.iloc[k : k + HORIZON_BARS], stress)
+                if e is not None:
+                    out[(sym, day)] = e
+    return out
+
+
 def outcomes_ten(
     bars: dict[str, pd.DataFrame], days: Sequence[date], stress: CostStress = STRESS
 ) -> dict[tuple[str, date], StrictOutcome]:
@@ -108,6 +149,11 @@ def evaluate(
     folds: Sequence[wf.Fold],
     model_scores: Callable[[wf.Fold], dict[str, dict[date, float]]],
     stress: CostStress = STRESS,
+    *,
+    nifty: pd.DataFrame | None = None,
+    buckets: dict[str, str | None] | None = None,
+    random_draws: int | None = None,
+    account_draws: int | None = None,
 ) -> dict:
     """`model_scores(fold)` returns {symbol: {day: score}} from a model trained only on data known by the
     fold's cutoff (replaceable in tests). Picks never depend on costs."""
@@ -116,6 +162,9 @@ def evaluate(
     diffs: dict[str, list[float]] = {"model": [], "momentum": []}
     split_rows: dict[str, list[tuple[str, str, StrictOutcome]]] = {"model": [], "every_stock": []}
     labels: list[str] = []
+    all_out: dict[tuple[str, date], StrictOutcome] = {}
+    all_every: dict[date, list[str]] = {}
+    all_picks: dict[str, dict[date, list[str]]] = {"model": {}, "momentum": {}}
     for fold in folds:
         days = sorted({d for df in bars.values() for d in df["day"] if fold.start <= d <= fold.end})
         if not days:
@@ -127,6 +176,10 @@ def evaluate(
             "model": top_k_by_day(scores, days, TOP_K),
             "momentum": top_k_by_day(wf.momentum_scores(bars, days), days, TOP_K),
         }
+        all_out.update(outcomes)
+        all_every.update(everyone)
+        for name in all_picks:
+            all_picks[name].update(picks[name])
         grouped = {name: _group(p, outcomes) for name, p in picks.items()}
         grouped["every"] = _group(everyone, outcomes)
         for name, g in grouped.items():
@@ -196,7 +249,18 @@ def evaluate(
             (r["model"]["avg_net_by_day"] for r in eligible if r["model"]["avg_net_by_day"] is not None),
             default=None,
         ),
-        "not_yet_reported": "random-5 accounts, 5 strongest risers by account, NIFTY 50 held and cash (protocol section 5) are added before the tag",
+        "benchmarks": _benchmarks(
+            bars,
+            all_out,
+            all_every,
+            all_picks,
+            nifty,
+            buckets or {},
+            model_all,
+            random_draws,
+            account_draws,
+            stress,
+        ),
         "verdict": wf.verdict(
             model_ideas=model_all["ideas"],
             eligible=len(eligible),
@@ -206,6 +270,96 @@ def evaluate(
             pooled_avg_net=model_all["avg_net"],
         ),
     }
+
+
+PORTFOLIO_CAPITAL = 1_000_000.0  # as phase_b (evidence-defs-v2)
+
+
+def _account(picks, bars, pdays, buckets, exits, *, seed_picks=None) -> dict:
+    """One account (`portfolio_sim`: ladder limits, sector cap, top 5 a day, 15% halt, costs) whose positions
+    leave exactly when the per-idea scoring says."""
+    from swing_trade_ml.brain.phase_b import _risk
+    from swing_trade_ml.brain.portfolio_sim import Pick, simulate
+
+    chosen = seed_picks
+    if chosen is None:
+        chosen = [
+            Pick(d, s, float(len(syms) - i), buckets.get(s))
+            for d, syms in sorted(picks.items())
+            for i, s in enumerate(syms)
+        ]
+
+    def plan(sym: str, day: date):
+        return exits.get((sym, day))
+
+    return _risk(simulate(chosen, dict(bars), list(pdays), capital=PORTFOLIO_CAPITAL, exit_plan=plan))
+
+
+def _benchmarks(
+    bars, outcomes, everyone, picks, nifty, buckets, model_all, random_draws, account_draws, stress
+) -> dict:
+    """The evidence-defs-v2 set reported beside the model (protocol section 5): every stock and the 5 strongest
+    20-day risers are in the main result; here the random-5 trades, NIFTY 50 over the same holds, cash, and the
+    account replays (200 random-5 accounts, NIFTY 50 held)."""
+    import statistics
+
+    from swing_trade_ml.brain.phase_b import (
+        CASH,
+        PORTFOLIO_DRAWS,
+        RANDOM_DRAWS,
+        RANDOM_SEED,
+        _quantile,
+        nifty_buy_and_hold,
+        nifty_matched,
+        random5_trade,
+    )
+    from swing_trade_ml.brain.portfolio_sim import random_picks
+    from swing_trade_ml.brain.replay_scoring import StrictOutcome  # noqa: F401
+
+    random_draws = RANDOM_DRAWS if random_draws is None else random_draws
+    account_draws = PORTFOLIO_DRAWS if account_draws is None else account_draws
+    days = sorted(d for d, syms in picks["model"].items() if syms)
+    out: dict = {
+        "random_5": random5_trade(
+            days, everyone, outcomes, candidate_avg=model_all["avg_net"], draws=random_draws
+        ),
+        "cash": {"avg_net": 0.0},
+    }
+    if nifty is None or nifty.empty or not days:
+        out["nifty_matched"] = out["accounts"] = "missing: no NIFTY 50 series or no picks"
+        return out
+    out["nifty_matched"] = nifty_matched(picks["model"], outcomes, nifty)
+    exits = exits_ten(bars, days, stress)
+    calendar = sorted({d for df in (*bars.values(), nifty) for d in df["day"]})
+    pdays = [d for d in calendar if d >= days[0]]
+    pool = {d: everyone[d] for d in days if everyone.get(d)}
+    runs = [
+        _account(
+            {},
+            bars,
+            pdays,
+            buckets,
+            exits,
+            seed_picks=random_picks(pool, dict.fromkeys(pool, TOP_K), RANDOM_SEED + n, dict(buckets)),
+        )
+        for n in range(account_draws)
+    ]
+    rets = [r["final_net_return"] for r in runs]
+    out["accounts"] = {
+        "best_5": _account(picks["model"], bars, pdays, buckets, exits),
+        "strongest_risers_5": _account(picks["momentum"], bars, pdays, buckets, exits),
+        "random_5_accounts": {
+            "runs": account_draws,
+            "final_net_return_median": statistics.median(rets) if rets else None,
+            "p5": _quantile(rets, 0.05),
+            "p95": _quantile(rets, 0.95),
+            "max_drawdown_median": statistics.median(r["max_drawdown"] for r in runs) if runs else None,
+            "halt_triggered_runs": sum(r["halt_triggered"] for r in runs),
+        },
+        "nifty_held": nifty_buy_and_hold(nifty, pdays),
+        "cash": dict(CASH),
+    }
+    return out
 
 
 # ---------------------------------------------------------------- the guard
@@ -323,7 +477,9 @@ def collect(db, first_start: date, last_end: date):
         ).items()
         if len(df)
     }
-    return instruments, bars
+    bench = settings.BENCHMARK_INDEX_SYMBOL
+    nifty = load_bars(db, [bench], last_end + timedelta(days=LOAD_EXTRA_DAYS)).get(bench)
+    return instruments, bars, nifty
 
 
 def run(db, *, first_start: date, last_end: date, out_dir: Path) -> tuple[Path, Path]:
@@ -331,7 +487,9 @@ def run(db, *, first_start: date, last_end: date, out_dir: Path) -> tuple[Path, 
 
     assert_costs_pinned()
     check_run_allowed(out_dir, first_start, last_end)
-    instruments, bars = collect(db, first_start, last_end)
+    from swing_trade_ml.ml.sector_map import get_sector_bucket
+
+    instruments, bars, nifty = collect(db, first_start, last_end)
 
     def model_scores(fold: wf.Fold) -> dict[str, dict[date, float]]:
         model = _train(db, fold.cutoff)
@@ -344,7 +502,13 @@ def run(db, *, first_start: date, last_end: date, out_dir: Path) -> tuple[Path, 
             for i in instruments
         }
 
-    result = evaluate(bars, make_folds(first_start, last_end), model_scores)
+    result = evaluate(
+        bars,
+        make_folds(first_start, last_end),
+        model_scores,
+        nifty=nifty,
+        buckets={s: get_sector_bucket(s) for s in bars},
+    )
     out_dir.mkdir(parents=True, exist_ok=True)
     md, js = output_paths(out_dir, first_start, last_end)
     md.write_text(plain_report(result), encoding="utf-8")
@@ -375,9 +539,33 @@ def plain_report(result: dict) -> str:
             f"- Every stock, same days: average per trade {_pct(e['avg_net'])}.",
             f"- Reading: {v['reading']}",
             "",
-            f"Not yet reported: {result['not_yet_reported']}.",
+            *benchmark_lines(result),
         ]
     )
+
+
+def benchmark_lines(result: dict) -> list[str]:
+    b = result.get("benchmarks", {})
+    if not b:
+        return ["Benchmarks: missing."]
+    r5, nm = b["random_5"], b["nifty_matched"]
+    lines = ["", "Beside the model (evidence-defs-v2):"]
+    lines.append(
+        f"- Random 5 a day ({r5.get('draws')} draws, mean per trade): {_pct(r5.get('avg_net_mean'))}"
+    )
+    lines.append(
+        "- NIFTY 50 over the same holds: " + (_pct(nm["avg_net"]) if isinstance(nm, dict) else str(nm))
+    )
+    lines.append("- Cash: +0.00%")
+    acc = b.get("accounts")
+    if isinstance(acc, dict):
+        lines.append(
+            f"- Account replay (Rs 10 lakh, ladder limits, 15% halt): best 5 {_pct(acc['best_5']['final_net_return'])} "
+            f"(worst fall {_pct(acc['best_5']['max_drawdown'])}); 5 strongest risers {_pct(acc['strongest_risers_5']['final_net_return'])}; "
+            f"random-5 accounts median {_pct(acc['random_5_accounts']['final_net_return_median'])}; "
+            f"NIFTY 50 held {_pct(acc['nifty_held']['final_net_return'])}; cash 0.00%."
+        )
+    return lines
 
 
 def main(argv: Sequence[str] | None = None) -> int:

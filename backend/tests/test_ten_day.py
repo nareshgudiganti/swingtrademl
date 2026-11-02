@@ -1,3 +1,4 @@
+# ruff: noqa: E501 (long test sentences)
 """td-protocol-v1 (10-day) history tool: the signed rule, costs, folds, guard and isolation."""
 
 from __future__ import annotations
@@ -303,3 +304,120 @@ def test_the_report_lists_the_benchmarks_and_the_two_questions():
         "Ranking and trading are different questions",
     ):
         assert needle in text, needle
+
+
+# ---------------------------------------------------------------- the one real run: guard, ledger, record
+
+
+def _inst(bars):
+    from types import SimpleNamespace
+
+    return [SimpleNamespace(tradingsymbol=s) for s in bars]
+
+
+def _ledger(tmp_path):
+    p = tmp_path / "EXPOSURE-LEDGER.md"
+    p.write_text(
+        "# Ledger\n\n## Local data (development database)\n\n| a | b |\n|---|---|\n| row | row |\n\n## Other\n",
+        encoding="utf-8",
+    )
+    return p
+
+
+def test_only_the_confirmation_window_is_allowed(tmp_path):
+    with pytest.raises(td.RunRefusedError, match="only on the confirmation window"):
+        td.check_run_allowed(tmp_path, date(2024, 1, 1), date(2024, 6, 1), state=(True, []))
+
+
+def test_any_earlier_report_blocks_a_second_run_whatever_its_window(tmp_path):
+    (tmp_path / "ten_day_2024-01-01_2024-06-01.json").write_text("x", encoding="utf-8")
+    with pytest.raises(td.RunRefusedError, match="whatever the window"):
+        td.check_run_allowed(tmp_path, *td.CONFIRMATION, state=(True, []))
+
+
+def test_a_dirty_working_tree_is_refused(tmp_path):
+    with pytest.raises(td.RunRefusedError, match="uncommitted changes"):
+        td.check_run_allowed(tmp_path, *td.CONFIRMATION, state=(True, []), dirty=True)
+
+
+def test_the_run_writes_the_ledger_row_before_any_model_is_scored_and_keeps_a_run_record(tmp_path):
+    bars = synthetic(n_stocks=td.EXPECTED_STOCKS)
+    ledger = _ledger(tmp_path)
+    seen = {}
+
+    def scores_fn(insts):
+        seen["ledger_before_scoring"] = td.LEDGER_MARKER.format(
+            first=td.CONFIRMATION[0], last=td.CONFIRMATION[1]
+        ) in ledger.read_text(encoding="utf-8")
+
+        def model_scores(fold):
+            return {
+                s: {d: float(i) for d in df["day"] if fold.start <= d <= fold.end}
+                for i, (s, df) in enumerate(bars.items())
+            }
+
+        return model_scores
+
+    nifty = next(iter(bars.values()))[["day", "open", "high", "low", "close"]].copy()
+    md, js = td.run(
+        None,
+        first_start=td.CONFIRMATION[0],
+        last_end=td.CONFIRMATION[1],
+        out_dir=tmp_path / "out",
+        ledger_path=ledger,
+        state=(True, []),
+        collect_fn=lambda: (_inst(bars), bars, nifty),
+        scores_fn=scores_fn,
+        commit_fn=lambda: "abc123",
+        today=date(2026, 11, 6),
+        eval_kw={"random_draws": 2, "account_draws": 2},
+    )
+    assert seen["ledger_before_scoring"] is True
+    record = __import__("json").loads(js.read_text(encoding="utf-8"))["manifest"]
+    assert (
+        record["Code commit"] == "abc123"
+        and "never activated" in record["Folds"]
+        and "sha256" in record["Universe"]
+    )
+    assert md.name in ledger.read_text(encoding="utf-8") and md.exists()
+    with pytest.raises(td.RunRefusedError, match="already exists"):
+        td.run(
+            None,
+            first_start=td.CONFIRMATION[0],
+            last_end=td.CONFIRMATION[1],
+            out_dir=tmp_path / "out",
+            ledger_path=ledger,
+            state=(True, []),
+            collect_fn=lambda: (_inst(bars), bars, nifty),
+            scores_fn=scores_fn,
+        )
+
+
+def test_a_universe_that_is_not_the_frozen_forty_nine_is_refused_before_anything_is_written(tmp_path):
+    bars = synthetic(n_stocks=48)
+    ledger = _ledger(tmp_path)
+    nifty = next(iter(bars.values()))[["day", "open", "high", "low", "close"]].copy()
+    with pytest.raises(td.RunRefusedError, match="froze 49"):
+        td.run(
+            None,
+            first_start=td.CONFIRMATION[0],
+            last_end=td.CONFIRMATION[1],
+            out_dir=tmp_path / "out",
+            ledger_path=ledger,
+            state=(True, []),
+            collect_fn=lambda: (_inst(bars), bars, nifty),
+            scores_fn=lambda insts: None,
+        )
+    assert "td-protocol-v1 history gate" not in ledger.read_text(encoding="utf-8")
+    assert not (tmp_path / "out").exists()
+
+
+def test_fold_models_train_on_an_explicit_stock_list_and_are_never_activated(monkeypatch):
+    seen = {}
+    monkeypatch.setattr("swing_trade_ml.ml.train.train_model", lambda db, **kw: seen.update(kw) or "model")
+    assert td._train(None, date(2023, 6, 30), ["B", "A"]) == "model"
+    assert (
+        seen["symbols"] == ["B", "A"]
+        and seen["auto_activate"] is False
+        and seen["cutoff"] == date(2023, 6, 30)
+    )

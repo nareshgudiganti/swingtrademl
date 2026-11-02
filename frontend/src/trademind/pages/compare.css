@@ -1,0 +1,26 @@
+/* Stock Compare. Scoped under .sp (see stockpage.css), so no other screen changes. */
+
+.sp .cmp-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+.sp .cmp-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.sp .cmp-remove {
+  background: none; border: 1px solid var(--sp-line); border-radius: 999px; padding: 4px 12px;
+  font-size: 12px; color: var(--sp-muted); cursor: pointer;
+}
+.sp .cmp-tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.sp .cmp-tile {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  min-height: 64px; padding: 8px 4px; border-radius: 10px; background: var(--sp-grey-bg); text-align: center;
+}
+.sp .cmp-tile b { font-size: 13px; }
+.sp .cmp-tile span { font-size: 11px; color: var(--sp-muted); }
+.sp .cmp-tile[data-tone='up'] { background: var(--sp-green-bg); }
+.sp .cmp-tile[data-tone='up'] b { color: var(--sp-green-ink); }
+.sp .cmp-tile[data-tone='down'] { background: var(--sp-red-bg); }
+.sp .cmp-tile[data-tone='down'] b { color: var(--sp-red-ink); }
+.sp .cmp-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.sp .cmp-chip {
+  border: 1px solid var(--sp-line); background: #fff; border-radius: 999px; padding: 6px 14px;
+  font-size: 13px; cursor: pointer; color: var(--sp-ink);
+}
+.sp .cmp-chip[aria-pressed='true'] { background: var(--sp-blue-bg); border-color: var(--sp-accent); color: var(--sp-blue-ink); font-weight: 700; }
+@media (max-width: 520px) { .sp .cmp-tiles { grid-template-columns: repeat(2, 1fr); } }

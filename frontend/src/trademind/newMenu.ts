@@ -28,7 +28,10 @@ export const NAV: NavItem[] = [
   {
     id: 'discover',
     label: 'Discover',
-    pages: [{ to: '/trademind/opportunities', label: 'Discover' }],
+    pages: [
+      { to: '/trademind/opportunities', label: 'Discover' },
+      { to: '/trademind/compare', label: 'Compare', ownerOnly: true },
+    ],
     also: ['/trademind/stock', '/trademind/ai'],
   },
   { id: 'portfolio', label: 'Portfolio', pages: portfolioPages },

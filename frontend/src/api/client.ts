@@ -43,6 +43,7 @@ import type {
   BrainWhy,
   Candle,
   CompanyView,
+  CompareView,
   ShadowTestView,
   PriceSnapshot,
   CurrentUser,
@@ -507,6 +508,7 @@ export const api = {
     get<Candle[]>(`/market-data/candles/${encodeURIComponent(symbol)}?interval=day&limit=${limit}`),
   shadowTest: () => get<ShadowTestView>('/brain/shadow-test'),
   company: (symbol: string) => get<CompanyView>(`/company/${encodeURIComponent(symbol)}`),
+  compare: (symbols: string[]) => get<CompareView>(`/compare?symbols=${encodeURIComponent(symbols.join(','))}`),
   priceSnapshot: (symbol: string) =>
     get<PriceSnapshot>(`/market-data/snapshot/${encodeURIComponent(symbol)}`),
   backfill: (body: Record<string, unknown>) => post<MessageResponse>('/market-data/backfill', body),

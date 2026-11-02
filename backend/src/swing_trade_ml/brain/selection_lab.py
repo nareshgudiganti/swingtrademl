@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import bisect
 import math
+import random
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, timedelta
@@ -405,3 +406,162 @@ def train_lab_model(
     db.commit()
     db.refresh(model)
     return model
+
+
+# ---------------------------------------------------------------- the ranking verdict (design sections 6.1 and 6.3)
+
+BONFERRONI_Q = 0.05 / 4  # familywise 5% over the four model candidates: the 1.25th percentile
+BLOCK_DAYS = 15  # trades last up to 15 days, so days closer than this are not independent
+DRAWS = 2000
+SEED = 7
+MIN_STOCKS = 10  # a day with fewer scored stocks is left out of every ranking measure
+NOT_WORSE_MARGIN = 0.005  # S2r against S2: the paired IC difference must stay above -0.005
+MIN_FOLD_DAYS = 10
+MIN_FOLD_IDEAS = 20
+MIN_ELIGIBLE_FOLDS = 12
+FOLDS_SHARE = 0.60
+
+
+def daily_ic(
+    scores: Mapping[str, Mapping[date, float]],
+    returns: Mapping[tuple[str, date], float | None],
+    min_stocks: int = MIN_STOCKS,
+) -> dict[date, float]:
+    """Mean-rank (Spearman) correlation of score and 15-day return across the stocks of each day (R1's IC(d)).
+    A day with fewer than `min_stocks` scored stocks that have a valid return, or where every score or every
+    return is equal, is left out."""
+    by_day: dict[date, list[tuple[float, float]]] = {}
+    for sym, per_day in scores.items():
+        for d, sc in per_day.items():
+            r = returns.get((sym, d))
+            if r is not None and math.isfinite(r) and math.isfinite(sc):
+                by_day.setdefault(d, []).append((sc, r))
+    out: dict[date, float] = {}
+    for d, pairs in by_day.items():
+        if len(pairs) < min_stocks:
+            continue
+        s, r = pd.Series([p[0] for p in pairs]), pd.Series([p[1] for p in pairs])
+        if s.nunique() < 2 or r.nunique() < 2:
+            continue
+        out[d] = float(s.rank().corr(r.rank()))
+    return out
+
+
+def block_quantile(
+    values: Sequence[float], q: float, block: int = BLOCK_DAYS, draws: int = DRAWS, seed: int = SEED
+) -> float | None:
+    """The q-quantile of the mean of `values` (in day order) over moving-block resamples: runs of `block`
+    consecutive days, so overlapping 15-day trades are not treated as independent. None with fewer than two
+    blocks of days (no honest bound)."""
+    n = len(values)
+    if n < max(5, 2 * block):
+        return None
+    rng = random.Random(seed)
+    per_draw = -(-n // block)
+    means = []
+    for _ in range(draws):
+        picked: list[float] = []
+        for _ in range(per_draw):
+            s = rng.randrange(n - block + 1)
+            picked.extend(values[s : s + block])
+        means.append(sum(picked) / len(picked))
+    means.sort()
+    return means[int(q * draws)]
+
+
+def r1(ic: Mapping[date, float]) -> dict:
+    """R1: the mean daily IC is above zero and so is its 1.25th-percentile block-bootstrap lower bound."""
+    ordered = [ic[d] for d in sorted(ic)]
+    mean = sum(ordered) / len(ordered) if ordered else None
+    low = block_quantile(ordered, BONFERRONI_Q)
+    return {
+        "mean_ic": mean,
+        "lower_bound": low,
+        "days": len(ordered),
+        "passes": bool(mean is not None and mean > 0 and low is not None and low > 0),
+    }
+
+
+def top_k(scores: Mapping[str, Mapping[date, float]], day: date, k: int = 5) -> list[str]:
+    """The k highest scores on `day`; exact ties are broken by symbol, alphabetically."""
+    have = [(s, per[day]) for s, per in scores.items() if day in per and math.isfinite(per[day])]
+    return [s for s, _ in sorted(have, key=lambda x: (-x[1], x[0]))[:k]]
+
+
+def top5_measures(
+    scores: Mapping[str, Mapping[date, float]],
+    returns: Mapping[tuple[str, date], float | None],
+    k: int = 5,
+    min_stocks: int = MIN_STOCKS,
+) -> dict:
+    """The top-5 measures of section 6.1 over the days with at least `min_stocks` scored stocks: mean excess
+    (top-5 return minus the day's median), hit share (share of the top 5 whose return is in the top 30% of the
+    day) and the spread (top 20% minus bottom 20% by score). `per_day_excess` lets callers split by fold."""
+    excess, hits, spread, per_day = [], [], [], {}
+    days = sorted({d for per in scores.values() for d in per})
+    for d in days:
+        u = [(s, scores[s][d], returns.get((s, d))) for s in scores if d in scores[s]]
+        u = [(s, sc, r) for s, sc, r in u if r is not None and math.isfinite(r) and math.isfinite(sc)]
+        if len(u) < min_stocks:
+            continue
+        ranked = sorted(u, key=lambda x: (-x[1], x[0]))
+        rs = [x[2] for x in u]
+        top = ranked[:k]
+        e = sum(x[2] for x in top) / len(top) - float(np.median(rs))
+        cut = float(np.percentile(rs, 70, method="linear"))
+        excess.append(e)
+        per_day[d] = e
+        hits.append(sum(x[2] >= cut for x in top) / len(top))
+        n20 = max(1, round(0.2 * len(ranked)))
+        spread.append(sum(x[2] for x in ranked[:n20]) / n20 - sum(x[2] for x in ranked[-n20:]) / n20)
+
+    def mean(v):
+        return sum(v) / len(v) if v else None
+
+    return {
+        "days": len(excess),
+        "excess": mean(excess),
+        "hit_share": mean(hits),
+        "spread": mean(spread),
+        "per_day_excess": per_day,
+    }
+
+
+def r2(excess: float | None, momentum_excess: float | None) -> dict:
+    """R2: the top-5 excess is above zero and above momentum 5's on the same statistic."""
+    ok = excess is not None and excess > 0 and momentum_excess is not None and excess > momentum_excess
+    return {"excess": excess, "momentum_excess": momentum_excess, "passes": bool(ok)}
+
+
+def r3(folds: Sequence[Mapping]) -> dict:
+    """R3: IC above zero in at least 60% of eligible folds (a fold is eligible with 10 days and 20 finished
+    ideas); fewer than 12 eligible folds is insufficient, not a pass."""
+    eligible = [f for f in folds if f["days"] >= MIN_FOLD_DAYS and f["ideas"] >= MIN_FOLD_IDEAS]
+    positive = sum(1 for f in eligible if f["mean_ic"] is not None and f["mean_ic"] > 0)
+    enough = len(eligible) >= MIN_ELIGIBLE_FOLDS
+    share = positive / len(eligible) if eligible else 0.0
+    return {
+        "eligible": len(eligible),
+        "positive": positive,
+        "share": share,
+        "state": "ok" if enough else "insufficient",
+        "passes": bool(enough and share >= FOLDS_SHARE),
+    }
+
+
+def r4(ic_a: Mapping[date, float], ic_b: Mapping[date, float], mode: str) -> dict:
+    """R4: the paired daily IC difference (a minus b, on days both scored) has a 1.25th-percentile lower bound
+    above zero ("better") or above -0.005 ("not_worse", for S2r against S2)."""
+    if mode not in ("better", "not_worse"):
+        raise ValueError("mode must be 'better' or 'not_worse'")
+    common = sorted(set(ic_a) & set(ic_b))
+    diff = [ic_a[d] - ic_b[d] for d in common]
+    low = block_quantile(diff, BONFERRONI_Q)
+    floor = 0.0 if mode == "better" else -NOT_WORSE_MARGIN
+    return {
+        "mode": mode,
+        "days": len(common),
+        "mean_difference": sum(diff) / len(diff) if diff else None,
+        "lower_bound": low,
+        "passes": bool(low is not None and low > floor),
+    }

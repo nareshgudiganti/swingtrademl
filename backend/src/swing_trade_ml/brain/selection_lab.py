@@ -497,7 +497,7 @@ def top5_measures(
     """The top-5 measures of section 6.1 over the days with at least `min_stocks` scored stocks: mean excess
     (top-5 return minus the day's median), hit share (share of the top 5 whose return is in the top 30% of the
     day) and the spread (top 20% minus bottom 20% by score). `per_day_excess` lets callers split by fold."""
-    excess, hits, spread, per_day = [], [], [], {}
+    excess, hits, spread, per_day, vs_mean = [], [], [], {}, []
     days = sorted({d for per in scores.values() for d in per})
     for d in days:
         u = [(s, scores[s][d], returns.get((s, d))) for s in scores if d in scores[s]]
@@ -510,6 +510,7 @@ def top5_measures(
         e = sum(x[2] for x in top) / len(top) - float(np.median(rs))
         cut = float(np.percentile(rs, 70, method="linear"))
         excess.append(e)
+        vs_mean.append(sum(x[2] for x in top) / len(top) - sum(rs) / len(rs))
         per_day[d] = e
         hits.append(sum(x[2] >= cut for x in top) / len(top))
         n20 = max(1, round(0.2 * len(ranked)))
@@ -521,6 +522,7 @@ def top5_measures(
     return {
         "days": len(excess),
         "excess": mean(excess),
+        "excess_vs_mean": mean(vs_mean),
         "hit_share": mean(hits),
         "spread": mean(spread),
         "per_day_excess": per_day,
@@ -633,6 +635,68 @@ def momentum_scores(bars: Mapping[str, pd.DataFrame], days: Sequence[date]) -> d
     return out
 
 
+MIN_GROUP_STOCKS = 30  # a scored group smaller than this is a limited experiment
+LIMITED_LABEL = "NO WARNING (diagnostic, limited sample)"
+FULL_LABEL = "NO WARNING (diagnostic)"
+BENCHMARK = (
+    "Cap-group benchmark: a group's best-5 excess is measured over the day's median stock of the SAME group and "
+    "over the average of that group's own eligible stocks, never over a different size group or an index."
+)
+
+
+def sample_warning(n_stocks: int) -> str | None:
+    """The plain warning for a scored group under MIN_GROUP_STOCKS stocks; None for a large enough group."""
+    if n_stocks >= MIN_GROUP_STOCKS:
+        return None
+    return f"Limited experiment: {n_stocks} stocks. Wide uncertainty. Not a basis for trading approval on its own."
+
+
+def mid_group_from(
+    model_training_symbols: Sequence[str], reject_set: Sequence[str], used_49: Sequence[str]
+) -> list[str]:
+    """The mid-cap group: the training stocks of the app's mid-cap model, minus the held-back set. None may be in
+    the 49 (the large group): that would mean the two groups overlap, and the run is refused."""
+    held, used = set(reject_set), set(used_49)
+    group = sorted({s for s in model_training_symbols if s not in held})
+    overlap = sorted(set(group) & used)
+    if overlap:
+        raise ValueError(f"The mid-cap group overlaps the 49: {', '.join(overlap)}")
+    return group
+
+
+def assert_no_held_back(reject_set: Sequence[str], **lists: Sequence[str]) -> None:
+    """Hard rule: no held-back stock may be in any list the lab loads, trains on or scores."""
+    held = set(reject_set)
+    for name, symbols in lists.items():
+        bad = sorted(set(symbols) & held)
+        if bad:
+            raise ValueError(
+                f"Held-back stocks found in {name}: {', '.join(bad[:5])} ({len(bad)}). They are never used."
+            )
+
+
+def _group_result(
+    members: Sequence[str],
+    scores_all: Mapping[str, Mapping[date, float]],
+    rets_all: Mapping[tuple[str, date], float | None],
+) -> dict:
+    sub = {s: scores_all[s] for s in members if s in scores_all}
+    ic = daily_ic(sub, rets_all)
+    top = top5_measures(sub, rets_all)
+    r = r1(ic)
+    return {
+        "stocks_listed": len(members),
+        "stocks_scored": sum(1 for per in sub.values() if per),
+        "days": r["days"],
+        "mean_ic": r["mean_ic"],
+        "lower_bound": r["lower_bound"],
+        "top5_excess_over_median": top["excess"],
+        "top5_excess_over_group_average": top["excess_vs_mean"],
+        "hit_share": top["hit_share"],
+        "top5_days": top["days"],
+    }
+
+
 def evaluate_ranking(
     bars: Mapping[str, pd.DataFrame],
     folds: Sequence[Fold],
@@ -641,6 +705,7 @@ def evaluate_ranking(
     *,
     comparison_ic: Mapping[date, float] | None = None,
     r4_mode: str | None = None,
+    groups: Mapping[str, Sequence[str]] | None = None,
 ) -> dict:
     """Ranking verdict (R1 to R4) of one candidate over expanding walk-forward folds, scored on the `candidates`
     (the 49) that have at least 220 bars and a valid 15-day return on the decision day. `model_scores(fold)`
@@ -714,12 +779,20 @@ def evaluate_ranking(
             for label, ic in cond_ic.items()
             if ic
         },
+        "benchmark": BENCHMARK,
+        "by_cap_group": {
+            name: _group_result(members, scores_all, rets_all) for name, members in (groups or {}).items()
+        },
         "stocks_scored_max": max_scored,
         "ic_by_day": ic_all,
         "money": MONEY_NOT_EVALUATED,
         "qualifies_for_winner": False,
         "statement": TWO_QUESTIONS,
     }
+    warning = sample_warning(len(scored))
+    out["label"] = FULL_LABEL if warning is None else LIMITED_LABEL
+    if warning:
+        out["sample_warning"] = warning
     parts = [r1_res["passes"], r2_res["passes"], r3_res["passes"]]
     if comparison_ic is not None and r4_mode is not None:
         out["r4"] = r4(ic_all, comparison_ic, r4_mode)

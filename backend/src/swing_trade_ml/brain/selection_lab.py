@@ -55,3 +55,72 @@ def excess_labels(
     median = float(np.median(ref_returns))
     cut = float(np.percentile([r - median for r in ref_returns], (1 - TOP_SHARE) * 100, method="linear"))
     return {s: int(r - median >= cut - _TOL) for s, r in valid.items()}, cut
+
+
+MIN_BARS = 220  # a stock is in the reference group only with this much history up to the decision day
+MIN_TURNOVER_INR = 5e7  # Rs 5 crore: median close x volume over 20 sessions up to and including the day
+TURNOVER_SESSIONS = 20
+IST = "Asia/Kolkata"
+
+
+def median_turnover(bars: pd.DataFrame, day: date, sessions: int = TURNOVER_SESSIONS) -> float | None:
+    """Median of close x volume over the last `sessions` bars up to and including `day`; None with fewer."""
+    upto = bars[bars["day"] <= day].tail(sessions)
+    if len(upto) < sessions:
+        return None
+    return float((upto["close"] * upto["volume"]).median())
+
+
+def reference_for_day(day: date, candidates: Sequence[str], bars: Mapping[str, pd.DataFrame]) -> list[str]:
+    """The reference group of design section 4.1 for one decision day: the candidates (the 49) with enough
+    history and enough turnover. A valid forward return is checked by `excess_labels`, which drops the rest."""
+    out = []
+    for s in candidates:
+        df = bars.get(s)
+        if df is None or int((df["day"] <= day).sum()) < MIN_BARS:
+            continue
+        t = median_turnover(df, day)
+        if t is not None and t >= MIN_TURNOVER_INR:
+            out.append(s)
+    return out
+
+
+def label_frame(
+    dataset: pd.DataFrame, bars: Mapping[str, pd.DataFrame], candidates: Sequence[str]
+) -> tuple[pd.DataFrame, dict]:
+    """Replace a training frame's target with the section 4.1 label. `dataset` has `symbol` and a tz-aware `ts`
+    (the decision bar); the decision day is the IST date of the stamp. Rows without a forward return, and every
+    row on a day without enough reference stocks, are dropped and counted. Returns the labelled frame (with a
+    `day` column) and a report: counts, and the share of 1s among reference and extra stocks per year."""
+    work = dataset.assign(day=pd.to_datetime(dataset["ts"], utc=True).dt.tz_convert(IST).dt.date)
+    rets: dict[tuple[str, date], float | None] = {}
+    for s, d in set(zip(work["symbol"], work["day"], strict=True)):
+        df = bars.get(s)
+        rets[(s, d)] = forward_return(df, d) if df is not None else None
+    work["_r"] = [rets[(s, d)] for s, d in zip(work["symbol"], work["day"], strict=True)]
+    no_return = int(work["_r"].isna().sum())
+    labelled, days_ok, days_bad = [], set(), set()
+    for d, grp in work.dropna(subset=["_r"]).groupby("day"):
+        got = excess_labels(
+            dict(zip(grp["symbol"], grp["_r"], strict=True)), reference_for_day(d, candidates, bars)
+        )
+        if got is None:
+            days_bad.add(d)
+            continue
+        days_ok.add(d)
+        labels, _cut = got
+        labelled.append(grp.assign(target=[labels[s] for s in grp["symbol"]]))
+    out = pd.concat(labelled).drop(columns=["_r"]) if labelled else work.iloc[0:0].drop(columns=["_r"])
+    share: dict[str, dict[str, float]] = {}
+    if len(out):
+        cand = set(candidates)
+        tagged = out.assign(year=[d.year for d in out["day"]], is_ref=[s in cand for s in out["symbol"]])
+        for (year, is_ref), grp in tagged.groupby(["year", "is_ref"]):
+            share.setdefault(str(year), {})["reference" if is_ref else "extra"] = float(grp["target"].mean())
+    return out, {
+        "rows_in": len(work),
+        "rows_without_return": no_return,
+        "days_labelled": len(days_ok),
+        "days_without_labels": len(days_bad),
+        "share_of_ones_by_year": share,
+    }

@@ -101,3 +101,81 @@ def test_the_forward_return_is_missing_when_a_price_is_bad():
     df = bars()
     df.loc[3, "open"] = 0.0
     assert sl.forward_return(df, df.iloc[2]["day"]) is None
+
+
+# ---------------------------------------------------------------- reference group and labelled frame
+
+IST = "Asia/Kolkata"
+
+
+def make_bars(n=260, drift=0.0, vol=2_000_000.0, px=100.0):
+    d0 = date(2023, 1, 2)
+    rows = []
+    p = px
+    for i in range(n):
+        o = p
+        p = p * (1 + drift)
+        rows.append({"day": d0 + timedelta(days=i), "open": o, "close": p, "volume": vol})
+    return pd.DataFrame(rows)
+
+
+def test_median_turnover_is_close_times_volume_over_twenty_sessions_up_to_the_day():
+    df = make_bars(vol=1_000_000.0, px=100.0, drift=0.0)
+    assert sl.median_turnover(df, df.iloc[100]["day"]) == pytest.approx(100.0 * 1_000_000.0)
+    assert sl.median_turnover(df, df.iloc[5]["day"]) is None  # fewer than 20 sessions of history
+
+
+def test_the_reference_group_needs_history_and_turnover_of_five_crore():
+    bars = {"OK": make_bars(), "THIN": make_bars(vol=1_000.0), "SHORT": make_bars(n=150)}
+    day = bars["OK"].iloc[230]["day"]
+    assert sl.reference_for_day(day, list(bars), bars) == ["OK"]
+
+
+def frame_for(bars, symbols, days):
+    rows = []
+    for s in symbols:
+        for d in days:
+            ts = pd.Timestamp(d, tz=IST).tz_convert("UTC")
+            rows.append({"symbol": s, "ts": ts})
+    return pd.DataFrame(rows)
+
+
+def test_label_frame_labels_every_stock_with_the_reference_cut_off_and_reports_what_it_dropped():
+    ref_syms = [f"R{i:02d}" for i in range(12)]
+    bars = {s: make_bars(drift=0.0005 * (i + 1)) for i, s in enumerate(ref_syms)}
+    bars["EXTRA"] = make_bars(drift=0.01)
+    day = bars["R00"].iloc[230]["day"]
+    late = bars["R00"].iloc[-1]["day"]  # no 15 bars after it: no return, no label
+    frame = frame_for(bars, [*ref_syms, "EXTRA"], [day, late])
+    out, report = sl.label_frame(frame, bars, ref_syms)
+    got = {(r.symbol, r.day): r.target for r in out.itertuples()}
+    assert got[("EXTRA", day)] == 1 and got[("R00", day)] == 0 and got[("R11", day)] == 1
+    assert ("R00", late) not in got and report["rows_without_return"] == 13
+    assert report["days_labelled"] == 1 and report["days_without_labels"] == 0
+
+
+def test_label_frame_uses_the_ist_date_of_the_stamp():
+    ref_syms = [f"R{i:02d}" for i in range(10)]
+    bars = {s: make_bars(drift=0.0005 * (i + 1)) for i, s in enumerate(ref_syms)}
+    day = bars["R00"].iloc[230]["day"]
+    out, _ = sl.label_frame(frame_for(bars, ref_syms, [day]), bars, ref_syms)
+    assert set(out["day"]) == {day}  # an 18:30 UTC stamp is that IST day, not the previous one
+
+
+def test_the_share_of_ones_is_reported_separately_for_reference_and_extra_stocks_per_year():
+    ref_syms = [f"R{i:02d}" for i in range(12)]
+    bars = {s: make_bars(drift=0.0005 * (i + 1)) for i, s in enumerate(ref_syms)}
+    bars["EXTRA"] = make_bars(drift=0.01)
+    days = [bars["R00"].iloc[i]["day"] for i in (220, 225, 230)]
+    _, report = sl.label_frame(frame_for(bars, [*ref_syms, "EXTRA"], days), bars, ref_syms)
+    y = report["share_of_ones_by_year"]["2023"]
+    assert y["extra"] == 1.0 and 0.2 <= y["reference"] <= 0.5
+
+
+def test_a_day_with_too_few_reference_stocks_is_dropped_and_counted():
+    ref_syms = [f"R{i:02d}" for i in range(9)]  # one short of the minimum
+    bars = {s: make_bars(drift=0.0005 * (i + 1)) for i, s in enumerate(ref_syms)}
+    bars["EXTRA"] = make_bars(drift=0.01)
+    day = bars["R00"].iloc[230]["day"]
+    out, report = sl.label_frame(frame_for(bars, [*ref_syms, "EXTRA"], [day]), bars, ref_syms)
+    assert out.empty and report["days_without_labels"] == 1 and report["days_labelled"] == 0

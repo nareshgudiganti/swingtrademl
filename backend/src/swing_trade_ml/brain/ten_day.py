@@ -24,6 +24,7 @@ or activates a model.
 from __future__ import annotations
 
 import json
+import re
 from collections import defaultdict
 from collections.abc import Callable, Sequence
 from datetime import date, timedelta
@@ -64,6 +65,21 @@ CODE_DEFAULT_SLIPPAGE_BPS = 5.0
 STRESS = CostStress(
     extra_slip=0.0005
 )  # 0.05% code default + 0.05% = 0.10% per side (protocol section 6, rule 4)
+
+
+MAX_TECHNICAL_RERUNS = 2
+INCIDENT_DIR = "incidents"
+INCIDENT_KINDS = ("execution_failure", "data_integrity_failure")
+RERUN_MARKER = "td-protocol-v1 technical rerun {n}, {first} to {last}"
+LABEL = "HISTORICAL GATE - SURVIVOR-BIASED UNIVERSE (today's 49 stocks)"
+LIMITATIONS = (
+    "Survivor bias: the 49 stocks are today's watchlist, so stocks that were dropped or delisted are missing from the history.",
+    "No liquidity or limit checks: fills assume the next open is executable at the stated slippage; circuit limits, halts and volume caps are not modelled. To be resolved before any realistic portfolio simulation or trading approval.",
+    "Costs use the shared scorer's Rs 40,000 position; the protocol's Rs 1,00,000 applies to the forward lane.",
+    "Stop and target levels follow the slippage-adjusted fill, as the shared scorer does.",
+    "The 10-day history is partly already seen (protocol section 3): a pass allows a watch-only lane, never proof.",
+    "Drawdown and account returns come from a simulated Rs 10 lakh account and are reported only; benchmarks are NIFTY 50, every stock, random picks and cash.",
+)
 
 
 class RunRefusedError(RuntimeError):
@@ -227,6 +243,8 @@ def evaluate(
             "block_days": BLOCK_DAYS,
         },
         "costs": f"slippage 0.10% per side in total; {stress.label}",
+        "label": LABEL,
+        "limitations": list(LIMITATIONS),
         "stocks": len(bars),
         "folds": fold_rows,
         "pooled": {
@@ -366,9 +384,22 @@ def _benchmarks(
 
 
 def refusal_reasons(
-    *, tag_on_head: bool, changed_since_tag: Sequence[str], already_ran: Sequence[str]
+    *,
+    tag_on_head: bool,
+    changed_since_tag: Sequence[str],
+    already_ran: Sequence[str],
+    dirty: bool = False,
+    window_ok: bool = True,
 ) -> list[str]:
     reasons: list[str] = []
+    if not window_ok:
+        reasons.append(
+            f"The history gate runs only on the confirmation window {CONFIRMATION[0]} to {CONFIRMATION[1]}: one run, no other window."
+        )
+    if dirty:
+        reasons.append(
+            "The working tree has uncommitted changes: a run must come from a clean, committed tree."
+        )
     if not tag_on_head:
         reasons.append(
             f"The git tag {TAG} is not in this commit's history: the protocol is not frozen yet. "
@@ -379,8 +410,24 @@ def refusal_reasons(
             f"{path} differs from the tagged version: a changed setting is td-protocol-v2, not v1."
         )
     for path in already_ran:
-        reasons.append(f"{path} already exists: the history gate runs once, with no re-runs.")
+        reasons.append(
+            f"{path} already exists: the history gate runs once, whatever the window, with no re-runs."
+        )
     return reasons
+
+
+def git_dirty(repo_root: Path) -> bool:
+    import subprocess
+
+    out = subprocess.run(
+        ["git", "-C", str(repo_root), "status", "--porcelain"], capture_output=True, text=True, check=False
+    )
+    return bool(out.stdout.strip())
+
+
+def existing_reports(out_dir: Path) -> list[Path]:
+    """Any earlier report of this protocol, whatever its window: the gate runs once."""
+    return sorted(out_dir.glob("ten_day_*")) if out_dir.exists() else []
 
 
 def git_guard_state(repo_root: Path) -> tuple[bool, list[str]]:
@@ -400,13 +447,25 @@ def output_paths(out_dir: Path, first: date, last: date) -> tuple[Path, Path]:
 
 
 def check_run_allowed(
-    out_dir: Path, first: date, last: date, *, state: tuple[bool, list[str]] | None = None
+    out_dir: Path,
+    first: date,
+    last: date,
+    *,
+    state: tuple[bool, list[str]] | None = None,
+    dirty: bool | None = None,
 ) -> None:
     from swing_trade_ml.core.config import REPO_ROOT
 
     tag_on_head, changed = state if state is not None else git_guard_state(REPO_ROOT)
-    ran = [str(p) for p in output_paths(out_dir, first, last) if p.exists()]
-    reasons = refusal_reasons(tag_on_head=tag_on_head, changed_since_tag=changed, already_ran=ran)
+    if dirty is None:
+        dirty = git_dirty(REPO_ROOT) if state is None else False
+    reasons = refusal_reasons(
+        tag_on_head=tag_on_head,
+        changed_since_tag=changed,
+        already_ran=[str(p) for p in existing_reports(out_dir)],
+        dirty=dirty,
+        window_ok=(first, last) == CONFIRMATION,
+    )
     if reasons:
         raise RunRefusedError(
             f"{PROTOCOL_VERSION} refused: nothing was scored and no result was produced.\n"
@@ -421,8 +480,13 @@ def dry_run_plan(
     from swing_trade_ml.core.config import REPO_ROOT
 
     tag_on_head, changed = state if state is not None else git_guard_state(REPO_ROOT)
-    ran = [str(p) for p in output_paths(out_dir, first_start, last_end) if p.exists()]
-    reasons = refusal_reasons(tag_on_head=tag_on_head, changed_since_tag=changed, already_ran=ran)
+    reasons = refusal_reasons(
+        tag_on_head=tag_on_head,
+        changed_since_tag=changed,
+        already_ran=[str(p) for p in existing_reports(out_dir)],
+        dirty=git_dirty(REPO_ROOT) if state is None else False,
+        window_ok=(first_start, last_end) == CONFIRMATION,
+    )
     folds = make_folds(first_start, last_end)
     return "\n".join(
         [
@@ -436,6 +500,7 @@ def dry_run_plan(
             f"{len(folds)} folds: " + ", ".join(f"{f.start}..{f.end}" for f in folds),
             f"Rule: reach +{TARGET:.0%} before -{STOP:.1%} within {HORIZON_BARS} trading days, no half-out, "
             "enter the next open, gaps fill at the open, slippage 0.10% per side, best 5 a day.",
+            f"A failed attempt can be rerun at most {MAX_TECHNICAL_RERUNS} times, only with an incident note (execution or data-integrity failure, result never read); a finished report is never rerun.",
             "A real run is "
             + ("allowed." if not reasons else "refused:\n" + "\n".join(f"- {r}" for r in reasons)),
         ]
@@ -445,12 +510,14 @@ def dry_run_plan(
 # ---------------------------------------------------------------- the real run (database; read-only)
 
 
-def _train(db, cutoff: date):
+def _train(db, cutoff: date, symbols: Sequence[str]):
+    """Train one fold model on an EXPLICIT stock list (the frozen 49), never on whatever the watchlist is today."""
     from swing_trade_ml.ml.train import train_model
 
     return train_model(
         db,
         name=f"td_h{HORIZON_BARS}_{cutoff:%Y%m%d}",
+        symbols=list(symbols),
         cutoff=cutoff,
         horizon_days=HORIZON_BARS,
         target_return=TARGET,
@@ -482,37 +549,216 @@ def collect(db, first_start: date, last_end: date):
     return instruments, bars, nifty
 
 
-def run(db, *, first_start: date, last_end: date, out_dir: Path) -> tuple[Path, Path]:
-    from swing_trade_ml.ml.asof import score_series
+EXPECTED_STOCKS = 49  # the frozen model stocks (protocol section 6): a different count means the list moved
+LEDGER_MARKER = "td-protocol-v1 history gate, {first} to {last}"
 
-    assert_costs_pinned()
-    check_run_allowed(out_dir, first_start, last_end)
+
+def ledger_attempts(text: str, first: date, last: date) -> int:
+    """How many times the gate has been started for this window: the first run plus any technical reruns."""
+    first_run = LEDGER_MARKER.format(first=first, last=last) in text
+    reruns = sum(
+        1
+        for n in range(1, MAX_TECHNICAL_RERUNS + 2)
+        if RERUN_MARKER.format(n=n, first=first, last=last) in text
+    )
+    return (1 if first_run else 0) + reruns
+
+
+def validate_incident(path: Path) -> list[str]:
+    """An incident note must say what failed and that no result was read; it can never excuse a result someone
+    saw and disliked."""
+    text = path.read_text(encoding="utf-8")
+    problems: list[str] = []
+    kind = re.search(r"^Kind:\s*(\S+)", text, re.M)
+    if not kind or kind.group(1) not in INCIDENT_KINDS:
+        problems.append(f"{path.name}: 'Kind:' must be one of {', '.join(INCIDENT_KINDS)}")
+    cause = re.search(r"^Cause:\s*(\S.+)", text, re.M)
+    if not cause or len(cause.group(1).strip()) < 15:
+        problems.append(f"{path.name}: 'Cause:' must state what failed (at least a sentence)")
+    if not re.search(r"^Result read:\s*none\s*$", text, re.M | re.I):
+        problems.append(f"{path.name}: it must say 'Result read: none'")
+    if not re.search(r"^Same code and rules:\s*yes\s*$", text, re.M | re.I):
+        problems.append(f"{path.name}: it must say 'Same code and rules: yes'")
+    return problems
+
+
+def plan_attempt(ledger_path: Path, out_dir: Path, first: date, last: date, technical_rerun: bool) -> int:
+    """0 for the first run; n >= 1 for the nth technical rerun. Refuses everything else. A completed report
+    never reaches here (the guard already refused it): a rerun is possible only after an attempt that left a
+    ledger row but no report, and only with one valid incident note per failed attempt."""
+    attempts = ledger_attempts(ledger_path.read_text(encoding="utf-8"), first, last)
+    if attempts == 0:
+        if technical_rerun:
+            raise RunRefusedError(f"{PROTOCOL_VERSION} refused: there is no earlier attempt to rerun.")
+        return 0
+    if not technical_rerun:
+        raise RunRefusedError(
+            f"{PROTOCOL_VERSION} refused: an earlier attempt left a ledger row but no report. If infrastructure "
+            "failed (not a result you disliked), write an incident note in "
+            f"{OUT_DIR}/{INCIDENT_DIR}/ and rerun with --technical-rerun."
+        )
+    if attempts - 1 >= MAX_TECHNICAL_RERUNS:
+        raise RunRefusedError(
+            f"{PROTOCOL_VERSION} refused: {MAX_TECHNICAL_RERUNS} technical reruns are already used. Anything more "
+            "is td-protocol-v2, a new protocol."
+        )
+    notes = (
+        sorted((out_dir / INCIDENT_DIR).glob("incident_*.md")) if (out_dir / INCIDENT_DIR).exists() else []
+    )
+    if len(notes) < attempts:
+        raise RunRefusedError(
+            f"{PROTOCOL_VERSION} refused: {attempts} failed attempt(s) need {attempts} incident note(s); "
+            f"found {len(notes)} in {OUT_DIR}/{INCIDENT_DIR}/."
+        )
+    problems = [x for n in notes for x in validate_incident(n)]
+    if problems:
+        raise RunRefusedError(
+            f"{PROTOCOL_VERSION} refused: incident note problems:\n" + "\n".join(f"- {x}" for x in problems)
+        )
+    return attempts
+
+
+def add_ledger_row(
+    path: Path,
+    first: date,
+    last: date,
+    *,
+    run_day: date,
+    report_name: str,
+    rerun: int = 0,
+    incident: str = "",
+) -> None:
+    """Write the attempt's exposure-ledger row BEFORE any result exists (protocol section 7). The first attempt
+    cannot be written twice; a technical rerun adds its own row naming its incident note."""
+    text = path.read_text(encoding="utf-8")
+    marker = LEDGER_MARKER.format(first=first, last=last)
+    if rerun == 0 and marker in text:
+        raise RunRefusedError(f"{marker} already has a row in the exposure ledger: it has had its one run.")
+    what = (
+        f"{marker}: 10-day model, barrier label +6% / -3.5%, best 5 a day, benchmarks; run once"
+        if rerun == 0
+        else f"{RERUN_MARKER.format(n=rerun, first=first, last=last)}: after incident {incident}; same code and rules; "
+        "no result was read in the failed attempt"
+    )
+    lines = text.splitlines()
+    start = next(i for i, ln in enumerate(lines) if ln.startswith("## Local data"))
+    end = next((i for i in range(start + 1, len(lines)) if lines[i].startswith("## ")), len(lines))
+    last_row = max(i for i in range(start, end) if lines[i].startswith("|"))
+    lines.insert(
+        last_row + 1,
+        f"| {first.isoformat()} to {last.isoformat()} (49 stocks) | {what} | "
+        f"Owner's decision: to be written after reading | {run_day.isoformat()} | `td_v1/{report_name}` |",
+    )
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+
+
+def _atomic_write(path: Path, text: str) -> None:
+    """Write whole or not at all, so a crash can never leave a half-written report that counts as a finished run."""
+    import os
+
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(text, encoding="utf-8")
+    os.replace(tmp, path)
+
+
+def _commit(repo_root: Path) -> str:
+    import subprocess
+
+    out = subprocess.run(
+        ["git", "-C", str(repo_root), "rev-parse", "HEAD"], capture_output=True, text=True, check=False
+    )
+    return out.stdout.strip() or "unknown"
+
+
+def run(
+    db,
+    *,
+    first_start: date,
+    last_end: date,
+    out_dir: Path,
+    ledger_path: Path | None = None,
+    state: tuple[bool, list[str]] | None = None,
+    collect_fn: Callable | None = None,
+    scores_fn: Callable | None = None,
+    commit_fn: Callable[[], str] | None = None,
+    today: date | None = None,
+    eval_kw: dict | None = None,
+    technical_rerun: bool = False,
+) -> tuple[Path, Path]:
+    """The one real run: guard, data, the exposure-ledger row (before any model is scored), fold models,
+    benchmarks, report and run record. `collect_fn() -> (instruments, bars, nifty)` and
+    `scores_fn(instruments) -> (fold -> scores)` are replaceable in tests."""
+    import hashlib
+    from datetime import datetime
+
+    from swing_trade_ml.core.config import REPO_ROOT
     from swing_trade_ml.ml.sector_map import get_sector_bucket
 
-    instruments, bars, nifty = collect(db, first_start, last_end)
+    assert_costs_pinned()
+    check_run_allowed(out_dir, first_start, last_end, state=state)
+    ledger = ledger_path or REPO_ROOT / "docs" / "brain" / "EXPOSURE-LEDGER.md"
+    rerun = plan_attempt(ledger, out_dir, first_start, last_end, technical_rerun)
+    instruments, bars, nifty = (collect_fn or (lambda: collect(db, first_start, last_end)))()
+    symbols = sorted(i.tradingsymbol for i in instruments)
+    if len(symbols) != EXPECTED_STOCKS:
+        raise RunRefusedError(
+            f"{PROTOCOL_VERSION} refused: {len(symbols)} stocks are watchlisted, the protocol froze {EXPECTED_STOCKS}."
+        )
+    md, js = output_paths(out_dir, first_start, last_end)
+    notes = sorted((out_dir / INCIDENT_DIR).glob("incident_*.md")) if rerun else []
+    add_ledger_row(
+        ledger,
+        first_start,
+        last_end,
+        run_day=today or date.today(),
+        report_name=md.name,
+        rerun=rerun,
+        incident=notes[-1].name if notes else "",
+    )
+    trained: list[dict] = []
 
-    def model_scores(fold: wf.Fold) -> dict[str, dict[date, float]]:
-        model = _train(db, fold.cutoff)
-        return {
-            i.tradingsymbol: {
-                d: p
-                for d, p in score_series(db, i, model, fold.cutoff).items()
-                if fold.start <= d <= fold.end
+    def default_scores(insts):
+        from swing_trade_ml.ml.asof import score_series
+
+        def model_scores(fold: wf.Fold) -> dict[str, dict[date, float]]:
+            model = _train(db, fold.cutoff, symbols)
+            trained.append(
+                {"name": model.name, "version": model.version, "auc": getattr(model, "roc_auc", None)}
+            )
+            return {
+                i.tradingsymbol: {
+                    d: p
+                    for d, p in score_series(db, i, model, fold.cutoff).items()
+                    if fold.start <= d <= fold.end
+                }
+                for i in insts
             }
-            for i in instruments
-        }
 
+        return model_scores
+
+    folds = make_folds(first_start, last_end)
     result = evaluate(
         bars,
-        make_folds(first_start, last_end),
-        model_scores,
+        folds,
+        (scores_fn or default_scores)(instruments),
         nifty=nifty,
         buckets={s: get_sector_bucket(s) for s in bars},
+        **(eval_kw or {}),
     )
+    result["manifest"] = {
+        "Protocol": PROTOCOL_VERSION,
+        "Tag": f"{TAG} (in this commit's history)",
+        "Code commit": (commit_fn or (lambda: _commit(REPO_ROOT)))(),
+        "Window": f"{first_start} to {last_end}",
+        "Folds": f"{len(folds)} of 28 calendar days, model retrained once per fold, never activated",
+        "Universe": f"{len(symbols)} stocks (today's list: survivor bias), sha256 {hashlib.sha256(','.join(symbols).encode()).hexdigest()}",
+        "Costs": result["costs"],
+        "Models trained": trained,
+        "Written": datetime.now().isoformat(timespec="seconds"),
+    }
     out_dir.mkdir(parents=True, exist_ok=True)
-    md, js = output_paths(out_dir, first_start, last_end)
-    md.write_text(plain_report(result), encoding="utf-8")
-    js.write_text(json.dumps(result, indent=1, default=str), encoding="utf-8")
+    _atomic_write(js, json.dumps(result, indent=1, default=str))
+    _atomic_write(md, plain_report(result))
     return md, js
 
 
@@ -527,6 +773,8 @@ def plain_report(result: dict) -> str:
         [
             f"# {PROTOCOL_VERSION}: 10-day model, history gate",
             "",
+            f"**{result.get('label', LABEL)}**",
+            "",
             "**This gate only decides whether a shadow lane may be proposed. It is never proof.**",
             "**Ranking and trading are different questions.** The first part asks whether the model's best 5 beat every stock "
             "on the same days; the second asks whether the actual trade (+6% / -3.5%, out by day 10, after costs) made money.",
@@ -540,6 +788,9 @@ def plain_report(result: dict) -> str:
             f"- Reading: {v['reading']}",
             "",
             *benchmark_lines(result),
+            "",
+            "Limits of this test:",
+            *[f"- {x}" for x in result.get("limitations", LIMITATIONS)],
         ]
     )
 
@@ -579,6 +830,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     ap.add_argument("--from", dest="start", required=True)
     ap.add_argument("--to", dest="end", required=True)
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument(
+        "--technical-rerun",
+        action="store_true",
+        help="rerun after an infrastructure failure that left no report; needs an incident note",
+    )
     a = ap.parse_args(argv)
     first, last = date.fromisoformat(a.start), date.fromisoformat(a.end)
     out_dir = REPO_ROOT / OUT_DIR
@@ -594,7 +850,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     from swing_trade_ml.db.session import SessionLocal
 
     with SessionLocal() as db:
-        md, js = run(db, first_start=first, last_end=last, out_dir=out_dir)
+        try:
+            md, js = run(
+                db, first_start=first, last_end=last, out_dir=out_dir, technical_rerun=a.technical_rerun
+            )
+        except RunRefusedError as e:
+            print(e)
+            return 2
     print(md.read_text(encoding="utf-8"))
     print(f"Written: {md} and {js}")
     return 0

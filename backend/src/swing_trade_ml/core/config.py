@@ -204,6 +204,8 @@ class Settings(BaseSettings):
     BRAIN_ENABLED: bool = False
     # Daily shadow-testing lanes (10-day, 15-day). Off by default; the job is not wired into the scheduler yet.
     LANE_SHADOW_ENABLED: bool = False
+    # Owner-chosen model per lane slot, JSON like {"10d-large": 123}. Never auto-picked.
+    LANE_SHADOW_MODELS: str = ""
     # Telegram alerts after live brain runs (market mode changed, new TRADE ideas,
     # holdings needing attention). Off by default; needs BRAIN_ENABLED too.
     BRAIN_ALERTS_ENABLED: bool = False

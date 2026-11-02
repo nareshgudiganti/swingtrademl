@@ -1,6 +1,6 @@
-# Evidence plan, Amendment 2 — the 15-day selection lab (DRAFT for owner review, not signed)
+# Evidence plan, Amendment 2 — the 15-day selection lab (ADOPTED on the owner's instruction, 2026-11-02)
 
-Status: **DRAFT, 2026-11-02. Not signed. Nothing runs under it until the owner signs.** Follows Amendment 1
+Status: **ADOPTED 2026-11-02, on the owner's written instruction "go a head" to sign Amendment 2, Q1 and Q7. It takes effect only when the owner merges this change.** Follows Amendment 1
 (`2026-10-21-evidence-plan-amendment-1.md`). It changes only what is written here; every other rule of the plan
 (`2026-10-15-evidence-and-pilot-plan.md`) stands.
 
@@ -54,18 +54,18 @@ every overnight move over 20% is classified in writing, the candidate has not ru
 signed marker file exists: `docs/brain/evidence/sl_v1/EVIDENCE_PLAN_AMENDMENT_SIGNED.md`, containing the word SIGNED.
 The exposure-ledger row is written before any model is scored.
 
-## Owner decisions (to sign — nothing signed)
+## Owner decisions (signed)
 
-- [ ] A2-1 The lab may run after 2026-12-05, candidates S0, S1, S2 (large) and S0M, S1M, S2M (mid, 14 stocks) in order, one run each, with the technical-rerun rule (items 1 and 2).
-- [ ] A2-2 Ranking only, no money figures (item 3).
-- [ ] A2-3 The 129 held-back stocks are not used in this release (item 4).
-- [ ] A2-4 No paid data (item 5).
-- [ ] A2-5 Diagnostic label only; any next step needs a separate approval with a money check (section above).
+- [x] A2-1 The lab may run after 2026-12-05, candidates S0, S1, S2 (large) and S0M, S1M, S2M (mid, 14 stocks) in order, one run each, with the technical-rerun rule (items 1 and 2).
+- [x] A2-2 Ranking only, no money figures (item 3).
+- [x] A2-3 The 129 held-back stocks are not used in this release (item 4).
+- [x] A2-4 No paid data (item 5).
+- [x] A2-5 Diagnostic label only; any next step needs a separate approval with a money check (section above).
 
-Signature (owner): ____________________  Date: __________
+Signature (owner): instruction "go a head" in the working session, recorded by the assistant at the owner's request. Date: 2026-11-02. Q1 (lab pre-registration) and Q7 (wait for Phase C, no paid data) are covered by the same instruction.
 
 ## Change-log line for the plan (added on signing)
 
 | Date | Change |
 |---|---|
-| (signing date) | Amendment 2 adopted (`2026-11-02-evidence-plan-amendment-2.md`): the 15-day selection lab may run offline after 2026-12-04 as S0, S1, S2 and S0M, S1M, S2M, ranking only, held-back 129 untouched, no paid data, diagnostic label only. |
+| 2026-11-02 | Amendment 2 adopted (`2026-11-02-evidence-plan-amendment-2.md`): the 15-day selection lab may run offline after 2026-12-04 as S0, S1, S2 and S0M, S1M, S2M, ranking only, held-back 129 untouched, no paid data, diagnostic label only. |

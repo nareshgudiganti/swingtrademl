@@ -12,7 +12,7 @@ from __future__ import annotations
 import bisect
 import math
 import random
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, timedelta
 
@@ -565,3 +565,165 @@ def r4(ic_a: Mapping[date, float], ic_b: Mapping[date, float], mode: str) -> dic
         "lower_bound": low,
         "passes": bool(low is not None and low > floor),
     }
+
+
+# ---------------------------------------------------------------- the ranking evaluation over folds
+
+RISING_OVER = 0.03  # a window where the average stock gained more than this is "rising" (as walk_forward)
+FALLING_UNDER = -0.03
+MOMENTUM_BARS = 20  # the "strongest risers" rule looks back this many trading days
+TEST_DAYS = 28
+MONEY_NOT_EVALUATED = (
+    "not evaluated: owner decision 2026-11-02, focus on the chart score by market condition. "
+    "No profit, cost, capital or account figure is produced or implied."
+)
+TWO_QUESTIONS = (
+    "Ranking and trading are different questions. Ranking asks whether a higher score picks stocks that do better "
+    "than the other stocks that day (relative). Trading asks whether the +8% / -4% trade made money after costs. "
+    "This result answers only the ranking question and is never a profit forecast."
+)
+
+
+@dataclass(frozen=True, slots=True)
+class Fold:
+    cutoff: date  # last day whose outcome the model may learn from
+    start: date  # first test day
+    end: date  # last test day
+
+
+def make_folds(first_start: date, last_end: date, test_days: int = TEST_DAYS) -> list[Fold]:
+    """Back-to-back test windows of `test_days` calendar days (the same windows wf-protocol-v1 uses). A window
+    that would run past `last_end` is cut short; one under a week is dropped."""
+    folds: list[Fold] = []
+    start = first_start
+    while start <= last_end:
+        end = min(start + timedelta(days=test_days - 1), last_end)
+        if (end - start).days >= 6:
+            folds.append(Fold(cutoff=start - timedelta(days=1), start=start, end=end))
+        start += timedelta(days=test_days)
+    return folds
+
+
+def market_label(bars: Mapping[str, pd.DataFrame], start: date, end: date) -> str:
+    """Describe the window afterwards: how did the average stock move from its first to its last bar?
+    (The same labelling as `walk_forward.classify_regime`.) Reporting only; it never picks anything."""
+    moves = []
+    for df in bars.values():
+        w = df[(df["day"] >= start) & (df["day"] <= end)]
+        if len(w) >= 2 and float(w.iloc[0]["close"]) > 0:
+            moves.append(float(w.iloc[-1]["close"]) / float(w.iloc[0]["close"]) - 1.0)
+    if not moves:
+        return "unknown"
+    avg = sum(moves) / len(moves)
+    return "rising" if avg > RISING_OVER else "falling" if avg < FALLING_UNDER else "sideways"
+
+
+def momentum_scores(bars: Mapping[str, pd.DataFrame], days: Sequence[date]) -> dict[str, dict[date, float]]:
+    """Trailing 20-bar gain, known at the close of each day (the comparison for R2)."""
+    out: dict[str, dict[date, float]] = {}
+    wanted = set(days)
+    for sym, df in bars.items():
+        closes = [float(c) for c in df["close"]]
+        bar_days = list(df["day"])
+        per: dict[date, float] = {}
+        for i, d in enumerate(bar_days):
+            if d in wanted and i >= MOMENTUM_BARS and closes[i - MOMENTUM_BARS] > 0:
+                per[d] = closes[i] / closes[i - MOMENTUM_BARS] - 1.0
+        out[sym] = per
+    return out
+
+
+def evaluate_ranking(
+    bars: Mapping[str, pd.DataFrame],
+    folds: Sequence[Fold],
+    model_scores: Callable[[Fold], dict[str, dict[date, float]]],
+    candidates: Sequence[str],
+    *,
+    comparison_ic: Mapping[date, float] | None = None,
+    r4_mode: str | None = None,
+) -> dict:
+    """Ranking verdict (R1 to R4) of one candidate over expanding walk-forward folds, scored on the `candidates`
+    (the 49) that have at least 220 bars and a valid 15-day return on the decision day. `model_scores(fold)`
+    returns {symbol: {day: score}} from a model trained only on data known by the fold's cutoff. The money verdict
+    is deliberately not evaluated (owner, 2026-11-02): the result says so and cannot qualify a winner."""
+    scored = [s for s in candidates if s in bars]
+    ic_all: dict[date, float] = {}
+    scores_all: dict[str, dict[date, float]] = {s: {} for s in scored}
+    rets_all: dict[tuple[str, date], float | None] = {}
+    fold_rows: list[dict] = []
+    cond_ic: dict[str, dict[date, float]] = {}
+    cond_scores: dict[str, dict[str, dict[date, float]]] = {}
+    max_scored = 0
+    for fold in folds:
+        days = sorted({d for s in scored for d in bars[s]["day"] if fold.start <= d <= fold.end})
+        if not days:
+            continue
+        raw = model_scores(fold)
+        scores: dict[str, dict[date, float]] = {}
+        returns: dict[tuple[str, date], float | None] = {}
+        for s in scored:
+            df = bars[s]
+            have = df["day"]
+            per = {}
+            for d, sc in raw.get(s, {}).items():
+                if fold.start <= d <= fold.end and int((have <= d).sum()) >= MIN_BARS:
+                    per[d] = sc
+                    returns[(s, d)] = forward_return(df, d)
+            scores[s] = per
+        ic = daily_ic(scores, returns)
+        top = top5_measures(scores, returns)
+        label = market_label(bars, fold.start, fold.end)
+        for s, per in scores.items():
+            scores_all[s].update(per)
+        rets_all.update(returns)
+        ic_all.update(ic)
+        cond_ic.setdefault(label, {}).update(ic)
+        for s, per in scores.items():
+            cond_scores.setdefault(label, {}).setdefault(s, {}).update(per)
+        max_scored = max([max_scored, *(sum(1 for s in scores if d in scores[s]) for d in ic)])
+        fold_rows.append(
+            {
+                "cutoff": fold.cutoff.isoformat(),
+                "start": fold.start.isoformat(),
+                "end": fold.end.isoformat(),
+                "regime": label,
+                "days": len(ic),
+                "ideas": top["days"] * 5,
+                "mean_ic": (sum(ic.values()) / len(ic)) if ic else None,
+                "top5_excess": top["excess"],
+            }
+        )
+    all_days = sorted({d for per in scores_all.values() for d in per})
+    top_all = top5_measures(scores_all, rets_all)
+    mom_all = top5_measures(momentum_scores({s: bars[s] for s in scored}, all_days), rets_all)
+    r1_res, r2_res, r3_res = r1(ic_all), r2(top_all["excess"], mom_all["excess"]), r3(fold_rows)
+    out: dict = {
+        "protocol": "sl-protocol-v1 (draft; ranking only)",
+        "folds": fold_rows,
+        "r1": r1_res,
+        "r2": r2_res,
+        "r3": r3_res,
+        "top5": {k: v for k, v in top_all.items() if k != "per_day_excess"},
+        "momentum5": {k: v for k, v in mom_all.items() if k != "per_day_excess"},
+        "by_market_condition": {
+            label: {
+                "days": len(ic),
+                "mean_ic": sum(ic.values()) / len(ic),
+                "top5_excess": top5_measures(cond_scores[label], rets_all)["excess"],
+            }
+            for label, ic in cond_ic.items()
+            if ic
+        },
+        "stocks_scored_max": max_scored,
+        "ic_by_day": ic_all,
+        "money": MONEY_NOT_EVALUATED,
+        "qualifies_for_winner": False,
+        "statement": TWO_QUESTIONS,
+    }
+    parts = [r1_res["passes"], r2_res["passes"], r3_res["passes"]]
+    if comparison_ic is not None and r4_mode is not None:
+        out["r4"] = r4(ic_all, comparison_ic, r4_mode)
+        parts.append(out["r4"]["passes"])
+    insufficient = r1_res["lower_bound"] is None or r3_res["state"] == "insufficient"
+    out["ranking_verdict"] = "pass" if all(parts) else ("insufficient" if insufficient else "fail")
+    return out

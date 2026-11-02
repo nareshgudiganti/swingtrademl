@@ -473,11 +473,57 @@ def test_register_is_a_noop_unless_enabled_and_scheduler_does_not_call_it(monkey
     assert settings.__class__.model_fields["LANE_SHADOW_ENABLED"].default is False
 
 
-def test_job_picks_lane_models_without_activating_and_keeps_a_slots_model(db):
+# ---------------------------------------------------------------- the owner chooses each slot's model (never auto-picked)
+
+
+def test_no_model_is_picked_automatically_and_the_owners_choice_is_used(db, monkeypatch):
+    import json
+
     old = ml_model(db, name="sl1_S0_a", horizon=15, version="v1")
-    ml_model(db, name="swing_classifier", horizon=15, version="prod", status="ACTIVE")
-    assert lane_job.lane_model_for(db, "15d-large").id == old.id
     newer = ml_model(db, name="sl1_S1_b", horizon=15, version="v2")
-    assert lane_job.lane_model_for(db, "15d-large").id == newer.id
+    ml_model(db, name="swing_classifier", horizon=15, version="prod", status="ACTIVE")
+    monkeypatch.setattr(settings, "LANE_SHADOW_MODELS", "")
+    assert lane_job.lane_model_for(db, "15d-large") is None  # lane-named models exist, but nobody chose one
+    monkeypatch.setattr(settings, "LANE_SHADOW_MODELS", json.dumps({"15d-large": old.id}))
+    assert lane_job.lane_model_for(db, "15d-large").id == old.id
     assert lane_job.lane_model_for(db, "15d-midcap") is None
+    monkeypatch.setattr(settings, "LANE_SHADOW_MODELS", json.dumps({"15d-large": newer.id, "10d-large": newer.id}))
+    assert lane_job.lane_model_for(db, "10d-large") is None  # a 15-day model is not registered for a 10-day slot
     assert old.status == "TRAINED" and newer.status == "TRAINED"
+
+
+def test_a_slot_keeps_its_model_and_a_different_configured_model_stops_the_slot(db, monkeypatch):
+    import json
+
+    first = ml_model(db, name="td_h10_a", horizon=10, version="v1")
+    other = ml_model(db, name="td_h10_b", horizon=10, version="v2")
+    _picks(db, first)  # records picks for slot 10d-large with `first`
+    monkeypatch.setattr(settings, "LANE_SHADOW_MODELS", json.dumps({"10d-large": other.id}))
+    assert lane_job.lane_model_for(db, "10d-large").id == first.id
+    assert "keeps model" in lane_job.model_conflict(db, "10d-large")
+    monkeypatch.setattr(settings, "LANE_SHADOW_MODELS", json.dumps({"10d-large": first.id}))
+    assert lane_job.model_conflict(db, "10d-large") is None
+
+
+def test_run_daily_uses_the_frozen_universe_and_stamps_its_hash_on_every_pick(db, monkeypatch):
+    import json
+    from datetime import UTC, datetime
+
+    m10 = ml_model(db, name="td_h10_a", horizon=10)
+    seen = {}
+    monkeypatch.setattr(settings, "LANE_SHADOW_MODELS", json.dumps({"10d-large": m10.id}))
+    monkeypatch.setattr(
+        lane_job.lane_universe,
+        "load_universe",
+        lambda: {"large": ["AAA", "BBB"], "mid": ["MMM"], "sha256": "abc"},
+    )
+
+    def spy(db_, model, slot, groups, signal_day, moment, **kw):
+        seen[slot] = (model.id, groups, kw)
+        return {"recorded": 0}
+
+    monkeypatch.setattr(lane_job.S, "record_day", spy)
+    out = lane_job.run_daily(db, now=datetime(2026, 12, 8, 14, 0, tzinfo=UTC))
+    assert seen["10d-large"][0] == m10.id and seen["10d-large"][1] == {"large": ["AAA", "BBB"]}
+    assert seen["10d-large"][2]["extra_flags"] == {"universe_sha256": "abc"}
+    assert out["slots"]["15d-large"].startswith("no_model") and out["slots"]["15d-midcap"].startswith("no_model")

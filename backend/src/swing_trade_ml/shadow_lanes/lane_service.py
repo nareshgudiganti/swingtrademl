@@ -217,6 +217,7 @@ def record_day(
     *,
     scorer: Scorer | None = None,
     min_ready_share: float = 0.0,
+    extra_flags: dict | None = None,
 ) -> dict:
     """Score the eligible stocks of each cap group with `model` and record the top 5 per group.
 
@@ -262,7 +263,7 @@ def record_day(
             f"only {len(scored)} of {len(symbols)} stocks are scoreable: the day's data is not ready"
         )
     top = rank_top(scored)
-    flags = {"eligible_n": len(scored), "eligible_symbols": sorted(s for s, _ in scored)}
+    flags = {"eligible_n": len(scored), "eligible_symbols": sorted(s for s, _ in scored), **(extra_flags or {})}
     if len(top) < TOP_N:
         flags["shortfall"] = TOP_N - len(top)
     try:

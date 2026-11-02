@@ -200,3 +200,106 @@ def test_the_tool_never_writes_to_the_database_or_activates_a_model():
     src = Path(td.__file__).read_text(encoding="utf-8")
     assert "auto_activate=False" in src
     assert "db.add(" not in src and "db.commit(" not in src and "activate_model" not in src
+
+
+# ---------------------------------------------------------------- benchmarks and account replay
+
+
+@pytest.mark.parametrize(
+    "rows",
+    [
+        [(100, 107, 95, 100)] + [(100, 100.2, 99.9, 100)] * 9,  # stop and target the same day -> stop
+        [(100, 101, 99.5, 100.5), (100.5, 102, 100, 101), (101, 107.5, 100.8, 107)]
+        + [(107, 107, 106, 106)] * 7,
+        [(100, 100.5, 99.5, 100), (92, 93, 90, 91)] + [(91, 92, 90, 91)] * 8,  # gap through the stop
+        [(100, 101, 99.5, 100.2)] * 12,  # neither level: close of bar 10
+        [(100, 101, 99.5, 100.2), (107, 108, 106, 107.5)]
+        + [(107, 108, 106, 107)] * 8,  # gap up through the target
+    ],
+)
+def test_the_scripted_exit_matches_the_scored_trade(rows):
+    b = bars_from(rows)
+    out, ex = td.score_trade(b), td.trade_exit(b)
+    assert ex is not None and ex[2] == {"stop": "stop", "target": "target", "timeout": "timeout"}[out.status]
+    assert ex[0] == out.exit_day
+
+
+def test_an_unfinished_trade_has_no_scripted_exit():
+    assert td.trade_exit(bars_from([(100, 101, 99.5, 100.2)] * 4)) is None
+    assert td.trade_exit(bars_from([])) is None
+
+
+def _nifty(bars):
+    first = next(iter(bars.values()))
+    return first[["day", "open", "high", "low", "close"]].copy()
+
+
+def test_the_result_carries_every_benchmark_the_protocol_lists():
+    bars = synthetic()
+    folds = td.make_folds(date(2023, 9, 1), date(2023, 10, 5))
+
+    def scores(fold):
+        return {
+            s: {d: float(i) for d in df["day"] if fold.start <= d <= fold.end}
+            for i, (s, df) in enumerate(bars.items())
+        }
+
+    res = td.evaluate(
+        bars,
+        folds,
+        scores,
+        nifty=_nifty(bars),
+        buckets=dict.fromkeys(bars, "A"),
+        random_draws=5,
+        account_draws=3,
+    )
+    b = res["benchmarks"]
+    assert b["random_5"]["draws"] == 5 and b["cash"] == {"avg_net": 0.0}
+    assert b["nifty_matched"]["ideas"] > 0
+    acc = b["accounts"]
+    assert set(acc) == {"best_5", "strongest_risers_5", "random_5_accounts", "nifty_held", "cash"}
+    assert acc["random_5_accounts"]["runs"] == 3 and acc["cash"]["final_net_return"] == 0.0
+    assert res["pooled"]["momentum"]["ideas"] > 0  # the 5 strongest 20-day risers, by trade
+    assert "not_yet_reported" not in res
+
+
+def test_a_missing_nifty_series_is_said_plainly_not_zero():
+    bars = synthetic()
+    folds = td.make_folds(date(2023, 9, 1), date(2023, 10, 5))
+    res = td.evaluate(
+        bars,
+        folds,
+        lambda f: {s: {d: 1.0 for d in df["day"] if f.start <= d <= f.end} for s, df in bars.items()},
+        random_draws=2,
+    )
+    assert str(res["benchmarks"]["nifty_matched"]).startswith("missing")
+    text = td.plain_report(res)
+    assert "Beside the model" in text and "NIFTY 50 over the same holds: missing" in text
+    assert str(res["benchmarks"]["accounts"]).startswith("missing")
+
+
+def test_the_report_lists_the_benchmarks_and_the_two_questions():
+    bars = synthetic()
+    folds = td.make_folds(date(2023, 9, 1), date(2023, 10, 5))
+    res = td.evaluate(
+        bars,
+        folds,
+        lambda f: {
+            s: {d: float(i) for d in df["day"] if f.start <= d <= f.end}
+            for i, (s, df) in enumerate(bars.items())
+        },
+        nifty=_nifty(bars),
+        buckets=dict.fromkeys(bars, "A"),
+        random_draws=3,
+        account_draws=2,
+    )
+    text = td.plain_report(res)
+    for needle in (
+        "Random 5 a day",
+        "NIFTY 50 over the same holds",
+        "Cash",
+        "Account replay",
+        "never proof",
+        "Ranking and trading are different questions",
+    ):
+        assert needle in text, needle

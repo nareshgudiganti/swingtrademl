@@ -180,6 +180,29 @@ the recommendation "yes" on each. T1 = **T1-c, +6% / −3.5%, 10 trading days**.
 changed by signing. Signing does not authorise running the history test (section 12 steps 2 to 4 come first),
 starting the forward lane, any order (paper or real), or any change to 5D, 15D, Phase B or the sealed trial.
 
+## 11a. Clarifications recorded before the tag (2026-11-02)
+
+These clarify how the signed rules are run; they change none of T1 to T6.
+
+- **C1 Label.** Every history result carries the label "HISTORICAL GATE - SURVIVOR-BIASED UNIVERSE (today's 49
+  stocks)": the 49 are today's watchlist, so stocks dropped or delisted over the years are missing. A pass allows a
+  watch-only lane to be proposed; it is never proof (section 3).
+- **C2 Costs.** The history uses the shared scorer's Rs 40,000 position for charges and slippage 0.10% per side in
+  total (pinned; the run refuses if the setting differs). The Rs 1,00,000 position in section 6 rule 4 applies to
+  the forward lane.
+- **C3 Levels.** Stop and target levels follow the slippage-adjusted fill, as the shared scorer does.
+- **C4 Execution limits.** No liquidity, circuit-limit, halt or volume-cap checks are modelled. This is recorded
+  in every report and must be resolved before any realistic portfolio simulation or trading approval.
+- **C5 One run, controlled technical reruns.** The gate runs once, on the confirmation window only, and a finished
+  report is never rerun or tuned against. If an attempt fails for infrastructure reasons (an execution failure or a
+  data-integrity failure) and leaves a ledger row but no report, it may be rerun with `--technical-rerun`, at most
+  twice, and only with one incident note per failed attempt in `docs/brain/evidence/td_v1/incidents/`. A note
+  names the kind, the cause, states "Result read: none" and "Same code and rules: yes". Each rerun is logged in
+  the exposure ledger. Reports are written whole or not at all and nothing is printed before they exist, so a result
+  cannot be seen and then called a failure. A third rerun, or any change of rule, is td-protocol-v2.
+- **C6 Training list.** Fold models train on an explicit sorted list of the 49; any other stock count refuses
+  the run before anything is written.
+
 ## 12. Freezing mechanics
 
 1. Owner signs section 11.

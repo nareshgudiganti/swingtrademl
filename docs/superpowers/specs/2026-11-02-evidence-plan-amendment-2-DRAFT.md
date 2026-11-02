@@ -12,9 +12,18 @@ Phase B, under limits that keep Phase B, the sealed trial and the live brain exa
 
 ## What is allowed
 
-1. **Candidates S0, S1 and S2, one run each**, in that order, offline, on the development window
+1. **Candidates S0, S1 and S2 (large group, the 49 stocks) and S0M, S1M and S2M (mid-cap group, 14 stocks), one run
+   each**, S0 then S1 then S2, and S0M then S1M then S2M, offline, on the development window
    2023-07-01 to 2026-08-15. S2r only if the owner adds it in writing. **S3 stays blocked** (owner 2026-10-29)
    until company-data timestamps, quality and licensing are verified.
+   The mid-cap group is the 24 training stocks of the app's mid-cap model minus the 10 of them that are in the
+   held-back 129, so 14 stocks, none in the 49. It is a **limited experiment**: results carry the warning "Limited
+   experiment: 14 stocks. Wide uncertainty. Not a basis for trading approval on its own." and the label is capped at
+   "NO WARNING (diagnostic, limited sample)". Results are also split by size group, each group measured against its
+   own median and its own average stock.
+   **Technical rerun.** A candidate whose attempt crashed (ledger row written, no result) may be rerun at most twice,
+   only with one incident note per failed attempt (kind execution or data-integrity failure, result never read, same
+   code and rules), each rerun logged in the exposure ledger. A finished result is never rerun.
 2. **Start no earlier than 2026-12-05**, after Phase B's lock date (2026-12-04). Phase B runs unchanged.
 3. **Ranking only (owner, 2026-11-02).** The lab judges the chart-based score, split by market condition. It
    contains no money management and produces no profit, cost, capital or account figure. The brain's risk gate is
@@ -47,7 +56,7 @@ The exposure-ledger row is written before any model is scored.
 
 ## Owner decisions (to sign — nothing signed)
 
-- [ ] A2-1 The lab may run after 2026-12-05, candidates S0, S1, S2 in order, one run each (items 1 and 2).
+- [ ] A2-1 The lab may run after 2026-12-05, candidates S0, S1, S2 (large) and S0M, S1M, S2M (mid, 14 stocks) in order, one run each, with the technical-rerun rule (items 1 and 2).
 - [ ] A2-2 Ranking only, no money figures (item 3).
 - [ ] A2-3 The 129 held-back stocks are not used in this release (item 4).
 - [ ] A2-4 No paid data (item 5).
@@ -59,4 +68,4 @@ Signature (owner): ____________________  Date: __________
 
 | Date | Change |
 |---|---|
-| (signing date) | Amendment 2 adopted (`2026-11-02-evidence-plan-amendment-2.md`): the 15-day selection lab may run offline after 2026-12-04 as S0, S1, S2, ranking only, held-back 129 untouched, no paid data, diagnostic label only. |
+| (signing date) | Amendment 2 adopted (`2026-11-02-evidence-plan-amendment-2.md`): the 15-day selection lab may run offline after 2026-12-04 as S0, S1, S2 and S0M, S1M, S2M, ranking only, held-back 129 untouched, no paid data, diagnostic label only. |

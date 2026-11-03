@@ -14,7 +14,6 @@ from sqlalchemy.exc import DBAPIError
 
 from swing_trade_ml.brain.lanes import h05_service
 from swing_trade_ml.db.models.lanes import H05Event, H05GroupDay, H05Run, H05Signal
-
 from test_h05_service import (  # noqa: F401  (fixture + helpers)
     NOW,
     SIGNAL,

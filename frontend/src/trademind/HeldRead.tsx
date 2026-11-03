@@ -2,6 +2,8 @@
 // which day of the trade it is, today's model score (and the change since the
 // last reading), and one suggestion word. Display only — nothing here sells.
 
+import { useState } from 'react'
+
 import type { DetailedPosition, Trade } from '../api/types'
 import { Tag } from './ui'
 
@@ -38,21 +40,69 @@ export function SellStatusTag({ p }: { p: DetailedPosition }) {
   )
 }
 
-/** The latest sells of one book, each with its plain label and the book it came from. Display only. */
-export function SellList({ trades, book, title = 'Latest sells' }: { trades: Trade[]; book: 'Bot' | 'Testing'; title?: string }) {
-  const latest = trades
-    .filter((t) => (t.book_label ?? book) === book)
-    .sort((a, b) => b.exit_at.localeCompare(a.exit_at))
-    .slice(0, 8)
-  if (latest.length === 0) return null
+export type SellFilter = string // 'all' | 'type:<sell label>' | 'reason:<exit reason label>'
+
+const reasonOf = (t: Trade) => t.exit_reason_label ?? t.exit_reason ?? 'No reason recorded'
+const typeOf = (t: Trade) => t.sell_label ?? 'Sold'
+
+/** The choices for the title dropdown, with how many sells each one matches. Only choices that match something. */
+export function sellFilterOptions(trades: Trade[]) {
+  const count = (keyOf: (t: Trade) => string) => {
+    const m = new Map<string, number>()
+    for (const t of trades) m.set(keyOf(t), (m.get(keyOf(t)) ?? 0) + 1)
+    return [...m.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+  }
+  return { total: trades.length, types: count(typeOf), reasons: count(reasonOf) }
+}
+
+export function filterSells(trades: Trade[], filter: SellFilter): Trade[] {
+  if (filter.startsWith('type:')) return trades.filter((t) => typeOf(t) === filter.slice(5))
+  if (filter.startsWith('reason:')) return trades.filter((t) => reasonOf(t) === filter.slice(7))
+  return trades
+}
+
+/** The sells of one book, newest first. The title is a dropdown: all sells, or only one type (PAPER SELL executed,
+ *  Partial SELL completed) or one reason (Stop-loss hit, Target reached ...). Display only. */
+export function SellList({ trades, book, title = 'Sells' }: { trades: Trade[]; book: 'Bot' | 'Testing'; title?: string }) {
+  const [filter, setFilter] = useState<SellFilter>('all')
+  const mine = trades.filter((t) => (t.book_label ?? book) === book).sort((a, b) => b.exit_at.localeCompare(a.exit_at))
+  if (mine.length === 0) return null
+  const opts = sellFilterOptions(mine)
+  const shown = filterSells(mine, filter).slice(0, 12)
+  const matching = filterSells(mine, filter).length
   return (
     <div data-testid="sell-list">
-      <div className="tm-stat-label">{title}</div>
+      <label className="tm-stat-label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+        <select
+          aria-label={`${title}: choose which sells to show`}
+          data-testid="sell-filter"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          style={{ font: 'inherit', fontWeight: 600, padding: '0.2rem 0.4rem', borderRadius: 6, maxWidth: '24rem' }}
+        >
+          <option value="all">{`${title}: all (${opts.total})`}</option>
+          <optgroup label="By type">
+            {opts.types.map(([name, n]) => (
+              <option key={`type:${name}`} value={`type:${name}`}>
+                {`${name} (${n})`}
+              </option>
+            ))}
+          </optgroup>
+          <optgroup label="By reason">
+            {opts.reasons.map(([name, n]) => (
+              <option key={`reason:${name}`} value={`reason:${name}`}>
+                {`${name} (${n})`}
+              </option>
+            ))}
+          </optgroup>
+        </select>
+        {matching > shown.length && <span className="tm-dim">showing the latest {shown.length} of {matching}</span>}
+      </label>
       <ul style={{ margin: '0.3rem 0 0', paddingLeft: '1.1rem' }}>
-        {latest.map((t) => (
+        {shown.map((t) => (
           <li key={t.id}>
-            <strong>{t.symbol}</strong> · <Tag tone={t.sell_label === 'Partial SELL completed' ? 'blue' : 'green'}>{t.sell_label ?? 'Sold'}</Tag>{' '}
-            ({t.book_label ?? book}) · {t.exit_reason_label ?? t.exit_reason ?? 'no reason recorded'} · {t.exit_at.slice(0, 10)}
+            <strong>{t.symbol}</strong> · <Tag tone={typeOf(t) === 'Partial SELL completed' ? 'blue' : 'green'}>{typeOf(t)}</Tag>{' '}
+            ({t.book_label ?? book}) · {reasonOf(t)} · {t.exit_at.slice(0, 10)}
           </li>
         ))}
       </ul>

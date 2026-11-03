@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import asyncio
 import html
+import re
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
@@ -32,6 +34,31 @@ MAX_MESSAGE_LENGTH = 4000
 
 def _esc(value: Any) -> str:
     return html.escape(str(value), quote=False)
+
+
+@dataclass(frozen=True)
+class SendResult:
+    """How one send ended. `ok` means Telegram's API accepted the message, not that a phone received it.
+    `skipped` means nothing was attempted (Telegram is off for this environment). `error_kind` is an exception
+    class name or "http_<status>", never a message that could carry the bot token."""
+
+    ok: bool
+    skipped: bool = False
+    http_status: int | None = None
+    error_kind: str | None = None
+    error_detail: str | None = None
+
+
+_TOKEN_SHAPE = re.compile(r"\d{6,}:[A-Za-z0-9_-]{20,}")
+
+
+def scrub(text: str | None, token: str = "") -> str | None:
+    """Remove anything shaped like a bot token, and the configured token itself, before storing or logging."""
+    if not text:
+        return None
+    if token:
+        text = text.replace(token, "[token]")
+    return _TOKEN_SHAPE.sub("[token]", text)[:160]
 
 
 class TelegramNotifier:
@@ -83,6 +110,9 @@ class TelegramNotifier:
         return await self._post(text)
 
     async def _post(self, text: str) -> bool:
+        return (await self._post_detail(text)).ok
+
+    async def _post_detail(self, text: str) -> SendResult:
         payload = {
             "chat_id": self._chat_id,
             "text": text[:MAX_MESSAGE_LENGTH],
@@ -101,11 +131,32 @@ class TelegramNotifier:
                     status=response.status_code,
                     body=response.text[:300],
                 )
-                return False
-            return True
+                try:
+                    description = response.json().get("description")
+                except Exception:  # noqa: BLE001 - an unreadable error body is simply not recorded
+                    description = None
+                return SendResult(
+                    False,
+                    http_status=response.status_code,
+                    error_kind=f"http_{response.status_code}",
+                    error_detail=scrub(description, self._token),
+                )
+            return SendResult(True, http_status=200)
         except Exception as exc:  # noqa: BLE001 — never let notification failure propagate
-            log.error("telegram.send_error", error=str(exc))
-            return False
+            # Keep only the class name: an httpx error message can hold the request URL, which has the token.
+            log.error("telegram.send_error", error_kind=type(exc).__name__)
+            return SendResult(False, error_kind=type(exc).__name__)
+
+    def send_sync_result(
+        self, text: str, event: NotificationEvent | str = NotificationEvent.SYSTEM
+    ) -> SendResult:
+        """Like send_sync, but says how it ended. Blocking, for scheduler threads."""
+        if not self._should_send(event):
+            return SendResult(False, skipped=True)
+        try:
+            return asyncio.run(self._post_detail(text))
+        except RuntimeError as exc:
+            return SendResult(False, error_kind=type(exc).__name__)
 
     def deliver_sync(self, text: str) -> bool:
         """Send already-held messages (the digest), past the alert settings. Blocking, for

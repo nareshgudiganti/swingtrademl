@@ -39,7 +39,7 @@ from swing_trade_ml.db.models.market import Instrument
 from swing_trade_ml.db.models.trading import Order, Position, Signal, Strategy, Trade
 from swing_trade_ml.ml import real_question
 from swing_trade_ml.notifications import alert_policy, notifier
-from swing_trade_ml.services import risk, score_history, sell_labels, system_state
+from swing_trade_ml.services import notification_log, risk, score_history, sell_labels, system_state
 from swing_trade_ml.services.costs import compute_charges
 from swing_trade_ml.services.exit_policy import (
     exit_confidence_for,
@@ -598,8 +598,9 @@ def close_position(
             pnl=round(trade.net_pnl, 2),
             reason=reason,
         )
-        notifier.send_sync(
-            _partial_exit_message(instrument, trade, position, reason, broker.mode, _book(position)), "fill"
+        _notify_sell(
+            _partial_exit_message(instrument, trade, position, reason, broker.mode, _book(position)),
+            trade, position, partial=True,
         )
         return trade
 
@@ -615,10 +616,7 @@ def close_position(
         reason=reason,
     )
 
-    notifier.send_sync(
-        _exit_message(instrument, trade, reason, broker.mode, _book(position)),
-        "fill",
-    )
+    _notify_sell(_exit_message(instrument, trade, reason, broker.mode, _book(position)), trade, position)
     return trade
 
 
@@ -656,9 +654,7 @@ def manual_close_position(
         reason=reason,
     )
 
-    notifier.send_sync(
-        _exit_message(instrument, trade, reason, position.mode, _book(position)), "fill"
-    )
+    _notify_sell(_exit_message(instrument, trade, reason, position.mode, _book(position)), trade, position)
     return trade
 
 
@@ -1797,11 +1793,11 @@ def _finish_reconciled_order(db: Session, order: Order, result: OrderResult) -> 
                 symbol=instrument.tradingsymbol, order_id=order.id, price=fill_price,
                 qty=filled_qty, remaining=position.quantity,
             )
-            notifier.send_sync(
+            _notify_sell(
                 _partial_exit_message(
                     instrument, trade, position, partial_reason, order.mode, _book(position)
                 ),
-                "fill",
+                trade, position, partial=True,
             )
             # Still open, holding the rest — and now sellable again.
             position.exit_in_progress_at = None
@@ -1824,7 +1820,9 @@ def _finish_reconciled_order(db: Session, order: Order, result: OrderResult) -> 
             symbol=instrument.tradingsymbol, order_id=order.id, price=fill_price,
             reason=str(exit_reason),
         )
-        notifier.send_sync(_exit_message(instrument, trade, exit_reason, order.mode, _book(position)), "fill")
+        _notify_sell(
+            _exit_message(instrument, trade, exit_reason, order.mode, _book(position)), trade, position
+        )
 
 
 def _fail_reconciled_order(db: Session, order: Order, result: OrderResult) -> None:
@@ -1898,6 +1896,24 @@ def _entry_message(instrument, position, signal, result, mode) -> str:
         f"Stop: ₹{position.stop_loss or 0:,.2f}  ·  Target: ₹{position.take_profit or 0:,.2f}\n"
         f"Order: <code>{result.broker_order_id}</code>"
     )
+
+
+def _notify_sell(text: str, trade, position, partial: bool = False) -> None:
+    """Send a sell alert once per trade and record how it went (services/notification_log.py).
+    Never raises: a notification problem must not touch the trade that was just saved."""
+    try:
+        notification_log.send_logged(
+            text,
+            # One alert per saved trade; the fill time is in the key so a reused id cannot collide.
+            dedupe_key=f"sell:{trade.id}:{int(trade.exit_at.timestamp())}",
+            message_type="sell_partial" if partial else "sell_full",
+            book=_book(position),
+            symbol=trade.symbol,
+            trade_id=trade.id,
+            position_id=position.id,
+        )
+    except Exception as exc:  # noqa: BLE001
+        log.warning("execution.sell_alert_failed", error_kind=type(exc).__name__)
 
 
 def _book(position) -> str:

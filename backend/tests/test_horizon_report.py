@@ -8,7 +8,7 @@ from __future__ import annotations
 from datetime import UTC, date, datetime, timedelta
 
 import pytest
-from tests.test_lane_shadow_api import headers, seed
+from test_lane_shadow_api import headers, seed
 
 from swing_trade_ml.db.models.lane_shadow import LaneOutcome, LanePick
 from swing_trade_ml.db.models.market import Candle, Instrument

@@ -456,7 +456,7 @@ def test_new_modules_do_not_import_money_brain_modules_or_h05():
         assert not [m for m in names if any(b in m for b in banned)], (f.name, names)
 
 
-def test_register_is_a_noop_unless_enabled_and_scheduler_does_not_call_it(monkeypatch):
+def test_register_is_a_noop_unless_enabled_and_scheduler_wiring_is_guarded(monkeypatch):
     class Sched:
         def __init__(self):
             self.jobs = []
@@ -469,7 +469,8 @@ def test_register_is_a_noop_unless_enabled_and_scheduler_does_not_call_it(monkey
     assert lane_job.register(s) is False and s.jobs == []
     monkeypatch.setattr(settings, "LANE_SHADOW_ENABLED", True)
     assert lane_job.register(s) is True and len(s.jobs) == 1
-    assert "lane_job" not in (ROOT / "src/swing_trade_ml/workers/scheduler.py").read_text(encoding="utf-8")
+    # the scheduler wires it only through the guarded add_lane_job (see test_lane_job_wiring.py)
+    assert "add_lane_job(scheduler)" in (ROOT / "src/swing_trade_ml/workers/scheduler.py").read_text(encoding="utf-8")
     assert settings.__class__.model_fields["LANE_SHADOW_ENABLED"].default is False
 
 

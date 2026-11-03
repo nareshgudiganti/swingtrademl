@@ -1,9 +1,13 @@
 # ruff: noqa: E501, N812 (long explanatory lines; S is the service alias)
 """The shared shadow-lane daily job: record the latest closed session's top 5, then score matured picks.
 
-DISABLED by default and NOT wired into the scheduler: `register(scheduler)` adds nothing unless the setting
-LANE_SHADOW_ENABLED is true, and nothing in `workers/scheduler.py` calls it. The owner approves wiring and
-deploy separately. It never activates a model, never trades and writes only `lane_picks` / `lane_outcomes`.
+DISABLED by default: `register(scheduler)` adds nothing unless the setting LANE_SHADOW_ENABLED is true.
+`workers/scheduler.py` calls it through a guarded `add_lane_job` that never raises. It never activates a model,
+never trades and writes only `lane_picks` / `lane_outcomes`.
+
+Each slot (10d-large, 15d-large, 15d-midcap) runs in its own savepoint: any error in one slot (a missing model, bad
+data, a database error) is logged and recorded for that slot and the other slots still score and commit. A Postgres
+advisory lock stops two runs overlapping; a second run skips and records that it did.
 
 The owner chooses each slot's model in LANE_SHADOW_MODELS (a JSON map of slot key to model id); nothing is auto-picked, and a
 slot keeps the model it first used: a configured model that differs from the slot's existing picks stops that slot.
@@ -13,11 +17,12 @@ The stock lists come from the frozen universe file (the locked 49 and the 14 mid
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
 from apscheduler.triggers.cron import CronTrigger
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from swing_trade_ml.core.config import settings
@@ -33,6 +38,7 @@ log = get_logger(__name__)
 IST = ZoneInfo("Asia/Kolkata")
 JOB_ID = "lane_shadow_daily"
 SCHEDULE = {"day_of_week": "mon-sat", "hour": "18,20,22", "minute": 45}
+LOCK_KEY = 7_300_145_002  # one Postgres advisory lock key for the whole job
 READY_SHARE = 0.8  # record only when at least this share of the group's stocks can be scored
 
 
@@ -79,41 +85,79 @@ def model_conflict(db: Session, slot_key: str) -> str | None:
     return None
 
 
+def _try_lock(db: Session | None) -> bool:
+    """Take the job's transaction-level advisory lock; False when another run holds it. Released at commit/rollback."""
+    if db is None:
+        return True
+    return bool(db.scalar(text("SELECT pg_try_advisory_xact_lock(:k)"), {"k": LOCK_KEY}))
+
+
+def _isolated(db: Session | None, fn: Callable[[], object]):
+    """Run `fn` in its own savepoint so a failure inside it (including a database error) is rolled back alone and
+    leaves the surrounding transaction usable for the next slot."""
+    if db is None:
+        return fn()
+    with db.begin_nested():
+        return fn()
+
+
 def run_daily(db: Session, now: datetime | None = None) -> dict:
     moment = now or datetime.now(UTC)
     signal_day = last_closed_trading_day(moment)
     result: dict = {"signal_day": str(signal_day), "slots": {}}
+    if not _try_lock(db):
+        result["skipped"] = "another_run_active"
+        return result
     try:
         universe = lane_universe.load_universe()
     except lane_universe.UniverseError as exc:
         for slot_key in S.SLOTS:
             result["slots"][slot_key] = f"no_universe: {exc}"
-        result["outcomes"] = S.evaluate_matured(db, signal_day)
+        result["outcomes"] = _outcomes(db, signal_day)
         return result
     for slot_key, (_, group) in S.SLOTS.items():
-        conflict = model_conflict(db, slot_key)
-        if conflict:
-            result["slots"][slot_key] = f"model_mismatch: {conflict}"
-            continue
-        model = lane_model_for(db, slot_key)
-        if model is None:
-            result["slots"][slot_key] = "no_model: choose one in LANE_SHADOW_MODELS"
-            continue
         try:
-            result["slots"][slot_key] = S.record_day(
+            result["slots"][slot_key] = _isolated(
                 db,
-                model,
-                slot_key,
-                {group: lane_universe.group_symbols(universe, group)},
-                signal_day,
-                moment,
-                min_ready_share=READY_SHARE,
-                extra_flags={"universe_sha256": universe["sha256"]},
+                lambda slot_key=slot_key, group=group: _run_slot(
+                    db, slot_key, group, universe, signal_day, moment
+                ),
             )
         except S.LaneError as exc:
             result["slots"][slot_key] = f"not_recorded: {exc}"
-    result["outcomes"] = S.evaluate_matured(db, signal_day)
+        except Exception as exc:  # noqa: BLE001  (one slot must never stop the others)
+            result["slots"][slot_key] = f"error: {type(exc).__name__}"
+            log.error("lane_shadow.slot_failed", slot=slot_key, error_kind=type(exc).__name__)
+    result["outcomes"] = _outcomes(db, signal_day)
     return result
+
+
+def _run_slot(db: Session, slot_key: str, group: str, universe: dict, signal_day, moment: datetime):
+    conflict = model_conflict(db, slot_key)
+    if conflict:
+        return f"model_mismatch: {conflict}"
+    model = lane_model_for(db, slot_key)
+    if model is None:
+        return "no_model: choose one in LANE_SHADOW_MODELS"
+    return S.record_day(
+        db,
+        model,
+        slot_key,
+        {group: lane_universe.group_symbols(universe, group)},
+        signal_day,
+        moment,
+        min_ready_share=READY_SHARE,
+        extra_flags={"universe_sha256": universe["sha256"]},
+    )
+
+
+def _outcomes(db: Session | None, signal_day) -> dict | str:
+    """Score matured picks in their own savepoint: a failure here never undoes the picks just recorded."""
+    try:
+        return _isolated(db, lambda: S.evaluate_matured(db, signal_day))
+    except Exception as exc:  # noqa: BLE001
+        log.error("lane_shadow.outcomes_failed", error_kind=type(exc).__name__)
+        return f"error: {type(exc).__name__}"
 
 
 def job_lane_daily() -> None:
@@ -123,7 +167,12 @@ def job_lane_daily() -> None:
     try:
         with session_scope() as db:
             result = run_daily(db)
-        log.info("lane_shadow.daily", signal_day=result["signal_day"])
+        log.info(
+            "lane_shadow.daily",
+            signal_day=result["signal_day"],
+            skipped=result.get("skipped"),
+            slots={k: (v if isinstance(v, str) else "ok") for k, v in result["slots"].items()},
+        )
     except Exception as exc:  # noqa: BLE001
         log.error("lane_shadow.daily_failed", error_kind=type(exc).__name__)
 

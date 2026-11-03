@@ -22,21 +22,29 @@ from swing_trade_ml.db.models.market import Instrument
 from swing_trade_ml.brokers.kite import kite_broker
 
 IST = ZoneInfo("Asia/Kolkata")
+# (symbol, from, to). BAJAJELEC is added for the Sep-2023 demerger (+38.8% step in our stored data; a demerger should LOWER
+# the parent's price, so check whether Kite shows a drop or a rise around the ex-date 2023-09-14 and compare with our stored bars).
+CHECKS = [
+    ("HINDUNILVR", datetime(2025, 11, 25, tzinfo=IST), datetime(2025, 12, 12, 23, 59, tzinfo=IST)),
+    ("BAJAJELEC", datetime(2023, 9, 8, tzinfo=IST), datetime(2023, 9, 20, 23, 59, tzinfo=IST)),
+]
 with session_scope() as db:
-    inst = db.execute(
-        select(Instrument).where(Instrument.tradingsymbol == "HINDUNILVR", Instrument.exchange == "NSE")
-    ).scalar_one()
     if not kite_broker.load_session(db):  # reads the newest active BrokerSession
         raise SystemExit("no active Kite session - do NOT log in; stop")
-    bars = kite_broker._kite.historical_data(  # raw client: no auto-login side effect
-        instrument_token=inst.instrument_token,
-        from_date=datetime(2025, 11, 25, tzinfo=IST),
-        to_date=datetime(2025, 12, 12, 23, 59, tzinfo=IST),
-        interval="day",
-        continuous=False,
-        oi=False,
-    )
-    for b in bars:
-        print(b["date"], b["open"], b["high"], b["low"], b["close"], b["volume"])
+    for symbol, frm, to in CHECKS:
+        inst = db.execute(
+            select(Instrument).where(Instrument.tradingsymbol == symbol, Instrument.exchange == "NSE")
+        ).scalar_one()
+        bars = kite_broker._kite.historical_data(  # raw client: no auto-login side effect
+            instrument_token=inst.instrument_token,
+            from_date=frm,
+            to_date=to,
+            interval="day",
+            continuous=False,
+            oi=False,
+        )
+        print("==", symbol)
+        for b in bars:
+            print(b["date"], b["open"], b["high"], b["low"], b["close"], b["volume"])
     db.rollback()  # nothing is committed
 PY

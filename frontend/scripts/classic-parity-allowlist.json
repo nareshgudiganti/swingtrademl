@@ -36,7 +36,14 @@
   "HorizonPicks": {
     "lanePicks": { "status": "keep", "note": "owner-only classic-shell page by design (owner 2026-11-01: horizon picks tab); not part of TradeMind" },
     "lanes": { "status": "keep", "note": "owner-only classic-shell page by design (owner 2026-11-02: horizon picks tab); not part of TradeMind" },
-    "lanePickRows": { "status": "keep", "note": "owner-only classic-shell page by design (owner 2026-11-02: horizon picks tab); not part of TradeMind" }
+    "lanePickRows": { "status": "keep", "note": "owner-only classic-shell page by design (owner 2026-11-02: horizon picks tab); not part of TradeMind" },
+    "horizonReport": { "status": "keep", "note": "owner-only classic-shell page by design (the same horizon picks tab as the lane cards); not part of TradeMind" }
+  },
+  "HorizonReport": {
+    "horizonReport": { "status": "keep", "note": "owner-only classic-shell page by design (the same horizon picks tab as the lane cards); not part of TradeMind" }
+  },
+  "HorizonReport.test": {
+    "horizonReport": { "status": "keep", "note": "owner-only classic-shell page by design (the same horizon picks tab as the lane cards); not part of TradeMind" }
   },
   "HorizonPicks.test": {
     "lanePicks": { "status": "keep", "note": "owner-only classic-shell page by design (owner 2026-11-01: horizon picks tab); not part of TradeMind" },

@@ -34,6 +34,7 @@ from swing_trade_ml.core.market_session import last_closed_trading_day, next_tra
 from swing_trade_ml.db.models.lane_shadow import LaneOutcome, LanePick
 from swing_trade_ml.db.models.market import Candle, Instrument
 from swing_trade_ml.db.models.ml import MLModel
+from swing_trade_ml.services import lane_slots
 from swing_trade_ml.services.costs import apply_slippage
 from swing_trade_ml.services.model_registry import slot_for
 
@@ -45,17 +46,10 @@ EXTRA_SLIP = 0.0005
 STRESS = CostStress(extra_slip=EXTRA_SLIP)
 GROSS = CostStress(charges_x=0.0, extra_slip=0.0)  # same rule, brokerage and taxes removed (slippage kept)
 
-#: slot -> (horizon in sessions, cap group)
-SLOTS: dict[str, tuple[int, str]] = {
-    "10d-large": (10, "large"),
-    "15d-large": (15, "large"),
-    "15d-midcap": (15, "mid"),
-}
-#: horizon -> pinned trade rule
-RULES: dict[int, dict] = {
-    10: {"target": 0.06, "stop": 0.035, "half_out": None},
-    15: {"target": 0.08, "stop": 0.04, "half_out": 0.05},
-}
+#: slot -> (horizon in sessions, cap group) and horizon -> pinned trade rule. Both are live views over the one slot table
+#: in services/lane_slots.py: a new slot is added there, not here.
+SLOTS: dict[str, tuple[int, str]] = lane_slots.SLOTS_VIEW
+RULES: dict[int, dict] = lane_slots.RULES_VIEW
 
 
 class LaneError(Exception):

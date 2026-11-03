@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -36,9 +35,7 @@ from swing_trade_ml.db.models.session import User
 from swing_trade_ml.db.models.trading import Strategy
 from swing_trade_ml.ml.real_question import resolve_model_name
 from swing_trade_ml.services import audit
-
-HORIZONS = (15, 10, 5)
-TIERS = ("large", "midcap", "smallcap")
+from swing_trade_ml.services.lane_slots import HORIZONS, TIERS, fold_name_pattern, prefix_table
 
 #: The only model names mapped to a cap group. Exact matches; no suffix guessing.
 VERIFIED_NAMES: dict[str, str] = {
@@ -46,18 +43,6 @@ VERIFIED_NAMES: dict[str, str] = {
     "swing_classifier_midcap": "midcap",
     "swing_classifier_smallcap": "smallcap",
 }
-
-#: Shadow-lane model families: (name prefix, the one horizon it is valid for, cap tier). A name must START with the
-#: prefix (which ends in "_") and the model must be of that horizon. The mid-cap prefixes carry an "M".
-LANE_PREFIXES: tuple[tuple[str, int, str], ...] = (
-    ("td_h10_", 10, "large"),
-    ("sl1_S0_", 15, "large"),
-    ("sl1_S1_", 15, "large"),
-    ("sl1_S2_", 15, "large"),
-    ("sl1_S0M_", 15, "midcap"),
-    ("sl1_S1M_", 15, "midcap"),
-    ("sl1_S2M_", 15, "midcap"),
-)
 
 #: Descriptive labels. None of them means validated, and none of them starts or enables anything.
 RESEARCH_STATUSES = ("not_started", "researching", "paused", "dropped")
@@ -93,7 +78,7 @@ def slot_for(name: str | None, horizon: int | None) -> str | None:
         return None
     if name in VERIFIED_NAMES:
         return slot_key(horizon, VERIFIED_NAMES[name])
-    for prefix, lane_horizon, tier in LANE_PREFIXES:
+    for prefix, lane_horizon, tier in prefix_table():  # the lane families come from services/lane_slots.py
         if name.startswith(prefix) and horizon == lane_horizon:
             return slot_key(horizon, tier)
     return None
@@ -101,8 +86,6 @@ def slot_for(name: str | None, horizon: int | None) -> str | None:
 
 #: Model roles (ml_models.model_role). Only "final" (frozen after a passed history test) may be scored by a shadow lane.
 ROLES: tuple[str, ...] = ("fold", "final", "prod")
-#: Evaluation-fold names, e.g. sl1_S1_20230701: lane prefix followed straight by a date, never "lane_".
-_FOLD_NAME = re.compile(r"^(?:sl1_S[012]M?|td_h10)_\d{8}$")
 
 
 def role_of(m: Any) -> dict[str, Any]:
@@ -111,7 +94,7 @@ def role_of(m: Any) -> dict[str, Any]:
     stored = getattr(m, "model_role", None)
     if stored in ROLES:
         return {"role": stored, "recorded": True}
-    if _FOLD_NAME.match(getattr(m, "name", "") or ""):
+    if fold_name_pattern().match(getattr(m, "name", "") or ""):
         return {"role": "fold", "recorded": False}
     return {"role": "unmarked", "recorded": False}
 

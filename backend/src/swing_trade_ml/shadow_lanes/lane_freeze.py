@@ -25,12 +25,10 @@ from datetime import date, datetime
 from pathlib import Path
 
 MODEL_DIR = "docs/brain/evidence/lane_models"
-#: slot -> the candidates whose history test may feed it
-SLOT_CANDIDATES = {
-    "10d-large": ("TD10",),
-    "15d-large": ("S0", "S1", "S2"),
-    "15d-midcap": ("S0M", "S1M", "S2M"),
-}
+#: slot -> the candidates whose history test may feed it (a live view over services/lane_slots.py). A NEW candidate
+#: also needs its own training recipe below: that is a model, not infrastructure.
+from swing_trade_ml.services.lane_slots import CANDIDATES_VIEW as SLOT_CANDIDATES  # noqa: E402
+
 BARRIER = {"TD10": (10, 0.06, 0.035), "S0": (15, 0.08, 0.04), "S0M": (15, 0.08, 0.04)}
 
 

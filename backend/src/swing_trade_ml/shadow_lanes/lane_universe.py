@@ -100,8 +100,12 @@ def load_universe(repo_root: Path | None = None) -> dict:
 
 
 def group_symbols(universe: dict, cap_group: str) -> list[str]:
-    if cap_group not in ("large", "mid"):
+    from swing_trade_ml.services.lane_slots import all_slots
+
+    if cap_group not in {slot.universe_group for slot in all_slots()}:
         raise UniverseError(f"unknown cap group {cap_group!r}")
+    if cap_group not in universe:
+        raise UniverseError(f"the frozen lane universe has no {cap_group!r} list")
     return list(universe[cap_group])
 
 

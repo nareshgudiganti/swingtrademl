@@ -207,6 +207,11 @@ function PositionsBody() {
           <dd style={{ color: 'var(--tm-violet)' }}>up to {selected.horizon_days} trading days</dd>
         </dl>
       )}
+      {pos?.sell_status && (
+        <p data-testid="sell-status" style={{ margin: '0.6rem 0 0' }}>
+          <Tag tone={pos.sell_status === 'SELL review required' ? 'red' : 'amber'}>{pos.sell_status}</Tag>
+        </p>
+      )}
       {pos &&
         ((pos.score_trail?.length ?? 0) > 0 || (!pos.score_from_trail && pos.last_confidence != null)) && (
         <div style={{ marginTop: '0.9rem' }}>

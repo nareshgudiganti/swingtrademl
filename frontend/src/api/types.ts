@@ -267,10 +267,10 @@ export interface DetailedPosition {
   day_number?: number
   /** A trade is planned to finish within this many trading days (15). */
   trade_limit_days?: number
-  /** One word on what to do today. Display only. */
   /** "SELL review required" or "Exit check unavailable"; absent when nothing needs saying. */
   sell_status?: string | null
   book_label?: string
+  /** One word on what to do today. Display only. */
   suggestion?: 'SELL' | 'SELL_PARTIALLY' | 'WATCH' | 'HOLD'
   suggestion_reason?: string
 }

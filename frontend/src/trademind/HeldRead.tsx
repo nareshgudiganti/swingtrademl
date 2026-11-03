@@ -2,7 +2,7 @@
 // which day of the trade it is, today's model score (and the change since the
 // last reading), and one suggestion word. Display only — nothing here sells.
 
-import type { DetailedPosition } from '../api/types'
+import type { DetailedPosition, Trade } from '../api/types'
 import { Tag } from './ui'
 
 export type Suggestion = NonNullable<DetailedPosition['suggestion']>
@@ -34,6 +34,28 @@ export function SellStatusTag({ p }: { p: DetailedPosition }) {
   return (
     <div>
       <Tag tone={review ? 'red' : 'amber'}>{p.sell_status}</Tag>
+    </div>
+  )
+}
+
+/** The latest sells of one book, each with its plain label and the book it came from. Display only. */
+export function SellList({ trades, book, title = 'Latest sells' }: { trades: Trade[]; book: 'Bot' | 'Testing'; title?: string }) {
+  const latest = trades
+    .filter((t) => (t.book_label ?? book) === book)
+    .sort((a, b) => b.exit_at.localeCompare(a.exit_at))
+    .slice(0, 8)
+  if (latest.length === 0) return null
+  return (
+    <div data-testid="sell-list">
+      <div className="tm-stat-label">{title}</div>
+      <ul style={{ margin: '0.3rem 0 0', paddingLeft: '1.1rem' }}>
+        {latest.map((t) => (
+          <li key={t.id}>
+            <strong>{t.symbol}</strong> · <Tag tone={t.sell_label === 'Partial SELL completed' ? 'blue' : 'green'}>{t.sell_label ?? 'Sold'}</Tag>{' '}
+            ({t.book_label ?? book}) · {t.exit_reason_label ?? t.exit_reason ?? 'no reason recorded'} · {t.exit_at.slice(0, 10)}
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }

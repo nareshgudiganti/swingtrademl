@@ -36,6 +36,7 @@ import { stoppedByRoom } from '../today/answerRules'
 import { ideaCounts } from '../today/TodayIdeas'
 import { scorePoints } from '../scoreText'
 import { useSort } from '../sort'
+import { SellList } from '../HeldRead'
 import { GlowArea, inr, StockLogo, Tag } from '../ui'
 import '../newlook-w2.css'
 
@@ -53,6 +54,7 @@ export default function PortfolioNew({ owner = false }: { owner?: boolean }) {
   const limits = useQuery({ queryKey: ['riskLimits'], queryFn: api.riskLimits, enabled: owner, retry: false })
   const safety = useQuery({ queryKey: ['safetyState'], queryFn: api.safetyState, enabled: owner, retry: false })
   const status = useQuery({ queryKey: ['status'], queryFn: api.status, retry: false })
+  const sells = useQuery({ queryKey: ['trades', 50], queryFn: () => api.trades(50), retry: false })
   const equity = useQuery({ queryKey: ['equityCurve', 400], queryFn: () => api.equityCurve(400), retry: false })
 
   const rows = heldRows(positions.data, run)
@@ -96,6 +98,12 @@ export default function PortfolioNew({ owner = false }: { owner?: boolean }) {
       )}
 
       <HeldTable rows={rows} positionsLoaded={positions.data !== undefined} positionsRefused={refused(positions)} runLoaded={!!run} />
+
+      {(sells.data?.length ?? 0) > 0 && (
+        <section className="tmn-card tmn-w2-pad" aria-label="Latest sells" data-testid="bot-sells">
+          <SellList trades={sells.data ?? []} book="Bot" />
+        </section>
+      )}
 
       <Sectors owner={owner} limits={limits.data} positions={positions.data} total={summary.data?.total_value ?? null} />
 
@@ -252,6 +260,11 @@ function HeldTable({
                     <span className="tm-dim tmn-small">Not read tonight</span>
                   )}
                 </span>
+                {p?.sell_status && (
+                  <span data-testid="sell-status">
+                    <Tag tone={p.sell_status === 'SELL review required' ? 'red' : 'amber'}>{p.sell_status}</Tag>
+                  </span>
+                )}
                 {positionsLoaded && (
                   <span className="tmn-w2-hcard-money">
                     <span className={`tmn-w2-hcard-pct ${p ? (p.unrealized_pnl >= 0 ? 'tm-pos' : 'tm-neg') : ''}`}>

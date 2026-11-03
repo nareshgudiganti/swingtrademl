@@ -139,7 +139,8 @@ def build_sector_features(
     cal = cal.sort_values()
 
     def on_cal(s: pd.Series) -> pd.Series:
-        return s.reindex(cal).ffill(limit=max_ffill)
+        placed = s.reindex(cal)
+        return placed.ffill(limit=max_ffill) if max_ffill > 0 else placed  # pandas rejects limit=0
 
     nif = on_cal(nifty)
     stk = on_cal(stock)

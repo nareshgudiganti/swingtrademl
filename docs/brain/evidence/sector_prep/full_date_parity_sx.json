@@ -1,0 +1,245 @@
+{
+ "stocks": 47,
+ "stock_dates": 59361,
+ "comparisons_stock_date_feature": 237444,
+ "mismatches": 0,
+ "fully_valid_stock_dates": 57266,
+ "per_stock": {
+  "ADANIENT": {
+   "dates": 1263,
+   "mismatches": 0,
+   "valid_dates": 1219
+  },
+  "ADANIPORTS": {
+   "dates": 1263,
+   "mismatches": 0,
+   "valid_dates": 1219
+  },
+  "APOLLOHOSP": {
+   "dates": 1263,
+   "mismatches": 0,
+   "valid_dates": 1192
+  },
+  "AXISBANK": {
+   "dates": 1263,
+   "mismatches": 0,
+   "valid_dates": 1219
+  },
+  "BAJAJ-AUTO": {
+   "dates": 1263,
+   "mismatches": 0,
+   "valid_dates": 1219
+  },
+  "BAJAJFINSV": {
+   "dates": 1263,
+   "mismatches": 0,
+   "valid_dates": 1219
+  },
+  "BAJFINANCE": {
+   "dates": 1263,
+   "mismatches": 0,
+   "valid_dates": 1219
+  },
+  "BPCL": {
+   "dates": 1263,
+   "mismatches": 0,
+   "valid_dates": 1219
+  },
+  "BRITANNIA": {
+   "dates": 1263,
+   "mismatches": 0,
+   "valid_dates": 1219
+  },
+  "CIPLA": {
+   "dates": 1263,
+   "mismatches": 0,
+   "valid_dates": 1219
+  },
+  "COALINDIA": {
+   "dates": 1263,
+   "mismatches": 0,
+   "valid_dates": 1219
+  },
+  "DIVISLAB": {
+   "dates": 1263,
+   "mismatches": 0,
+   "valid_dates": 1219
+  },
+  "DRREDDY": {
+   "dates": 1263,
+   "mismatches": 0,
+   "valid_dates": 1219
+  },
+  "EICHERMOT": {
+   "dates": 1263,
+   "mismatches": 0,
+   "valid_dates": 1219
+  },
+  "GRASIM": {
+   "dates": 1263,
+   "mismatches": 0,
+   "valid_dates": 1219
+  },
+  "HCLTECH": {
+   "dates": 1263,
+   "mismatches": 0,
+   "valid_dates": 1219
+  },
+  "HDFCBANK": {
+   "dates": 1263,
+   "mismatches": 0,
+   "valid_dates": 1219
+  },
+  "HDFCLIFE": {
+   "dates": 1263,
+   "mismatches": 0,
+   "valid_dates": 1219
+  },
+  "HEROMOTOCO": {
+   "dates": 1263,
+   "mismatches": 0,
+   "valid_dates": 1219
+  },
+  "HINDALCO": {
+   "dates": 1263,
+   "mismatches": 0,
+   "valid_dates": 1219
+  },
+  "HINDUNILVR": {
+   "dates": 1263,
+   "mismatches": 0,
+   "valid_dates": 1219
+  },
+  "ICICIBANK": {
+   "dates": 1263,
+   "mismatches": 0,
+   "valid_dates": 1219
+  },
+  "INDUSINDBK": {
+   "dates": 1263,
+   "mismatches": 0,
+   "valid_dates": 1219
+  },
+  "INFY": {
+   "dates": 1263,
+   "mismatches": 0,
+   "valid_dates": 1219
+  },
+  "ITC": {
+   "dates": 1263,
+   "mismatches": 0,
+   "valid_dates": 1219
+  },
+  "JSWSTEEL": {
+   "dates": 1263,
+   "mismatches": 0,
+   "valid_dates": 1219
+  },
+  "KOTAKBANK": {
+   "dates": 1263,
+   "mismatches": 0,
+   "valid_dates": 1219
+  },
+  "LT": {
+   "dates": 1263,
+   "mismatches": 0,
+   "valid_dates": 1219
+  },
+  "M&M": {
+   "dates": 1263,
+   "mismatches": 0,
+   "valid_dates": 1219
+  },
+  "MARUTI": {
+   "dates": 1263,
+   "mismatches": 0,
+   "valid_dates": 1219
+  },
+  "NESTLEIND": {
+   "dates": 1263,
+   "mismatches": 0,
+   "valid_dates": 1219
+  },
+  "NTPC": {
+   "dates": 1263,
+   "mismatches": 0,
+   "valid_dates": 1219
+  },
+  "ONGC": {
+   "dates": 1263,
+   "mismatches": 0,
+   "valid_dates": 1219
+  },
+  "POWERGRID": {
+   "dates": 1263,
+   "mismatches": 0,
+   "valid_dates": 1219
+  },
+  "RELIANCE": {
+   "dates": 1263,
+   "mismatches": 0,
+   "valid_dates": 1219
+  },
+  "SBILIFE": {
+   "dates": 1263,
+   "mismatches": 0,
+   "valid_dates": 1219
+  },
+  "SBIN": {
+   "dates": 1263,
+   "mismatches": 0,
+   "valid_dates": 1219
+  },
+  "SHRIRAMFIN": {
+   "dates": 1263,
+   "mismatches": 0,
+   "valid_dates": 1219
+  },
+  "SUNPHARMA": {
+   "dates": 1263,
+   "mismatches": 0,
+   "valid_dates": 1219
+  },
+  "TATACONSUM": {
+   "dates": 1263,
+   "mismatches": 0,
+   "valid_dates": 1219
+  },
+  "TATASTEEL": {
+   "dates": 1263,
+   "mismatches": 0,
+   "valid_dates": 1219
+  },
+  "TCS": {
+   "dates": 1263,
+   "mismatches": 0,
+   "valid_dates": 1219
+  },
+  "TECHM": {
+   "dates": 1263,
+   "mismatches": 0,
+   "valid_dates": 1219
+  },
+  "TITAN": {
+   "dates": 1263,
+   "mismatches": 0,
+   "valid_dates": 1219
+  },
+  "ULTRACEMCO": {
+   "dates": 1263,
+   "mismatches": 0,
+   "valid_dates": 1219
+  },
+  "UPL": {
+   "dates": 1263,
+   "mismatches": 0,
+   "valid_dates": 1219
+  },
+  "WIPRO": {
+   "dates": 1263,
+   "mismatches": 0,
+   "valid_dates": 1219
+  }
+ },
+ "tolerance": "exact (==, NaN equals NaN)"
+}

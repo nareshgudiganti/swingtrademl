@@ -430,7 +430,9 @@ def test_migration_idempotent_with_triggers_and_single_head(db):
     assert mod.down_revision == "mrs5p1a8c3d2"
     cfg = Config(str(ROOT / "alembic.ini"))
     cfg.set_main_option("script_location", str(ROOT / "alembic"))
-    assert ScriptDirectory.from_config(cfg).get_heads() == [mod.revision]
+    script = ScriptDirectory.from_config(cfg)
+    assert len(script.get_heads()) == 1  # still one head
+    assert script.get_revision(mod.revision) is not None  # and this migration is in the chain
 
 
 # ------------------------------------------------------------------ isolation and job
@@ -510,6 +512,7 @@ def test_run_daily_uses_the_frozen_universe_and_stamps_its_hash_on_every_pick(db
     from datetime import UTC, datetime
 
     m10 = ml_model(db, name="td_h10_a", horizon=10)
+    m10.model_role = "final"  # a lane scores only a frozen final model
     seen = {}
     monkeypatch.setattr(settings, "LANE_SHADOW_MODELS", json.dumps({"10d-large": m10.id}))
     monkeypatch.setattr(

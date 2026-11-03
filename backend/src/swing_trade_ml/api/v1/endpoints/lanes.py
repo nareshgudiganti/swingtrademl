@@ -22,6 +22,7 @@ from swing_trade_ml.api.deps import DbSession, require_owner
 from swing_trade_ml.core.config import REPO_ROOT
 from swing_trade_ml.db.models.lane_shadow import LaneOutcome, LanePick
 from swing_trade_ml.db.models.ml import MLModel
+from swing_trade_ml.services.model_registry import role_of
 from swing_trade_ml.shadow_lanes import lane_job
 from swing_trade_ml.shadow_lanes.lane_service import SLOTS
 
@@ -227,7 +228,11 @@ def build_lanes(db) -> dict[str, Any]:
                 "slot_key": slot_key,
                 "horizon_days": horizon,
                 "cap_group": group,
-                "model": {"id": model.id, "name": model.name, "version": model.version} if model else None,
+                "model": (
+                    {"id": model.id, "name": model.name, "version": model.version, "role": role_of(model)}
+                    if model
+                    else None
+                ),
                 "status": lane_status(sessions, completed),
                 "started_on": rows[0][0].signal_day.isoformat() if rows else None,
                 "sessions_recorded": sessions,

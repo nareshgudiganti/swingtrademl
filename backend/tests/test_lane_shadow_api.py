@@ -143,7 +143,12 @@ def test_forward_numbers_are_fractions_and_drawdown_is_pick_level(client, db_ses
     m = seed(db_session)
     out = client.get(URL, headers=headers(db_session, "owner")).json()
     ln = out["lanes"][2]
-    assert ln["model"] == {"id": m.id, "name": "sl1_S0M_a", "version": "v1"}
+    assert ln["model"] == {
+        "id": m.id,
+        "name": "sl1_S0M_a",
+        "version": "v1",
+        "role": {"role": "unmarked", "recorded": False},
+    }
     assert (
         ln["status"] == "forward_watching"
         and ln["started_on"] == "2026-09-01"

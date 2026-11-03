@@ -25,7 +25,7 @@ from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.core.market_session import last_closed_trading_day
 from swing_trade_ml.db.models.lane_shadow import LanePick
 from swing_trade_ml.db.models.ml import MLModel
-from swing_trade_ml.services.model_registry import slot_for
+from swing_trade_ml.services.model_registry import role_of, slot_for
 from swing_trade_ml.shadow_lanes import lane_service as S
 from swing_trade_ml.shadow_lanes import lane_universe
 
@@ -34,6 +34,8 @@ IST = ZoneInfo("Asia/Kolkata")
 JOB_ID = "lane_shadow_daily"
 SCHEDULE = {"day_of_week": "mon-sat", "hour": "18,20,22", "minute": 45}
 READY_SHARE = 0.8  # record only when at least this share of the group's stocks can be scored
+#: Slots that may score a verified production model ("prod" role). None today: every lane slot needs a frozen "final".
+PROD_ALLOWED_SLOTS: frozenset[str] = frozenset()
 
 
 def enabled() -> bool:
@@ -71,6 +73,19 @@ def lane_model_for(db: Session, slot_key: str) -> MLModel | None:
     return None
 
 
+def require_eligible_role(model: MLModel, slot_key: str) -> None:
+    """A lane scores only a model frozen for it after a passed history test (role "final"), or a "prod" model where the
+    slot allows one. A fold of the lab's history test, a look-alike name or an unmarked legacy row is refused."""
+    role = role_of(model)
+    if role["role"] == "final" or (role["role"] == "prod" and slot_key in PROD_ALLOWED_SLOTS):
+        return
+    shown = role["role"] if role["recorded"] or role["role"] == "fold" else "not marked"
+    raise S.LaneError(
+        f"model {model.name!r} (id {model.id}) is {shown}, not a frozen final model: only a model frozen after a "
+        "passed history test can be scored by a lane"
+    )
+
+
 def model_conflict(db: Session, slot_key: str) -> str | None:
     """Set when the owner configured a different model than the slot's existing picks use: the slot never switches."""
     used, chosen = _used_model_id(db, slot_key), configured_model_ids().get(slot_key)
@@ -100,6 +115,7 @@ def run_daily(db: Session, now: datetime | None = None) -> dict:
             result["slots"][slot_key] = "no_model: choose one in LANE_SHADOW_MODELS"
             continue
         try:
+            require_eligible_role(model, slot_key)
             result["slots"][slot_key] = S.record_day(
                 db,
                 model,

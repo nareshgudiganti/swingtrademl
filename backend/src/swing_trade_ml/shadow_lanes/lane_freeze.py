@@ -129,6 +129,22 @@ def default_trainer(db, candidate: str, cutoff: date, universe: dict, name: str)
     return sl.train_lab_model(db, name=name, cutoff=cutoff, symbols=symbols, candidates=ref, bars=bars)
 
 
+def _mark_final(db, model, slot_key: str, candidate: str, report_path: Path, stamp: str) -> None:
+    """Record that this model is the frozen final one, and which passed history report qualified it. Adds data only:
+    status, files and scoring are untouched. A software step; it is not itself a model validation."""
+    model.model_role = "final"
+    metrics = dict(model.metrics) if isinstance(getattr(model, "metrics", None), dict) else {}
+    metrics["qualification"] = {
+        "slot_key": slot_key,
+        "candidate": candidate,
+        "history_report": str(report_path),
+        "frozen_at": stamp,
+    }
+    model.metrics = metrics  # a new dict, so the JSON column registers the change
+    if db is not None:
+        db.commit()
+
+
 def model_name(candidate: str, cutoff: date) -> str:
     """Names the registry maps to the right slot: td_h10_* for the 10-day model, sl1_<cand>_* for the 15-day ones."""
     return f"td_h10_lane_{cutoff:%Y%m%d}" if candidate == "TD10" else f"sl1_{candidate}_lane_{cutoff:%Y%m%d}"
@@ -176,6 +192,7 @@ def freeze(
     if slot_for(model.name, model.prediction_horizon_days) != slot_key:
         raise FreezeRefusedError(f"trained model {model.name!r} is not registered for slot {slot_key}")
     stamp = (now or datetime.now()).isoformat(timespec="seconds")
+    _mark_final(db, model, slot_key, candidate, report_path, stamp)
     record = {
         "slot_key": slot_key,
         "candidate": candidate,

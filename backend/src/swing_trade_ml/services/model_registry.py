@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -96,6 +97,23 @@ def slot_for(name: str | None, horizon: int | None) -> str | None:
         if name.startswith(prefix) and horizon == lane_horizon:
             return slot_key(horizon, tier)
     return None
+
+
+#: Model roles (ml_models.model_role). Only "final" (frozen after a passed history test) may be scored by a shadow lane.
+ROLES: tuple[str, ...] = ("fold", "final", "prod")
+#: Evaluation-fold names, e.g. sl1_S1_20230701: lane prefix followed straight by a date, never "lane_".
+_FOLD_NAME = re.compile(r"^(?:sl1_S[012]M?|td_h10)_\d{8}$")
+
+
+def role_of(m: Any) -> dict[str, Any]:
+    """The model's role for display and eligibility. A stored role wins; an unmarked fold-style name is shown as
+    "fold" (derived, display only); everything else unmarked is "unmarked". Read-only, never writes."""
+    stored = getattr(m, "model_role", None)
+    if stored in ROLES:
+        return {"role": stored, "recorded": True}
+    if _FOLD_NAME.match(getattr(m, "name", "") or ""):
+        return {"role": "fold", "recorded": False}
+    return {"role": "unmarked", "recorded": False}
 
 
 def _fingerprint(values: list[Any]) -> str | None:
@@ -199,6 +217,7 @@ def model_view(m: MLModel, usage: dict[str, list[dict[str, Any]]] | None) -> dic
         used_by = []  # only the ACTIVE version of a name is ever loaded
     return {
         "slot": slot_for(m.name, m.prediction_horizon_days),
+        "role": role_of(m),
         "provenance": provenance(m),
         # Two separate facts, never merged into one label.
         "registry_status": m.status,

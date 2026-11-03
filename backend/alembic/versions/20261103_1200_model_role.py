@@ -7,7 +7,7 @@ swing_classifier_smallcap) that have no role yet. Every other row stays null, wh
 eligible". The upgrade is safe to run twice. The downgrade deliberately drops nothing: a recorded role is evidence.
 
 Revision ID: mdlrole1a2b3
-Revises: lane5h4d0w1a
+Revises: h05ao7p2k9d1
 Create Date: 2026-11-03 12:00:00.000000+00:00
 """
 
@@ -19,7 +19,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "mdlrole1a2b3"
-down_revision: str | None = "lane5h4d0w1a"
+down_revision: str | None = "h05ao7p2k9d1"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

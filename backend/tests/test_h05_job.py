@@ -22,9 +22,12 @@ from test_h05_service import (
     future,
     lane,  # noqa: F401  (fixture)
     make_run,
+    unguarded,
 )
 
-EVENING = datetime(2026, 10, 14, 13, 0, tzinfo=UTC)  # 18:30 IST on the signal day (a Wednesday), after the close
+EVENING = datetime(
+    2026, 10, 14, 13, 0, tzinfo=UTC
+)  # 18:30 IST on the signal day (a Wednesday), after the close
 NEXT_MORNING_8 = datetime(2026, 10, 15, 2, 30, tzinfo=UTC)  # 08:00 IST: before the 09:00 cut-off
 NEXT_MORNING_10 = datetime(2026, 10, 15, 4, 30, tzinfo=UTC)  # 10:00 IST: after the cut-off
 GROUPS = {"LRG1": "large", "MID1": "mid", "SML1": "small"}
@@ -75,7 +78,9 @@ def test_the_scheduler_gets_the_job_only_when_enabled_and_accepted(monkeypatch):
 
 
 def _settings(monkeypatch, enabled, hash_):
-    monkeypatch.setattr(P, "H05Settings", lambda: SimpleNamespace(ENABLED=enabled, ACCEPTED_PROTOCOL_HASH=hash_))
+    monkeypatch.setattr(
+        P, "H05Settings", lambda: SimpleNamespace(ENABLED=enabled, ACCEPTED_PROTOCOL_HASH=hash_)
+    )
 
 
 def test_disabled_startup_adds_no_job_and_imports_nothing_from_the_lane():
@@ -170,7 +175,9 @@ def test_incomplete_data_waits_and_is_recorded_once_the_data_arrives(db_session,
     run, _ = _world(db_session, lane)
     # two of the three stocks have no candle on the signal session yet (33% < 90%)
     for sym in ("MID1", "SML1"):
-        inst = db_session.scalar(select(h05_service.Instrument).where(h05_service.Instrument.tradingsymbol == sym))
+        inst = db_session.scalar(
+            select(h05_service.Instrument).where(h05_service.Instrument.tradingsymbol == sym)
+        )
         db_session.execute(
             text("delete from candles where instrument_id = :i and ts = :t"),
             {"i": inst.id, "t": datetime(2026, 10, 14, tzinfo=h05_service.IST)},
@@ -181,16 +188,20 @@ def test_incomplete_data_waits_and_is_recorded_once_the_data_arrives(db_session,
     assert len(_events(db_session, run, "data_not_ready")) == 1  # said once, not every pass
     assert _count(db_session, H05Signal, run) == 0
     for sym in ("MID1", "SML1"):
-        inst = db_session.scalar(select(h05_service.Instrument).where(h05_service.Instrument.tradingsymbol == sym))
+        inst = db_session.scalar(
+            select(h05_service.Instrument).where(h05_service.Instrument.tradingsymbol == sym)
+        )
         add_candle(db_session, inst, SIGNAL, (100, 100, 100, 100))
     done = h05_job.run_daily(db_session, NEXT_MORNING_8)
     assert done["actions"][0]["state"] == "recorded"  # still before the 09:00 cut-off
 
 
-def test_after_the_cutoff_an_unrecorded_session_is_missed_reported_once_and_never_scored_late(db_session, lane):
+def test_after_the_cutoff_an_unrecorded_session_is_missed_reported_once_and_never_scored_late(
+    db_session, lane
+):
     run, _ = _world(db_session, lane)
-    run.start_day = SIGNAL
-    db_session.flush()
+    with unguarded(db_session):
+        run.start_day = SIGNAL
     out = h05_job.run_daily(db_session, NEXT_MORNING_10)
     assert out["actions"][0]["newly_missed_sessions"] == [str(SIGNAL)]
     assert _count(db_session, H05Signal, run) == 0  # not scored late
@@ -206,8 +217,8 @@ def test_a_lane_stop_is_retried_until_the_cutoff_then_reported_as_the_reason_for
     from swing_trade_ml.brain.lanes import h05_protocol
 
     run, _ = _world(db_session, lane)
-    run.start_day = SIGNAL
-    db_session.flush()
+    with unguarded(db_session):
+        run.start_day = SIGNAL
 
     def broken(db):
         raise h05_protocol.ProtocolError("model 16 sha256 differs from the frozen one")
@@ -224,8 +235,8 @@ def test_a_lane_stop_is_retried_until_the_cutoff_then_reported_as_the_reason_for
 
 def test_every_unrecorded_session_of_the_window_is_reported_with_the_report_listing_them(db_session, lane):
     run, _ = _world(db_session, lane)
-    run.start_day = date(2026, 10, 12)  # Monday; Tuesday and Wednesday follow
-    db_session.flush()
+    with unguarded(db_session):
+        run.start_day = date(2026, 10, 12)  # Monday; Tuesday and Wednesday follow
     h05_job.run_daily(db_session, EVENING)  # Wednesday recorded; Monday and Tuesday were never recorded
     missed = sorted(e.signal_day for e in _events(db_session, run, "missed_session"))
     assert missed == [date(2026, 10, 12), date(2026, 10, 13)]
@@ -240,8 +251,8 @@ def test_every_unrecorded_session_of_the_window_is_reported_with_the_report_list
 
 def test_outcomes_mature_on_later_passes_and_the_run_closes_after_its_last_session(db_session, lane):
     run, insts = _world(db_session, lane)
-    run.start_day = run.end_day = SIGNAL
-    db_session.flush()
+    with unguarded(db_session):
+        run.start_day = run.end_day = SIGNAL
     h05_job.run_daily(db_session, EVENING)
     assert _count(db_session, H05Signal, run) == 3
     assert db_session.scalar(select(H05Run.status).where(H05Run.id == run.id)) == "closed"  # one-session run
@@ -262,11 +273,13 @@ def test_outcomes_mature_on_later_passes_and_the_run_closes_after_its_last_sessi
 
 def test_a_run_is_not_closed_while_its_last_session_can_still_be_recorded(db_session, lane):
     run, _ = _world(db_session, lane)
-    run.end_day = SIGNAL
-    db_session.flush()
+    with unguarded(db_session):
+        run.end_day = SIGNAL
     # data incomplete at 18:30 on the last session: waiting, so the run stays open
     for sym in ("MID1", "SML1"):
-        inst = db_session.scalar(select(h05_service.Instrument).where(h05_service.Instrument.tradingsymbol == sym))
+        inst = db_session.scalar(
+            select(h05_service.Instrument).where(h05_service.Instrument.tradingsymbol == sym)
+        )
         db_session.execute(
             text("delete from candles where instrument_id = :i and ts = :t"),
             {"i": inst.id, "t": datetime(2026, 10, 14, tzinfo=h05_service.IST)},
@@ -282,17 +295,21 @@ def test_the_job_id_is_stable():
     assert h05_job.JOB_ID == "h05_daily"
 
 
-def test_collection_ends_after_the_last_session_but_the_verdict_waits_for_every_outcome(db_session, lane, monkeypatch):
+def test_collection_ends_after_the_last_session_but_the_verdict_waits_for_every_outcome(
+    db_session, lane, monkeypatch
+):
     """Item: a run closes for COLLECTION after its final signal session; FINALISATION waits for the five-session
     outcomes. Unresolved trades and not-evaluated labels are final states that never block it."""
     monkeypatch.setattr(P, "accepted", lambda settings=None: True)
     run, insts = _world(db_session, lane)
-    run.start_day = run.end_day = SIGNAL
-    db_session.flush()
+    with unguarded(db_session):
+        run.start_day = run.end_day = SIGNAL
     h05_job.run_daily(db_session, EVENING)
     assert db_session.scalar(select(H05Run.status).where(H05Run.id == run.id)) == "closed"  # collection ended
     waiting = h05_report.build_report(db_session, now=EVENING)["verdict"]["large"]["runs"][1]
-    assert waiting["final"] is False and "1 outcomes not matured" in waiting["why"]  # per group: one stock each
+    assert (
+        waiting["final"] is False and "1 outcomes not matured" in waiting["why"]
+    )  # per group: one stock each
 
     # the exchange calendar only has sessions that happened: four of the five later sessions so far
     known = {"through": after(SIGNAL, 4)}
@@ -312,10 +329,14 @@ def test_collection_ends_after_the_last_session_but_the_verdict_waits_for_every_
     add_candle(db_session, insts["MID1"], after(SIGNAL, 6), (100, 100, 100, 100))
     day5 = after(SIGNAL, 6)
     known["through"] = day5
-    out = h05_job.run_daily(db_session, datetime.combine(day5, datetime.min.time(), tzinfo=UTC).replace(hour=13))
+    out = h05_job.run_daily(
+        db_session, datetime.combine(day5, datetime.min.time(), tzinfo=UTC).replace(hour=13)
+    )
     assert out["maturation"][1]["pending_after"] == 0  # nothing waits any more
     mid = db_session.scalar(select(h05_service.H05Signal).where(h05_service.H05Signal.symbol == "MID1"))
     assert (mid.label_status, mid.trade_status) == ("not_evaluated", "unresolved")
     final = h05_report.build_report(db_session, now=EVENING)
     assert final["verdict"]["large"]["runs"][1]["final"] is True  # finalised despite the unresolved outcome
-    assert final["runs"][0]["groups"]["mid"]["shadow_trade"]["baseline_every_eligible_stock"]["unresolved"] == 1
+    assert (
+        final["runs"][0]["groups"]["mid"]["shadow_trade"]["baseline_every_eligible_stock"]["unresolved"] == 1
+    )

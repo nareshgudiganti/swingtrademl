@@ -1,0 +1,42 @@
+{
+  "note": "Test records only: not trades and not advice. Software tests passing does not prove a model works; only enough finished picks, judged against the same stocks' own average, can show that.",
+  "nifty_note": "NIFTY 50 comparison = buying the index at the next session's open and holding to the same exit day, no costs. A yardstick, not something the bot trades.",
+  "edge_notes": [
+    "5-day edge = the picks' average minus every eligible stock's average, per signal day (the 5-day test's own measure).",
+    "10- and 15-day edge = each pick minus the average of every eligible stock of the same size group on the same day."
+  ],
+  "fold_model_note": "The 15-day lab trains one model per test fold (246 in all). Those fold models only measure ranking skill in the history test; they never make daily picks. A daily lane uses one frozen final model.",
+  "horizons": [
+    {
+      "key": "5d-large",
+      "horizon_days": 5,
+      "cap_group": "large",
+      "source": "h05",
+      "run_no": 1,
+      "model": { "id": 2, "name": "swing_classifier", "version": "v2", "role": "prod", "role_recorded": true, "role_label": "Existing production model (under test; not a frozen final model)", "daily_picks_allowed": false },
+      "qualification": { "state": "not_qualified", "protocol": "fd-protocol-v1 (history), h05-protocol-v1-DRAFT-4 (forward)", "text": "Not qualified yet. Earlier history test: FAIL on both parts. The live 5-day test is the evidence being collected." },
+      "forward": { "matured_days": 0, "picks": 5, "finished": 0, "net_per_trade": null, "edge_vs_every_stock": null, "hit_rate": null, "nifty": { "available": true, "mean_return": null, "windows": 0, "note": "No finished window to compare yet." } },
+      "verdict": { "state": "not_enough_days", "text": "Not enough days to judge.", "needed_days": 40, "rule": "h05 protocol" }
+    },
+    {
+      "key": "10d-large",
+      "horizon_days": 10,
+      "cap_group": "large",
+      "source": "lanes",
+      "model": null,
+      "qualification": { "state": "not_qualified", "protocol": "td-protocol-v1", "text": "Not qualified yet: a history test is on file, but no model has been frozen from it." },
+      "forward": { "matured_days": 0, "picks": 0, "finished": 0, "net_per_trade": null, "edge_vs_every_stock": null, "hit_rate": null, "nifty": { "available": true, "mean_return": null, "windows": 0, "note": "No finished window to compare yet." } },
+      "verdict": { "state": "not_enough_days", "text": "Not enough days to judge.", "needed_days": 60, "rule": "lane review" }
+    },
+    {
+      "key": "15d-mid",
+      "horizon_days": 15,
+      "cap_group": "mid",
+      "source": "lanes",
+      "model": { "id": 16, "name": "sl1_S0M_20230701", "version": "v1", "role": "fold", "role_recorded": false, "role_label": "Evaluation fold model - not used for daily picks", "daily_picks_allowed": false },
+      "qualification": { "state": "not_run", "protocol": "sl-protocol-v1 (candidates S0M, S1M, S2M)", "text": "Not run: no history test is on file for this lane. It cannot start before 5 Dec 2026 (signed Amendment 2)." },
+      "forward": { "matured_days": 0, "picks": 0, "finished": 0, "net_per_trade": null, "edge_vs_every_stock": null, "hit_rate": null, "nifty": { "available": false, "mean_return": null, "windows": 0, "note": "NIFTY 50 bars are not available here, so no index comparison is shown." } },
+      "verdict": { "state": "not_enough_days", "text": "Not enough days to judge.", "needed_days": 60, "rule": "lane review" }
+    }
+  ]
+}

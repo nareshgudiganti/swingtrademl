@@ -5,6 +5,7 @@ import { api, ApiError } from '../api/client'
 import type { LanePick, LanePickRow, LanesResponse, LaneSummary } from '../api/types'
 import { Empty, ErrorBox, Loading } from '../components/Loading'
 import { formatDate } from '../lib/format'
+import { HorizonReportSection } from './HorizonReport'
 
 // Horizon picks (owner only). Per-lane cards keep HISTORY (past data) and FORWARD (live, watch-only) apart, then the
 // older 5-day table. It only reads. There is no action button here: a row is a test record, not a trade and not advice.
@@ -361,6 +362,7 @@ export default function HorizonPicks() {
       <div className="card" style={{ padding: 12, margin: '8px 0', fontWeight: 600 }} role="note">
         {BANNER}
       </div>
+      <HorizonReportSection />
       <LanesSection />
       <FiveDayLane />
     </div>

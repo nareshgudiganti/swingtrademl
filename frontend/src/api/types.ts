@@ -1845,6 +1845,47 @@ export interface LanesResponse {
   lanes: LaneSummary[]
 }
 
+// One forward report over the 5-, 10- and 15-day tests (owner only). Returns are fractions (0.012 = 1.2%).
+export type HorizonModelRole = 'fold' | 'final' | 'prod' | 'unmarked'
+export type HorizonQualificationState = 'qualified' | 'not_qualified' | 'not_run'
+export type HorizonVerdictState = 'not_enough_days' | 'reading' | 'not_calculated'
+
+export interface HorizonReportRow {
+  key: string
+  horizon_days: number
+  cap_group: 'large' | 'mid' | 'small'
+  source: 'h05' | 'lanes'
+  run_no?: number
+  model: {
+    id: number
+    name: string
+    version: string
+    role: HorizonModelRole
+    role_recorded: boolean
+    role_label: string
+    daily_picks_allowed: boolean
+  } | null
+  qualification: { state: HorizonQualificationState; protocol: string; text: string }
+  forward: {
+    matured_days: number
+    picks: number
+    finished: number
+    net_per_trade: number | null
+    edge_vs_every_stock: number | null
+    hit_rate: number | null
+    nifty: { available: boolean; mean_return: number | null; windows: number; note: string | null }
+  }
+  verdict: { state: HorizonVerdictState; text: string; needed_days: number; rule: string }
+}
+
+export interface HorizonReport {
+  note: string
+  nifty_note: string
+  edge_notes: string[]
+  fold_model_note: string
+  horizons: HorizonReportRow[]
+}
+
 export interface LanePickRow {
   signal_day: string
   symbol: string

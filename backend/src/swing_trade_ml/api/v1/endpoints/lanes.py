@@ -248,6 +248,14 @@ def lanes(db: DbSession) -> dict[str, Any]:
     return build_lanes(db)
 
 
+@router.get("/horizon-report")
+def horizon_report(db: DbSession) -> dict[str, Any]:
+    """5-, 10- and 15-day forward results in one shape (read-only). See shadow_lanes/horizon_report.py."""
+    from swing_trade_ml.shadow_lanes import horizon_report as hr
+
+    return hr.build(db)
+
+
 @router.get("/{slot_key}/picks")
 def lane_picks(
     slot_key: str, db: DbSession, limit: int = Query(default=100, ge=1, le=1000)

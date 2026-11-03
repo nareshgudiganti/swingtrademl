@@ -33,6 +33,7 @@ const SCANNED: Record<string, { open: (page: Page) => Promise<void>; ready: stri
   'portfolio-testing': { open: (page) => signedIn(page, '/trademind/testing'), ready: 'Closed trades' },
   'portfolio-real': { open: (page) => signedIn(page, '/trademind/holdings'), ready: 'Your Zerodha account' },
   'portfolio-overview': { open: (page) => signedIn(page, '/trademind/portfolio'), ready: 'Portfolio Overview' },
+  'horizon-picks': { open: (page) => signedIn(page, '/horizon-picks'), ready: 'All three horizons side by side' },
   admin: { open: (page) => signedIn(page, '/trademind/control'), ready: 'Money being used' },
   'admin-alerts': { open: (page) => signedIn(page, '/trademind/alerts'), ready: 'Messages you can switch off' },
 }

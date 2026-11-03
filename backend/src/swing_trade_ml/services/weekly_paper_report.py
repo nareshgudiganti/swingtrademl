@@ -32,7 +32,6 @@ from sqlalchemy.orm import Session
 
 from swing_trade_ml.core.enums import PositionStatus, TradingMode
 from swing_trade_ml.core.logging import get_logger
-from swing_trade_ml.core.market_session import last_closed_trading_day
 from swing_trade_ml.core.strategy_policy import HAND_BOOK_STRATEGY_NAMES
 from swing_trade_ml.db.models.trading import Order, Position, Strategy, Trade
 from swing_trade_ml.strategies.tier import cap_tier
@@ -139,6 +138,7 @@ def summarise_book(
         if week_trades
         else None,
         "events": _events(done, week_trades),
+        "data_status": "no buys or sells this week" if not (done or week_trades) else "activity recorded",
     }
 
 
@@ -283,8 +283,12 @@ def entry_tier_fallback(db: Session, position_id: int, default: str | None) -> s
 
 
 def window(now: datetime | None = None) -> tuple[date, date]:
-    """Seven calendar days ending on the last IST day whose market bar is final."""
-    end = last_closed_trading_day(now or datetime.now(UTC))
+    """Seven calendar days ending on the day before the run, in IST.
+
+    Calendar days, not trading days: the Testing book can be traded on a weekend or a holiday, and week
+    after week the windows touch with no gap and no overlap (a Sunday run covers Sunday to Saturday)."""
+    today = (now or datetime.now(UTC)).astimezone(IST).date()
+    end = today - timedelta(days=1)
     return end - timedelta(days=WINDOW_DAYS - 1), end
 
 
@@ -309,6 +313,17 @@ def benchmark(db: Session, start: date, end: date) -> dict[str, Any]:
         "newest_bar": last.isoformat(),
         "note": "price index return, same dates as the week; compare with 'avg sell return', which is per trade, not per rupee",
     }
+
+
+def outcomes_status(picks_total: int, matured_total: int, matured_in_week: int) -> str:
+    """Plain words for how complete the outcome data is, so a missing result is never read as a zero."""
+    if picks_total == 0:
+        return "no picks recorded yet"
+    if matured_total == 0:
+        return "no outcomes yet: the 5th session after each signal has not closed"
+    if matured_in_week == 0:
+        return f"{matured_total} of {picks_total} picks matured in total, none this week"
+    return f"{matured_total} of {picks_total} picks matured in total, {matured_in_week} this week"
 
 
 def h05_section(db: Session, start: date, end: date) -> dict[str, Any]:
@@ -336,8 +351,12 @@ def h05_section(db: Session, start: date, end: date) -> dict[str, Any]:
             .all()
         )
         picks = [s for s in sigs if s.selected]
-        matured_in_week = [s for s in picks if s.label_day5 is not None and start <= s.label_day5 <= end]
+        # Matured = the 5th session has a close to compare. A pick with no label_hit has not matured (or has no data).
+        matured_in_week = [
+            s for s in picks if s.label_hit is not None and s.label_day5 and start <= s.label_day5 <= end
+        ]
         matured_all = [s for s in sigs if s.label_hit is not None]
+        picks_matured_ever = [s for s in picks if s.label_hit is not None]
         week_days = [d for d in in_week if d.group == g]
         groups[g] = {
             "signal_days_recorded": len(week_days),
@@ -346,7 +365,8 @@ def h05_section(db: Session, start: date, end: date) -> dict[str, Any]:
             "picks_matured": len(matured_in_week),
             "picks_hit_plus_2pct": sum(1 for s in matured_in_week if s.label_hit == 1),
             "every_stock_matured_so_far": len(matured_all),
-            "pending_outcomes": sum(1 for s in sigs if s.label_status == "pending"),
+            "stocks_waiting_for_outcome": sum(1 for s in sigs if s.label_status == "pending"),
+            "outcomes_status": outcomes_status(len(picks), len(picks_matured_ever), len(matured_in_week)),
         }
     recorded = {d.signal_day for d in days}
     from swing_trade_ml.core.market_session import is_trading_day

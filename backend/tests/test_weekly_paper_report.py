@@ -231,3 +231,74 @@ def test_weekly_job_has_its_own_id_and_leaves_the_brain_saturday_report_alone():
     weekly = s.get_job("weekly_paper_report").trigger
     assert "day_of_week='sun'" in str(weekly)
     assert "day_of_week='sat'" in str(s.get_job("brain_weekly_health").trigger)
+
+
+def test_weekly_windows_touch_with_no_gap_and_no_overlap_even_across_a_holiday():
+    sunday = datetime(2026, 11, 8, 4, 0, tzinfo=UTC)  # Sunday 09:30 IST, after a Tuesday-holiday-free week
+    this_start, this_end = w.window(sunday)
+    _, prev_end = w.window(sunday - timedelta(days=7))
+    assert (this_start, this_end) == (date(2026, 11, 1), date(2026, 11, 7))
+    assert prev_end + timedelta(days=1) == this_start
+    assert (this_end - this_start).days == 6
+    # Diwali Balipratipada, Tuesday 10 Nov 2026, is a market holiday: it is still inside one window.
+    _, end = w.window(datetime(2026, 11, 15, 4, 0, tzinfo=UTC))
+    assert date(2026, 11, 10) <= end
+
+
+def test_an_order_just_after_midnight_india_time_belongs_to_the_india_day():
+    # 2026-11-02 18:40 UTC is 00:10 IST on 3 Nov: outside a window that ends 2 Nov, inside the next one.
+    late = datetime(2026, 11, 2, 18, 40, tzinfo=UTC)
+    assert w._ist_date(late) == date(2026, 11, 3)
+    first = datetime(2026, 10, 26, 18, 40, tzinfo=UTC)  # 00:10 IST on 27 Oct: the first minute of the window
+    assert w._ist_date(first) == START
+
+
+def _h05_world(db):
+    from swing_trade_ml.db.models.lanes import H05GroupDay, H05Run, H05Signal
+
+    run = H05Run(
+        run_no=1, protocol_code="t", protocol_hash="x" * 64, status="active", start_day=date(2026, 11, 2),
+        end_day=date(2027, 1, 28), models={}, universe={}, universe_hash="u" * 64,
+    )
+    db.add(run)
+    db.flush()
+    for group in ("large", "mid", "small"):
+        for day in (date(2026, 11, 2), date(2026, 11, 3)):
+            db.add(H05GroupDay(run_id=run.id, signal_day=day, group=group, universe_n=10, scored_n=9,
+                               not_scored_n=1, selected_n=5, shortfall=0))
+        db.add(H05Signal(run_id=run.id, signal_day=date(2026, 11, 2), symbol=f"{group}A", group=group,
+                         status="scored", selected=True, label_status="pending"))
+    db.flush()
+    return run
+
+
+def test_h05_is_its_own_section_and_says_when_outcomes_are_not_there_yet(db_session):
+    _h05_world(db_session)
+    out = w.h05_section(db_session, date(2026, 11, 2), date(2026, 11, 3))
+    assert out["active"] and set(out["groups"]) == {"large", "mid", "small"}
+    for g in out["groups"].values():
+        assert g["signal_days_recorded"] == 2 and g["picks_made"] == 10
+        assert g["picks_matured"] == 0 and "no outcomes yet" in g["outcomes_status"]
+    assert out["sessions_not_recorded"] == []  # both sessions of the window were recorded
+
+
+def test_a_matured_pick_is_counted_once_and_a_missing_hit_value_is_not_a_zero(db_session):
+    from swing_trade_ml.db.models.lanes import H05Signal
+
+    run = _h05_world(db_session)
+    db_session.add(H05Signal(run_id=run.id, signal_day=date(2026, 11, 2), symbol="LARGEHIT", group="large",
+                             status="scored", selected=True, label_status="matured", label_hit=1,
+                             label_day5=date(2026, 11, 9)))
+    db_session.add(H05Signal(run_id=run.id, signal_day=date(2026, 11, 2), symbol="LARGENODATA", group="large",
+                             status="scored", selected=True, label_status="unavailable", label_hit=None,
+                             label_day5=date(2026, 11, 9)))
+    db_session.flush()
+    large = w.h05_section(db_session, date(2026, 11, 9), date(2026, 11, 15))["groups"]["large"]
+    assert large["picks_matured"] == 1 and large["picks_hit_plus_2pct"] == 1
+    assert "1 of 3 picks matured" in large["outcomes_status"]
+
+
+def test_an_empty_week_says_so_instead_of_showing_zeros_as_results():
+    out = w.summarise_book([], [], [], START, END)
+    assert out["data_status"] == "no buys or sells this week"
+    assert out["realized_pnl"]["net"] == 0.0 and out["avg_sell_return_pct"] is None

@@ -360,6 +360,9 @@ def add_weekly_paper_report_job(target: BackgroundScheduler) -> None:
         CronTrigger(day_of_week="sun", hour=9, minute=30, timezone=IST),
         id="weekly_paper_report",
         replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=1800,
     )
 
 

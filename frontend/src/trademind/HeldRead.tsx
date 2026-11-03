@@ -27,6 +27,17 @@ export function SuggestionTag({ p }: { p: DetailedPosition }) {
   )
 }
 
+/** "SELL review required" (past its stop, target or time limit) or "Exit check unavailable". Display only. */
+export function SellStatusTag({ p }: { p: DetailedPosition }) {
+  if (!p.sell_status) return null
+  const review = p.sell_status === 'SELL review required'
+  return (
+    <div>
+      <Tag tone={review ? 'red' : 'amber'}>{p.sell_status}</Tag>
+    </div>
+  )
+}
+
 export function DayCell({ p }: { p: DetailedPosition }) {
   if (p.day_number == null) return <span className="tm-dim">—</span>
   const limit = p.trade_limit_days ?? 15

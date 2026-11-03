@@ -2,9 +2,9 @@ import { Fragment, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api } from '../../api/client'
-import type { DetailedPosition } from '../../api/types'
+import type { DetailedPosition, Trade } from '../../api/types'
 import { CapFlag } from '../cap'
-import { DayCell, ScoreToday, SuggestionTag, scoreNow, suggestionRank } from '../HeldRead'
+import { DayCell, ScoreToday, SellStatusTag, SuggestionTag, scoreNow, suggestionRank } from '../HeldRead'
 import ScoreTrail from '../ScoreTrail'
 import { SortTh, useSort } from '../sort'
 import { Card, inr, signed, StockLogo, toneClass } from '../ui'
@@ -224,8 +224,28 @@ export default function PaperPositions() {
         {tradesState === 'ready' && reportRows.length === 0 && (
           <PageState kind="empty" reason="No closed paper trades yet. A trade shows here once you sell it." />
         )}
+        {tradesState === 'ready' && <RecentSells trades={trades.data ?? []} />}
         {reportRows.length > 0 && <PeriodTable rows={reportRows} />}
       </Card>
+    </div>
+  )
+}
+
+/** The latest sells in the Testing book, each with its plain label. Display only. */
+function RecentSells({ trades }: { trades: Trade[] }) {
+  const latest = [...trades].sort((a, b) => b.exit_at.localeCompare(a.exit_at)).slice(0, 8)
+  if (latest.length === 0) return null
+  return (
+    <div style={{ marginBottom: '0.8rem' }}>
+      <div className="tm-stat-label">Latest sells</div>
+      <ul style={{ margin: '0.3rem 0 0', paddingLeft: '1.1rem' }}>
+        {latest.map((t) => (
+          <li key={t.id}>
+            <strong>{t.symbol}</strong> · {t.sell_label ?? 'Sold'} ({t.book_label ?? 'Testing'}) ·{' '}
+            {t.exit_reason_label ?? t.exit_reason ?? 'no reason recorded'} · {t.exit_at.slice(0, 10)}
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }
@@ -322,6 +342,7 @@ function OpenTable({
                 </td>
                 <td>
                   <SuggestionTag p={p} />
+                  <SellStatusTag p={p} />
                 </td>
                 <td className="tm-right">
                   <ScoreToday p={p} />

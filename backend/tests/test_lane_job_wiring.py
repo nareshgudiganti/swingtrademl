@@ -79,6 +79,8 @@ def _setup(db, monkeypatch):
     m10 = ml_model(db, name="td_h10_a", horizon=10)
     m15 = ml_model(db, name="sl1_S1_a", horizon=15)
     mmid = ml_model(db, name="sl1_S1M_a", horizon=15)
+    for m in (m10, m15, mmid):
+        m.model_role = "final"  # a lane scores only a frozen final model
     for sym in LARGE + MID:
         instrument(db, sym)
     monkeypatch.setattr(

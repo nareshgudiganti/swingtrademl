@@ -203,6 +203,7 @@ def open_position(
         order_type=OrderType.MARKET,
         product=ProductType.CNC,
         tag=f"stml-{strategy.id}",
+        own_funds=strategy.strategy_type == "tester_paper",
     )
     result = broker.place_order(request, db)
 

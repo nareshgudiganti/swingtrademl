@@ -6,6 +6,7 @@ the daily engine and never mixed into `book=bot` reports.
 
 from __future__ import annotations
 
+import math
 from datetime import UTC, datetime
 from typing import Any, Literal
 
@@ -24,7 +25,7 @@ from swing_trade_ml.core.enums import (
 )
 from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.db.models.market import Instrument
-from swing_trade_ml.db.models.trading import Order, Position, Signal, Strategy, Trade
+from swing_trade_ml.db.models.trading import CapitalDeposit, Order, Position, Signal, Strategy, Trade
 from swing_trade_ml.services.execution import open_position
 
 log = get_logger(__name__)
@@ -33,6 +34,9 @@ TESTER_PAPER_STRATEGY_NAME = "tester_paper"
 TESTER_PAPER_STRATEGY_TYPE = "tester_paper"
 CapTier = Literal["large", "midcap", "smallcap"]
 VALID_CAP_TIERS: frozenset[str] = frozenset({"large", "midcap", "smallcap"})
+# Top-ups to this book live in `capital_deposits` under their own mode value, so the bot's deposit
+# queries (mode="paper") never see them and they are never counted as profit.
+TESTER_DEPOSIT_MODE = "tester"
 
 
 class PaperTesterDisabled(Exception):
@@ -109,9 +113,24 @@ def _realized_pnl(db: Session) -> float:
     )
 
 
+def _added_money(db: Session) -> float:
+    return float(
+        db.execute(
+            select(func.coalesce(func.sum(CapitalDeposit.amount), 0.0)).where(
+                CapitalDeposit.mode == TESTER_DEPOSIT_MODE
+            )
+        ).scalar_one()
+    )
+
+
+def starting_capital(db: Session) -> float:
+    """The setting plus every top-up: the money put into this book, the base for its return."""
+    return settings.PAPER_TESTER_STARTING_CAPITAL + _added_money(db)
+
+
 def available_cash(db: Session) -> float:
     """Virtual cash for the tester book only (independent starting capital)."""
-    return settings.PAPER_TESTER_STARTING_CAPITAL + _realized_pnl(db) - _locked_capital(db)
+    return starting_capital(db) + _realized_pnl(db) - _locked_capital(db)
 
 
 def portfolio_value(db: Session) -> tuple[float, float, float]:
@@ -159,7 +178,7 @@ def performance_stats(db: Session) -> dict[str, Any]:
         .all()
     )
     total_value, cash, holdings_value = portfolio_value(db)
-    starting = settings.PAPER_TESTER_STARTING_CAPITAL
+    starting = starting_capital(db)
     unrealized = sum(p.unrealized_pnl for p in positions)
     realized = sum(t.net_pnl for t in trades)
     stats: dict[str, Any] = {
@@ -251,14 +270,18 @@ def paper_buy(
     required = est_turnover + brokerage + taxes
     cash = available_cash(db)
     if required > cash:
-        raise ValueError(
-            f"Not enough paper testing cash: need about ₹{required:,.0f}, have ₹{cash:,.0f}."
+        # No cash limit on practice buys: the shortfall is added as practice money, recorded as a
+        # deposit so it raises cash without ever showing up as profit.
+        shortfall = math.ceil(required - cash)
+        db.add(
+            CapitalDeposit(
+                mode=TESTER_DEPOSIT_MODE,
+                ts=datetime.now(UTC),
+                amount=float(shortfall),
+                note=f"Auto top-up for buying {instrument.tradingsymbol}"[:200],
+            )
         )
-    if paper_broker.get_available_cash(db) < required:
-        raise ValueError(
-            "The shared practice cash pool is too low for this buy "
-            "(bot paper trades and manual testing share the same pool)."
-        )
+        db.flush()
 
     now = datetime.now(UTC)
     signal = Signal(

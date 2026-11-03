@@ -188,7 +188,7 @@ class PaperBroker(Broker):
         turnover = fill_price * request.quantity
         brokerage, taxes = self._charges(turnover, request.transaction_type)
 
-        if request.transaction_type == TransactionType.BUY:
+        if request.transaction_type == TransactionType.BUY and not request.own_funds:
             required = turnover + brokerage + taxes
             available = self.get_available_cash(db)
             if required > available:

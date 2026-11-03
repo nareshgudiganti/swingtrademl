@@ -192,18 +192,39 @@ def assemble_training_matrix(spec: DatasetSpec, inputs: ResearchInputs) -> pd.Da
     return m.sort_values(["ts", "symbol"]).reset_index(drop=True)
 
 
-def assemble_asof_row(inputs: ResearchInputs, symbol: str, as_of: date | pd.Timestamp) -> pd.DataFrame | None:
+def _has_bar_on(df: pd.DataFrame | None, day: pd.Timestamp) -> bool:
+    return df is not None and len(df) > 0 and _ist_date(df["ts"]).iloc[-1] == day
+
+
+def assemble_asof_row(
+    inputs: ResearchInputs, symbol: str, as_of: date | pd.Timestamp, *, now=None
+) -> pd.DataFrame | None:
     """(c) The one input row for `symbol` on decision day `as_of`, using only data dated <= as_of.
+
+    Availability rules (no guessing): the stock, NIFTY 50 and the stock's own sector index must each have a bar
+    dated exactly `as_of` (a missing index bar would otherwise be a stale carry-forward). If a clock `now` is
+    given, `as_of` must be a day whose bar can no longer change (`core.market_session.last_closed_trading_day`,
+    15:40 IST on a trading day): a bar stored while the market is open may be partial.
 
     Same existing feature code and the same sector builder as the training assembler. Returns None when the
     stock has no bar that day or any input is missing (never a guess)."""
     day = pd.Timestamp(as_of).normalize()
     sym = symbol.upper()
+    if now is not None:
+        from swing_trade_ml.core.market_session import last_closed_trading_day
+
+        if day.date() > last_closed_trading_day(now):
+            return None
     raw = inputs.raw.get(sym)
     if raw is None or len(raw) == 0:
         return None
     raw = _cut(raw.sort_values("ts"), day)
     if len(raw) == 0 or _ist_date(raw["ts"]).iloc[-1] != day:
+        return None
+    if not _has_bar_on(_cut(inputs.index_df, day), day):
+        return None
+    sec_name = sf.resolve_sector_index(sym)
+    if sec_name is not None and not _has_bar_on(_cut(inputs.index_frames.get(sec_name), day), day):
         return None
     cut = ResearchInputs(
         raw={sym: raw},

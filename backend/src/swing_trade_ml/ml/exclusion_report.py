@@ -5,10 +5,12 @@ Which training rows would a model have to drop because a price window crosses a 
 Rule (all parameters are recorded in the report header):
   * An event sits on session index e (the first session on or after its date).
   * FEATURE window: a decision row at session p uses up to `feature_lookback` sessions of history, so every row
-    with e <= p <= e + feature_lookback is excluded (its inputs straddle the step).
+    with e <= p <= e + feature_lookback (feature_lookback + 1 = 253 rows by default, both ends included) is excluded (its inputs straddle the step).
   * LABEL window: a row looks `horizon` sessions ahead, so every row with e - horizon <= p <= e - 1 is excluded
     (its outcome straddles the step).
-  * Only events classified EXCLUDE are removed in the base policy (a mechanical, verified price step).
+  * Only events classified EXCLUDE are removed in the base policy (a mechanical price step whose stored history is
+    NOT adjusted, or that nobody has shown to be adjusted). Events whose stored history is verified adjusted
+    (adjust_status ADJUSTED_OK) are RETAIN_VERIFIED_ADJUSTED: kept, but flagged in the report table.
     Genuine market moves are RETAINED (owner decision). The "24-move rule" is only an anomaly screen: events it
     flagged and nobody verified stay PROVISIONAL (listed, counted in the sensitivity table, NOT removed in the
     base policy). Events awaiting a fresh-fetch comparison are PENDING and are kept in the base exclusion list,
@@ -38,13 +40,32 @@ EXCLUDE = "EXCLUDE"  # verified mechanical price step: rows dropped in the base 
 RETAIN_GENUINE = "RETAIN_GENUINE"  # genuine market move (owner decision): rows kept
 PROVISIONAL = "PROVISIONAL"  # flagged by the screen, not verified: kept in base, shown in sensitivity
 PENDING = "PENDING_FRESH_FETCH"  # waiting for a fresh-fetch comparison: kept in the exclusion list, flagged
+RETAIN_VERIFIED_ADJUSTED = (
+    "RETAIN_VERIFIED_ADJUSTED"  # corporate action whose stored history is verified adjusted
+)
+
+# Per-event adjustment status (is the stored price history already adjusted across the event?).
+ADJUSTED_OK = (
+    "ADJUSTED_OK"  # verified: history is adjusted, no price step -> rows kept, flagged in the report
+)
+UNADJUSTED_CONFIRMED = "UNADJUSTED_CONFIRMED"  # verified: raw step still in the stored prices -> EXCLUDE
+PENDING_ADJ = "PENDING"  # waiting for a fresh fetch -> rows removed until checked
+UNKNOWN_ADJ = "UNKNOWN"  # nobody checked: fall back to the mechanical/genuine/provisional logic
 
 # Owner decisions (2026-11-04): these stocks' big moves are genuine and are retained.
 OWNER_GENUINE_STOCKS = frozenset(
     {"ADANIENT", "GABRIEL", "PAYTM", "IREDA", "GALAXYSURF", "WHIRLPOOL", "POWERINDIA"}
 )
-# (stock, ISO date) pairs waiting for a fresh-fetch comparison.
-PENDING_EVENTS = frozenset({("HINDUNILVR", "2025-12-05"), ("BAJAJELEC", "2023-09-14")})
+# (stock, ISO date) -> adjustment status, seeded from the 2026-11-05 owner decisions. RELIANCE and ITC histories were
+# verified COA-adjusted; HINDUNILVR and BAJAJELEC still wait for a fresh fetch.
+ADJUST_STATUS: dict[tuple[str, str], str] = {
+    ("RELIANCE", "2023-07-20"): ADJUSTED_OK,
+    ("ITC", "2025-01-06"): ADJUSTED_OK,
+    ("HINDUNILVR", "2025-12-05"): PENDING_ADJ,
+    ("BAJAJELEC", "2023-09-14"): PENDING_ADJ,
+}
+# (stock, ISO date) pairs waiting for a fresh-fetch comparison (kept for older callers).
+PENDING_EVENTS = frozenset(k for k, v in ADJUST_STATUS.items() if v == PENDING_ADJ)
 
 
 @dataclass(frozen=True)
@@ -65,13 +86,28 @@ class Event:
     in_49: bool
     mechanical: bool
     category: str
+    adjust_status: str = UNKNOWN_ADJ
+
+
+def adjust_status_for(row: Mapping[str, str]) -> str:
+    """Adjustment status of one event: the seeded table first, then an optional `adjust_status` column."""
+    key = (row["stock"], row["date"])
+    if key in ADJUST_STATUS:
+        return ADJUST_STATUS[key]
+    given = str(row.get("adjust_status", "") or "").strip().upper()
+    return given if given in {ADJUSTED_OK, UNADJUSTED_CONFIRMED, PENDING_ADJ} else UNKNOWN_ADJ
 
 
 def classify(row: Mapping[str, str]) -> str:
-    key = (row["stock"], row["date"])
+    """The stale `mechanical_step` flag no longer decides alone: the adjustment status comes first."""
     status = row.get("status", "")
     mech = str(row.get("mechanical_step", "")).strip().lower() == "true"
-    if key in PENDING_EVENTS:
+    adj = adjust_status_for(row)
+    if adj == ADJUSTED_OK:
+        return RETAIN_VERIFIED_ADJUSTED
+    if adj == UNADJUSTED_CONFIRMED:
+        return EXCLUDE
+    if adj == PENDING_ADJ:
         return PENDING
     if mech:
         return EXCLUDE
@@ -94,6 +130,7 @@ def load_events(path: str | Path) -> list[Event]:
                     in_49=row["in_49"].strip().lower() == "yes",
                     mechanical=str(row["mechanical_step"]).strip().lower() == "true",
                     category=classify(row),
+                    adjust_status=adjust_status_for(row),
                 )
             )
     return out
@@ -239,11 +276,14 @@ def render_markdown(
         f"- Universe: {len(universe)} symbols; {len(dates_by_symbol)} had local daily candles.",
         f"- Label horizon (sessions): {policy.horizon}; feature lookback after an event (sessions): {policy.feature_lookback}",
         f"- Warm-up (rows skipped at the start): {policy.min_history} sessions; last {policy.horizon} sessions skipped (label unknown)",
-        f"- Feature window excluded: decision rows p with e <= p <= e + {policy.feature_lookback}",
+        f"- Feature window excluded: decision rows p with e <= p <= e + {policy.feature_lookback} "
+        f"(both ends included = {policy.feature_lookback + 1} rows)",
         f"- Label window excluded: decision rows p with e - {policy.horizon} <= p <= e - 1",
         f"- Events file: {events_path} ({len(events)} events; {len(in_u)} on universe stocks)",
-        "- Base policy removes categories: EXCLUDE (verified mechanical step) and PENDING_FRESH_FETCH. "
-        "RETAIN_GENUINE and PROVISIONAL are kept.",
+        "- Base policy removes categories: EXCLUDE (price step not shown to be adjusted) and PENDING_FRESH_FETCH. "
+        "RETAIN_GENUINE, RETAIN_VERIFIED_ADJUSTED and PROVISIONAL are kept.",
+        "- Adjustment status per event (ADJUSTED_OK / UNADJUSTED_CONFIRMED / PENDING / UNKNOWN) decides before the "
+        "stale mechanical_step flag.",
         "- Owner-retained genuine moves: " + ", ".join(sorted(OWNER_GENUINE_STOCKS)),
         "- The 24-move rule is an anomaly screen only; unverified events stay PROVISIONAL.",
         "- Pending fresh-fetch comparison: " + ", ".join(f"{a} {b}" for a, b in sorted(PENDING_EVENTS)),
@@ -260,10 +300,11 @@ def render_markdown(
         f"- Excluded-list hash: {s['excluded_list_sha256']}",
         "",
         "## Events driving exclusions or flagged",
-        "| event id | category | type | status |",
-        "|---|---|---|---|",
+        "| event id | category | adjust status | type | status |",
+        "|---|---|---|---|---|",
         *(
-            f"| {e.event_id} | {e.category} | {e.event_type[:50]} | {e.status[:50]} |"
+            f"| {e.event_id} | {e.category}{' (KEPT, flagged)' if e.category == RETAIN_VERIFIED_ADJUSTED else ''} "
+            f"| {e.adjust_status} | {e.event_type[:50]} | {e.status[:50]} |"
             for e in sorted(in_u, key=lambda x: (x.category, x.event_id))
             if e.category != RETAIN_GENUINE
         ),

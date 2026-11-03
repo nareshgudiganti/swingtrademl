@@ -62,10 +62,62 @@ def test_classify_owner_decisions():
     assert er.classify({**base, "stock": "ADANIENT"}) == er.RETAIN_GENUINE
     assert er.classify({**base, "stock": "SBIN"}) == er.PROVISIONAL
     assert er.classify({**base, "stock": "SBIN", "status": "GENUINE MOVE (x)"}) == er.RETAIN_GENUINE
+    # a mechanical step with NO adjustment evidence still excludes (the default, cautious)
     assert (
-        er.classify({**base, "stock": "RELIANCE", "mechanical_step": "True", "status": "VERIFIED"})
+        er.classify(
+            {
+                **base,
+                "stock": "RELIANCE",
+                "date": "2023-01-27",
+                "mechanical_step": "True",
+                "status": "VERIFIED",
+            }
+        )
         == er.EXCLUDE
     )
+
+
+def test_verified_adjusted_events_are_retained_not_removed():
+    for stock, d in (("RELIANCE", "2023-07-20"), ("ITC", "2025-01-06")):
+        row = {"stock": stock, "date": d, "status": "VERIFIED", "mechanical_step": "True"}
+        assert er.adjust_status_for(row) == er.ADJUSTED_OK
+        assert er.classify(row) == er.RETAIN_VERIFIED_ADJUSTED
+    dates = _dates(1000)
+    pol = er.Policy(horizon=5, feature_lookback=10, min_history=0)
+    ev = _ev("RELIANCE", dates[500].isoformat(), er.RETAIN_VERIFIED_ADJUSTED)
+    assert er.excluded_rows({"RELIANCE": dates}, [ev], pol) == []
+    assert er.RETAIN_VERIFIED_ADJUSTED not in er._removed_categories(pol)
+
+
+def test_confirmed_unadjusted_is_excluded_and_pending_is_pending():
+    row = {
+        "stock": "XYZ",
+        "date": "2024-03-01",
+        "status": "VERIFIED",
+        "mechanical_step": "False",
+        "adjust_status": "UNADJUSTED_CONFIRMED",
+    }
+    assert er.classify(row) == er.EXCLUDE  # even though the stale mechanical flag is False
+    for stock, d in (("HINDUNILVR", "2025-12-05"), ("BAJAJELEC", "2023-09-14")):
+        r = {"stock": stock, "date": d, "status": "VERIFIED", "mechanical_step": "True"}
+        assert er.adjust_status_for(r) == er.PENDING_ADJ
+        assert er.classify(r) == er.PENDING
+    dates = _dates(1000)
+    pol = er.Policy(horizon=5, feature_lookback=10, min_history=0)
+    ev = _ev("HINDUNILVR", dates[500].isoformat(), er.PENDING)
+    assert len(er.excluded_rows({"HINDUNILVR": dates}, [ev], pol)) == 16
+
+
+def test_unknown_adjust_status_falls_back_to_existing_logic():
+    base = {"date": "2024-05-05", "mechanical_step": "False", "status": "UNVERIFIED", "stock": "SBIN"}
+    assert er.adjust_status_for(base) == er.UNKNOWN_ADJ
+    assert er.classify(base) == er.PROVISIONAL
+
+
+def test_report_wording_counts_253_rows():
+    dates = _dates(800)
+    md = er.render_markdown("t", ["A"], {"A": dates}, [], er.Policy(horizon=5), "e.csv", (5,))
+    assert "253 rows" in md
 
 
 def test_warmup_and_label_cutoff_not_counted_as_exclusions():

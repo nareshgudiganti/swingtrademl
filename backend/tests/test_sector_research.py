@@ -110,6 +110,38 @@ def test_asof_row_is_none_when_stock_has_no_bar_or_is_unmapped(inputs):
     assert sr.assemble_asof_row(inputs, "NOSUCH", DAYS[400]) is None
 
 
+def test_asof_row_refuses_when_the_decision_day_index_bars_are_missing(inputs):
+    t = DAYS[400]
+    assert sr.assemble_asof_row(inputs, "TCS", t) is not None
+    # NIFTY 50 has no bar for the decision day: its value would be a stale carry-forward, so refuse
+    no_nifty = sr.ResearchInputs(
+        inputs.raw,
+        inputs.index_df[inputs.index_df.index != 400],
+        inputs.index_frames,
+        inputs.vix_df,
+        inputs.breadth_df,
+    )
+    assert sr.assemble_asof_row(no_nifty, "TCS", t) is None
+    # the stock's own sector index (TCS -> NIFTY IT) has no bar that day
+    frames = dict(inputs.index_frames)
+    frames["NIFTY IT"] = frames["NIFTY IT"][frames["NIFTY IT"].index != 400]
+    no_sector = sr.ResearchInputs(inputs.raw, inputs.index_df, frames, inputs.vix_df, inputs.breadth_df)
+    assert sr.assemble_asof_row(no_sector, "TCS", t) is None
+
+
+def test_asof_row_refuses_a_day_whose_bar_may_still_be_partial(inputs):
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    t = DAYS[400]  # a business day (weekday)
+    ist = ZoneInfo("Asia/Kolkata")
+    during = datetime(t.year, t.month, t.day, 14, 0, tzinfo=ist)
+    after = datetime(t.year, t.month, t.day, 15, 41, tzinfo=ist)
+    assert sr.assemble_asof_row(inputs, "TCS", t, now=during) is None  # the day's bar is not final yet
+    assert sr.assemble_asof_row(inputs, "TCS", t, now=after) is not None
+    assert sr.assemble_asof_row(inputs, "TCS", t) is not None  # no clock given: research replay, unchanged
+
+
 def test_asof_row_ignores_future_data(inputs):
     t = DAYS[400]
     a = sr.assemble_asof_row(inputs, "TCS", t)

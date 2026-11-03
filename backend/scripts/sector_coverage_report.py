@@ -119,6 +119,7 @@ def _daily_stats(per_day: pd.Series, all_days: pd.DatetimeIndex) -> dict:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", required=True)
+    ap.add_argument("--excl-suffix", default="", help="e.g. _v2: reads excluded_rows_h{5,10}{suffix}.csv")
     a = ap.parse_args(argv)
     groups = _groups()
     allsyms = sorted({s for g in groups.values() for s in g})
@@ -126,8 +127,12 @@ def main(argv=None) -> int:
     nifty, secs = sr._closes(inputs)
     out: dict = {"groups": {k: len(v) for k, v in groups.items()}, "views": {}}
     excl = {
-        5: sr.load_exclusions_csv(REPO / "docs/brain/evidence/sector_prep/excluded_rows_h5.csv"),
-        10: sr.load_exclusions_csv(REPO / "docs/brain/evidence/sector_prep/excluded_rows_h10.csv"),
+        5: sr.load_exclusions_csv(
+            REPO / f"docs/brain/evidence/sector_prep/excluded_rows_h5{a.excl_suffix}.csv"
+        ),
+        10: sr.load_exclusions_csv(
+            REPO / f"docs/brain/evidence/sector_prep/excluded_rows_h10{a.excl_suffix}.csv"
+        ),
     }
     for horizon in (5, 10):
         stocks = {

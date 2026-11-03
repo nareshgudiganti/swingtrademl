@@ -1,0 +1,296 @@
+[
+ {
+  "window": "fd_v1/wf_v1 2023-07-01..2025-01-31",
+  "variant": "hold",
+  "finished": 19404,
+  "base": -0.2738,
+  "excl_path": [
+   -0.2748,
+   19398,
+   6
+  ],
+  "excl_path+label5": [
+   -0.2751,
+   19394,
+   10
+  ],
+  "excl_path+label5+feat252": [
+   -0.2787,
+   19122,
+   282
+  ]
+ },
+ {
+  "window": "fd_v1/wf_v1 2023-07-01..2025-01-31",
+  "variant": "day5",
+  "finished": 19404,
+  "base": -0.3433,
+  "excl_path": [
+   -0.3443,
+   19398,
+   6
+  ],
+  "excl_path+label5": [
+   -0.3446,
+   19394,
+   10
+  ],
+  "excl_path+label5+feat252": [
+   -0.3473,
+   19122,
+   282
+  ]
+ },
+ {
+  "window": "horizon_grid A 2025-02-03..2025-06-30",
+  "variant": "hold",
+  "finished": 4851,
+  "base": -0.4255,
+  "excl_path": [
+   -0.4255,
+   4851,
+   0
+  ],
+  "excl_path+label5": [
+   -0.4255,
+   4851,
+   0
+  ],
+  "excl_path+label5+feat252": [
+   -0.4211,
+   4752,
+   99
+  ]
+ },
+ {
+  "window": "horizon_grid A 2025-02-03..2025-06-30",
+  "variant": "day5",
+  "finished": 4851,
+  "base": -0.3788,
+  "excl_path": [
+   -0.3788,
+   4851,
+   0
+  ],
+  "excl_path+label5": [
+   -0.3788,
+   4851,
+   0
+  ],
+  "excl_path+label5+feat252": [
+   -0.3737,
+   4752,
+   99
+  ]
+ },
+ {
+  "window": "horizon_grid B 2025-08-01..2025-12-31",
+  "variant": "hold",
+  "finished": 5047,
+  "base": 0.0845,
+  "excl_path": [
+   0.0899,
+   5039,
+   8
+  ],
+  "excl_path+label5": [
+   0.0899,
+   5039,
+   8
+  ],
+  "excl_path+label5+feat252": [
+   0.0989,
+   4918,
+   129
+  ]
+ },
+ {
+  "window": "horizon_grid B 2025-08-01..2025-12-31",
+  "variant": "day5",
+  "finished": 5047,
+  "base": -0.0866,
+  "excl_path": [
+   -0.0833,
+   5042,
+   5
+  ],
+  "excl_path+label5": [
+   -0.0833,
+   5042,
+   5
+  ],
+  "excl_path+label5+feat252": [
+   -0.0724,
+   4921,
+   126
+  ]
+ },
+ {
+  "window": "horizon_grid C 2026-05-01..2026-08-14",
+  "variant": "hold",
+  "finished": 3574,
+  "base": -0.4831,
+  "excl_path": [
+   -0.4831,
+   3574,
+   0
+  ],
+  "excl_path+label5": [
+   -0.4831,
+   3574,
+   0
+  ],
+  "excl_path+label5+feat252": [
+   -0.4605,
+   3501,
+   73
+  ]
+ },
+ {
+  "window": "horizon_grid C 2026-05-01..2026-08-14",
+  "variant": "day5",
+  "finished": 3577,
+  "base": -0.4384,
+  "excl_path": [
+   -0.4384,
+   3577,
+   0
+  ],
+  "excl_path+label5": [
+   -0.4384,
+   3577,
+   0
+  ],
+  "excl_path+label5+feat252": [
+   -0.4262,
+   3504,
+   73
+  ]
+ },
+ {
+  "window": "walk_forward/portfolio_replay 2025-10-01..2026-08-15",
+  "variant": "hold",
+  "finished": 10532,
+  "base": -0.3654,
+  "excl_path": [
+   -0.3632,
+   10524,
+   8
+  ],
+  "excl_path+label5": [
+   -0.3632,
+   10524,
+   8
+  ],
+  "excl_path+label5+feat252": [
+   -0.3516,
+   10285,
+   247
+  ]
+ },
+ {
+  "window": "walk_forward/portfolio_replay 2025-10-01..2026-08-15",
+  "variant": "day5",
+  "finished": 10535,
+  "base": -0.3734,
+  "excl_path": [
+   -0.372,
+   10530,
+   5
+  ],
+  "excl_path+label5": [
+   -0.372,
+   10530,
+   5
+  ],
+  "excl_path+label5+feat252": [
+   -0.3632,
+   10291,
+   244
+  ]
+ },
+ {
+  "window": "scoreboard s1 2025-02-01..2026-08-15",
+  "variant": "hold",
+  "finished": 18568,
+  "base": -0.3912,
+  "excl_path": [
+   -0.39,
+   18560,
+   8
+  ],
+  "excl_path+label5": [
+   -0.39,
+   18560,
+   8
+  ],
+  "excl_path+label5+feat252": [
+   -0.3823,
+   18157,
+   411
+  ]
+ },
+ {
+  "window": "scoreboard s1 2025-02-01..2026-08-15",
+  "variant": "day5",
+  "finished": 18571,
+  "base": -0.386,
+  "excl_path": [
+   -0.3852,
+   18566,
+   5
+  ],
+  "excl_path+label5": [
+   -0.3852,
+   18566,
+   5
+  ],
+  "excl_path+label5+feat252": [
+   -0.3786,
+   18163,
+   408
+  ]
+ },
+ {
+  "window": "scoreboard s2 2026-07-13..2026-09-08(data end)",
+  "variant": "hold",
+  "finished": 1742,
+  "base": -0.6485,
+  "excl_path": [
+   -0.6485,
+   1742,
+   0
+  ],
+  "excl_path+label5": [
+   -0.6485,
+   1742,
+   0
+  ],
+  "excl_path+label5+feat252": [
+   -0.6108,
+   1710,
+   40
+  ]
+ },
+ {
+  "window": "scoreboard s2 2026-07-13..2026-09-08(data end)",
+  "variant": "day5",
+  "finished": 1814,
+  "base": -0.4354,
+  "excl_path": [
+   -0.4354,
+   1814,
+   0
+  ],
+  "excl_path+label5": [
+   -0.4354,
+   1814,
+   0
+  ],
+  "excl_path+label5+feat252": [
+   -0.4139,
+   1778,
+   40
+  ]
+ }
+]

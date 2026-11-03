@@ -18,6 +18,7 @@ import brainLatestRun from '../fixtures/brain-latest-run.json' with { type: 'jso
 import brainLearning from '../fixtures/brain-learning.json' with { type: 'json' }
 import beginnerStockInfy from '../fixtures/beginner-stock-infy.json' with { type: 'json' }
 import brainStage from '../fixtures/brain-stage.json' with { type: 'json' }
+import horizonReport from '../fixtures/horizon-report.json' with { type: 'json' }
 import marketSession from '../fixtures/market-session.json' with { type: 'json' }
 import meMember from '../fixtures/me-member.json' with { type: 'json' }
 import meOwner from '../fixtures/me-owner.json' with { type: 'json' }
@@ -163,6 +164,14 @@ function answer(role: Role, method: string, path: string, query: URLSearchParams
   // Plans manager (owner only, like the real /admin API).
   const adminPlan: Record<string, unknown> = { '/admin/switch': adminPlans.switch, '/admin/features': adminPlans.features, '/admin/plans': adminPlans.plans, '/admin/users': adminPlans.users }
   if (path in adminPlan) return owner ? { body: adminPlan[path] } : { status: 403, body: { detail: 'Owner only.' } }
+
+  // Horizon picks (owner only): the side-by-side report, the older lane cards and the 5-day table.
+  if (path === '/research/lanes/horizon-report') return owner ? { body: horizonReport } : { status: 403, body: { detail: 'Owner only.' } }
+  if (path === '/research/lanes') return owner ? { body: { note: 'Test picks only.', lanes: [] } } : { status: 403, body: { detail: 'Owner only.' } }
+  if (path === '/research/lane-picks')
+    return owner
+      ? { body: { note: 'Test picks only.', lanes: [], summary: { picks: 0, finished: 0, open: 0, wins: 0, mean_net_return: null }, rows: [] } }
+      : { status: 403, body: { detail: 'Owner only.' } }
 
   // Brain (practice mode) and the market clock.
   if (path === '/brain/runs/latest') return { body: brainLatestRun }

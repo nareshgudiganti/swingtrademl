@@ -55,6 +55,7 @@ import type {
   RegistrySlots,
   LanePicks,
   LanePickRow,
+  HorizonReport,
   LanesResponse,
   PlanConfig,
   PlanPick,
@@ -350,6 +351,7 @@ export const api = {
     return get<LanePicks>(`/research/lane-picks${qs ? `?${qs}` : ''}`)
   },
   lanes: () => get<LanesResponse>('/research/lanes'),
+  horizonReport: () => get<HorizonReport>('/research/lanes/horizon-report'),
   lanePickRows: (slotKey: string, limit = 100) =>
     get<LanePickRow[]>(`/research/lanes/${encodeURIComponent(slotKey)}/picks?limit=${limit}`),
   h05Report: () => get<{ runs: unknown[]; verdict?: { state?: string } }>('/research/h05/report'),

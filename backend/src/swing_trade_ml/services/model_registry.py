@@ -35,9 +35,7 @@ from swing_trade_ml.db.models.session import User
 from swing_trade_ml.db.models.trading import Strategy
 from swing_trade_ml.ml.real_question import resolve_model_name
 from swing_trade_ml.services import audit
-
-HORIZONS = (15, 10, 5)
-TIERS = ("large", "midcap", "smallcap")
+from swing_trade_ml.services.lane_slots import HORIZONS, TIERS, fold_name_pattern, prefix_table
 
 #: The only model names mapped to a cap group. Exact matches; no suffix guessing.
 VERIFIED_NAMES: dict[str, str] = {
@@ -45,18 +43,6 @@ VERIFIED_NAMES: dict[str, str] = {
     "swing_classifier_midcap": "midcap",
     "swing_classifier_smallcap": "smallcap",
 }
-
-#: Shadow-lane model families: (name prefix, the one horizon it is valid for, cap tier). A name must START with the
-#: prefix (which ends in "_") and the model must be of that horizon. The mid-cap prefixes carry an "M".
-LANE_PREFIXES: tuple[tuple[str, int, str], ...] = (
-    ("td_h10_", 10, "large"),
-    ("sl1_S0_", 15, "large"),
-    ("sl1_S1_", 15, "large"),
-    ("sl1_S2_", 15, "large"),
-    ("sl1_S0M_", 15, "midcap"),
-    ("sl1_S1M_", 15, "midcap"),
-    ("sl1_S2M_", 15, "midcap"),
-)
 
 #: Descriptive labels. None of them means validated, and none of them starts or enables anything.
 RESEARCH_STATUSES = ("not_started", "researching", "paused", "dropped")
@@ -92,10 +78,25 @@ def slot_for(name: str | None, horizon: int | None) -> str | None:
         return None
     if name in VERIFIED_NAMES:
         return slot_key(horizon, VERIFIED_NAMES[name])
-    for prefix, lane_horizon, tier in LANE_PREFIXES:
+    for prefix, lane_horizon, tier in prefix_table():  # the lane families come from services/lane_slots.py
         if name.startswith(prefix) and horizon == lane_horizon:
             return slot_key(horizon, tier)
     return None
+
+
+#: Model roles (ml_models.model_role). Only "final" (frozen after a passed history test) may be scored by a shadow lane.
+ROLES: tuple[str, ...] = ("fold", "final", "prod")
+
+
+def role_of(m: Any) -> dict[str, Any]:
+    """The model's role for display and eligibility. A stored role wins; an unmarked fold-style name is shown as
+    "fold" (derived, display only); everything else unmarked is "unmarked". Read-only, never writes."""
+    stored = getattr(m, "model_role", None)
+    if stored in ROLES:
+        return {"role": stored, "recorded": True}
+    if fold_name_pattern().match(getattr(m, "name", "") or ""):
+        return {"role": "fold", "recorded": False}
+    return {"role": "unmarked", "recorded": False}
 
 
 def _fingerprint(values: list[Any]) -> str | None:
@@ -199,6 +200,7 @@ def model_view(m: MLModel, usage: dict[str, list[dict[str, Any]]] | None) -> dic
         used_by = []  # only the ACTIVE version of a name is ever loaded
     return {
         "slot": slot_for(m.name, m.prediction_horizon_days),
+        "role": role_of(m),
         "provenance": provenance(m),
         # Two separate facts, never merged into one label.
         "registry_status": m.status,

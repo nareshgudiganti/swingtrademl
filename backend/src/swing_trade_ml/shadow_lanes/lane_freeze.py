@@ -25,12 +25,10 @@ from datetime import date, datetime
 from pathlib import Path
 
 MODEL_DIR = "docs/brain/evidence/lane_models"
-#: slot -> the candidates whose history test may feed it
-SLOT_CANDIDATES = {
-    "10d-large": ("TD10",),
-    "15d-large": ("S0", "S1", "S2"),
-    "15d-midcap": ("S0M", "S1M", "S2M"),
-}
+#: slot -> the candidates whose history test may feed it (a live view over services/lane_slots.py). A NEW candidate
+#: also needs its own training recipe below: that is a model, not infrastructure.
+from swing_trade_ml.services.lane_slots import CANDIDATES_VIEW as SLOT_CANDIDATES  # noqa: E402
+
 BARRIER = {"TD10": (10, 0.06, 0.035), "S0": (15, 0.08, 0.04), "S0M": (15, 0.08, 0.04)}
 
 
@@ -129,6 +127,22 @@ def default_trainer(db, candidate: str, cutoff: date, universe: dict, name: str)
     return sl.train_lab_model(db, name=name, cutoff=cutoff, symbols=symbols, candidates=ref, bars=bars)
 
 
+def _mark_final(db, model, slot_key: str, candidate: str, report_path: Path, stamp: str) -> None:
+    """Record that this model is the frozen final one, and which passed history report qualified it. Adds data only:
+    status, files and scoring are untouched. A software step; it is not itself a model validation."""
+    model.model_role = "final"
+    metrics = dict(model.metrics) if isinstance(getattr(model, "metrics", None), dict) else {}
+    metrics["qualification"] = {
+        "slot_key": slot_key,
+        "candidate": candidate,
+        "history_report": str(report_path),
+        "frozen_at": stamp,
+    }
+    model.metrics = metrics  # a new dict, so the JSON column registers the change
+    if db is not None:
+        db.commit()
+
+
 def model_name(candidate: str, cutoff: date) -> str:
     """Names the registry maps to the right slot: td_h10_* for the 10-day model, sl1_<cand>_* for the 15-day ones."""
     return f"td_h10_lane_{cutoff:%Y%m%d}" if candidate == "TD10" else f"sl1_{candidate}_lane_{cutoff:%Y%m%d}"
@@ -176,6 +190,7 @@ def freeze(
     if slot_for(model.name, model.prediction_horizon_days) != slot_key:
         raise FreezeRefusedError(f"trained model {model.name!r} is not registered for slot {slot_key}")
     stamp = (now or datetime.now()).isoformat(timespec="seconds")
+    _mark_final(db, model, slot_key, candidate, report_path, stamp)
     record = {
         "slot_key": slot_key,
         "candidate": candidate,

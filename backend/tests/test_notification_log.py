@@ -16,18 +16,22 @@ TOKEN = "123456789:AAH_fake_token_value_for_tests_only_1234"
 
 
 class FakeNotifier:
+    """Stands in for the real notifier: send_sync is the one send path, take_last_result says how it ended."""
+
     def __init__(self, *results: SendResult) -> None:
         self.results = list(results) or [SendResult(True, http_status=200)]
         self.calls = 0
-        self.plain_calls = 0
-
-    def send_sync_result(self, text, event="fill"):
-        self.calls += 1
-        return self.results[min(self.calls - 1, len(self.results) - 1)]
+        self._last: SendResult | None = None
 
     def send_sync(self, text, event="fill"):
-        self.plain_calls += 1
-        return True
+        self.calls += 1
+        result = self.results[min(self.calls - 1, len(self.results) - 1)]
+        self._last = None if result.skipped else result  # Telegram off: nothing is posted
+        return result.ok
+
+    def take_last_result(self):
+        last, self._last = self._last, None
+        return last
 
 
 @pytest.fixture()
@@ -161,20 +165,35 @@ def test_the_alert_still_goes_out_when_the_log_cannot_be_used():
     out = nl.send_logged(
         "text", dedupe_key="k", message_type="sell_full", book="Bot", notifier=n, sessions=broken
     )
-    assert out == "logged_off" and n.plain_calls == 1 and n.calls == 0
+    assert out == "logged_off" and n.calls == 1  # sent once, plainly, without a row
 
 
 def test_a_failing_notifier_never_raises_into_the_caller(db_session, sessions):
     class Boom(FakeNotifier):
-        def send_sync_result(self, text, event="fill"):
+        def send_sync(self, text, event="fill"):
             raise ValueError("network exploded")
 
     assert _send(Boom(), sessions) == "failed"
     assert _row(db_session).error_kind == "ValueError"
 
 
-def test_notifier_result_for_a_switched_off_telegram_is_skipped():
-    assert TelegramNotifier().send_sync_result("hi", "fill").skipped is True  # tests run outside production
+def test_the_real_notifier_posts_nothing_when_switched_off_and_the_log_says_skipped(db_session, sessions):
+    real = TelegramNotifier()  # tests run outside production, so Telegram is off
+    assert real.send_sync("hi", "fill") is False and real.take_last_result() is None
+    assert _send(real, sessions, key="sell:9:9") == "skipped"
+    assert _row(db_session, "sell:9:9").status == "SKIPPED"
+
+
+def test_a_patched_send_sync_still_counts_as_the_send_path(db_session, sessions):
+    """Existing tests capture sell messages by patching send_sync; that must keep working."""
+    seen: list[str] = []
+
+    class Patched(FakeNotifier):
+        def send_sync(self, text, event="fill"):
+            seen.append(text)
+            return True
+
+    assert _send(Patched(), sessions, key="sell:8:8") == "sent" and seen == ["text"]
 
 
 def test_endpoint_lists_the_log_and_counts(client, db_session):

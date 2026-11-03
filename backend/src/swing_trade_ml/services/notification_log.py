@@ -82,6 +82,17 @@ def _finish(db: Session, row_id: int, result: SendResult, now: datetime) -> None
         row.status, row.error_kind, row.error_detail = FAILED, result.error_kind, scrub(result.error_detail)
 
 
+def _attempt(notifier: Any, text: str, event: str) -> SendResult:
+    """One send through the notifier's ordinary send_sync (so it behaves as before), then ask how it ended.
+    No post at all means Telegram is off here: SKIPPED, not FAILED."""
+    ok = notifier.send_sync(text, event)
+    took = getattr(notifier, "take_last_result", None)
+    result = took() if callable(took) else None
+    if result is not None:
+        return result
+    return SendResult(True) if ok else SendResult(False, skipped=True)
+
+
 def send_logged(
     text: str,
     *,
@@ -127,7 +138,7 @@ def send_logged(
         return "logged_off"
 
     try:
-        result = notifier.send_sync_result(text, event)
+        result = _attempt(notifier, text, event)
     except Exception as exc:  # noqa: BLE001
         result = SendResult(False, error_kind=type(exc).__name__)
     try:

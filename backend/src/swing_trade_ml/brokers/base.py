@@ -39,6 +39,9 @@ class OrderRequest:
     price: float | None = None
     trigger_price: float | None = None
     tag: str | None = None
+    # A hand-bought practice book with its own money (services/tester_paper.py): the paper broker then
+    # skips the bot's cash check, because that pool is not this book's. Ignored by the live broker.
+    own_funds: bool = False
 
 
 @dataclass(slots=True)

@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../../api/client'
 import type { DetailedPosition } from '../../api/types'
 import { CapFlag } from '../cap'
-import { DayCell, ScoreToday, SuggestionTag, scoreNow, suggestionRank } from '../HeldRead'
+import { DayCell, ScoreToday, SellList, SellStatusTag, SuggestionTag, scoreNow, suggestionRank } from '../HeldRead'
 import ScoreTrail from '../ScoreTrail'
 import { SortTh, useSort } from '../sort'
 import { Card, inr, signed, StockLogo, toneClass } from '../ui'
@@ -224,6 +224,7 @@ export default function PaperPositions() {
         {tradesState === 'ready' && reportRows.length === 0 && (
           <PageState kind="empty" reason="No closed paper trades yet. A trade shows here once you sell it." />
         )}
+        {tradesState === 'ready' && <SellList trades={trades.data ?? []} book="Testing" />}
         {reportRows.length > 0 && <PeriodTable rows={reportRows} />}
       </Card>
     </div>
@@ -322,6 +323,7 @@ function OpenTable({
                 </td>
                 <td>
                   <SuggestionTag p={p} />
+                  <SellStatusTag p={p} />
                 </td>
                 <td className="tm-right">
                   <ScoreToday p={p} />

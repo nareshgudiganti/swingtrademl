@@ -39,7 +39,7 @@ from swing_trade_ml.db.models.market import Instrument
 from swing_trade_ml.db.models.trading import Order, Position, Signal, Strategy, Trade
 from swing_trade_ml.ml import real_question
 from swing_trade_ml.notifications import alert_policy, notifier
-from swing_trade_ml.services import risk, score_history, system_state
+from swing_trade_ml.services import risk, score_history, sell_labels, system_state
 from swing_trade_ml.services.costs import compute_charges
 from swing_trade_ml.services.exit_policy import (
     exit_confidence_for,
@@ -599,7 +599,7 @@ def close_position(
             reason=reason,
         )
         notifier.send_sync(
-            _partial_exit_message(instrument, trade, position, reason, broker.mode), "fill"
+            _partial_exit_message(instrument, trade, position, reason, broker.mode, _book(position)), "fill"
         )
         return trade
 
@@ -616,7 +616,7 @@ def close_position(
     )
 
     notifier.send_sync(
-        _exit_message(instrument, trade, reason, broker.mode),
+        _exit_message(instrument, trade, reason, broker.mode, _book(position)),
         "fill",
     )
     return trade
@@ -656,7 +656,9 @@ def manual_close_position(
         reason=reason,
     )
 
-    notifier.send_sync(_exit_message(instrument, trade, reason, position.mode), "fill")
+    notifier.send_sync(
+        _exit_message(instrument, trade, reason, position.mode, _book(position)), "fill"
+    )
     return trade
 
 
@@ -1796,7 +1798,9 @@ def _finish_reconciled_order(db: Session, order: Order, result: OrderResult) -> 
                 qty=filled_qty, remaining=position.quantity,
             )
             notifier.send_sync(
-                _partial_exit_message(instrument, trade, position, partial_reason, order.mode),
+                _partial_exit_message(
+                    instrument, trade, position, partial_reason, order.mode, _book(position)
+                ),
                 "fill",
             )
             # Still open, holding the rest — and now sellable again.
@@ -1820,7 +1824,7 @@ def _finish_reconciled_order(db: Session, order: Order, result: OrderResult) -> 
             symbol=instrument.tradingsymbol, order_id=order.id, price=fill_price,
             reason=str(exit_reason),
         )
-        notifier.send_sync(_exit_message(instrument, trade, exit_reason, order.mode), "fill")
+        notifier.send_sync(_exit_message(instrument, trade, exit_reason, order.mode, _book(position)), "fill")
 
 
 def _fail_reconciled_order(db: Session, order: Order, result: OrderResult) -> None:
@@ -1896,9 +1900,19 @@ def _entry_message(instrument, position, signal, result, mode) -> str:
     )
 
 
-def _exit_message(instrument, trade, reason, mode) -> str:
+def _book(position) -> str:
+    """Which book a sell came from, for the alert: 'Bot' or 'Testing'."""
+    return sell_labels.book_label(position.strategy.name if getattr(position, "strategy", None) else None)
+
+
+def _badge(mode, book: str | None) -> str:
+    base = "📝 PAPER" if mode == "paper" else "💰 <b>LIVE</b>"
+    return f"{base} · {book}" if book else base
+
+
+def _exit_message(instrument, trade, reason, mode, book: str | None = None) -> str:
     icon = "🎯" if trade.net_pnl >= 0 else "🛑"
-    badge = "📝 PAPER" if mode == "paper" else "💰 <b>LIVE</b>"
+    badge = _badge(mode, book)
     return (
         f"{icon} <b>CLOSED · {instrument.tradingsymbol}</b>  ({badge})\n\n"
         f"Entry ₹{trade.entry_price:,.2f} → Exit ₹{trade.exit_price:,.2f}\n"
@@ -1909,10 +1923,10 @@ def _exit_message(instrument, trade, reason, mode) -> str:
     )
 
 
-def _partial_exit_message(instrument, trade, position, reason, mode) -> str:
+def _partial_exit_message(instrument, trade, position, reason, mode, book: str | None = None) -> str:
     """Plain English on purpose — the owner reads these on a phone without a
     trading background, so "stop-loss" becomes "sell-if-wrong price"."""
-    badge = "📝 PAPER" if mode == "paper" else "💰 <b>LIVE</b>"
+    badge = _badge(mode, book)
     symbol = instrument.tradingsymbol
     held_before = trade.quantity + position.quantity
     portion = "half" if trade.quantity * 2 == held_before else f"{trade.quantity:,} of {held_before:,} shares"

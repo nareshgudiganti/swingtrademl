@@ -108,6 +108,15 @@ input differently and on different history lengths. Here no input depends on his
 Not yet wired into `ml/features.py` or `ml/predict.py` (both fingerprinted in `backend/tests/trial_freeze.json`);
 wiring would need an owner-approved freeze change or a separate research path.
 
+### R_37 and obv_slope (added 2026-11-07)
+
+Training-era `obv_slope` = `obv.diff(10) / obv.rolling(20).mean().abs()` (models 2, 16, 17). Current builder since `fcaef35`
+(2026-10-05) = `obv.diff(10) / volume.rolling(20).mean()`. The research arms A_53, R_37 and C_56 all use the current
+formula on the full history, so C_56 minus A_53 is unaffected; R_37 has model 2's 37 names but not its `obv_slope` values
+and is retrained under the research recipe, so it is a research reference, not a production replay. Production serves 400
+bars and research uses the full history. The current implementation is deliberately NOT changed (owner, 2026-11-07).
+See `docs/superpowers/specs/2026-10-30-obv-slope-incident.md` and `docs/brain/evidence/sector_prep/r37_semantic_drift_v1.json`.
+
 ## 8. Sector mapping verification (ASIANPAINT, BHARTIARTL)
 
 Both are the only two of the 49 with no label in `ml/sector_map.py`. Method: individual look-ups only, no bulk

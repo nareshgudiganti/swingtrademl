@@ -56,16 +56,34 @@ def authorise(paths, eid="ev5", horizon=5, **kw):
     kw.setdefault("signer", "owner")
     kw.setdefault("signed_date", "2026-11-06")
     kw.setdefault("reason", "first holdout")
+    proto = kw.pop("proto", "sx-protocol-test")
+    kw.setdefault("text", "I authorise this" if eid == "ev5" else f"I authorise this {eid}")
     return hr.append_authorisation(
-        eid, authorisation_text="I authorise this", bound=bound(horizon), **kw, **paths
+        eid,
+        authorisation_text=kw.pop("text"),
+        bound=bound(horizon, protocol_id=proto),
+        **kw,
+        **paths,
     )
 
 
-def start(paths, horizon=5, **kw):
-    return hr.require_authorised_and_mark_started(run_of(horizon, **kw), **paths)
+def locs(paths, name="m1"):
+    base = Path(paths["registry_path"]).parent.parent / "run_out"
+    return {"marker_file": str(base / name / "SX5.holdout_used.json"), "record_dirs": [str(base / "SX5")]}
+
+
+def start(paths, horizon=5, marker="m1", **kw):
+    return hr.require_authorised_and_mark_started(
+        run_of(horizon, **kw), locations=locs(paths, marker), **paths
+    )
+
+
+def expose(paths, eid="ev5"):
+    return hr.mark_results_exposed(eid, **paths)
 
 
 def complete(paths, eid="ev5"):
+    expose(paths, eid)  # COMPLETED needs RESULTS_EXPOSED first
     return hr.mark_completed(eid, {a: [H64("9")] for a in ARMS}, **paths)
 
 
@@ -111,12 +129,13 @@ def test_authorised_writes_started_before_any_fit_and_completes(paths):
     complete(paths)
     assert hr.event_states(**paths) == {"ev5": "COMPLETED"}
     types = [json.loads(x)["type"] for x in lines(paths)]
-    assert types == ["AUTHORISED", "STARTED", "COMPLETED"]
+    assert types == ["AUTHORISED", "STARTED", "RESULTS_EXPOSED", "COMPLETED"]
 
 
 def test_completed_must_cover_exactly_the_authorised_arms(paths):
     authorise(paths)
     start(paths)
+    expose(paths)
     with pytest.raises(hr.HoldoutRefused, match="exactly the authorised arms"):
         hr.mark_completed("ev5", {"A_53": [H64("9")]}, **paths)
 
@@ -190,8 +209,19 @@ def test_new_event_for_a_consumed_horizon_needs_a_signed_superseding_authorisati
         authorise(paths, "ev5b", reason="please")
     with pytest.raises(hr.HoldoutRefused, match="supersedes_event_id"):
         authorise(paths, "ev5b", supersedes_event_id="nope", reason="x")
-    authorise(paths, "ev5b", supersedes_event_id="ev5", reason="owner re-run because X")
-    assert start(paths) == "ev5b"
+    with pytest.raises(
+        hr.HoldoutRefused, match="NEW protocol id"
+    ):  # results were exposed: same id is not enough
+        authorise(paths, "ev5b", supersedes_event_id="ev5", reason="owner re-run because X")
+    authorise(
+        paths, "ev5b", supersedes_event_id="ev5", reason="owner re-run because X", proto="sx-protocol-v2"
+    )
+    assert (
+        hr.require_authorised_and_mark_started(
+            run_of(protocol_id="sx-protocol-v2"), locations=locs(paths, "m2"), **paths
+        )
+        == "ev5b"
+    )
     with pytest.raises(hr.HoldoutRefused, match="supersedes_event_id"):
         authorise(paths, "ev5c", reason="r")
 
@@ -234,9 +264,11 @@ def test_recovery_authorisation_reopens_exactly_one_attempt_and_is_append_only(p
     assert rec["body"]["started_entry_sha256"] == hr._line_sha(before[1])
     assert lines(paths)[: len(before)] == before  # earlier lines untouched
     assert hr.event_states(**paths) == {"ev5": "RECOVERY_AUTHORISED"}
-    assert start(paths) == "ev5"
+    with pytest.raises(hr.HoldoutRefused, match="fresh marker"):
+        start(paths)  # the crashed run's marker file may not be reused
+    assert start(paths, marker="m2") == "ev5"
     with pytest.raises(hr.HoldoutRefused, match="CONSUMED"):
-        start(paths)  # one recovery = one further attempt
+        start(paths, marker="m3")  # one recovery = one further attempt
     complete(paths)
     hr.verify(**paths)
     with pytest.raises(hr.HoldoutRefused):
@@ -281,7 +313,7 @@ def _write(paths, ls):
 def test_verify_passes_on_untouched_registry(paths):
     _setup_three(paths)
     rep = hr.verify(**paths)
-    assert rep["entries"] == 3 and rep["events"] == {"ev5": "COMPLETED"}
+    assert rep["entries"] == 4 and rep["events"] == {"ev5": "COMPLETED"}
 
 
 def test_edit_is_detected(paths):
@@ -343,10 +375,10 @@ def test_a_forged_state_sequence_is_detected_even_with_a_valid_chain(paths):
     """Someone recomputes the chain after removing STARTED: replay rules still catch COMPLETED-without-STARTED."""
     _setup_three(paths)
     ls = lines(paths)
-    e2 = json.loads(ls[2])
+    e2 = json.loads(ls[3])
     e2["seq"], e2["prev_sha256"] = 1, hr._line_sha(ls[0])
     _write(paths, [ls[0], hr._canon(e2)])
-    with pytest.raises(hr.RegistryCorrupt, match="COMPLETED needs state STARTED"):
+    with pytest.raises(hr.RegistryCorrupt, match="COMPLETED needs state RESULTS_EXPOSED"):
         hr.verify(**paths)
 
 

@@ -490,6 +490,10 @@ def run_walkforward(
         protocol_path=holdout_protocol_path,
         fit_fn=fit_fn,
         registry_path=holdout_registry_path,
+        locations={
+            "marker_file": str(_marker_path(markers, spec.candidate)),
+            "record_dirs": [str(root / spec.candidate)],
+        },
         run={
             "candidate": spec.candidate,
             "horizon": spec.horizon_days,
@@ -563,6 +567,8 @@ def run_walkforward(
             if status == "ok":
                 meta = train_all[["symbol", "decision_date", "label_end_date"]]
                 predict = fit_fn(train_all[cols], train_all["target"], meta, seed=seed)
+                if gate and fold.kind == "holdout":
+                    gate.mark_results_exposed()  # fsync'd BEFORE the first holdout prediction exists; raises -> no predict
                 scores = np.asarray(predict(test_df[cols]), dtype="float64")
                 if scores.shape != (len(test_df),) or not np.isfinite(scores).all():
                     raise HarnessRefused(

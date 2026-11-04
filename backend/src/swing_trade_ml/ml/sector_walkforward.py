@@ -41,6 +41,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from swing_trade_ml.ml import holdout_registry as hr
 from swing_trade_ml.ml import sector_research as sr
 from swing_trade_ml.ml.features import FEATURE_COLUMNS
 from swing_trade_ml.ml.sector_reconcile import keys_sha256
@@ -400,6 +401,8 @@ def run_walkforward(
     net_fn: NetFn | None = None,
     embargo: int | None = None,
     min_train_rows: int = MIN_TRAIN_ROWS,
+    holdout_protocol_path: str | Path | None = None,
+    holdout_registry_path: str | Path | None = None,
 ) -> RunResult:
     """Run all three arms over all folds and write one immutable record per (arm, fold).
 
@@ -455,11 +458,32 @@ def run_walkforward(
     if run_dir.exists():
         raise HarnessRefused(f"{run_dir.name} already exists: records are immutable, never overwritten")
 
+    # HOLDOUT REGISTRY hook (fixed, durable, outside out_root; see ml/holdout_registry.py). None for synthetic runs.
+    gate = hr.gate_for_run(
+        synthetic=synthetic,
+        folds=fold_list,
+        holdout_start=HOLDOUT_START,
+        protocol_path=holdout_protocol_path,
+        fit_fn=fit_fn,
+        registry_path=holdout_registry_path,
+        run={
+            "candidate": spec.candidate,
+            "horizon": spec.horizon_days,
+            "dataset_sha256": ds_sha,
+            "config_sha256": spec.config_sha256(),
+            "harness_config_sha256": harness_cfg_sha,
+            "fold_definition_sha256": fold_sha,
+            "code_version": code_version,
+            "arm_feature_shas": {a: feature_list_sha256(c) for a, c in arms.items()},
+        },
+    )
     records: list[dict] = []
     marker_written = False
     for fold in fold_list:
         sp = split_for_fold(matrix, fold, embargo)
         if fold.kind == "holdout" and not marker_written:
+            if gate:
+                gate.require_authorised_and_mark_started()  # STARTED is on disk before any holdout fit
             write_immutable_json(
                 _marker_path(markers, spec.candidate),
                 {
@@ -541,6 +565,8 @@ def run_walkforward(
         f = rec["fold"]
         write_immutable_json(run_dir / f"{f['kind']}_{f['index']:03d}_{rec['arm']}.json", rec)
     write_immutable_json(run_dir / "manifest.json", _seal(manifest))
+    if gate:
+        gate.mark_completed(records)
     return RunResult(run_id, run_dir, manifest, tuple(records))
 
 

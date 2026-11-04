@@ -278,7 +278,7 @@ def test_research_root_is_gitignored():
 
 
 # ------------------------------------------------------------------ hard guard: nothing imports it
-RESEARCH_SIBLINGS = {"sector_research.py", "sector_walkforward.py", "feature_audit.py"}
+RESEARCH_SIBLINGS = {"sector_research.py", "sector_walkforward.py", "feature_audit.py", "sx_recipe.py"}
 
 
 def test_no_production_module_imports_sector_research():

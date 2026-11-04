@@ -3,6 +3,8 @@ name: Daily backup
 # Every night at 23:00 IST: a compressed copy of the whole database on the droplet (14 days kept) and,
 # once set up (docs/BACKUP-OFFSITE.md), an encrypted copy on the owner's Google Drive. Runs
 # infra/deploy/daily-backup.sh over the deploy's SSH key. Telegram only when it fails. Tracker af4.
+# The same run also puts every model file (once each, named by sha256) and a manifest of them on the Drive
+# (infra/deploy/backup-models-offsite.sh); restore check: scripts/verify_restore.py, see docs/BACKUP-OFFSITE.md.
 on:
   schedule:
     - cron: "30 17 * * *" # 23:00 IST; GitHub may start it late, which is fine at night

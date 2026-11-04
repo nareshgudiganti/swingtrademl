@@ -136,7 +136,7 @@ def test_partial_or_different_arms_are_refused(paths):
     partial = {a: ARMS[a] for a in ("A_53", "R_37")}
     with pytest.raises(hr.HoldoutRefused, match="partial"):
         hr.require_authorised_and_mark_started(run_of(arms=partial), **paths)
-    swapped = {**ARMS, "C_57": ARMS["C_56"]}
+    swapped = {**ARMS, "C_56": ARMS["C_56"]}
     del swapped["C_56"]
     with pytest.raises(hr.HoldoutRefused, match="arm set"):
         hr.require_authorised_and_mark_started(run_of(arms=swapped), **paths)
@@ -555,7 +555,7 @@ def test_out_root_marker_dir_run_name_and_protocol_copy_cannot_bypass(matrix, tm
     res = wf.run_walkforward(sp, matrix, **kw)
     assert hr.event_states(reg, tmp_path / "lk" / "l.lock") == {"int5": "COMPLETED"}
     done = [json.loads(x) for x in reg.read_text().splitlines()][-1]
-    assert set(done["body"]["holdout_records"]) == {"A_53", "R_37", "C_57"}
+    assert set(done["body"]["holdout_records"]) == {"A_53", "R_37", "C_56"}
     assert all(
         s in {r["record_sha256"] for r in res.records}
         for v in done["body"]["holdout_records"].values()

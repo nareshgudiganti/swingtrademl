@@ -24,7 +24,7 @@ and a fake price step appears on the ex-date. This tool finds those cases and te
 Prepare two files: stored bars and freshly fetched bars, JSON `{"SYMBOL": [{"date","open","high","low","close","volume"}, ...]}`
 or CSV with columns `symbol,date,open,high,low,close,volume`.
 
-    cd "D:\machine learning\detector-wt"
+    cd <repository root>   (the folder that contains backend\)
     set PYTHONPATH=backend\src
     backend\.venv\Scripts\python.exe -m swing_trade_ml.services.price_change_detector --offline stored.json fetched.json
     (optional) --exclude RELIANCE:2023-07-20  --threshold 0.01  --log backend/data/price_change.jsonl

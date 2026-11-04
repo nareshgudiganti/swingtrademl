@@ -66,3 +66,8 @@ frontend/test-results/
 frontend/playwright-report/
 frontend/blob-report/
 frontend/playwright/.cache/
+
+# Regenerated evidence intermediates (corporate_actions scripts)
+docs/brain/evidence/corporate_actions/work/
+# ...but the two evidence tables in that folder are source evidence and must be committed
+!docs/brain/evidence/corporate_actions/*.csv

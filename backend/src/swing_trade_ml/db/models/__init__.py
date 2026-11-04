@@ -5,6 +5,7 @@ module must be re-exported here.
 """
 
 from swing_trade_ml.db.models.alerts import AlertOutbox, AlertSettings
+from swing_trade_ml.db.models.notification_log import NotificationLog
 from swing_trade_ml.db.models.audit import AuditLog, LoginCode
 from swing_trade_ml.db.models.brain import (
     BrainAlert,
@@ -117,6 +118,7 @@ __all__ = [
     "MutualFund",
     "MutualFundHolding",
     "MutualFundNav",
+    "NotificationLog",
     "Order",
     "PlanSettings",
     "PortfolioSnapshot",

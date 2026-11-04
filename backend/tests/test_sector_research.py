@@ -278,10 +278,13 @@ def test_research_root_is_gitignored():
 
 
 # ------------------------------------------------------------------ hard guard: nothing imports it
+RESEARCH_SIBLINGS = {"sector_research.py", "sector_walkforward.py", "feature_audit.py"}
+
+
 def test_no_production_module_imports_sector_research():
     offenders = []
     for p in SRC.rglob("*.py"):
-        if p.name == "sector_research.py":
+        if p.name in RESEARCH_SIBLINGS:  # the research-only modules may use each other; nothing else may
             continue
         if re.search(r"sector_research", p.read_text(encoding="utf-8", errors="ignore")):
             offenders.append(str(p.relative_to(SRC)))

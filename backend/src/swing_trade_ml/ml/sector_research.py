@@ -39,6 +39,17 @@ RESEARCH_VERSION = "sector_research_v0"
 SECTOR_COLUMNS: tuple[str, ...] = sf.FEATURE_NAMES
 RESEARCH_COLUMNS: tuple[str, ...] = (*FEATURE_COLUMNS, *SECTOR_COLUMNS)
 CANDIDATE_HORIZON = {"SX5": 5, "SX10": 10}
+LABEL_KINDS = ("barrier", "endpoint")
+# The label each candidate is defined with in its DRAFT protocol (docs/superpowers/specs/2026-11-05-sx*-DRAFT.md):
+# SX5 = brain/five_day_train.endpoint_target (close 5 bars later >= +2%); SX10 = td-protocol-v1 barrier label
+# (+6% before -3.5% within 10 bars; ten_day.TARGET / STOP / HORIZON_BARS). (label_kind, target, stop)
+PROTOCOL_LABELS: dict[str, tuple[str, float, float | None]] = {
+    "SX5": ("endpoint", 0.02, None),
+    "SX10": ("barrier", 0.06, 0.035),
+}
+_ENDPOINT_PLACEHOLDER_STOP = (
+    0.04  # five_day_train passes this to build_label; it only shapes the replaced column
+)
 APPROVAL_ENV = "SECTOR_RESEARCH_APPROVAL_FILE"
 BACKEND_ROOT = Path(__file__).resolve().parents[3]
 RESEARCH_ROOT = BACKEND_ROOT / "data" / "research_models"
@@ -59,12 +70,22 @@ class DatasetSpec:
     symbols: tuple[str, ...]
     horizon_days: int  # 5 or 10
     target_return: float  # the label rule is part of the protocol: no default on purpose
-    stop_return: float
+    stop_return: float | None  # None for an endpoint label (there is no stop)
     data_cutoff: date  # rows whose outcome was not known by the end of this IST day are dropped
     exclusions: frozenset[tuple[str, str]] = field(default_factory=frozenset)  # (SYMBOL, YYYY-MM-DD)
     min_history: int = 252  # warm-up sessions skipped per stock (as in the exclusion report)
+    # "barrier": +target before -stop within the horizon (ml/features.build_label). "endpoint": close `horizon`
+    # bars later >= +target (brain/five_day_train.endpoint_target). Added 2026-11-05 for SX5; the default keeps
+    # every earlier call site on the barrier rule it always used.
+    label_kind: str = "barrier"
 
     def __post_init__(self):
+        if self.label_kind not in LABEL_KINDS:
+            raise ValueError(f"label_kind must be one of {list(LABEL_KINDS)}")
+        if self.label_kind == "barrier" and self.stop_return is None:
+            raise ValueError("a barrier label needs stop_return")
+        if self.label_kind == "endpoint" and self.stop_return is not None:
+            raise ValueError("an endpoint label has no stop: stop_return must be None")
         if self.candidate not in CANDIDATE_HORIZON:
             raise ValueError(f"candidate must be one of {sorted(CANDIDATE_HORIZON)}")
         if CANDIDATE_HORIZON[self.candidate] != self.horizon_days:
@@ -93,6 +114,9 @@ class ResearchInputs:
     index_frames: Mapping[str, pd.DataFrame]  # sector index name -> OHLCV
     vix_df: pd.DataFrame
     breadth_df: pd.DataFrame  # ts, breadth_pct_above_sma50, breadth_advance_pct
+    source: str = (
+        "unknown"  # "database" when loaded by load_inputs_readonly (real data); used by the harness guard
+    )
 
 
 def exclusions_from_hits(hits: Iterable[Mapping[str, str]]) -> frozenset[tuple[str, str]]:
@@ -145,6 +169,18 @@ def _attach_sector(
     return out
 
 
+def _label(feat: pd.DataFrame, spec: DatasetSpec) -> pd.DataFrame:
+    """The label of `spec.label_kind`. Endpoint = five_day_train.endpoint_target applied to build_label's
+    forward_return (rows, features, label_end_ts identical to the barrier build; only `target` is replaced).
+    A missing forward_return gives a missing target (the row is then dropped), never a silent 0."""
+    if spec.label_kind == "barrier":
+        return build_label(feat, spec.horizon_days, spec.target_return, spec.stop_return)
+    lab = build_label(feat, spec.horizon_days, spec.target_return, _ENDPOINT_PLACEHOLDER_STOP)
+    fr = lab["forward_return"]
+    lab["target"] = (fr >= spec.target_return).astype("float64").where(fr.notna())
+    return lab
+
+
 def assemble_training_matrix(spec: DatasetSpec, inputs: ResearchInputs) -> pd.DataFrame:
     """(a) existing FEATURE_COLUMNS + four sector inputs + label, one row per (stock, decision day)."""
     nifty, secs = _closes(inputs)
@@ -156,7 +192,7 @@ def assemble_training_matrix(spec: DatasetSpec, inputs: ResearchInputs) -> pd.Da
             continue
         raw = raw.sort_values("ts").reset_index(drop=True)
         feat = _existing_features(raw, inputs, sym)
-        lab = build_label(feat, spec.horizon_days, spec.target_return, spec.stop_return)
+        lab = _label(feat, spec)
         lab = lab.iloc[spec.min_history :]  # warm-up: first min_history sessions skipped
         lab = _attach_sector(lab, raw, nifty, secs, sym)
         lab["symbol"] = sym
@@ -172,7 +208,7 @@ def assemble_training_matrix(spec: DatasetSpec, inputs: ResearchInputs) -> pd.Da
         ]
         frames.append(lab[keep])
     if not frames:
-        return pd.DataFrame(
+        empty = pd.DataFrame(
             columns=[
                 *RESEARCH_COLUMNS,
                 "target",
@@ -183,13 +219,18 @@ def assemble_training_matrix(spec: DatasetSpec, inputs: ResearchInputs) -> pd.Da
                 "decision_date",
             ]
         )
+        empty.attrs["inputs_source"] = inputs.source
+        return empty
     m = pd.concat(frames, ignore_index=True)
     if spec.exclusions:
         key = m["symbol"] + "|" + m["decision_date"].dt.strftime("%Y-%m-%d")
         m = m[~key.isin({f"{s}|{d}" for s, d in spec.exclusions})]
     ends = pd.to_datetime(m["label_end_ts"], utc=True)
     m = m[ends <= cutoff_end]
-    return m.sort_values(["ts", "symbol"]).reset_index(drop=True)
+    m = m.sort_values(["ts", "symbol"]).reset_index(drop=True)
+    m["target"] = m["target"].astype(int)
+    m.attrs["inputs_source"] = inputs.source
+    return m
 
 
 def _has_bar_on(df: pd.DataFrame | None, day: pd.Timestamp) -> bool:
@@ -372,12 +413,16 @@ def load_inputs_readonly(symbols: Iterable[str], conn=None) -> ResearchInputs:
     finally:
         if own:
             c.close()
-    return ResearchInputs(raw=raw, index_df=nifty, index_frames=frames, vix_df=vix, breadth_df=breadth)
+    return ResearchInputs(
+        raw=raw, index_df=nifty, index_frames=frames, vix_df=vix, breadth_df=breadth, source="database"
+    )
 
 
 __all__ = [
     "RESEARCH_COLUMNS",
     "DatasetSpec",
+    "LABEL_KINDS",
+    "PROTOCOL_LABELS",
     "ResearchInputs",
     "ResearchApprovalRequired",
     "ResearchPathRefused",

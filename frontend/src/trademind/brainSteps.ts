@@ -10,6 +10,7 @@
 
 import type { BrainDecision, BrainRun } from '../api/types'
 import { finalWord, stockSituations } from './live'
+import { SCORE_VS_PLAN_SHORT } from './scoreVsPlan'
 import { rankText, scorePoints, scoreRank } from './scoreText'
 import { MARKET_LABEL, MARKET_PLAIN } from './vocab'
 import { whyNotTrade, type WhyItem, type WhyKind } from './whyNotTrade'
@@ -53,7 +54,7 @@ const LIMITS_OFF = /switched off for testing/i
 export const NOT_RECORDED = 'Not recorded for this stock yet: the brain saves every step from 7 Nov.'
 
 const WORD_PLAIN: Record<string, string> = {
-  TRADE: 'Buy it, with the usual plan (+8% target, −4% stop, out within 15 trading days).',
+  TRADE: `Buy it, with the usual plan (+8% target, −4% stop, out within 15 trading days). ${SCORE_VS_PLAN_SHORT}`,
   WATCH: 'Not a BUY today. Keep an eye on it.',
   WAIT: 'Nothing to do today.',
   AVOID: 'Stay away for now.',

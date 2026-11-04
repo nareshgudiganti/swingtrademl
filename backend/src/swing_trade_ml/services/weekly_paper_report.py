@@ -177,9 +177,7 @@ def _ist_date(value: datetime) -> date:
 
 def _brain_ids(db: Session) -> set[int]:
     return {
-        s.id
-        for s in db.execute(select(Strategy)).scalars()
-        if is_brain_strategy(s.name, s.strategy_type)
+        s.id for s in db.execute(select(Strategy)).scalars() if is_brain_strategy(s.name, s.strategy_type)
     }
 
 

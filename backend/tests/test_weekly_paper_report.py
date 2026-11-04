@@ -309,7 +309,9 @@ def test_an_empty_week_says_so_instead_of_showing_zeros_as_results():
 
 
 def _seed_week(db, day, with_brain=True):
-    inst = Instrument(instrument_token=991_002, tradingsymbol="BRAINSYM", exchange="NSE", is_watchlisted=False)
+    inst = Instrument(
+        instrument_token=991_002, tradingsymbol="BRAINSYM", exchange="NSE", is_watchlisted=False
+    )
     db.add(inst)
     db.flush()
     strats = [(_book(db, "wk_bot"), 45.0)]
@@ -382,7 +384,8 @@ def test_bot_and_testing_unchanged_without_a_brain_strategy(db_session):
     _seed_week(db_session, date(2026, 10, 30), with_brain=False)
     a = w.build_report(db_session, datetime(2026, 11, 3, 5, 0, tzinfo=UTC))
     assert a["bot"]["realized_pnl"]["net"] == 45.0
-    assert a["brain_paper"]["buys"] == a["brain_paper"]["sell_orders"] == a["brain_paper"]["open_positions"] == 0
+    bp = a["brain_paper"]
+    assert bp["buys"] == bp["sell_orders"] == bp["open_positions"] == 0
     assert a["testing"]["buys"]["orders"] == 0
 
 

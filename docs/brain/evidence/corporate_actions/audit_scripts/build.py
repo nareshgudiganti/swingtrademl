@@ -1,12 +1,23 @@
 # READ-ONLY SELECT script: it only reads the local candle database and writes local files (never to the database).
 # Run: backend/.venv/Scripts/python.exe -I <this file>   (local Docker Postgres, port 5433, must be up)
-# The DB password was replaced by <LOCAL_PG_PASSWORD>; put the local Docker password there before running. Paths below are from the original machine and must be edited.
+# The DB password was replaced by <LOCAL_PG_PASSWORD>; put the local Docker password there before running. Paths are relative to this script; set SWING_LOCAL_DB_URL (local Postgres connection string) and optionally SWING_EVIDENCE_WORK.
 # Preserved as evidence from 2026-11-03; not a maintained tool.
+import os, pathlib
+_HERE = pathlib.Path(__file__).resolve().parent
+EVID = _HERE.parent  # the corporate_actions evidence folder (events.csv lives here)
+SPLIT_JSON = EVID.parent / "stock_split" / "stock_split_ev15.json"
+WORK = pathlib.Path(os.environ.get("SWING_EVIDENCE_WORK", EVID / "work"))  # intermediates/outputs; override with SWING_EVIDENCE_WORK
+WORK.mkdir(parents=True, exist_ok=True)
+def _dsn():
+    v = os.environ.get("SWING_LOCAL_DB_URL")
+    if not v:
+        raise SystemExit("Set SWING_LOCAL_DB_URL, e.g. postgresql://swingtrade:<LOCAL_PG_PASSWORD>@localhost:5433/swing_trade_ml (local Docker Postgres)")
+    return v
 import pandas as pd, numpy as np, datetime as dt, json
-P = r"C:\Users\nares\AppData\Local\Temp\claude\d--machine-learning-swing-trade-bot\7760ad1c-0af2-4782-9c69-ebf2dca1d1d5\scratchpad\corp_actions"
-d = pd.read_pickle(P + r"\bars.pkl").sort_values(['sym', 'day']).reset_index(drop=True)
-u49 = set(json.load(open(r"D:\machine learning\swing-trade-bot\docs\brain\evidence\stock_split\stock_split_ev15.json"))['used_49'])
-raw = pd.read_csv(P + r"\raw_flags.csv", parse_dates=['day'])
+P = str(WORK)
+d = pd.read_pickle(str(WORK / "bars.pkl")).sort_values(['sym', 'day']).reset_index(drop=True)
+u49 = set(json.load(open(str(SPLIT_JSON)))['used_49'])
+raw = pd.read_csv(str(WORK / "raw_flags.csv"), parse_dates=['day'])
 raw['day'] = raw.day.dt.date
 D = dt.date.fromisoformat
 U = lambda *a: " ; ".join(a)
@@ -77,7 +88,7 @@ for r in E.itertuples():
                     vol_vs_20d_median=round(r.vx, 2) if pd.notna(r.vx) else None, ratio_signature=r.sig, event_type=t, ratio=ratio,
                     status=st, source_url=url, in_49='yes' if r.in49 else 'no', mechanical_step=t.startswith('demerger'), bar_index=r.i))
 O = pd.DataFrame(out).sort_values(['mechanical_step', 'in_49', 'date'], ascending=[False, False, True])
-O.drop(columns=['bar_index']).to_csv(P + r"\events.csv", index=False)
+O.drop(columns=['bar_index']).to_csv(str(WORK / "events.csv"), index=False)
 print('rows', len(O), 'stocks', O.stock.nunique(), 'in49 rows', (O.in_49 == 'yes').sum(), 'in49 stocks', O[O.in_49 == 'yes'].stock.nunique())
 print(O.status.str.split(' ').str[0].value_counts().to_dict())
 print('>=15%:', (O.move_pct.abs() >= 15).sum(), '>=20%:', (O.move_pct.abs() >= 20).sum())
@@ -99,7 +110,7 @@ for r in M.itertuples():
         rec[f'lab{h}'] = (i - max(i - h, 0)) if i >= 1 else 0
     res.append(rec)
 R = pd.DataFrame(res)
-R.to_csv(P + r"\impact_by_event.csv", index=False)
+R.to_csv(str(WORK / "impact_by_event.csv"), index=False)
 pd.set_option('display.width', 250)
 print(R.to_string())
 tot49 = d[d.sym.isin(u49)].shape[0]

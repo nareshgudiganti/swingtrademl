@@ -1,0 +1,420 @@
+stock,date,move_pct,open_gap_pct,vol_vs_20d_median,ratio_signature,event_type,ratio,status,source_url,in_49,mechanical_step
+RELIANCE,2023-07-20,-3.3,-4.8,3.07,,demerger (Jio Financial Services),1:1,VERIFIED,https://www.business-standard.com/amp/markets/news/all-eyes-on-jio-fin-price-discovery-special-session-by-bourses-on-thursday-123071900788_1.html ; https://www.voicendata.com/jio-financial-shares-from-the-reliance-demerger-worth-rs-261-85-each,yes,True
+ITC,2025-01-06,6.3,9.4,1.44,,demerger (ITC Hotels),1 ITC Hotels : 10 ITC,VERIFIED,https://www.business-standard.com/amp/markets/news/itc-down-1-ahead-of-ex-date-for-hotel-business-on-monday-january-6-125010300337_1.html ; https://www.itcportal.com/investor/pdf/share-entitlement-ratio-report.pdf,yes,True
+HINDUNILVR,2025-12-05,-5.0,-1.6,2.84,,demerger (Kwality Walls ice cream),1:1,VERIFIED (dates/ratio); adjusted price not found,https://www.business-standard.com/markets/news/hul-share-price-nse-bse-kwality-walls-ice-cream-business-demerger-record-date-125120500267_1.html ; https://www.hul.co.in/files/newspaper-publication-regarding-intimation-of-record-date-21-11-2025.pdf,yes,True
+NMDC,2022-10-27,85.7,63.8,2.36,,demerger (NMDC Steel),1:1,VERIFIED,https://www.business-standard.com/amp/article/markets/nmdc-trades-ex-date-for-demerger-stock-surges-14-amid-heavy-volumes-122102700302_1.html ; https://www.indiainfoline.com/news/markets/nmdc-soars-ex-demerger,no,True
+SCI,2023-03-31,30.0,30.0,0.47,,demerger (SCI Land & Assets),1:1,"PARTIALLY (record date 31 Mar 2023, effective 14 Mar 2023; ex-date not confirmed)",https://www.business-standard.com/amp/article/markets/shipping-corporation-fixes-march-31-as-record-date-for-demerger-stk-up-4-123032000699_1.html,no,True
+ALLCARGO,2023-04-18,-21.0,-24.8,0.38,3/4,demerger (TransIndia Realty),1:1,PARTIALLY (ex-date 18 Apr 2023 from secondary aggregator snippet),https://www.pocketful.in/stocks/allcargo-logistics-ltd/corporate-actions/merger-demerger,no,True
+BAJAJELEC,2023-09-14,38.8,32.2,0.18,,demerger (resulting company name not found),not found,"PARTIALLY (BSE filing: record date 14 Sep 2023, NCLT 8 Jun 2023; ex-date and ratio not found)","https://www.bseindia.com/xml-data/corpfiling/AttachHis/301406b4-1161-448f-9336-fb9dfb0602c0.pdf (returned by search, not opened)",no,True
+SANOFI,2024-06-13,-28.0,-30.3,1.12,3/4,demerger (consumer healthcare),1:1,VERIFIED,https://www.business-standard.com/markets/news/sanofi-india-turns-ex-date-for-healthcare-biz-demerger-hits-5-upper-limit-124061300425_1.html,no,True
+SIEMENS,2025-04-07,-25.1,-34.7,5.13,3/4,demerger (Siemens Energy India),1:1,VERIFIED,https://www.business-standard.com/amp/markets/capital-market-news/siemens-soars-on-ex-date-for-demerger-125040700442_1.html,no,True
+ABFRL,2025-05-22,-55.9,-51.9,9.75,,demerger (Madura -> Aditya Birla Lifestyle Brands),1:1,VERIFIED,https://www.business-standard.com/amp/markets/news/why-did-abfrl-share-price-crashed-67-to-88-from-269-in-trade-today-125052200495_1.html ; https://www.angelone.in/news/share-market/aditya-birla-fashion-retail-share-price-in-focus-ahead-of-may-22-demerger-record-date,no,True
+TMPV,2025-10-14,-13.1,-12.1,2.73,5/6,demerger (Tata Motors CV -> TMLCV),1:1,PARTIALLY (record date 14 Oct verified; sources conflict 13 vs 14 Oct for ex-date),https://www.theweek.in/news/biz-tech/2025/10/13/tata-motors-demerger-special-pre-open-session-stock-split-record-date-and-share-price-explained.html,no,True
+ALLCARGO,2025-11-12,-60.1,-64.4,1.45,,demerger (international supply chain -> Allcargo Global),1:1,"VERIFIED (event, ex-date); price factor not found",https://www.motilaloswal.com/news/stocks/109150 ; https://www.itln.in/latest-news/allcargo-logistics-completes-demerger-of-international-business-1356984,no,True
+VEDL,2026-04-30,-32.9,-28.5,2.33,2/3,demerger (4 companies),1 VEDL : 1 each of 4 new cos,VERIFIED,https://www.businesstoday.in/amp/markets/stocks/story/vedanta-demerger-why-this-stock-is-showing-up-to-63-fall-in-your-trading-apps-today-528146-2026-04-30 ; https://www.kotakneo.com/bulletins/corporate-action-update-vedanta-limited-demerger/,no,True
+TRIVENI,2026-07-22,-41.6,-38.5,0.42,,demerger (power transmission -> TPTL),1 TPTL : 3 TRIVENI,VERIFIED,https://www.businesstoday.in/markets/stocks/story/from-rs-33-to-rs-471-why-this-smallcap-multibagger-stock-is-showing-38-fall-in-some-apps-544369-2026-07-22 ; https://www.angelone.in/news/stocks/triveni-engineering-shareholders-to-receive-tptl-shares-record,no,True
+JSWSTEEL,2022-05-23,-13.2,-5.9,4.28,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,yes,False
+TATASTEEL,2022-05-23,-13.0,-6.5,3.9,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,yes,False
+ONGC,2022-07-01,-13.5,-1.8,4.81,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,yes,False
+ADANIENT,2023-01-27,-18.5,-1.6,9.75,4/5,GENUINE MOVE (Adani group / Hindenburg period),-,GENUINE MOVE (group-level news; per-day cause not individually checked),https://www.business-standard.com/amp/article/markets/adani-group-shares-extend-fall-adani-enterprises-tanks-35-in-2-days-123020200265_1.html,yes,False
+ADANIPORTS,2023-01-27,-16.3,-2.0,19.49,4/5,GENUINE MOVE (Adani group / Hindenburg period),-,GENUINE MOVE (group-level news; per-day cause not individually checked),https://www.business-standard.com/amp/article/markets/adani-group-shares-extend-fall-adani-enterprises-tanks-35-in-2-days-123020200265_1.html,yes,False
+ADANIENT,2023-02-01,-28.2,0.7,8.49,3/4,GENUINE MOVE (Hindenburg / FPO withdrawn),-,GENUINE MOVE,https://www.business-standard.com/amp/article/markets/adani-enterprises-joins-emaar-motherson-in-cancelling-share-sale-123020201152_1.html,yes,False
+ADANIPORTS,2023-02-01,-19.2,2.3,12.9,4/5,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,yes,False
+ADANIENT,2023-02-02,-26.7,10.0,19.52,3/4,GENUINE MOVE (Hindenburg aftermath),-,GENUINE MOVE,https://www.business-standard.com/amp/article/markets/adani-group-shares-extend-fall-adani-enterprises-tanks-35-in-2-days-123020200265_1.html,yes,False
+ADANIENT,2023-02-08,20.0,3.7,5.23,,GENUINE MOVE (Adani group / Hindenburg period),-,GENUINE MOVE (group-level news; per-day cause not individually checked),https://www.business-standard.com/amp/article/markets/adani-group-shares-extend-fall-adani-enterprises-tanks-35-in-2-days-123020200265_1.html,yes,False
+ADANIENT,2023-03-03,16.9,5.1,1.94,,unknown (INFERRED possible mechanical or circuit move: low volume reaction),-,UNVERIFIED,,yes,False
+ADANIENT,2023-05-22,18.9,2.8,7.07,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,yes,False
+ADANIENT,2023-12-05,16.9,0.0,18.19,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,yes,False
+ADANIPORTS,2023-12-05,15.3,0.6,13.55,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,yes,False
+HINDALCO,2024-02-13,-12.4,-7.5,8.94,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,yes,False
+ADANIENT,2024-06-04,-19.3,-3.4,9.35,4/5,GENUINE MOVE (election-result day market crash; PSU index -14..16%),-,GENUINE MOVE (market-level news verified; per-stock cause not individually checked),https://www.angelone.in/news/share-market/10-psu-stocks-with-the-highest-decline-on-election-result-day ; https://www.business-standard.com/amp/markets/news/sensex-plunges-over-4-000-points-intraday-check-factors-behind-the-fall-124060400591_1.html,yes,False
+ADANIPORTS,2024-06-04,-21.1,-1.6,15.58,3/4,GENUINE MOVE (election-result day market crash; PSU index -14..16%),-,GENUINE MOVE (market-level news verified; per-stock cause not individually checked),https://www.angelone.in/news/share-market/10-psu-stocks-with-the-highest-decline-on-election-result-day ; https://www.business-standard.com/amp/markets/news/sensex-plunges-over-4-000-points-intraday-check-factors-behind-the-fall-124060400591_1.html,yes,False
+BPCL,2024-06-04,-12.9,0.6,2.93,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,yes,False
+COALINDIA,2024-06-04,-13.7,0.0,4.1,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,yes,False
+LT,2024-06-04,-12.7,-1.2,3.54,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,yes,False
+NTPC,2024-06-04,-15.5,0.0,7.42,4/5,GENUINE MOVE (election-result day market crash; PSU index -14..16%),-,GENUINE MOVE (market-level news verified; per-stock cause not individually checked),https://www.angelone.in/news/share-market/10-psu-stocks-with-the-highest-decline-on-election-result-day ; https://www.business-standard.com/amp/markets/news/sensex-plunges-over-4-000-points-intraday-check-factors-behind-the-fall-124060400591_1.html,yes,False
+ONGC,2024-06-04,-16.8,0.3,5.6,4/5,GENUINE MOVE (election-result day market crash; PSU index -14..16%),-,GENUINE MOVE (market-level news verified; per-stock cause not individually checked),https://www.angelone.in/news/share-market/10-psu-stocks-with-the-highest-decline-on-election-result-day ; https://www.business-standard.com/amp/markets/news/sensex-plunges-over-4-000-points-intraday-check-factors-behind-the-fall-124060400591_1.html,yes,False
+POWERGRID,2024-06-04,-12.4,-0.8,5.48,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,yes,False
+SBIN,2024-06-04,-14.4,-1.0,7.62,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,yes,False
+BAJAJ-AUTO,2024-10-17,-12.9,-3.4,7.64,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,yes,False
+INDUSINDBK,2024-10-25,-18.6,-9.1,20.1,4/5,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,yes,False
+ADANIENT,2024-11-21,-22.6,-10.0,21.78,3/4,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,yes,False
+ADANIPORTS,2024-11-21,-13.6,-10.0,24.65,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,yes,False
+INDUSINDBK,2025-03-11,-27.2,-10.0,25.33,3/4,GENUINE MOVE (derivatives accounting discrepancy),-,GENUINE MOVE,https://www.business-standard.com/amp/markets/news/indusind-tanks-20-at-lowest-level-since-nov-2020-on-account-discrepancies-125031100200_1.html,yes,False
+UPL,2026-02-23,-14.3,-5.0,10.59,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,yes,False
+AUBANK,2021-08-31,-12.7,0.5,,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+IDEA,2021-09-02,17.2,1.6,,,unknown (INFERRED possible mechanical or circuit move: low volume reaction),-,UNVERIFIED,,no,False
+IDEA,2021-09-16,25.7,9.5,4.08,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+YESBANK,2021-09-16,15.7,2.0,8.52,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+CHAMBLFERT,2021-10-08,15.6,0.0,13.42,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+IDBI,2021-10-12,19.9,0.9,5.61,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+TMPV,2021-10-13,20.4,10.0,6.7,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+TATAPOWER,2021-10-18,15.6,2.2,3.34,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+LTM,2021-10-19,16.1,9.1,12.45,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+DEEPAKNTR,2021-10-20,-12.7,-1.9,5.86,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+IRCTC,2021-10-20,-18.7,-10.0,3.72,4/5,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+RVNL,2021-10-22,19.9,1.7,29.97,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+IRCTC,2021-10-25,-13.0,1.4,1.23,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+KEI,2021-10-26,19.1,1.8,7.11,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+TTKPRESTIG,2021-10-27,15.4,1.5,34.25,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+ALLCARGO,2021-11-02,20.0,7.3,12.14,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+PAYTM,2021-11-22,-12.9,-3.3,,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+LATENTVIEW,2021-11-24,19.7,2.1,,,unknown (INFERRED possible mechanical or circuit move: low volume reaction),-,UNVERIFIED,,no,False
+PAYTM,2021-11-24,17.2,0.6,,,unknown (INFERRED possible mechanical or circuit move: low volume reaction),-,UNVERIFIED,,no,False
+LATENTVIEW,2021-11-25,20.0,5.2,,,unknown (INFERRED possible mechanical or circuit move: low volume reaction),-,UNVERIFIED,,no,False
+IDEA,2021-12-01,15.8,0.5,4.15,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+CREDITACC,2021-12-13,19.8,-0.2,20.57,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+POLICYBZR,2021-12-20,-13.3,-2.4,2.63,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+RBLBANK,2021-12-27,-18.5,-10.0,30.99,4/5,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+SUPRIYA,2021-12-29,18.6,0.5,,,unknown (INFERRED possible mechanical or circuit move: low volume reaction),-,UNVERIFIED,,no,False
+GRAPHITE,2021-12-30,19.1,0.5,23.44,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+DHANUKA,2021-12-31,15.1,-0.7,65.75,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+MINDACORP,2022-01-03,17.3,2.0,25.11,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+INDIACEM,2022-01-07,15.3,0.7,12.28,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+IDEA,2022-01-11,-20.5,-9.8,7.13,3/4,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+METROBRAND,2022-01-17,19.1,7.3,12.63,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+SUPRIYA,2022-01-21,-18.1,0.0,2.57,4/5,unknown (INFERRED possible mechanical or circuit move: low volume reaction),-,UNVERIFIED,,no,False
+TORNTPHARM,2022-01-27,-15.1,-7.0,26.61,5/6,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+METROPOLIS,2022-02-14,-15.3,-6.7,10.67,4/5,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+BANKINDIA,2022-02-24,-13.2,-3.1,1.35,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+HEG,2022-02-24,-13.6,-3.4,1.94,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+INDUSTOWER,2022-02-24,-18.1,-8.2,44.31,4/5,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+NBCC,2022-02-24,-12.3,-3.1,2.63,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+PNB,2022-02-24,-14.3,-3.7,3.29,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+TITAGARH,2022-02-24,-13.8,-4.2,1.22,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+FACT,2022-02-25,15.4,4.0,4.77,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+SCI,2022-03-03,16.8,1.6,14.05,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+BSE,2022-03-10,18.5,3.1,6.09,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+PAYTM,2022-03-14,-12.9,-12.9,9.99,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+PAYTM,2022-03-15,-12.2,3.0,14.62,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+5PAISA,2022-03-17,19.4,1.1,8.88,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+ANGELONE,2022-04-21,17.5,7.8,13.55,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+GNFC,2022-05-11,-14.7,2.7,5.78,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+NEULANDLAB,2022-05-11,-12.9,3.4,10.58,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+PNB,2022-05-12,-13.6,-6.3,7.04,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+POLICYBZR,2022-05-13,17.4,4.8,9.66,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+ROUTE,2022-05-18,-14.7,1.3,9.17,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+JKLAKSHMI,2022-05-20,17.1,3.0,82.62,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+WELCORP,2022-05-20,17.2,1.0,32.05,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+JINDALSTEL,2022-05-23,-17.4,-6.9,4.66,4/5,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+NMDC,2022-05-23,-12.7,-6.8,4.72,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+ADANIGREEN,2022-05-31,-12.2,-0.5,16.94,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+TIMKEN,2022-06-01,17.2,0.9,14.65,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+PNBHOUSING,2022-06-09,15.1,-0.2,49.97,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+RBLBANK,2022-06-13,-22.7,-10.0,13.42,3/4,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+FACT,2022-06-20,-13.8,0.0,9.97,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+VEDL,2022-06-20,-13.9,-0.5,4.46,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+SUVEN,2022-06-21,19.8,0.0,30.07,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+METROBRAND,2022-08-01,15.2,6.6,54.24,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+NEULANDLAB,2022-08-03,-12.0,0.6,6.87,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+FINEORG,2022-08-10,15.6,16.7,12.23,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+SAFARI,2022-08-11,18.4,0.8,29.43,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+MUTHOOTFIN,2022-08-16,-12.4,-8.0,15.63,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+RBLBANK,2022-08-24,17.0,0.0,6.74,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+5PAISA,2022-08-30,20.0,10.6,14.2,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+SUZLON,2022-09-05,19.8,3.7,5.93,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+TRIVENI,2022-09-19,18.8,0.0,17.02,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+FORTIS,2022-09-22,-14.7,2.1,59.63,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+NEULANDLAB,2022-09-22,15.8,-1.2,28.48,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+SUZLON,2022-10-19,19.4,1.3,4.14,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+RAJRATAN,2022-10-21,-19.2,0.3,7.87,4/5,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+NEULANDLAB,2022-11-10,20.0,0.2,12.36,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+TIMKEN,2022-11-17,20.0,1.1,53.73,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+FACT,2022-12-15,19.9,-0.2,22.45,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+FACT,2022-12-16,20.0,1.9,24.73,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+J&KBANK,2022-12-26,19.7,1.2,1.76,,unknown (INFERRED possible mechanical or circuit move: low volume reaction),-,UNVERIFIED,,no,False
+UNIONBANK,2022-12-26,19.9,1.5,2.29,,unknown (INFERRED possible mechanical or circuit move: low volume reaction),-,UNVERIFIED,,no,False
+ACC,2023-01-27,-13.2,0.5,13.72,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+ADANIENSOL,2023-01-27,-20.0,-4.4,5.47,4/5,GENUINE MOVE (Adani group / Hindenburg period),-,GENUINE MOVE (group-level news; per-day cause not individually checked),https://www.business-standard.com/amp/article/markets/adani-group-shares-extend-fall-adani-enterprises-tanks-35-in-2-days-123020200265_1.html,no,False
+ADANIGREEN,2023-01-27,-20.0,-4.2,7.22,4/5,GENUINE MOVE (Adani group / Hindenburg period),-,GENUINE MOVE (group-level news; per-day cause not individually checked),https://www.business-standard.com/amp/article/markets/adani-group-shares-extend-fall-adani-enterprises-tanks-35-in-2-days-123020200265_1.html,no,False
+AMBUJACEM,2023-01-27,-17.3,-0.6,27.77,4/5,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+DIXON,2023-01-27,-19.1,-6.8,37.25,4/5,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+INDUSTOWER,2023-01-27,-13.2,-0.6,10.53,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+ADANIENSOL,2023-01-30,-15.2,-11.9,11.26,5/6,GENUINE MOVE (Adani group / Hindenburg period),-,GENUINE MOVE (group-level news; per-day cause not individually checked),https://www.business-standard.com/amp/article/markets/adani-group-shares-extend-fall-adani-enterprises-tanks-35-in-2-days-123020200265_1.html,no,False
+ADANIGREEN,2023-01-30,-20.0,-10.8,14.29,4/5,GENUINE MOVE (Adani group / Hindenburg period),-,GENUINE MOVE (group-level news; per-day cause not individually checked),https://www.business-standard.com/amp/article/markets/adani-group-shares-extend-fall-adani-enterprises-tanks-35-in-2-days-123020200265_1.html,no,False
+AMBUJACEM,2023-02-01,-16.7,2.0,23.15,4/5,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+GICRE,2023-02-01,-12.4,0.5,1.73,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+IDEA,2023-02-06,20.4,9.5,6.21,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+CUB,2023-02-13,-15.7,-1.9,12.9,4/5,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+KIRLOSENG,2023-03-08,20.0,4.0,33.49,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+KPITTECH,2023-04-03,-12.3,0.4,8.11,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+FACT,2023-04-12,20.0,0.4,19.33,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+AUBANK,2023-04-13,17.1,8.6,20.06,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+RVNL,2023-04-25,19.2,1.1,21.38,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+GVT&D,2023-04-27,18.0,0.1,65.61,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+IRCON,2023-05-02,16.2,0.9,17.77,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+MANAPPURAM,2023-05-03,-12.1,-0.0,15.22,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+GICRE,2023-05-04,19.5,-0.4,53.93,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+NIACL,2023-05-04,15.2,0.2,64.54,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+KIRLOSBROS,2023-05-11,20.0,0.9,14.21,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+NEULANDLAB,2023-05-11,20.0,-0.2,23.73,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+NEULANDLAB,2023-05-15,15.2,0.2,31.08,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+SUZLON,2023-06-07,18.4,2.9,8.7,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+HEG,2023-06-15,15.5,0.5,18.76,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+SUBROS,2023-06-20,20.0,10.9,8.22,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+5PAISA,2023-07-25,15.2,7.6,28.31,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+JYOTHYLAB,2023-07-25,20.0,0.8,27.72,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+RAILTEL,2023-09-01,15.5,0.3,11.7,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+IRFC,2023-09-04,19.6,3.5,4.41,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+FACT,2023-09-06,18.8,0.5,18.97,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+IRCON,2023-09-11,20.0,7.0,6.41,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+RVNL,2023-09-11,16.4,3.8,10.84,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+SJVN,2023-09-11,20.0,4.4,10.27,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+SJVN,2023-09-21,-13.1,-8.5,5.46,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+HUDCO,2023-09-22,18.8,0.4,15.06,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+NAVINFLUOR,2023-09-29,-13.6,-8.2,33.02,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+FACT,2023-10-16,20.0,-0.2,13.8,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+JUBLPHARMA,2023-10-27,16.9,-2.0,28.03,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+SUVEN,2023-10-30,19.9,1.5,6.9,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+TITAGARH,2023-11-17,16.3,0.1,11.17,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+CGPOWER,2023-11-22,20.0,-0.4,12.02,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+TIINDIA,2023-11-22,16.7,-0.0,20.69,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+GICRE,2023-11-24,16.5,0.0,58.75,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+NIACL,2023-11-24,20.0,1.0,45.43,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+ADANIENSOL,2023-11-28,18.7,2.6,30.29,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+ADANIENSOL,2023-12-05,20.0,-0.1,67.89,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+ADANIGREEN,2023-12-05,20.0,0.2,38.31,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+ADANIPOWER,2023-12-05,15.8,-0.4,4.33,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+ADANIGREEN,2023-12-06,15.9,9.3,44.46,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+PAYTM,2023-12-07,-18.7,-10.4,15.58,4/5,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+IREDA,2023-12-11,20.0,4.4,1.9,,unknown (INFERRED possible mechanical or circuit move: low volume reaction),-,UNVERIFIED,,no,False
+IREDA,2023-12-12,19.8,10.6,2.45,,unknown (INFERRED possible mechanical or circuit move: low volume reaction),-,UNVERIFIED,,no,False
+IDEA,2023-12-29,20.8,1.5,6.29,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+RAILTEL,2023-12-29,15.2,1.6,8.2,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+TRIDENT,2024-01-08,17.8,2.7,41.56,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+POLYCAB,2024-01-11,-21.0,-10.0,57.12,3/4,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+ANGELONE,2024-01-16,-14.1,-9.7,8.12,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+OFSS,2024-01-18,30.1,10.5,35.3,,GENUINE MOVE (Q3 results),-,GENUINE MOVE (size differs by source),https://www.business-standard.com/amp/markets/news/oracle-financial-hits-record-high-zooms-15-on-strong-q3-results-124011800116_1.html,no,False
+GICRE,2024-01-19,16.5,0.6,17.41,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+HUDCO,2024-01-19,15.8,0.7,5.67,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+RVNL,2024-01-19,19.6,0.9,10.19,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+IRCON,2024-01-20,17.3,1.4,8.12,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+IRCON,2024-01-23,-14.0,3.0,5.32,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+RAILTEL,2024-01-23,-12.8,0.5,4.36,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+RITES,2024-01-25,18.6,0.5,18.43,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+HUDCO,2024-02-01,19.5,0.7,6.52,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+PAYTM,2024-02-01,-20.0,-20.0,0.3,4/5,unknown (INFERRED possible mechanical or circuit move: low volume reaction),-,UNVERIFIED,,no,False
+NBCC,2024-02-02,19.1,5.9,3.87,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+PAYTM,2024-02-02,-20.0,-20.0,2.28,4/5,"GENUINE MOVE (RBI order, lower circuit)",-,GENUINE MOVE (prior signed doc; not re-searched),docs/brain/evidence/sl_v1/gap_classification.md,no,False
+TRITURBINE,2024-02-06,20.0,5.9,32.26,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+TRENT,2024-02-07,18.9,1.5,10.76,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+YESBANK,2024-02-07,17.3,2.8,6.4,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+BHARATFORG,2024-02-12,-13.9,0.8,10.65,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+GICRE,2024-02-12,-14.4,1.0,1.65,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+IRCON,2024-02-12,-12.6,0.3,0.87,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+IRFC,2024-02-12,-13.5,-2.0,1.3,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+NHPC,2024-02-12,-15.8,-0.8,2.3,4/5,unknown (INFERRED possible mechanical or circuit move: low volume reaction),-,UNVERIFIED,,no,False
+NIACL,2024-02-12,-15.2,0.0,1.9,5/6,unknown (INFERRED possible mechanical or circuit move: low volume reaction),-,UNVERIFIED,,no,False
+SJVN,2024-02-12,-20.0,-11.1,1.62,4/5,unknown (INFERRED possible mechanical or circuit move: low volume reaction),-,UNVERIFIED,,no,False
+IRFC,2024-02-13,15.4,-0.7,2.43,,unknown (INFERRED possible mechanical or circuit move: low volume reaction),-,UNVERIFIED,,no,False
+NATCOPHARM,2024-02-16,15.7,0.4,32.2,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+NIACL,2024-02-16,15.6,0.9,4.95,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+IDEA,2024-02-28,-13.9,-2.2,4.52,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+IIFL,2024-03-05,-20.0,-20.0,1.19,4/5,"GENUINE MOVE (RBI gold-loan ban, 20% lower circuit)",-,GENUINE MOVE,https://www.businesstoday.in/amp/markets/company-stock/story/iifl-finance-shares-crack-20-after-rbi-order-development-a-major-negative-setback-says-motilal-oswal-420093-2024-03-05,no,False
+IIFL,2024-03-06,-20.0,-20.0,20.19,4/5,GENUINE MOVE (2nd lower circuit),-,GENUINE MOVE,https://www.businesstoday.in/markets/company-stock/story/iifl-finance-shares-down-37-in-3-days-stock-price-targets-more-420346-2024-03-06,no,False
+KIRLOSBROS,2024-03-13,-12.8,0.1,7.96,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+RAILTEL,2024-03-13,-20.0,0.7,2.57,4/5,unknown (INFERRED possible mechanical or circuit move: low volume reaction),-,UNVERIFIED,,no,False
+RITES,2024-03-13,-15.5,0.1,5.18,4/5,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+SJVN,2024-03-14,17.2,-0.8,3.66,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+PNBHOUSING,2024-04-01,19.0,3.4,23.77,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+EXIDEIND,2024-04-08,17.2,0.8,33.28,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+HINDZINC,2024-04-09,15.7,0.5,38.89,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+WABAG,2024-04-16,15.5,-0.1,16.64,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+BSE,2024-04-29,-13.6,-15.0,9.32,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+HINDZINC,2024-05-10,15.2,1.1,7.38,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+NEULANDLAB,2024-05-13,-15.1,-7.0,6.26,5/6,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+SOMANYCERA,2024-05-16,15.9,16.7,95.18,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+CROMPTON,2024-05-17,15.6,3.4,11.61,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+HINDZINC,2024-05-21,19.6,2.8,4.02,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+HEG,2024-05-23,-16.4,-3.3,6.96,4/5,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+ZFCVINDIA,2024-05-27,20.0,-0.9,20.2,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+CAMPUS,2024-05-29,18.3,5.4,60.06,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+EMAMILTD,2024-05-30,16.8,0.1,23.67,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+ADANIPOWER,2024-06-03,15.7,15.1,7.87,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+ABB,2024-06-04,-12.2,0.3,3.54,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+ACC,2024-06-04,-14.9,-0.1,3.34,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+ADANIENSOL,2024-06-04,-20.0,-0.2,6.2,4/5,GENUINE MOVE (election-result day market crash; PSU index -14..16%),-,GENUINE MOVE (market-level news verified; per-stock cause not individually checked),https://www.angelone.in/news/share-market/10-psu-stocks-with-the-highest-decline-on-election-result-day ; https://www.business-standard.com/amp/markets/news/sensex-plunges-over-4-000-points-intraday-check-factors-behind-the-fall-124060400591_1.html,no,False
+ADANIGREEN,2024-06-04,-19.2,-0.4,3.2,4/5,GENUINE MOVE (election-result day market crash; PSU index -14..16%),-,GENUINE MOVE (market-level news verified; per-stock cause not individually checked),https://www.angelone.in/news/share-market/10-psu-stocks-with-the-highest-decline-on-election-result-day ; https://www.business-standard.com/amp/markets/news/sensex-plunges-over-4-000-points-intraday-check-factors-behind-the-fall-124060400591_1.html,no,False
+ADANIPOWER,2024-06-04,-17.3,-0.2,11.11,4/5,GENUINE MOVE (election-result day market crash; PSU index -14..16%),-,GENUINE MOVE (market-level news verified; per-stock cause not individually checked),https://www.angelone.in/news/share-market/10-psu-stocks-with-the-highest-decline-on-election-result-day ; https://www.business-standard.com/amp/markets/news/sensex-plunges-over-4-000-points-intraday-check-factors-behind-the-fall-124060400591_1.html,no,False
+AMBUJACEM,2024-06-04,-17.0,0.0,8.07,4/5,GENUINE MOVE (election-result day market crash; PSU index -14..16%),-,GENUINE MOVE (market-level news verified; per-stock cause not individually checked),https://www.angelone.in/news/share-market/10-psu-stocks-with-the-highest-decline-on-election-result-day ; https://www.business-standard.com/amp/markets/news/sensex-plunges-over-4-000-points-intraday-check-factors-behind-the-fall-124060400591_1.html,no,False
+ANGELONE,2024-06-04,-12.8,-0.3,3.37,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+ASHOKLEY,2024-06-04,-12.1,-0.6,2.65,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+BANKINDIA,2024-06-04,-14.2,0.2,3.52,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+BHEL,2024-06-04,-20.8,-0.1,4.66,3/4,GENUINE MOVE (election-result day market crash; PSU index -14..16%),-,GENUINE MOVE (market-level news verified; per-stock cause not individually checked),https://www.angelone.in/news/share-market/10-psu-stocks-with-the-highest-decline-on-election-result-day ; https://www.business-standard.com/amp/markets/news/sensex-plunges-over-4-000-points-intraday-check-factors-behind-the-fall-124060400591_1.html,no,False
+CANBK,2024-06-04,-14.7,-0.4,5.07,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+CHAMBLFERT,2024-06-04,-13.5,-0.0,2.54,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+CONCOR,2024-06-04,-19.2,0.5,5.9,4/5,GENUINE MOVE (election-result day market crash; PSU index -14..16%),-,GENUINE MOVE (market-level news verified; per-stock cause not individually checked),https://www.angelone.in/news/share-market/10-psu-stocks-with-the-highest-decline-on-election-result-day ; https://www.business-standard.com/amp/markets/news/sensex-plunges-over-4-000-points-intraday-check-factors-behind-the-fall-124060400591_1.html,no,False
+CUMMINSIND,2024-06-04,-12.6,0.0,3.18,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+DLF,2024-06-04,-12.2,1.2,2.97,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+GAIL,2024-06-04,-17.5,-0.2,8.02,4/5,GENUINE MOVE (election-result day market crash; PSU index -14..16%),-,GENUINE MOVE (market-level news verified; per-stock cause not individually checked),https://www.angelone.in/news/share-market/10-psu-stocks-with-the-highest-decline-on-election-result-day ; https://www.business-standard.com/amp/markets/news/sensex-plunges-over-4-000-points-intraday-check-factors-behind-the-fall-124060400591_1.html,no,False
+GEOJITFSL,2024-06-04,-13.9,-0.1,1.67,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+GMRAIRPORT,2024-06-04,-13.3,-0.3,3.65,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+GODREJPROP,2024-06-04,-12.8,-0.5,1.62,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+HDFCAMC,2024-06-04,-15.5,-0.4,6.24,4/5,GENUINE MOVE (election-result day market crash; PSU index -14..16%),-,GENUINE MOVE (market-level news verified; per-stock cause not individually checked),https://www.angelone.in/news/share-market/10-psu-stocks-with-the-highest-decline-on-election-result-day ; https://www.business-standard.com/amp/markets/news/sensex-plunges-over-4-000-points-intraday-check-factors-behind-the-fall-124060400591_1.html,no,False
+HEG,2024-06-04,-12.8,-0.1,1.5,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+HINDCOPPER,2024-06-04,-19.4,-0.1,3.46,4/5,GENUINE MOVE (election-result day market crash; PSU index -14..16%),-,GENUINE MOVE (market-level news verified; per-stock cause not individually checked),https://www.angelone.in/news/share-market/10-psu-stocks-with-the-highest-decline-on-election-result-day ; https://www.business-standard.com/amp/markets/news/sensex-plunges-over-4-000-points-intraday-check-factors-behind-the-fall-124060400591_1.html,no,False
+HINDPETRO,2024-06-04,-15.5,0.3,2.35,4/5,GENUINE MOVE (election-result day market crash; PSU index -14..16%),-,GENUINE MOVE (market-level news verified; per-stock cause not individually checked),https://www.angelone.in/news/share-market/10-psu-stocks-with-the-highest-decline-on-election-result-day ; https://www.business-standard.com/amp/markets/news/sensex-plunges-over-4-000-points-intraday-check-factors-behind-the-fall-124060400591_1.html,no,False
+HUDCO,2024-06-04,-20.0,-0.3,2.34,4/5,GENUINE MOVE (election-result day market crash; PSU index -14..16%),-,GENUINE MOVE (market-level news verified; per-stock cause not individually checked),https://www.angelone.in/news/share-market/10-psu-stocks-with-the-highest-decline-on-election-result-day ; https://www.business-standard.com/amp/markets/news/sensex-plunges-over-4-000-points-intraday-check-factors-behind-the-fall-124060400591_1.html,no,False
+IDBI,2024-06-04,-14.5,-0.9,5.77,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+IDEA,2024-06-04,-17.5,-1.9,4.64,4/5,GENUINE MOVE (election-result day market crash; PSU index -14..16%),-,GENUINE MOVE (market-level news verified; per-stock cause not individually checked),https://www.angelone.in/news/share-market/10-psu-stocks-with-the-highest-decline-on-election-result-day ; https://www.business-standard.com/amp/markets/news/sensex-plunges-over-4-000-points-intraday-check-factors-behind-the-fall-124060400591_1.html,no,False
+INDIACEM,2024-06-04,-14.4,-0.1,4.82,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+INDIANB,2024-06-04,-13.3,-0.1,4.13,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+INDUSTOWER,2024-06-04,-15.4,-0.3,3.52,4/5,GENUINE MOVE (election-result day market crash; PSU index -14..16%),-,GENUINE MOVE (market-level news verified; per-stock cause not individually checked),https://www.angelone.in/news/share-market/10-psu-stocks-with-the-highest-decline-on-election-result-day ; https://www.business-standard.com/amp/markets/news/sensex-plunges-over-4-000-points-intraday-check-factors-behind-the-fall-124060400591_1.html,no,False
+IRCON,2024-06-04,-17.3,0.0,2.95,4/5,GENUINE MOVE (election-result day market crash; PSU index -14..16%),-,GENUINE MOVE (market-level news verified; per-stock cause not individually checked),https://www.angelone.in/news/share-market/10-psu-stocks-with-the-highest-decline-on-election-result-day ; https://www.business-standard.com/amp/markets/news/sensex-plunges-over-4-000-points-intraday-check-factors-behind-the-fall-124060400591_1.html,no,False
+IRCTC,2024-06-04,-13.5,0.2,4.81,5/6,GENUINE MOVE (election-result day market crash; PSU index -14..16%),-,GENUINE MOVE (market-level news verified; per-stock cause not individually checked),https://www.angelone.in/news/share-market/10-psu-stocks-with-the-highest-decline-on-election-result-day ; https://www.business-standard.com/amp/markets/news/sensex-plunges-over-4-000-points-intraday-check-factors-behind-the-fall-124060400591_1.html,no,False
+IREDA,2024-06-04,-12.7,-1.0,3.93,5/6,GENUINE MOVE (election-result day market crash; PSU index -14..16%),-,GENUINE MOVE (market-level news verified; per-stock cause not individually checked),https://www.angelone.in/news/share-market/10-psu-stocks-with-the-highest-decline-on-election-result-day ; https://www.business-standard.com/amp/markets/news/sensex-plunges-over-4-000-points-intraday-check-factors-behind-the-fall-124060400591_1.html,no,False
+IRFC,2024-06-04,-12.7,0.0,3.56,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+J&KBANK,2024-06-04,-19.9,-0.4,11.17,4/5,GENUINE MOVE (election-result day market crash; PSU index -14..16%),-,GENUINE MOVE (market-level news verified; per-stock cause not individually checked),https://www.angelone.in/news/share-market/10-psu-stocks-with-the-highest-decline-on-election-result-day ; https://www.business-standard.com/amp/markets/news/sensex-plunges-over-4-000-points-intraday-check-factors-behind-the-fall-124060400591_1.html,no,False
+LICHSGFIN,2024-06-04,-15.3,-0.9,5.21,4/5,GENUINE MOVE (election-result day market crash; PSU index -14..16%),-,GENUINE MOVE (market-level news verified; per-stock cause not individually checked),https://www.angelone.in/news/share-market/10-psu-stocks-with-the-highest-decline-on-election-result-day ; https://www.business-standard.com/amp/markets/news/sensex-plunges-over-4-000-points-intraday-check-factors-behind-the-fall-124060400591_1.html,no,False
+MOTILALOFS,2024-06-04,-12.5,0.8,3.07,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+NATIONALUM,2024-06-04,-19.2,-0.6,3.99,4/5,GENUINE MOVE (election-result day market crash; PSU index -14..16%),-,GENUINE MOVE (market-level news verified; per-stock cause not individually checked),https://www.angelone.in/news/share-market/10-psu-stocks-with-the-highest-decline-on-election-result-day ; https://www.business-standard.com/amp/markets/news/sensex-plunges-over-4-000-points-intraday-check-factors-behind-the-fall-124060400591_1.html,no,False
+NHPC,2024-06-04,-13.9,0.0,3.02,5/6,GENUINE MOVE (election-result day market crash; PSU index -14..16%),-,GENUINE MOVE (market-level news verified; per-stock cause not individually checked),https://www.angelone.in/news/share-market/10-psu-stocks-with-the-highest-decline-on-election-result-day ; https://www.business-standard.com/amp/markets/news/sensex-plunges-over-4-000-points-intraday-check-factors-behind-the-fall-124060400591_1.html,no,False
+NIACL,2024-06-04,-16.1,-0.1,4.09,4/5,GENUINE MOVE (election-result day market crash; PSU index -14..16%),-,GENUINE MOVE (market-level news verified; per-stock cause not individually checked),https://www.angelone.in/news/share-market/10-psu-stocks-with-the-highest-decline-on-election-result-day ; https://www.business-standard.com/amp/markets/news/sensex-plunges-over-4-000-points-intraday-check-factors-behind-the-fall-124060400591_1.html,no,False
+NUVAMA,2024-06-04,-12.4,-0.7,2.9,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+PETRONET,2024-06-04,-12.3,0.1,2.54,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+PFC,2024-06-04,-23.1,-1.8,6.28,3/4,GENUINE MOVE (election-result day market crash; PSU index -14..16%),-,GENUINE MOVE (market-level news verified; per-stock cause not individually checked),https://www.angelone.in/news/share-market/10-psu-stocks-with-the-highest-decline-on-election-result-day ; https://www.business-standard.com/amp/markets/news/sensex-plunges-over-4-000-points-intraday-check-factors-behind-the-fall-124060400591_1.html,no,False
+PNB,2024-06-04,-15.8,-0.4,3.9,4/5,GENUINE MOVE (election-result day market crash; PSU index -14..16%),-,GENUINE MOVE (market-level news verified; per-stock cause not individually checked),https://www.angelone.in/news/share-market/10-psu-stocks-with-the-highest-decline-on-election-result-day ; https://www.business-standard.com/amp/markets/news/sensex-plunges-over-4-000-points-intraday-check-factors-behind-the-fall-124060400591_1.html,no,False
+PRESTIGE,2024-06-04,-12.9,0.8,1.7,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+RAILTEL,2024-06-04,-15.1,-0.4,2.36,5/6,GENUINE MOVE (election-result day market crash; PSU index -14..16%),-,GENUINE MOVE (market-level news verified; per-stock cause not individually checked),https://www.angelone.in/news/share-market/10-psu-stocks-with-the-highest-decline-on-election-result-day ; https://www.business-standard.com/amp/markets/news/sensex-plunges-over-4-000-points-intraday-check-factors-behind-the-fall-124060400591_1.html,no,False
+RBLBANK,2024-06-04,-14.2,0.7,4.33,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+RCF,2024-06-04,-13.9,-2.7,3.06,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+RECLTD,2024-06-04,-25.2,-1.7,6.9,3/4,GENUINE MOVE (election-result day market crash; PSU index -14..16%),-,GENUINE MOVE (market-level news verified; per-stock cause not individually checked),https://www.angelone.in/news/share-market/10-psu-stocks-with-the-highest-decline-on-election-result-day ; https://www.business-standard.com/amp/markets/news/sensex-plunges-over-4-000-points-intraday-check-factors-behind-the-fall-124060400591_1.html,no,False
+RITES,2024-06-04,-13.8,0.2,2.95,5/6,GENUINE MOVE (election-result day market crash; PSU index -14..16%),-,GENUINE MOVE (market-level news verified; per-stock cause not individually checked),https://www.angelone.in/news/share-market/10-psu-stocks-with-the-highest-decline-on-election-result-day ; https://www.business-standard.com/amp/markets/news/sensex-plunges-over-4-000-points-intraday-check-factors-behind-the-fall-124060400591_1.html,no,False
+RVNL,2024-06-04,-13.1,-1.1,3.07,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+SAIL,2024-06-04,-20.0,-0.9,4.63,4/5,GENUINE MOVE (election-result day market crash; PSU index -14..16%),-,GENUINE MOVE (market-level news verified; per-stock cause not individually checked),https://www.angelone.in/news/share-market/10-psu-stocks-with-the-highest-decline-on-election-result-day ; https://www.business-standard.com/amp/markets/news/sensex-plunges-over-4-000-points-intraday-check-factors-behind-the-fall-124060400591_1.html,no,False
+SCI,2024-06-04,-17.1,-1.4,2.31,4/5,GENUINE MOVE (election-result day market crash; PSU index -14..16%),-,GENUINE MOVE (market-level news verified; per-stock cause not individually checked),https://www.angelone.in/news/share-market/10-psu-stocks-with-the-highest-decline-on-election-result-day ; https://www.business-standard.com/amp/markets/news/sensex-plunges-over-4-000-points-intraday-check-factors-behind-the-fall-124060400591_1.html,no,False
+SIEMENS,2024-06-04,-12.4,0.6,2.66,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+SJVN,2024-06-04,-13.9,-0.1,5.31,5/6,GENUINE MOVE (election-result day market crash; PSU index -14..16%),-,GENUINE MOVE (market-level news verified; per-stock cause not individually checked),https://www.angelone.in/news/share-market/10-psu-stocks-with-the-highest-decline-on-election-result-day ; https://www.business-standard.com/amp/markets/news/sensex-plunges-over-4-000-points-intraday-check-factors-behind-the-fall-124060400591_1.html,no,False
+TATAPOWER,2024-06-04,-12.5,0.5,4.65,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+TITAGARH,2024-06-04,-19.8,-0.4,2.97,4/5,GENUINE MOVE (election-result day market crash; PSU index -14..16%),-,GENUINE MOVE (market-level news verified; per-stock cause not individually checked),https://www.angelone.in/news/share-market/10-psu-stocks-with-the-highest-decline-on-election-result-day ; https://www.business-standard.com/amp/markets/news/sensex-plunges-over-4-000-points-intraday-check-factors-behind-the-fall-124060400591_1.html,no,False
+UNIONBANK,2024-06-04,-18.6,-0.1,3.28,4/5,GENUINE MOVE (election-result day market crash; PSU index -14..16%),-,GENUINE MOVE (market-level news verified; per-stock cause not individually checked),https://www.angelone.in/news/share-market/10-psu-stocks-with-the-highest-decline-on-election-result-day ; https://www.business-standard.com/amp/markets/news/sensex-plunges-over-4-000-points-intraday-check-factors-behind-the-fall-124060400591_1.html,no,False
+WELCORP,2024-06-04,-14.3,0.9,3.21,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+CHAMBLFERT,2024-06-20,19.3,0.5,27.42,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+FACT,2024-06-20,20.0,-0.0,36.66,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+RCF,2024-06-20,20.0,0.6,20.81,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+CDSL,2024-06-28,19.0,7.7,33.43,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+SUBROS,2024-07-01,18.5,-0.2,15.67,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+RVNL,2024-07-05,17.3,1.5,7.43,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+RVNL,2024-07-08,15.2,3.5,8.7,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+SCI,2024-07-11,20.0,2.1,12.75,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+GEOJITFSL,2024-07-15,15.3,3.8,21.79,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+TORNTPOWER,2024-07-31,16.6,6.2,60.61,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+NEULANDLAB,2024-08-02,18.1,0.1,17.44,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+KIRLOSBROS,2024-08-05,-12.7,-1.8,2.82,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+SYMPHONY,2024-08-06,18.9,1.5,69.89,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+BASF,2024-08-07,20.0,2.0,13.39,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+KFINTECH,2024-08-09,18.3,1.1,19.09,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+SUPRAJIT,2024-08-16,15.1,5.7,52.3,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+CAPLIPOINT,2024-08-19,16.4,1.3,57.17,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+ANGELONE,2024-08-20,15.2,1.2,21.34,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+MINDACORP,2024-08-23,17.3,0.1,51.46,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+TATAELXSI,2024-08-27,16.8,1.5,85.67,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+GEOJITFSL,2024-09-03,15.6,0.3,22.49,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+GRANULES,2024-09-12,-16.5,0.3,21.08,4/5,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+BSE,2024-09-16,18.2,2.0,14.67,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+BSE,2024-09-18,16.9,0.5,21.52,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+IDEA,2024-09-19,-19.5,0.7,6.87,4/5,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+PAYTM,2024-10-08,15.1,0.8,2.82,,unknown (INFERRED possible mechanical or circuit move: low volume reaction),-,UNVERIFIED,,no,False
+ANGELONE,2024-10-15,18.4,8.0,18.36,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+MANAPPURAM,2024-10-18,-13.6,-10.0,14.61,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+RBLBANK,2024-10-21,-14.2,-6.0,9.75,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+DEEPAKFERT,2024-10-23,16.5,1.2,9.26,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+KPITTECH,2024-10-24,-13.7,-2.1,16.72,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+POONAWALLA,2024-10-25,-17.2,0.1,9.69,4/5,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+ORIENTELEC,2024-10-28,20.0,2.7,14.37,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+BASF,2024-11-12,-14.8,0.1,5.64,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+ADANIENSOL,2024-11-21,-20.0,-20.0,10.38,4/5,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+ADANIGREEN,2024-11-21,-18.9,-17.9,15.13,4/5,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+POLYMED,2024-11-25,16.3,0.8,12.14,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+ADANIPOWER,2024-11-27,19.5,-0.2,20.22,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+ZFCVINDIA,2024-11-27,-13.7,-4.5,190.51,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+ADANIENSOL,2024-11-29,15.6,2.9,10.01,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+ADANIGREEN,2024-11-29,21.8,5.7,33.24,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+HEG,2024-12-04,16.2,0.9,186.57,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+KIRLOSBROS,2025-01-07,16.0,0.6,34.37,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+ADANIPOWER,2025-01-14,19.3,2.2,14.16,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+IDBI,2025-01-14,17.6,0.3,5.49,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+IRCON,2025-01-16,16.0,2.6,16.2,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+DIXON,2025-01-21,-13.8,-1.8,6.61,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+CYIENT,2025-01-24,-23.4,-7.6,41.81,3/4,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+DEEPAKFERT,2025-01-29,15.9,0.9,10.8,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+DEEPAKFERT,2025-01-30,-13.5,-0.9,10.29,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+POWERINDIA,2025-01-30,20.0,11.9,11.58,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+VOLTAS,2025-01-30,-13.9,-3.0,13.2,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+WHIRLPOOL,2025-01-30,-20.0,-20.0,4.17,4/5,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+NATCOPHARM,2025-02-13,-20.0,-14.7,19.68,4/5,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+DEEPAKNTR,2025-02-14,-15.1,-8.4,48.54,5/6,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+GLAXO,2025-02-17,16.0,9.0,20.09,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+KEI,2025-02-27,-21.0,-9.2,15.94,3/4,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+POLYCAB,2025-02-27,-18.8,-6.3,13.46,4/5,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+INDIACEM,2025-03-04,15.1,-1.2,24.47,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+KEI,2025-03-20,-13.5,-3.9,15.42,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+BSE,2025-03-28,17.0,6.7,3.56,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+IDEA,2025-04-01,19.1,10.0,4.94,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+TRENT,2025-04-07,-14.8,-10.0,6.88,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+RAJRATAN,2025-04-22,20.0,1.5,10.24,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+BAJAJELEC,2025-05-12,15.2,1.9,31.07,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+KIRLOSENG,2025-05-15,17.3,0.7,37.68,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+RITES,2025-05-16,15.6,0.5,33.41,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+GRAPHITE,2025-05-19,16.8,0.2,55.62,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+LUMAXTECH,2025-05-30,16.5,8.5,27.28,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+FACT,2025-06-03,17.8,0.3,28.67,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+SOMANYCERA,2025-06-09,20.0,0.0,20.58,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+SUBROS,2025-06-16,18.8,0.0,47.84,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+ORIENTCEM,2025-06-18,-16.3,-11.3,13.73,4/5,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+KIRLOSBROS,2025-06-25,16.3,0.2,76.09,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+GABRIEL,2025-07-01,20.0,20.0,1.8,,unknown (INFERRED possible mechanical or circuit move: low volume reaction),-,UNVERIFIED,,no,False
+GABRIEL,2025-07-02,15.8,20.0,12.65,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+NEULANDLAB,2025-07-14,18.3,0.0,26.78,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+IEX,2025-07-24,-29.6,-10.0,22.52,2/3,GENUINE MOVE (CERC market coupling order),-,GENUINE MOVE,https://businesstoday.in/markets/stocks/story/iex-shares-136-lakh-retail-investors-lose-rs-1450-crore-as-stock-crashes-28-486107-2025-07-24,no,False
+NIACL,2025-07-30,17.8,4.9,251.57,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+DHANUKA,2025-08-01,-13.9,0.7,12.25,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+PNBHOUSING,2025-08-01,-18.0,-10.5,42.97,4/5,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+GREENPANEL,2025-09-11,18.1,0.4,300.63,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+ADANIPOWER,2025-09-22,20.0,4.4,7.1,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+RAJRATAN,2025-10-20,17.3,1.4,80.7,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+LUMAXTECH,2025-11-10,15.5,5.8,18.24,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+GABRIEL,2025-11-17,-12.3,0.1,12.84,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+ORIENTELEC,2025-11-25,20.0,-5.5,193.01,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+IIFL,2026-01-22,-13.5,1.8,15.53,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+ADANIENSOL,2026-01-23,-12.1,0.0,7.83,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+ADANIGREEN,2026-01-23,-14.5,0.5,16.72,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+HINDCOPPER,2026-01-29,20.0,4.6,3.81,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+HINDZINC,2026-01-30,-12.1,-3.5,3.26,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+HINDCOPPER,2026-02-01,-12.6,-9.6,2.42,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+SCI,2026-02-09,19.6,12.3,39.22,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+RATNAMANI,2026-02-12,19.4,0.9,55.38,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+RATNAMANI,2026-02-18,15.8,0.7,46.32,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+IDFCFIRSTB,2026-02-23,-16.1,-10.0,28.19,4/5,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+FACT,2026-03-10,20.0,1.0,101.2,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+HAPPSTMNDS,2026-03-10,17.6,1.6,39.25,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+RCF,2026-03-10,16.1,1.3,78.16,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+IDBI,2026-03-16,-16.6,-10.9,7.56,4/5,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+LATENTVIEW,2026-04-02,19.5,-0.5,86.55,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+NIACL,2026-04-10,19.8,0.8,144.58,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+RAILTEL,2026-04-15,18.4,5.5,53.53,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+LALPATHLAB,2026-05-04,15.1,1.7,28.21,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+CREDITACC,2026-05-05,15.4,1.0,59.71,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+SUVEN,2026-05-18,19.6,0.4,42.38,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+HONAUT,2026-05-21,15.9,4.4,64.91,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+NATCOPHARM,2026-05-29,-13.6,-1.2,7.67,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+SUPRIYA,2026-05-29,20.0,9.9,35.69,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+FINCABLES,2026-06-01,-12.9,1.8,4.52,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+SUPRIYA,2026-06-02,-12.9,-2.5,11.96,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+IDBI,2026-06-17,17.1,0.3,31.45,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+KIRLOSENG,2026-06-22,20.0,10.5,5.43,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+TCIEXP,2026-06-24,16.6,0.6,362.85,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+TCIEXP,2026-06-25,-13.4,-3.5,87.84,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+KPITTECH,2026-07-01,-17.0,-10.0,26.45,4/5,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+TRENT,2026-07-07,-12.4,-7.9,6.06,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+GRINDWELL,2026-07-16,16.4,0.6,5.51,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+GRINDWELL,2026-07-17,-12.4,0.7,10.29,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+RELAXO,2026-07-17,20.0,0.4,136.02,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+BANDHANBNK,2026-07-22,-16.9,-10.0,16.41,4/5,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+J&KBANK,2026-07-29,-12.8,0.8,8.19,5/6,ratio-signature only (<15% move); no event found,-,UNVERIFIED (no evidence of corporate action),,no,False
+ALLCARGO,2026-08-06,19.9,2.6,54.48,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+LUMAXTECH,2026-08-11,19.5,3.3,48.77,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+GALAXYSURF,2026-08-14,20.0,15.4,81.18,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+ALLCARGO,2026-08-21,15.8,0.4,9.96,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+WELCORP,2026-08-21,15.3,8.5,27.91,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False
+NIACL,2026-09-04,17.7,0.6,59.69,,"unknown (INFERRED market move: volume >=3x 20d median, no mechanical signature)",-,UNVERIFIED,,no,False

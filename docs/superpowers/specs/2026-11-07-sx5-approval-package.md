@@ -27,7 +27,7 @@
 | Existing-input gap | 1,103 | 1,081 rows of one window (2022-08-11 to 2022-09-14, all 47 stocks, no VIX rank yet: INDIA VIX starts 2021-09-13) plus 22 rows where MFI is undefined | 45,945 |
 | Sector gap | 10 | APOLLOHOSP, early rows where the NIFTY HEALTHCARE history is too short for a sector input | 45,935 |
 
-Final: **45,935** (assembler and reconciliation agree: identical row sets, 0 differences). Against the full-49 baseline (existing inputs only) the 47-stock set loses 1,974 rows (4.12%): ASIANPAINT and BHARTIARTL (unmapped) and 10 APOLLOHOSP rows. Exclusion files used by the configuration: `docs/brain/evidence/sector_prep/excluded_rows_h5_v2.csv` (sha256 `99aef24dc4c9dd13c14d859956090693700d8041e20fd18774c9abbc7b2fefa9`, 187 rows, all HINDUNILVR); `events_input_v2.csv` sha256 `23f145d80e6ce64e784c5db4d93d479929f4c429fcf369c84aa4b46710b649cf`. There are no v3 exclusion files (the C_56 change did not alter exclusions).
+Final: **45,935** (assembler and reconciliation agree: identical row sets, 0 differences). Against the full-49 baseline (existing inputs only) the 47-stock set loses 1,974 rows (4.12%): ASIANPAINT and BHARTIARTL (unmapped) and 10 APOLLOHOSP rows. Exclusion files used by the configuration: `docs/brain/evidence/sector_prep/excluded_rows_h5_v2.csv` (sha256 `ac3cfa19aecbf253119b16535b1ecbf5370d68d3572e25aba66716f2be2abaf6`, 187 rows, all HINDUNILVR); `events_input_v2.csv` sha256 `48b8b85efb751269db0d69d75d428353cc95e521f0a590c7db1b811953613eb1`. There are no v3 exclusion files (the C_56 change did not alter exclusions).
 
 ## 3. Inputs: the three manifests
 

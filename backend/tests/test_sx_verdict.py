@@ -25,7 +25,14 @@ def day_rows(start_ordinal, ds, n_stocks=14):
     out = []
     for i, x in enumerate(ds):
         d = date.fromordinal(start_ordinal + i).isoformat()
-        out.append({"date": d, "n_stocks": n_stocks, "top_symbols": list("abcde"), "excess_vs_all": x})
+        out.append(
+            {
+                "date": d,
+                "n_stocks": n_stocks,
+                "top_symbols": [f"s{start_ordinal + i}_{k}" for k in range(5)],
+                "excess_vs_all": x,
+            }
+        )
     return out
 
 
@@ -82,7 +89,7 @@ def test_mde_missing_refuses():
 def test_params_hash_canonical_and_stable():
     a, b = params(), params()
     assert a.canonical_json() == b.canonical_json() and a.sha256() == b.sha256()
-    assert params(mde_h=0.02).sha256() != a.sha256()
+    assert params(mde_h=0.015).sha256() != a.sha256()
     assert json.loads(a.canonical_json())["seed"] == 7 and a.block == 10 and params(horizon=10).block == 20
 
 
@@ -123,7 +130,7 @@ def test_bound_indices_known_answer():
 def test_pass_after_holdout_completed():
     p = params()
     dev = make_records(folds(p, const(0.002)))
-    hold = make_records({0: [0.001] * 20}, kind="holdout", base=740000)
+    hold = make_records({0: [0.001] * 120}, kind="holdout", base=740000)
     out = v.compute_verdict(dev, p, holdout_records=hold, holdout_completed=True)
     assert out["outcome"] == v.PASS and out["r1"]["met"] and out["r2"]["met"] and out["r4"]["met"]
     assert out["n_paired_days"] == 30 * 15 and out["r3"]["eligible_folds"] == 30
@@ -135,7 +142,7 @@ def test_r4_zero_or_negative_holdout_is_inconclusive():
     p = params()
     dev = make_records(folds(p, const(0.002)))
     for hv in (0.0, -0.001):
-        hold = make_records({0: [hv] * 20}, kind="holdout", base=740000)
+        hold = make_records({0: [hv] * 120}, kind="holdout", base=740000)
         out = v.compute_verdict(dev, p, holdout_records=hold, holdout_completed=True)
         assert out["outcome"] == v.INCONCLUSIVE and out["r4"]["met"] is False
 
@@ -200,7 +207,12 @@ def test_inconclusive_data_few_picks_and_few_days():
     out = v.compute_verdict(make_records(d), p)
     assert out["r3"]["picks"] == 50 and out["outcome_detail"] == "data"
     p2 = params(
-        min_eligible_folds=0, min_picks=0, min_fold_days=1, min_fold_picks=1, burn_in_folds=4, last_fold_index=4
+        min_eligible_folds=0,
+        min_picks=0,
+        min_fold_days=1,
+        min_fold_picks=1,
+        burn_in_folds=4,
+        last_fold_index=4,
     )
     out2 = v.compute_verdict(make_records({4: [0.002] * 9}), p2)  # 9 days < 2h = 10
     assert out2["n_paired_days"] == 9 and out2["outcome_detail"] == "data"
@@ -259,7 +271,9 @@ def test_holm_two_horizon_levels_and_requirement():
     me = v.compute_verdict(base, p, other_horizon_p=1.0)["holm"]
     assert me["alpha"] == 0.025  # my p is smaller
     assert v.compute_verdict(base, p, other_horizon_p=1e-9)["holm"]["alpha"] == 0.05
-    assert v.compute_verdict(base, p, other_horizon_p=me["p_this_horizon"])["holm"]["alpha"] == 0.025  # SX5 wins ties
+    assert (
+        v.compute_verdict(base, p, other_horizon_p=me["p_this_horizon"])["holm"]["alpha"] == 0.025
+    )  # SX5 wins ties
 
     p10 = params(horizon=10, holm_mode="two_horizon")
     rec10 = make_records(folds(p10, noisy_zero(amp=0.003), days=25))
@@ -344,3 +358,266 @@ def test_module_has_no_registry_or_io_dependency():
     code = src.split('"""', 2)[2]
     assert "import holdout_registry" not in code and "from swing_trade_ml" not in code
     assert "import os" not in code and "open(" not in code and "datetime" not in code
+
+
+# ================================================================ final statistical rules (2026-11-04)
+def _dev_pass_setup(**kw):
+    p = params(**kw)
+    return p, make_records(folds(p, const(0.002)))
+
+
+def _hold(vals, status="ok", base=740000):
+    return make_records({0: vals}, kind="holdout", base=base, status={0: status})
+
+
+# ---- R4
+def test_r4_fewer_than_required_days_is_not_met():
+    p, dev = _dev_pass_setup()
+    out = v.compute_verdict(dev, p, holdout_records=_hold([0.001] * 99), holdout_completed=True)
+    assert out["r4"]["met"] is False and out["r4"]["holdout_days"] == 99 and out["outcome"] == v.INCONCLUSIVE
+    assert "not evaluable" in out["outcome_detail"] and "99" in out["outcome_detail"]
+    ok = v.compute_verdict(dev, p, holdout_records=_hold([0.001] * 100), holdout_completed=True)
+    assert ok["outcome"] == v.PASS and ok["r4"]["required_holdout_days"] == 100
+    assert ok["r4"]["expected_holdout_days"] == 133
+
+
+def test_r4_zero_ok_days_not_met():
+    p, dev = _dev_pass_setup()
+    out = v.compute_verdict(
+        dev, p, holdout_records=_hold([], status="skipped_no_test_rows"), holdout_completed=True
+    )
+    assert out["r4"]["met"] is False and out["r4"]["holdout_days"] == 0 and out["outcome"] == v.INCONCLUSIVE
+    assert "zero ok holdout days" in out["outcome_detail"]
+    low = _hold([0.001] * 120)
+    for r in low:
+        for d in r["daily"]:
+            d["n_stocks"] = 9
+    out2 = v.compute_verdict(dev, p, holdout_records=low, holdout_completed=True)
+    assert out2["r4"]["holdout_days"] == 0 and out2["r4"]["met"] is False
+
+
+def test_r4_sign_flips_and_no_size_threshold():
+    p, dev = _dev_pass_setup()
+    tiny = v.compute_verdict(dev, p, holdout_records=_hold([1e-9] * 120), holdout_completed=True)
+    assert tiny["outcome"] == v.PASS and tiny["r4"]["same_sign"]  # no size / bound requirement
+    neg = v.compute_verdict(dev, p, holdout_records=_hold([-1e-9] * 120), holdout_completed=True)
+    assert neg["outcome"] == v.INCONCLUSIVE and "signals disagree" in neg["outcome_detail"]
+    r = random.Random(2)
+    noisy = [r.uniform(-0.01, 0.01) for _ in range(120)]
+    noisy[0] += abs(sum(noisy)) + 0.001  # force a tiny positive mean with a huge spread
+    o = v.compute_verdict(dev, p, holdout_records=_hold(noisy), holdout_completed=True)
+    assert o["r4"]["holdout_mean_d"] > 0 and o["outcome"] == v.PASS  # R4 is not a second inference test
+
+
+def test_r4_failed_holdout_status_not_met():
+    p, dev = _dev_pass_setup()
+    hold = _hold([0.001] * 120, status="skipped_no_test_rows")
+    out = v.compute_verdict(dev, p, holdout_records=hold, holdout_completed=True)
+    assert out["r4"]["met"] is False and out["outcome"] == v.INCONCLUSIVE
+
+
+def test_r4_interaction_with_pending_and_dev_failures():
+    p, dev = _dev_pass_setup()
+    assert (
+        v.compute_verdict(dev, p, holdout_records=boom, holdout_completed=False)["outcome"]
+        == v.PENDING_HOLDOUT
+    )
+    weak = make_records(folds(p, noisy_zero(amp=0.002)))
+    assert v.compute_verdict(weak, p, holdout_records=boom, holdout_completed=True)["outcome"] == v.FAIL
+
+
+def test_r4_params_validated_and_hashed():
+    with pytest.raises(v.VerdictRefused):
+        params(min_holdout_days=0)
+    assert params(min_holdout_days=90).sha256() != params().sha256()
+
+
+# ---- Holm sequential
+def test_second_read_alpha_depends_on_first_r2():
+    p5 = params(holm_mode="single_horizon")
+    strong = v.compute_verdict(make_records(folds(p5, const(0.002))), p5)
+    weak = v.compute_verdict(make_records(folds(p5, noisy_zero(amp=0.003))), p5)
+    assert strong["r2"]["met"] and strong["holm"]["alpha"] == 0.025 and not weak["r2"]["met"]
+    p10 = params(horizon=10, holm_mode="second_read")
+    rec10 = make_records(folds(p10, noisy_zero(amp=0.003), days=25))
+    with pytest.raises(v.VerdictRefused):
+        v.compute_verdict(rec10, p10)  # first_read missing
+    a = v.compute_verdict(rec10, p10, first_read=strong)
+    b = v.compute_verdict(rec10, p10, first_read=weak)
+    assert a["holm"]["alpha"] == 0.05 and a["holm"]["first_read_record_sha256"] == strong["record_sha256"]
+    assert b["holm"]["alpha"] == 0.025
+    assert a["r2"]["alpha"] == 0.05 and b["r2"]["alpha"] == 0.025
+
+
+def test_second_read_rejects_bad_first_read():
+    p10 = params(horizon=10, holm_mode="second_read")
+    rec10 = make_records(folds(p10, const(0.002), days=25))
+    p5 = params()
+    ok = v.compute_verdict(make_records(folds(p5, const(0.002))), p5)
+    same_h = v.compute_verdict(
+        make_records(folds(params(horizon=10), const(0.002), days=25)), params(horizon=10)
+    )
+    ok2 = dict(ok)
+    ok2["holm"] = dict(ok["holm"], alpha=0.05)
+    for bad in (same_h, ok2, {"params": {}}, {}):
+        with pytest.raises(v.VerdictRefused):
+            v.compute_verdict(rec10, p10, first_read=bad)
+
+
+def test_sequential_schedule_family_wise_error_simulation():
+    """FWER <= 5% under each null configuration; p-values are exact uniforms (nominal-level assumption),
+    a false null is rejected with certainty (worst case). Schedule = 2.5% first, then second_read_alpha."""
+    p = params()
+    rng = random.Random(11)
+    n = 200000
+    for a_true, b_true in ((True, True), (True, False), (False, True)):
+        bad = 0
+        for _ in range(n):
+            pa = rng.random() if a_true else 1e-9
+            pb = rng.random() if b_true else 1e-9
+            a_rej = pa < p.alpha_strict
+            b_alpha, _ = v.second_read_alpha(a_rej, p)
+            b_rej = pb < b_alpha
+            if (a_true and a_rej) or (b_true and b_rej):
+                bad += 1
+        assert bad / n <= 0.05 + 0.002, (a_true, b_true, bad / n)
+
+
+# ---- PENDING_HOLDOUT wording
+def test_pending_holdout_text_exact_and_never_pass():
+    p, dev = _dev_pass_setup()
+    out = v.compute_verdict(dev, p, holdout_completed=False)
+    txt = v.render_plain_english(out)
+    assert v.PENDING_HOLDOUT_TEXT in txt
+    assert "NOT A PROTOCOL OUTCOME" in txt and "not a PASS" in txt and "registry" in txt
+    assert "Outcome:" not in txt
+    assert "profitab" not in txt.lower() and "works" not in txt.lower()
+
+
+# ---- outcome words and mandatory sentences
+def test_mandatory_sentences_in_every_render():
+    p, dev = _dev_pass_setup()
+    pas = v.render_plain_english(
+        v.compute_verdict(dev, p, holdout_records=_hold([0.001] * 120), holdout_completed=True)
+    )
+    assert v.PASS_SENTENCE[1:] in pas and "Outcome: PASS" in pas
+    fail = v.render_plain_english(v.compute_verdict(make_records(folds(p, noisy_zero(amp=0.002))), p))
+    assert v.FAIL_SENTENCE in fail and "Outcome: FAIL" in fail
+    wide = params(mde_h=1e-6)
+    inc = v.render_plain_english(v.compute_verdict(make_records(folds(wide, noisy_zero(amp=0.004))), wide))
+    assert v.INCONCLUSIVE_SENTENCE in inc and "Outcome: INCONCLUSIVE" in inc
+    assert v.FAIL_SENTENCE == (
+        "FAIL means a gain of MDE_H or more is unlikely; it is not evidence that every smaller positive effect is absent."
+    )
+    for t in (pas, fail, inc):
+        assert "works" not in t.lower()
+
+
+def test_outcome_table_scenarios():
+    p = params()
+    dev_good = make_records(folds(p, const(0.002)))
+    cases = [
+        ("strong, holdout pending", dev_good, None, v.PENDING_HOLDOUT),
+        ("strong, holdout positive", dev_good, [0.001] * 120, v.PASS),
+        ("strong, holdout negative", dev_good, [-0.001] * 120, v.INCONCLUSIVE),
+        ("strong, holdout short", dev_good, [0.001] * 10, v.INCONCLUSIVE),
+        ("null, tight interval", make_records(folds(p, noisy_zero(amp=0.002))), None, v.FAIL),
+    ]
+    for label, dev, hv, want in cases:
+        kw = {} if hv is None else dict(holdout_records=_hold(hv), holdout_completed=True)
+        assert v.compute_verdict(dev, p, **kw)["outcome"] == want, label
+    wide = params(mde_h=1e-6)
+    assert (
+        v.compute_verdict(make_records(folds(wide, noisy_zero(amp=0.004))), wide)["outcome"] == v.INCONCLUSIVE
+    )
+    # FAIL is relative to MDE_H: the same data are INCONCLUSIVE when a smaller edge is the target
+    f = make_records(folds(p, noisy_zero(amp=0.002)))
+    assert v.compute_verdict(f, p)["outcome"] == v.FAIL
+    assert v.compute_verdict(f, params(mde_h=1e-6))["outcome"] == v.INCONCLUSIVE
+
+
+# ---- ideas per fold
+def _daily(syms_by_day, start=730000, n_stocks=14):
+    return [
+        {
+            "date": date.fromordinal(start + i).isoformat(),
+            "n_stocks": n_stocks,
+            "top_symbols": s,
+            "excess_vs_all": 0.0,
+        }
+        for i, s in enumerate(syms_by_day)
+    ]
+
+
+def test_count_ideas_no_repeat_known_answer():
+    same = _daily([list("abcde")] * 12)
+    assert v.count_ideas(same, 5, 10, 5, "no_repeat") == 10  # counted day 0, open through 5, again day 6
+    assert v.count_ideas(_daily([list("abcde")] * 11), 10, 10, 5, "no_repeat") == 5  # open through day 10
+    assert v.count_ideas(_daily([list("abcde")] * 12), 10, 10, 5, "no_repeat") == 10  # again day 11
+    assert v.count_ideas(same, 5, 10, 5, "raw_per_day") == 60
+    rot = _daily([[f"{i}_{k}" for k in range(5)] for i in range(12)])
+    assert v.count_ideas(rot, 5, 10, 5, "no_repeat") == 60
+    assert (
+        v.count_ideas(_daily([["a", "a", "b"]]), 5, 10, 5, "no_repeat") == 2
+    )  # duplicate in a day counts once
+    thin = _daily([["a"], ["a"], ["a"]])
+    thin[0]["n_stocks"] = 5
+    assert (
+        v.count_ideas(thin, 5, 10, 5, "no_repeat") == 1
+    )  # thin day adds nothing, day 1 counts, day 2 repeat
+
+
+def test_ideas_rule_changes_eligibility():
+    base = params(min_eligible_folds=1, min_picks=1)
+    d = {i: [0.002] * 12 for i in base.counted_folds}
+    recs = make_records(d)
+    for x in recs:
+        for day in x["daily"] or []:
+            day["top_symbols"] = list("abcde")  # persistent picks
+    nr = v.compute_verdict(recs, base)
+    assert (
+        nr["r3"]["eligible_folds"] == 0
+        and nr["folds"][0]["picks"] == 10
+        and nr["folds"][0]["raw_picks"] == 60
+    )
+    raw = v.compute_verdict(recs, params(min_eligible_folds=1, min_picks=1, idea_rule="raw_per_day"))
+    assert raw["r3"]["eligible_folds"] == 30
+    do = v.compute_verdict(recs, params(min_eligible_folds=1, min_picks=10**6, idea_rule="days_only"))
+    assert do["r3"]["eligible_folds"] == 30 and not any("picks" in r for r in do["r3"]["reasons"])
+    assert v.compute_verdict(make_records(d), base)["r3"]["eligible_folds"] == 30  # rotating picks: all agree
+    with pytest.raises(v.VerdictRefused):
+        params(idea_rule="whatever")
+
+
+# ---- hashes
+def test_hashes_move_with_rule_parameters():
+    base = params()
+    for kw in ({"idea_rule": "days_only"}, {"min_holdout_days": 90}, {"holm_mode": "second_read"}):
+        assert params(**kw).sha256() != base.sha256()
+    assert len(v.verdict_code_sha256()) == 64  # the signed text must name the FINAL code hash after all edits
+
+
+# ------------------------------------------------------------------------------------------------ unit guard
+def test_unit_guard_refuses_percentage_points_typed_as_fraction():
+    for bad in (0.18, 0.02, 1.0, 18.0):
+        with pytest.raises(v.VerdictRefused, match="percentage points"):
+            v.VerdictParams(horizon=5, mde_h=bad)
+    assert v.VerdictParams(horizon=5, mde_h=0.0018).mde_h == 0.0018
+    assert v.VerdictParams(horizon=5, mde_h=0.019999).mde_h == 0.019999
+
+
+def test_unit_tag_must_be_fraction_of_return():
+    assert v.VerdictParams(horizon=5, mde_h=0.0018).units == "fraction_of_return"
+    for bad in ("pp", "percentage_points", "bps", ""):
+        with pytest.raises(v.VerdictRefused, match="units"):
+            v.VerdictParams(horizon=5, mde_h=0.0018, units=bad)
+    assert json.loads(params().canonical_json())["units"] == "fraction_of_return"
+
+
+def test_mde_h_from_pp_helper():
+    assert v.mde_h_from_pp(0.18) == pytest.approx(0.0018)
+    assert v.mde_h_from_pp(0.37) == pytest.approx(0.0037)
+    assert v.VerdictParams(horizon=5, mde_h=v.mde_h_from_pp(0.18)).mde_h == pytest.approx(0.0018)
+    for bad in (0, -0.1, 2.0, 18.0, float("nan"), None, True, "0.18"):
+        with pytest.raises(v.VerdictRefused):
+            v.mde_h_from_pp(bad)  # type: ignore[arg-type]

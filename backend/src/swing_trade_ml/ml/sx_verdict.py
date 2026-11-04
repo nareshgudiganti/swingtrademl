@@ -30,6 +30,46 @@ REFERENCE_ARM = "A_53"
 PASS, FAIL, INCONCLUSIVE = "PASS", "FAIL", "INCONCLUSIVE"
 PENDING_HOLDOUT = "PENDING_HOLDOUT"  # not a protocol word: dev signals are met, R4 cannot be read yet
 
+# Mandatory sentences (owner request 2026-11-04). Verbatim; render_plain_english emits them.
+FAIL_SENTENCE = "FAIL means a gain of MDE_H or more is unlikely; it is not evidence that every smaller positive effect is absent."
+INCONCLUSIVE_SENTENCE = "the experiment could not tell; no conclusion either way"
+PASS_SENTENCE = (
+    "a PASS only proposes a separately signed forward shadow test; it is not evidence of profitability"
+)
+PENDING_HOLDOUT_TEXT = (
+    "INTERIM STATE, NOT A PROTOCOL OUTCOME: PENDING_HOLDOUT. On the development folds both development checks are "
+    "met (R1: the new inputs beat the old in at least 60% of the eligible folds; R2: the lower bound of the "
+    "average daily edge is above zero). The holdout run has not been recorded as COMPLETED, so the holdout check "
+    "(R4) has not been read. This is not a PASS, not a FAIL and not an INCONCLUSIVE, and it must not be "
+    "reported, acted on or described as a result. Next step: the owner decides whether to authorise the single "
+    "holdout run through the registry; only after the registry shows COMPLETED is the verdict called again, "
+    "with the holdout."
+)
+IDEA_RULES = ("no_repeat", "raw_per_day", "days_only")
+
+# UNITS (owner request 2026-11-04). mde_h is a FRACTION of one 5-session (or 10-session) holding return, per trade:
+# 0.0018 = 0.18 percentage points = 18 basis points. It is the unit of the daily paired difference
+# D_t = (C_56 daily top-5 excess) - (A_53 daily top-5 excess); each daily top-5 excess is already an average
+# per idea, so "per day" and "per trade" are the same number. Never annualised. Typing 0.18 (percentage points)
+# would mean 18 percentage points: the guard below refuses any value at or above MDE_H_MAX_PLAUSIBLE.
+MDE_H_UNITS = "fraction_of_return"
+MDE_H_MAX_PLAUSIBLE = 0.02  # 2 percentage points per trade; the largest realistic edge is ~0.0034 (S-9 range)
+
+
+def mde_h_from_pp(pp: float) -> float:
+    """Convert percentage points per trade (e.g. 0.18) to the fraction the verdict code takes (0.0018).
+
+    Refuses non-numbers and values that are not a plausible number of percentage points (>= 2.0 pp or <= 0)."""
+    if pp is None or isinstance(pp, bool) or not isinstance(pp, (int, float)) or not math.isfinite(pp) or pp <= 0:
+        raise VerdictRefused("mde_h_from_pp needs a positive number of percentage points, e.g. 0.18")
+    out = pp / 100.0
+    if out >= MDE_H_MAX_PLAUSIBLE:
+        raise VerdictRefused(
+            f"{pp} percentage points per trade is not a plausible MDE_H (>= {MDE_H_MAX_PLAUSIBLE * 100:g} pp): refused"
+        )
+    return out
+HOLM_MODES = ("single_horizon", "second_read", "two_horizon")
+
 
 class VerdictRefused(RuntimeError):
     """Parameters or inputs are not acceptable: there is NO result (void), never a guessed one."""
@@ -39,8 +79,10 @@ class VerdictRefused(RuntimeError):
 @dataclass(frozen=True)
 class VerdictParams:
     horizon: int  # 5 or 10 sessions
-    mde_h: float  # minimum detectable paired edge in return fraction per day (S-9). REQUIRED, no default.
-    holm_mode: str = "single_horizon"  # 'single_horizon' (2.5% bound, PROPOSED) or 'two_horizon'
+    mde_h: float  # minimum detectable paired edge, FRACTION of one holding return per trade (0.0018 = 0.18 pp). REQUIRED.
+    holm_mode: str = "single_horizon"  # first horizon read: 2.5% bound, never revised (PROPOSED)
+    # 'second_read': needs `first_read` verdict; 5% bound only if the first read's R2 was met, else 2.5%.
+    # 'two_horizon': simultaneous Holm; valid ONLY if both p-values exist before either verdict is acted on.
     primary_arm: str = PRIMARY_ARM
     reference_arm: str = REFERENCE_ARM
     burn_in_folds: int = 4  # folds 0..burn_in-1 are reported, never counted; 0 counts all 34
@@ -59,15 +101,38 @@ class VerdictParams:
     min_fold_days: int = 10
     min_fold_picks: int = 20
     r1_share: float = 0.6
+    idea_rule: str = "no_repeat"  # how 'ideas' are counted for fold eligibility / R3 (PROPOSED: no_repeat)
+    min_holdout_days: int = 100  # R4 needs at least this many retained holdout days (133 expected) (PROPOSED)
+    expected_holdout_days: int = 133  # informational only; compared in the report, never a gate
+    units: str = MDE_H_UNITS  # unit tag of mde_h; anything else is refused (guards pp-versus-fraction mistakes)
 
     def __post_init__(self) -> None:
         m = self.mde_h
-        if m is None or isinstance(m, bool) or not isinstance(m, (int, float)) or not math.isfinite(m) or m <= 0:
-            raise VerdictRefused("MDE_H (S-9) is missing or not a positive number: the verdict refuses to run")
+        if (
+            m is None
+            or isinstance(m, bool)
+            or not isinstance(m, (int, float))
+            or not math.isfinite(m)
+            or m <= 0
+        ):
+            raise VerdictRefused(
+                "MDE_H (S-9) is missing or not a positive number: the verdict refuses to run"
+            )
+        if self.units != MDE_H_UNITS:
+            raise VerdictRefused(f"units must be {MDE_H_UNITS!r} (mde_h is a fraction of one holding return)")
+        if m >= MDE_H_MAX_PLAUSIBLE:
+            raise VerdictRefused(
+                f"MDE_H = {m} looks like percentage points: pass a FRACTION (0.0018 for 0.18 pp; use mde_h_from_pp). "
+                f"Values >= {MDE_H_MAX_PLAUSIBLE} (2 percentage points per trade) are refused"
+            )
         if self.horizon not in (5, 10):
             raise VerdictRefused("horizon must be 5 or 10")
-        if self.holm_mode not in ("single_horizon", "two_horizon"):
-            raise VerdictRefused("holm_mode must be 'single_horizon' or 'two_horizon'")
+        if self.holm_mode not in HOLM_MODES:
+            raise VerdictRefused(f"holm_mode must be one of {HOLM_MODES}")
+        if self.idea_rule not in IDEA_RULES:
+            raise VerdictRefused(f"idea_rule must be one of {IDEA_RULES}")
+        if self.min_holdout_days < 1 or self.expected_holdout_days < 1:
+            raise VerdictRefused("holdout day counts must be positive")
         if self.burn_in_folds < 0 or self.last_fold_index < self.burn_in_folds:
             raise VerdictRefused("burn_in_folds / last_fold_index are inconsistent")
         if self.draws < 100 or self.block_multiple < 1 or self.min_stocks < 1 or self.top_k < 1:
@@ -163,6 +228,38 @@ def _index_records(records: Sequence[Mapping], kind: str, p: VerdictParams) -> d
     return out
 
 
+def count_ideas(daily: Sequence[Mapping], horizon: int, min_stocks: int, top_k: int, rule: str) -> int:
+    """Ideas in one fold from the recorded primary-arm daily list (deterministic from the records alone).
+
+    raw_per_day: len(top_symbols) (capped at top_k) per retained day, no repeat rule (legacy; never binds).
+    no_repeat  : td-protocol-v1 rule 2 as far as the records allow. Days are ordered by date and the position in
+                 the fold's recorded list is the trading-day clock (days below `min_stocks` advance the clock
+                 but add no ideas). A stock counted as an idea on day i is open through day i+horizon (entry next
+                 open, exit at the close of the h-th trading day) and is eligible again from day i+horizon+1; a
+                 pick of an open stock is NOT a new idea. The harness records only the top-k list, so the
+                 'next-best fills the slot' part of td-protocol-v1 cannot be replayed: ideas are never
+                 over-counted, at most under-counted. The clock resets at each fold start.
+    days_only  : same count as no_repeat (reported), but the caller ignores the ideas conditions."""
+    days = sorted(daily or [], key=lambda d: d["date"])
+    if rule == "raw_per_day":
+        return sum(
+            min(len(d.get("top_symbols") or [None] * top_k), top_k)
+            for d in days
+            if d["n_stocks"] >= min_stocks
+        )
+    last: dict[str, int] = {}
+    total = 0
+    for i, d in enumerate(days):
+        if d["n_stocks"] < min_stocks:
+            continue
+        for sym in dict.fromkeys(list(d.get("top_symbols") or [])[:top_k]):
+            if sym in last and i - last[sym] <= horizon:
+                continue
+            last[sym] = i
+            total += 1
+    return total
+
+
 def _paired_days(rec_c: Mapping, rec_a: Mapping, p: VerdictParams, fold: int) -> list[tuple[str, float]]:
     dc = {d["date"]: d for d in (rec_c["daily"] or [])}
     da = {d["date"]: d for d in (rec_a["daily"] or [])}
@@ -204,6 +301,7 @@ def _fold_table(records: Sequence[Mapping], kind: str, indices: Sequence[int] | 
             "status": status,
             "days": 0,
             "picks": 0,
+            "raw_picks": 0,
             "mean_d": None,
             "eligible": False,
             "win": False,
@@ -214,15 +312,17 @@ def _fold_table(records: Sequence[Mapping], kind: str, indices: Sequence[int] | 
                 if date in seen:
                     raise VerdictRefused(f"date {date} appears in two folds: void")
                 seen.add(date)
-            picks = sum(
-                min(len(d.get("top_symbols") or [None] * p.top_k), p.top_k)
-                for d in (rc["daily"] or [])
-                if d["n_stocks"] >= p.min_stocks
+            raw = count_ideas(rc["daily"], p.horizon, p.min_stocks, p.top_k, "raw_per_day")
+            picks = (
+                raw
+                if p.idea_rule == "raw_per_day"
+                else count_ideas(rc["daily"], p.horizon, p.min_stocks, p.top_k, "no_repeat")
             )
-            row["days"], row["picks"] = len(days), picks
+            row["days"], row["picks"], row["raw_picks"] = len(days), picks, raw
             if days:
                 row["mean_d"] = sum(v for _, v in days) / len(days)
-            row["eligible"] = len(days) >= p.min_fold_days and picks >= p.min_fold_picks
+            ideas_ok = p.idea_rule == "days_only" or picks >= p.min_fold_picks
+            row["eligible"] = len(days) >= p.min_fold_days and ideas_ok
             row["win"] = bool(row["eligible"] and row["mean_d"] is not None and row["mean_d"] > 0)
             flat.extend(days)
         rows.append(row)
@@ -240,6 +340,7 @@ def compute_verdict(
     params: VerdictParams,
     *,
     other_horizon_p: float | None = None,
+    first_read: Mapping | None = None,
     holdout_records: Sequence[Mapping] | Callable[[], Sequence[Mapping]] | None = None,
     holdout_completed: bool | Callable[[], bool] = False,
 ) -> dict:
@@ -250,6 +351,8 @@ def compute_verdict(
     p = params
     if p.holm_mode == "two_horizon" and other_horizon_p is None:
         raise VerdictRefused("holm_mode 'two_horizon' needs the other horizon's p-value (other_horizon_p)")
+    if p.holm_mode == "second_read":
+        _check_first_read(first_read, p)
     counted = p.counted_folds
     rows, series = _fold_table(dev_records, "dev", counted, p)
     d_vals = [v for _, v in series]
@@ -262,7 +365,7 @@ def compute_verdict(
     data_reasons = []
     if len(elig) < p.min_eligible_folds:
         data_reasons.append(f"eligible counted folds {len(elig)} < {p.min_eligible_folds}")
-    if picks_e < p.min_picks:
+    if p.idea_rule != "days_only" and picks_e < p.min_picks:
         data_reasons.append(f"picks {picks_e} < {p.min_picks}")
     if n < need:
         data_reasons.append(f"paired days {n} < {need}")
@@ -291,8 +394,15 @@ def compute_verdict(
     # Holm level and p-value (needs the pooled bootstrap, which exists when n >= 2b)
     primary_means = block_bootstrap_means(d_vals, p.block, p.draws, p.seed)
     p_this = p_value(primary_means) if primary_means is not None else None
-    alpha, alpha_why = p.alpha_strict, "single_horizon: strict bound (PROPOSED)"
-    if p.holm_mode == "two_horizon":
+    alpha, alpha_why = (
+        p.alpha_strict,
+        "single_horizon: strict bound, first horizon read, never revised (PROPOSED)",
+    )
+    first_sha = None
+    if p.holm_mode == "second_read":
+        first_sha = first_read.get("record_sha256")  # type: ignore[union-attr]
+        alpha, alpha_why = second_read_alpha(bool(first_read["r2"]["met"]), p)  # type: ignore[index]
+    elif p.holm_mode == "two_horizon":
         if p_this is None:
             alpha, alpha_why = p.alpha_strict, "p not computable: strict bound"
         elif p_this < other_horizon_p or (p_this == other_horizon_p and p.horizon == 5):
@@ -303,6 +413,7 @@ def compute_verdict(
         "mode": p.holm_mode,
         "p_this_horizon": p_this,
         "p_other_horizon": other_horizon_p,
+        "first_read_record_sha256": first_sha,
         "alpha": alpha,
         "why": alpha_why,
     }
@@ -351,7 +462,9 @@ def compute_verdict(
                 raise VerdictRefused("holdout is COMPLETED but no holdout records were supplied")
             r4 = _r4(hrecs, p, mean_d, alpha)
             out["r4"] = r4
-            outcome, sub = (PASS, "R1, R2, R4 met") if r4["met"] else (INCONCLUSIVE, "R4 not met: signals disagree")
+            outcome, sub = (
+                (PASS, "R1, R2, R4 met") if r4["met"] else (INCONCLUSIVE, "R4 not met: " + r4["reason"])
+            )
     elif not r2 and not mde_straddle:
         outcome, sub = FAIL, "R2 not met and the 5% upper bound is below MDE_H"
     elif not r2:
@@ -364,20 +477,74 @@ def compute_verdict(
 
 
 def _r4(hrecs: Sequence[Mapping], p: VerdictParams, dev_mean: float | None, alpha: float) -> dict:
+    """R4 = sign consistency, NOT a second inference test (PROPOSED). Met only if ALL hold:
+      every holdout fold has status ok (at least one fold), AND >= `min_holdout_days` retained holdout days
+      (zero ok days -> not met), AND holdout mean D_t > 0 (strict), AND development mean D_t > 0 (strict).
+    No bound, p-value or threshold on the size is used; the holdout interval is reported with no weight."""
     rows, series = _fold_table(hrecs, "holdout", None, p)
     vals = [v for _, v in series]
     mean_h = _mean(vals)
     ok_status = bool(rows) and all(r["status"] == "ok" for r in rows)
-    met = bool(ok_status and mean_h is not None and mean_h > 0 and dev_mean is not None and dev_mean > 0)
+    enough = len(vals) >= p.min_holdout_days
+    dev_pos = dev_mean is not None and dev_mean > 0
+    hold_pos = mean_h is not None and mean_h > 0
+    reasons = []
+    if not ok_status:
+        reasons.append("a holdout fold is missing or not status ok (not evaluable)")
+    if not vals:
+        reasons.append("zero ok holdout days (not evaluable)")
+    elif not enough:
+        reasons.append(
+            f"holdout has {len(vals)} days, fewer than the required {p.min_holdout_days} (not evaluable)"
+        )
+    if vals and not hold_pos:
+        reasons.append("holdout mean D_t is not above 0 (signals disagree)")
+    if not dev_pos:
+        reasons.append("development mean D_t is not above 0 (signals disagree)")
+    met = ok_status and enough and hold_pos and dev_pos
     return {
         "met": met,
         "evaluated": True,
+        "reason": "; ".join(reasons) if reasons else "met",
         "holdout_days": len(vals),
+        "required_holdout_days": p.min_holdout_days,
+        "expected_holdout_days": p.expected_holdout_days,
         "holdout_mean_d": mean_h,
         "dev_mean_d": dev_mean,
         "all_status_ok": ok_status,
+        "same_sign": bool(hold_pos and dev_pos),
         "interval_reported_no_weight": _interval(vals, p.block, p, alpha),
     }
+
+
+def second_read_alpha(first_r2_met: bool, p: VerdictParams) -> tuple[float, str]:
+    """Fallback (fixed-sequence with Bonferroni fallback) schedule for the SECOND horizon read.
+    First read always used alpha_strict (2.5%) and is never revised. The second uses alpha_loose (5%) only if the
+    first read's R2 (its inference test) was met, else alpha_strict. Family-wise error <= alpha_loose: see
+    docs/superpowers/specs/sx-final-statistical-rules.md."""
+    if first_r2_met:
+        return p.alpha_loose, "second_read: first read rejected (R2 met), loose bound"
+    return p.alpha_strict, "second_read: first read did not reject, strict bound"
+
+
+def _check_first_read(fr: Mapping | None, p: VerdictParams) -> None:
+    if not fr:
+        raise VerdictRefused("holm_mode 'second_read' needs the first read's verdict (first_read)")
+    try:
+        fp, fh = fr["params"], fr["holm"]
+        ok = (
+            fp["horizon"] != p.horizon
+            and fp["holm_mode"] == "single_horizon"
+            and fh["alpha"] == p.alpha_strict
+            and isinstance(fr["r2"]["met"], bool)
+            and bool(fr.get("record_sha256"))
+        )
+    except (KeyError, TypeError):
+        ok = False
+    if not ok:
+        raise VerdictRefused(
+            "first_read is not a first-read (single_horizon, 2.5%) verdict of the other horizon"
+        )
 
 
 # ----------------------------------------------------------------------------------------------- rendering
@@ -388,12 +555,15 @@ def _canon(obj: Any) -> str:
 
 def render_json(verdict: Mapping, code_sha256: str | None = None) -> str:
     """Canonical JSON text of the verdict, with the verdict-code hash. Same input -> identical text."""
-    rec = {**verdict, "verdict_code_sha256": code_sha256 if code_sha256 is not None else verdict_code_sha256()}
+    rec = {
+        **verdict,
+        "verdict_code_sha256": code_sha256 if code_sha256 is not None else verdict_code_sha256(),
+    }
     return json.dumps(rec, sort_keys=True, indent=2)
 
 
 def render_plain_english(verdict: Mapping) -> str:
-    """A short paragraph. It never says a model 'works'; PASS only proposes a separate forward shadow test."""
+    """A short paragraph. It never says a model 'works'. Each outcome carries its mandatory sentence."""
     p = verdict["params"]
     h, n, o = p["horizon"], verdict["n_paired_days"], verdict["outcome"]
     mean = verdict["mean_d"]
@@ -406,23 +576,19 @@ def render_plain_english(verdict: Mapping) -> str:
         )
         + " (top five picks against the average stock)."
     )
+    if o == PENDING_HOLDOUT:
+        return f"{head} {PENDING_HOLDOUT_TEXT}"
     if o == PASS:
-        tail = (
-            "All three agreement checks were met. This only proposes a separate, separately signed "
-            "forward shadow test. It is not proof, nothing is switched on, and no model is promoted."
-        )
+        tail = f"All checks were met. {PASS_SENTENCE[0].upper() + PASS_SENTENCE[1:]}. Nothing is switched on."
     elif o == FAIL:
         tail = (
-            "The data were large enough to see an edge of the size we planned for, and the best "
-            "estimate stayed below it. Recorded with equal prominence; no promotion and no re-run."
+            f"{FAIL_SENTENCE} The planned minimum detectable edge was MDE_H = {p['mde_h'] * 100:.3f} percentage "
+            "points per day. Recorded with equal prominence; no promotion and no re-run."
         )
-    elif o == PENDING_HOLDOUT:
-        tail = "The development checks are met. The final answer waits for the holdout run to be recorded as completed."
     else:
-        why = verdict["outcome_detail"]
         tail = (
-            f"INCONCLUSIVE ({why}). The test cannot tell no effect from a useful effect, or its "
-            "checks disagree. This is not read as 'no effect'; no promotion, no re-run on the same holdout."
+            f"INCONCLUSIVE ({verdict['outcome_detail']}). Meaning: {INCONCLUSIVE_SENTENCE}. "
+            "This is not read as 'no effect'; no promotion, no re-run on the same holdout."
         )
     return f"{head} Outcome: {o}. {tail}"
 
@@ -435,6 +601,12 @@ __all__ = [
     "render_plain_english",
     "verdict_code_sha256",
     "block_bootstrap_means",
+    "count_ideas",
+    "second_read_alpha",
+    "FAIL_SENTENCE",
+    "INCONCLUSIVE_SENTENCE",
+    "PASS_SENTENCE",
+    "PENDING_HOLDOUT_TEXT",
     "lower_bound",
     "upper_bound",
     "p_value",

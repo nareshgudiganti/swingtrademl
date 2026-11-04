@@ -75,3 +75,7 @@ The module has no import of the registry. `compute_verdict(dev_records, params, 
 7. Holdout day count (133) is not enforced by the code; it uses whatever holdout-kind records are given (days with >= 10 stocks). The caller / registry should verify the count.
 8. Zero eligible-or-ok holdout days -> R4 not met (INCONCLUSIVE), a case the text does not yet mention.
 9. Test note: importing `brain.walk_forward` first triggers a repo-wide circular import; the test imports `brain.service` first. Not changed (no existing files edited).
+
+## Addendum 2026-11-04: final statistical rules
+
+Superseded or changed by `sx-final-statistical-rules.md` (read that file for the definitions): R4 now also requires `min_holdout_days` (100, PROPOSED) retained holdout days and has a stated reason for each failure; Holm gained `holm_mode="second_read"` (needs `first_read`; 5% only if the first read's R2 was met, else 2.5%), `two_horizon` is valid only for simultaneous reading; ideas per fold use `idea_rule="no_repeat"` (td-protocol-v1 rule 2, horizon h clock; alternatives `raw_per_day`, `days_only`); PENDING_HOLDOUT has fixed owner-facing text; every outcome carries its mandatory sentence. Open questions 3, 7 and 8 above are answered there (picks, holdout day count, zero ok holdout days). Parameter hash and code hash both changed: the signed text must name the final ones.

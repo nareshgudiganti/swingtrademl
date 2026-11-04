@@ -21,6 +21,7 @@ EXTRA = [f"X{i:03d}" for i in range(128)]
 REJECT = [f"R{i:03d}" for i in range(129)]
 MID = [f"M{i:02d}" for i in range(14)]
 GOOD_STATE = (True, [], False)
+SIGNED_A3 = f"# Amendment 3: SIGNED\n\nSIGNED by the owner on 2026-12-05 (test). Amendment 3, protocol {run.PROTOCOL}.\n"
 
 
 def make_bars(phase, n=800):
@@ -53,9 +54,10 @@ def repo(tmp_path):
         "# Ledger\n\n## Local data (development database)\n\n| a | b |\n|---|---|\n| row | row |\n\n## Other\n",
         encoding="utf-8",
     )
-    amend = tmp_path / run.AMENDMENT
-    amend.parent.mkdir(parents=True, exist_ok=True)
-    amend.write_text("Evidence-plan amendment: SIGNED 2026-12-05\n", encoding="utf-8")
+    amend2 = tmp_path / run.AMENDMENT_2
+    amend2.parent.mkdir(parents=True, exist_ok=True)
+    amend2.write_text("Evidence-plan amendment: SIGNED 2026-11-02\n", encoding="utf-8")
+    (tmp_path / run.AMENDMENT).write_text(SIGNED_A3, encoding="utf-8")
     return tmp_path
 
 
@@ -106,13 +108,13 @@ def test_the_ledger_row_is_written_before_results_and_names_the_run(repo, bars):
     d = do_run(repo, bars, "S0")
     ledger = (repo / "docs/brain/EXPOSURE-LEDGER.md").read_text(encoding="utf-8")
     assert run.LEDGER_MARKER.format(cand="S0", first=FIRST, last=LAST) in ledger
-    assert d.name in ledger and ledger.index("sl-protocol-v1 S0") < ledger.index("## Other")
+    assert d.name in ledger and ledger.index(f"{run.PROTOCOL} S0") < ledger.index("## Other")
 
 
 @pytest.mark.parametrize(
     ("state", "needle"),
     [
-        ((False, [], False), "git tag sl-protocol-v1 is not in this commit"),
+        ((False, [], False), f"git tag {run.PROTOCOL} is not in this commit"),
         ((True, [run.SPEC], False), "differs from the tagged version"),
         ((True, [], True), "uncommitted changes"),
     ],
@@ -121,7 +123,7 @@ def test_the_run_is_refused_without_the_tag_a_frozen_file_or_a_clean_tree(repo, 
     with pytest.raises(run.RunRefusedError, match=needle):
         do_run(repo, bars, "S0", state=state)
     assert not (repo / run.OUT_DIR).exists() or not list((repo / run.OUT_DIR).glob("sl1-*"))
-    assert "sl-protocol-v1 S0" not in (repo / "docs/brain/EXPOSURE-LEDGER.md").read_text(encoding="utf-8")
+    assert f"{run.PROTOCOL} S0" not in (repo / "docs/brain/EXPOSURE-LEDGER.md").read_text(encoding="utf-8")
 
 
 def test_the_run_is_refused_until_the_evidence_plan_amendment_is_signed(repo, bars):
@@ -257,7 +259,7 @@ def test_s1m_needs_s0m_and_is_compared_with_it_while_a_large_result_does_not_cou
     do_run(repo, bars, "S2M")
     assert len(run.existing_runs(repo / run.OUT_DIR, "S0")) == 1  # S0 and S0M are separate runs
     ledger = (repo / "docs/brain/EXPOSURE-LEDGER.md").read_text(encoding="utf-8")
-    assert "sl-protocol-v1 S0M," in ledger and "14 mid-cap stocks" in ledger
+    assert f"{run.PROTOCOL} S0M," in ledger and "14 mid-cap stocks" in ledger
 
 
 def test_a_held_back_stock_in_any_loaded_list_refuses_the_run_before_anything_is_trained(repo, bars):
@@ -267,7 +269,7 @@ def test_a_held_back_stock_in_any_loaded_list_refuses_the_run_before_anything_is
     with pytest.raises(run.RunRefusedError, match="Held-back stocks found in mid"):
         run.run("S0M", repo_root=repo, collect_fn=lambda: (bars, USED, EXTRA), mid_fn=lambda: [*MID, REJECT[0]],
                 model_scores_fn=foresight(bars), state=GOOD_STATE, first=FIRST, last=LAST)  # fmt: skip
-    assert "sl-protocol-v1 S0," not in (repo / "docs/brain/EXPOSURE-LEDGER.md").read_text(encoding="utf-8")
+    assert f"{run.PROTOCOL} S0," not in (repo / "docs/brain/EXPOSURE-LEDGER.md").read_text(encoding="utf-8")
 
 
 def test_the_lists_the_scorer_sees_never_include_a_held_back_stock(repo, bars):
@@ -319,7 +321,7 @@ def finished(repo, cand="S0"):
 def test_a_crash_leaves_a_ledger_row_but_no_run_folder_and_a_plain_rerun_is_refused(repo, bars, capsys):
     crash(repo, bars)
     assert not finished(repo) and not list((repo / run.OUT_DIR).glob(".tmp-*"))
-    assert "sl-protocol-v1 S0," in (repo / "docs/brain/EXPOSURE-LEDGER.md").read_text(encoding="utf-8")
+    assert f"{run.PROTOCOL} S0," in (repo / "docs/brain/EXPOSURE-LEDGER.md").read_text(encoding="utf-8")
     assert capsys.readouterr().out == ""  # nothing printed
     with pytest.raises(run.RunRefusedError, match="--technical-rerun"):
         do_run(repo, bars, "S0")

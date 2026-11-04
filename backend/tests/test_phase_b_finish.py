@@ -610,3 +610,20 @@ def test_phase_b_py_not_modified_and_constants_not_duplicated():
     src = Path(pf.__file__).read_text(encoding="utf-8")
     assert '"push"' not in src and '("commit"' not in src and '("tag", "-a"' not in src
     assert "wf-protocol-v2" not in pb.__doc__ if pb.__doc__ else True
+
+
+def test_run_order_must_be_b1_b2_b3(no_survivor):
+    lp = no_survivor.root / pf.LEDGER_REL
+    lines = lp.read_text(encoding="utf-8").splitlines()
+    i1 = next(i for i, ln in enumerate(lines) if pb.LEDGER_MARKER.format(cid="B1") in ln)
+    i2 = next(i for i, ln in enumerate(lines) if pb.LEDGER_MARKER.format(cid="B2") in ln)
+    lines[i1], lines[i2] = lines[i2], lines[i1]
+    lp.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+    assert any("order B1, B2, B3" in r for r in reasons(no_survivor))
+
+
+def test_wf_tag_command_points_at_the_commit_not_a_nested_tag():
+    cmds = pf.commands_for(
+        {"outcome": "SURVIVOR_SELECTED", "survivor": "B2", "written_at_ist": "x"}, "h" * 64, GOOD_NOW.date()
+    )
+    assert any(f"git tag -a {pf.WF_TAG} {pf.RESULT_TAG}~0 " in c for c in cmds)

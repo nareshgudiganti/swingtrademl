@@ -495,6 +495,9 @@ def prepare(root: Path, git: GitFn, now: datetime) -> Plan:
         if r:
             by_line[r[0][0]] = cid
     seq = [by_line[i] for i in order if by_line.get(i) in commits]
+    ran = [by_line[i] for i in order if i in by_line]
+    if ran != sorted(pb.CANDIDATES)[: len(ran)]:
+        why.append(f"The candidates must run in the order B1, B2, B3 (owner decision C); the ledger rows are in the order {ran}.")
     for a, b in itertools.pairwise(seq):
         if commits[a] == commits[b]:
             why.append(
@@ -605,7 +608,7 @@ def commands_for(result: Mapping, digest: str, today: date) -> list[str]:
     ]
     if outcome == "SURVIVOR_SELECTED":  # NEVER printed for NO_SURVIVOR
         cmds.append(
-            f"# then, by the owner, only after the tag above: git tag -a {WF_TAG} {RESULT_TAG} "
+            f"# then, by the owner, only after the tag above: git tag -a {WF_TAG} {RESULT_TAG}~0 "
             f'-m "survivor={survivor}" -m "result_tag={RESULT_TAG}"'
         )
     return cmds

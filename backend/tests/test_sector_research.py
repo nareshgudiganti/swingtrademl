@@ -75,9 +75,9 @@ def matrix(inputs):
     return sr.assemble_training_matrix(_spec(), inputs)
 
 
-def test_matrix_has_existing_columns_then_four_sector_columns(matrix):
-    assert list(sr.RESEARCH_COLUMNS) == [*sr.FEATURE_COLUMNS, *sf.FEATURE_NAMES]
-    assert len(sr.RESEARCH_COLUMNS) == len(sr.FEATURE_COLUMNS) + 4
+def test_matrix_has_existing_columns_then_three_sector_columns(matrix):
+    assert list(sr.RESEARCH_COLUMNS) == [*sr.FEATURE_COLUMNS, *sr.SECTOR_COLUMNS]
+    assert len(sr.RESEARCH_COLUMNS) == len(sr.FEATURE_COLUMNS) + 3
     assert not matrix[list(sr.RESEARCH_COLUMNS)].isna().to_numpy().any()
     assert len(matrix) > 300
     assert "ASIANPAINT" not in set(matrix["symbol"])  # unmapped stays missing -> row dropped, never guessed
@@ -93,9 +93,9 @@ def test_asof_row_has_same_columns_and_same_values_as_training_row(matrix, input
             assert row is not None
             assert list(row.columns) == list(sr.RESEARCH_COLUMNS)
             train = sub[sub["decision_date"] == t][list(sr.RESEARCH_COLUMNS)].reset_index(drop=True)
-            # the four sector inputs: exactly equal (one builder)
+            # the three sector inputs: exactly equal (one builder)
             pd.testing.assert_frame_equal(
-                row[list(sf.FEATURE_NAMES)], train[list(sf.FEATURE_NAMES)], check_exact=True
+                row[list(sr.SECTOR_COLUMNS)], train[list(sr.SECTOR_COLUMNS)], check_exact=True
             )
             # existing columns: same code, history cut at t instead of full: equal to float precision
             np.testing.assert_allclose(row.to_numpy(float), train.to_numpy(float), rtol=1e-9, atol=1e-12)

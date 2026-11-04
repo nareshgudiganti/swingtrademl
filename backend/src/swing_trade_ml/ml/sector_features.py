@@ -37,6 +37,14 @@ SECTOR_RET_20D = "sector_ret_20d_vs_nifty"
 SECTOR_RANK_10D = "sector_rank_10d"
 STOCK_VS_SECTOR_10D = "stock_vs_sector_10d"
 FEATURE_NAMES: tuple[str, ...] = (SECTOR_RET_10D, SECTOR_RET_20D, SECTOR_RANK_10D, STOCK_VS_SECTOR_10D)
+# Dropped from the RESEARCH challenger on 2026-11-06 (C_56): `sector_ret_20d_vs_nifty` is, by its definition, the
+# difference of two inputs that already exist (relative_strength_20d - sector_relative_strength_20d). The two agree
+# on 45,917 of 45,930 audited rows to 1e-9; the other 13 differ only because NIFTY HEALTHCARE lacks sessions and the
+# existing inputs count 20 ROWS of an index while this builder counts 20 SESSIONS of the shared calendar (a
+# definition difference, no new information: docs/brain/evidence/sector_prep/c56_decision_v3.json).
+# The builder still computes it (serving and the parity tests are unchanged); the research path does not use it.
+REDUNDANT_WITH_EXISTING: tuple[str, ...] = (SECTOR_RET_20D,)
+RESEARCH_FEATURE_NAMES: tuple[str, ...] = tuple(n for n in FEATURE_NAMES if n not in REDUNDANT_WITH_EXISTING)
 # Sessions before the first row where all four can exist (the longest window).
 WARMUP_SESSIONS = LONG_WINDOW
 

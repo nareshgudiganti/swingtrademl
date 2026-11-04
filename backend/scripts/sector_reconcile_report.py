@@ -50,7 +50,11 @@ def _stock_arrays(sym, inputs, nifty, secs, horizon):
     dates = [x.date() for x in d]
     idx_name = sf.resolve_sector_index(sym)
     sec = sf.build_sector_features(sf.close_series_from_candles(raw[["ts", "close"]]), nifty, secs, idx_name)
-    sec_ok = pd.Series(sec.notna().all(axis=1).reindex(d).to_numpy()).fillna(False).to_numpy(dtype=bool)
+    sec_ok = (
+        pd.Series(sec[list(sr.SECTOR_COLUMNS)].notna().all(axis=1).reindex(d).to_numpy())
+        .fillna(False)
+        .to_numpy(dtype=bool)
+    )
     nan_cols = feat[FEATURE_COLUMNS].isna().sum().to_dict()
     return dates, feat_ok, sec_ok, {k: int(v) for k, v in nan_cols.items() if v}
 
@@ -172,6 +176,9 @@ def main(argv=None) -> int:
     ap.add_argument("--events", required=True)
     ap.add_argument("--out-dir", required=True)
     ap.add_argument("--cutoff", default="2026-12-31", help="matrix cross-check data cut-off (IST date)")
+    ap.add_argument(
+        "--suffix", default="_v2", help="file-name suffix of the outputs (use _v3 for the 3-input challenger)"
+    )
     a = ap.parse_args(argv)
     out = Path(a.out_dir)
     used, mapped = _universe()
@@ -256,10 +263,12 @@ def main(argv=None) -> int:
             "per_stock_full": full_stock,
         }
         for nm, ks in ((f"sx{h}_47", sx_keys), (f"full49_h{h}", full_keys)):
-            with gzip.open(out / f"{nm}_rows_v2.txt.gz", "wt", encoding="utf-8", newline="\n") as fh:
+            with gzip.open(out / f"{nm}_rows{a.suffix}.txt.gz", "wt", encoding="utf-8", newline="\n") as fh:
                 fh.write("\n".join(sorted(ks)) + "\n")
-    (out / "reconciliation_v2.json").write_text(json.dumps(result, indent=1, default=str), encoding="utf-8")
-    (out / "reconciliation_v2.md").write_text(render_md(result), encoding="utf-8")
+    (out / f"reconciliation{a.suffix}.json").write_text(
+        json.dumps(result, indent=1, default=str), encoding="utf-8"
+    )
+    (out / f"reconciliation{a.suffix}.md").write_text(render_md(result), encoding="utf-8")
     print(
         json.dumps(
             {

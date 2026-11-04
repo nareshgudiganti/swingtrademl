@@ -1,7 +1,7 @@
 """Coverage of the sector-only candidates (SX5 / SX10) on the local data. READ-ONLY (SELECT), writes one JSON.
 
 For each stock and decision day: does a BASELINE row exist (all existing FEATURE_COLUMNS and, for the label
-view, a known label) and does a CHALLENGER row exist (also all four sector inputs)? Counts the rows removed
+view, a known label) and does a CHALLENGER row exist (also the three research sector inputs)? Counts the rows removed
 specifically because the sector inputs are missing, split by cause, overall and by sector index.
 
   python scripts/sector_coverage_report.py --out ../docs/brain/evidence/sector_prep/sector_coverage_sx.json
@@ -58,7 +58,7 @@ def _per_stock(sym, inputs, nifty, secs, horizon, excl):
     stock_close = sf.close_series_from_candles(raw[["ts", "close"]])
     sec = sf.build_sector_features(stock_close, nifty, secs, idx_name)
     sec_ok = (
-        pd.Series(sec.notna().all(axis=1).reindex(date).to_numpy(), index=feat.index)
+        pd.Series(sec[list(sr.SECTOR_COLUMNS)].notna().all(axis=1).reindex(date).to_numpy(), index=feat.index)
         .fillna(False)
         .astype(bool)
     )
@@ -83,7 +83,7 @@ def _per_stock(sym, inputs, nifty, secs, horizon, excl):
                 cause[i] = "late_start_index"
             else:
                 r = sec_aligned.loc[i]
-                others_ok = r[[sf.SECTOR_RET_10D, sf.SECTOR_RET_20D, sf.STOCK_VS_SECTOR_10D]].notna().all()
+                others_ok = r[[c for c in sr.SECTOR_COLUMNS if c != sf.SECTOR_RANK_10D]].notna().all()
                 cause[i] = (
                     "rank_invalid_only"
                     if (others_ok and np.isnan(r[sf.SECTOR_RANK_10D]))

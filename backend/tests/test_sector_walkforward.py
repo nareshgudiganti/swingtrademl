@@ -150,9 +150,9 @@ def test_training_never_sees_a_label_window_reaching_the_test_window(matrix):
 # ----------------------------------------------------------------------------------- arms, rows and records
 def test_arm_definitions():
     arms = wf.build_arms()
-    assert [len(arms[a]) for a in wf.ARM_IDS] == [53, 37, 57]
-    assert set(arms["R_37"]) <= set(arms["A_53"]) and arms["C_57"][:53] == arms["A_53"]
-    assert arms["C_57"][53:] == sr.SECTOR_COLUMNS
+    assert [len(arms[a]) for a in wf.ARM_IDS] == [53, 37, 56]
+    assert set(arms["R_37"]) <= set(arms["A_53"]) and arms["C_56"][:53] == arms["A_53"]
+    assert arms["C_56"][53:] == sr.SECTOR_COLUMNS
     assert not set(arms["R_37"]) & set(sr.SECTOR_COLUMNS)
     with pytest.raises(wf.HarnessRefused):
         wf.build_arms(["not_a_feature"])
@@ -196,7 +196,7 @@ def test_plan_folds_matches_the_run_records_and_every_arm_has_the_same_rows(matr
     res = run(matrix, tmp_path)
     for p in plan:
         assert len({(a["rows_train"], a["rows_test"]) for a in p["arms"].values()}) == 1
-        assert [a["columns"] for a in p["arms"].values()] == [53, 37, 57]
+        assert [a["columns"] for a in p["arms"].values()] == [53, 37, 56]
         for r in (x for x in res.records if x["fold"]["index"] == p["index"]):
             assert (r["n_train"], r["n_test"]) == (p["n_train"], p["n_test"])
 
@@ -308,7 +308,7 @@ def test_approval_file_must_match_exact_configuration_then_run_is_allowed(matrix
 def test_code_version_and_matrix_are_checked(matrix, tmp_path):
     with pytest.raises(wf.HarnessRefused, match="code_version"):
         run(matrix, tmp_path, code_version=" ")
-    with pytest.raises(wf.HarnessRefused, match="NaN|57 inputs"):
+    with pytest.raises(wf.HarnessRefused, match="NaN|56 inputs"):
         bad = matrix.copy()
         bad.loc[3, "rsi_14"] = np.nan
         run(bad, tmp_path)
@@ -486,7 +486,7 @@ def test_changing_data_after_a_fold_cut_changes_no_earlier_record(matrix, tmp_pa
 
 
 def test_matrix_assembly_ignores_data_after_the_decision_day():
-    """Mutate every input (stock, indices, VIX, breadth) after day T: rows decided on or before T keep their 57
+    """Mutate every input (stock, indices, VIX, breadth) after day T: rows decided on or before T keep their 56
     inputs, and rows whose label window ended on or before T keep their label and their eligibility."""
     from swing_trade_ml.ml import sector_features as sf
     from test_sector_research import STOCKS, _ohlcv  # the same synthetic builder as the research tests

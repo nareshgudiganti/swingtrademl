@@ -7,7 +7,8 @@ What it does, and what it refuses
   * Three ARMS on IDENTICAL rows, folds, costs and metrics (owner decision 2026-11-05):
       A_53  the 53 existing inputs (ml/features.FEATURE_COLUMNS)           primary matched baseline
       R_37  model 2's 37-input configuration (a SUBSET of the 53)          separate production-reference benchmark
-      C_57  the 53 plus the four sector inputs                              the challenger
+            (a RESEARCH REFERENCE, not an exact production replay: see R37_KNOWN_SEMANTIC_DIFFERENCES)
+      C_56  the 53 plus three sector inputs (renamed from C_57)              the challenger
   * Chronological, label-purged folds. A training row is used only if its whole label window ends before the
     test window starts (purge) AND its decision day is at least `embargo` sessions before the test start
     (embargo = the horizon). Training is an expanding window, retrained once per fold.
@@ -47,7 +48,7 @@ from swing_trade_ml.ml.sector_reconcile import keys_sha256
 
 HARNESS_VERSION = "sector_walkforward_v0"
 PINNED_SEED = 42  # the drafts' recipe seed; a real run refuses any other
-ARM_A, ARM_R, ARM_C = "A_53", "R_37", "C_57"
+ARM_A, ARM_R, ARM_C = "A_53", "R_37", "C_56"
 ARM_IDS = (ARM_A, ARM_R, ARM_C)
 
 # Folds of the drafts (wf-protocol-v1 windows): 28-day back-to-back tests, then one holdout.
@@ -63,10 +64,10 @@ RANDOM_DRAWS = 200
 RANDOM_SEED = 7
 MIN_TRAIN_ROWS = 100
 
-# Model 2's 37 inputs. DERIVED (not read from the prod artifact): the 37 columns of the very first
-# FEATURE_COLUMNS (git 7da460c^), which equal the 53 minus the 16 inputs that docs/superpowers/specs/
-# 2026-10-30-model-facts-corrections.md (C1) says the large-cap model lacks. The count agrees (53 - 16 = 37).
-# The exact saved list is UNVERIFIED without reading the prod model row: pass `reference_columns=` to override.
+# Model 2's 37 inputs: the 37 columns of the very first FEATURE_COLUMNS (git 7da460c^), i.e. the 53 minus the 16
+# inputs that docs/superpowers/specs/2026-10-30-model-facts-corrections.md (C1) says the large-cap model lacks.
+# VERIFIED 2026-11-06 against the list SAVED in prod model 2 (read-only GET /api/v1/ml/models/2): same 37 names in
+# the same order (evidence: R37_SAVED_FEATURES_EVIDENCE). `reference_columns=` still overrides it.
 _NOT_IN_MODEL_2 = frozenset(
     {
         "days_since_52w_high",
@@ -88,6 +89,29 @@ _NOT_IN_MODEL_2 = frozenset(
     }
 )
 REFERENCE_37_COLUMNS: tuple[str, ...] = tuple(c for c in FEATURE_COLUMNS if c not in _NOT_IN_MODEL_2)
+
+R37_SAVED_FEATURES_EVIDENCE = "docs/brain/evidence/sector_prep/model2_saved_features_v1.json"
+R37_LABEL = "R_37: a 37-feature RESEARCH REFERENCE, not an exact production replay"
+# Why it is not a replay. The NAMES and ORDER are exactly the saved ones; the VALUES built by today's feature code are
+# not exactly what model 2 was trained on (trained 2026-08-05 on the feature code of git 7da460c^).
+R37_KNOWN_SEMANTIC_DIFFERENCES: tuple[dict, ...] = (
+    {
+        "input": "obv_slope",
+        "kind": "formula",
+        "training": "obv.diff(10) / obv.rolling(20).mean().abs()  (10-day OBV change over the 20-day mean OBV LEVEL)",
+        "current_builder": "obv.diff(10) / volume.rolling(20).mean()  (over the 20-day mean VOLUME), since fcaef35 2026-10-05",
+        "note": "docs/superpowers/specs/2026-10-30-obv-slope-incident.md; the OBV level also depends on how much history is loaded",
+    },
+)
+# Not per-input, and not about the research path (which builds on the full history, as training did).
+R37_OTHER_NOTES: tuple[str, ...] = (
+    "Production serves the newest 400 bars (ml/predict.py limit=400) while training used the full stored history, "
+    "so the smoothed inputs (rsi_14, macd*, ema_*, atr_14_pct, adx_14, trend_strength) differ slightly early in that window.",
+    "Candles are read as stored today; training read them as stored on 2026-08-05 (later data repairs are not replayed).",
+    "The saved scaler and booster are not available locally and hyperparameters is {} in the registry row, "
+    "so scaling and tree settings cannot be compared here.",
+)
+ARM_LABELS: dict[str, str] = {ARM_A: ARM_A, ARM_R: R37_LABEL, ARM_C: ARM_C}
 
 FitFn = Callable[..., Callable[[pd.DataFrame], np.ndarray]]
 NetFn = Callable[[str, date], "float | None"]
@@ -220,7 +244,7 @@ def _check_arms(arms: Mapping[str, Sequence[str]]) -> None:
     if tuple(arms[ARM_A]) != tuple(FEATURE_COLUMNS):
         raise HarnessRefused("A_53 must be exactly the 53 existing inputs")
     if tuple(arms[ARM_C]) != tuple(sr.RESEARCH_COLUMNS):
-        raise HarnessRefused("C_57 must be the 53 existing inputs plus the four sector inputs")
+        raise HarnessRefused("C_56 must be the 53 existing inputs plus the three sector inputs")
     if not set(arms[ARM_R]) <= set(arms[ARM_A]):
         raise HarnessRefused("R_37 must be a subset of the 53")
 
@@ -336,7 +360,7 @@ def _validate_matrix(spec: sr.DatasetSpec, matrix: pd.DataFrame) -> None:
         matrix[list(sr.RESEARCH_COLUMNS)].isna().to_numpy().any()
         or matrix[["target", "forward_return"]].isna().to_numpy().any()
     ):
-        raise HarnessRefused("the eligible rows must have all 57 inputs, the label and the forward return")
+        raise HarnessRefused("the eligible rows must have all 56 inputs, the label and the forward return")
     if matrix.duplicated(["symbol", "decision_date"]).any():
         raise HarnessRefused("duplicate (symbol, decision_date) rows")
     if not matrix.index.equals(pd.RangeIndex(len(matrix))):
@@ -530,7 +554,8 @@ def run_walkforward(
         **common,
         "run_id": run_id,
         "arms": {
-            a: {"columns": list(c), "feature_list_sha256": feature_list_sha256(c)} for a, c in arms.items()
+            a: {"label": ARM_LABELS[a], "columns": list(c), "feature_list_sha256": feature_list_sha256(c)}
+            for a, c in arms.items()
         },
         "folds": [fold_sha, len(fold_list)],
         "n_records": len(records),
@@ -621,6 +646,10 @@ def assert_identical_across_arms(records: Sequence[dict]) -> None:
 
 __all__ = [
     "ARM_IDS",
+    "ARM_LABELS",
+    "R37_LABEL",
+    "R37_KNOWN_SEMANTIC_DIFFERENCES",
+    "R37_OTHER_NOTES",
     "REFERENCE_37_COLUMNS",
     "Fold",
     "HarnessRefused",

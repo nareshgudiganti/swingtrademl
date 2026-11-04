@@ -83,16 +83,17 @@ def test_overlap_reports_pearson_spearman_and_r2():
     base = {c: rng.normal(size=n) for c in sr.FEATURE_COLUMNS}
     m = pd.DataFrame(base)
     m["sector_ret_10d_vs_nifty"] = m["sector_relative_strength_5d"] * 0.9 + rng.normal(0, 0.1, n)
-    m["sector_ret_20d_vs_nifty"] = rng.normal(size=n)
     m["sector_rank_10d"] = rng.normal(size=n)
     m["stock_vs_sector_10d"] = rng.normal(size=n)
     o = fa.overlap(m)
     assert o["strongest_partner"]["sector_ret_10d_vs_nifty"][0][0] == "sector_relative_strength_5d"
     assert o["r2_on_sector_and_relative_inputs"]["sector_ret_10d_vs_nifty"] > 0.8
     assert o["r2_on_all_53"]["sector_rank_10d"] < 0.05
-    assert o["sector_ret_20d_vs_nifty_minus_existing_difference"]["max_abs"] > 0.1  # random data: no identity
-    exact = m.assign(sector_ret_20d_vs_nifty=m["relative_strength_20d"] - m["sector_relative_strength_20d"])
-    assert fa.overlap(exact)["sector_ret_20d_vs_nifty_minus_existing_difference"]["max_abs"] == 0.0
+    assert set(o["r2_on_all_53"]) == set(sr.SECTOR_COLUMNS) and len(o["r2_on_all_53"]) == 3
+    assert "sector_ret_20d_vs_nifty_minus_existing_difference" not in o  # the input was dropped (C_56)
+    # the diagnostic is still available when someone passes the dropped column in
+    m2 = m.assign(sector_ret_20d_vs_nifty=m["relative_strength_20d"] - m["sector_relative_strength_20d"])
+    assert fa.overlap(m2)["sector_ret_20d_vs_nifty_minus_existing_difference"]["max_abs"] == 0.0
 
 
 # ---- real local data, SELECT only

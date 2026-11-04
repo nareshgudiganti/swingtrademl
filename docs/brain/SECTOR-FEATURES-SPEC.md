@@ -39,7 +39,7 @@ calendar (section 3). `R_x(t, n) = C_x(t) / C_x(t-n) - 1`. If either close is mi
 | Input | Name in code | Formula |
 |---|---|---|
 | B1-5 | `sector_ret_10d_vs_nifty` | `R_sector(t,10) - R_NIFTY50(t,10)` |
-| B1-6 | `sector_ret_20d_vs_nifty` | `R_sector(t,20) - R_NIFTY50(t,20)` |
+| B1-6 | `sector_ret_20d_vs_nifty` | `R_sector(t,20) - R_NIFTY50(t,20)`. **Not used by the research challenger C_56 (2026-11-06)**: it equals `relative_strength_20d - sector_relative_strength_20d` of the existing inputs except on 13 of 45,930 rows where the sector index lacks sessions (a window-definition difference, no new information; `docs/brain/evidence/sector_prep/c56_decision_v3.json`). The builder still computes it. |
 | B1-7 | `sector_rank_10d` | among the 15 sector indices with a valid `R(t,10)` on day t: `(average_rank - 1) / (N - 1)`, 0 weakest, 1 strongest. Ties take the average rank. Missing if `N < 5` |
 | B1-8 | `stock_vs_sector_10d` | `R_stock(t,10) - R_sector(t,10)` (same two dates for the stock and the index) |
 

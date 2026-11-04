@@ -5,7 +5,7 @@ workers, the strategies, the brain, the h05 lane or any scheduler. It reads the 
 (ml/features.py, imported read-only, never edited) and the ONE sector builder (ml/sector_features.py).
 
 What it offers
-  (a) `assemble_training_matrix`: existing FEATURE_COLUMNS + the four sector inputs, labelled, with the
+  (a) `assemble_training_matrix`: existing FEATURE_COLUMNS + the three sector inputs, labelled, with the
       warm-up rows, the exclusion-report rows and the rows whose outcome was unknown at the data cut-off removed.
   (b) `train_research_candidate`: DRY-RUN by default. It REFUSES to fit anything unless an approval file for
       this exact configuration exists (SECTOR_RESEARCH_APPROVAL_FILE, or the `approval_path` argument). The
@@ -36,7 +36,9 @@ from swing_trade_ml.ml.features import FEATURE_COLUMNS, build_features, build_la
 from swing_trade_ml.ml.sector_map import get_sector_index  # read-only use
 
 RESEARCH_VERSION = "sector_research_v0"
-SECTOR_COLUMNS: tuple[str, ...] = sf.FEATURE_NAMES
+SECTOR_COLUMNS: tuple[str, ...] = (
+    sf.RESEARCH_FEATURE_NAMES
+)  # three: sector_ret_20d_vs_nifty is redundant (C_56)
 RESEARCH_COLUMNS: tuple[str, ...] = (*FEATURE_COLUMNS, *SECTOR_COLUMNS)
 CANDIDATE_HORIZON = {"SX5": 5, "SX10": 10}
 LABEL_KINDS = ("barrier", "endpoint")
@@ -182,7 +184,7 @@ def _label(feat: pd.DataFrame, spec: DatasetSpec) -> pd.DataFrame:
 
 
 def assemble_training_matrix(spec: DatasetSpec, inputs: ResearchInputs) -> pd.DataFrame:
-    """(a) existing FEATURE_COLUMNS + four sector inputs + label, one row per (stock, decision day)."""
+    """(a) existing FEATURE_COLUMNS + three sector inputs + label, one row per (stock, decision day)."""
     nifty, secs = _closes(inputs)
     cutoff_end = pd.Timestamp(f"{spec.data_cutoff.isoformat()} 23:59", tz=_IST)
     frames = []

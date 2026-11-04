@@ -14,6 +14,7 @@ import pandas as pd
 import pytest
 
 from swing_trade_ml.brain import five_day_train, ten_day
+from swing_trade_ml.ml import sector_features as sf
 from swing_trade_ml.ml import sector_research as sr
 from swing_trade_ml.ml.features import build_label
 from test_sector_research import STOCKS, inputs  # noqa: F401  (synthetic fixture, same builder)
@@ -108,6 +109,9 @@ def test_hash_changes_only_by_the_new_field():
     assert cfg["label_kind"] == "barrier"
     assert s.config_sha256() != "147059d1b67a8455e51fc194ffa07bffb3e8c762192fdacbd256be5534c70e95"
     cfg.pop("label_kind")
+    # 2026-11-06: the challenger lost `sector_ret_20d_vs_nifty` (C_57 -> C_56), so `columns` changed on purpose. Put the
+    # former 57 columns back and the original pinned hash is reproduced: nothing else in the configuration moved.
+    cfg["columns"] = [*sr.FEATURE_COLUMNS, *sf.FEATURE_NAMES]
     assert (
         hashlib.sha256(json.dumps(cfg, sort_keys=True).encode()).hexdigest()
         == "147059d1b67a8455e51fc194ffa07bffb3e8c762192fdacbd256be5534c70e95"

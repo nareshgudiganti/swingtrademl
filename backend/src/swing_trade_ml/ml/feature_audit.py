@@ -8,7 +8,7 @@ nothing here is imported by the app (the research tests enforce that for the sib
   * `mutation_check`   the same idea the other way round: wreck every series after day T and confirm that every
                        input on or before T is unchanged.
   * `availability`     per input: first valid date, share and count of missing rows after warm-up.
-  * `overlap`          how much the four sector inputs are explained by the existing inputs (pooled stock-days).
+  * `overlap`          how much the research sector inputs are explained by the existing inputs (pooled stock-days).
 """
 
 from __future__ import annotations
@@ -173,7 +173,7 @@ def availability(
 
 
 def overlap(matrix: pd.DataFrame) -> dict:
-    """Pooled stock-day overlap between the four sector inputs and the 53 existing inputs (eligible rows only).
+    """Pooled stock-day overlap between the research sector inputs and the 53 existing inputs (eligible rows only).
     Pearson and Spearman against every existing input, the strongest partner of each new input, and the share of
     each new input's variance a linear model on (a) the five relative-strength / sector-regime inputs and (b) all 53
     existing inputs explains (R squared, in-sample, pooled; descriptive, not a forecast)."""
@@ -211,13 +211,15 @@ def overlap(matrix: pd.DataFrame) -> dict:
         out["r2_on_all_53"][n] = round(r2(y, old), 4)
     # (stock 20d return - NIFTY 20d return) - (stock 20d return - sector 20d return) = sector - NIFTY 20d return:
     # the new `sector_ret_20d_vs_nifty` should equal that difference of two EXISTING inputs.
-    resid = (
-        matrix["sector_ret_20d_vs_nifty"]
-        - (matrix["relative_strength_20d"] - matrix["sector_relative_strength_20d"])
-    ).abs()
-    out["sector_ret_20d_vs_nifty_minus_existing_difference"] = {
-        "max_abs": float(resid.max()),
-        "mean_abs": float(resid.mean()),
-        "rows_over_1e-9": int((resid > 1e-9).sum()),
-    }
+    # It was dropped from the research arm (C_56); the check runs only when a caller still supplies the column.
+    if "sector_ret_20d_vs_nifty" in matrix.columns:
+        resid = (
+            matrix["sector_ret_20d_vs_nifty"]
+            - (matrix["relative_strength_20d"] - matrix["sector_relative_strength_20d"])
+        ).abs()
+        out["sector_ret_20d_vs_nifty_minus_existing_difference"] = {
+            "max_abs": float(resid.max()),
+            "mean_abs": float(resid.mean()),
+            "rows_over_1e-9": int((resid > 1e-9).sum()),
+        }
     return out

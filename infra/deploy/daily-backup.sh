@@ -6,6 +6,8 @@
 # 2. Off the server (once set up, docs/BACKUP-OFFSITE.md): the same copy, encrypted with the passphrase
 #    in /root/.backup-passphrase (AES-256, openssl), uploaded with rclone to Google Drive. Copies older
 #    than 15 days are removed there. Nothing unencrypted ever leaves the server.
+# 2b. Model files + their sha256 manifest go off the server too (backup-models-offsite.sh); scripts/verify_restore.py
+#    checks the database and every file together (docs/BACKUP-OFFSITE.md).
 # 3. Deploy copies (release-*/database.sql, ~260 MB each, never removed until now): the dump is
 #    deleted from all but the 5 newest releases. Their rollback.json and previous-sha stay.
 #
@@ -52,9 +54,16 @@ if command -v rclone >/dev/null 2>&1 && [ -s "$PASSPHRASE_FILE" ] \
   if openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass "file:$PASSPHRASE_FILE" -in "$file" -out "$enc" \
       && rclone copy "$enc" "$REMOTE" \
       && rclone check --one-way --size-only "$dir" "$REMOTE" --include "$(basename "$enc")"; then
-    rclone delete "$REMOTE" --min-age "$REMOTE_KEEP_AGE" || echo "Note: could not remove old off-server copies."
+    # Only the nightly database copies expire; models/ and manifests/ (backup-models-offsite.sh) are kept.
+    rclone delete "$REMOTE" --min-age "$REMOTE_KEEP_AGE" --exclude "models/**" --exclude "manifests/**" \
+      || echo "Note: could not remove old off-server copies."
     offsite=ok
     echo "Off-server copy: $REMOTE/$(basename "$enc")"
+    # Model files + their sha256 manifest (same stamp as the database copy). A failure here fails the run.
+    if ! bash "$(dirname "$0")/backup-models-offsite.sh" "$stamp"; then
+      offsite=failed
+      echo "OFF-SERVER MODEL COPY FAILED: the database copy is fine; see the lines above." >&2
+    fi
   else
     offsite=failed
     echo "OFF-SERVER COPY FAILED: the local copy is fine; check rclone and $PASSPHRASE_FILE." >&2

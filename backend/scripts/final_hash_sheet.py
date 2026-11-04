@@ -59,7 +59,10 @@ def sha256_bytes(b: bytes) -> str:
 
 
 def sha256_file(path: Path) -> str:
-    return sha256_bytes(Path(path).read_bytes())
+    """sha256 of a TEXT file, line-ending independent: CRLF is normalised to LF before hashing, so a Windows
+    checkout (core.autocrlf=true) and the LF blob that Linux CI sees give the same hash. Recorded file hashes are
+    therefore the hash of the LF bytes. Only use this for text files (csv/json/md), never for binary files."""
+    return sha256_bytes(Path(path).read_bytes().replace(b"\r\n", b"\n"))
 
 
 def plain_manifest_sha256(columns) -> str:
@@ -197,7 +200,7 @@ def candidate_block(candidate: str, repo: Path, symbols, rowlist_name: str, prio
         "horizon_days": h,
         "rows": len(keys),
         "rowlist_file": f"{EVID_REL}/{rowlist_name}",
-        "rowlist_file_gz_sha256": sha256_file(evid / rowlist_name),
+        "rowlist_file_gz_sha256": sha256_bytes((evid / rowlist_name).read_bytes()),
         "rowlist_text_sha256 (decompressed, as written)": sha256_bytes(
             ("\n".join(keys) + "\n").encode("utf-8")
         ),

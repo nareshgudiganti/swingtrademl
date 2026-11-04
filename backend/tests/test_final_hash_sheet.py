@@ -175,3 +175,16 @@ def test_real_repo_files_reproduce_the_verified_v3_hashes():
             got["dataset_rowlist_sha256 (keys_sha256: sorted SYMBOL|YYYY-MM-DD, newline separated)"]
             == want["dataset_rowlist_sha256"]
         )
+
+
+def test_text_file_hash_is_line_ending_independent(tmp_path):
+    lf, crlf = tmp_path / "lf.csv", tmp_path / "crlf.csv"
+    lf.write_bytes(b"a,b\n1,2\n")
+    crlf.write_bytes(b"a,b\r\n1,2\r\n")  # what a Windows checkout with core.autocrlf=true produces
+    assert fhs.sha256_file(lf) == fhs.sha256_file(crlf) == hashlib.sha256(b"a,b\n1,2\n").hexdigest()
+
+
+def test_gitattributes_pins_hashed_evidence_text_files_to_lf():
+    attrs = (REPO / ".gitattributes").read_text("utf-8")
+    for rule in ("sector_prep/*.csv text eol=lf", "sector_prep/*.json text eol=lf", "HOLDOUT-REGISTRY.jsonl -text"):
+        assert rule in attrs

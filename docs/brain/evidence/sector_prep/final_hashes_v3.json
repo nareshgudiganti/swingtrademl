@@ -213,11 +213,11 @@
    "fold_definition_sha256_dev_only": "9bb378011bd1ae4448aaf327d39c770a63869d98a63dc0586949c8b2f67fd8ef",
    "n_dev_folds": 34,
    "exclusion_file_used_by_config": "docs/brain/evidence/sector_prep/excluded_rows_h5_v2.csv",
-   "exclusion_file_sha256": "99aef24dc4c9dd13c14d859956090693700d8041e20fd18774c9abbc7b2fefa9",
+   "exclusion_file_sha256": "ac3cfa19aecbf253119b16535b1ecbf5370d68d3572e25aba66716f2be2abaf6",
    "exclusion_rows": 187,
    "exclusion_keys_sha256 (sorted SYMBOL|DATE lines)": "7a5fbebcb02ece2a5c0675c68ec19ea1fcb9f29de74a723b13cfe430ade631d8",
    "events_input_file": "docs/brain/evidence/sector_prep/events_input_v2.csv",
-   "events_input_sha256": "23f145d80e6ce64e784c5db4d93d479929f4c429fcf369c84aa4b46710b649cf",
+   "events_input_sha256": "48b8b85efb751269db0d69d75d428353cc95e521f0a590c7db1b811953613eb1",
    "data_cutoff": "2026-12-31"
   },
   "SX10": {
@@ -243,11 +243,11 @@
    "fold_definition_sha256_dev_only": "fe4f133f20aafe39ff4c3d696e5c49ab5061c5d88098f3dd5b8e4545eb3bd023",
    "n_dev_folds": 34,
    "exclusion_file_used_by_config": "docs/brain/evidence/sector_prep/excluded_rows_h10_v2.csv",
-   "exclusion_file_sha256": "0aaec2b5b1e4a79620df5d683f4506c4bdf4a501be2ed0a28d36535cd3cf9372",
+   "exclusion_file_sha256": "fb4dd04dcf50dcf779c91a579d192df302f2dbfedea54dd261d4c0e3dd37e2e9",
    "exclusion_rows": 187,
    "exclusion_keys_sha256 (sorted SYMBOL|DATE lines)": "f91418585c918d9f71c2cef5da98cd094e2df04ecd8f1dc8399160e3012f3565",
    "events_input_file": "docs/brain/evidence/sector_prep/events_input_v2.csv",
-   "events_input_sha256": "23f145d80e6ce64e784c5db4d93d479929f4c429fcf369c84aa4b46710b649cf",
+   "events_input_sha256": "48b8b85efb751269db0d69d75d428353cc95e521f0a590c7db1b811953613eb1",
    "data_cutoff": "2026-12-31"
   }
  },

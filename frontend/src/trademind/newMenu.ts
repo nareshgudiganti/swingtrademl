@@ -3,7 +3,7 @@
 // so both looks share one route table (TradeMindApp.tsx). Owner-only and real-account rules are the same as the
 // classic menu's (menu.ts): this only regroups where a page is listed.
 
-import { ADMIN_SECTION, SECTIONS, matches, type Page } from './menu'
+import { ADMIN_SECTION, matches, type Page } from './menu'
 
 export type NavId = 'today' | 'discover' | 'portfolio' | 'shadow' | 'watchlist' | 'market' | 'evidence' | 'history' | 'admin'
 export type NavItem = {
@@ -16,12 +16,9 @@ export type NavItem = {
   ownerOnly?: boolean
 }
 
-// Wave 2: the new Portfolio screen (/trademind/portfolio) comes first; the Bot / Testing / My Zerodha tabs follow.
-const classicPortfolio = SECTIONS.find((s) => s.id === 'portfolio')!.pages
-const portfolioPages: Page[] = [
-  { to: '/trademind/portfolio', label: 'Overview (Paper)' },
-  ...classicPortfolio.filter((p) => p.to !== '/trademind/portfolio'),
-]
+// Owner 2026-11-05: Portfolio is one page, "Open positions" (/trademind/portfolio). Overview, Bot, Manual test and
+// My Zerodha are hidden from the menu; their routes still work.
+const portfolioPages: Page[] = [{ to: '/trademind/portfolio', label: 'Open positions' }]
 
 export const NAV: NavItem[] = [
   { id: 'today', label: 'Today', pages: [{ to: '/trademind', label: 'Today', end: true }], also: ['/trademind/dashboard'] },

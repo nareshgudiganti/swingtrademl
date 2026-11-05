@@ -47,6 +47,7 @@ export const SECTIONS: Section[] = [
       { to: '/trademind/holdings', label: 'My Zerodha (Real)', ownerOnly: true, realAccount: true },
       { to: '/trademind/portfolio', label: 'Paper Overview' },
     ],
+    also: ['/trademind/overview'],
   },
   {
     id: 'insights',

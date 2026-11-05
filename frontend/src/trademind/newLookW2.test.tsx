@@ -248,7 +248,7 @@ describe('Portfolio: money, held stocks, room and the safety net', () => {
   })
 
   it('renders for the owner in order: money, needs a decision, held stocks, sectors, room, safety net, chart last', () => {
-    const html = render('/trademind/portfolio', true, (c) => {
+    const html = render('/trademind/overview', true, (c) => {
       c.setQueryData(['summary'], SUMMARY)
       c.setQueryData(['positions'], [pos('HELDCO'), pos('KEPTCO', { sector: 'IT' })])
       c.setQueryData(['riskLimits'], LIMITS)
@@ -272,16 +272,13 @@ describe('Portfolio: money, held stocks, room and the safety net', () => {
     expect(html).not.toContain('Money room')
   })
 
-  it('the new Portfolio is first under Portfolio; Bot / Testing / Zerodha stay listed by the same rules', () => {
+  it('Portfolio lists one page, Open positions, at /trademind/portfolio (2026-11-05)', () => {
     const portfolio = visibleNav(true).find((n) => n.id === 'portfolio')!
-    expect(navPages(portfolio, true).map((p) => p.to)).toEqual([
-      '/trademind/portfolio',
-      '/trademind/positions',
-      '/trademind/testing',
-      '/trademind/manual-test',
-      '/trademind/holdings',
-    ])
-    expect(navPages(portfolio, false, { realAccount: false }).map((p) => p.to)).toEqual(['/trademind/portfolio', '/trademind/positions'])
+    for (const owner of [true, false]) {
+      const pages = navPages(portfolio, owner)
+      expect(pages.map((p) => p.to)).toEqual(['/trademind/portfolio'])
+      expect(pages[0]!.label).toBe('Open positions')
+    }
   })
 })
 

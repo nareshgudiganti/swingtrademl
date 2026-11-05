@@ -505,15 +505,31 @@ def absent_tables(db) -> list[str]:
     return [n for n in names if db.execute(text("SELECT to_regclass(:n)"), {"n": n}).scalar() is None]
 
 
-def collect(db, start: date, end: date) -> list[tuple[dict, list[Rec], str, bool]]:
-    """A missing table is missing evidence ("not recorded"), never an error and never zero."""
+def collect_with_notes(db, start: date, end: date):
+    """(series, notes). A missing table or an out-of-date column is missing evidence: it is named in
+    the notes ("not recorded"), never an error and never counted as zero."""
+    from sqlalchemy.exc import ProgrammingError
+
+    notes: list[str] = []
     gone = set(absent_tables(db))
     out = brain_series(db, start, end)
-    if not gone & {"lane_picks", "lane_outcomes"}:
-        out += lane_series(db)
-    if "h05_signals" not in gone:
-        out += h05_series(db)
-    return out
+    for label, reader, tables in (
+        ("lanes", lane_series, {"lane_picks", "lane_outcomes"}),
+        ("h05", h05_series, {"h05_signals"}),
+    ):
+        if gone & tables:
+            notes.append(f"{label}: table {', '.join(sorted(gone & tables))} is absent in this database")
+            continue
+        try:
+            out += reader(db)
+        except ProgrammingError:
+            db.rollback()
+            notes.append(f"{label}: the table layout here is older than the code expects")
+    return out, notes
+
+
+def collect(db, start: date, end: date) -> list[tuple[dict, list[Rec], str, bool]]:
+    return collect_with_notes(db, start, end)[0]
 
 
 # ----------------------------------------------------------------------------- text
@@ -591,11 +607,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     today = datetime.now(IST).date()
     end = date.fromisoformat(a.end) if a.end else today
     with SessionLocal() as db:
-        gone = absent_tables(db)
-        rep = build_report(collect(db, date.fromisoformat(a.start), end))
+        series, notes = collect_with_notes(db, date.fromisoformat(a.start), end)
+        rep = build_report(series)
     text = plain_report(rep)
-    if gone:
-        text += "\nNot recorded: this database has no table " + ", ".join(gone) + ".\n"
+    if notes:
+        text += "\nNot recorded:\n" + "".join(f"- {n}\n" for n in notes)
     print(text)
     try:
         print(f"Written: {write_report(text, Path(a.out), today)}")

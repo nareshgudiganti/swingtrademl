@@ -244,6 +244,10 @@ def start_scheduler() -> None:
     if settings.BRAIN_ENABLED:
         add_brain_jobs(scheduler)
 
+    # h05 evaluation lane (disabled by default): the daily job exists only when the owner has switched the
+    # lane on AND accepted the protocol hash. Nothing of the lane is imported otherwise.
+    add_h05_job(scheduler)
+
     # Observe only: records each job's last run for Admin > Jobs (workers/job_runs.py). Never raises.
     job_runs.attach(scheduler)
     scheduler.start()
@@ -252,6 +256,24 @@ def start_scheduler() -> None:
         jobs=[j.id for j in scheduler.get_jobs()],
         timezone="Asia/Kolkata",
     )
+
+
+def add_h05_job(target: BackgroundScheduler) -> bool:
+    """Register the h05 daily job only if LANE_H05_ENABLED is true. Never raises: an evaluation lane must not
+    stop the bot from starting. Disabled (the default) imports only the lane's tiny settings class."""
+    try:
+        from swing_trade_ml.brain.lanes.h05_protocol import H05Settings
+
+        if not H05Settings().ENABLED:
+            return False
+        from swing_trade_ml.brain.lanes import h05_job
+
+        added = h05_job.register(target)  # also requires the accepted protocol hash
+        log.info("h05.job", registered=added)
+        return added
+    except Exception as exc:  # noqa: BLE001
+        log.error("h05.job_registration_failed", error_kind=type(exc).__name__)
+        return False
 
 
 def add_brain_jobs(target: BackgroundScheduler) -> None:

@@ -68,22 +68,39 @@ export default function PaperPositions() {
   const currentValue = rows.reduce((s, p) => s + p.current_value, 0)
   const openPnl = rows.reduce((s, p) => s + p.unrealized_pnl, 0)
   const dayPnl = rows.reduce((s, p) => s + (p.day_pnl ?? 0), 0)
+  // Total = open + banked profit, measured against everything put into trades (open and closed).
+  const totalPnl = openPnl + (moneyRow?.realized_pnl ?? 0)
+  const totalCost = invested + (trades.data ?? []).reduce((s, t) => s + t.quantity * t.entry_price, 0)
   const byReturn = [...rows].sort((a, b) => b.unrealized_pnl_pct - a.unrealized_pnl_pct)
   const best = byReturn[0]
   const worst = byReturn[byReturn.length - 1]
+  const dayPct = (p: DetailedPosition) => {
+    const before = p.current_value - (p.day_pnl ?? 0)
+    return before > 0 ? ((p.day_pnl ?? 0) / before) * 100 : 0
+  }
+  const byDay = [...rows].sort((a, b) => dayPct(b) - dayPct(a))
+  const bestDay = byDay[0]
+  const worstDay = byDay[byDay.length - 1]
 
   const sectors = useMemo(() => {
-    const m = new Map<string, { value: number; symbols: string[] }>()
+    const m = new Map<string, { value: number; cost: number; pnl: number; stocks: { symbol: string; pct: number }[] }>()
     for (const p of rows) {
       const name = p.sector || 'Unclassified'
-      const cur = m.get(name) ?? { value: 0, symbols: [] }
+      const cur = m.get(name) ?? { value: 0, cost: 0, pnl: 0, stocks: [] }
       cur.value += p.current_value
-      cur.symbols.push(p.symbol)
+      cur.cost += p.invested
+      cur.pnl += p.unrealized_pnl
+      cur.stocks.push({ symbol: p.symbol, pct: p.unrealized_pnl_pct * 100 })
       m.set(name, cur)
     }
     const total = rows.reduce((s, p) => s + p.current_value, 0)
     return [...m.entries()]
-      .map(([name, v]) => ({ name, ...v, pct: total > 0 ? v.value / total : 0 }))
+      .map(([name, v]) => ({
+        name,
+        ...v,
+        ret: v.cost > 0 ? (v.pnl / v.cost) * 100 : 0,
+        pct: total > 0 ? v.value / total : 0,
+      }))
       .sort((a, b) => b.value - a.value)
   }, [rows])
 
@@ -108,15 +125,19 @@ export default function PaperPositions() {
           <PageState kind={positionsState} what="your test positions" error={positions.error} onRetry={positions.refetch} />
         )}
         {moneyRow && (
-          <div className="tm-grid tm-cols-4">
-            <Stat label="Account value" value={money(moneyRow.total_value)} />
-            <Stat label="Cash left" value={money(moneyRow.cash)} />
-            <Stat label="Held in stocks" value={money(currentValue)} note={`${rows.length} stocks`} />
+          <div className="tm-grid tm-cols-3">
+            <Stat label="Invested value" value={money(currentValue)} note={`${rows.length} stocks`} />
             <Stat
-              label="Profit banked"
-              value={`${moneyRow.realized_pnl < 0 ? '−' : ''}${money(moneyRow.realized_pnl)}`}
-              tone={toneClass(moneyRow.realized_pnl)}
-              note={`${moneyRow.total_trades} closed`}
+              label="Today's P&L"
+              value={`${dayPnl < 0 ? '−' : ''}${money(dayPnl)}`}
+              tone={toneClass(dayPnl)}
+              note={currentValue - dayPnl > 0 ? signed((dayPnl / (currentValue - dayPnl)) * 100) : undefined}
+            />
+            <Stat
+              label="Total P&L"
+              value={`${totalPnl < 0 ? '−' : ''}${money(totalPnl)}`}
+              tone={toneClass(totalPnl)}
+              note={`${totalCost > 0 ? `${signed((totalPnl / totalCost) * 100)} · ` : ''}open ${openPnl < 0 ? '−' : ''}${money(openPnl)}, banked ${moneyRow.realized_pnl < 0 ? '−' : ''}${money(moneyRow.realized_pnl)}`}
             />
           </div>
         )}
@@ -124,25 +145,24 @@ export default function PaperPositions() {
 
       {rows.length > 0 && (
         <div className="tm-grid tm-cols-4">
-          <Card>
-            <Stat label="Today" value={`${dayPnl < 0 ? '−' : ''}${money(dayPnl)}`} tone={toneClass(dayPnl)} />
-          </Card>
-          <Card>
-            <Stat
-              label="Open P&L"
-              value={`${openPnl < 0 ? '−' : ''}${money(openPnl)}`}
-              tone={toneClass(openPnl)}
-              note={invested ? signed((openPnl / invested) * 100) : undefined}
-            />
-          </Card>
+          {bestDay && dayPct(bestDay) > 0 && (
+            <Card>
+              <Stat label="Best today" value={bestDay.symbol} tone="tm-pos" note={signed(dayPct(bestDay))} />
+            </Card>
+          )}
+          {worstDay && dayPct(worstDay) < 0 && (
+            <Card>
+              <Stat label="Worst today" value={worstDay.symbol} tone="tm-neg" note={signed(dayPct(worstDay))} />
+            </Card>
+          )}
           {best && best.unrealized_pnl_pct > 0 && (
             <Card>
-              <Stat label="Best" value={best.symbol} tone="tm-pos" note={signed(best.unrealized_pnl_pct * 100)} />
+              <Stat label="Best overall (open)" value={best.symbol} tone="tm-pos" note={signed(best.unrealized_pnl_pct * 100)} />
             </Card>
           )}
           {worst && worst.unrealized_pnl_pct < 0 && (
             <Card>
-              <Stat label="Worst" value={worst.symbol} tone="tm-neg" note={signed(worst.unrealized_pnl_pct * 100)} />
+              <Stat label="Worst overall (open)" value={worst.symbol} tone="tm-neg" note={signed(worst.unrealized_pnl_pct * 100)} />
             </Card>
           )}
         </div>
@@ -192,13 +212,19 @@ export default function PaperPositions() {
                 <div className="tm-sector-bar">
                   <span style={{ width: `${Math.min(100, s.pct * 100)}%` }} />
                 </div>
-                <div className="tm-dim">{money(s.value)}</div>
-                <div className="tm-sector-stocks">
-                  {s.symbols.map((sym) => (
-                    <span key={sym} className="tm-stock-cell">
-                      <StockLogo symbol={sym} />
-                      {sym}
-                    </span>
+                <div className="tm-flex" style={{ justifyContent: 'space-between' }}>
+                  <span className="tm-dim">{money(s.value)}</span>
+                  <b className={`${toneClass(s.pnl)} tm-num`}>{signed(s.ret)}</b>
+                </div>
+                <div className="tm-sector-stocks" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '0.4rem' }}>
+                  {s.stocks.map((st) => (
+                    <div key={st.symbol} className="tm-flex" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span className="tm-stock-cell">
+                        <StockLogo symbol={st.symbol} />
+                        {st.symbol}
+                      </span>
+                      <span className={`${toneClass(st.pct)} tm-num`}>{signed(st.pct)}</span>
+                    </div>
                   ))}
                 </div>
               </div>

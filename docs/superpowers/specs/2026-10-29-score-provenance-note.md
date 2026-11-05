@@ -82,3 +82,14 @@ Consequences, stated without reinterpreting Phase B:
 
 Fixes stay proposals (audit F1–F14). Any that changes the trial's picks or reporting (F3, F4, F6, F7) waits for
 the trial's evaluation or a new trial, with owner approval.
+
+---
+
+## Addendum 2026-10-30 (appended; nothing above was edited)
+
+1. The production score in section 2's chain is computed by `ml/predict.py: predict_instrument` from the **newest 400
+   bars** with today's `obv_slope` formula, which differs from the formula the saved models were trained on (D13 in
+   `2026-10-29-audit-model-scores.md`). So "the trial tests the 5-day score" is accurate for the score as it is
+   served, which is not the score as trained.
+2. The models behind that score use 37 / 46 / 46 inputs and were trained on 49 / 24 / 30 stocks
+   (`2026-10-30-model-facts-corrections.md`).

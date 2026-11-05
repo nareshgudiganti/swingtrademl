@@ -219,3 +219,20 @@ def test_testing_tab_rows_carry_day_and_suggestion(client, db_session, _tester_o
     assert row["trade_limit_days"] == 15
     assert row["suggestion"] in {SELL, SELL_PARTIALLY, WATCH, HOLD}
     assert row["suggestion_reason"]
+
+
+def test_tester_buy_over_cash_tops_up_instead_of_refusing(db_session, _tester_on, monkeypatch):
+    """No cash limit on practice buys: the shortfall is recorded as a top-up, not profit."""
+    monkeypatch.setattr(settings, "PAPER_TESTER_STARTING_CAPITAL", 500.0)
+    monkeypatch.setattr(settings, "PAPER_STARTING_CAPITAL", 100.0)  # the bot's pool cannot cover it either
+    position = _tester_position(db_session, "TOPUPCO", 990001)
+
+    assert position.quantity == 10
+    added = tester_paper._added_money(db_session)
+    assert added > 0
+    assert tester_paper.starting_capital(db_session) == 500.0 + added
+    assert tester_paper.available_cash(db_session) >= 0
+    # the top-up is not profit: nothing realized, return measured on money put in
+    stats = tester_paper.performance_stats(db_session)
+    assert stats["realized_pnl"] == 0.0
+    assert abs(stats["total_return_pct"]) < 0.05

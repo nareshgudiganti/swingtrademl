@@ -234,3 +234,24 @@ new trial version.
 4. `GET /api/v1/strategies` → which rows are active, auto, and their `symbols` (D2), plus whether
    `sma_crossover` / `long_term_value` rows are active (D5d, D6).
 5. Is `brain_meta_v*.joblib` present, and what is M06's mode (D5a–c)?
+
+---
+
+## Addendum 2026-10-30 — verified model facts and a new finding (D13)
+
+Appended; nothing above was edited. Full list of corrections: `2026-10-30-model-facts-corrections.md`.
+
+- **Inputs per model (corrects any reading of section 1 that assumes the same inputs):** prod ids 2 / 16 / 17 use
+  **37 / 46 / 46** inputs, not the 53 of today's feature builder. **Training stocks:** 49 / 24 / 30 (data to Oct–Nov 2025).
+  The 52 / 150 / 104 lists are v1's trading lists; 51 / 150 / 104 trained the *barrier* models, not these.
+- **D13 (CONFIRMED, new): the production score is not computed from the inputs the model was trained on.** On
+  2026-10-05 (`fcaef35`) `obv_slope` changed from `obv.diff(10) / obv.rolling(20).mean().abs()` to
+  `obv.diff(10) / volume.rolling(20).mean()`. Replaying today's code on each model's training data reproduces every
+  other input's saved mean and spread but not `obv_slope` (spread ratio 0.52 / 1.53 / 0.10 against 1.01 / 1.00 /
+  1.00 with the old formula). On 2026-09-07, rank correlation between production-path and training-basis scores
+  was 0.69 / 0.87 / 0.93 and the large-cap top 5 overlapped 3 of 5. Touches: v1 (all three models) and the brain
+  (model 2) since the 2026-10-05/06 deploy, so the sealed trial's scores. Severity: Medium–High for score meaning;
+  effect on outcomes unknown. **Do not fix quietly:** `ml/features.py` is trial-frozen.
+- **F15 (proposal only):** record the formula version with every stored score (extends F1); after the trial
+  evaluation decide whether serving should use the training formula for these three models or the models should be
+  retrained on the new formula. Either needs the owner.

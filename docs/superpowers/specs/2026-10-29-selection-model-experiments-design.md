@@ -1,6 +1,6 @@
-# 15-day stock selection experiments — design for owner approval (rev 2)
+# 15-day stock selection experiments — design for owner approval (rev 3, final corrections 11-01)
 
-Status: **DESIGN rev 2 for owner approval, 2026-10-29. Not approved to build, not approved to run.**
+Status: **DESIGN rev 3 for owner approval, 2026-11-01 (rev 3 = six technical corrections, section 19). Not approved to build, not approved to run.**
 No code, model, table, protocol, ledger row or trading rule has been changed by this document.
 Proposed protocol name: **`sl-protocol-v1`** (selection lab). Frozen only when the owner signs section 17 and
 the signed commit is tagged.
@@ -27,6 +27,9 @@ Inputs to this revision:
 | 10-29 | Earnings filter studied separately; never activated without evidence and approval; earnings exposure of open positions documented. |
 | 10-29 | D1 pre-2021 confirmation is labelled "NO WARNING (untouched history)", never PASS. D2 quotes only; buying needs a plan amendment; licensing review covers **all** NSE feeds. D3 F1 is report-only. D4 every label is measured against the 49. D5 one 15-day forward candidate at a time. D6 S0 = the raw 15-day barrier model, not M06. |
 | 10-29 | Include four more workstreams with clear boundaries: market-regime separation, horizon-specific scores, feature reduction, daily shadow top-5. Feature reduction must sit in an allowed slot, **never a fourth Phase B candidate**. |
+| 11-01 | Q4 FINAL YES: pass rules 6.3 accepted as written (ranking and money both required; 1.25% bound for 4 candidates; S2r non-inferiority −0.005; one winner, one H1 use, no fallback). |
+| 11-02 | **Owner: no money management in the lab or the model.** The lab judges the chart-based score only, split by market condition. The money verdict (M0 to M3), costs, capital, account replay, capacity and portfolio view are out of the lab; the brain's existing risk gate (M07, banner, limits) is the only place money is handled, and it is applied when a model is connected to the brain. Consequence: a lab result is a ranking result only and cannot qualify a winner (6.3 required both); any later recommendation still needs a separate money check. |
+| 11-01 | Rev 3 requested by owner: six technical corrections (label cut-off, breadth sensitivity, portfolio-level report, Stage 2 chronology test, S2r purge, S3 stays blocked); Release 1 = S0, S1, S2, S2r as signed; nothing runs before the evidence-plan amendment. |
 | 10-29 (review 3) | Q2 YES. Q3 YES for design and definitions only — company inputs not authorised until B3 verifies public times, completeness, point-in-time correctness and licensing. Q4 CONDITIONAL YES pending the 6.1/6.2 clarifications. Q9 YES. Q5 approved as winner-only, no fallback. Lab does not run until B1 and the evidence-plan amendment are approved. |
 | 10-29 (review 2) | Held-back 129: **one use by the lab only** — for the single preselected winner. Ranking **and** money both required; positive net expectancy required; "no winner" is a valid outcome. Pre-registration may be signed separately; **the lab may not run until an evidence-plan amendment is signed**. Corporate actions: never auto-remove real losses or every > 20% move — classify verified error / real gap / unresolved anomaly. S0 named as the raw 15D barrier model, never M06. Phase B unchanged. Q10, Q11 approved; Q12, Q13 resolved. |
 
@@ -125,9 +128,13 @@ For decision day *d* and stock *s*:
 - **Reference group = the 49** (D4), for every candidate: those with ≥ 220 bars, a valid r, and median
   turnover (close × volume, 20 sessions up to and including *d*) ≥ ₹5 crore. ≥ 10 such stocks a day, else no
   labels that day.
-- Excess e(s,d) = r(s,d) − median r of the reference group. The 128 extra stocks are labelled against the same
-  median.
-- **Label** = 1 if e(s,d) would rank in the top 30% of the reference group (percentile ≥ 0.70, ties averaged).
+- Excess e(s,d) = r(s,d) − median r of the reference group (the 49 only; an extra stock never enters it).
+- **One cut-off per day, from the 49 only:** C(d) = the 70th percentile of e over the reference group, linear
+  interpolation (`numpy.percentile(..., 70, method="linear")`). **Label(s,d) = 1 if e(s,d) ≥ C(d), else 0**, applied
+  identically to all 177 stocks. A value exactly on the cut-off, or tied with it, is 1. Because the 49 take part in
+  their own cut-off and the 128 do not, the 128 are labelled by the same rule against a fixed distribution; the
+  share of 1s among the 128 is reported per year (it can differ from 30%, which is expected and not a defect).
+  Unit tests: tie at C(d) → 1; a value just below → 0; adding or removing an extra stock never changes C(d).
 - `label_end_ts` = bar day+15, so the existing `apply_cutoff` and purge are exact.
 
 Note: the trainer always uses `class_weight="balanced"`. Ranking is unaffected; probabilities are not used.
@@ -148,7 +155,7 @@ Training stocks = the 49 + ev15 extra 128 (`stock_split_ev15.json`, SHA-256 chec
 | History | a stock enters training from its first complete input row (~272 bars); `min_rows = 300` |
 | Gaps | > 10 missing sessions in a calendar year → that stock-year left out, listed |
 | Bad bar (high < low, close ≤ 0, zero volume; M01 numbers where they apply) | leave out the bar's row **and every label whose window [d+1, d+15] contains it**; inputs using it for up to 252 sessions are reported, not dropped |
-| Large overnight move (\|close-to-open\| > 20%, M01 spike line) | **flagged for review, never removed automatically.** Each flag is classified before the run, from a written record: **VERIFIED ERROR** (exchange record or company filing shows a split/bonus/demerger or bad print not reflected in our prices) → only that stock's labels spanning it and its rows for the next 252 sessions are left out; **REAL GAP** (exchange record shows a genuine move, e.g. results) → kept, losses included; **UNRESOLVED ANOMALY** (no record either way) → kept in the main result, and a sensitivity result without them is reported; a candidate must pass in **both**. Moves ≤ 20% are never touched. Verification is done by hand from public exchange pages (no automated collection) and recorded in the run folder. The report never says "adjusted" |
+| Large overnight move (\|close-to-open\| > 20%, M01 spike line) | **flagged for review, never removed automatically.** Each flag is classified before the run, from a written record: **REAL GAP** (exchange record shows a genuine move, e.g. results) → **always kept, losses included, in every result and every sensitivity run**; **VERIFIED ERROR** (exchange record or company filing shows a split/bonus/demerger or bad print not reflected in our prices) → only that stock's labels spanning it and its rows for the next 252 sessions are left out; **UNRESOLVED ANOMALY** (no record either way) → kept in the main result, and a sensitivity result without them is reported; a candidate must pass in **both**. Moves ≤ 20% are never touched. Verification is done by hand from public exchange pages (no automated collection) and recorded in the run folder. The report never says "adjusted" |
 | Survivorship | all 177 are listed today; stated in the report's first paragraph. Fixed only in Stage 2 |
 
 ### 4.3 Experiment C — results and shareholding (S3)
@@ -186,7 +193,8 @@ row has `public_at` and first-filed values. Known today: NSE/BSE filings carry d
 moved to "Integrated Filing – Financials" on 2025-04-01 (two formats to join); our existing
 `company_filing_shareholdings.filed_on` is a date only (fails L1). If verification fails or consent is not
 granted, **S3 is NOT TESTABLE**; the multiple-testing correction still counts four (section 6.3), the
-conservative choice.
+conservative choice. **S3 stays blocked** (owner 11-01) until timestamps, completeness, point-in-time quality and
+licensing are all verified; nothing else in the lab waits for it.
 
 ### 4.4 F1 — earnings filter (report-only)
 
@@ -261,6 +269,8 @@ A model can pass R1 (good overall order) and fail R2 (no useful top), or the rev
 
 ### 6.2 Money verdict — "does it make money after costs?"
 
+> **Superseded for now (owner, 2026-11-02): no money management in the lab.** This section and 6.2a are not built or evaluated. The lab code contains no costs, capital, sizing, account or net-profit logic (a test enforces it); the brain's risk gate handles money when a model is connected. Kept below as the record of the signed rules.
+
 **Execution and costs = exactly the locked 15-day protocol** (`evidence-defs-v1` §3a, `replay_scoring.strict_score`,
 the function Phase B and wf-v1 use):
 
@@ -284,6 +294,34 @@ Diagnostics, never pass or fail: the other locked ps3 settings from `cost_stress
 and both together (the harshest) — reported in one table: for each setting, top-5 mean net per trade, every
 stock, momentum 5, S0, and the difference, each with its trade count. A measured real-fill setting (ps4) is
 added as a column if it exists at run time.
+
+### 6.2a Report-only additions (rev 3) — never pass or fail rules
+
+**Portfolio-level view, reported separately from the locked trade-level result.** From the `portfolio_sim`
+replay (₹10 lakh, ladder limits, 25% sector cap, 15% halt), per candidate and per baseline:
+
+| Item | Meaning |
+|---|---|
+| Overlapping exposure | positions open per day (mean, 95th percentile, maximum) — five picks a day held up to 15 days can mean up to ~75 at ₹40,000 (≈ ₹30 lakh) against ₹10 lakh |
+| Capital usage | share of the ₹10 lakh invested per day (mean, maximum); idle cash share |
+| Portfolio return | the replay's total and per-month return, max drawdown, and the same for every stock / momentum 5 / S0 |
+| Skipped ideas | top-5 trades the portfolio could not take (no cash, sector cap, slots, halt) and their mean result vs the taken ones |
+| Executable capacity | each ₹40,000 order as a share of that stock's median 20-session turnover (mean, 95th percentile, worst); count of days above 1% |
+
+The locked trade-level result (M0–M2) is unchanged; if the two disagree in sign the report says so in its first
+paragraph. M3 (drawdown < 15%) stays the only portfolio pass rule.
+
+**Breadth-survivorship sensitivity.** The breadth inputs are built from today's watchlist for past days (section
+1, L8). For every candidate that passes Stage 1, one extra run **without** the breadth inputs (and, as a second
+line, without all 6 market-wide inputs of audit F10) is trained and scored identically (same folds, stocks, days,
+costs). Reported side by side with the full-input result, with R1 and M0 for each. It is a **diagnostic, not a
+fifth candidate**: it never wins, never changes the family of four or the correction, and is not tuned. If a
+candidate passes only with the breadth inputs, the report says "passes only with affected inputs" in its first
+paragraph **and the candidate is flagged `REQUIRES DATA-INTEGRITY REVIEW BEFORE PROMOTION`**: it may not go to
+Stage 2 promotion, shadow promotion or any recommendation until a separate written data-integrity review (point-in-time
+breadth rebuilt from the dated universe, or the inputs removed) has been approved by the owner. The flag is
+stored in the run record and shown on the screen. "Depends on" = passes R1 or M0 with the inputs but fails either
+without them.
 
 ### 6.3 Pass rules — fixed before any run
 
@@ -344,7 +382,12 @@ survives H1 it is locked as `sl-protocol-v1-locked` and is the only candidate th
 
 **Stage 2 — untouched pre-2021 history (one survivor, once):** expanding walk-forward, 28-day folds, test
 2016-01-01 → 2021-07-31, point-in-time universe incl. delisted. All Phase C pass rules + R1 at the 5th
-percentile. Best label: **"NO WARNING (untouched history)"** (D1) — never PASS. If the data cannot be had:
+percentile. Best label: **"NO WARNING (untouched history)"** (D1) — never PASS. **Chronology is tested, not
+assumed (rev 3):** an automated check, run before and logged with every fold, proves (a) the latest `label_end_ts`
+in the training rows is before the fold's first test day, (b) no row dated inside or after the test fold is in
+training, (c) every input and universe list used on a day was available on that day (point-in-time membership,
+delisted stocks included), (d) no model trained for a later fold is used for an earlier one. The run stops on any
+failure. If the data cannot be had:
 NOT TESTABLE, and the candidate is reported as "forward only, no historical check".
 
 **Stage 3 — forward shadow:** Phase C's clock exactly (3-month working check without returns, verdict at 6
@@ -356,6 +399,19 @@ stage that can give PASS.
 Split by NIFTY 100 / NIFTY Midcap 150 membership **on the decision day** for formal results; today's lists
 only with the badge "EXPLORATORY — today's index lists (survivor bias)". < 30 days with picks in a group → NOT
 TESTABLE (small caps expected to be).
+
+### 6.4a Two questions, always stated (rev 3 final)
+
+Every report, screen and summary of this lab carries this paragraph, in this order, before any number:
+
+> **Ranking and trading are different questions.** *Ranking* asks: does a higher score pick stocks that do better
+> than other stocks that day (relative, measured by rank correlation and the top-5 excess over the day's median)?
+> *Trading* asks: did the actual trade (buy next open, +8% target, -4% stop, half out at +5%, out by day 15,
+> after costs) make money? A model can rank well and still lose on the +8% / -4% rule, and the reverse. The ranking
+> label ("beats the day's median stock") is **not** the trade outcome, and a ranking pass is never reported as a
+> profit forecast.
+
+Each result card shows the two verdicts side by side, never merged into one badge.
 
 ### 6.5 Labels shown everywhere
 
@@ -500,15 +556,17 @@ needs owner approval and does not alter results already produced.
 | Audit | `2026-10-29-audit-model-scores.md`. Findings: **see audit summary below**. |
 | Rule going forward | Every score carries `{model_id, version, target, horizon_days, calibration}`; a consumer that needs a 15D probability refuses a 5D score; screens show the horizon next to any score. |
 
-Audit summary (read-only; prod not queried, so prod model ids are LIKELY from earlier documents; five read-only
-prod checks listed in the audit would settle them):
+Audit summary. The audit itself was read-only code work; the owner-approved read-only production checks (Q12,
+**done 2026-10-29**, `2026-10-29-score-provenance-note.md`) have since settled the production facts below, so
+they are stated as confirmed, not likely:
 
 - **No code turns a 5-day score into a 15-day probability.** The only "honest chance" display
   (`brain/score_evidence.py`) refuses any model not trained on +8% / −4% / 15 days; screens never show a raw
   score with a % sign.
 - **But the brain chooses its 15-day ideas with the 5-day score.** Live brain runs read the active
-  `swing_classifier` (`brain/reader.py:460-496`, checked) — per fd-protocol-v1 C1 that is prod model 2, "close
-  ≥ +2% after 5 trading days", uncalibrated. That score decides "liked" (≥ 0.60 or the accepted buy level) and
+  `swing_classifier` (`brain/reader.py:460-496`, checked) — **confirmed in prod (Q12): ACTIVE model id 2 v2,
+  label kind "endpoint", "close ≥ +2% after 5 trading days", uncalibrated; all 20 prod models are of that kind and none
+  is a +8% / −4% barrier model.** That score decides "liked" (≥ 0.60 or the accepted buy level) and
   slot priority; the +8% / −4% / 15-day plan is attached afterwards. This is the known tv23/tv24 gap and is
   **what the sealed trial is actually testing**.
 - **M06**, the only true 15-day probability, runs in shadow and very probably has nothing to run on (no active
@@ -516,14 +574,14 @@ prod checks listed in the audit would settle them):
 
 | # | Defect | Class | Touches |
 |---|---|---|---|
-| D1 | 15-day brain ideas selected and prioritised by the 5-day score | CONFIRMED in code; prod model = 5D LIKELY | prod picks, sealed trial |
-| D2 | Brain scores mid/small caps with the large-cap model; v1 uses tier models for the same stocks | CONFIRMED | prod picks |
+| D1 | 15-day brain ideas selected and prioritised by the 5-day score | **CONFIRMED in code and in prod (Q12)** | prod picks, sealed trial |
+| D2 | Brain scores mid/small caps with the large-cap model; v1 uses tier models for the same stocks | CONFIRMED in prod (strategies 4 and 5 active; brain scored 302 stocks with id 2) | prod picks |
 | D3 | A brain decision does not record which model scored it; evidence is chosen by today's active model | CONFIRMED, dormant | trial reporting after tv23/tv24 |
-| D4 | "Score ≥ 0.80" means three different numbers (Phase B B1 = per-fold 15D model; trial's "Score 80+" set and the owner's "read score > 80" rule = prod 5D score) | LIKELY (process) | **a B1 pass would not validate the owner's rule** |
+| D4 | "Score ≥ 0.80" means three different numbers (Phase B B1 = per-fold 15D model; trial's "Score 80+" set and the owner's "read score > 80" rule = prod 5D score) | **CONFIRMED (Q12, provenance note §4)** | **a B1 pass would not validate the owner's rule** |
 | D5 | Different score kinds sorted on one scale (`/signals/picks`, `/top-picks` already mix strategies incl. SMA's made-up 0.5–0.85) | CONFIRMED | live display |
 | D6 | Stock-page score trail: last strategy to run wins, incl. the 250-day model | CONFIRMED | display |
 | D7 | Positions page uses "the active model" for every position → 15-day positions get "5-day call has passed" notes | CONFIRMED | display |
-| D8 | Prod settings likely 5 days / +2%; untagged `swingtrade train`, as-of models and documented `*_barrier_cal` commands would build 5D models — **the tv23/tv24 fix itself would build the wrong model** | LIKELY, high | future training |
+| D8 | Prod models and v1 rules are 5 days / +2% (**confirmed in prod, Q12**; the settings values themselves were not read); untagged `swingtrade train`, as-of models and documented `*_barrier_cal` commands would build 5D models — **the tv23/tv24 fix itself would build the wrong model** | CONFIRMED for models and rules; settings values unread | future training |
 | D9–D12 | Signal grading mixes questions; 5D graded on calendar days + slack; long-term text from settings; real-question switch moves bands but not the brain's model | CONFIRMED, low / dormant | v1 path |
 
 Proposed fixes (proposals only, in the audit as F1–F14): record the scoring model on every decision and choose
@@ -570,7 +628,9 @@ windows look back only), breadth inputs built from today's watchlist (confirmed 
 2. Spearman correlation between all inputs (no labels used). Group inputs where |ρ| ≥ 0.90 (connected groups).
 3. In each group, keep the input with the highest |IC| against the training label.
 4. **Usefulness check — do not drop on correlation alone:** for each other group member, refit on the training
-   window's first 80% with and without it and compare IC on the last 20% (still inside training). Keep it if
+   window's first 80% with and without it and compare IC on the last 20% (still inside training). **Purged
+   (rev 3):** leave a gap of 15 trading days between the two blocks and drop every first-block row whose
+   `label_end_ts` falls on or after the last block's first day, so no label overlaps the validation block. Keep it if
    removing it lowers that IC by more than 0.005.
 5. The kept list is recorded per fold in `metrics.json`.
 
@@ -581,7 +641,7 @@ stability across folds (Kendall τ between consecutive folds); inputs whose impo
 −0.005 (6.3). S3 builds on S2's full inputs, fixed now, whatever S2r shows.
 
 **Acceptance criteria:** procedure code has unit tests on synthetic data (two copies of one input → one kept;
-a correlated but useful input → kept by step 4; nothing reads rows after the cutoff); per-fold kept lists
+a correlated but useful input → kept by step 4; nothing reads rows after the cutoff; a first-block label ending inside the validation block is dropped); per-fold kept lists
 stored; S2r and S2 reported side by side.
 **Implementation impact:** ≈ 2–3 days inside Release 1; compute ≈ 2× S2's (step 4 refits).
 
@@ -614,7 +674,7 @@ verdicts are never re-run to change them**; a re-run is a new, labelled diagnost
 
 Consequences for this design (applied in 4.2): 4 of the 128 extra stocks carry suspect jumps (SANOFI,
 BAJAJELEC, VEDL, ABFRL); the gap line is lowered from 30% to **20%** (M01's spike line) because 30% misses
-ALLCARGO's −24.8%; every flagged gap gets the "unadjusted; affected windows removed" treatment; the data
+ALLCARGO's −24.8%; each flagged gap is classified by the 4.2 rule, **not** treated alike: a genuine overnight gap is always kept (including its losses), a verified data error has only its affected windows left out, and an unresolved anomaly stays in the main result with a sensitivity run that excludes it; the data
 snapshot (row count + hash) is frozen at the start of each run and a run refuses if it changes mid-way.
 
 **Data sources:** R0 report `2026-10-29-r0-data-feasibility-report.md` (desk research only; nothing bought,
@@ -670,7 +730,21 @@ survivor if the owner wants it here), in one append-only table `research_shadow_
 | hypothetical entry (next open), exit, status, net result | filled by the scorer after 15 days |
 | `kind` = `shadow` | never `trade` |
 
-Rules: one record per stock at a time (no repeats until finished); recorded whether or not a slot is free;
+**Two separate records (rev 3 final).**
+
+1. **Daily ranking snapshot — `research_shadow_rankings` (append-only).** Every decision day, **all five** top-ranked
+   stocks are recorded (rank 1-5, score, rank percentile, model id/version, banner, breadth, VIX percentile, event
+   flags) **including stocks that were also in yesterday's top 5 or are still open**. Nothing is skipped for
+   repeats, free slots or eligibility. This is the like-for-like record of *selection*: the lab's historical
+   results score exactly the same thing (each day's top 5, repeats as separate trades, 6.2), so forward and
+   historical selection compare fairly. Its 15-day outcomes are filled by the scorer after the window and stay
+   sealed until the verdict.
+2. **Unique shadow positions — `research_shadow_ideas` (the table above).** A stock is opened as a position only
+   when it has no unfinished position; this is the record that mimics holding.
+
+The snapshot is never derived from the positions table. A report that mixes them is a defect.
+
+Rules for the positions table: one record per stock at a time (no repeats until finished); recorded whether or not a slot is free;
 results hidden until the Stage 3 verdict (counts only), like Phase C; **never summed with portfolio trades,
 never called profit**; nothing reads this table except the lab report and the owner screen.
 
@@ -737,7 +811,7 @@ on the laptop (S2r ≈ 2×). All of Stage 1 ≈ one working day of machine time.
 | Q1 | Sign `sl-protocol-v1` before 9 Nov; execution waits for a separate GO after 4 Dec? **Note:** the evidence plan has no phase for this lab (after Phase B it allows Phase C or the December go/pivot/stop review only), so signing the rules is a pre-registration; permission to *run* needs a separately signed evidence-plan amendment, decided at or after the December review | Owner: CONDITIONAL (2026-10-29) |
 | Q2 | Approve the target in 4.1 (top 30% of 15-day excess vs the 49's median)? | **Approved 10-29** |
 | Q3 | Approve the 8 company inputs in 4.3? | **Approved 10-29 for design/definitions only**; use needs B3 |
-| Q4 | Approve pass rules 6.3 (1.25% bound for 4 candidates; S2r non-inferiority −0.005)? | **Conditional yes 10-29**; clarifications written in 6.1/6.2 — awaiting final yes |
+| Q4 | Approve pass rules 6.3 (1.25% bound for 4 candidates; S2r non-inferiority −0.005)? | **FINAL YES 2026-11-01** (conditional yes 10-29; plain-English summary of 6.1/6.2/6.3 shown to the owner first). Rules unchanged |
 | Q5 | One lab use of the 129, on the preselected winner only (4 uses in total incl. Phase B), each logged? | **Approved 10-29** (winner only, no fallback) |
 | Q6 | Execute Release 1 after 4 Dec? | **Not before the evidence-plan amendment is signed** (owner 10-29); pre-registration (Q1) is separate |
 | Q7 | Paid data: amend the evidence plan to allow a purchase after R0, or wait until Phase C ends? | Decide after R0 quotes |
@@ -760,3 +834,48 @@ on the laptop (S2r ≈ 2×). All of Stage 1 ≈ one working day of machine time.
 - Not committed yet: the current branch holds unrelated work; on approval this goes on its own docs branch.
 
 Signature (owner): ____________________  Date: __________
+
+## 19. Rev 3 corrections (2026-11-01)
+
+| # | Owner point | Where fixed |
+|---|---|---|
+| 1 | Exact top-30% labels for the 128 extras vs the 49 (ties, boundary) | 4.1 |
+| 2 | Breadth survivorship: controlled sensitivity run without the affected inputs | 6.2a |
+| 3 | Overlapping exposure, capital usage, portfolio return, executable capacity — separate from the locked trade-level result | 6.2a |
+| 4 | Stage 2 proven chronological (automated check) | 6.3 Stage 2 |
+| 5 | S2r internal validation purges overlapping 15D labels | 12 step 4 |
+| 6 | S3 blocked until timestamps, quality, licensing verified | 4.3 |
+
+Nothing else changed: the family of four, pass rules, costs, held-back rule and Phase B/trial separation are as
+signed (Q4 final yes, 11-01). Release 1 builds S0, S1, S2 and S2r only. Rev 3 does not change what Q1 signs
+except by adding these checks; none of them runs before the evidence-plan amendment.
+
+### 19.1 Final corrections (2026-11-01, second owner review)
+
+| # | Owner point | Where fixed |
+|---|---|---|
+| 1 | Daily top-5 ranking snapshot recorded in full (repeats included), separate from unique shadow positions | 14 |
+| 2 | Candidate that depends on breadth-affected inputs is flagged for a separate data-integrity review before any promotion | 6.2a |
+| 3 | Section 11 states the Q12 production verification as confirmed | 11 |
+| 4 | Genuine overnight gaps always kept; verified errors handled by window; unresolved anomalies get a sensitivity run | 4.2, 13 |
+| 5 | Ranking vs actual +8% / -4% trade outcome stated in all reports | 6.4a |
+
+### 19.2 Pre-registration checklist (what signing Q1 covers)
+
+- [x] Protocol text is rev 3 final; family of four fixed (S1, S2, S2r, S3); S0 control; no fifth candidate.
+- [x] Pass rules 6.3 accepted (Q4 final yes, 11-01).
+- [x] Label rule, cut-off, ties, boundaries exact (4.1).
+- [x] Costs pinned in `config.json`; run refuses on mismatch (6.2).
+- [x] One use of the 129 held-back stocks, winner only, no fallback (Q5).
+- [x] Report-only items defined: portfolio view, breadth sensitivity with integrity flag, gap sensitivity (6.2a, 4.2).
+- [x] Stage 2 chronology test and S2r purge are required tests (6.3, 12).
+- [x] S3 blocked until timestamps, quality, licensing verified (4.3).
+- [x] Production facts confirmed (Q12; Section 11).
+- [ ] **Q7** answered (my recommendation: wait until Phase C ends).
+- [ ] **Owner signature** on section 17 and tag `sl-protocol-v1` (by about 7 Nov, before Phase B starts on 9 Nov).
+- [ ] **Not part of signing:** the evidence-plan amendment (Q6) that permits running. Decided at or after the December review.
+
+**Scientific or technical blockers:** none for signing. For *running*: (a) the evidence-plan amendment; (b) the
+licensing/consent position for NSE feeds only matters for S3 and any outside user, not for S0/S1/S2/S2r on data
+already held; (c) the new code (Release 1) and its required tests do not exist yet; (d) Stage 2 needs pre-2021 data,
+which has not been obtained, so Stage 2 may be NOT TESTABLE and the candidate would be reported as forward-only.

@@ -1,16 +1,18 @@
-import { Fragment, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api } from '../../api/client'
 import type { DetailedPosition } from '../../api/types'
 import { CapFlag } from '../cap'
-import { DayCell, ScoreToday, SellList, SellStatusTag, SuggestionTag, scoreNow, suggestionRank } from '../HeldRead'
-import ScoreTrail from '../ScoreTrail'
+import { SellList } from '../HeldRead'
 import { SortTh, useSort } from '../sort'
 import { Card, inr, signed, StockLogo, toneClass } from '../ui'
 import StockLink from '../StockLink'
 import { PageState, StaleNotice } from '../PageState'
 import { pickState } from '../stateRules'
+import { ActToday, DetailPanel, LevelTag, PositionBar, levelOf, retPct } from './PositionParts'
+import type { LevelState } from './positionLevels'
 
 const SECTOR_COLORS = ['#3f55d6', '#1f9d6b', '#e0a72b', '#d9486a', '#7a4fd6', '#17a2b8', '#e8702a', '#5a6b8c']
 
@@ -61,6 +63,21 @@ export default function PaperPositions() {
   })
 
   const rows = positions.data ?? []
+  const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [filter, setFilter] = useState<Filter>('all')
+  const [query, setQuery] = useState('')
+  const [trailOpen, setTrailOpen] = useState(false)
+  const actCount = rows.filter((p) => levelOf(p).act).length
+  const watchCount = rows.filter((p) => levelOf(p).state === 'watch').length
+  const visibleRows = rows.filter(
+    (p) =>
+      (filter === 'all' || (filter === 'act' ? levelOf(p).act : levelOf(p).state === 'watch')) &&
+      (!query.trim() || `${p.symbol} ${p.name ?? ''}`.toLowerCase().includes(query.trim().toLowerCase())),
+  )
+  // The most urgent stock is selected until the owner picks one.
+  const selected =
+    rows.find((p) => p.id === selectedId) ??
+    [...rows].sort((a, b) => STATE_RANK[levelOf(a).state] - STATE_RANK[levelOf(b).state])[0]
   const positionsState = pickState(positions, rows.length === 0)
   const tradesState = pickState(trades)
   const moneyRow = summary.data
@@ -78,6 +95,7 @@ export default function PaperPositions() {
     const before = p.current_value - (p.day_pnl ?? 0)
     return before > 0 ? ((p.day_pnl ?? 0) / before) * 100 : 0
   }
+  const dayPctTotal = currentValue - dayPnl > 0 ? (dayPnl / (currentValue - dayPnl)) * 100 : undefined
   const byDay = [...rows].sort((a, b) => dayPct(b) - dayPct(a))
   const bestDay = byDay[0]
   const worstDay = byDay[byDay.length - 1]
@@ -119,25 +137,24 @@ export default function PaperPositions() {
 
   return (
     <div className="tm-page tm-grid">
-      <Card glow title="Testing" sub="Manual paper trades. Your existing Positions tab is unchanged.">
+      <Card glow title="Open positions" sub="Your manual paper trades.">
         <StaleNotice q={positions} />
         {positionsState !== 'ready' && positionsState !== 'empty' && (
           <PageState kind={positionsState} what="your test positions" error={positions.error} onRetry={positions.refetch} />
         )}
         {moneyRow && (
           <div className="tm-grid tm-cols-3">
-            <Stat label="Invested value" value={money(currentValue)} note={`${rows.length} stocks`} />
+            <Stat label="Invested" value={money(currentValue)} note={`${rows.length} open positions`} />
             <Stat
-              label="Today's P&L"
-              value={`${dayPnl < 0 ? '−' : ''}${money(dayPnl)}`}
+              label="Today's profit / loss"
+              value={`${dayPnl < 0 ? '−' : ''}${money(dayPnl)}${dayPctTotal === undefined ? '' : ` (${signed(dayPctTotal)})`}`}
               tone={toneClass(dayPnl)}
-              note={currentValue - dayPnl > 0 ? signed((dayPnl / (currentValue - dayPnl)) * 100) : undefined}
             />
             <Stat
-              label="Total P&L"
-              value={`${totalPnl < 0 ? '−' : ''}${money(totalPnl)}`}
+              label="Total profit / loss"
+              value={`${totalPnl < 0 ? '−' : ''}${money(totalPnl)}${totalCost > 0 ? ` (${signed((totalPnl / totalCost) * 100)})` : ''}`}
               tone={toneClass(totalPnl)}
-              note={`${totalCost > 0 ? `${signed((totalPnl / totalCost) * 100)} · ` : ''}open ${openPnl < 0 ? '−' : ''}${money(openPnl)}, banked ${moneyRow.realized_pnl < 0 ? '−' : ''}${money(moneyRow.realized_pnl)}`}
+              note={`banked ${moneyRow.realized_pnl < 0 ? '−' : ''}${money(moneyRow.realized_pnl)} + open`}
             />
           </div>
         )}
@@ -145,60 +162,133 @@ export default function PaperPositions() {
 
       {rows.length > 0 && (
         <div className="tm-grid tm-cols-4">
-          {bestDay && dayPct(bestDay) > 0 && (
+          <Card>
+            <Stat
+              label="Open profit / loss"
+              value={`${openPnl < 0 ? '−' : ''}${money(openPnl)}`}
+              tone={toneClass(openPnl)}
+              note={invested > 0 ? signed((openPnl / invested) * 100) : undefined}
+            />
+          </Card>
+          {bestDay && (
             <Card>
-              <Stat label="Best today" value={bestDay.symbol} tone="tm-pos" note={signed(dayPct(bestDay))} />
+              <Stat label="Best today" value={bestDay.symbol} tone={toneClass(dayPct(bestDay))} note={signed(dayPct(bestDay))} />
             </Card>
           )}
-          {worstDay && dayPct(worstDay) < 0 && (
+          {worstDay && (
             <Card>
-              <Stat label="Worst today" value={worstDay.symbol} tone="tm-neg" note={signed(dayPct(worstDay))} />
+              <Stat label="Worst today" value={worstDay.symbol} tone={toneClass(dayPct(worstDay))} note={signed(dayPct(worstDay))} />
             </Card>
           )}
-          {best && best.unrealized_pnl_pct > 0 && (
+          {best && (
             <Card>
-              <Stat label="Best overall (open)" value={best.symbol} tone="tm-pos" note={signed(best.unrealized_pnl_pct * 100)} />
+              <Stat label="Best overall (open)" value={best.symbol} tone={toneClass(best.unrealized_pnl_pct)} note={signed(best.unrealized_pnl_pct * 100)} />
             </Card>
           )}
-          {worst && worst.unrealized_pnl_pct < 0 && (
+          {worst && (
             <Card>
-              <Stat label="Worst overall (open)" value={worst.symbol} tone="tm-neg" note={signed(worst.unrealized_pnl_pct * 100)} />
+              <Stat label="Worst overall (open)" value={worst.symbol} tone={toneClass(worst.unrealized_pnl_pct)} note={signed(worst.unrealized_pnl_pct * 100)} />
             </Card>
           )}
         </div>
       )}
 
-      <Card
-        title="Open positions"
-        sub="Buy new stocks on Portfolio → Manual test. Buy more or sell here. Click a column name to sort, click a stock to see its score day by day."
-      >
-        {close.isError && <p className="tm-dim">Could not sell that position.</p>}
-        {positionsState === 'empty' && (
-          <PageState kind="empty" reason="Nothing held yet. Make a practice buy on Portfolio → Manual test." />
+      {rows.length > 0 && <ActToday rows={rows} onPick={(id) => { setSelectedId(id); setFilter('all') }} />}
+
+      <div className="op-main">
+        <Card title={`Your positions (${rows.length})`}>
+          {close.isError && <p className="tm-dim">Could not sell that position.</p>}
+          {positionsState === 'empty' && (
+            <PageState kind="empty" reason="Nothing held yet. Make a practice buy on Portfolio → Manual test." />
+          )}
+          {rows.length > 0 && (
+            <>
+              <div className="op-toolbar">
+                <Link className="tm-btn" to="/trademind/manual-test">
+                  + Add practice position
+                </Link>
+                {(['all', 'act', 'watch'] as Filter[]).map((f) => (
+                  <button key={f} type="button" className="tm-btn op-chip" aria-pressed={filter === f} onClick={() => setFilter(f)}>
+                    {f === 'all' ? `All (${rows.length})` : f === 'act' ? `Act today (${actCount})` : `Watch (${watchCount})`}
+                  </button>
+                ))}
+                <input
+                  className="tm-input"
+                  type="search"
+                  placeholder="Search stock…"
+                  aria-label="Search stock"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                />
+              </div>
+              <OpenTable
+                rows={visibleRows}
+                selectedId={selected?.id ?? null}
+                onSelect={(id) => {
+                  setSelectedId(id)
+                  setTrailOpen(false)
+                  setBuyingId(null)
+                }}
+              />
+              {visibleRows.length === 0 && <p className="tm-dim">No stock matches this filter.</p>}
+            </>
+          )}
+        </Card>
+        {selected && (
+          <DetailPanel p={selected} trailOpen={trailOpen} onTrail={() => setTrailOpen(!trailOpen)}>
+            <div className="op-actions">
+              <button
+                type="button"
+                className="tm-btn"
+                onClick={() => {
+                  setBuyingId(buyingId === selected.id ? null : selected.id)
+                  setBuyQty('1')
+                  buyMore.reset()
+                }}
+              >
+                {buyingId === selected.id ? 'Close' : 'Buy more'}
+              </button>
+              <button
+                type="button"
+                className="tm-btn tm-btn-danger"
+                disabled={close.isPending}
+                onClick={() => {
+                  if (confirm(`Paper sell all ${selected.quantity} × ${selected.symbol}?`)) close.mutate(selected.id)
+                }}
+              >
+                Paper sell
+              </button>
+            </div>
+            {buyingId === selected.id && (
+              <form
+                className="tm-flex tm-wrap"
+                style={{ gap: '0.5rem', alignItems: 'center' }}
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  buyMore.mutate(selected)
+                }}
+              >
+                <span className="tm-strong">Paper buy more {selected.symbol}</span>
+                <input
+                  className="tm-input"
+                  type="number"
+                  min={1}
+                  value={buyQty}
+                  onChange={(e) => setBuyQty(e.target.value)}
+                  aria-label="Quantity"
+                  style={{ width: 90 }}
+                />
+                <button className="tm-btn" type="submit" disabled={!Number(buyQty) || buyMore.isPending}>
+                  {buyMore.isPending ? 'Buying…' : 'Paper buy'}
+                </button>
+                <span className="tm-dim">Added as a separate lot at today's price.</span>
+                {buyMore.isError && <span className="tm-neg">{(buyMore.error as Error).message}</span>}
+              </form>
+            )}
+          </DetailPanel>
         )}
-        {rows.length > 0 && (
-          <OpenTable
-            rows={rows}
-            selling={close.isPending}
-            onSell={(p) => {
-              if (confirm(`Paper sell all ${p.quantity} × ${p.symbol}?`)) close.mutate(p.id)
-            }}
-            buy={{
-              openId: buyingId,
-              qty: buyQty,
-              pending: buyMore.isPending,
-              error: buyMore.isError ? (buyMore.error as Error).message : null,
-              toggle: (p) => {
-                setBuyingId(buyingId === p.id ? null : p.id)
-                setBuyQty('1')
-                buyMore.reset()
-              },
-              setQty: setBuyQty,
-              confirm: (p) => buyMore.mutate(p),
-            }}
-          />
-        )}
-      </Card>
+      </div>
+
 
       {sectors.length > 0 && (
         <Card title="By sector">
@@ -277,44 +367,43 @@ function Stat({
   )
 }
 
-type OpenKey = 'symbol' | 'sector' | 'day' | 'bought' | 'score' | 'suggestion' | 'value' | 'pnl'
+type Filter = 'all' | 'act' | 'watch'
+type OpenKey = 'symbol' | 'qty' | 'entry' | 'price' | 'pnlAbs' | 'pnl' | 'progress' | 'state'
 
-type BuyMore = {
-  openId: number | null
-  qty: string
-  pending: boolean
-  error: string | null
-  toggle: (p: DetailedPosition) => void
-  setQty: (v: string) => void
-  confirm: (p: DetailedPosition) => void
+const STATE_RANK: Record<LevelState, number> = {
+  stop: 0,
+  near_stop: 1,
+  target: 2,
+  near_target: 3,
+  half: 4,
+  near_half: 5,
+  watch: 6,
+  hold: 7,
 }
 
 function OpenTable({
   rows,
-  selling,
-  onSell,
-  buy,
+  selectedId,
+  onSelect,
 }: {
   rows: DetailedPosition[]
-  selling: boolean
-  onSell: (p: DetailedPosition) => void
-  buy: BuyMore
+  selectedId: number | null
+  onSelect: (id: number) => void
 }) {
-  const [open, setOpen] = useState<number | null>(null)
   const { sorted, sorter } = useSort<DetailedPosition, OpenKey>(
     rows,
     {
       symbol: (p) => p.symbol,
-      sector: (p) => p.sector ?? null,
-      day: (p) => p.day_number ?? null,
-      bought: (p) => p.entry_at,
-      score: (p) => scoreNow(p),
-      suggestion: suggestionRank,
-      value: (p) => p.current_value,
+      qty: (p) => p.quantity,
+      entry: (p) => p.entry_price,
+      price: (p) => p.current_price,
+      pnlAbs: (p) => p.unrealized_pnl,
       pnl: (p) => p.unrealized_pnl_pct,
+      progress: (p) => p.unrealized_pnl_pct,
+      state: (p) => STATE_RANK[levelOf(p).state],
     },
-    { key: 'suggestion', dir: 'asc' },
-    { symbol: 'asc', sector: 'asc', suggestion: 'asc' },
+    { key: 'state', dir: 'asc' },
+    { symbol: 'asc', state: 'asc' },
   )
   return (
     <div className="tm-table-wrap" tabIndex={0} role="region" aria-label="Table, scroll sideways to see more">
@@ -322,120 +411,57 @@ function OpenTable({
         <thead>
           <tr>
             <SortTh sorter={sorter} k="symbol">Stock</SortTh>
-            <SortTh sorter={sorter} k="suggestion" title="What to do today: Sell, Sell half, Watch or Hold">
+            <SortTh sorter={sorter} k="qty" right>Qty</SortTh>
+            <SortTh sorter={sorter} k="entry" right>Entry</SortTh>
+            <SortTh sorter={sorter} k="price" right>Current</SortTh>
+            <SortTh sorter={sorter} k="pnlAbs" right>P&amp;L (₹)</SortTh>
+            <SortTh sorter={sorter} k="pnl" right>P&amp;L %</SortTh>
+            <SortTh sorter={sorter} k="progress">Progress (−4% to +8%)</SortTh>
+            <SortTh sorter={sorter} k="state" title="What to do today, from where the stock sits between stop, half-profit and target">
               Suggestion
             </SortTh>
-            <SortTh sorter={sorter} k="score" right>Score today</SortTh>
-            <SortTh sorter={sorter} k="day">Day</SortTh>
-            <SortTh sorter={sorter} k="bought">Bought on</SortTh>
-            <SortTh sorter={sorter} k="sector">Sector</SortTh>
-            <th className="tm-right">Qty</th>
-            <th className="tm-right">Avg</th>
-            <SortTh sorter={sorter} k="value" right>Value</SortTh>
-            <SortTh sorter={sorter} k="pnl" right>P&amp;L</SortTh>
-            <th />
           </tr>
         </thead>
         <tbody>
           {sorted.map((p) => (
-            <Fragment key={p.id}>
-              <tr className="tm-clickable" onClick={() => setOpen(open === p.id ? null : p.id)}>
-                <td className="tm-strong">
-                  <span className="tm-stock-cell">
-                    <StockLogo symbol={p.symbol} />
+            <tr key={p.id} className={`tm-clickable ${p.id === selectedId ? 'op-row-sel' : ''}`} onClick={() => onSelect(p.id)}>
+              <td className="tm-strong">
+                <span className="tm-stock-cell">
+                  <StockLogo symbol={p.symbol} />
+                  <span>
                     <StockLink symbol={p.symbol} withScore={false} />
                     <CapFlag tier={p.cap_tier} gap />
+                    {p.name && (
+                      <small className="tm-dim" style={{ display: 'block', fontWeight: 400 }}>
+                        {p.name}
+                      </small>
+                    )}
                   </span>
-                </td>
-                <td>
-                  <SuggestionTag p={p} />
-                  <SellStatusTag p={p} />
-                </td>
-                <td className="tm-right">
-                  <ScoreToday p={p} />
-                </td>
-                <td>
-                  <DayCell p={p} />
-                </td>
-                <td className="tm-dim">{shortDay(p.entry_at)}</td>
-                <td className="tm-dim">{p.sector || '—'}</td>
-                <td className="tm-right tm-num">{p.quantity}</td>
-                <td className="tm-right tm-num">₹{inr(p.entry_price)}</td>
-                <td className="tm-right tm-num">₹{inr(p.current_value, 0)}</td>
-                <td className="tm-right tm-num">
-                  <span className={`tm-pnl-pill ${toneClass(p.unrealized_pnl)}`}>{signed(p.unrealized_pnl_pct * 100)}</span>
-                </td>
-                <td>
-                  <div className="tm-flex tm-wrap" style={{ gap: '0.4rem' }}>
-                    <button
-                      type="button"
-                      className="tm-btn"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        buy.toggle(p)
-                      }}
-                    >
-                      {buy.openId === p.id ? 'Close' : 'Buy more'}
-                    </button>
-                    <button
-                      type="button"
-                      className="tm-btn tm-btn-danger"
-                      disabled={selling}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        onSell(p)
-                      }}
-                    >
-                      Paper sell
-                    </button>
-                  </div>
-                </td>
-              </tr>
-              {buy.openId === p.id && (
-                <tr>
-                  <td colSpan={11}>
-                    <form
-                      className="tm-flex tm-wrap"
-                      style={{ gap: '0.5rem', alignItems: 'center', padding: '0.35rem 0' }}
-                      onSubmit={(e) => {
-                        e.preventDefault()
-                        buy.confirm(p)
-                      }}
-                    >
-                      <span className="tm-strong">Paper buy more {p.symbol}</span>
-                      <input
-                        className="tm-input"
-                        type="number"
-                        min={1}
-                        value={buy.qty}
-                        onChange={(e) => buy.setQty(e.target.value)}
-                        aria-label="Quantity"
-                        style={{ width: 90 }}
-                      />
-                      <button className="tm-btn" type="submit" disabled={!Number(buy.qty) || buy.pending}>
-                        {buy.pending ? 'Buying…' : 'Paper buy'}
-                      </button>
-                      <span className="tm-dim">Added as a separate lot at today's price.</span>
-                      {buy.error && <span className="tm-neg">{buy.error}</span>}
-                    </form>
-                  </td>
-                </tr>
-              )}
-              {open === p.id && (
-                <tr>
-                  <td colSpan={11} className="tm-wrap">
-                    {p.suggestion_reason && <p style={{ margin: '0 0 0.5rem' }}>{p.suggestion_reason}</p>}
-                    <ScoreTrail p={p} />
-                  </td>
-                </tr>
-              )}
-            </Fragment>
+                </span>
+              </td>
+              <td className="tm-right tm-num">{p.quantity}</td>
+              <td className="tm-right tm-num">₹{inr(p.entry_price)}</td>
+              <td className="tm-right tm-num">₹{inr(p.current_price)}</td>
+              <td className={`tm-right tm-num ${toneClass(p.unrealized_pnl)}`}>
+                {p.unrealized_pnl < 0 ? '−' : '+'}₹{inr(Math.abs(p.unrealized_pnl), 0)}
+              </td>
+              <td className="tm-right tm-num">
+                <span className={`tm-pnl-pill ${toneClass(p.unrealized_pnl)}`}>{signed(retPct(p))}</span>
+              </td>
+              <td>
+                <PositionBar pct={retPct(p)} />
+              </td>
+              <td>
+                <LevelTag level={levelOf(p)} />
+              </td>
+            </tr>
           ))}
         </tbody>
       </table>
     </div>
   )
 }
+
 
 type PeriodRow = { key: string; trades: number; wins: number; net: number }
 
@@ -469,8 +495,4 @@ function PeriodTable({ rows }: { rows: PeriodRow[] }) {
       </tbody>
     </table>
   )
-}
-
-function shortDay(isoTime: string) {
-  return new Date(isoTime).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
 }

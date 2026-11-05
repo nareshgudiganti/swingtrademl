@@ -323,7 +323,13 @@ export function TradeMindRoutes({
           path="stock/:symbol/analysis"
           element={look === 'new' ? <StockAnalysis /> : <StockDetail />}
         />
-        <Route path="portfolio" element={look === 'new' ? <PortfolioNew owner={ownerConsole} /> : <Portfolio />} />
+        {/* New look, owner: Portfolio is the Open positions screen. Everyone else keeps the paper overview. */}
+        <Route
+          path="portfolio"
+          element={look === 'new' ? ownerConsole && !testingOff ? <PaperPositions /> : <PortfolioNew owner={ownerConsole} /> : <Portfolio />}
+        />
+        {/* The old paper overview, still reachable by URL for the owner. */}
+        <Route path="overview" element={look === 'new' ? <PortfolioNew owner={ownerConsole} /> : <Navigate to="/trademind/portfolio" replace />} />
         <Route path="positions" element={<Positions />} />
         <Route path="positions/:symbol" element={<Positions />} />
         <Route

@@ -7,7 +7,7 @@
 
 import type { BrainDecision, IdeaWord } from '../api/types'
 import { stopOf } from './brainSteps'
-import { finalWord } from './live'
+import { shownWord } from './live'
 
 export type DiscoverFilter = 'ALL' | IdeaWord
 export const DISCOVER_FILTERS: DiscoverFilter[] = ['ALL', 'TRADE', 'WATCH', 'WAIT', 'AVOID']
@@ -28,8 +28,9 @@ export type WhereStopped = { label: string; step: number | null; tone: StopTone;
 
 /** Where the brain stopped this idea: "Passed" for a TRADE, else the step its stored reason points to. */
 export function whereItStopped(d: BrainDecision): WhereStopped {
-  if (finalWord(d) === 'TRADE') return { label: 'Passed', step: null, tone: 'pass', why: null }
-  const stop = stopOf(d)
+  if (shownWord(d) === 'TRADE') return { label: 'Passed', step: null, tone: 'pass', why: null }
+  // No account-money step anywhere in the lists: a refusal about the account's room shows where the brain decided.
+  const stop = stopOf(d, false)
   if (!stop) return { label: 'Not recorded', step: null, tone: 'none', why: null }
   // Steps 6-7 come after the model liked it (the account's safety limits, the final word): "late" = nearly there.
   return { label: STOP_LABEL[stop.step] ?? 'Decision', step: stop.step, tone: stop.step >= 6 ? 'late' : 'early', why: stop.why.text }
@@ -39,7 +40,7 @@ export function whereItStopped(d: BrainDecision): WhereStopped {
 export function discoverCounts(ideas: BrainDecision[]): Record<DiscoverFilter, number> {
   const c: Record<DiscoverFilter, number> = { ALL: ideas.length, TRADE: 0, WATCH: 0, WAIT: 0, AVOID: 0 }
   for (const d of ideas) {
-    const w = finalWord(d) as IdeaWord
+    const w = shownWord(d) as IdeaWord
     if (w in c) c[w] += 1
   }
   return c
@@ -53,7 +54,7 @@ export function filterIdeas(
   const q = (opts.query ?? '').trim().toUpperCase()
   return ideas.filter(
     (d) =>
-      (opts.filter === 'ALL' || finalWord(d) === opts.filter) &&
+      (opts.filter === 'ALL' || shownWord(d) === opts.filter) &&
       (!opts.sector || opts.sectorOf?.[d.symbol.toUpperCase()] === opts.sector) &&
       (q === '' || d.symbol.toUpperCase().includes(q)),
   )
@@ -73,5 +74,5 @@ export function sectorsIn(ideas: BrainDecision[], sectorOf: Record<string, strin
 /** The footer line under the table: the checks in order, and what the score is not. */
 export const DISCOVER_FOOT =
   'Each stock goes through the brain’s checks in order: data check → market → situation → similar cases → model ' +
-  'check → safety check → decision. “Where it stopped” is the first check that held it back, from the reason the ' +
+  'check → decision. “Where it stopped” is the first step that held it back, from the reason the ' +
   'brain stored. The score ranks tonight’s stocks against each other; it is not a chance of profit.'

@@ -43,12 +43,20 @@ import type {
   BrainWhy,
   Candle,
   CompanyView,
+  CompareView,
   ShadowTestView,
   PriceSnapshot,
   CurrentUser,
   AdminUser,
   MyPlan,
   PlanCatalogue,
+  RegistrySlot,
+  RegistrySlotChange,
+  RegistrySlots,
+  LanePicks,
+  LanePickRow,
+  HorizonReport,
+  LanesResponse,
   PlanConfig,
   PlanPick,
   TopPick,
@@ -331,6 +339,22 @@ export const api = {
   planSwitch: () => get<{ enabled: boolean }>('/admin/switch'),
   setPlanSwitch: (enabled: boolean) => put<{ enabled: boolean }>('/admin/switch', { enabled }),
   planCatalogue: () => get<PlanCatalogue>('/admin/features'),
+  // Model registry (phase 1, owner only): reads, plus one write that changes a slot's research notes.
+  modelRegistrySlots: () => get<RegistrySlots>('/model-registry/slots'),
+  modelRegistryChange: (slotKey: string, body: RegistrySlotChange) =>
+    patch<RegistrySlot>(`/model-registry/slots/${encodeURIComponent(slotKey)}`, body),
+  lanePicks: (horizon?: number, cap?: string) => {
+    const q = new URLSearchParams()
+    if (horizon) q.set('horizon', String(horizon))
+    if (cap) q.set('cap', cap)
+    const qs = q.toString()
+    return get<LanePicks>(`/research/lane-picks${qs ? `?${qs}` : ''}`)
+  },
+  lanes: () => get<LanesResponse>('/research/lanes'),
+  horizonReport: () => get<HorizonReport>('/research/lanes/horizon-report'),
+  lanePickRows: (slotKey: string, limit = 100) =>
+    get<LanePickRow[]>(`/research/lanes/${encodeURIComponent(slotKey)}/picks?limit=${limit}`),
+  h05Report: () => get<{ runs: unknown[]; verdict?: { state?: string } }>('/research/h05/report'),
   plans: () => get<PlanConfig[]>('/admin/plans'),
   savePlan: (key: string, body: Pick<PlanConfig, 'features' | 'limits'>) =>
     put<PlanConfig>(`/admin/plans/${key}`, body),
@@ -499,6 +523,7 @@ export const api = {
     get<Candle[]>(`/market-data/candles/${encodeURIComponent(symbol)}?interval=day&limit=${limit}`),
   shadowTest: () => get<ShadowTestView>('/brain/shadow-test'),
   company: (symbol: string) => get<CompanyView>(`/company/${encodeURIComponent(symbol)}`),
+  compare: (symbols: string[]) => get<CompareView>(`/compare?symbols=${encodeURIComponent(symbols.join(','))}`),
   priceSnapshot: (symbol: string) =>
     get<PriceSnapshot>(`/market-data/snapshot/${encodeURIComponent(symbol)}`),
   backfill: (body: Record<string, unknown>) => post<MessageResponse>('/market-data/backfill', body),

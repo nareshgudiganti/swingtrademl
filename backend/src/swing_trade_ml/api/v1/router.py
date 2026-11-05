@@ -15,14 +15,18 @@ from swing_trade_ml.api.v1.endpoints import (
     brain_observatory,
     brain_shadow,
     company,
+    compare,
     experiments,
     finance,
     h05,
     instruments,
     invites,
     jobs,
+    lane_picks,
+    lanes,
     market_data,
     ml,
+    model_registry,
     mutual_funds,
     my_watchlist,
     notifications,
@@ -36,6 +40,7 @@ from swing_trade_ml.api.v1.endpoints import (
     signals,
     strategies,
     system,
+    weekly_report,
 )
 
 api_router = APIRouter()
@@ -63,6 +68,7 @@ protected = [Depends(require_auth)]
 api_router.include_router(instruments.router, dependencies=protected)
 api_router.include_router(market_data.router, dependencies=protected)
 api_router.include_router(company.router, dependencies=protected)
+api_router.include_router(compare.router, dependencies=protected)
 api_router.include_router(strategies.router, dependencies=protected)
 api_router.include_router(signals.router, dependencies=protected)
 api_router.include_router(orders.router, dependencies=protected)
@@ -82,6 +88,10 @@ api_router.include_router(brain_observatory.router, dependencies=protected)
 api_router.include_router(brain_shadow.router, dependencies=protected)
 api_router.include_router(experiments.router, dependencies=protected)
 api_router.include_router(h05.router, dependencies=protected)
+api_router.include_router(weekly_report.router, dependencies=protected)
+api_router.include_router(model_registry.router, dependencies=protected)
+api_router.include_router(lane_picks.router, dependencies=protected)
+api_router.include_router(lanes.router, dependencies=protected)
 api_router.include_router(jobs.router, dependencies=protected)
 api_router.include_router(server_watch.router, dependencies=protected)
 api_router.include_router(beginner.router, dependencies=protected)

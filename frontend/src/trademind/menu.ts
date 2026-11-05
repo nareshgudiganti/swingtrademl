@@ -35,7 +35,7 @@ export const SECTIONS: Section[] = [
       { to: '/trademind/market', label: 'Market' },
       { to: '/trademind/ai', label: 'Why (AI)' },
     ],
-    also: ['/trademind/stock'],
+    also: ['/trademind/stock', '/trademind/compare'],
   },
   {
     id: 'portfolio',

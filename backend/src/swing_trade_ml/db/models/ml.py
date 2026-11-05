@@ -69,6 +69,10 @@ class MLModel(Base, TimestampMixin):
     # the stop. Scoring a barrier model with the endpoint rule would silently
     # mark losing trades correct, so the evaluator branches on this.
     label_kind: Mapped[str] = mapped_column(String(16), default="barrier", index=True)
+    # What the model is FOR: "fold" (evaluation only, a history-test fold), "final" (frozen after a passed
+    # history test; the only kind a shadow lane may score) or "prod" (a verified production model). Null = not
+    # marked; lanes treat it as not eligible. Recording a role never changes status, loading or scoring.
+    model_role: Mapped[str | None] = mapped_column(String(8))
     # Null on endpoint models, which have no lower barrier.
     stop_return_pct: Mapped[float | None] = mapped_column(Float)
 

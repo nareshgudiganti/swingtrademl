@@ -26,6 +26,13 @@ export function finalWord(d: BrainDecision): string {
   return d.overruled_word ?? d.word
 }
 
+/** The word a stock list or page SHOWS: the owner's overrule if any, else the stock-level verdict when only the
+ *  account's room held the idea back (so every screen agrees), else the stored word. Stored decisions never change. */
+export function shownWord(d: BrainDecision): string {
+  if (d.overruled_word) return d.overruled_word
+  return d.stock_verdict_restored && d.stock_verdict ? d.stock_verdict : d.word
+}
+
 export function useLatestRun(): UseQueryResult<BrainRun> {
   return useQuery({
     queryKey: ['brainLatest', 'nightly'],

@@ -832,3 +832,23 @@
   border-color: #3f55d6;
   color: #fff;
 }
+
+/* ---- Discover as slides: a few rows of cards you swipe, instead of one long page to scroll. ---- */
+.tm-new .tmn-w2-rails {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.tm-new .tmn-w2-layouttabs {
+  padding: 0;
+}
+
+.tm-new .tmn-w2-seeall {
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  font: inherit;
+  cursor: pointer;
+  flex-basis: 200px;
+}

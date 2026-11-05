@@ -1,8 +1,25 @@
 # Model Registry, Phase 1: implementation plan (PLAN ONLY, nothing built)
 
-Status: **plan for owner approval, 2026-11-01.** No code, migration or deployment until the owner approves this plan.
+Status: **conditionally approved 2026-11-01, revision 2 below; built on branch `feat/model-registry-phase1`. Merge and deploy wait for explicit owner approval.**
 Owner direction: nine logical model slots (5D/10D/15D x large/mid/small), maximum capacity, not a target; prove one model before
 expanding; the brain ignores the registry; no activation controls.
+
+## Revision 2: the owner's six corrections (as built)
+
+| # | Correction | What was built |
+|---|---|---|
+| 1 | Strict, verified slot mapping | `VERIFIED_NAMES` has exactly three entries (`swing_classifier`, `swing_classifier_midcap`, `swing_classifier_smallcap`) and the horizon must be 5, 10 or 15. Anything else (for example `wf_h15_*`, `*_barrier*`, a 7-day model) is **Unassigned** and shown in a read-only list. The existing `cap_tier()` helper is not used because it defaults unknown names to "large". |
+| 2 | Registry status and strategy usage are separate | The API returns `registry_status` (the `ml_models` row) and `active_strategies` (switched-on `ml_swing` strategies whose resolved model name equals the model's name, only for the ACTIVE version) as two fields. There is no combined "deployed" label. An ACTIVE model with no strategy shows an empty list; unreadable strategies show Unknown. |
+| 3 | No hashing of model files per request | The model file is never opened. A file fingerprint is shown only if training stored one (`metrics["artifact_sha256"]`; none do today), otherwise `Unknown`. Input-list and training-universe fingerprints are computed from the small stored lists and labelled as such. |
+| 4 | Deterministic priorities, concurrent updates | Priority is empty or 1 to 9; duplicates are allowed and ordered by priority, then longer horizon, then large, mid, small, then slot key. Every change must send the `expected_version` it read; the update is one compare-and-set statement, and a stale caller gets 409 with the current slot. |
+| 5 | Research status is descriptive | Labels are `not_started`, `researching`, `paused`, `dropped` (no "validated" or "approved"). The UI and API say it starts nothing; a test shows changing it leaves the slot's models and every other table unchanged. |
+| 6 | Rollback is code first | The migration's downgrade does nothing and keeps the table and the owner's notes. The upgrade is idempotent (skips an existing table, never overwrites a seeded row). Rollback = revert the application code; dropping the table is a separate manual decision. |
+
+Owner answers applied: priority order 15D large, 15D mid, 10D large; the three existing 5D slots start as `researching`; unassigned
+models are listed read-only. Slot keys use the existing size vocabulary: `large`, `midcap`, `smallcap`.
+
+Reach: the page is at `/model-registry`, rendered in the classic shell like `/plans` (so it also opens for the owner while the brain
+is on). It has no menu entry. Forward evidence for the 5D slots is one line read from the existing `GET /research/h05/report`.
 
 ## 1. What Phase 1 is
 

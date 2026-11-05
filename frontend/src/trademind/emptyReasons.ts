@@ -28,7 +28,7 @@ export function noTradeReason(banner: BrainBanner, ideaCount: number, tradeCount
     return `No BUY ideas today: the brain is in "No new trades" mode, so it is not buying anything new. Stocks you hold are still watched.${headline}`
   }
   if (banner.mode === 'DEFENSIVE') {
-    return `No BUY ideas today: the brain is in "Careful" mode (at most two new ideas, at half size) and no stock passed its checks.${headline}`
+    return `No BUY ideas today: the brain is in "Careful" mode (at most two new ideas, each needing extra proof) and no stock passed its checks.${headline}`
   }
   if (ideaCount === 0) return "The brain's last run had no stocks to look at, so there are no ideas."
   return "No BUY ideas today: none of the stocks passed the brain's checks. The others are listed as WATCH, WAIT or AVOID."

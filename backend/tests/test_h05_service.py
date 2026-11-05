@@ -9,6 +9,8 @@ tests with temporary artifacts), so these tests prove the lane's wiring, not any
 from __future__ import annotations
 
 import ast
+import contextlib
+import importlib.util
 import itertools
 import pathlib
 from datetime import UTC, date, datetime, timedelta
@@ -18,7 +20,7 @@ from zoneinfo import ZoneInfo
 
 import joblib
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 import swing_trade_ml.brain.lanes as lanes_pkg
 from swing_trade_ml.brain.lanes import h05_models, h05_report, h05_service
@@ -33,7 +35,9 @@ from swing_trade_ml.ml.features import FEATURE_COLUMNS
 
 IST = ZoneInfo("Asia/Kolkata")
 SIGNAL = date(2026, 10, 14)  # a Wednesday
-NOW = datetime(2026, 10, 14, 13, 0, tzinfo=UTC)  # 18:30 IST on the signal day: after the close, before the entry open
+NOW = datetime(
+    2026, 10, 14, 13, 0, tzinfo=UTC
+)  # 18:30 IST on the signal day: after the close, before the entry open
 _token = itertools.count(910_000)
 
 
@@ -141,12 +145,38 @@ def lane(monkeypatch, db_session):
         p = alt.get(inst.tradingsymbol, scores[inst.tradingsymbol])
         return SimpleNamespace(probability=p, ts=row.ts, price=row.close)
 
+    # create_all builds the tables without triggers; install the append-only guards so every lane test also proves
+    # the real write paths (insert, outcome fill, close_run) pass them (rolled back with the test)
+    spec = importlib.util.spec_from_file_location(
+        "h05_append_only_migration",
+        Path(__file__).resolve().parents[1] / "alembic" / "versions" / "20261103_1500_h05_append_only.py",
+    )
+    guards = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(guards)
+    guards.install_triggers(db_session.connection())
+
     monkeypatch.setattr(P, "require_runnable", lambda *a, **k: None)
     monkeypatch.setattr(h05_service, "market_sessions", lambda db: list(SESSIONS))
     monkeypatch.setattr(h05_service, "score_training_basis", primary)
     monkeypatch.setattr(h05_service, "predict_instrument", production)
     monkeypatch.setattr(h05_service, "verify_models", lambda db: fake_models())
     return SimpleNamespace(scores=scores, alt=alt, calls=calls)
+
+
+@contextlib.contextmanager
+def unguarded(db):
+    """Test scaffolding only: bend a run date or a recorded time the lane itself can never change, with the
+    append-only guards switched off for the edit and back on after (the lane's own writes never use this)."""
+    tables = ("h05_runs", "h05_signals", "h05_group_days", "h05_events")
+    db.flush()
+    for t in tables:
+        db.execute(text(f"ALTER TABLE {t} DISABLE TRIGGER USER"))
+    try:
+        yield
+        db.flush()
+    finally:
+        for t in tables:
+            db.execute(text(f"ALTER TABLE {t} ENABLE TRIGGER USER"))
 
 
 def make_run(db, groups: dict[str, str], excluded=None, run_no=1) -> H05Run:
@@ -267,7 +297,9 @@ def test_ranks_never_mix_groups_even_when_raw_scores_are_comparable(db_session, 
     assert rows["LRG"].group_rank == 1 and rows["SML"].group_rank == 1 and rows["LRG"].selected
 
 
-def test_a_recorded_day_is_never_rewritten_and_future_or_foreign_days_are_refused(db_session, lane, monkeypatch):
+def test_a_recorded_day_is_never_rewritten_and_future_or_foreign_days_are_refused(
+    db_session, lane, monkeypatch
+):
     add_stock(db_session, "A1")
     lane.scores["A1"] = 0.6
     run = make_run(db_session, {"A1": "large"})
@@ -690,8 +722,13 @@ def test_nothing_outside_the_lane_imports_it_except_its_own_owner_only_route():
             continue
         if "brain.lanes" in f.read_text(encoding="utf-8"):
             users.append(rel)
-    # the owner-only route, and the scheduler's disabled-by-default hook (tested in test_h05_job.py)
-    assert sorted(users) == ["api/v1/endpoints/h05.py", "workers/scheduler.py"]
+    # the owner-only route, the read-only side-by-side report, and the scheduler's disabled-by-default hook
+    # (tested in test_h05_job.py)
+    assert sorted(users) == [
+        "api/v1/endpoints/h05.py",
+        "shadow_lanes/horizon_report.py",
+        "workers/scheduler.py",
+    ]
 
 
 def test_no_lane_file_is_part_of_the_sealed_trial_freeze():
@@ -764,7 +801,9 @@ def test_every_scored_selection_is_stored_before_its_simulated_entry(db_session,
     assert row.recorded_at == NOW == gd.recorded_at and row.recorded_at < entry_open
 
 
-def test_a_delayed_retry_after_the_entry_open_is_refused_so_no_opening_fill_can_be_backdated(db_session, lane):
+def test_a_delayed_retry_after_the_entry_open_is_refused_so_no_opening_fill_can_be_backdated(
+    db_session, lane
+):
     add_stock(db_session, "A1")
     lane.scores["A1"] = 0.6
     run = make_run(db_session, {"A1": "large"})
@@ -797,14 +836,18 @@ def test_a_row_recorded_at_or_after_its_entry_open_is_never_simulated(db_session
     run = make_run(db_session, {"A1": "large"})
     h05_service.score_day(db_session, run, SIGNAL, now=NOW)
     row = rows_of(db_session, run)["A1"]
-    row.recorded_at = h05_service.entry_open_time(SIGNAL)  # as if a late write had slipped through
-    db_session.flush()
+    with unguarded(
+        db_session
+    ):  # the guards would (rightly) refuse this; it simulates a bug that got past them
+        row.recorded_at = h05_service.entry_open_time(SIGNAL)  # as if a late write had slipped through
     future(db_session, inst, n1=(100, 103, 100, 102))
     h05_service.evaluate(db_session, run)
     assert row.trade_status == "unresolved" and "recorded_late" in row.trade_flags and row.net_return is None
 
 
-def test_picks_and_baselines_use_the_same_position_size_and_a_too_expensive_stock_leaves_both(db_session, lane):
+def test_picks_and_baselines_use_the_same_position_size_and_a_too_expensive_stock_leaves_both(
+    db_session, lane
+):
     cheap_pick = add_stock(db_session, "CHEAPPICK", price=100.0)
     cheap_other = add_stock(db_session, "CHEAPOTHER", price=100.0)
     dear_pick = add_stock(db_session, "DEARPICK", price=150_000.0)
@@ -820,7 +863,9 @@ def test_picks_and_baselines_use_the_same_position_size_and_a_too_expensive_stoc
     h05_service.evaluate(db_session, run)
     rows = rows_of(db_session, run)
     assert rows["CHEAPPICK"].selected and rows["DEARPICK"].selected  # all four are in the top 5
-    assert rows["CHEAPPICK"].net_return == pytest.approx(rows["CHEAPOTHER"].net_return)  # same rule, same number
+    assert rows["CHEAPPICK"].net_return == pytest.approx(
+        rows["CHEAPOTHER"].net_return
+    )  # same rule, same number
     for sym in ("DEARPICK", "DEAROTHER"):
         assert rows[sym].trade_status == "unresolved" and "too_expensive" in rows[sym].trade_flags
         assert rows[sym].net_return is None

@@ -48,7 +48,7 @@ from swing_trade_ml.schemas import (
     TesterPaperBuyRequest,
     TradeOut,
 )
-from swing_trade_ml.services import brain_position_score, held_read, real_orders, score_history
+from swing_trade_ml.services import brain_position_score, held_read, real_orders, score_history, sell_labels
 from swing_trade_ml.services import capital as capital_service
 from swing_trade_ml.services import portfolio as portfolio_service
 from swing_trade_ml.services.execution import (
@@ -57,7 +57,7 @@ from swing_trade_ml.services.execution import (
     manual_open_position,
     position_action,
 )
-from swing_trade_ml.services.exit_policy import exit_confidence_for
+from swing_trade_ml.services.exit_policy import exit_confidence_for, exit_policy_for_strategy
 from swing_trade_ml.services.holdings_sync import (
     close_positions_no_longer_held,
 )
@@ -263,6 +263,7 @@ def detailed_positions(
             prev_close_by_instrument[inst_id] = float(close)
 
     trails = score_history.trails_for(db, [position.id for position, _, _ in rows])
+    exits_enabled, check_job_ok = sell_labels.exit_check_health(db)
 
     result = []
     for position, symbol, name in rows:
@@ -336,6 +337,17 @@ def detailed_positions(
                 "horizon_days": horizon_days,
                 "action_code": action_code,
                 "action_label": action_label,
+                # "SELL review required" / "Exit check unavailable" / None. Display only.
+                "sell_status": sell_labels.open_label(
+                    price=position.current_price,
+                    stop_loss=position.stop_loss,
+                    take_profit=position.take_profit,
+                    holding_days=(datetime.now(UTC) - position.entry_at).days,
+                    limit_days=exit_policy_for_strategy(position.strategy).time_stop_days,
+                    exits_enabled=exits_enabled,
+                    check_job_ok=check_job_ok,
+                ),
+                "book_label": sell_labels.book_label(position.strategy.name if position.strategy else None),
                 # Day N of the trade, plus one word on what to do (SELL / SELL_PARTIALLY /
                 # WATCH / HOLD) for the Testing and My Holdings tabs. Display only.
                 **held_read.describe(
@@ -1080,6 +1092,8 @@ def list_trades(
                 "return_pct": trade.return_pct,
                 "exit_reason": trade.exit_reason,
                 "exit_reason_label": EXIT_REASON_LABELS.get(trade.exit_reason, trade.exit_reason),
+                "sell_label": sell_labels.trade_label(trade.exit_reason, trade.mode),
+                "book_label": sell_labels.book_label(strategy.name if strategy else None),
                 "is_win": trade.is_win,
                 "stop_loss": position.stop_loss if position else None,
                 "take_profit": position.take_profit if position else None,

@@ -53,13 +53,13 @@ const RULES: Rule[] = [
   {
     kind: 'risk_no_room',
     test: /risk check said no/i,
-    text: "It looked good, but the account's safety limits had no room for it.",
-    showDetail: true,
+    text: 'Not a BUY today. Click this step for the full reasons.',
+    showDetail: false,
   },
   {
     kind: 'risk_not_approved',
     test: /risk check has not approved|risk gate did not approve|risk gate is not installed/i,
-    text: 'The safety check did not approve buying it.',
+    text: 'The brain did not approve a new buy today.',
     showDetail: false,
   },
   {

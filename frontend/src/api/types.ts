@@ -267,6 +267,9 @@ export interface DetailedPosition {
   day_number?: number
   /** A trade is planned to finish within this many trading days (15). */
   trade_limit_days?: number
+  /** "SELL review required" or "Exit check unavailable"; absent when nothing needs saying. */
+  sell_status?: string | null
+  book_label?: string
   /** One word on what to do today. Display only. */
   suggestion?: 'SELL' | 'SELL_PARTIALLY' | 'WATCH' | 'HOLD'
   suggestion_reason?: string
@@ -409,6 +412,23 @@ export interface CompanyView {
   note: string
 }
 
+/** One stock in Stock Compare: its price change per period, from stored daily candles. Display only. */
+export interface CompareStock {
+  symbol: string
+  name: string | null
+  /** ok = has history; no_history = known stock with no stored candles; unknown = not a stock we know. */
+  state: 'ok' | 'no_history' | 'unknown'
+  as_of: string | null
+  last_close: number | null
+  /** Percent change per period label; null = not enough history for that period. */
+  returns: Record<string, number | null>
+}
+
+export interface CompareView {
+  periods: string[]
+  stocks: CompareStock[]
+}
+
 /** Stored market candle used for short-term price-performance summaries. */
 /** A current price with its own timestamp; independent of any stored brain decision. */
 export interface PriceSnapshot {
@@ -483,6 +503,9 @@ export interface Trade {
   return_pct: number
   exit_reason: string | null
   exit_reason_label: string | null
+  /** "PAPER SELL executed" or "Partial SELL completed", and which book it came from (Bot or Testing). */
+  sell_label?: string
+  book_label?: string
   is_win: boolean
   stop_loss: number | null
   take_profit: number | null
@@ -1685,3 +1708,199 @@ export interface ExperimentPickIn {
   note?: string | null
 }
 
+
+// ---- Model registry (phase 1, owner only) --------------------------------
+
+export interface RegistryEvidenceItem {
+  label: string
+  value: number | null
+  note?: string
+}
+
+export interface RegistryModel {
+  slot: string | null
+  provenance: {
+    model_id: number
+    name: string
+    version: string
+    algorithm: string
+    horizon_days: number
+    target_return_pct: number | null
+    stop_return_pct: number | null
+    label_kind: string | null
+    n_inputs: number | null
+    inputs_fingerprint: string | null
+    n_training_symbols: number | null
+    training_universe_fingerprint: string | null
+    n_samples: number | null
+    train_start: string | null
+    train_end: string | null
+    trained_at: string | null
+    calibration: string
+    model_file_fingerprint: string
+  }
+  registry_status: string
+  active_strategies: { strategy: string; mode: string; execution_mode: string }[] | null
+  active_strategies_note: string
+  evidence: {
+    historical: Record<
+      'held_out_auc' | 'precision_at_threshold' | 'top5_ranking' | 'net_return_after_costs' | 'drawdown',
+      RegistryEvidenceItem
+    >
+    forward: RegistryEvidenceItem
+  }
+}
+
+export interface RegistrySlot {
+  slot_key: string
+  horizon_days: number
+  cap_tier: 'large' | 'midcap' | 'smallcap'
+  research_status: string
+  priority: number | null
+  note: string | null
+  version: number
+  updated_at: string | null
+  updated_by: string | null
+  rank: number
+  models: RegistryModel[]
+}
+
+export interface RegistrySlots {
+  ordering: string
+  slots: RegistrySlot[]
+  unassigned: RegistryModel[]
+  statuses: string[]
+  status_note: string
+}
+
+export interface RegistrySlotChange {
+  expected_version: number
+  priority?: number | null
+  research_status?: string
+  note?: string | null
+}
+
+export interface LanePick {
+  horizon_days: number
+  lane: string
+  run_no: number
+  signal_day: string
+  symbol: string
+  cap: 'large' | 'mid' | 'small'
+  cap_label: string
+  rank: number | null
+  score: number | null
+  model_id: number | null
+  model_version: string | null
+  status: string
+  entry_day: string | null
+  entry_price: number | null
+  exit_day: string | null
+  exit_price: number | null
+  exit_reason: string | null
+  net_return: number | null
+}
+
+export interface LanePicks {
+  note: string
+  lanes: { horizon_days: number; lane: string; label: string; live: boolean }[]
+  summary: { picks: number; finished: number; open: number; wins: number; mean_net_return: number | null }
+  rows: LanePick[]
+}
+
+// Per-lane dashboard (owner only): history and forward results are kept apart.
+export type LaneStatus = 'history_only' | 'forward_watching' | 'review_due' | 'inconclusive'
+
+export interface LaneHistory {
+  available: boolean
+  label: string | null
+  ranking: { mean_ic: number | null; lower_bound: number | null; days: number | null }
+  after_cost: { mean_net_return: number | null; trades: number | null }
+  benchmark_excess: number | null
+  drawdown: number | null
+  note: string | null
+}
+
+export interface LaneForward {
+  picks: number
+  completed: number
+  open: number
+  hit_rate: number | null
+  mean_net_return: number | null
+  benchmark_excess: number | null
+  drawdown: number | null
+  uncertainty: { low: number | null; high: number | null }
+  sample_warning: string | null
+  review: { due_after_sessions: number; sessions_done: number; state: 'not_due' | 'due' | 'done' }
+}
+
+export interface LaneSummary {
+  slot_key: string
+  horizon_days: number
+  cap_group: 'large' | 'mid'
+  model: { id: number; name: string; version: string } | null
+  status: LaneStatus
+  started_on: string | null
+  sessions_recorded: number
+  history: LaneHistory
+  forward: LaneForward
+}
+
+export interface LanesResponse {
+  note: string
+  lanes: LaneSummary[]
+}
+
+// One forward report over the 5-, 10- and 15-day tests (owner only). Returns are fractions (0.012 = 1.2%).
+export type HorizonModelRole = 'fold' | 'final' | 'prod' | 'unmarked'
+export type HorizonQualificationState = 'qualified' | 'not_qualified' | 'not_run'
+export type HorizonVerdictState = 'not_enough_days' | 'reading' | 'not_calculated'
+
+export interface HorizonReportRow {
+  key: string
+  horizon_days: number
+  cap_group: 'large' | 'mid' | 'small'
+  source: 'h05' | 'lanes'
+  run_no?: number
+  model: {
+    id: number
+    name: string
+    version: string
+    role: HorizonModelRole
+    role_recorded: boolean
+    role_label: string
+    daily_picks_allowed: boolean
+  } | null
+  qualification: { state: HorizonQualificationState; protocol: string; text: string }
+  forward: {
+    matured_days: number
+    picks: number
+    finished: number
+    net_per_trade: number | null
+    edge_vs_every_stock: number | null
+    hit_rate: number | null
+    nifty: { available: boolean; mean_return: number | null; windows: number; note: string | null }
+  }
+  verdict: { state: HorizonVerdictState; text: string; needed_days: number; rule: string }
+}
+
+export interface HorizonReport {
+  note: string
+  nifty_note: string
+  edge_notes: string[]
+  fold_model_note: string
+  horizons: HorizonReportRow[]
+}
+
+export interface LanePickRow {
+  signal_day: string
+  symbol: string
+  cap_group: string
+  rank: number
+  score: number | null
+  model_version: string
+  recorded_at: string
+  status: string
+  net_return: number | null
+  excess_return: number | null
+}

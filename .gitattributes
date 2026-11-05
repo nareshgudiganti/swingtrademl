@@ -1,0 +1,3 @@
+# Test fixtures that are hashed byte-for-byte must keep LF line endings on every platform.
+backend/tests/fixtures/** text eol=lf
+backend/tests/fixtures/features_before_fcaef35.py.txt text eol=lf

@@ -1,8 +1,9 @@
-# Ten-day strategy protocol (td-protocol-v1) — PROPOSAL rev 2, not signed
+# Ten-day strategy protocol (td-protocol-v1) — rev 2, SIGNED 2026-11-02
 
-Status: **PROPOSAL for owner review, 2026-10-26. Not approved for signing and not approved to run.** No 10D
-model is built and no 10D result exists for this protocol. It becomes frozen only when the owner signs
-section 11 and the signed commit is tagged `td-protocol-v1`. 15D is not touched by anything here.
+Status: **SIGNED by the owner on 2026-11-02 (T1 to T6, as recommended; rules unchanged from rev 2).** It becomes
+frozen when the signed file and the tool are merged to main and that merge is tagged `td-protocol-v1`
+(section 12). No 10D model is built and no 10D result exists yet. Scope: 10-day, large-cap stock list (the 49
+model stocks) only; mid and small caps are not covered by this protocol. 15D is not touched by anything here.
 
 ## 1. Why a 10-day horizon
 
@@ -167,12 +168,40 @@ rule (section 6) is new and has no 15D precedent.
 
 ## 11. Owner decisions (to sign — nothing signed)
 
-- [ ] T1 Setting: **T1-c +6% / −3.5%** (1.71 : 1, as the owner's alternative), or T1-b +6% / −3%, 10 trading days.
-- [ ] T2 Counting rules and stock list (section 6).
-- [ ] T3 Historical gate and outcome words (section 5).
-- [ ] T4 Forward rule and outcome words, including the month-based unit and the 50% single-month limit (section 6).
-- [ ] T5 Checkpoints: month 3 sanity, month 6 verdict, one extension to 9.
-- [ ] T6 Own candidate budget; not a Phase B candidate; Phase B reject set not used.
+- [x] T1 Setting: **T1-c +6% / −3.5%** (1.71 : 1, as the owner's alternative), or T1-b +6% / −3%, 10 trading days.
+- [x] T2 Counting rules and stock list (section 6).
+- [x] T3 Historical gate and outcome words (section 5).
+- [x] T4 Forward rule and outcome words, including the month-based unit and the 50% single-month limit (section 6).
+- [x] T5 Checkpoints: month 3 sanity, month 6 verdict, one extension to 9.
+- [x] T6 Own candidate budget; not a Phase B candidate; Phase B reject set not used.
+
+**Signature record.** Owner, 2026-11-02: "sign T1 to T6", given after the plain-English table of T1 to T6 and
+the recommendation "yes" on each. T1 = **T1-c, +6% / −3.5%, 10 trading days**. Nothing in sections 1 to 10 was
+changed by signing. Signing does not authorise running the history test (section 12 steps 2 to 4 come first),
+starting the forward lane, any order (paper or real), or any change to 5D, 15D, Phase B or the sealed trial.
+
+## 11a. Clarifications recorded before the tag (2026-11-02)
+
+These clarify how the signed rules are run; they change none of T1 to T6.
+
+- **C1 Label.** Every history result carries the label "HISTORICAL GATE - SURVIVOR-BIASED UNIVERSE (today's 49
+  stocks)": the 49 are today's watchlist, so stocks dropped or delisted over the years are missing. A pass allows a
+  watch-only lane to be proposed; it is never proof (section 3).
+- **C2 Costs.** The history uses the shared scorer's Rs 40,000 position for charges and slippage 0.10% per side in
+  total (pinned; the run refuses if the setting differs). The Rs 1,00,000 position in section 6 rule 4 applies to
+  the forward lane.
+- **C3 Levels.** Stop and target levels follow the slippage-adjusted fill, as the shared scorer does.
+- **C4 Execution limits.** No liquidity, circuit-limit, halt or volume-cap checks are modelled. This is recorded
+  in every report and must be resolved before any realistic portfolio simulation or trading approval.
+- **C5 One run, controlled technical reruns.** The gate runs once, on the confirmation window only, and a finished
+  report is never rerun or tuned against. If an attempt fails for infrastructure reasons (an execution failure or a
+  data-integrity failure) and leaves a ledger row but no report, it may be rerun with `--technical-rerun`, at most
+  twice, and only with one incident note per failed attempt in `docs/brain/evidence/td_v1/incidents/`. A note
+  names the kind, the cause, states "Result read: none" and "Same code and rules: yes". Each rerun is logged in
+  the exposure ledger. Reports are written whole or not at all and nothing is printed before they exist, so a result
+  cannot be seen and then called a failure. A third rerun, or any change of rule, is td-protocol-v2.
+- **C6 Training list.** Fold models train on an explicit sorted list of the 49; any other stock count refuses
+  the run before anything is written.
 
 ## 12. Freezing mechanics
 

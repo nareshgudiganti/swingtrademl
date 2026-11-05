@@ -247,6 +247,11 @@ def start_scheduler() -> None:
     # h05 evaluation lane (disabled by default): the daily job exists only when the owner has switched the
     # lane on AND accepted the protocol hash. Nothing of the lane is imported otherwise.
     add_h05_job(scheduler)
+    add_weekly_paper_report_job(scheduler)
+
+    # Shared shadow lanes (10D / 15D, disabled by default): the daily job exists only when the owner has set
+    # LANE_SHADOW_ENABLED. It never picks a model by itself and never trades.
+    add_lane_job(scheduler)
 
     # Observe only: records each job's last run for Admin > Jobs (workers/job_runs.py). Never raises.
     job_runs.attach(scheduler)
@@ -273,6 +278,22 @@ def add_h05_job(target: BackgroundScheduler) -> bool:
         return added
     except Exception as exc:  # noqa: BLE001
         log.error("h05.job_registration_failed", error_kind=type(exc).__name__)
+        return False
+
+
+def add_lane_job(target: BackgroundScheduler) -> bool:
+    """Register the shared shadow-lane daily job only if LANE_SHADOW_ENABLED is true. Never raises: an
+    evaluation lane must not stop the bot from starting. Disabled (the default) imports nothing of it."""
+    try:
+        if not settings.LANE_SHADOW_ENABLED:
+            return False
+        from swing_trade_ml.shadow_lanes import lane_job
+
+        added = lane_job.register(target)
+        log.info("lane_shadow.job", registered=added)
+        return added
+    except Exception as exc:  # noqa: BLE001
+        log.error("lane_shadow.job_registration_failed", error_kind=type(exc).__name__)
         return False
 
 
@@ -329,6 +350,19 @@ def add_brain_jobs(target: BackgroundScheduler) -> None:
         CronTrigger(day_of_week="sat", hour=11, minute=0, timezone=IST),
         id="brain_weekly_health",
         replace_existing=True,
+    )
+
+
+def add_weekly_paper_report_job(target: BackgroundScheduler) -> None:
+    """Sunday 09:30 IST, its own job id, clear of the brain's Saturday 11:00 health report."""
+    target.add_job(
+        jobs.job_weekly_paper_report,
+        CronTrigger(day_of_week="sun", hour=9, minute=30, timezone=IST),
+        id="weekly_paper_report",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=1800,
     )
 
 

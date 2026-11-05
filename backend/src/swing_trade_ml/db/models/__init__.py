@@ -14,6 +14,7 @@ from swing_trade_ml.db.models.brain import (
     FeatureSnapshot,
 )
 from swing_trade_ml.db.models.brain_golive import BrainApproval, BrainStageChange
+from swing_trade_ml.db.models.corporate_actions import CorporateAction, PositionAdjustment
 from swing_trade_ml.db.models.company import CompanyAnnouncement, CompanyShareholding
 from swing_trade_ml.db.models.experiments import (
     ExperimentCohort,
@@ -40,6 +41,7 @@ from swing_trade_ml.db.models.finance import (
     FinanceTransaction,
 )
 from swing_trade_ml.db.models.invites import InviteRequest
+from swing_trade_ml.db.models.lane_shadow import LaneOutcome, LanePick
 from swing_trade_ml.db.models.lanes import H05Event, H05GroupDay, H05Run, H05Signal
 from swing_trade_ml.db.models.market import (
     Candle,
@@ -51,6 +53,7 @@ from swing_trade_ml.db.models.market import (
 )
 from swing_trade_ml.db.models.ml import MLModel, Prediction
 from swing_trade_ml.db.models.mutual_funds import MutualFund, MutualFundHolding, MutualFundNav
+from swing_trade_ml.db.models.registry import ModelResearchSlot
 from swing_trade_ml.db.models.safety import RiskEvent, SystemState
 from swing_trade_ml.db.models.session import BrokerSession, PlanSettings, SubscriptionPlan, User
 from swing_trade_ml.db.models.trading import (
@@ -83,6 +86,7 @@ __all__ = [
     "CandleCorrection",
     "CapitalDeposit",
     "CompanyAnnouncement",
+    "CorporateAction",
     "CompanyShareholding",
     "DailyDelivery",
     "ExperimentCohort",
@@ -102,11 +106,18 @@ __all__ = [
     "FinanceRecurringBill",
     "FinanceRecurringBillPayment",
     "FinanceTransaction",
+    "H05Event",
+    "H05GroupDay",
+    "H05Run",
+    "H05Signal",
+    "LaneOutcome",
+    "LanePick",
     "InstitutionalFlow",
     "Instrument",
     "InviteRequest",
     "LoginCode",
     "MLModel",
+    "ModelResearchSlot",
     "MutualFund",
     "MutualFundHolding",
     "MutualFundNav",
@@ -114,6 +125,7 @@ __all__ = [
     "PlanSettings",
     "PortfolioSnapshot",
     "Position",
+    "PositionAdjustment",
     "PositionScore",
     "Prediction",
     "Quote",

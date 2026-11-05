@@ -77,6 +77,7 @@ JOB_LABELS: dict[str, tuple[str, str]] = {
     "brain_learn": ("Brain: weekly learning", "The brain's weekly learning run"),
     "brain_weekly_health": ("Brain: weekly health report", "Weekly report on the brain"),
     "sync_instruments": ("Stock list refresh", "Refreshes Zerodha's list of stocks"),
+    "weekly_paper_report": ("Weekly paper report", "Sunday summary of the 5-day lane, Bot and Testing paper books"),
 }
 
 

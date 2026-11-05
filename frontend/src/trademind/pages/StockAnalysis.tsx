@@ -12,7 +12,7 @@ import type { StockBriefData } from '../beginner/types'
 import { NO_EVENTS } from '../beginner/UpcomingEvents'
 import { changeHeadline, rankLine } from '../changes'
 import { useSymbolCaps } from '../cap'
-import { finalWord, stockSituations, useLatestRun } from '../live'
+import { stockSituations, useLatestRun } from '../live'
 import { barsFrom } from '../live-stock'
 import { scorePoints, SCORE_HINT } from '../scoreText'
 import { BrainGate, Candles, inr } from '../ui'
@@ -22,8 +22,10 @@ import {
   buyLevel,
   CompanyCard,
   PlanLadder,
+  QuickAnswers,
   ScoreMonitor,
   scoreToday,
+  shownWord,
   StockHeader,
   stepPasses,
   useStockData,
@@ -60,7 +62,7 @@ function StockAnalysisView({ decision: d, run }: { decision: BrainDecision; run:
   const data = useStockData(d, run)
   const [params, setParams] = useSearchParams()
   const tab = params.get('tab') === 'company' ? 'company' : 'brain'
-  const word = finalWord(d)
+  const word = shownWord(d)
   const back = `/trademind/stock/${encodeURIComponent(d.symbol)}`
   const cap = caps.get(d.symbol.toUpperCase())
   const steps = brainSteps(d, run, false)
@@ -137,6 +139,7 @@ function StockAnalysisView({ decision: d, run }: { decision: BrainDecision; run:
         <WhatAISees decision={d} run={run} />
       </div>
 
+      <QuickAnswers brief={data.brief} />
       <Stories brief={data.brief} />
 
       <div className="sp-split">

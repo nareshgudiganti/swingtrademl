@@ -4,6 +4,10 @@ Rules: docs/superpowers/specs/2026-11-05-prediction-reliability-rules.md. It mea
 guarantees accuracy or profit. Pure functions plus thin SELECT-only readers; no writes, no orders, no
 thresholds changed. Horizons and models are separate series and are never pooled. Only completed outcomes
 count. Days on or after the trial seal show counts only.
+
+DIAGNOSTIC ONLY (owner-approved 2026-11-05): a state (HEALTHY, WATCH, FAIL, INSUFFICIENT DATA) is a label on a
+report. Nothing here, and nothing that imports this module, may activate, retrain, disable, promote or change
+any model, rule or order. This module imports no such code and writes nothing.
 """
 
 from __future__ import annotations
@@ -22,7 +26,7 @@ import numpy as np
 # isort: off
 from swing_trade_ml.services import trial_seal  # first: breaks an existing import cycle with trial_journal
 from swing_trade_ml.brain.trial_journal import GATE_MIN_IDEAS, MIN_SESSIONS, SCORE_LINE, TOP_N
-from swing_trade_ml.brain.walk_forward import bootstrap_low
+from swing_trade_ml.brain.walk_forward import bootstrap_low, daily_edge
 from swing_trade_ml.ml.calibrated_model import reliability_table
 
 # isort: on
@@ -44,23 +48,26 @@ NOT_RECORDED = "not recorded for this source"
 
 
 # The existing sample gates, reused and never changed here.
+# The 5D lane's gate is copied, not imported: nothing outside the 5D lane package may import it (a test in
+# test_h05_service.py enforces that). A test here checks the copy equals h05_protocol.RUN_VALUES.
+H05_MIN_MATURED_DAYS = 40
+
+
 def _gates() -> dict[str, dict[str, int]]:
-    from swing_trade_ml.brain.lanes.h05_protocol import RUN_VALUES
     from swing_trade_ml.shadow_lanes.lane_review import CHECKPOINTS
 
-    h05_days = int(RUN_VALUES["min_evidence_per_group"]["matured_signal_days"])  # type: ignore[index]
     return {
         "brain": {"min_days": MIN_SESSIONS, "min_completed": GATE_MIN_IDEAS},
         "lane": {"min_days": CHECKPOINTS[0], "min_completed": CHECKPOINTS[0]},
-        "h05": {"min_days": h05_days, "min_completed": h05_days},
+        "h05": {"min_days": H05_MIN_MATURED_DAYS, "min_completed": H05_MIN_MATURED_DAYS},
     }
 
 
-# PROPOSED health rules: the owner signs these before any real outcome is read.
+# Health rules (owner-approved 2026-11-05; docs "Health states"). Named constants, one place.
 HEALTH_RULES = {
-    "brier_fail_margin": 0.02,  # Brier worse than the naive score by more than this -> FAIL
-    "boot_low_healthy_above": 0.0,  # bootstrap lower bound of the daily net result must exceed this
-    "psi_watch": 0.2,  # score drift at or above this -> WATCH
+    "brier_fail_margin": 0.02,  # ONLY for a series flagged calibrated: Brier worse than naive by more -> FAIL
+    "boot_low_healthy_above": 0.0,  # lower bound of the daily net result and of the paired advantage
+    "psi_watch": 0.2,  # score drift at or above this -> WATCH, only with a valid reference sample
     "wilson_z": 1.96,
 }
 
@@ -110,12 +117,18 @@ def effective_blocks(days: Sequence[date], horizon: int) -> int:
 
 
 def psi_flag(reference: Sequence[float] | None, recent: Sequence[float] | None) -> dict:
-    """Score drift. 'not measured' unless both samples are given and large enough."""
-    if reference is None or recent is None:
-        return {"measured": False, "text": "drift: not measured"}
-    from swing_trade_ml.brain.modules.m09_learn.drift import psi
+    """Score drift. 'not measured' (no effect on any state) unless a reference sample and a recent sample
+    are both given and each has at least `drift.MIN_ROWS` scores. Callers pass unsealed scores only."""
+    from swing_trade_ml.brain.modules.m09_learn.drift import MIN_ROWS, psi
 
-    v = psi(np.asarray(reference, float), np.asarray(recent, float))
+    if reference is None or recent is None:
+        return {"measured": False, "text": "drift: not measured (no reference sample)"}
+    ref = np.asarray([x for x in reference if x is not None], float)
+    rec = np.asarray([x for x in recent if x is not None], float)
+    ref, rec = ref[~np.isnan(ref)], rec[~np.isnan(rec)]
+    if len(ref) < MIN_ROWS or len(rec) < MIN_ROWS:
+        return {"measured": False, "text": "drift: not measured (too few scores)"}
+    v = psi(ref, rec)
     if v is None:
         return {"measured": False, "text": "drift: not measured (too few scores)"}
     return {"measured": True, "psi": v, "text": f"drift (PSI): {v:.2f}"}
@@ -125,8 +138,53 @@ def _mean(xs: Sequence[float]) -> float | None:
     return float(sum(xs) / len(xs)) if xs else None
 
 
+@dataclass(frozen=True, slots=True)
+class _Val:
+    """The one attribute walk_forward.daily_edge reads from an outcome."""
+
+    net_return: float | None
+
+
+def paired_days(mine: Sequence[Rec], theirs: Sequence[Rec], field: str) -> list[float]:
+    """Per day (in day order): mean of `mine` minus mean of `theirs`, completed values only, days where both
+    exist. This is walk_forward.daily_edge, the same paired daily gap the trial journal uses (field is "ret"
+    or "hit"). A day missing on either side is skipped, never filled with 0."""
+    outs: dict[tuple[str, date], _Val] = {}
+    picks: dict[date, list[str]] = defaultdict(list)
+    everyone: dict[date, list[str]] = defaultdict(list)
+    for rs, into in ((mine, picks), (theirs, everyone)):
+        for r in rs:
+            v = getattr(r, field)
+            if v is None:
+                continue
+            outs.setdefault((r.symbol, r.day), _Val(float(v)))
+            into[r.day].append(r.symbol)
+    return daily_edge({d: picks[d] for d in sorted(picks)}, everyone, outs)  # type: ignore[arg-type]
+
+
+def paired_days_own_baseline(recs: Sequence[Rec]) -> list[float]:
+    """Lanes: each pick carries its own same-day baseline. Per day: mean of (return - baseline), only
+    picks that have both. A pick with no stored baseline is left out (never treated as a 0 baseline)."""
+    by_day: dict[date, list[float]] = defaultdict(list)
+    for r in recs:
+        if r.ret is not None and r.baseline_ret is not None:
+            by_day[r.day].append(r.ret - r.baseline_ret)
+    return [sum(v) / len(v) for _, v in sorted(by_day.items())]
+
+
+def block_bounds(diffs: Sequence[float]) -> tuple[float | None, float | None]:
+    """5th and 95th percentile of the average paired gap, by resampling runs of BLOCK_DAYS days
+    (walk_forward.bootstrap_low, reused; the upper bound is the same function on the negated gaps).
+    (None, None) when there are too few days for that test."""
+    lo = bootstrap_low(list(diffs)) if diffs else None
+    neg = bootstrap_low([-d for d in diffs]) if diffs else None
+    return lo, (None if neg is None else -neg)
+
+
 def measure(recs: Sequence[Rec], horizon: int, baseline: Sequence[Rec] | None = None) -> dict:
-    """Figures for one pick set (unsealed rows only). Open rows are counted apart and never averaged."""
+    """Figures for one pick set (unsealed rows only). Open rows are counted apart and never averaged.
+    Accuracy (hit rate), economics (net result), advantage over the baseline (paired by day) and calibration
+    are separate figures; nothing here blends them."""
     hit_done = [r for r in recs if r.hit is not None]
     pnl_done = [r for r in recs if r.ret is not None]
     n, k = len(hit_done), sum(r.hit for r in hit_done)  # type: ignore[misc]
@@ -145,33 +203,35 @@ def measure(recs: Sequence[Rec], horizon: int, baseline: Sequence[Rec] | None = 
         probs = np.array([r.score for r in scored], float)
         ys = np.array([r.hit for r in scored], float)
         out["brier"] = brier(probs, ys)  # type: ignore[arg-type]
-        out["brier_naive"] = None  # filled below once the baseline hit rate is known
         out["calibration"] = [b for b in reliability_table(ys, probs) if b["n"]]
     else:
-        out["brier"] = out["brier_naive"] = None
+        out["brier"] = None
         out["calibration"] = []
+    out["brier_naive"] = None  # filled below once the baseline hit rate is known
     by_day: dict[date, list[float]] = defaultdict(list)
     for r in pnl_done:
         by_day[r.day].append(r.ret)  # type: ignore[arg-type]
     daily = [sum(v) / len(v) for _, v in sorted(by_day.items())]
     out["avg_net"] = _mean([r.ret for r in pnl_done])  # type: ignore[misc]
     out["boot_low"] = bootstrap_low(daily) if daily else None
-    # excess over the matched baseline
+    # Advantage over the baseline: paired by day, then block-bootstrapped (decision 3).
     if baseline is not None:
         bh = [r for r in baseline if r.hit is not None]
         out["baseline_hit_rate"] = sum(r.hit for r in bh) / len(bh) if bh else None  # type: ignore[misc]
-        bday: dict[date, list[float]] = defaultdict(list)
-        for r in baseline:
-            if r.ret is not None:
-                bday[r.day].append(r.ret)
-        diffs = [_mean(by_day[d]) - _mean(bday[d]) for d in sorted(by_day) if d in bday]  # type: ignore[operator]
-        out["avg_excess"] = _mean(diffs)
-        out["baseline_avg_net"] = _mean([x for v in bday.values() for x in v])
+        net_diffs = paired_days(recs, baseline, "ret")
+        hit_diffs = paired_days(recs, baseline, "hit")
+        out["baseline_avg_net"] = _mean([r.ret for r in baseline if r.ret is not None])  # type: ignore[misc]
     else:
-        ex = [r.ret - r.baseline_ret for r in pnl_done if r.baseline_ret is not None]  # type: ignore[operator]
         out["baseline_hit_rate"] = None
-        out["avg_excess"] = _mean(ex)
+        net_diffs = paired_days_own_baseline(recs)
+        hit_diffs = []
         out["baseline_avg_net"] = _mean([r.baseline_ret for r in pnl_done if r.baseline_ret is not None])  # type: ignore[misc]
+    out["avg_excess"] = _mean(net_diffs)
+    out["excess_days"] = len(net_diffs)
+    out["excess_boot_low"], out["excess_boot_high"] = block_bounds(net_diffs)
+    out["hit_excess"] = _mean(hit_diffs)
+    out["hit_excess_days"] = len(hit_diffs)
+    out["hit_boot_low"], out["hit_boot_high"] = block_bounds(hit_diffs)
     # Naive score: always say the baseline's hit rate (the pool's own when no baseline pool exists).
     if out["brier"] is not None:
         p0 = out["baseline_hit_rate"] if out["baseline_hit_rate"] is not None else out["hit_rate"]
@@ -179,8 +239,30 @@ def measure(recs: Sequence[Rec], horizon: int, baseline: Sequence[Rec] | None = 
     return out
 
 
-def health(m: dict | None, gate: dict[str, int], *, sealed: bool = False, drift: dict | None = None) -> dict:
-    """PROPOSED rules (docs, 'Health states'). Never HEALTHY from sealed data or below the sample gates."""
+def ranking(top: Sequence[Rec], rest: Sequence[Rec]) -> dict:
+    """Ranking performance, apart from the states: Top 5 against ranks 6-20, paired by day."""
+    net, hit = paired_days(top, rest, "ret"), paired_days(top, rest, "hit")
+    return {
+        "net_gap": _mean(net),
+        "net_gap_days": len(net),
+        "net_gap_bounds": block_bounds(net),
+        "hit_gap": _mean(hit),
+        "hit_gap_days": len(hit),
+        "hit_gap_bounds": block_bounds(hit),
+    }
+
+
+def health(
+    m: dict | None,
+    gate: dict[str, int],
+    *,
+    sealed: bool = False,
+    drift: dict | None = None,
+    calibrated: bool = False,
+) -> dict:
+    """Diagnostic label only (docs, 'Health states'); it changes nothing. Never HEALTHY from sealed data,
+    below the sample gates, or with any required evidence missing (missing is None, never 0).
+    Brier gates a state only when the series is flagged `calibrated` (default: it never gates)."""
     if sealed or m is None:
         return {
             "state": INSUFFICIENT,
@@ -199,26 +281,43 @@ def health(m: dict | None, gate: dict[str, int], *, sealed: bool = False, drift:
     if m.get("avg_excess") is None:
         return {"state": INSUFFICIENT, "why": "no matched baseline"}
     rules = HEALTH_RULES
-    lo, hi = m["hit_wilson"]
-    bhr = m.get("baseline_hit_rate")
-    brier_bad = m["brier"] is not None and m["brier"] > m["brier_naive"] + rules["brier_fail_margin"]
-    if (
-        (bhr is not None and hi < bhr)
+    use_brier = bool(calibrated and m.get("brier") is not None and m.get("brier_naive") is not None)
+    brier_bad = use_brier and m["brier"] > m["brier_naive"] + rules["brier_fail_margin"]
+    clearly_worse = (
+        (m.get("excess_boot_high") is not None and m["excess_boot_high"] < 0)
+        or (m.get("hit_boot_high") is not None and m["hit_boot_high"] < 0)
         or (m["avg_net"] is not None and m["avg_net"] < 0 and m["avg_excess"] < 0)
-        or brier_bad
-    ):
-        return {"state": FAIL, "why": "worse than its baseline or badly calibrated"}
-    drifting = bool(drift and drift.get("measured") and drift["psi"] >= rules["psi_watch"])
+    )
+    if clearly_worse or brier_bad:
+        why = "worse than its baseline" + (" or badly calibrated" if brier_bad else "")
+        return {"state": FAIL, "why": why}
+    drifting = bool(
+        drift
+        and drift.get("measured")
+        and drift.get("psi") is not None
+        and drift["psi"] >= rules["psi_watch"]
+    )
+    floor = rules["boot_low_healthy_above"]
+    missing = []
+    if m.get("excess_boot_low") is None:
+        missing.append("paired block test needs more days")
+    if m["boot_low"] is None:
+        missing.append("net-result block test needs more days")
+    if m.get("hit_excess") is None:
+        missing.append("baseline hit rate not recorded")
+    elif m.get("hit_boot_low") is None:
+        missing.append("paired hit-rate block test needs more days")
+    if missing:
+        return {"state": WATCH, "why": "cannot be called healthy: " + "; ".join(missing)}
     ok = (
-        (bhr is None or lo > bhr)
-        and m["avg_excess"] > 0
-        and m["boot_low"] is not None
-        and m["boot_low"] > rules["boot_low_healthy_above"]
-        and (m["brier"] is None or m["brier"] <= m["brier_naive"])
+        m["excess_boot_low"] > floor
+        and m["boot_low"] > floor
+        and m["hit_boot_low"] > floor
+        and (not use_brier or m["brier"] <= m["brier_naive"])
     )
     if ok and not drifting:
-        return {"state": HEALTHY, "why": "beats its baseline with a margin; calibrated"}
-    return {"state": WATCH, "why": "drift" if drifting else "not clearly better than its baseline"}
+        return {"state": HEALTHY, "why": "beats its baseline in paired day-blocks, with a margin"}
+    return {"state": WATCH, "why": "score drift" if ok else "not clearly better than its baseline"}
 
 
 def split_sets(recs: Sequence[Rec]) -> dict[str, list[Rec]]:
@@ -226,7 +325,9 @@ def split_sets(recs: Sequence[Rec]) -> dict[str, list[Rec]]:
         "top5": [r for r in recs if r.rank is not None and r.rank <= TOP_N],
         "trade": [r for r in recs if r.trade],
         "over_80": [
-            r for r in recs if r.rank is not None and r.rank <= TOP_N and (r.score or 0) >= SCORE_LINE
+            r
+            for r in recs
+            if r.rank is not None and r.rank <= TOP_N and r.score is not None and r.score >= SCORE_LINE
         ],
         "ranks_6_20": [r for r in recs if r.rank is not None and 6 <= r.rank <= 20],
         "baseline": list(recs),
@@ -240,13 +341,14 @@ def report_series(
     only, and results are computed from open days alone, so no total can include a sealed result."""
     gate = _gates()[source]
     horizon = key["horizon"]
+    calibrated = bool(key.get("calibrated", False))  # default: score not an established probability
     sealed_recs = [r for r in recs if trial_seal.is_sealed_day(r.day)]
     open_recs = [r for r in recs if not trial_seal.is_sealed_day(r.day)]
     sealed_by_set = {
         name: trial_seal.counts_only(
             {
                 "picked": len(rs),
-                "completed": sum(1 for r in rs if r.hit is not None or r.ret is not None),
+                "finished": sum(1 for r in rs if r.hit is not None or r.ret is not None),
                 "open": sum(1 for r in rs if r.hit is None and r.ret is None),
                 "avg_net": None,
                 "hit_rate": None,
@@ -273,10 +375,13 @@ def report_series(
                 gate,
                 sealed=bool(sealed_recs) and not open_recs,
                 drift=drift,
+                calibrated=calibrated,
             )
     return {
         "key": key,
+        "calibrated": calibrated,
         "sets": out_sets,
+        "ranking": ranking(sets["top5"], sets["ranks_6_20"]) if has_baseline_pool and open_recs else None,
         "health": healths,
         "sealed_counts": sealed_by_set if sealed_recs else None,
         "sealed_note": trial_seal.SEALED_TEXT if sealed_recs else None,
@@ -287,10 +392,14 @@ def report_series(
 def build_report(series: Sequence[tuple[dict, Sequence[Rec], str, bool]]) -> dict:
     """series: (key, records, source, has_baseline_pool). Each series is reported on its own; there is no
     combined figure across horizons or models."""
-    return {
-        "disclaimer": "This measures evidence. It does not guarantee accuracy or profit.",
+    rep = {
+        "disclaimer": "This measures evidence. It does not guarantee accuracy or profit. States are labels "
+        "only: they never switch, retrain, disable or promote any model.",
         "series": [report_series(k, r, s, has_baseline_pool=b) for k, r, s, b in series],
     }
+    if not rep["series"]:
+        rep["empty"] = {"state": INSUFFICIENT, "why": "no predictions recorded for this range"}
+    return rep
 
 
 # ----------------------------------------------------------------------------- readers (SELECT only)
@@ -401,6 +510,8 @@ def _pct(x: float | None, d: int = 1) -> str:
 
 def plain_report(rep: dict) -> str:
     lines = ["# Prediction Reliability", "", rep["disclaimer"], ""]
+    if rep.get("empty"):
+        lines += [f"{rep['empty']['state']}: {rep['empty']['why']}", ""]
     for s in rep["series"]:
         k = s["key"]
         lines += [f"## {k['source']} | {k['horizon']}-day | {k['model']} | {k['group']}", ""]
@@ -415,19 +526,31 @@ def plain_report(rep: dict) -> str:
                 f"- {SET_NAMES[name]}: picked {m['picked']}, completed {m['completed']}, open {m['open']}, "
                 f"independent blocks {m['effective_blocks']}; hit {_pct(m['hit_rate'])}"
                 + (f" (95% range {_pct(w[0])} to {_pct(w[1])})" if w else "")
-                + f"; avg net {_pct(m['avg_net'], 2)}; vs baseline {_pct(m['avg_excess'], 2)}"
-                + f"; bootstrap low {_pct(m['boot_low'], 2)}"
+                + f"; avg net {_pct(m['avg_net'], 2)}"
+                + f"; vs baseline (paired by day, {m['excess_days']} days) {_pct(m['avg_excess'], 2)}"
+                + f"; net bootstrap low {_pct(m['boot_low'], 2)}"
+                + f"; paired bootstrap low {_pct(m['excess_boot_low'], 2)}"
                 + (
-                    f"; Brier {m['brier']:.3f} (naive {m['brier_naive']:.3f})"
-                    if m["brier"] is not None
+                    f"; Brier {m['brier']:.3f} (naive {m['brier_naive']:.3f}; information only"
+                    + ("" if s["calibrated"] else ", score not established as calibrated")
+                    + ")"
+                    if m["brier"] is not None and m["brier_naive"] is not None
                     else ""
                 )
                 + (f" -> {h['state']} ({h['why']})" if h else "")
             )
+        rk = s.get("ranking")
+        if rk and rk["net_gap_days"]:
+            lo, hi = rk["net_gap_bounds"]
+            lines.append(
+                f"- Ranking (Top 5 minus ranks 6-20, paired by day): net {_pct(rk['net_gap'], 2)} over "
+                f"{rk['net_gap_days']} days (block range {_pct(lo, 2)} to {_pct(hi, 2)}); "
+                f"hit {_pct(rk['hit_gap'])}"
+            )
         if s["sealed_counts"]:
             c = s["sealed_counts"]["top5"]
             lines.append(
-                f"- Sealed days: top 5 picked {c['picked']}, completed {c['completed']}, "
+                f"- Sealed days: top 5 picked {c['picked']}, finished {c['finished']}, "
                 f"open {c['open']}. {s['sealed_note']}"
             )
         lines += [f"- {s['drift']}", ""]

@@ -1,7 +1,9 @@
 """Phase B completion record (docs: docs/brain/PHASE-B-FINISH.md).
 
-Reads the three finished Phase B results and, only when every precondition holds, writes ONE file
-(`PHASE_B_RESULT.json`) and ONE exposure-ledger row. Dry run by default. It never commits, tags,
+Reads the three finished Phase B results and, only when every precondition holds, writes the record
+(`PHASE_B_RESULT.json`), its readable report (`PHASE_B_RESULT.md`, derived byte-for-byte from the
+JSON) and ONE exposure-ledger row. Dry run by default. Idempotent: run again after the record exists
+and it only VERIFIES (exit 0, writes nothing) or refuses with reasons. It never commits, tags,
 pushes, creates `wf-protocol-v2`, calls the network or database, or reads `.env`. It imports
 `phase_b` for constants and `survives`; it never edits it (`phase_b.py` stays byte-identical to the
 `phase-b-settings` tag).
@@ -32,6 +34,12 @@ SCHEMA = "phase-b-result-v1"
 MANIFEST_SCHEMA = "phase-b-candidate-manifest-v1"
 RANK_METHOD = "phase-b-completion-v1"
 RESULT_NAME = "PHASE_B_RESULT.json"
+REPORT_NAME = "PHASE_B_RESULT.md"
+MAX_EVIDENCE_BYTES = 5_000_000  # an evidence file larger than this is a dataset, not evidence
+SECRET_NAMES = (
+    "KITE_API_KEY", "KITE_API_SECRET", "KITE_PASSWORD", "KITE_TOTP_SECRET", "JWT_SECRET_KEY",
+    "GOOGLE_CLIENT_SECRET", "POSTGRES_PASSWORD", "TELEGRAM_BOT_TOKEN", "BEGIN PRIVATE KEY",
+)  # names only; no value is ever stored here
 RESULT_TAG = "phase-b-result"
 WF_TAG = "wf-protocol-v2"
 RESULT_MARKER = "Phase B result record"
@@ -248,6 +256,107 @@ def select_outcome(results: Mapping[str, Mapping]) -> dict:
     }
 
 
+
+# ------------------------------------------------------------------ evidence hygiene and report
+
+
+def evidence_hygiene(root: Path) -> list[str]:
+    """Only expected, small, secret-free text files may sit in the evidence folder."""
+    import re
+
+    why: list[str] = []
+    d = root / EVIDENCE_REL
+    allowed = [
+        re.compile(r"^\.gitattributes$"),
+        re.compile(r"^phase_b_B[123]_\d{4}-\d{2}-\d{2}_\d{4}-\d{2}-\d{2}\.(md|json)$"),
+        re.compile(r"^MANIFEST_B[123]\.json$"),
+        re.compile(r"^PHASE_B_RESULT\.(json|md)$"),
+        re.compile(r"^(INTERRUPTION|RECOVERY)_B[123]_[12]\.md$"),
+    ]
+    if not d.exists():
+        return why
+    for p in sorted(d.iterdir()):
+        if p.is_dir() or not any(a.match(p.name) for a in allowed):
+            why.append(f"HYGIENE: unexpected item in the evidence folder: {p.name} (not committed evidence).")
+            continue
+        if p.stat().st_size > MAX_EVIDENCE_BYTES:
+            why.append(f"HYGIENE: {p.name} is larger than {MAX_EVIDENCE_BYTES} bytes (a dataset, not evidence).")
+            continue
+        text = p.read_text(encoding="utf-8", errors="replace")
+        hit = [n for n in SECRET_NAMES if n in text]
+        if hit:
+            why.append(f"HYGIENE: {p.name} mentions a secret setting name ({hit[0]}); remove nothing, tell the owner.")
+    return why
+
+
+def render_report(result: Mapping, digest: str) -> str:
+    """Readable Markdown of the stored record. Pure function of the JSON, so it can be re-checked."""
+    sel = result["selection"]
+    L = [
+        "# Phase B result",
+        "",
+        f"**Outcome: {result['outcome']}**" + (f" (survivor {result['survivor']})" if result["survivor"] else ""),
+        "",
+        "Plain English: " + (
+            f"{result['survivor']} is the single best idea that passed both required checks; it is the only one "
+            "that may be locked as wf-protocol-v2."
+            if result["survivor"]
+            else "No idea passed both required checks. Nothing is promoted. A later experiment may run only "
+            "as independent research."
+        ),
+        "",
+        f"- Record file: `{EVIDENCE_REL}/{RESULT_NAME}`, sha256 `{digest}`",
+        f"- Written (India time): {result['written_at_ist']} (deadline {result['deadline_ist']})",
+        f"- Protocol: {result['protocol']}; definitions {result['defs_version']}; window "
+        f"{result['window'][0]} to {result['window'][1]}",
+        f"- Split file: `{result['split']['file']}` sha256 `{result['split']['sha256']}`",
+        f"- Finish-tool commit: `{result['code_commit_finish']}`",
+        f"- Evidence manifests combined sha256: `{result['evidence_manifest']['combined_sha256']}`",
+        f"- Trading days: {result['counts']['trading_days']}; folds: {result['counts']['folds']}; "
+        f"survivors: {result['counts']['survivors']} of {result['counts']['candidates']}",
+        "",
+        "## Tags",
+        "",
+        "| Tag | Tag object | Commit |",
+        "|---|---|---|",
+    ]
+    for t, v in sorted(result["tags"].items()):
+        L.append(f"| {t} | `{v['tag_object']}` | `{v['commit']}` |")
+    L += ["", "## Required checks (the only ones that decide survival)", "",
+          "| Candidate | Beats every-stock and momentum | Not worse on reject set | Survives |",
+          "|---|---|---|---|"]
+    for cid, c in sorted(result["candidates"].items()):
+        r = c["B1_B2_B3_rule_rows"]
+        L.append(f"| {cid} {c['name']} | {r['beats_every_stock_and_momentum']} | {r['reject_set']} | "
+                 f"{'YES' if c['survives'] else 'NO'} |")
+    L += ["", "## Metrics (fractions; 0.004 = 0.4 percentage points)", "",
+          "| Candidate | Pessimistic edge over every-stock (edge_low) | Edge per day | Avg per trade after costs | "
+          "Pessimistic edge over momentum | Every-stock avg | Momentum avg | Ideas | Days |",
+          "|---|---|---|---|---|---|---|---|---|"]
+    for cid, c in sorted(result["candidates"].items()):
+        f = c["figures"]
+        vals = [f.get(n) for n, _ in LADDER]
+        L.append("| " + " | ".join([cid, *(str(v) for v in vals), str(c["avg_net_every_stock"]),
+                                    str(c["avg_net_momentum"]), str(c["ideas"]), str(c["days"])]) + " |")
+    L += ["", "## Ranking among survivors", ""]
+    if sel["ranking"]:
+        L.append(f"Decided by: `{sel['decided_by']}`. Ranked: " + ", ".join(r["candidate"] for r in sel["ranking"]))
+    else:
+        L.append("No survivors, so no ranking.")
+    L += ["", "## Other pass rules (reported, not deciding)", "", "| Candidate | Check | Label |", "|---|---|---|"]
+    for cid, c in sorted(result["candidates"].items()):
+        for k, lab in sorted(c["pass_rows"].items()):
+            L.append(f"| {cid} | {k} | {lab} |")
+    L += ["", "## Evidence hashes", "", "| Candidate | Evidence commit | Result file / manifest | sha256 |", "|---|---|---|---|"]
+    for cid, c in sorted(result["candidates"].items()):
+        for n, h in sorted(c["result_files"].items()):
+            L.append(f"| {cid} | `{c['evidence_commit']}` | {n} | `{h}` |")
+        L.append(f"| {cid} | `{c['evidence_commit']}` | {c['manifest_file']} | `{c['manifest_sha256']}` |")
+    L += ["", "Generated by `phase_b_finish`. This report is derived from the JSON record and is re-checked "
+          "byte-for-byte on every re-run. Paper trading only; nothing here promotes or deploys anything.", ""]
+    return "\n".join(L)
+
+
 # ------------------------------------------------------------------ git-backed checks
 
 
@@ -302,20 +411,21 @@ def manifest_path(root: Path, cid: str) -> Path:
 
 
 def build_candidate_manifest(
-    root: Path, cid: str, git: GitFn, now: datetime
+    root: Path, cid: str, git: GitFn, now: datetime, *, verifying: bool = False
 ) -> tuple[dict | None, list[str]]:
     """The evidence manifest of one finished candidate: hashes of its two outputs and its ledger row."""
     why: list[str] = []
     today = ist_now(now).date()
-    if not (WINDOW_START <= today <= WINDOW_END):
+    if not verifying and not (WINDOW_START <= today <= WINDOW_END):
         why.append(f"Today is {today} IST; manifests are written {WINDOW_START} to {WINDOW_END} only.")
+    why += evidence_hygiene(root)
     out_dir = root / EVIDENCE_REL
     md, js = pb.output_paths(cid, out_dir)
     ledger = root / LEDGER_REL
     for p in (md, js, ledger):
         if not p.exists():
             why.append(f"{cid}: {p.name} is missing.")
-    if manifest_path(root, cid).exists():
+    if manifest_path(root, cid).exists() and not verifying:
         why.append(f"{cid}: its manifest already exists (duplicate); manifests are never rewritten.")
     if why:
         return None, why
@@ -360,38 +470,40 @@ def _add_commit(git: GitFn, rel: str) -> str | None:
     return lines[-1] if rc == 0 and lines else None
 
 
-def prepare(root: Path, git: GitFn, now: datetime) -> Plan:
+def prepare(root: Path, git: GitFn, now: datetime, *, verifying: bool = False) -> Plan:
     plan = Plan()
     why = plan.reasons
     now_ist = ist_now(now)
     today = now_ist.date()
     if today < WINDOW_START:
         why.append(f"Today is {today} IST, before {WINDOW_START}: Phase B has not started.")
-    if today > WINDOW_END:
+    if today > WINDOW_END and not verifying:
         why.append(f"Today is {today} IST, after the deadline {WINDOW_END}: no record may be written.")
+    why += evidence_hygiene(root)
 
     tags = {}
     for t in pb.REQUIRED_TAGS:
         info = _tag_info(git, t, why)
         if info:
             tags[t] = info
-    rc, out = git(("tag", "-l", RESULT_TAG))
-    if rc != 0 or out.strip():
-        why.append(f"Duplicate: tag {RESULT_TAG} already exists (or cannot be checked).")
-    rc, out = git(("status", "--porcelain", "--untracked-files=all"))
-    if rc != 0 or out.strip():
-        why.append("The working tree is not clean (or cannot be checked).")
+    if not verifying:
+        rc, out = git(("tag", "-l", RESULT_TAG))
+        if rc != 0 or out.strip():
+            why.append(f"Duplicate: tag {RESULT_TAG} already exists (or cannot be checked).")
+        rc, out = git(("status", "--porcelain", "--untracked-files=all"))
+        if rc != 0 or out.strip():
+            why.append("The working tree is not clean (or cannot be checked).")
 
     out_dir = root / EVIDENCE_REL
     result_path = out_dir / RESULT_NAME
-    if result_path.exists():
+    if result_path.exists() and not verifying:
         why.append(f"Duplicate: {RESULT_NAME} already exists.")
     ledger = root / LEDGER_REL
     if not ledger.exists():
         why.append("The exposure ledger is missing.")
         return plan
     ltext = ledger.read_text(encoding="utf-8")
-    if ledger_rows(ltext, RESULT_MARKER):
+    if ledger_rows(ltext, RESULT_MARKER) and not verifying:
         why.append(f"Duplicate: the ledger already has a '{RESULT_MARKER}' row.")
 
     split_dir = root / SPLIT_REL
@@ -594,11 +706,56 @@ def prepare(root: Path, git: GitFn, now: datetime) -> Plan:
     return plan
 
 
+def verify_existing(root: Path, git: GitFn, now: datetime) -> list[str]:
+    """Idempotent re-run: the record already exists. Re-derive it from the committed results and check
+    that nothing differs. Writes nothing. An empty list means 'already finalized and consistent'."""
+    why: list[str] = []
+    rp = root / EVIDENCE_REL / RESULT_NAME
+    try:
+        raw = rp.read_bytes()
+        stored = json.loads(raw.decode("utf-8"))
+    except (OSError, ValueError) as e:
+        return [f"{RESULT_NAME} cannot be read as JSON ({type(e).__name__})."]
+    digest = sha256_bytes(raw)
+    plan = prepare(root, git, now, verifying=True)
+    if not plan.ok:
+        return ["The committed results no longer support the stored record:", *plan.reasons]
+    volatile = ("written_at_ist", "code_commit_finish")
+    a = {k: v for k, v in stored.items() if k not in volatile}
+    b = {k: v for k, v in plan.result.items() if k not in volatile}
+    if a != b:
+        diff = sorted(k for k in set(a) | set(b) if a.get(k) != b.get(k))
+        why.append(f"INCONSISTENT: the stored record differs from what the committed results give: {diff}.")
+    if raw.decode("utf-8") != dumps(stored):
+        why.append("INCONSISTENT: the stored record is not in the canonical byte form.")
+    cf = stored.get("code_commit_finish", "")
+    rc, _ = git(("merge-base", "--is-ancestor", cf, "HEAD"))
+    if not cf or rc != 0:
+        why.append("INCONSISTENT: code_commit_finish is not an ancestor of HEAD.")
+    ltext = (root / LEDGER_REL).read_text(encoding="utf-8")
+    rows = ledger_rows(ltext, RESULT_MARKER)
+    if len(rows) != 1:
+        why.append(f"INCONSISTENT: the ledger has {len(rows)} '{RESULT_MARKER}' rows, expected exactly 1.")
+    elif digest not in rows[0][1]:
+        why.append("INCONSISTENT: the ledger row does not carry the sha256 of the stored record.")
+    mp = root / EVIDENCE_REL / REPORT_NAME
+    if not mp.exists():
+        why.append(f"{REPORT_NAME} is missing.")
+    elif mp.read_bytes().decode("utf-8") != render_report(stored, digest):
+        why.append(f"INCONSISTENT: {REPORT_NAME} does not match the stored record.")
+    rc, out = git(("tag", "-l", RESULT_TAG))
+    if rc == 0 and out.strip():
+        rc, msg = git(("for-each-ref", f"refs/tags/{RESULT_TAG}", "--format=%(contents)"))
+        if f"result_sha256={digest}" not in msg:
+            why.append(f"INCONSISTENT: tag {RESULT_TAG} does not carry result_sha256={digest}.")
+    return why
+
+
 def commands_for(result: Mapping, digest: str, today: date) -> list[str]:
     outcome = result["outcome"]
     survivor = result["survivor"] or "none"
     cmds = [
-        f"git add {EVIDENCE_REL}/{RESULT_NAME} {LEDGER_REL}",
+        f"git add {EVIDENCE_REL}/{RESULT_NAME} {EVIDENCE_REL}/{REPORT_NAME} {LEDGER_REL}",
         f'git commit -m "Phase B result: {outcome} ({survivor})"',
         (
             f'git tag -a {RESULT_TAG} -m "outcome={outcome}" -m "survivor={survivor}" '
@@ -629,10 +786,16 @@ def insert_ledger_row(text: str, row: str) -> str:
 def apply_plan(root: Path, plan: Plan) -> None:
     assert plan.ok and plan.result_text is not None and plan.ledger_row is not None
     rp = root / EVIDENCE_REL / RESULT_NAME
+    mp = root / EVIDENCE_REL / REPORT_NAME
     lp = root / LEDGER_REL
     old = lp.read_bytes()
     try:
         rp.write_text(plan.result_text, encoding="utf-8", newline="\n")
+        mp.write_text(
+            render_report(plan.result, sha256_bytes(plan.result_text.encode("utf-8"))),
+            encoding="utf-8",
+            newline="\n",
+        )
         new = insert_ledger_row(old.decode("utf-8"), plan.ledger_row)
         lp.write_text(new, encoding="utf-8", newline="\n")
         if sha256_file(rp) != sha256_bytes(plan.result_text.encode("utf-8")):
@@ -642,6 +805,7 @@ def apply_plan(root: Path, plan: Plan) -> None:
     except Exception:
         lp.write_bytes(old)
         rp.unlink(missing_ok=True)
+        mp.unlink(missing_ok=True)
         raise
 
 
@@ -674,6 +838,25 @@ def main(
     now = (now_fn or (lambda: datetime.now(UTC)))()
 
     if args.manifest:
+        mpath = manifest_path(root, args.manifest)
+        if mpath.exists():  # idempotent: verify, never rewrite
+            m, why = build_candidate_manifest(root, args.manifest, git, now, verifying=True)
+            if not why:
+                try:
+                    old = json.loads(mpath.read_text(encoding="utf-8"))
+                except (OSError, ValueError):
+                    old = None
+                if old is None or {k: v for k, v in old.items() if k != "written_at_ist"} != {
+                    k: v for k, v in m.items() if k != "written_at_ist"
+                }:
+                    why = [f"INCONSISTENT: {mpath.name} differs from what the committed results give."]
+            if why:
+                say("REFUSED, existing manifest does not verify; nothing written:")
+                for w in why:
+                    say(f"- {w}")
+                return 2
+            say(f"ALREADY WRITTEN and verified: {mpath.name}. Nothing changed.")
+            return 0
         m, why = build_candidate_manifest(root, args.manifest, git, now)
         if why:
             say("REFUSED, nothing written:")
@@ -691,6 +874,15 @@ def main(
         say(f'git commit -m "Phase B {args.manifest}: result and evidence manifest"')
         return 0
 
+    if (root / EVIDENCE_REL / RESULT_NAME).exists():  # idempotent: verify, never rewrite
+        why = verify_existing(root, git, now)
+        if why:
+            say("REFUSED, the existing record does not verify; nothing written:")
+            for w in why:
+                say(f"- {w}")
+            return 2
+        say("ALREADY FINALIZED and verified: record, report, ledger row and any tag agree. Nothing changed.")
+        return 0
     plan = prepare(root, git, now)
     if not plan.ok:
         say("REFUSED, nothing written:")
@@ -702,10 +894,11 @@ def main(
     if not args.apply:
         say("DRY RUN: nothing written. Would write:")
         say(f"- {EVIDENCE_REL}/{RESULT_NAME}")
+        say(f"- {EVIDENCE_REL}/{REPORT_NAME} (readable report)")
         say(f"- one ledger row: {plan.ledger_row}")
         return 0
     apply_plan(root, plan)
-    say("Wrote the record and one ledger row. Now, by the owner (this tool never commits or tags):")
+    say("Wrote the record, its readable report and one ledger row. Now, by the owner (this tool never commits or tags):")
     for c in plan.commands:
         say(c)
     return 0

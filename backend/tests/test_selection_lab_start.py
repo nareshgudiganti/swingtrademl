@@ -296,6 +296,18 @@ def test_valid_no_survivor_record_passes(env):
     assert go(env, "S0") == 0
 
 
+def test_no_survivor_start_is_labelled_experimental_research_only(env, capsys):
+    assert go(env, "S0") == 0
+    out = capsys.readouterr().out
+    assert "independent experimental research only" in out and "promoted" in out
+
+
+def test_survivor_start_has_no_research_only_notice(env, capsys):
+    write_phase_b_record(env, "SURVIVOR_SELECTED", "B2")
+    assert go(env, "S0") == 0
+    assert "experimental research only" not in capsys.readouterr().out
+
+
 def test_valid_survivor_record_passes(env):
     write_phase_b_record(env, "SURVIVOR_SELECTED", "B2")
     assert go(env, "S0") == 0

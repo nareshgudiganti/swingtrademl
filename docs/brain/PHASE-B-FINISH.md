@@ -8,13 +8,26 @@ Phase B completion protocol (draft: `2026-11-05-phase-b-completion-protocol-FINA
 
 - `python -m swing_trade_ml.brain.phase_b_finish` : DRY RUN. Checks everything, prints the outcome
   (`SURVIVOR_SELECTED` or `NO_SURVIVOR`) and what it would write. Writes nothing.
-- `... --apply` : writes `docs/brain/evidence/phase_b/PHASE_B_RESULT.json` and ONE ledger row
+- `... --apply` : writes `docs/brain/evidence/phase_b/PHASE_B_RESULT.json`, its readable report
+  `PHASE_B_RESULT.md` (hashes, metrics, gate outcomes; derived byte-for-byte from the JSON) and ONE ledger row
   ("Phase B result record"), then prints the `git add`, `git commit` and `git tag -a phase-b-result` commands.
   It never commits, tags, pushes or creates `wf-protocol-v2`. For `NO_SURVIVOR` it never prints any
   `wf-protocol-v2` command.
 - `... --manifest B1 [--apply]` : after a candidate has run, writes that candidate's evidence manifest
   `MANIFEST_B1.json` (sha256 of its `.md`, `.json`, its ledger row, tags, split hash). Commit it together
   with the candidate's outputs and ledger row BEFORE running the next candidate.
+
+## Safe to run twice (idempotent)
+
+- If `PHASE_B_RESULT.json` already exists, the tool only VERIFIES: it re-derives the outcome from the committed
+  results and checks the stored record, the `.md` report, the single ledger row and (if present) the
+  `phase-b-result` tag message. All agree: "ALREADY FINALIZED", exit 0, nothing written. Any difference:
+  exit 2 with reasons, nothing written. It works after the deadline and on a dirty tree (it only reads).
+- `--manifest Bn` on an existing manifest does the same (exit 0 "ALREADY WRITTEN" or exit 2).
+- Evidence hygiene: the evidence folder may hold only the expected small text files (candidate `.md`/`.json`,
+  `MANIFEST_*`, `PHASE_B_RESULT.*`, `INTERRUPTION_*`/`RECOVERY_*`, `.gitattributes`); any other file or folder,
+  any file over 5 MB, or any file naming a secret setting is refused ("HYGIENE"). The printed commit commands
+  name explicit files, never a whole folder.
 
 ## It refuses (exit 2, writes nothing) unless all hold
 

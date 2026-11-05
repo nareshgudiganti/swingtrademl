@@ -521,7 +521,11 @@ def test_apply_writes_only_record_and_one_ledger_row(no_survivor):
     assert rc == 0
     after = no_survivor.snapshot()
     changed = {k for k in after if before.get(k) != after[k]}
-    assert changed == {str(Path(pf.EVIDENCE_REL) / pf.RESULT_NAME), str(Path(pf.LEDGER_REL))}
+    assert changed == {
+        str(Path(pf.EVIDENCE_REL) / pf.RESULT_NAME),
+        str(Path(pf.EVIDENCE_REL) / pf.REPORT_NAME),
+        str(Path(pf.LEDGER_REL)),
+    }
     old = before[str(Path(pf.LEDGER_REL))].decode().splitlines()
     new = after[str(Path(pf.LEDGER_REL))].decode().splitlines()
     assert [x for x in new if x not in old] and len(new) == len(old) + 1
@@ -552,10 +556,126 @@ def test_survivor_prints_wf_protocol_v2_only_after_result_tag(tmp_path):
     assert out.index("git tag -a phase-b-result") < out.index(pf.WF_TAG)
 
 
-def test_apply_twice_is_a_duplicate(no_survivor):
-    assert no_survivor.run(["--apply"])[0] == 0
+def finalize_and_register(repo):
+    assert repo.run(["--apply"])[0] == 0
+    repo.git.table[("merge-base", "--is-ancestor", "headsha", "HEAD")] = (0, "")
+    return repo
+
+
+def test_apply_twice_is_idempotent_and_writes_nothing(no_survivor):
+    finalize_and_register(no_survivor)
+    before = no_survivor.snapshot()
     rc, out = no_survivor.run(["--apply"])
-    assert rc != 0 and "Duplicate" in out
+    assert rc == 0 and "ALREADY FINALIZED" in out
+    assert no_survivor.snapshot() == before
+    rc, out = no_survivor.run([])
+    assert rc == 0 and "ALREADY FINALIZED" in out and no_survivor.snapshot() == before
+
+
+def test_rerun_refuses_if_record_edited(no_survivor):
+    finalize_and_register(no_survivor)
+    rp = no_survivor.root / pf.EVIDENCE_REL / pf.RESULT_NAME
+    d = json.loads(rp.read_text(encoding="utf-8"))
+    d["survivor"] = "B1"
+    rp.write_text(pf.dumps(d), encoding="utf-8", newline="\n")
+    before = no_survivor.snapshot()
+    rc, out = no_survivor.run(["--apply"])
+    assert rc != 0 and "INCONSISTENT" in out and no_survivor.snapshot() == before
+
+
+def test_rerun_refuses_if_report_edited(no_survivor):
+    finalize_and_register(no_survivor)
+    mp = no_survivor.root / pf.EVIDENCE_REL / pf.REPORT_NAME
+    mp.write_text(mp.read_text(encoding="utf-8") + "extra\n", encoding="utf-8", newline="\n")
+    rc, out = no_survivor.run(["--apply"])
+    assert rc != 0 and pf.REPORT_NAME in out
+
+
+def test_rerun_refuses_if_ledger_row_removed(no_survivor):
+    finalize_and_register(no_survivor)
+    lp = no_survivor.root / pf.LEDGER_REL
+    kept = [x for x in lp.read_text(encoding="utf-8").splitlines() if pf.RESULT_MARKER not in x]
+    lp.write_text("\n".join(kept) + "\n", encoding="utf-8", newline="\n")
+    rc, out = no_survivor.run(["--apply"])
+    assert rc != 0 and "ledger" in out
+
+
+def test_rerun_refuses_if_tag_carries_another_hash(no_survivor):
+    finalize_and_register(no_survivor)
+    g = no_survivor.git.table
+    g[("tag", "-l", pf.RESULT_TAG)] = (0, "phase-b-result\n")
+    g[("for-each-ref", f"refs/tags/{pf.RESULT_TAG}", "--format=%(contents)")] = (0, "result_sha256=dead\n")
+    rc, out = no_survivor.run(["--apply"])
+    assert rc != 0 and "tag" in out
+
+
+def test_rerun_works_after_deadline_and_dirty_tree(no_survivor):
+    finalize_and_register(no_survivor)
+    no_survivor.git.table[("status", "--porcelain", "--untracked-files=all")] = (0, " M x\n")
+    late = datetime(2026, 12, 20, 10, 0, tzinfo=IST)
+    rc, out = no_survivor.run(["--apply"], now=late)
+    assert rc == 0 and "ALREADY FINALIZED" in out
+
+
+def test_report_has_hashes_metrics_and_gate_outcomes(tmp_path):
+    repo = Repo(tmp_path, survives=(True, False, False))
+    assert repo.run(["--apply"])[0] == 0
+    rp = repo.root / pf.EVIDENCE_REL / pf.RESULT_NAME
+    md = (repo.root / pf.EVIDENCE_REL / pf.REPORT_NAME).read_text(encoding="utf-8")
+    digest = pf.sha256_bytes(rp.read_bytes())
+    stored = json.loads(rp.read_text(encoding="utf-8"))
+    assert md == pf.render_report(stored, digest)
+    for needle in (
+        "SURVIVOR_SELECTED",
+        digest,
+        "edge_low",
+        "Beats every-stock and momentum",
+        "B1",
+        "B2",
+        "B3",
+        "evidence-defs-v2",
+        stored["split"]["sha256"],
+    ):
+        assert needle in md, needle
+
+
+def test_report_for_no_survivor_says_nothing_is_promoted(no_survivor):
+    assert no_survivor.run(["--apply"])[0] == 0
+    md = (no_survivor.root / pf.EVIDENCE_REL / pf.REPORT_NAME).read_text(encoding="utf-8")
+    assert "NO_SURVIVOR" in md and "Nothing is promoted" in md and pf.WF_TAG not in md
+
+
+def test_best_survivor_is_chosen_only_among_survivors(tmp_path):
+    # B1 does not survive but has the highest edge_low: it must never win.
+    repo = Repo(
+        tmp_path,
+        survives=(False, True, True),
+        B1={"edge_low": 0.05},
+        B2={"edge_low": 0.002},
+        B3={"edge_low": 0.003},
+    )
+    plan = pf.prepare(repo.root, repo.git, GOOD_NOW)
+    assert plan.ok, plan.reasons
+    assert plan.result["survivor"] == "B3"
+    assert [r["candidate"] for r in plan.result["selection"]["ranking"]] == ["B3", "B2"]
+
+
+def test_hygiene_flags_dataset_secret_and_unexpected_files(no_survivor):
+    d = no_survivor.root / pf.EVIDENCE_REL
+    (d / "prices.csv").write_text("x", encoding="utf-8")
+    (d / "INTERRUPTION_B1_1.md").write_text("KITE_API_SECRET leaked", encoding="utf-8")
+    (d / "RECOVERY_B2_1.md").write_bytes(b"a" * (pf.MAX_EVIDENCE_BYTES + 1))
+    why = pf.evidence_hygiene(no_survivor.root)
+    assert len(why) == 3 and all(w.startswith("HYGIENE") for w in why)
+    assert not pf.prepare(no_survivor.root, no_survivor.git, GOOD_NOW).ok
+
+
+def test_commands_name_explicit_files_not_the_folder():
+    cmds = pf.commands_for(
+        {"outcome": "NO_SURVIVOR", "survivor": None, "written_at_ist": "x"}, "h" * 64, GOOD_NOW.date()
+    )
+    add = cmds[0]
+    assert pf.RESULT_NAME in add and pf.REPORT_NAME in add and add.count(pf.EVIDENCE_REL) == 2
 
 
 def test_commands_for_no_survivor_have_no_wf():
@@ -592,8 +712,13 @@ def test_manifest_command_dry_run_and_apply(tmp_path):
     assert rc == 0 and "DRY RUN" in out and repo.snapshot() == before
     rc, out = repo.run(["--manifest", "B2", "--apply"])
     assert rc == 0 and pf.manifest_path(repo.root, "B2").exists()
+    written = pf.manifest_path(repo.root, "B2").read_bytes()
     rc, out = repo.run(["--manifest", "B2", "--apply"])
-    assert rc != 0 and "duplicate" in out
+    assert rc == 0 and "ALREADY WRITTEN" in out
+    assert pf.manifest_path(repo.root, "B2").read_bytes() == written
+    pf.manifest_path(repo.root, "B2").write_text("{}", encoding="utf-8", newline="\n")
+    rc, out = repo.run(["--manifest", "B2", "--apply"])
+    assert rc != 0 and "INCONSISTENT" in out
 
 
 def test_manifest_refuses_without_result_file(tmp_path):

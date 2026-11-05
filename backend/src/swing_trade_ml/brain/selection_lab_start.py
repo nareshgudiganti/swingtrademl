@@ -372,7 +372,13 @@ def check_phase_b_lock(git: GitFn, repo_root: Path) -> dict:
             reasons.append(f"Phase B: tag {PHASE_B_LOCK_TAG} does not name survivor {survivor}.")
         if wkv.get("result_tag") != PHASE_B_RESULT_TAG:
             reasons.append(f"Phase B: tag {PHASE_B_LOCK_TAG} does not name result_tag={PHASE_B_RESULT_TAG}.")
-    return _result("phase_b_lock", not reasons, reasons)
+    notes: list[str] = []
+    if outcome == "NO_SURVIVOR" and not reasons:
+        notes.append(
+            "Phase B ended with NO_SURVIVOR: this lab run is independent experimental research only. "
+            "No Phase B candidate is promoted, approved or enabled by it."
+        )
+    return _result("phase_b_lock", not reasons, reasons, notes)
 
 
 def check_protocol_tag(git: GitFn, tag: str) -> dict:

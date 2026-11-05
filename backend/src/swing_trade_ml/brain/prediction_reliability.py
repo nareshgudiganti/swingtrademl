@@ -497,8 +497,23 @@ def h05_series(db) -> list[tuple[dict, list[Rec], str, bool]]:
     ]
 
 
+def absent_tables(db) -> list[str]:
+    """Names of the evidence tables this database does not have (read-only check)."""
+    from sqlalchemy import text
+
+    names = ("lane_picks", "lane_outcomes", "h05_signals")
+    return [n for n in names if db.execute(text("SELECT to_regclass(:n)"), {"n": n}).scalar() is None]
+
+
 def collect(db, start: date, end: date) -> list[tuple[dict, list[Rec], str, bool]]:
-    return brain_series(db, start, end) + lane_series(db) + h05_series(db)
+    """A missing table is missing evidence ("not recorded"), never an error and never zero."""
+    gone = set(absent_tables(db))
+    out = brain_series(db, start, end)
+    if not gone & {"lane_picks", "lane_outcomes"}:
+        out += lane_series(db)
+    if "h05_signals" not in gone:
+        out += h05_series(db)
+    return out
 
 
 # ----------------------------------------------------------------------------- text
@@ -576,8 +591,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     today = datetime.now(IST).date()
     end = date.fromisoformat(a.end) if a.end else today
     with SessionLocal() as db:
+        gone = absent_tables(db)
         rep = build_report(collect(db, date.fromisoformat(a.start), end))
     text = plain_report(rep)
+    if gone:
+        text += "\nNot recorded: this database has no table " + ", ".join(gone) + ".\n"
     print(text)
     try:
         print(f"Written: {write_report(text, Path(a.out), today)}")

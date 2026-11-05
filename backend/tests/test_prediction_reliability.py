@@ -436,6 +436,7 @@ def test_report_cli_output_and_dated_file_match_and_do_not_leak(monkeypatch, tmp
     ):
         data = [(dict(SERIES), _market_recs(60) + extra, "brain", True)]
         monkeypatch.setattr(pr, "collect", lambda db, s, e, data=data: data)
+        monkeypatch.setattr(pr, "absent_tables", lambda db: [])
         d = tmp_path / label
         assert pr.main(["--from", "2026-01-01", "--to", "2026-12-31", "--out", str(d)]) == 0
         printed = capsys.readouterr().out

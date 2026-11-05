@@ -338,3 +338,15 @@ def test_h05_reader_open_sealed_models_and_missing_values(db_session):
     assert tm["avg_net"] is None and tm["avg_excess"] is None and tm["completed"] == 40
     assert repm["health"]["top5"]["state"] == pr.INSUFFICIENT
     assert all(s["health"]["top5"]["state"] == pr.INSUFFICIENT for s in pr.build_report(series)["series"])
+
+
+def test_absent_tables_are_reported_not_fatal(db_session):
+    from sqlalchemy import text
+
+    from swing_trade_ml.brain import prediction_reliability as pr
+
+    assert pr.absent_tables(db_session) == []
+    db_session.execute(text("DROP TABLE h05_signals CASCADE"))  # rolled back with the test transaction
+    assert pr.absent_tables(db_session) == ["h05_signals"]
+    out = pr.collect(db_session, date(2026, 9, 1), date(2026, 11, 5))
+    assert all(k["source"] != "h05" for k, *_ in out)

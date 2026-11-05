@@ -1,0 +1,52 @@
+/* Open positions screen (pages/PaperPositions.tsx, PositionParts.tsx). Own "op-" prefix; works in both looks. */
+.op-act { display: grid; grid-template-columns: minmax(150px, 200px) 1fr; gap: 1rem; align-items: stretch; }
+.op-act-intro p { margin: 0.25rem 0 0; }
+.op-count { margin-left: 0.5rem; padding: 0.1rem 0.5rem; border-radius: 99px; background: #fde4e6; color: #b4233a; font-size: 0.8rem; font-weight: 700; }
+.op-act-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.75rem; }
+.op-act-card { display: grid; gap: 0.25rem; text-align: left; padding: 0.75rem 0.9rem; border-radius: 12px; border: 1px solid transparent; font: inherit; cursor: pointer; color: #1c2430; }
+.op-act-pct { font-weight: 800; font-size: 1.05rem; }
+.op-tone-red { background: #fdecee; border-color: #f4b8c0; }
+.op-tone-amber { background: #fdf3dc; border-color: #f0d28a; }
+.op-tone-green { background: #e5f6ec; border-color: #a9dfc0; }
+.op-tone-blue { background: #e8effd; border-color: #bccdf5; }
+.op-tone-grey { background: #f1f3f6; border-color: #dde1e8; }
+.op-tag { display: inline-block; padding: 0.15rem 0.65rem; border-radius: 99px; font-weight: 700; font-size: 0.8rem; white-space: nowrap; color: #1c2430; }
+.op-tag-red { background: #fbd5da; }
+.op-tag-amber { background: #fbe7a8; }
+.op-tag-green { background: #d3f1e0; }
+.op-tag-blue { background: #dbe6fc; }
+.op-tag-grey { background: #e6e9ee; }
+
+.op-main { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 1rem; align-items: start; }
+.op-toolbar { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-bottom: 0.75rem; }
+.op-toolbar .tm-input { max-width: 220px; }
+.op-chip[aria-pressed='true'] { background: #dbe6fc; font-weight: 700; }
+.op-row-sel td { background: #eef3ff; }
+
+.op-bar { min-width: 150px; }
+.op-bar-track { position: relative; height: 8px; border-radius: 99px; background: linear-gradient(90deg, #ef4444 0%, #f59e0b 33%, #eab308 50%, #22c55e 100%); }
+.op-dot { position: absolute; top: 50%; width: 14px; height: 14px; border-radius: 50%; background: #fff; border: 3px solid #1c2430; transform: translate(-50%, -50%); }
+.op-bar-ticks { position: relative; height: 1.1rem; margin-top: 0.3rem; font-size: 0.68rem; color: #5b6573; }
+.op-bar-ticks span { position: absolute; transform: translateX(-50%); text-align: center; white-space: nowrap; }
+.op-bar-ticks em { display: block; font-style: normal; font-weight: 600; }
+.op-bar-big { padding: 0.5rem 0.5rem 1.4rem; }
+.op-bar-big .op-bar-track { height: 12px; }
+.op-bar-big .op-dot { width: 20px; height: 20px; }
+.op-bar-big .op-bar-ticks { font-size: 0.75rem; }
+
+.op-panel { display: grid; gap: 0.6rem; padding: 1rem; border-radius: 14px; background: #fff; border: 1px solid #e3e7ee; }
+.op-panel-head { display: flex; justify-content: space-between; gap: 0.5rem; align-items: center; }
+.op-panel-ret { font-size: 1.8rem; font-weight: 800; }
+.op-panel-ret small { font-size: 0.95rem; font-weight: 600; }
+.op-levels { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+.op-levels dl { margin: 0; padding: 0.5rem 0.6rem; border-radius: 10px; background: #f6f8fb; display: grid; grid-template-columns: 1fr auto; gap: 0.2rem 0.5rem; font-size: 0.85rem; }
+.op-levels dt { color: #5b6573; }
+.op-levels dd { margin: 0; text-align: right; font-weight: 600; }
+.op-suggest { margin: 0; padding: 0.6rem 0.75rem; border-radius: 10px; border: 1px solid transparent; font-size: 0.9rem; }
+.op-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.op-actions .tm-btn { text-decoration: none; }
+
+@media (max-width: 1100px) {
+  .op-main { grid-template-columns: minmax(0, 1fr); }
+  .op-act { grid-template-columns: 1fr; }
+}

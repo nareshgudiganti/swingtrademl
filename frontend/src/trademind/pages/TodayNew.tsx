@@ -88,7 +88,7 @@ function Answer({ owner }: { owner: boolean }) {
       <div className={`tmn-tiles ${owner ? 'tmn-tiles-4' : ''}`} data-testid="today-tiles">
         <Tile n={counts.TRADE} label="New buys today" to="/trademind/opportunities" tone={counts.TRADE ? 'green' : undefined} />
         <Tile n={counts.WATCH} label="Watch closely" to="/trademind/opportunities" tone={counts.WATCH ? 'amber' : undefined} />
-        <Tile n={attention.length} label="Holdings need review" to="/trademind/positions" tone={attention.length ? 'red' : undefined} />
+        <Tile n={attention.length} label="Holdings need review" to={owner ? '/trademind/portfolio' : '/trademind/positions'} tone={attention.length ? 'red' : undefined} />
         {owner && <WaitingTile />}
       </div>
 

@@ -874,6 +874,20 @@ def job_brain_daily_check() -> None:
         _report_error("brain_pause_rules", exc)
 
 
+def job_weekly_paper_report() -> None:
+    """Sunday: build the read-only weekly report (5-day lane, Bot paper, Testing paper) and send one short
+    Telegram summary. Reads and reports only; never raised."""
+    from swing_trade_ml.services import weekly_paper_report as weekly
+
+    try:
+        with session_scope() as db:
+            report = weekly.build_report(db)
+        log.info("job.weekly_paper_report.done", window=report["window"])
+        notifier.send_sync(weekly.format_message(report), kind=alert_policy.WEEKLY_REPORT)
+    except Exception as exc:  # noqa: BLE001
+        _report_error("weekly_paper_report", exc)
+
+
 def job_brain_weekly_health() -> None:
     """Saturday: run the owner's weekly checklist, store the result and send
     one Telegram summary. Reads and reports only; never raised, and a

@@ -7,6 +7,7 @@ import type { BrainDecision, BrainRun } from '../api/types'
 import type { StockBriefData } from './beginner/types'
 import { finalWord } from './live'
 import { rankText, scorePoints, scoreRank, SCORE_HINT } from './scoreText'
+import { SCORE_VS_PLAN } from './scoreVsPlan'
 import { buyLevel, wordSay } from './stockParts'
 import { MARKET_PLAIN } from './vocab'
 import { inr } from './ui'
@@ -271,6 +272,7 @@ export function ModelEvidence({ decision: d }: { decision: BrainDecision }) {
           </ul>
         </>
       )}
+      <p className="sp-small" data-testid="score-vs-plan">{SCORE_VS_PLAN}</p>
       <p className="sp-small">Past results do not guarantee future results. The score is a ranking, not a chance of profit.</p>
     </section>
   )

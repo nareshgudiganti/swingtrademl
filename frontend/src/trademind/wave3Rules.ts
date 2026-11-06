@@ -232,7 +232,7 @@ export function tradeRow(t: Trade, own: boolean): HistoryRow {
     kind: own ? 'own' : t.mode === 'paper' ? 'paper' : 'botReal',
     price: t.entry_price,
     why: own ? 'Your own pick' : botWhy(t.strategy_name),
-    ended: `${end.text} · sold ${shortDate(t.exit_at)}`,
+    ended: `${t.sell_label ? `${t.sell_label}${t.book_label ? ` (${t.book_label})` : ''} · ` : ''}${end.text} · sold ${shortDate(t.exit_at)}`,
     endedTone: end.tone,
     resultPct: sealed ? null : t.return_pct * 100,
     sealed,

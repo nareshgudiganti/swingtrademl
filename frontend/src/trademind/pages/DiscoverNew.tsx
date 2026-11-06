@@ -70,8 +70,8 @@ function DiscoverBody() {
   const [filter, setFilter] = useState<DiscoverFilter>('ALL')
   const [sector, setSector] = useState<string>('')
   const [query, setQuery] = useState('')
-  // Slides (swipe through rows of cards) is the default; the table stays one tap away.
-  const [layout, setLayout] = useState<'slides' | 'table'>(params.get('layout') === 'table' ? 'table' : 'slides')
+  // The table is the default (owner, 2026-11-03); slides (swipe through rows of cards) stay one tap away.
+  const [layout, setLayout] = useState<'slides' | 'table'>(params.get('layout') === 'slides' ? 'slides' : 'table')
 
   // The sector map (ml/sector_map.py). Not every account may read it; without it the sector filter is hidden.
   const symbols = useMemo(() => ideas.map((d) => d.symbol.toUpperCase()).sort(), [ideas])

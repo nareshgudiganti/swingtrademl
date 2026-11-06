@@ -1,0 +1,1704 @@
+{
+ "groups": {
+  "large_49": 49,
+  "mid_14": 14
+ },
+ "views": {
+  "h5_large_49": {
+   "rows_protocol": {
+    "baseline_rows": 48096,
+    "challenger_rows": 46122,
+    "removed_because_sector_missing": 1974,
+    "removed_pct_of_baseline": 4.104,
+    "removed_by_cause": {
+     "unmapped_stock": 1964,
+     "calendar_warmup_20": 0,
+     "late_start_index": 0,
+     "rank_invalid_only": 0,
+     "other_gap_or_stale": 10
+    },
+    "removed_by_cause_pct_of_baseline": {
+     "unmapped_stock": 4.083,
+     "calendar_warmup_20": 0.0,
+     "late_start_index": 0.0,
+     "rank_invalid_only": 0.0,
+     "other_gap_or_stale": 0.021
+    },
+    "baseline_eligible_per_day": {
+     "days": 982,
+     "min": 48,
+     "median": 49.0,
+     "max": 49,
+     "days_below_20": 0
+    },
+    "challenger_eligible_per_day": {
+     "days": 982,
+     "min": 46,
+     "median": 47.0,
+     "max": 47,
+     "days_below_20": 0
+    },
+    "by_sector": {
+     "NIFTY AUTO": {
+      "baseline_rows": 4904,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY BANK": {
+      "baseline_rows": 5890,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY COMMODITIES": {
+      "baseline_rows": 2946,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY CONSUMPTION": {
+      "baseline_rows": 982,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY ENERGY": {
+      "baseline_rows": 5891,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY FIN SERVICE": {
+      "baseline_rows": 4907,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY FMCG": {
+      "baseline_rows": 4904,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY HEALTHCARE": {
+      "baseline_rows": 982,
+      "removed": 10,
+      "removed_pct": 1.018,
+      "by_cause": {
+       "other_gap_or_stale": 10
+      }
+     },
+     "NIFTY INFRA": {
+      "baseline_rows": 2946,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY IT": {
+      "baseline_rows": 4910,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY METAL": {
+      "baseline_rows": 2946,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY PHARMA": {
+      "baseline_rows": 3924,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NO SECTOR": {
+      "baseline_rows": 1964,
+      "removed": 1964,
+      "removed_pct": 100.0,
+      "by_cause": {
+       "unmapped_stock": 1964
+      }
+     }
+    }
+   },
+   "rows_protocol_with_exclusions": {
+    "baseline_rows": 47909,
+    "challenger_rows": 45935,
+    "removed_because_sector_missing": 1974,
+    "removed_pct_of_baseline": 4.12,
+    "removed_by_cause": {
+     "unmapped_stock": 1964,
+     "calendar_warmup_20": 0,
+     "late_start_index": 0,
+     "rank_invalid_only": 0,
+     "other_gap_or_stale": 10
+    },
+    "removed_by_cause_pct_of_baseline": {
+     "unmapped_stock": 4.099,
+     "calendar_warmup_20": 0.0,
+     "late_start_index": 0.0,
+     "rank_invalid_only": 0.0,
+     "other_gap_or_stale": 0.021
+    },
+    "baseline_eligible_per_day": {
+     "days": 982,
+     "min": 47,
+     "median": 49.0,
+     "max": 49,
+     "days_below_20": 0
+    },
+    "challenger_eligible_per_day": {
+     "days": 982,
+     "min": 45,
+     "median": 47.0,
+     "max": 47,
+     "days_below_20": 0
+    },
+    "by_sector": {
+     "NIFTY AUTO": {
+      "baseline_rows": 4904,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY BANK": {
+      "baseline_rows": 5890,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY COMMODITIES": {
+      "baseline_rows": 2946,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY CONSUMPTION": {
+      "baseline_rows": 982,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY ENERGY": {
+      "baseline_rows": 5891,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY FIN SERVICE": {
+      "baseline_rows": 4907,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY FMCG": {
+      "baseline_rows": 4717,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY HEALTHCARE": {
+      "baseline_rows": 982,
+      "removed": 10,
+      "removed_pct": 1.018,
+      "by_cause": {
+       "other_gap_or_stale": 10
+      }
+     },
+     "NIFTY INFRA": {
+      "baseline_rows": 2946,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY IT": {
+      "baseline_rows": 4910,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY METAL": {
+      "baseline_rows": 2946,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY PHARMA": {
+      "baseline_rows": 3924,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NO SECTOR": {
+      "baseline_rows": 1964,
+      "removed": 1964,
+      "removed_pct": 100.0,
+      "by_cause": {
+       "unmapped_stock": 1964
+      }
+     }
+    }
+   },
+   "rows_no_warmup_skip": {
+    "baseline_rows": 48096,
+    "challenger_rows": 46122,
+    "removed_because_sector_missing": 1974,
+    "removed_pct_of_baseline": 4.104,
+    "removed_by_cause": {
+     "unmapped_stock": 1964,
+     "calendar_warmup_20": 0,
+     "late_start_index": 0,
+     "rank_invalid_only": 0,
+     "other_gap_or_stale": 10
+    },
+    "removed_by_cause_pct_of_baseline": {
+     "unmapped_stock": 4.083,
+     "calendar_warmup_20": 0.0,
+     "late_start_index": 0.0,
+     "rank_invalid_only": 0.0,
+     "other_gap_or_stale": 0.021
+    },
+    "baseline_eligible_per_day": {
+     "days": 982,
+     "min": 48,
+     "median": 49.0,
+     "max": 49,
+     "days_below_20": 0
+    },
+    "challenger_eligible_per_day": {
+     "days": 982,
+     "min": 46,
+     "median": 47.0,
+     "max": 47,
+     "days_below_20": 0
+    },
+    "by_sector": {
+     "NIFTY AUTO": {
+      "baseline_rows": 4904,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY BANK": {
+      "baseline_rows": 5890,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY COMMODITIES": {
+      "baseline_rows": 2946,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY CONSUMPTION": {
+      "baseline_rows": 982,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY ENERGY": {
+      "baseline_rows": 5891,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY FIN SERVICE": {
+      "baseline_rows": 4907,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY FMCG": {
+      "baseline_rows": 4904,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY HEALTHCARE": {
+      "baseline_rows": 982,
+      "removed": 10,
+      "removed_pct": 1.018,
+      "by_cause": {
+       "other_gap_or_stale": 10
+      }
+     },
+     "NIFTY INFRA": {
+      "baseline_rows": 2946,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY IT": {
+      "baseline_rows": 4910,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY METAL": {
+      "baseline_rows": 2946,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY PHARMA": {
+      "baseline_rows": 3924,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NO SECTOR": {
+      "baseline_rows": 1964,
+      "removed": 1964,
+      "removed_pct": 100.0,
+      "by_cause": {
+       "unmapped_stock": 1964
+      }
+     }
+    }
+   },
+   "stockdays_protocol": {
+    "baseline_rows": 48341,
+    "challenger_rows": 46357,
+    "removed_because_sector_missing": 1984,
+    "removed_pct_of_baseline": 4.104,
+    "removed_by_cause": {
+     "unmapped_stock": 1974,
+     "calendar_warmup_20": 0,
+     "late_start_index": 0,
+     "rank_invalid_only": 0,
+     "other_gap_or_stale": 10
+    },
+    "removed_by_cause_pct_of_baseline": {
+     "unmapped_stock": 4.083,
+     "calendar_warmup_20": 0.0,
+     "late_start_index": 0.0,
+     "rank_invalid_only": 0.0,
+     "other_gap_or_stale": 0.021
+    },
+    "baseline_eligible_per_day": {
+     "days": 987,
+     "min": 48,
+     "median": 49.0,
+     "max": 49,
+     "days_below_20": 0
+    },
+    "challenger_eligible_per_day": {
+     "days": 987,
+     "min": 46,
+     "median": 47.0,
+     "max": 47,
+     "days_below_20": 0
+    },
+    "by_sector": {
+     "NIFTY AUTO": {
+      "baseline_rows": 4929,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY BANK": {
+      "baseline_rows": 5920,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY COMMODITIES": {
+      "baseline_rows": 2961,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY CONSUMPTION": {
+      "baseline_rows": 987,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY ENERGY": {
+      "baseline_rows": 5921,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY FIN SERVICE": {
+      "baseline_rows": 4932,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY FMCG": {
+      "baseline_rows": 4929,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY HEALTHCARE": {
+      "baseline_rows": 987,
+      "removed": 10,
+      "removed_pct": 1.013,
+      "by_cause": {
+       "other_gap_or_stale": 10
+      }
+     },
+     "NIFTY INFRA": {
+      "baseline_rows": 2961,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY IT": {
+      "baseline_rows": 4935,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY METAL": {
+      "baseline_rows": 2961,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY PHARMA": {
+      "baseline_rows": 3944,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NO SECTOR": {
+      "baseline_rows": 1974,
+      "removed": 1974,
+      "removed_pct": 100.0,
+      "by_cause": {
+       "unmapped_stock": 1974
+      }
+     }
+    }
+   },
+   "structural_warmup_252_rows": {
+    "baseline_rows_without_skip": 48096,
+    "baseline_rows_after_skip": 48096,
+    "rows_lost_to_252_skip": 0,
+    "pct_of_without_skip": 0.0
+   }
+  },
+  "h5_mid_14": {
+   "rows_protocol": {
+    "baseline_rows": 13527,
+    "challenger_rows": 13527,
+    "removed_because_sector_missing": 0,
+    "removed_pct_of_baseline": 0.0,
+    "removed_by_cause": {
+     "unmapped_stock": 0,
+     "calendar_warmup_20": 0,
+     "late_start_index": 0,
+     "rank_invalid_only": 0,
+     "other_gap_or_stale": 0
+    },
+    "removed_by_cause_pct_of_baseline": {
+     "unmapped_stock": 0.0,
+     "calendar_warmup_20": 0.0,
+     "late_start_index": 0.0,
+     "rank_invalid_only": 0.0,
+     "other_gap_or_stale": 0.0
+    },
+    "baseline_eligible_per_day": {
+     "days": 981,
+     "min": 12,
+     "median": 14.0,
+     "max": 14,
+     "days_below_20": 981
+    },
+    "challenger_eligible_per_day": {
+     "days": 981,
+     "min": 12,
+     "median": 14.0,
+     "max": 14,
+     "days_below_20": 981
+    },
+    "by_sector": {
+     "NIFTY BANK": {
+      "baseline_rows": 981,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY CAPITAL MKT": {
+      "baseline_rows": 1962,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY CONSR DURBL": {
+      "baseline_rows": 981,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY ENERGY": {
+      "baseline_rows": 900,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY FIN SERVICE": {
+      "baseline_rows": 1839,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY FMCG": {
+      "baseline_rows": 981,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY INFRA": {
+      "baseline_rows": 2941,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY IT": {
+      "baseline_rows": 1962,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY PHARMA": {
+      "baseline_rows": 980,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     }
+    }
+   },
+   "rows_protocol_with_exclusions": {
+    "baseline_rows": 13527,
+    "challenger_rows": 13527,
+    "removed_because_sector_missing": 0,
+    "removed_pct_of_baseline": 0.0,
+    "removed_by_cause": {
+     "unmapped_stock": 0,
+     "calendar_warmup_20": 0,
+     "late_start_index": 0,
+     "rank_invalid_only": 0,
+     "other_gap_or_stale": 0
+    },
+    "removed_by_cause_pct_of_baseline": {
+     "unmapped_stock": 0.0,
+     "calendar_warmup_20": 0.0,
+     "late_start_index": 0.0,
+     "rank_invalid_only": 0.0,
+     "other_gap_or_stale": 0.0
+    },
+    "baseline_eligible_per_day": {
+     "days": 981,
+     "min": 12,
+     "median": 14.0,
+     "max": 14,
+     "days_below_20": 981
+    },
+    "challenger_eligible_per_day": {
+     "days": 981,
+     "min": 12,
+     "median": 14.0,
+     "max": 14,
+     "days_below_20": 981
+    },
+    "by_sector": {
+     "NIFTY BANK": {
+      "baseline_rows": 981,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY CAPITAL MKT": {
+      "baseline_rows": 1962,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY CONSR DURBL": {
+      "baseline_rows": 981,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY ENERGY": {
+      "baseline_rows": 900,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY FIN SERVICE": {
+      "baseline_rows": 1839,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY FMCG": {
+      "baseline_rows": 981,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY INFRA": {
+      "baseline_rows": 2941,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY IT": {
+      "baseline_rows": 1962,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY PHARMA": {
+      "baseline_rows": 980,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     }
+    }
+   },
+   "rows_no_warmup_skip": {
+    "baseline_rows": 13527,
+    "challenger_rows": 13527,
+    "removed_because_sector_missing": 0,
+    "removed_pct_of_baseline": 0.0,
+    "removed_by_cause": {
+     "unmapped_stock": 0,
+     "calendar_warmup_20": 0,
+     "late_start_index": 0,
+     "rank_invalid_only": 0,
+     "other_gap_or_stale": 0
+    },
+    "removed_by_cause_pct_of_baseline": {
+     "unmapped_stock": 0.0,
+     "calendar_warmup_20": 0.0,
+     "late_start_index": 0.0,
+     "rank_invalid_only": 0.0,
+     "other_gap_or_stale": 0.0
+    },
+    "baseline_eligible_per_day": {
+     "days": 981,
+     "min": 12,
+     "median": 14.0,
+     "max": 14,
+     "days_below_20": 981
+    },
+    "challenger_eligible_per_day": {
+     "days": 981,
+     "min": 12,
+     "median": 14.0,
+     "max": 14,
+     "days_below_20": 981
+    },
+    "by_sector": {
+     "NIFTY BANK": {
+      "baseline_rows": 981,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY CAPITAL MKT": {
+      "baseline_rows": 1962,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY CONSR DURBL": {
+      "baseline_rows": 981,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY ENERGY": {
+      "baseline_rows": 900,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY FIN SERVICE": {
+      "baseline_rows": 1839,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY FMCG": {
+      "baseline_rows": 981,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY INFRA": {
+      "baseline_rows": 2941,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY IT": {
+      "baseline_rows": 1962,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY PHARMA": {
+      "baseline_rows": 980,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     }
+    }
+   },
+   "stockdays_protocol": {
+    "baseline_rows": 13597,
+    "challenger_rows": 13597,
+    "removed_because_sector_missing": 0,
+    "removed_pct_of_baseline": 0.0,
+    "removed_by_cause": {
+     "unmapped_stock": 0,
+     "calendar_warmup_20": 0,
+     "late_start_index": 0,
+     "rank_invalid_only": 0,
+     "other_gap_or_stale": 0
+    },
+    "removed_by_cause_pct_of_baseline": {
+     "unmapped_stock": 0.0,
+     "calendar_warmup_20": 0.0,
+     "late_start_index": 0.0,
+     "rank_invalid_only": 0.0,
+     "other_gap_or_stale": 0.0
+    },
+    "baseline_eligible_per_day": {
+     "days": 986,
+     "min": 12,
+     "median": 14.0,
+     "max": 14,
+     "days_below_20": 986
+    },
+    "challenger_eligible_per_day": {
+     "days": 986,
+     "min": 12,
+     "median": 14.0,
+     "max": 14,
+     "days_below_20": 986
+    },
+    "by_sector": {
+     "NIFTY BANK": {
+      "baseline_rows": 986,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY CAPITAL MKT": {
+      "baseline_rows": 1972,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY CONSR DURBL": {
+      "baseline_rows": 986,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY ENERGY": {
+      "baseline_rows": 905,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY FIN SERVICE": {
+      "baseline_rows": 1849,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY FMCG": {
+      "baseline_rows": 986,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY INFRA": {
+      "baseline_rows": 2956,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY IT": {
+      "baseline_rows": 1972,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY PHARMA": {
+      "baseline_rows": 985,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     }
+    }
+   },
+   "structural_warmup_252_rows": {
+    "baseline_rows_without_skip": 13527,
+    "baseline_rows_after_skip": 13527,
+    "rows_lost_to_252_skip": 0,
+    "pct_of_without_skip": 0.0
+   }
+  },
+  "h10_large_49": {
+   "rows_protocol": {
+    "baseline_rows": 47851,
+    "challenger_rows": 45887,
+    "removed_because_sector_missing": 1964,
+    "removed_pct_of_baseline": 4.104,
+    "removed_by_cause": {
+     "unmapped_stock": 1954,
+     "calendar_warmup_20": 0,
+     "late_start_index": 0,
+     "rank_invalid_only": 0,
+     "other_gap_or_stale": 10
+    },
+    "removed_by_cause_pct_of_baseline": {
+     "unmapped_stock": 4.084,
+     "calendar_warmup_20": 0.0,
+     "late_start_index": 0.0,
+     "rank_invalid_only": 0.0,
+     "other_gap_or_stale": 0.021
+    },
+    "baseline_eligible_per_day": {
+     "days": 977,
+     "min": 48,
+     "median": 49.0,
+     "max": 49,
+     "days_below_20": 0
+    },
+    "challenger_eligible_per_day": {
+     "days": 977,
+     "min": 46,
+     "median": 47.0,
+     "max": 47,
+     "days_below_20": 0
+    },
+    "by_sector": {
+     "NIFTY AUTO": {
+      "baseline_rows": 4879,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY BANK": {
+      "baseline_rows": 5860,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY COMMODITIES": {
+      "baseline_rows": 2931,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY CONSUMPTION": {
+      "baseline_rows": 977,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY ENERGY": {
+      "baseline_rows": 5861,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY FIN SERVICE": {
+      "baseline_rows": 4882,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY FMCG": {
+      "baseline_rows": 4879,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY HEALTHCARE": {
+      "baseline_rows": 977,
+      "removed": 10,
+      "removed_pct": 1.024,
+      "by_cause": {
+       "other_gap_or_stale": 10
+      }
+     },
+     "NIFTY INFRA": {
+      "baseline_rows": 2931,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY IT": {
+      "baseline_rows": 4885,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY METAL": {
+      "baseline_rows": 2931,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY PHARMA": {
+      "baseline_rows": 3904,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NO SECTOR": {
+      "baseline_rows": 1954,
+      "removed": 1954,
+      "removed_pct": 100.0,
+      "by_cause": {
+       "unmapped_stock": 1954
+      }
+     }
+    }
+   },
+   "rows_protocol_with_exclusions": {
+    "baseline_rows": 47664,
+    "challenger_rows": 45700,
+    "removed_because_sector_missing": 1964,
+    "removed_pct_of_baseline": 4.121,
+    "removed_by_cause": {
+     "unmapped_stock": 1954,
+     "calendar_warmup_20": 0,
+     "late_start_index": 0,
+     "rank_invalid_only": 0,
+     "other_gap_or_stale": 10
+    },
+    "removed_by_cause_pct_of_baseline": {
+     "unmapped_stock": 4.1,
+     "calendar_warmup_20": 0.0,
+     "late_start_index": 0.0,
+     "rank_invalid_only": 0.0,
+     "other_gap_or_stale": 0.021
+    },
+    "baseline_eligible_per_day": {
+     "days": 977,
+     "min": 47,
+     "median": 49.0,
+     "max": 49,
+     "days_below_20": 0
+    },
+    "challenger_eligible_per_day": {
+     "days": 977,
+     "min": 45,
+     "median": 47.0,
+     "max": 47,
+     "days_below_20": 0
+    },
+    "by_sector": {
+     "NIFTY AUTO": {
+      "baseline_rows": 4879,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY BANK": {
+      "baseline_rows": 5860,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY COMMODITIES": {
+      "baseline_rows": 2931,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY CONSUMPTION": {
+      "baseline_rows": 977,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY ENERGY": {
+      "baseline_rows": 5861,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY FIN SERVICE": {
+      "baseline_rows": 4882,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY FMCG": {
+      "baseline_rows": 4692,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY HEALTHCARE": {
+      "baseline_rows": 977,
+      "removed": 10,
+      "removed_pct": 1.024,
+      "by_cause": {
+       "other_gap_or_stale": 10
+      }
+     },
+     "NIFTY INFRA": {
+      "baseline_rows": 2931,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY IT": {
+      "baseline_rows": 4885,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY METAL": {
+      "baseline_rows": 2931,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY PHARMA": {
+      "baseline_rows": 3904,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NO SECTOR": {
+      "baseline_rows": 1954,
+      "removed": 1954,
+      "removed_pct": 100.0,
+      "by_cause": {
+       "unmapped_stock": 1954
+      }
+     }
+    }
+   },
+   "rows_no_warmup_skip": {
+    "baseline_rows": 47851,
+    "challenger_rows": 45887,
+    "removed_because_sector_missing": 1964,
+    "removed_pct_of_baseline": 4.104,
+    "removed_by_cause": {
+     "unmapped_stock": 1954,
+     "calendar_warmup_20": 0,
+     "late_start_index": 0,
+     "rank_invalid_only": 0,
+     "other_gap_or_stale": 10
+    },
+    "removed_by_cause_pct_of_baseline": {
+     "unmapped_stock": 4.084,
+     "calendar_warmup_20": 0.0,
+     "late_start_index": 0.0,
+     "rank_invalid_only": 0.0,
+     "other_gap_or_stale": 0.021
+    },
+    "baseline_eligible_per_day": {
+     "days": 977,
+     "min": 48,
+     "median": 49.0,
+     "max": 49,
+     "days_below_20": 0
+    },
+    "challenger_eligible_per_day": {
+     "days": 977,
+     "min": 46,
+     "median": 47.0,
+     "max": 47,
+     "days_below_20": 0
+    },
+    "by_sector": {
+     "NIFTY AUTO": {
+      "baseline_rows": 4879,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY BANK": {
+      "baseline_rows": 5860,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY COMMODITIES": {
+      "baseline_rows": 2931,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY CONSUMPTION": {
+      "baseline_rows": 977,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY ENERGY": {
+      "baseline_rows": 5861,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY FIN SERVICE": {
+      "baseline_rows": 4882,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY FMCG": {
+      "baseline_rows": 4879,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY HEALTHCARE": {
+      "baseline_rows": 977,
+      "removed": 10,
+      "removed_pct": 1.024,
+      "by_cause": {
+       "other_gap_or_stale": 10
+      }
+     },
+     "NIFTY INFRA": {
+      "baseline_rows": 2931,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY IT": {
+      "baseline_rows": 4885,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY METAL": {
+      "baseline_rows": 2931,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY PHARMA": {
+      "baseline_rows": 3904,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NO SECTOR": {
+      "baseline_rows": 1954,
+      "removed": 1954,
+      "removed_pct": 100.0,
+      "by_cause": {
+       "unmapped_stock": 1954
+      }
+     }
+    }
+   },
+   "stockdays_protocol": {
+    "baseline_rows": 48341,
+    "challenger_rows": 46357,
+    "removed_because_sector_missing": 1984,
+    "removed_pct_of_baseline": 4.104,
+    "removed_by_cause": {
+     "unmapped_stock": 1974,
+     "calendar_warmup_20": 0,
+     "late_start_index": 0,
+     "rank_invalid_only": 0,
+     "other_gap_or_stale": 10
+    },
+    "removed_by_cause_pct_of_baseline": {
+     "unmapped_stock": 4.083,
+     "calendar_warmup_20": 0.0,
+     "late_start_index": 0.0,
+     "rank_invalid_only": 0.0,
+     "other_gap_or_stale": 0.021
+    },
+    "baseline_eligible_per_day": {
+     "days": 987,
+     "min": 48,
+     "median": 49.0,
+     "max": 49,
+     "days_below_20": 0
+    },
+    "challenger_eligible_per_day": {
+     "days": 987,
+     "min": 46,
+     "median": 47.0,
+     "max": 47,
+     "days_below_20": 0
+    },
+    "by_sector": {
+     "NIFTY AUTO": {
+      "baseline_rows": 4929,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY BANK": {
+      "baseline_rows": 5920,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY COMMODITIES": {
+      "baseline_rows": 2961,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY CONSUMPTION": {
+      "baseline_rows": 987,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY ENERGY": {
+      "baseline_rows": 5921,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY FIN SERVICE": {
+      "baseline_rows": 4932,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY FMCG": {
+      "baseline_rows": 4929,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY HEALTHCARE": {
+      "baseline_rows": 987,
+      "removed": 10,
+      "removed_pct": 1.013,
+      "by_cause": {
+       "other_gap_or_stale": 10
+      }
+     },
+     "NIFTY INFRA": {
+      "baseline_rows": 2961,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY IT": {
+      "baseline_rows": 4935,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY METAL": {
+      "baseline_rows": 2961,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY PHARMA": {
+      "baseline_rows": 3944,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NO SECTOR": {
+      "baseline_rows": 1974,
+      "removed": 1974,
+      "removed_pct": 100.0,
+      "by_cause": {
+       "unmapped_stock": 1974
+      }
+     }
+    }
+   },
+   "structural_warmup_252_rows": {
+    "baseline_rows_without_skip": 47851,
+    "baseline_rows_after_skip": 47851,
+    "rows_lost_to_252_skip": 0,
+    "pct_of_without_skip": 0.0
+   }
+  },
+  "h10_mid_14": {
+   "rows_protocol": {
+    "baseline_rows": 13457,
+    "challenger_rows": 13457,
+    "removed_because_sector_missing": 0,
+    "removed_pct_of_baseline": 0.0,
+    "removed_by_cause": {
+     "unmapped_stock": 0,
+     "calendar_warmup_20": 0,
+     "late_start_index": 0,
+     "rank_invalid_only": 0,
+     "other_gap_or_stale": 0
+    },
+    "removed_by_cause_pct_of_baseline": {
+     "unmapped_stock": 0.0,
+     "calendar_warmup_20": 0.0,
+     "late_start_index": 0.0,
+     "rank_invalid_only": 0.0,
+     "other_gap_or_stale": 0.0
+    },
+    "baseline_eligible_per_day": {
+     "days": 976,
+     "min": 12,
+     "median": 14.0,
+     "max": 14,
+     "days_below_20": 976
+    },
+    "challenger_eligible_per_day": {
+     "days": 976,
+     "min": 12,
+     "median": 14.0,
+     "max": 14,
+     "days_below_20": 976
+    },
+    "by_sector": {
+     "NIFTY BANK": {
+      "baseline_rows": 976,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY CAPITAL MKT": {
+      "baseline_rows": 1952,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY CONSR DURBL": {
+      "baseline_rows": 976,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY ENERGY": {
+      "baseline_rows": 895,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY FIN SERVICE": {
+      "baseline_rows": 1829,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY FMCG": {
+      "baseline_rows": 976,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY INFRA": {
+      "baseline_rows": 2926,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY IT": {
+      "baseline_rows": 1952,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY PHARMA": {
+      "baseline_rows": 975,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     }
+    }
+   },
+   "rows_protocol_with_exclusions": {
+    "baseline_rows": 13457,
+    "challenger_rows": 13457,
+    "removed_because_sector_missing": 0,
+    "removed_pct_of_baseline": 0.0,
+    "removed_by_cause": {
+     "unmapped_stock": 0,
+     "calendar_warmup_20": 0,
+     "late_start_index": 0,
+     "rank_invalid_only": 0,
+     "other_gap_or_stale": 0
+    },
+    "removed_by_cause_pct_of_baseline": {
+     "unmapped_stock": 0.0,
+     "calendar_warmup_20": 0.0,
+     "late_start_index": 0.0,
+     "rank_invalid_only": 0.0,
+     "other_gap_or_stale": 0.0
+    },
+    "baseline_eligible_per_day": {
+     "days": 976,
+     "min": 12,
+     "median": 14.0,
+     "max": 14,
+     "days_below_20": 976
+    },
+    "challenger_eligible_per_day": {
+     "days": 976,
+     "min": 12,
+     "median": 14.0,
+     "max": 14,
+     "days_below_20": 976
+    },
+    "by_sector": {
+     "NIFTY BANK": {
+      "baseline_rows": 976,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY CAPITAL MKT": {
+      "baseline_rows": 1952,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY CONSR DURBL": {
+      "baseline_rows": 976,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY ENERGY": {
+      "baseline_rows": 895,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY FIN SERVICE": {
+      "baseline_rows": 1829,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY FMCG": {
+      "baseline_rows": 976,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY INFRA": {
+      "baseline_rows": 2926,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY IT": {
+      "baseline_rows": 1952,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY PHARMA": {
+      "baseline_rows": 975,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     }
+    }
+   },
+   "rows_no_warmup_skip": {
+    "baseline_rows": 13457,
+    "challenger_rows": 13457,
+    "removed_because_sector_missing": 0,
+    "removed_pct_of_baseline": 0.0,
+    "removed_by_cause": {
+     "unmapped_stock": 0,
+     "calendar_warmup_20": 0,
+     "late_start_index": 0,
+     "rank_invalid_only": 0,
+     "other_gap_or_stale": 0
+    },
+    "removed_by_cause_pct_of_baseline": {
+     "unmapped_stock": 0.0,
+     "calendar_warmup_20": 0.0,
+     "late_start_index": 0.0,
+     "rank_invalid_only": 0.0,
+     "other_gap_or_stale": 0.0
+    },
+    "baseline_eligible_per_day": {
+     "days": 976,
+     "min": 12,
+     "median": 14.0,
+     "max": 14,
+     "days_below_20": 976
+    },
+    "challenger_eligible_per_day": {
+     "days": 976,
+     "min": 12,
+     "median": 14.0,
+     "max": 14,
+     "days_below_20": 976
+    },
+    "by_sector": {
+     "NIFTY BANK": {
+      "baseline_rows": 976,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY CAPITAL MKT": {
+      "baseline_rows": 1952,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY CONSR DURBL": {
+      "baseline_rows": 976,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY ENERGY": {
+      "baseline_rows": 895,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY FIN SERVICE": {
+      "baseline_rows": 1829,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY FMCG": {
+      "baseline_rows": 976,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY INFRA": {
+      "baseline_rows": 2926,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY IT": {
+      "baseline_rows": 1952,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY PHARMA": {
+      "baseline_rows": 975,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     }
+    }
+   },
+   "stockdays_protocol": {
+    "baseline_rows": 13597,
+    "challenger_rows": 13597,
+    "removed_because_sector_missing": 0,
+    "removed_pct_of_baseline": 0.0,
+    "removed_by_cause": {
+     "unmapped_stock": 0,
+     "calendar_warmup_20": 0,
+     "late_start_index": 0,
+     "rank_invalid_only": 0,
+     "other_gap_or_stale": 0
+    },
+    "removed_by_cause_pct_of_baseline": {
+     "unmapped_stock": 0.0,
+     "calendar_warmup_20": 0.0,
+     "late_start_index": 0.0,
+     "rank_invalid_only": 0.0,
+     "other_gap_or_stale": 0.0
+    },
+    "baseline_eligible_per_day": {
+     "days": 986,
+     "min": 12,
+     "median": 14.0,
+     "max": 14,
+     "days_below_20": 986
+    },
+    "challenger_eligible_per_day": {
+     "days": 986,
+     "min": 12,
+     "median": 14.0,
+     "max": 14,
+     "days_below_20": 986
+    },
+    "by_sector": {
+     "NIFTY BANK": {
+      "baseline_rows": 986,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY CAPITAL MKT": {
+      "baseline_rows": 1972,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY CONSR DURBL": {
+      "baseline_rows": 986,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY ENERGY": {
+      "baseline_rows": 905,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY FIN SERVICE": {
+      "baseline_rows": 1849,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY FMCG": {
+      "baseline_rows": 986,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY INFRA": {
+      "baseline_rows": 2956,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY IT": {
+      "baseline_rows": 1972,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     },
+     "NIFTY PHARMA": {
+      "baseline_rows": 985,
+      "removed": 0,
+      "removed_pct": 0.0,
+      "by_cause": {}
+     }
+    }
+   },
+   "structural_warmup_252_rows": {
+    "baseline_rows_without_skip": 13457,
+    "baseline_rows_after_skip": 13457,
+    "rows_lost_to_252_skip": 0,
+    "pct_of_without_skip": 0.0
+   }
+  }
+ }
+}

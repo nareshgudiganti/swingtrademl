@@ -247,6 +247,7 @@ def start_scheduler() -> None:
     # h05 evaluation lane (disabled by default): the daily job exists only when the owner has switched the
     # lane on AND accepted the protocol hash. Nothing of the lane is imported otherwise.
     add_h05_job(scheduler)
+    add_weekly_paper_report_job(scheduler)
 
     # Shared shadow lanes (10D / 15D, disabled by default): the daily job exists only when the owner has set
     # LANE_SHADOW_ENABLED. It never picks a model by itself and never trades.
@@ -349,6 +350,19 @@ def add_brain_jobs(target: BackgroundScheduler) -> None:
         CronTrigger(day_of_week="sat", hour=11, minute=0, timezone=IST),
         id="brain_weekly_health",
         replace_existing=True,
+    )
+
+
+def add_weekly_paper_report_job(target: BackgroundScheduler) -> None:
+    """Sunday 09:30 IST, its own job id, clear of the brain's Saturday 11:00 health report."""
+    target.add_job(
+        jobs.job_weekly_paper_report,
+        CronTrigger(day_of_week="sun", hour=9, minute=30, timezone=IST),
+        id="weekly_paper_report",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=1800,
     )
 
 

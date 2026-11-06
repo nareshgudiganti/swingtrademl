@@ -1,0 +1,295 @@
+{
+ "all_rows_same_stock_and_index": true,
+ "cause": "NIFTY HEALTHCARE has no close on 2022-09-26, 09-27, 09-29, 09-30, 10-03, 10-04 and 10-06 although NIFTY 50 and the stock traded. The existing inputs take the sector's 20-ROW return (pct_change(20) on the index's own rows, merged backward), so for these days the window reaches back further than 20 sessions. sector_ret_20d_vs_nifty counts 20 SESSIONS of the shared calendar (one-session carry only). Both use the same two closes series; no value from outside them enters, so there is no new information, only a different window.",
+ "classification": "definition_difference_not_new_information",
+ "date": "2026-11-06",
+ "decision": "REMOVE sector_ret_20d_vs_nifty from the challenger: renamed from C_57 to C_56 (53 + 3). A_53 and R_37 unchanged.",
+ "max_abs_difference": 0.0316118010526758,
+ "note": "The other 45,917 rows agree to 1e-9 (identity). The existing input is the one that is distorted on these 13 days (a longer window); keeping A_53 as it is.",
+ "rows": [
+  {
+   "decision_date": "2022-09-26",
+   "difference": -0.0006748740347173321,
+   "existing_difference_rs20_minus_srs20": 0.04011215952408864,
+   "existing_sector_window_starts": "2022-08-25",
+   "nifty_sessions_missing_in_window": [],
+   "sector_index": "NIFTY HEALTHCARE",
+   "sector_index_sessions_missing_in_20_session_window": [
+    "2022-09-26"
+   ],
+   "sector_input_value": 0.03943728548937131,
+   "sector_input_window_starts": "2022-08-26",
+   "stock_has_bar_every_session_in_window": true,
+   "symbol": "APOLLOHOSP"
+  },
+  {
+   "decision_date": "2022-09-28",
+   "difference": -0.011203693759632039,
+   "existing_difference_rs20_minus_srs20": 0.06583887719278159,
+   "existing_sector_window_starts": "2022-08-26",
+   "nifty_sessions_missing_in_window": [],
+   "sector_index": "NIFTY HEALTHCARE",
+   "sector_index_sessions_missing_in_20_session_window": [
+    "2022-09-26",
+    "2022-09-27"
+   ],
+   "sector_input_value": 0.05463518343314955,
+   "sector_input_window_starts": "2022-08-30",
+   "stock_has_bar_every_session_in_window": true,
+   "symbol": "APOLLOHOSP"
+  },
+  {
+   "decision_date": "2022-09-29",
+   "difference": 0.002606712201079109,
+   "existing_difference_rs20_minus_srs20": 0.056432183266191704,
+   "existing_sector_window_starts": "2022-08-26",
+   "nifty_sessions_missing_in_window": [],
+   "sector_index": "NIFTY HEALTHCARE",
+   "sector_index_sessions_missing_in_20_session_window": [
+    "2022-09-26",
+    "2022-09-27",
+    "2022-09-29"
+   ],
+   "sector_input_value": 0.05903889546727081,
+   "sector_input_window_starts": "2022-09-01",
+   "stock_has_bar_every_session_in_window": true,
+   "symbol": "APOLLOHOSP"
+  },
+  {
+   "decision_date": "2022-10-07",
+   "difference": -0.013201085602226659,
+   "existing_difference_rs20_minus_srs20": 0.07512946916793306,
+   "existing_sector_window_starts": "2022-08-29",
+   "nifty_sessions_missing_in_window": [],
+   "sector_index": "NIFTY HEALTHCARE",
+   "sector_index_sessions_missing_in_20_session_window": [
+    "2022-09-26",
+    "2022-09-27",
+    "2022-09-29",
+    "2022-09-30",
+    "2022-10-03",
+    "2022-10-04",
+    "2022-10-06"
+   ],
+   "sector_input_value": 0.0619283835657064,
+   "sector_input_window_starts": "2022-09-08",
+   "stock_has_bar_every_session_in_window": true,
+   "symbol": "APOLLOHOSP"
+  },
+  {
+   "decision_date": "2022-10-10",
+   "difference": -0.0018404082702101476,
+   "existing_difference_rs20_minus_srs20": 0.05930737051470181,
+   "existing_sector_window_starts": "2022-08-30",
+   "nifty_sessions_missing_in_window": [],
+   "sector_index": "NIFTY HEALTHCARE",
+   "sector_index_sessions_missing_in_20_session_window": [
+    "2022-09-26",
+    "2022-09-27",
+    "2022-09-29",
+    "2022-09-30",
+    "2022-10-03",
+    "2022-10-04",
+    "2022-10-06"
+   ],
+   "sector_input_value": 0.05746696224449166,
+   "sector_input_window_starts": "2022-09-09",
+   "stock_has_bar_every_session_in_window": true,
+   "symbol": "APOLLOHOSP"
+  },
+  {
+   "decision_date": "2022-10-11",
+   "difference": -0.018146198682156944,
+   "existing_difference_rs20_minus_srs20": 0.07688988930570095,
+   "existing_sector_window_starts": "2022-09-01",
+   "nifty_sessions_missing_in_window": [],
+   "sector_index": "NIFTY HEALTHCARE",
+   "sector_index_sessions_missing_in_20_session_window": [
+    "2022-09-26",
+    "2022-09-27",
+    "2022-09-29",
+    "2022-09-30",
+    "2022-10-03",
+    "2022-10-04",
+    "2022-10-06"
+   ],
+   "sector_input_value": 0.05874369062354401,
+   "sector_input_window_starts": "2022-09-12",
+   "stock_has_bar_every_session_in_window": true,
+   "symbol": "APOLLOHOSP"
+  },
+  {
+   "decision_date": "2022-10-13",
+   "difference": -0.01322572303828351,
+   "existing_difference_rs20_minus_srs20": 0.08290206992492932,
+   "existing_sector_window_starts": "2022-09-05",
+   "nifty_sessions_missing_in_window": [],
+   "sector_index": "NIFTY HEALTHCARE",
+   "sector_index_sessions_missing_in_20_session_window": [
+    "2022-09-26",
+    "2022-09-27",
+    "2022-09-29",
+    "2022-09-30",
+    "2022-10-03",
+    "2022-10-04",
+    "2022-10-06"
+   ],
+   "sector_input_value": 0.06967634688664581,
+   "sector_input_window_starts": "2022-09-14",
+   "stock_has_bar_every_session_in_window": true,
+   "symbol": "APOLLOHOSP"
+  },
+  {
+   "decision_date": "2022-10-14",
+   "difference": 0.006106031048687122,
+   "existing_difference_rs20_minus_srs20": 0.06805605829320027,
+   "existing_sector_window_starts": "2022-09-06",
+   "nifty_sessions_missing_in_window": [],
+   "sector_index": "NIFTY HEALTHCARE",
+   "sector_index_sessions_missing_in_20_session_window": [
+    "2022-09-26",
+    "2022-09-27",
+    "2022-09-29",
+    "2022-09-30",
+    "2022-10-03",
+    "2022-10-04",
+    "2022-10-06"
+   ],
+   "sector_input_value": 0.0741620893418874,
+   "sector_input_window_starts": "2022-09-15",
+   "stock_has_bar_every_session_in_window": true,
+   "symbol": "APOLLOHOSP"
+  },
+  {
+   "decision_date": "2022-10-21",
+   "difference": 0.003965690998245286,
+   "existing_difference_rs20_minus_srs20": 0.02578124241952051,
+   "existing_sector_window_starts": "2022-09-13",
+   "nifty_sessions_missing_in_window": [],
+   "sector_index": "NIFTY HEALTHCARE",
+   "sector_index_sessions_missing_in_20_session_window": [
+    "2022-09-26",
+    "2022-09-27",
+    "2022-09-29",
+    "2022-09-30",
+    "2022-10-03",
+    "2022-10-04",
+    "2022-10-06"
+   ],
+   "sector_input_value": 0.029746933417765797,
+   "sector_input_window_starts": "2022-09-22",
+   "stock_has_bar_every_session_in_window": true,
+   "symbol": "APOLLOHOSP"
+  },
+  {
+   "decision_date": "2022-10-24",
+   "difference": 0.0015786889623239375,
+   "existing_difference_rs20_minus_srs20": 0.011057778627409975,
+   "existing_sector_window_starts": "2022-09-14",
+   "nifty_sessions_missing_in_window": [],
+   "sector_index": "NIFTY HEALTHCARE",
+   "sector_index_sessions_missing_in_20_session_window": [
+    "2022-09-26",
+    "2022-09-27",
+    "2022-09-29",
+    "2022-09-30",
+    "2022-10-03",
+    "2022-10-04",
+    "2022-10-06"
+   ],
+   "sector_input_value": 0.012636467589733913,
+   "sector_input_window_starts": "2022-09-23",
+   "stock_has_bar_every_session_in_window": true,
+   "symbol": "APOLLOHOSP"
+  },
+  {
+   "decision_date": "2022-10-25",
+   "difference": -0.012552245908497017,
+   "existing_difference_rs20_minus_srs20": 0.01575999919812543,
+   "existing_sector_window_starts": "2022-09-15",
+   "nifty_sessions_missing_in_window": [],
+   "sector_index": "NIFTY HEALTHCARE",
+   "sector_index_sessions_missing_in_20_session_window": [
+    "2022-09-26",
+    "2022-09-27",
+    "2022-09-29",
+    "2022-09-30",
+    "2022-10-03",
+    "2022-10-04",
+    "2022-10-06"
+   ],
+   "sector_input_value": 0.0032077532896284122,
+   "sector_input_window_starts": "2022-09-26",
+   "stock_has_bar_every_session_in_window": true,
+   "symbol": "APOLLOHOSP"
+  },
+  {
+   "decision_date": "2022-10-28",
+   "difference": -0.0316118010526758,
+   "existing_difference_rs20_minus_srs20": 0.009541232687086953,
+   "existing_sector_window_starts": "2022-09-19",
+   "nifty_sessions_missing_in_window": [],
+   "sector_index": "NIFTY HEALTHCARE",
+   "sector_index_sessions_missing_in_20_session_window": [
+    "2022-09-29",
+    "2022-09-30",
+    "2022-10-03",
+    "2022-10-04",
+    "2022-10-06"
+   ],
+   "sector_input_value": -0.02207056836558885,
+   "sector_input_window_starts": "2022-09-28",
+   "stock_has_bar_every_session_in_window": true,
+   "symbol": "APOLLOHOSP"
+  },
+  {
+   "decision_date": "2022-10-31",
+   "difference": 0.0038279449751346117,
+   "existing_difference_rs20_minus_srs20": -0.03053699076629557,
+   "existing_sector_window_starts": "2022-09-20",
+   "nifty_sessions_missing_in_window": [],
+   "sector_index": "NIFTY HEALTHCARE",
+   "sector_index_sessions_missing_in_20_session_window": [
+    "2022-09-29",
+    "2022-09-30",
+    "2022-10-03",
+    "2022-10-04",
+    "2022-10-06"
+   ],
+   "sector_input_value": -0.026709045791160957,
+   "sector_input_window_starts": "2022-09-29",
+   "stock_has_bar_every_session_in_window": true,
+   "symbol": "APOLLOHOSP"
+  }
+ ],
+ "rows_added_by_dropping_the_input": [
+  "APOLLOHOSP|2022-10-27",
+  "APOLLOHOSP|2022-11-01",
+  "APOLLOHOSP|2022-11-02",
+  "APOLLOHOSP|2022-11-03",
+  "APOLLOHOSP|2022-11-04"
+ ],
+ "rows_added_why": "In the original 45,930 these rows were dropped only because sector_ret_20d_vs_nifty was missing (the sector index lacked sessions within its 20-session window; the 3 remaining sector inputs and all 53 existing inputs are present). Without that input they are eligible: 45,935 rows.",
+ "rows_not_equal": 13,
+ "rows_total": 45930,
+ "rows_total_after_dropping_the_input": 45935,
+ "schema": "c56_decision_v3",
+ "sector_index_sessions_missing_vs_nifty50_by_index_from_its_first_date": {
+  "NIFTY AUTO": 0,
+  "NIFTY BANK": 0,
+  "NIFTY CAPITAL MKT": 0,
+  "NIFTY COMMODITIES": 0,
+  "NIFTY CONSR DURBL": 0,
+  "NIFTY CONSUMPTION": 0,
+  "NIFTY ENERGY": 0,
+  "NIFTY FIN SERVICE": 0,
+  "NIFTY FMCG": 0,
+  "NIFTY HEALTHCARE": 12,
+  "NIFTY INFRA": 0,
+  "NIFTY IT": 0,
+  "NIFTY METAL": 0,
+  "NIFTY PHARMA": 0,
+  "NIFTY REALTY": 0
+ },
+ "tolerance": 1e-09
+}

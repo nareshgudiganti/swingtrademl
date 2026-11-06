@@ -1,0 +1,79 @@
+{
+ "checked_by": "the 37 columns computed by the 7da460c^ code and by today's build_features on identical synthetic candles: all identical except obv_slope (rtol 1e-12); and by tests/test_sector_c56_r37.py against the vendored fcaef35^ snapshot.",
+ "commits_that_touched_ml_features_py_since_training": [
+  {
+   "changed": "added 16 inputs (days_since_52w_*, streak, volatility_percentile_rank, cmf_20, relative_strength_*, nifty_*); signature build_features(df, index_df)",
+   "commit": "7da460c",
+   "date": "2026-08-06",
+   "formula_of_the_37_changed": false
+  },
+  {
+   "changed": "added sector context, VIX and breadth inputs; signature build_features(df, index_df, sector_df, vix_df, breadth_df); _index_context_frame gets a prefix",
+   "commit": "2bdb681",
+   "date": "2026-09-13",
+   "formula_of_the_37_changed": false
+  },
+  {
+   "changed": "build_label only (barrier label 15d/+8%/-4% defaults; target before stop)",
+   "commit": "dd1f4c4",
+   "date": "2026-09-15",
+   "formula_of_the_37_changed": false
+  },
+  {
+   "changed": "build_label adds label_end_ts column",
+   "commit": "39b768d",
+   "date": "2026-09-15",
+   "formula_of_the_37_changed": false
+  },
+  {
+   "changed": "obv_slope: denominator obv.rolling(20).mean().abs() -> volume.rolling(20).mean()",
+   "commit": "fcaef35",
+   "date": "2026-10-05",
+   "formula_of_the_37_changed": true,
+   "inputs": [
+    "obv_slope"
+   ]
+  }
+ ],
+ "date": "2026-11-06",
+ "known_semantic_differences_of_R37": [
+  {
+   "input": "obv_slope",
+   "research_builder_now": "obv.diff(10)/volume.rolling(20).mean()",
+   "training": "obv.diff(10)/obv.rolling(20).mean().abs()"
+  }
+ ],
+ "model_2": {
+  "note": "7da460c was committed 2026-08-06 16:58 IST, after the training run",
+  "trained_at": "2026-08-05T09:32:27Z (15:02 IST)",
+  "training_feature_code": "git 7da460c^ (1b17a86/abc9c0b era; 37 FEATURE_COLUMNS; build_features(df) with no index frames)"
+ },
+ "not_per_input": [
+  "Production serves 400 bars; training and the research path use the full history (EWM-based inputs differ slightly early in the 400-bar window).",
+  "Candles as stored today vs as stored on 2026-08-05.",
+  "Saved scaler/booster not available locally; hyperparameters {} in the registry row: cannot be compared."
+ ],
+ "other_files_since_training": [
+  {
+   "affects": "breadth_pct_above_sma50, breadth_advance_pct (in A_53, not in R_37 or model 2). Breadth is computed from today's watchlist on past days, not the membership of the day.",
+   "affects_r37": false,
+   "commits": [
+    "2145a20 2026-10-13 breadth no longer counts missing stocks as bearish",
+    "6209568 2026-10-13 cache expiry"
+   ],
+   "file": "ml/market_context.py"
+  },
+  {
+   "affects": "labels and splits, not feature values",
+   "affects_r37": false,
+   "commits": [
+    "f042a5f 2026-10-11 training cutoff",
+    "dd1f4c4",
+    "9731251 successive-window validation"
+   ],
+   "file": "ml/dataset.py"
+  }
+ ],
+ "schema": "r37_semantic_drift_v1",
+ "unchanged_inputs_of_the_37": "the other 36"
+}

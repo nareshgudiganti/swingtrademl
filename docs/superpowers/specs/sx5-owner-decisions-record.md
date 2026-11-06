@@ -73,6 +73,38 @@ The two FINAL-DRAFT protocols still quote the old string in their **illustrative
 protocols themselves say is recomputed at signing; the owner must expect that hash (and the illustrative verdict-code
 sha256) to change. The run records' `code_version` is the full signing commit hash, not this string.
 
+## Execution driver and hash sheet v5 (added after the first sheet)
+
+* **Driver.** `backend/scripts/sx5_run.py` (commit `4f4077673f3842b24ec70cc5b035c3db41f35488`; tests `backend/tests/test_sx5_run.py`, 34 on synthetic data;
+  guide `docs/brain/SX5-RUN.md`). No end-to-end SX5 command existed before it: only the library pieces (`run_walkforward`,
+  assembler, recipe, verdict). It is a dry run by default; a real run needs `--run`, the date 2026-12-04 or later, the harness approval
+  file (with an extra `code_commit` key), a SEPARATE training authorisation (schema `sx5-training-authorisation-v1`, development only,
+  never the holdout), a clean tree, HEAD equal to both files' commit, and eight recomputed hashes equal to the authorisation's.
+  It passes development folds only, calls the verdict once, never reads a holdout record, never writes the registry. It is a
+  script (not under `src/`) so the "nothing in the app imports the harness" test and protocol section 12 stay true. It is not a
+  training approval and nothing was trained.
+* **Hash-sheet defect fixed** (commit `6ca1920114ef1174fc7e4c49099b90b33c52def1`). `scripts/final_hash_sheet.py` copied the `_status` text key over the
+  matrix hash when a sheet that was itself carried was used as `--prior-sheet`, so v5 would have lost the carried matrix hashes
+  (`d131c710...`, `ee5eba79...`). It now carries only a real 64-hex value from the exact key (or the v3 descriptive key); regression test added.
+* **Sheet v5** `docs/brain/evidence/sector_prep/final_hashes_v5.json` is for commit `6ca1920114ef1174fc7e4c49099b90b33c52def1` (clean tree, `--protocol SX5_protocol=...
+  --protocol SX10_protocol=... --protocol recipe_document=... --prior-sheet final_hashes_v4.json`). It differs from v4 in the commit
+  only; every substantive hash and the carried matrix hashes are unchanged. Note that the `code_version` for the real run is the
+  full commit hash of the SIGNING commit, so this sheet (and the record's commit hashes) is regenerated again at signing.
+
+## Hashes that change at signing (protocol text and sheet)
+
+| Item | Why it changes | Where |
+|---|---|---|
+| Full commit hash | the signing commit is later than `6ca19201...`; `code_version`, `code_commit` in both run files, the sheet's `commit` | both protocols, sheet, approval, authorisation |
+| SX5 protocol file sha256 (now `4e54f614...`, LF) | the owner fills in protocol id, MDE_H, E\*, signature | sheet `protocol_file_sha256`, authorisation `protocol_sha256` |
+| Illustrative parameter-set sha256 `324d7f7b...` and verdict-code sha256 `109661ca...` quoted in the protocols | code name is now `sx_verdict_v1`; real values: parameter set (MDE_H 0.0018, units fraction) `98f47feb...2d180`, verdict code `0454850d...237b1`; both move again if any byte of `ml/sx_verdict.py` or MDE_H changes | protocol section 11 |
+| Matrix hash `dataset_sha256` (`d131c710...`, carried) | depends on the signing environment's pandas; `sx5_run.py --with-data` prints the real one | protocol, authorisation |
+| Lock-file sha256 (now `eb06d191...f290`) | regenerate if the signing machine's `pip freeze` differs | authorisation |
+| Authorisation text hash (`TO_BE_FILLED_AT_SIGNING`) | written at signing | sheet |
+
+Unchanged by anything here: DatasetSpec config sha256 `fb5648bb...2371`, recipe sha256 `fa6b3e97...1233`, row-list sha256 `fdf0b566...9f04`, the feature-list and
+fold hashes, the exclusion hashes.
+
 ## Still blocked on the owner
 
 1. **E\*** (decision 2): the owner's number.
@@ -83,3 +115,4 @@ sha256) to change. The run records' `code_version` is the full signing commit ha
 6. **Matrix hash** (needs the signing environment's pandas) and the **signing-environment lock file** (decision 11): the hash
    sheet carries the matrix hash from the prior sheet and labels it as carried.
 7. A clean **full-suite** result on the signing commit (this preparation ran only the SX and registry tests).
+8. The **approval file** now also needs the key `code_commit` (full 40-hex) and the **separate training authorisation** file (see `docs/brain/SX5-RUN.md`).

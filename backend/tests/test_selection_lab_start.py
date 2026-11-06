@@ -578,7 +578,7 @@ def test_no_code_script_or_workflow_calls_the_runner_directly():
 
 def test_non_frozen_docs_point_to_the_wrapper():
     doc = (REPO / "docs/brain/SELECTION-LAB-START.md").read_text(encoding="utf-8")
-    assert "selection_lab_start" in doc and "not a hard lock" in doc
+    assert "selection_lab_start" in doc and "What is not prevented" in doc and "not a hard lock" not in doc
 
 
 def test_console_entry_is_declared():

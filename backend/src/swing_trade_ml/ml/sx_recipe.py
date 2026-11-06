@@ -3,7 +3,7 @@
 NOT production; nothing in the app imports it. NO model is fitted by importing or building anything here. The recipe
 is the same LightGBM recipe the production-style models use (ml/train._build_estimator defaults via
 ml/train.fit_and_score), written out in full so that it can be reviewed, hashed and bound into the holdout
-registry. Documents: docs/superpowers/specs/2026-11-06-sx-model-recipe-FINAL-DRAFT.md (unsigned).
+registry. Documents: docs/superpowers/specs/sx-model-recipe-FINAL-DRAFT.md (unsigned).
 
   * Frozen dataclass; canonical JSON; sha256 that includes the exact library versions.
   * `build_fit_fn` returns the harness's `fit_fn(X, y, meta, *, seed)` ONLY through the approval gate of

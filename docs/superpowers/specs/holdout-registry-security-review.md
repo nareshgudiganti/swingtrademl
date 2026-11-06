@@ -1,4 +1,4 @@
-# Holdout registry: concurrency, durability and recovery security review (2026-11-08)
+# Holdout registry: concurrency, durability and recovery security review
 
 Scope: `backend/src/swing_trade_ml/ml/holdout_registry.py` (registry), the 6-line hook in `ml/sector_walkforward.py`,
 tests `test_holdout_registry.py` (updated) and `test_holdout_registry_security.py` (new, 25 tests). Owner requirement

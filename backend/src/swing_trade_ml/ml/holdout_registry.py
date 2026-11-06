@@ -30,7 +30,7 @@ Entry types and the per-event state machine (all rules are enforced by `_replay`
                       holdout record file in the locations named by STARTED: owner-signed, references the STARTED line
                       by hash, repeats all bound hashes, a never-used authorisation text, at most ONE per event. It
                       permits exactly one further STARTED, which must use a fresh marker file.
-See docs/superpowers/specs/2026-11-08-holdout-registry-security-review.md for the security review.
+See docs/superpowers/specs/holdout-registry-security-review.md for the security review.
 A SECOND event for the same horizon (a new AUTHORISED) is only possible when it names the consumed event it
 supersedes plus a reason, signed by the owner. Output path, run name, protocol file copy and seed play no role.
 

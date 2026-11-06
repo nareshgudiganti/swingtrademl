@@ -23,7 +23,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
-VERDICT_CODE_VERSION = "sx_verdict_v0_PROPOSED"
+VERDICT_CODE_VERSION = "sx_verdict_v1"
 PRIMARY_ARM = "C_56"
 REFERENCE_ARM = "A_53"
 

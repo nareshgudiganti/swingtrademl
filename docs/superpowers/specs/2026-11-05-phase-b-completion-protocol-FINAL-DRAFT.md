@@ -417,13 +417,15 @@ Python: `D:/machine learning/swing-trade-bot/backend/.venv/Scripts/python.exe`, 
 | G6 | Split file matches its recorded hash, and the runner's own guard has nothing to say | `python -c "import swing_trade_ml.brain.service; from swing_trade_ml.brain import phase_b as pb; from pathlib import Path; print(pb.refusal_reasons(today=pb.ist_today(), tags=pb.git_tags(Path('.')), split_dir=Path('docs/brain/evidence/stock_split')))"` (`[]`) |
 | G7 | Date window, India time | `python -c "from datetime import datetime; from zoneinfo import ZoneInfo; d=datetime.now(ZoneInfo('Asia/Kolkata')).date(); print(d, '2026-11-09' <= str(d) <= '2026-12-04')"` (`True`) |
 | G8 | Code versions are exactly the ones named in the signed text | `git rev-parse HEAD:backend/src/swing_trade_ml/brain/phase_b_finish.py HEAD:backend/tests/test_phase_b_finish.py HEAD:backend/src/swing_trade_ml/brain/selection_lab_start.py HEAD:backend/tests/test_selection_lab_start.py HEAD:backend/src/swing_trade_ml/brain/phase_b.py HEAD:docs/brain/evidence/phase_b/.gitattributes HEAD:docs/brain/PHASE-B-FINISH.md HEAD:docs/brain/SELECTION-LAB-START.md HEAD:backend/tests/trial_freeze.json` (the nine blob ids in the table below); and `git diff --exit-code phase-b-completion-v1 HEAD -- backend/src/swing_trade_ml/brain/phase_b_finish.py backend/src/swing_trade_ml/brain/selection_lab_start.py` (exit 0) |
-| G9 | Finish tests, wrapper tests, freeze test green | `python -m pytest backend/tests/test_phase_b_finish.py backend/tests/test_selection_lab_start.py backend/tests/test_trial_freeze.py -q -p no:cacheprovider` (all pass; 166 passed on 2026-11-05 on `release/phase-b-code` a05c619; re-run and record the count at signing) |
+| G9 | Finish tests, wrapper tests, freeze test green | `python -m pytest backend/tests/test_phase_b_finish.py backend/tests/test_selection_lab_start.py backend/tests/test_trial_freeze.py -q -p no:cacheprovider` (all pass; 166 passed on 2026-11-05 on `release/phase-b-code` a05c619, and 166 passed again on 2026-11-06 on the merged branch (a73b938 = a05c619 merged with `origin/main` cbdb3f6); re-run and record the count at signing) |
 | G10 | Evidence files are protected from line-ending conversion | `git check-attr text -- docs/brain/evidence/phase_b/x.json` (`text: unset`) |
 | G11 | No Phase B outputs or rows yet (before B1) | `grep -c "Phase B candidate" docs/brain/EXPOSURE-LEDGER.md` (0); `ls -A docs/brain/evidence/phase_b` (only `.gitattributes`) |
 | G12 | Ledger history clean of candidate rows (before B1) | `git log --oneline -S"Phase B candidate" -- docs/brain/EXPOSURE-LEDGER.md` (no output) |
 | G13 | Before B2 and B3: the previous candidate is committed and nothing is open | `git status --porcelain --untracked-files=all` (no output); `git log --oneline -1 -- docs/brain/evidence/phase_b/MANIFEST_B1.json` (a commit) |
 | G14 | No unresolved interruption; any removed row has a signed recovery note | `git log --oneline -S"Phase B candidate <Bn>" -- docs/brain/EXPOSURE-LEDGER.md` shows exactly one commit (the evidence commit), or for a recovered candidate exactly three (record, removal, evidence) with `RECOVERY_<Bn>_1.md` committed between the first two; `ls docs/brain/evidence/phase_b/INTERRUPTION_*` has a signed `RECOVERY_*` for every I1 |
 | G15 | The owner has said "start" in writing, and the signatures on this text are filled | owner's written note |
+
+Re-verified 2026-11-06 on the merged branch `release/phase-b-code` a73b938 (`a05c619` merged with `origin/main` cbdb3f6, no conflicts): all nine blob ids below equal the table, and `phase_b.py` equals tag `phase-b-settings`. The binding is still by blob id.
 
 Code-binding table (git blob ids of the COMMITTED files, local branch `release/phase-b-code` tip
 `a05c619` (see above); re-verify at signing against `main`; any later change to any of them voids this binding
@@ -469,6 +471,10 @@ freeze and everything fingerprinted in `backend/tests/trial_freeze.json`; Amendm
 rules; no number, threshold, seed or window anywhere.
 
 ---
+
+## 13a. Disclosure: known price-data steps (added 2026-11-06; disclosure only)
+
+Known price-data steps exist in the stored daily prices. They are disclosed here, before any result exists. Phase B settings, stock lists, the split file, windows and every signed rule are not changed, and no price is corrected or re-fetched for Phase B: results are disclosed, not corrected. Inside the 49 scored stocks (all three candidates): ITC 2025-01-06 (+6.3%), HINDUNILVR 2025-12-05 (-5.0%, stored unadjusted for the Kwality Wall's demerger) and RELIANCE 2023-07-20 (-3.3%). In B2's extra training set of 128 stocks: BAJAJELEC (+38.8%, unexplained). The owner's read-only fresh fetch for HINDUNILVR and BAJAJELEC is pending, and whatever it shows does not change Phase B. Sources: `docs/brain/evidence/corporate_actions/verify49_report.md` and `docs/brain/evidence/corporate_actions/corporate_actions_audit.md`.
 
 ## 14. Decisions
 

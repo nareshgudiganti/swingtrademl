@@ -1,6 +1,6 @@
 {
  "schema": "final_hashes_v3",
- "date": "2026-11-07",
+ "date": "prepared before signing",
  "status": "UNSIGNED. Computed read-only (SELECT only); nothing trained.",
  "code": {
   "git_head": "412a125a76db8e2afbdc6ba8f64d538fd7b187b8",

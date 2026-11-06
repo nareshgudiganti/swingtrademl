@@ -10,7 +10,7 @@ Call order (documented, enforced by arguments):
   2. Only after the holdout registry shows COMPLETED for the run, call again with
      `holdout_completed=True` and `holdout_records` (a list or a zero-argument loader). The holdout
      records are touched only if the outcome depends on R4 AND `holdout_completed` is true.
-Spec: docs/superpowers/specs/2026-11-08-sx-verdict-code-spec.md
+Spec: docs/superpowers/specs/sx-verdict-code-spec.md
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
-VERDICT_CODE_VERSION = "sx_verdict_v0_PROPOSED"
+VERDICT_CODE_VERSION = "sx_verdict_v1"
 PRIMARY_ARM = "C_56"
 REFERENCE_ARM = "A_53"
 

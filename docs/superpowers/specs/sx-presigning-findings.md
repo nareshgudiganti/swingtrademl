@@ -1,4 +1,4 @@
-# SX5 / SX10 pre-signing investigation: findings and proposed protocol text (2026-11-06)
+# SX5 / SX10 pre-signing investigation: findings and proposed protocol text
 
 Status: **findings for owner review. Nothing here is signed.** Read-only investigation on the local database (SELECT only); only
 development-period labels were used (decision days up to 2026-01-31); no model was fitted; no holdout-period outcome was computed.

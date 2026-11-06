@@ -1,4 +1,4 @@
-# Final verification v3 (2026-11-07): SX5 / SX10, A_53 / R_37 / C_56
+# Final verification v3: SX5 / SX10, A_53 / R_37 / C_56
 
 Status: **verification evidence, UNSIGNED.** Read-only (SELECT only) on the local database; no model was fitted on real data; no holdout was evaluated; nothing was signed or tagged. The scripts were scratch files (not in the repository); the numbers below are the record. Full hashes: `final_hashes_v3.json`.
 
@@ -115,7 +115,7 @@ Notes: the harness has no 'run name' argument, so the output folder (the nearest
 
 ## 1d. Limitations documented
 
-Both protocol drafts already carried a one-line survivor-bias caveat but not the precise text. Each now has an 'Update 2026-11-07' block with (L1) the breadth survivorship text, (L2) the input-gap selection text, (L3) the `obv_slope` old and current formulas, their effect on R_37, the 400-bar versus full-history difference, and a note that the older C_57, 45,930 and 45,695 text is superseded. `docs/brain/SECTOR-FEATURES-SPEC.md` has a new subsection 'R_37 and obv_slope'. Nothing is committed.
+Both protocol drafts already carried a one-line survivor-bias caveat but not the precise text. Each now has an 'Update 2' block with (L1) the breadth survivorship text, (L2) the input-gap selection text, (L3) the `obv_slope` old and current formulas, their effect on R_37, the 400-bar versus full-history difference, and a note that the older C_57, 45,930 and 45,695 text is superseded. `docs/brain/SECTOR-FEATURES-SPEC.md` has a new subsection 'R_37 and obv_slope'. Nothing is committed.
 
 ## Observations that need a decision (not failures)
 

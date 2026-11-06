@@ -1,0 +1,729 @@
+{
+ "meta": {
+  "master_seed": 20261104,
+  "reps": 1000,
+  "note": "neutral pick proxy (AR(1) scores, names only); no arm, no return, no holdout outcome used"
+ },
+ "cells": [
+  {
+   "h": 5,
+   "phi": 0.0,
+   "reps": 1000,
+   "seed": 20261104,
+   "n_counted_folds": 30,
+   "fold_days": [
+    19,
+    19,
+    19,
+    19,
+    20,
+    18,
+    17,
+    20,
+    19,
+    19,
+    19,
+    20,
+    19,
+    19,
+    19,
+    19,
+    21,
+    19,
+    18,
+    16,
+    20,
+    20,
+    20,
+    19,
+    19,
+    19,
+    18,
+    20,
+    19,
+    13
+   ],
+   "mean_ideas_per_fold_no_repeat": [
+    65.268,
+    65.421,
+    65.465,
+    65.408,
+    68.791,
+    62.155,
+    58.868,
+    68.623,
+    65.391,
+    65.47,
+    65.329,
+    68.559,
+    65.378,
+    65.427,
+    65.527,
+    65.426,
+    71.759,
+    65.361,
+    61.911,
+    55.762,
+    68.757,
+    68.666,
+    68.678,
+    65.427,
+    65.504,
+    65.454,
+    62.084,
+    68.588,
+    65.477,
+    45.812
+   ],
+   "new_idea_share_no_repeat": 0.6887596460176991,
+   "variants": {
+    "no_repeat": {
+     "p_19day_fold_passes_ideas": 1.0,
+     "p_last_fold_13_days_passes": 1.0,
+     "mean_eligible_folds": 30.0,
+     "min_eligible_folds_seen": 30,
+     "p_fewer_than_12_eligible_folds": 0.0,
+     "p_R3_data_fail": 0.0
+    },
+    "raw_per_day": {
+     "p_19day_fold_passes_ideas": 1.0,
+     "p_last_fold_13_days_passes": 1.0,
+     "mean_eligible_folds": 30.0,
+     "min_eligible_folds_seen": 30,
+     "p_fewer_than_12_eligible_folds": 0.0,
+     "p_R3_data_fail": 0.0
+    },
+    "days_only": {
+     "p_19day_fold_passes_ideas": 1.0,
+     "p_last_fold_13_days_passes": 1.0,
+     "mean_eligible_folds": 30.0,
+     "min_eligible_folds_seen": 30,
+     "p_fewer_than_12_eligible_folds": 0.0,
+     "p_R3_data_fail": 0.0
+    }
+   },
+   "thresholds_no_repeat": {
+    "16": {
+     "p_19day_fold_passes": 1.0,
+     "mean_eligible_folds": 30.0,
+     "p_fewer_than_12_eligible_folds": 0.0
+    },
+    "20": {
+     "p_19day_fold_passes": 1.0,
+     "mean_eligible_folds": 30.0,
+     "p_fewer_than_12_eligible_folds": 0.0
+    },
+    "36": {
+     "p_19day_fold_passes": 1.0,
+     "mean_eligible_folds": 30.0,
+     "p_fewer_than_12_eligible_folds": 0.0
+    }
+   },
+   "ideas_19day_fold": {
+    "p05": 61.0,
+    "median": 65.0,
+    "p95": 70.0
+   }
+  },
+  {
+   "h": 5,
+   "phi": 0.5,
+   "reps": 1000,
+   "seed": 20261104,
+   "n_counted_folds": 30,
+   "fold_days": [
+    19,
+    19,
+    19,
+    19,
+    20,
+    18,
+    17,
+    20,
+    19,
+    19,
+    19,
+    20,
+    19,
+    19,
+    19,
+    19,
+    21,
+    19,
+    18,
+    16,
+    20,
+    20,
+    20,
+    19,
+    19,
+    19,
+    18,
+    20,
+    19,
+    13
+   ],
+   "mean_ideas_per_fold_no_repeat": [
+    53.301,
+    53.213,
+    53.261,
+    53.088,
+    55.909,
+    50.531,
+    47.94,
+    55.791,
+    53.333,
+    53.089,
+    53.277,
+    55.858,
+    53.016,
+    53.195,
+    53.119,
+    53.224,
+    58.434,
+    53.26,
+    50.659,
+    45.122,
+    56.01,
+    55.875,
+    56.053,
+    53.267,
+    53.172,
+    53.223,
+    50.577,
+    55.761,
+    53.156,
+    37.332
+   ],
+   "new_idea_share_no_repeat": 0.5603702654867256,
+   "variants": {
+    "no_repeat": {
+     "p_19day_fold_passes_ideas": 1.0,
+     "p_last_fold_13_days_passes": 1.0,
+     "mean_eligible_folds": 30.0,
+     "min_eligible_folds_seen": 30,
+     "p_fewer_than_12_eligible_folds": 0.0,
+     "p_R3_data_fail": 0.0
+    },
+    "raw_per_day": {
+     "p_19day_fold_passes_ideas": 1.0,
+     "p_last_fold_13_days_passes": 1.0,
+     "mean_eligible_folds": 30.0,
+     "min_eligible_folds_seen": 30,
+     "p_fewer_than_12_eligible_folds": 0.0,
+     "p_R3_data_fail": 0.0
+    },
+    "days_only": {
+     "p_19day_fold_passes_ideas": 1.0,
+     "p_last_fold_13_days_passes": 1.0,
+     "mean_eligible_folds": 30.0,
+     "min_eligible_folds_seen": 30,
+     "p_fewer_than_12_eligible_folds": 0.0,
+     "p_R3_data_fail": 0.0
+    }
+   },
+   "thresholds_no_repeat": {
+    "16": {
+     "p_19day_fold_passes": 1.0,
+     "mean_eligible_folds": 30.0,
+     "p_fewer_than_12_eligible_folds": 0.0
+    },
+    "20": {
+     "p_19day_fold_passes": 1.0,
+     "mean_eligible_folds": 30.0,
+     "p_fewer_than_12_eligible_folds": 0.0
+    },
+    "36": {
+     "p_19day_fold_passes": 1.0,
+     "mean_eligible_folds": 29.745,
+     "p_fewer_than_12_eligible_folds": 0.0
+    }
+   },
+   "ideas_19day_fold": {
+    "p05": 48.0,
+    "median": 53.0,
+    "p95": 58.0
+   }
+  },
+  {
+   "h": 5,
+   "phi": 0.9,
+   "reps": 1000,
+   "seed": 20261104,
+   "n_counted_folds": 30,
+   "fold_days": [
+    19,
+    19,
+    19,
+    19,
+    20,
+    18,
+    17,
+    20,
+    19,
+    19,
+    19,
+    20,
+    19,
+    19,
+    19,
+    19,
+    21,
+    19,
+    18,
+    16,
+    20,
+    20,
+    20,
+    19,
+    19,
+    19,
+    18,
+    20,
+    19,
+    13
+   ],
+   "mean_ideas_per_fold_no_repeat": [
+    31.888,
+    31.927,
+    32.004,
+    32.043,
+    33.567,
+    30.326,
+    28.812,
+    33.503,
+    32.029,
+    31.957,
+    32.016,
+    33.632,
+    32.101,
+    32.137,
+    32.092,
+    31.965,
+    35.126,
+    32.103,
+    30.31,
+    27.367,
+    33.519,
+    33.706,
+    33.665,
+    32.054,
+    32.018,
+    32.112,
+    30.478,
+    33.566,
+    32.031,
+    22.86
+   ],
+   "new_idea_share_no_repeat": 0.3373146902654867,
+   "variants": {
+    "no_repeat": {
+     "p_19day_fold_passes_ideas": 1.0,
+     "p_last_fold_13_days_passes": 0.947,
+     "mean_eligible_folds": 29.947,
+     "min_eligible_folds_seen": 29,
+     "p_fewer_than_12_eligible_folds": 0.0,
+     "p_R3_data_fail": 0.0
+    },
+    "raw_per_day": {
+     "p_19day_fold_passes_ideas": 1.0,
+     "p_last_fold_13_days_passes": 1.0,
+     "mean_eligible_folds": 30.0,
+     "min_eligible_folds_seen": 30,
+     "p_fewer_than_12_eligible_folds": 0.0,
+     "p_R3_data_fail": 0.0
+    },
+    "days_only": {
+     "p_19day_fold_passes_ideas": 1.0,
+     "p_last_fold_13_days_passes": 1.0,
+     "mean_eligible_folds": 30.0,
+     "min_eligible_folds_seen": 30,
+     "p_fewer_than_12_eligible_folds": 0.0,
+     "p_R3_data_fail": 0.0
+    }
+   },
+   "thresholds_no_repeat": {
+    "16": {
+     "p_19day_fold_passes": 1.0,
+     "mean_eligible_folds": 30.0,
+     "p_fewer_than_12_eligible_folds": 0.0
+    },
+    "20": {
+     "p_19day_fold_passes": 1.0,
+     "mean_eligible_folds": 29.947,
+     "p_fewer_than_12_eligible_folds": 0.0
+    },
+    "36": {
+     "p_19day_fold_passes": 0.10575,
+     "mean_eligible_folds": 3.959,
+     "p_fewer_than_12_eligible_folds": 1.0
+    }
+   },
+   "ideas_19day_fold": {
+    "p05": 28.0,
+    "median": 32.0,
+    "p95": 37.0
+   }
+  },
+  {
+   "h": 10,
+   "phi": 0.0,
+   "reps": 1000,
+   "seed": 20261104,
+   "n_counted_folds": 30,
+   "fold_days": [
+    19,
+    19,
+    19,
+    19,
+    20,
+    18,
+    17,
+    20,
+    19,
+    19,
+    19,
+    20,
+    19,
+    19,
+    19,
+    19,
+    21,
+    19,
+    18,
+    16,
+    20,
+    20,
+    20,
+    19,
+    19,
+    19,
+    18,
+    20,
+    19,
+    13
+   ],
+   "mean_ideas_per_fold_no_repeat": [
+    52.894,
+    53.011,
+    53.036,
+    53.127,
+    55.683,
+    50.512,
+    47.989,
+    55.653,
+    53.013,
+    52.926,
+    53.117,
+    55.611,
+    53.106,
+    53.092,
+    53.018,
+    53.06,
+    58.027,
+    52.964,
+    50.54,
+    45.184,
+    55.455,
+    55.573,
+    55.516,
+    53.053,
+    52.93,
+    52.98,
+    50.393,
+    55.649,
+    53.161,
+    37.687
+   ],
+   "new_idea_share_no_repeat": 0.5585699115044248,
+   "variants": {
+    "no_repeat": {
+     "p_19day_fold_passes_ideas": 1.0,
+     "p_last_fold_13_days_passes": 1.0,
+     "mean_eligible_folds": 30.0,
+     "min_eligible_folds_seen": 30,
+     "p_fewer_than_12_eligible_folds": 0.0,
+     "p_R3_data_fail": 0.0
+    },
+    "raw_per_day": {
+     "p_19day_fold_passes_ideas": 1.0,
+     "p_last_fold_13_days_passes": 1.0,
+     "mean_eligible_folds": 30.0,
+     "min_eligible_folds_seen": 30,
+     "p_fewer_than_12_eligible_folds": 0.0,
+     "p_R3_data_fail": 0.0
+    },
+    "days_only": {
+     "p_19day_fold_passes_ideas": 1.0,
+     "p_last_fold_13_days_passes": 1.0,
+     "mean_eligible_folds": 30.0,
+     "min_eligible_folds_seen": 30,
+     "p_fewer_than_12_eligible_folds": 0.0,
+     "p_R3_data_fail": 0.0
+    }
+   },
+   "thresholds_no_repeat": {
+    "16": {
+     "p_19day_fold_passes": 1.0,
+     "mean_eligible_folds": 30.0,
+     "p_fewer_than_12_eligible_folds": 0.0
+    },
+    "20": {
+     "p_19day_fold_passes": 1.0,
+     "mean_eligible_folds": 30.0,
+     "p_fewer_than_12_eligible_folds": 0.0
+    },
+    "36": {
+     "p_19day_fold_passes": 1.0,
+     "mean_eligible_folds": 29.852,
+     "p_fewer_than_12_eligible_folds": 0.0
+    }
+   },
+   "ideas_19day_fold": {
+    "p05": 49.0,
+    "median": 53.0,
+    "p95": 57.0
+   }
+  },
+  {
+   "h": 10,
+   "phi": 0.5,
+   "reps": 1000,
+   "seed": 20261104,
+   "n_counted_folds": 30,
+   "fold_days": [
+    19,
+    19,
+    19,
+    19,
+    20,
+    18,
+    17,
+    20,
+    19,
+    19,
+    19,
+    20,
+    19,
+    19,
+    19,
+    19,
+    21,
+    19,
+    18,
+    16,
+    20,
+    20,
+    20,
+    19,
+    19,
+    19,
+    18,
+    20,
+    19,
+    13
+   ],
+   "mean_ideas_per_fold_no_repeat": [
+    44.448,
+    44.854,
+    44.55,
+    44.605,
+    46.636,
+    42.502,
+    40.386,
+    46.503,
+    44.629,
+    44.61,
+    44.645,
+    46.675,
+    44.767,
+    44.436,
+    44.643,
+    44.76,
+    48.744,
+    44.6,
+    42.435,
+    38.19,
+    46.768,
+    46.602,
+    46.677,
+    44.615,
+    44.679,
+    44.531,
+    42.483,
+    46.583,
+    44.539,
+    31.857
+   ],
+   "new_idea_share_no_repeat": 0.4697175221238938,
+   "variants": {
+    "no_repeat": {
+     "p_19day_fold_passes_ideas": 1.0,
+     "p_last_fold_13_days_passes": 1.0,
+     "mean_eligible_folds": 30.0,
+     "min_eligible_folds_seen": 30,
+     "p_fewer_than_12_eligible_folds": 0.0,
+     "p_R3_data_fail": 0.0
+    },
+    "raw_per_day": {
+     "p_19day_fold_passes_ideas": 1.0,
+     "p_last_fold_13_days_passes": 1.0,
+     "mean_eligible_folds": 30.0,
+     "min_eligible_folds_seen": 30,
+     "p_fewer_than_12_eligible_folds": 0.0,
+     "p_R3_data_fail": 0.0
+    },
+    "days_only": {
+     "p_19day_fold_passes_ideas": 1.0,
+     "p_last_fold_13_days_passes": 1.0,
+     "mean_eligible_folds": 30.0,
+     "min_eligible_folds_seen": 30,
+     "p_fewer_than_12_eligible_folds": 0.0,
+     "p_R3_data_fail": 0.0
+    }
+   },
+   "thresholds_no_repeat": {
+    "16": {
+     "p_19day_fold_passes": 1.0,
+     "mean_eligible_folds": 30.0,
+     "p_fewer_than_12_eligible_folds": 0.0
+    },
+    "20": {
+     "p_19day_fold_passes": 1.0,
+     "mean_eligible_folds": 30.0,
+     "p_fewer_than_12_eligible_folds": 0.0
+    },
+    "36": {
+     "p_19day_fold_passes": 0.9995,
+     "mean_eligible_folds": 28.85,
+     "p_fewer_than_12_eligible_folds": 0.0
+    }
+   },
+   "ideas_19day_fold": {
+    "p05": 40.0,
+    "median": 45.0,
+    "p95": 49.0
+   }
+  },
+  {
+   "h": 10,
+   "phi": 0.9,
+   "reps": 1000,
+   "seed": 20261104,
+   "n_counted_folds": 30,
+   "fold_days": [
+    19,
+    19,
+    19,
+    19,
+    20,
+    18,
+    17,
+    20,
+    19,
+    19,
+    19,
+    20,
+    19,
+    19,
+    19,
+    19,
+    21,
+    19,
+    18,
+    16,
+    20,
+    20,
+    20,
+    19,
+    19,
+    19,
+    18,
+    20,
+    19,
+    13
+   ],
+   "mean_ideas_per_fold_no_repeat": [
+    25.174,
+    25.245,
+    25.097,
+    25.29,
+    26.221,
+    24.113,
+    23.007,
+    26.182,
+    25.16,
+    25.125,
+    25.142,
+    26.335,
+    25.172,
+    25.173,
+    25.178,
+    25.403,
+    27.408,
+    25.069,
+    24.103,
+    21.808,
+    26.3,
+    26.291,
+    26.184,
+    25.222,
+    25.405,
+    25.162,
+    23.997,
+    26.249,
+    25.106,
+    18.418
+   ],
+   "new_idea_share_no_repeat": 0.2653943362831858,
+   "variants": {
+    "no_repeat": {
+     "p_19day_fold_passes_ideas": 0.988625,
+     "p_last_fold_13_days_passes": 0.296,
+     "mean_eligible_folds": 28.735,
+     "min_eligible_folds_seen": 25,
+     "p_fewer_than_12_eligible_folds": 0.0,
+     "p_R3_data_fail": 0.0
+    },
+    "raw_per_day": {
+     "p_19day_fold_passes_ideas": 1.0,
+     "p_last_fold_13_days_passes": 1.0,
+     "mean_eligible_folds": 30.0,
+     "min_eligible_folds_seen": 30,
+     "p_fewer_than_12_eligible_folds": 0.0,
+     "p_R3_data_fail": 0.0
+    },
+    "days_only": {
+     "p_19day_fold_passes_ideas": 1.0,
+     "p_last_fold_13_days_passes": 1.0,
+     "mean_eligible_folds": 30.0,
+     "min_eligible_folds_seen": 30,
+     "p_fewer_than_12_eligible_folds": 0.0,
+     "p_R3_data_fail": 0.0
+    }
+   },
+   "thresholds_no_repeat": {
+    "16": {
+     "p_19day_fold_passes": 1.0,
+     "mean_eligible_folds": 29.907,
+     "p_fewer_than_12_eligible_folds": 0.0
+    },
+    "20": {
+     "p_19day_fold_passes": 0.988625,
+     "mean_eligible_folds": 28.735,
+     "p_fewer_than_12_eligible_folds": 0.0
+    },
+    "36": {
+     "p_19day_fold_passes": 0.00025,
+     "mean_eligible_folds": 0.012,
+     "p_fewer_than_12_eligible_folds": 1.0
+    }
+   },
+   "ideas_19day_fold": {
+    "p05": 21.0,
+    "median": 25.0,
+    "p95": 30.0
+   }
+  }
+ ]
+}

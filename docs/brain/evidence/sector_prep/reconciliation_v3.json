@@ -1,0 +1,2054 @@
+{
+ "universe": {
+  "used_49": 49,
+  "sx_mapped": 47,
+  "unmapped": [
+   "ASIANPAINT",
+   "BHARTIARTL"
+  ]
+ },
+ "order_of_reasons": [
+  "warm_up",
+  "label_incomplete",
+  "event",
+  "existing_gap",
+  "sector_gap"
+ ],
+ "events_file_rows": 419,
+ "horizons": {
+  "h5": {
+   "exclusion_report_policy_counts": {
+    "buildable_rows": 49245,
+    "excluded_unique_rows": 187,
+    "excluded_by_window_type_row_counts": {
+     "feature": 182,
+     "label": 5
+    },
+    "retained_rows": 49058,
+    "dataset_sha256": "5800233d76617208db30ea6e1d42b486aee921dcb45c70b57b84f6ee1d5693c6",
+    "excluded_list_sha256": "761a9f9cf5b87da2855f8ff45de9c46bc4ebdaba2d4062f5166b00d052c628e2"
+   },
+   "sx_47": {
+    "counts": {
+     "raw": 59314,
+     "warm_up": 11844,
+     "label_incomplete": 235,
+     "event": 187,
+     "existing_gap": 1103,
+     "sector_gap": 10,
+     "final": 45935
+    },
+    "overlap": {
+     "warm_up+existing_gap": 11844,
+     "warm_up+sector_gap": 1606,
+     "label_incomplete+existing_gap": 235
+    },
+    "events": {
+     "HINDUNILVR:2025-12-05": {
+      "rows": 187,
+      "by_window": {
+       "label": 5,
+       "feature": 182
+      }
+     }
+    },
+    "event_overlap": {},
+    "final_rows": 45935,
+    "sha256": "fdf0b5665613a501f059d6f6de421463673156efcc1b5a9e7a35fe18e1d19f04"
+   },
+   "full_49_baseline": {
+    "counts": {
+     "raw": 61838,
+     "warm_up": 12348,
+     "label_incomplete": 245,
+     "event": 187,
+     "existing_gap": 1149,
+     "sector_gap": 0,
+     "final": 47909
+    },
+    "overlap": {
+     "warm_up+existing_gap": 12348,
+     "label_incomplete+existing_gap": 245
+    },
+    "events": {
+     "HINDUNILVR:2025-12-05": {
+      "rows": 187,
+      "by_window": {
+       "label": 5,
+       "feature": 182
+      }
+     }
+    },
+    "event_overlap": {},
+    "final_rows": 47909,
+    "sha256": "8b32492c653890e5da4334d888893b73c7f417a8d7ccf2c86ce610c68c0e10af"
+   },
+   "full_49_if_sector_required_info": {
+    "counts": {
+     "raw": 61838,
+     "warm_up": 12348,
+     "label_incomplete": 245,
+     "event": 187,
+     "existing_gap": 1149,
+     "sector_gap": 1974,
+     "final": 45935
+    },
+    "final_rows": 45935,
+    "sha256": "fdf0b5665613a501f059d6f6de421463673156efcc1b5a9e7a35fe18e1d19f04"
+   },
+   "matched_baseline": {
+    "definition": "existing inputs, exactly the SX 47 eligible rows",
+    "final_rows": 45935,
+    "sha256": "fdf0b5665613a501f059d6f6de421463673156efcc1b5a9e7a35fe18e1d19f04",
+    "subset_of_full_49_baseline": true
+   },
+   "sx_loss_vs_full_49": {
+    "rows": 1974,
+    "by_stock": {
+     "APOLLOHOSP": 10,
+     "ASIANPAINT": 982,
+     "BHARTIARTL": 982
+    },
+    "pct": 4.12
+   },
+   "assembler_cross_check": {
+    "assembler_rows": 45935,
+    "reconciliation_rows": 45935,
+    "identical_row_sets": true,
+    "only_in_assembler": 0,
+    "only_in_reconciliation": 0
+   },
+   "existing_input_missing_counts_all_rows_by_column": {
+    "vix_percentile_rank": 13475,
+    "volatility_percentile_rank": 13279,
+    "high_52w_dist": 12299,
+    "days_since_52w_high": 12299,
+    "days_since_52w_low": 12299,
+    "sma_200_ratio": 9751,
+    "sma_50_200_cross": 9751,
+    "sma_50_ratio": 2401,
+    "sma_10_50_cross": 2401,
+    "breadth_pct_above_sma50": 2401,
+    "sector_relative_strength_20d": 2110,
+    "vix_change_5d": 1421,
+    "sector_relative_strength_5d": 1375,
+    "adx_14": 1274,
+    "trend_strength": 1274,
+    "sector_trend_regime": 1130,
+    "relative_strength_20d": 1029,
+    "nifty_volatility_20": 1029,
+    "roc_20": 980,
+    "volatility_20": 980,
+    "return_20d": 980,
+    "sma_20_ratio": 931,
+    "bb_position": 931,
+    "bb_width": 931,
+    "volume_ratio_20": 931,
+    "obv_slope": 931,
+    "high_20_dist": 931,
+    "low_20_dist": 931,
+    "cmf_20": 931,
+    "stoch_d": 735,
+    "rsi_14": 686,
+    "mfi_14": 670,
+    "stoch_k": 637,
+    "williams_r": 637,
+    "atr_14_pct": 637,
+    "roc_10": 490,
+    "return_10d": 490,
+    "sma_10_ratio": 441,
+    "relative_strength_5d": 294,
+    "return_5d": 245,
+    "return_1d": 49,
+    "gap_pct": 49,
+    "nifty_trend_regime": 49,
+    "breadth_advance_pct": 49
+   },
+   "per_stock_sx": {
+    "ADANIENT": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "ADANIPORTS": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "APOLLOHOSP": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 10,
+     "final": 972
+    },
+    "AXISBANK": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 25,
+     "sector_gap": 0,
+     "final": 980
+    },
+    "BAJAJ-AUTO": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "BAJAJFINSV": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 26,
+     "sector_gap": 0,
+     "final": 979
+    },
+    "BAJFINANCE": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "BPCL": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 24,
+     "sector_gap": 0,
+     "final": 981
+    },
+    "BRITANNIA": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "CIPLA": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "COALINDIA": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "DIVISLAB": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "DRREDDY": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 27,
+     "sector_gap": 0,
+     "final": 978
+    },
+    "EICHERMOT": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "GRASIM": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "HCLTECH": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "HDFCBANK": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "HDFCLIFE": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "HEROMOTOCO": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 27,
+     "sector_gap": 0,
+     "final": 978
+    },
+    "HINDALCO": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "HINDUNILVR": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 187,
+     "existing_gap": 29,
+     "sector_gap": 0,
+     "final": 789
+    },
+    "ICICIBANK": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "INDUSINDBK": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "INFY": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "ITC": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "JSWSTEEL": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "KOTAKBANK": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "LT": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "M&M": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "MARUTI": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 25,
+     "sector_gap": 0,
+     "final": 980
+    },
+    "NESTLEIND": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "NTPC": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "ONGC": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "POWERGRID": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "RELIANCE": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "SBILIFE": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "SBIN": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "SHRIRAMFIN": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "SUNPHARMA": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "TATACONSUM": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "TATASTEEL": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "TCS": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "TECHM": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "TITAN": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "ULTRACEMCO": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "UPL": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "WIPRO": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    }
+   },
+   "per_stock_full": {
+    "ADANIENT": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "ADANIPORTS": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "APOLLOHOSP": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "ASIANPAINT": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "AXISBANK": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 25,
+     "sector_gap": 0,
+     "final": 980
+    },
+    "BAJAJ-AUTO": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "BAJAJFINSV": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 26,
+     "sector_gap": 0,
+     "final": 979
+    },
+    "BAJFINANCE": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "BHARTIARTL": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "BPCL": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 24,
+     "sector_gap": 0,
+     "final": 981
+    },
+    "BRITANNIA": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "CIPLA": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "COALINDIA": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "DIVISLAB": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "DRREDDY": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 27,
+     "sector_gap": 0,
+     "final": 978
+    },
+    "EICHERMOT": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "GRASIM": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "HCLTECH": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "HDFCBANK": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "HDFCLIFE": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "HEROMOTOCO": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 27,
+     "sector_gap": 0,
+     "final": 978
+    },
+    "HINDALCO": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "HINDUNILVR": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 187,
+     "existing_gap": 29,
+     "sector_gap": 0,
+     "final": 789
+    },
+    "ICICIBANK": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "INDUSINDBK": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "INFY": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "ITC": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "JSWSTEEL": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "KOTAKBANK": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "LT": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "M&M": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "MARUTI": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 25,
+     "sector_gap": 0,
+     "final": 980
+    },
+    "NESTLEIND": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "NTPC": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "ONGC": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "POWERGRID": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "RELIANCE": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "SBILIFE": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "SBIN": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "SHRIRAMFIN": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "SUNPHARMA": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "TATACONSUM": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "TATASTEEL": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "TCS": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "TECHM": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "TITAN": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "ULTRACEMCO": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "UPL": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    },
+    "WIPRO": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 5,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 982
+    }
+   }
+  },
+  "h10": {
+   "exclusion_report_policy_counts": {
+    "buildable_rows": 49000,
+    "excluded_unique_rows": 187,
+    "excluded_by_window_type_row_counts": {
+     "feature": 177,
+     "label": 10
+    },
+    "retained_rows": 48813,
+    "dataset_sha256": "5bd1c1884a727fe036e3f05bdd39c793450cb7db1d50daf6da7d985316d0f842",
+    "excluded_list_sha256": "c89f925d9b906f7b58e81262a8d02419afffd948665f646dc02e5899015f71d9"
+   },
+   "sx_47": {
+    "counts": {
+     "raw": 59314,
+     "warm_up": 11844,
+     "label_incomplete": 470,
+     "event": 187,
+     "existing_gap": 1103,
+     "sector_gap": 10,
+     "final": 45700
+    },
+    "overlap": {
+     "warm_up+existing_gap": 11844,
+     "warm_up+sector_gap": 1606,
+     "label_incomplete+existing_gap": 470
+    },
+    "events": {
+     "HINDUNILVR:2025-12-05": {
+      "rows": 187,
+      "by_window": {
+       "label": 10,
+       "feature": 177
+      }
+     }
+    },
+    "event_overlap": {},
+    "final_rows": 45700,
+    "sha256": "d10ef048f52a7bfe377472ff51814f8f3710998a5847f3159e7ae66fe359b444"
+   },
+   "full_49_baseline": {
+    "counts": {
+     "raw": 61838,
+     "warm_up": 12348,
+     "label_incomplete": 490,
+     "event": 187,
+     "existing_gap": 1149,
+     "sector_gap": 0,
+     "final": 47664
+    },
+    "overlap": {
+     "warm_up+existing_gap": 12348,
+     "label_incomplete+existing_gap": 490
+    },
+    "events": {
+     "HINDUNILVR:2025-12-05": {
+      "rows": 187,
+      "by_window": {
+       "label": 10,
+       "feature": 177
+      }
+     }
+    },
+    "event_overlap": {},
+    "final_rows": 47664,
+    "sha256": "2a4cf9e4b4dd1b0a8a0a90a14b9ee6f83b82d7296c67376b32b9c22d78a5f852"
+   },
+   "full_49_if_sector_required_info": {
+    "counts": {
+     "raw": 61838,
+     "warm_up": 12348,
+     "label_incomplete": 490,
+     "event": 187,
+     "existing_gap": 1149,
+     "sector_gap": 1964,
+     "final": 45700
+    },
+    "final_rows": 45700,
+    "sha256": "d10ef048f52a7bfe377472ff51814f8f3710998a5847f3159e7ae66fe359b444"
+   },
+   "matched_baseline": {
+    "definition": "existing inputs, exactly the SX 47 eligible rows",
+    "final_rows": 45700,
+    "sha256": "d10ef048f52a7bfe377472ff51814f8f3710998a5847f3159e7ae66fe359b444",
+    "subset_of_full_49_baseline": true
+   },
+   "sx_loss_vs_full_49": {
+    "rows": 1964,
+    "by_stock": {
+     "APOLLOHOSP": 10,
+     "ASIANPAINT": 977,
+     "BHARTIARTL": 977
+    },
+    "pct": 4.121
+   },
+   "assembler_cross_check": {
+    "assembler_rows": 45700,
+    "reconciliation_rows": 45700,
+    "identical_row_sets": true,
+    "only_in_assembler": 0,
+    "only_in_reconciliation": 0
+   },
+   "existing_input_missing_counts_all_rows_by_column": {
+    "vix_percentile_rank": 13475,
+    "volatility_percentile_rank": 13279,
+    "high_52w_dist": 12299,
+    "days_since_52w_high": 12299,
+    "days_since_52w_low": 12299,
+    "sma_200_ratio": 9751,
+    "sma_50_200_cross": 9751,
+    "sma_50_ratio": 2401,
+    "sma_10_50_cross": 2401,
+    "breadth_pct_above_sma50": 2401,
+    "sector_relative_strength_20d": 2110,
+    "vix_change_5d": 1421,
+    "sector_relative_strength_5d": 1375,
+    "adx_14": 1274,
+    "trend_strength": 1274,
+    "sector_trend_regime": 1130,
+    "relative_strength_20d": 1029,
+    "nifty_volatility_20": 1029,
+    "roc_20": 980,
+    "volatility_20": 980,
+    "return_20d": 980,
+    "sma_20_ratio": 931,
+    "bb_position": 931,
+    "bb_width": 931,
+    "volume_ratio_20": 931,
+    "obv_slope": 931,
+    "high_20_dist": 931,
+    "low_20_dist": 931,
+    "cmf_20": 931,
+    "stoch_d": 735,
+    "rsi_14": 686,
+    "mfi_14": 670,
+    "stoch_k": 637,
+    "williams_r": 637,
+    "atr_14_pct": 637,
+    "roc_10": 490,
+    "return_10d": 490,
+    "sma_10_ratio": 441,
+    "relative_strength_5d": 294,
+    "return_5d": 245,
+    "return_1d": 49,
+    "gap_pct": 49,
+    "nifty_trend_regime": 49,
+    "breadth_advance_pct": 49
+   },
+   "per_stock_sx": {
+    "ADANIENT": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "ADANIPORTS": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "APOLLOHOSP": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 10,
+     "final": 967
+    },
+    "AXISBANK": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 25,
+     "sector_gap": 0,
+     "final": 975
+    },
+    "BAJAJ-AUTO": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "BAJAJFINSV": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 26,
+     "sector_gap": 0,
+     "final": 974
+    },
+    "BAJFINANCE": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "BPCL": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 24,
+     "sector_gap": 0,
+     "final": 976
+    },
+    "BRITANNIA": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "CIPLA": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "COALINDIA": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "DIVISLAB": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "DRREDDY": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 27,
+     "sector_gap": 0,
+     "final": 973
+    },
+    "EICHERMOT": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "GRASIM": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "HCLTECH": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "HDFCBANK": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "HDFCLIFE": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "HEROMOTOCO": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 27,
+     "sector_gap": 0,
+     "final": 973
+    },
+    "HINDALCO": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "HINDUNILVR": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 187,
+     "existing_gap": 29,
+     "sector_gap": 0,
+     "final": 784
+    },
+    "ICICIBANK": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "INDUSINDBK": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "INFY": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "ITC": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "JSWSTEEL": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "KOTAKBANK": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "LT": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "M&M": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "MARUTI": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 25,
+     "sector_gap": 0,
+     "final": 975
+    },
+    "NESTLEIND": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "NTPC": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "ONGC": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "POWERGRID": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "RELIANCE": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "SBILIFE": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "SBIN": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "SHRIRAMFIN": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "SUNPHARMA": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "TATACONSUM": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "TATASTEEL": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "TCS": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "TECHM": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "TITAN": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "ULTRACEMCO": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "UPL": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "WIPRO": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    }
+   },
+   "per_stock_full": {
+    "ADANIENT": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "ADANIPORTS": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "APOLLOHOSP": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "ASIANPAINT": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "AXISBANK": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 25,
+     "sector_gap": 0,
+     "final": 975
+    },
+    "BAJAJ-AUTO": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "BAJAJFINSV": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 26,
+     "sector_gap": 0,
+     "final": 974
+    },
+    "BAJFINANCE": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "BHARTIARTL": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "BPCL": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 24,
+     "sector_gap": 0,
+     "final": 976
+    },
+    "BRITANNIA": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "CIPLA": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "COALINDIA": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "DIVISLAB": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "DRREDDY": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 27,
+     "sector_gap": 0,
+     "final": 973
+    },
+    "EICHERMOT": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "GRASIM": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "HCLTECH": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "HDFCBANK": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "HDFCLIFE": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "HEROMOTOCO": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 27,
+     "sector_gap": 0,
+     "final": 973
+    },
+    "HINDALCO": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "HINDUNILVR": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 187,
+     "existing_gap": 29,
+     "sector_gap": 0,
+     "final": 784
+    },
+    "ICICIBANK": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "INDUSINDBK": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "INFY": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "ITC": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "JSWSTEEL": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "KOTAKBANK": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "LT": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "M&M": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "MARUTI": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 25,
+     "sector_gap": 0,
+     "final": 975
+    },
+    "NESTLEIND": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "NTPC": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "ONGC": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "POWERGRID": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "RELIANCE": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "SBILIFE": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "SBIN": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "SHRIRAMFIN": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "SUNPHARMA": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "TATACONSUM": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "TATASTEEL": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "TCS": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "TECHM": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "TITAN": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "ULTRACEMCO": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "UPL": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    },
+    "WIPRO": {
+     "raw": 1262,
+     "warm_up": 252,
+     "label_incomplete": 10,
+     "event": 0,
+     "existing_gap": 23,
+     "sector_gap": 0,
+     "final": 977
+    }
+   }
+  }
+ }
+}

@@ -1,0 +1,784 @@
+# Exclusion report: 10D B1 sector-only candidate (49, horizon 10)
+
+PREPARATION REPORT. No data was modified. Not signed evidence. Recomputes nothing from sealed trials.
+
+## Header: rule parameters
+- Universe: 49 symbols; 49 had local daily candles.
+- Label horizon (sessions): 10; feature lookback after an event (sessions): 252
+- Warm-up (rows skipped at the start): 252 sessions; last 10 sessions skipped (label unknown)
+- Feature window excluded: decision rows p with e <= p <= e + 252
+- Label window excluded: decision rows p with e - 10 <= p <= e - 1
+- Events file: C:/Users/nares/AppData/Local/Temp/claude/d--machine-learning-swing-trade-bot/7760ad1c-0af2-4782-9c69-ebf2dca1d1d5/scratchpad/corp_actions/events.csv (419 events; 32 on universe stocks)
+- Base policy removes categories: EXCLUDE (verified mechanical step) and PENDING_FRESH_FETCH. RETAIN_GENUINE and PROVISIONAL are kept.
+- Owner-retained genuine moves: ADANIENT, GABRIEL, GALAXYSURF, IREDA, PAYTM, POWERINDIA, WHIRLPOOL
+- The 24-move rule is an anomaly screen only; unverified events stay PROVISIONAL.
+- Pending fresh-fetch comparison: BAJAJELEC 2023-09-14, HINDUNILVR 2025-12-05
+- Pending but NOT in this universe (no effect here): BAJAJELEC:2023-09-14
+
+## Event classes on universe stocks
+- EXCLUDE: 2
+- PENDING_FRESH_FETCH: 1
+- PROVISIONAL: 15
+- RETAIN_GENUINE: 14
+
+## Counts (base policy)
+- Buildable rows (after warm-up and label cut-off): 49000
+- Excluded unique rows: 713  (by window type: {'feature': 683, 'label': 30})
+- Retained rows: 48287
+- Dataset hash (sha256 of sorted SYMBOL|DATE retained rows): ff16fdfdf47e2c4228d9fe91512fa5f68fcdc0cce5b1c829ee17e079832709fa
+- Excluded-list hash: cebaa09ab08155fc6c5adb60ddc655cada84ffd1c86dec140abf2f977801c7d6
+
+## Events driving exclusions or flagged
+| event id | category | type | status |
+|---|---|---|---|
+| ITC:2025-01-06 | EXCLUDE | demerger (ITC Hotels) | VERIFIED |
+| RELIANCE:2023-07-20 | EXCLUDE | demerger (Jio Financial Services) | VERIFIED |
+| HINDUNILVR:2025-12-05 | PENDING_FRESH_FETCH | demerger (Kwality Walls ice cream) | VERIFIED (dates/ratio); adjusted price not found |
+| ADANIPORTS:2023-02-01 | PROVISIONAL | unknown (INFERRED market move: volume >=3x 20d med | UNVERIFIED |
+| ADANIPORTS:2023-12-05 | PROVISIONAL | unknown (INFERRED market move: volume >=3x 20d med | UNVERIFIED |
+| ADANIPORTS:2024-11-21 | PROVISIONAL | ratio-signature only (<15% move); no event found | UNVERIFIED (no evidence of corporate action) |
+| BAJAJ-AUTO:2024-10-17 | PROVISIONAL | ratio-signature only (<15% move); no event found | UNVERIFIED (no evidence of corporate action) |
+| BPCL:2024-06-04 | PROVISIONAL | ratio-signature only (<15% move); no event found | UNVERIFIED (no evidence of corporate action) |
+| COALINDIA:2024-06-04 | PROVISIONAL | ratio-signature only (<15% move); no event found | UNVERIFIED (no evidence of corporate action) |
+| HINDALCO:2024-02-13 | PROVISIONAL | ratio-signature only (<15% move); no event found | UNVERIFIED (no evidence of corporate action) |
+| INDUSINDBK:2024-10-25 | PROVISIONAL | unknown (INFERRED market move: volume >=3x 20d med | UNVERIFIED |
+| JSWSTEEL:2022-05-23 | PROVISIONAL | ratio-signature only (<15% move); no event found | UNVERIFIED (no evidence of corporate action) |
+| LT:2024-06-04 | PROVISIONAL | ratio-signature only (<15% move); no event found | UNVERIFIED (no evidence of corporate action) |
+| ONGC:2022-07-01 | PROVISIONAL | ratio-signature only (<15% move); no event found | UNVERIFIED (no evidence of corporate action) |
+| POWERGRID:2024-06-04 | PROVISIONAL | ratio-signature only (<15% move); no event found | UNVERIFIED (no evidence of corporate action) |
+| SBIN:2024-06-04 | PROVISIONAL | ratio-signature only (<15% move); no event found | UNVERIFIED (no evidence of corporate action) |
+| TATASTEEL:2022-05-23 | PROVISIONAL | ratio-signature only (<15% move); no event found | UNVERIFIED (no evidence of corporate action) |
+| UPL:2026-02-23 | PROVISIONAL | ratio-signature only (<15% move); no event found | UNVERIFIED (no evidence of corporate action) |
+
+## Sensitivity: rows lost
+| horizon | feature lookback | removes | buildable | lost | lost % |
+|---|---|---|---|---|---|
+| 5 | 63 | verified+pending (base) | 49245 | 207 | 0.42 |
+| 5 | 63 | verified+pending+provisional | 49245 | 1085 | 2.2 |
+| 5 | 126 | verified+pending (base) | 49245 | 396 | 0.8 |
+| 5 | 126 | verified+pending+provisional | 49245 | 2219 | 4.51 |
+| 5 | 252 | verified+pending (base) | 49245 | 703 | 1.43 |
+| 5 | 252 | verified+pending+provisional | 49245 | 4221 | 8.57 |
+| 10 | 63 | verified+pending (base) | 49000 | 222 | 0.45 |
+| 10 | 63 | verified+pending+provisional | 49000 | 1160 | 2.37 |
+| 10 | 126 | verified+pending (base) | 49000 | 411 | 0.84 |
+| 10 | 126 | verified+pending+provisional | 49000 | 2290 | 4.67 |
+| 10 | 252 | verified+pending (base) | 49000 | 713 | 1.46 |
+| 10 | 252 | verified+pending+provisional | 49000 | 4276 | 8.73 |
+
+## Exact excluded rows (base policy)
+| symbol | decision date | window | reason | event id |
+|---|---|---|---|---|
+| HINDUNILVR | 2025-11-21 | label | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2025-11-24 | label | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2025-11-25 | label | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2025-11-26 | label | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2025-11-27 | label | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2025-11-28 | label | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2025-12-01 | label | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2025-12-02 | label | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2025-12-03 | label | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2025-12-04 | label | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2025-12-05 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2025-12-08 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2025-12-09 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2025-12-10 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2025-12-11 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2025-12-12 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2025-12-15 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2025-12-16 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2025-12-17 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2025-12-18 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2025-12-19 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2025-12-22 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2025-12-23 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2025-12-24 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2025-12-26 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2025-12-29 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2025-12-30 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2025-12-31 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-01-01 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-01-02 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-01-05 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-01-06 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-01-07 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-01-08 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-01-09 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-01-12 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-01-13 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-01-14 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-01-16 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-01-19 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-01-20 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-01-21 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-01-22 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-01-23 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-01-27 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-01-28 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-01-29 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-01-30 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-02-01 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-02-02 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-02-03 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-02-04 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-02-05 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-02-06 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-02-09 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-02-10 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-02-11 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-02-12 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-02-13 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-02-16 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-02-17 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-02-18 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-02-19 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-02-20 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-02-23 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-02-24 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-02-25 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-02-26 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-02-27 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-03-02 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-03-04 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-03-05 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-03-06 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-03-09 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-03-10 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-03-11 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-03-12 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-03-13 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-03-16 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-03-17 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-03-18 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-03-19 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-03-20 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-03-23 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-03-24 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-03-25 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-03-27 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-03-30 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-04-01 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-04-02 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-04-06 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-04-07 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-04-08 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-04-09 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-04-10 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-04-13 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-04-15 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-04-16 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-04-17 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-04-20 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-04-21 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-04-22 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-04-23 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-04-24 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-04-27 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-04-28 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-04-29 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-04-30 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-05-04 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-05-05 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-05-06 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-05-07 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-05-08 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-05-11 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-05-12 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-05-13 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-05-14 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-05-15 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-05-18 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-05-19 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-05-20 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-05-21 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-05-22 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-05-25 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-05-26 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-05-27 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-05-29 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-06-01 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-06-02 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-06-03 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-06-04 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-06-05 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-06-08 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-06-09 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-06-10 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-06-11 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-06-12 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-06-15 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-06-16 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-06-17 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-06-18 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-06-19 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-06-22 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-06-23 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-06-24 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-06-25 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-06-29 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-06-30 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-07-01 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-07-02 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-07-03 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-07-06 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-07-07 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-07-08 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-07-09 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-07-10 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-07-13 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-07-14 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-07-15 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-07-16 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-07-17 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-07-20 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-07-21 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-07-22 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-07-23 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-07-24 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-07-27 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-07-28 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-07-29 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-07-30 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-07-31 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-08-03 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-08-04 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-08-05 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-08-06 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-08-07 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-08-10 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-08-11 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-08-12 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-08-13 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-08-14 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-08-17 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-08-18 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-08-19 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-08-20 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-08-21 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| HINDUNILVR | 2026-08-24 | feature | PENDING_FRESH_FETCH: demerger (Kwality Walls ice cream) (VERIFIED (dates/ratio); adjusted price n) | HINDUNILVR:2025-12-05 |
+| ITC | 2024-12-20 | label | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2024-12-23 | label | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2024-12-24 | label | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2024-12-26 | label | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2024-12-27 | label | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2024-12-30 | label | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2024-12-31 | label | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-01-01 | label | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-01-02 | label | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-01-03 | label | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-01-06 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-01-07 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-01-08 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-01-09 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-01-10 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-01-13 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-01-14 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-01-15 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-01-16 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-01-17 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-01-20 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-01-21 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-01-22 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-01-23 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-01-24 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-01-27 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-01-28 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-01-29 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-01-30 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-01-31 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-02-01 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-02-03 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-02-04 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-02-05 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-02-06 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-02-07 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-02-10 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-02-11 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-02-12 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-02-13 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-02-14 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-02-17 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-02-18 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-02-19 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-02-20 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-02-21 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-02-24 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-02-25 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-02-27 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-02-28 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-03-03 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-03-04 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-03-05 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-03-06 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-03-07 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-03-10 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-03-11 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-03-12 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-03-13 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-03-17 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-03-18 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-03-19 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-03-20 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-03-21 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-03-24 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-03-25 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-03-26 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-03-27 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-03-28 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-04-01 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-04-02 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-04-03 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-04-04 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-04-07 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-04-08 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-04-09 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-04-11 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-04-15 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-04-16 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-04-17 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-04-21 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-04-22 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-04-23 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-04-24 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-04-25 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-04-28 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-04-29 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-04-30 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-05-02 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-05-05 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-05-06 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-05-07 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-05-08 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-05-09 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-05-12 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-05-13 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-05-14 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-05-15 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-05-16 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-05-19 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-05-20 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-05-21 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-05-22 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-05-23 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-05-26 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-05-27 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-05-28 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-05-29 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-05-30 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-06-02 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-06-03 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-06-04 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-06-05 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-06-06 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-06-09 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-06-10 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-06-11 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-06-12 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-06-13 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-06-16 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-06-17 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-06-18 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-06-19 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-06-20 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-06-23 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-06-24 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-06-25 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-06-26 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-06-27 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-06-30 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-07-01 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-07-02 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-07-03 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-07-04 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-07-07 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-07-08 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-07-09 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-07-10 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-07-11 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-07-14 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-07-15 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-07-16 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-07-17 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-07-18 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-07-21 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-07-22 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-07-23 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-07-24 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-07-25 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-07-28 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-07-29 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-07-30 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-07-31 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-08-01 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-08-04 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-08-05 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-08-06 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-08-07 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-08-08 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-08-11 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-08-12 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-08-13 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-08-14 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-08-18 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-08-19 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-08-20 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-08-21 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-08-22 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-08-25 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-08-26 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-08-28 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-08-29 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-09-01 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-09-02 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-09-03 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-09-04 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-09-05 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-09-08 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-09-09 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-09-10 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-09-11 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-09-12 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-09-15 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-09-16 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-09-17 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-09-18 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-09-19 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-09-22 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-09-23 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-09-24 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-09-25 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-09-26 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-09-29 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-09-30 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-10-01 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-10-03 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-10-06 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-10-07 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-10-08 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-10-09 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-10-10 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-10-13 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-10-14 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-10-15 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-10-16 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-10-17 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-10-20 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-10-21 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-10-23 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-10-24 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-10-27 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-10-28 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-10-29 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-10-30 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-10-31 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-11-03 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-11-04 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-11-06 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-11-07 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-11-10 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-11-11 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-11-12 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-11-13 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-11-14 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-11-17 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-11-18 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-11-19 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-11-20 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-11-21 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-11-24 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-11-25 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-11-26 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-11-27 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-11-28 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-12-01 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-12-02 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-12-03 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-12-04 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-12-05 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-12-08 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-12-09 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-12-10 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-12-11 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-12-12 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-12-15 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-12-16 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-12-17 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-12-18 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-12-19 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-12-22 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-12-23 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-12-24 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-12-26 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-12-29 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-12-30 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2025-12-31 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2026-01-01 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2026-01-02 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2026-01-05 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2026-01-06 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2026-01-07 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2026-01-08 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| ITC | 2026-01-09 | feature | EXCLUDE: demerger (ITC Hotels) (VERIFIED) | ITC:2025-01-06 |
+| RELIANCE | 2023-07-06 | label | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-07-07 | label | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-07-10 | label | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-07-11 | label | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-07-12 | label | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-07-13 | label | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-07-14 | label | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-07-17 | label | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-07-18 | label | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-07-19 | label | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-07-20 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-07-21 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-07-24 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-07-25 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-07-26 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-07-27 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-07-28 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-07-31 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-08-01 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-08-02 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-08-03 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-08-04 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-08-07 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-08-08 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-08-09 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-08-10 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-08-11 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-08-14 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-08-16 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-08-17 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-08-18 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-08-21 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-08-22 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-08-23 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-08-24 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-08-25 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-08-28 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-08-29 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-08-30 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-08-31 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-09-01 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-09-04 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-09-05 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-09-06 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-09-07 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-09-08 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-09-11 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-09-12 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-09-13 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-09-14 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-09-15 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-09-18 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-09-20 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-09-21 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-09-22 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-09-25 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-09-26 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-09-27 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-09-28 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-09-29 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-10-03 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-10-04 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-10-05 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-10-06 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-10-09 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-10-10 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-10-11 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-10-12 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-10-13 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-10-16 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-10-17 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-10-18 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-10-19 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-10-20 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-10-23 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-10-25 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-10-26 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-10-27 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-10-30 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-10-31 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-11-01 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-11-02 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-11-03 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-11-06 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-11-07 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-11-08 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-11-09 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-11-10 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-11-12 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-11-13 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-11-15 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-11-16 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-11-17 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-11-20 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-11-21 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-11-22 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-11-23 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-11-24 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-11-28 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-11-29 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-11-30 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-12-01 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-12-04 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-12-05 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-12-06 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-12-07 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-12-08 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-12-11 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-12-12 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-12-13 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-12-14 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-12-15 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-12-18 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-12-19 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-12-20 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-12-21 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-12-22 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-12-26 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-12-27 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-12-28 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2023-12-29 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-01-01 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-01-02 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-01-03 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-01-04 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-01-05 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-01-08 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-01-09 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-01-10 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-01-11 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-01-12 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-01-15 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-01-16 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-01-17 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-01-18 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-01-19 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-01-20 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-01-23 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-01-24 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-01-25 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-01-29 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-01-30 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-01-31 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-02-01 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-02-02 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-02-05 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-02-06 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-02-07 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-02-08 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-02-09 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-02-12 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-02-13 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-02-14 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-02-15 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-02-16 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-02-19 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-02-20 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-02-21 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-02-22 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-02-23 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-02-26 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-02-27 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-02-28 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-02-29 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-03-01 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-03-02 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-03-04 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-03-05 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-03-06 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-03-07 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-03-11 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-03-12 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-03-13 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-03-14 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-03-15 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-03-18 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-03-19 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-03-20 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-03-21 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-03-22 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-03-26 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-03-27 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-03-28 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-04-01 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-04-02 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-04-03 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-04-04 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-04-05 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-04-08 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-04-09 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-04-10 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-04-12 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-04-15 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-04-16 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-04-18 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-04-19 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-04-22 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-04-23 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-04-24 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-04-25 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-04-26 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-04-29 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-04-30 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-05-02 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-05-03 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-05-06 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-05-07 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-05-08 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-05-09 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-05-10 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-05-13 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-05-14 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-05-15 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-05-16 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-05-17 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-05-18 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-05-21 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-05-22 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-05-23 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-05-24 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-05-27 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-05-28 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-05-29 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-05-30 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-05-31 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-06-03 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-06-04 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-06-05 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-06-06 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-06-07 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-06-10 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-06-11 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-06-12 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-06-13 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-06-14 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-06-18 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-06-19 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-06-20 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-06-21 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-06-24 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-06-25 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-06-26 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-06-27 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-06-28 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-07-01 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-07-02 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-07-03 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-07-04 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-07-05 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-07-08 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-07-09 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-07-10 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-07-11 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-07-12 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-07-15 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-07-16 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-07-18 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-07-19 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-07-22 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-07-23 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-07-24 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-07-25 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |
+| RELIANCE | 2024-07-26 | feature | EXCLUDE: demerger (Jio Financial Services) (VERIFIED) | RELIANCE:2023-07-20 |

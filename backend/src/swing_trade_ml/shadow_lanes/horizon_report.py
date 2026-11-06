@@ -58,10 +58,10 @@ ROWS = (
 #: the history test each lane slot is qualified by (names only; results live in the signed evidence files)
 LANE_PROTOCOLS = {
     "10d-large": "td-protocol-v1",
-    "15d-large": "sl-protocol-v1 (candidates S0, S1, S2)",
-    "15d-midcap": "sl-protocol-v1 (candidates S0M, S1M, S2M)",
+    "15d-large": "sl-protocol-v1.1 (candidates S0, S1, S2)",
+    "15d-midcap": "sl-protocol-v1.1 (candidates S0M, S1M, S2M)",
 }
-LAB_START_NOTE = "before 5 Dec 2026 (signed Amendment 2)"
+LAB_START_NOTE = "not before 5 Dec 2026 (Amendments 2 and 3)"
 
 
 # ------------------------------------------------------------------ pure helpers

@@ -1,13 +1,13 @@
 # backend/src/swing_trade_ml/brain/selection_lab_run.py
 # ruff: noqa: E501 (long lines are report sentences)
-"""Selection lab runner (draft `sl-protocol-v1`): the guard, the data, the fold loop and the report.
+"""Selection lab runner (`sl-protocol-v1.1`, Amendment 3, ranking only): the guard, the data, the fold loop and the report.
 
 Design: `docs/superpowers/specs/2026-10-29-selection-model-experiments-design.md` (rev 3, with the owner's
 2026-11-02 decision: no money management, ranking only). The pure rules live in `brain/selection_lab.py`; this
 file adds what touches the world: git, files and the database. Nothing in it runs by itself.
 
-A real run refuses unless ALL of these hold: the git tag `sl-protocol-v1` is in HEAD's history; the frozen files
-are unchanged since the tag; the working tree is clean; the evidence-plan amendment is signed; every overnight
+A real run refuses unless ALL of these hold: the git tag `sl-protocol-v1.1` is in HEAD's history; the frozen files
+are unchanged since the tag; the working tree is clean; the signed Amendment 3 marker exists; every overnight
 move over 20% in the 177 stocks has a written classification; the candidate has not run before; and, for S1 and
 S2, the comparison candidate's result exists. It records an exposure-ledger row BEFORE any model is scored.
 Candidates built: S0, S1, S2 (large group, the 49) and S0M, S1M, S2M (the same three ideas on the 14-stock mid-cap
@@ -32,16 +32,21 @@ from pathlib import Path
 
 from swing_trade_ml.brain import selection_lab as sl
 
-PROTOCOL = "sl-protocol-v1"
+PROTOCOL = "sl-protocol-v1.1"
 TAG = PROTOCOL
 SPEC = "docs/superpowers/specs/2026-10-29-selection-model-experiments-design.md"
+AMENDMENT_TEXT = "docs/superpowers/specs/2026-11-04-evidence-plan-amendment-3.md"
 FROZEN_FILES = (
     "backend/src/swing_trade_ml/brain/selection_lab.py",
     "backend/src/swing_trade_ml/brain/selection_lab_run.py",
     SPEC,
+    AMENDMENT_TEXT,
 )
 OUT_DIR = "docs/brain/evidence/sl_v1"
-AMENDMENT = f"{OUT_DIR}/EVIDENCE_PLAN_AMENDMENT_SIGNED.md"
+AMENDMENT_2 = (
+    f"{OUT_DIR}/EVIDENCE_PLAN_AMENDMENT_SIGNED.md"  # signed 2026-11-02; stays in place, never edited
+)
+AMENDMENT = f"{OUT_DIR}/EVIDENCE_PLAN_AMENDMENT_3_SIGNED.md"
 GAP_FILE = f"{OUT_DIR}/gap_classification.json"
 SPLIT_DIR = "docs/brain/evidence/stock_split"
 HELD_BACK_KEY = "reject_set"  # key in the locked split file; its members are excluded, never used
@@ -54,8 +59,8 @@ COMPARE_WITH = {
     "S1M": "S0M",
     "S2M": "S1M",
 }  # R4: S1 beats S0, S2 beats S1 (mid alike)
-LEDGER_MARKER = "sl-protocol-v1 {cand}, {first} to {last}"
-RERUN_MARKER = "sl-protocol-v1 technical rerun {n} {cand}, {first} to {last}"
+LEDGER_MARKER = PROTOCOL + " {cand}, {first} to {last}"
+RERUN_MARKER = PROTOCOL + " technical rerun {n} {cand}, {first} to {last}"
 MAX_TECHNICAL_RERUNS = 2
 INCIDENT_DIR = "incidents"
 INCIDENT_KINDS = ("execution_failure", "data_integrity_failure")
@@ -119,8 +124,17 @@ def git_state(repo_root: Path) -> tuple[bool, list[str], bool]:
 
 
 def amendment_signed(repo_root: Path) -> bool:
-    p = repo_root / AMENDMENT
-    return p.exists() and "SIGNED" in p.read_text(encoding="utf-8")
+    """True only when the Amendment 2 marker exists AND the Amendment 3 marker has a line starting
+    `SIGNED by the owner on <ISO date>` and names `sl-protocol-v1.1` and `Amendment 3`. ('UNSIGNED' does not count.)"""
+    a2, a3 = repo_root / AMENDMENT_2, repo_root / AMENDMENT
+    if not (a2.exists() and a3.exists()):
+        return False
+    text = a3.read_text(encoding="utf-8")
+    return (
+        re.search(r"^SIGNED by the owner on \d{4}-\d{2}-\d{2}", text, re.M) is not None
+        and PROTOCOL in text
+        and "Amendment 3" in text
+    )
 
 
 def refusal_reasons(
@@ -144,7 +158,7 @@ def refusal_reasons(
             f"The git tag {TAG} is not in this commit's history: the protocol is not signed and frozen."
         )
     reasons += [
-        f"{p} differs from the tagged version: a changed rule is sl-protocol-v2, not v1."
+        f"{p} differs from the tagged version: a changed rule is a new protocol version, not {PROTOCOL}."
         for p in changed_since_tag
     ]
     if dirty:
@@ -242,7 +256,7 @@ def plan_attempt(
     if attempts - 1 >= MAX_TECHNICAL_RERUNS:
         raise RunRefusedError(
             f"{PROTOCOL} {candidate} refused: {MAX_TECHNICAL_RERUNS} technical reruns are already used. Anything "
-            "more is sl-protocol-v2, a new protocol."
+            f"more is a new protocol version, not {PROTOCOL}."
         )
     notes = incident_notes(out_dir, candidate)
     if len(notes) < attempts:

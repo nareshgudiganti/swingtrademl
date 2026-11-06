@@ -21,6 +21,11 @@ EXTRA = [f"X{i:03d}" for i in range(128)]
 REJECT = [f"R{i:03d}" for i in range(129)]
 MID = [f"M{i:02d}" for i in range(14)]
 GOOD_STATE = (True, [], False)
+
+
+def OK_START(candidate, repo_root):  # noqa: N802  (the start checks have their own tests: test_selection_lab_runner_guard.py)
+    return []
+
 SIGNED_A3 = f"# Amendment 3: SIGNED\n\nSIGNED by the owner on 2026-12-05 (test). Amendment 3, protocol {run.PROTOCOL}.\n"
 
 
@@ -88,6 +93,7 @@ def do_run(repo, bars, candidate="S0", **kw):
         model_scores_fn=kw.pop("scorer", None) or foresight(bars),
         mid_fn=lambda: MID,
         state=kw.pop("state", GOOD_STATE),
+        start_check=kw.pop("start_check", OK_START),
         first=FIRST,
         last=LAST,
         today=date(2026, 12, 6),
@@ -180,6 +186,7 @@ def test_the_loaded_stock_lists_must_match_the_locked_split_file(repo, bars):
             collect_fn=lambda: (bars, USED[:-1], EXTRA),
             model_scores_fn=foresight(bars),
             state=GOOD_STATE,
+            start_check=OK_START,
             first=FIRST,
             last=LAST,
         )
@@ -268,7 +275,7 @@ def test_a_held_back_stock_in_any_loaded_list_refuses_the_run_before_anything_is
         do_run(repo, dirty, "S0")
     with pytest.raises(run.RunRefusedError, match="Held-back stocks found in mid"):
         run.run("S0M", repo_root=repo, collect_fn=lambda: (bars, USED, EXTRA), mid_fn=lambda: [*MID, REJECT[0]],
-                model_scores_fn=foresight(bars), state=GOOD_STATE, first=FIRST, last=LAST)  # fmt: skip
+                model_scores_fn=foresight(bars), state=GOOD_STATE, start_check=OK_START, first=FIRST, last=LAST)  # fmt: skip
     assert f"{run.PROTOCOL} S0," not in (repo / "docs/brain/EXPOSURE-LEDGER.md").read_text(encoding="utf-8")
 
 

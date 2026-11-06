@@ -1,7 +1,8 @@
 # Starting the 15-day selection lab
 
-Start the lab only through the wrapper. It checks every start condition, writes an audit line, and then calls the
-frozen runner with your arguments unchanged.
+Start the lab through the wrapper. It checks every start condition, writes an audit line, and then calls the
+runner with your arguments unchanged. **The runner repeats the same checks itself** (see "What this prevents" below), so
+starting it directly is refused for the same reasons; the wrapper is the documented, supervised way, not the only guarded one.
 
 ```
 python -m swing_trade_ml.brain.selection_lab_start S0             # real start
@@ -54,9 +55,29 @@ time in UTC and IST, candidate, arguments, git HEAD, tag commit, each check's re
 After a real start a second line records the runner's exit code. The file is git-ignored so it never dirties the
 tree. If it cannot be written, the wrapper refuses and the runner is not called.
 
-## Limitation: this is not a hard lock
+## What this prevents, and what it does not
 
-Someone can still run the frozen runner directly (`python -m swing_trade_ml.brain.selection_lab_run S0`) and skip
-the wrapper. The runner has its own guard, but not the date or Phase B checks. Direct execution is therefore
-restricted by rule, not by code: the lab is started only through the wrapper, with the owner supervising.
-A test fails if any non-frozen code, script or workflow in the repo calls the runner directly.
+**The runner enforces the start conditions itself.** `selection_lab_run.main` (the command line) and
+`selection_lab_run.run` (a direct call) both call `selection_lab_start.guard_for_runner` before any data is read. That
+function runs the same `evaluate` as the wrapper, so the two cannot drift: the date (2026-12-05 IST or later), the Phase B
+terminal record and tags, the protocol tag, a clean tree, unchanged frozen files and the runner's own helpers. So
+`python -m swing_trade_ml.brain.selection_lab_run S0`, and `run(...)` called from any script, are refused before 2026-12-05
+and without the Phase B record, exactly like the wrapper. Every such attempt writes one `runner_start_check` line to the
+audit log (with `via` = `cli` or `run`). There is no environment variable, flag or argument on the command line that
+turns the checks off. `selection_lab_start.py` is in the runner's frozen-file list, so editing the guard after the
+signing tag is itself caught.
+
+**What is technically prevented:** starting a candidate from the command line (wrapper or runner) or through `run()` on
+any day before the lock, without the verified Phase B record, from a dirty tree, or after a frozen file changed.
+
+**What is not prevented (be honest about it):**
+- Someone with write access to the repository can edit the files before running them. The tag and the frozen-file check
+  detect an edit after the tag (the run then refuses); they cannot stop an edit before it.
+- `run()` has a `start_check` parameter that exists only so unit tests can run it on a synthetic repository. Code that passes it
+  skips the guard. No production code passes it, and a test fails if the command line or the default path stops using the guard.
+- The library functions in `brain/selection_lab.py` can be called directly by a person writing new code; they are not a start path
+  (they write no ledger row and no run folder).
+- The audit log is a local, git-ignored file; it records attempts, it does not lock anything.
+
+A test also fails if any non-frozen code, script or workflow in the repo calls the runner directly, so no scheduled job or
+documented command bypasses the wrapper by habit.

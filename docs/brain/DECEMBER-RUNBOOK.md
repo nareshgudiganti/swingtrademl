@@ -51,7 +51,7 @@ python -m swing_trade_ml.brain.selection_lab_start S0                 # real sta
 ```
 
 After a NO_SURVIVOR Phase B the lab is independent experimental research only; no failed Phase B model is promoted.
-Never run `selection_lab_run` directly (it skips the date and Phase B checks).
+Use the wrapper; running `selection_lab_run` directly is also refused (it repeats the date, Phase B and tag checks) but is not the supervised way.
 
 ## 3. SX5 development run (details in `docs/brain/SX5-RUN.md`)
 

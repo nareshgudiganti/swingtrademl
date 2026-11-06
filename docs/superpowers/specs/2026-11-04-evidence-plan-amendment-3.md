@@ -46,7 +46,7 @@ run; and the approval sequence in section 8. Until you approve and sign, nothing
 | F7 | `amendment_signed()` only tests that `EVIDENCE_PLAN_AMENDMENT_SIGNED.md` exists and contains the substring `SIGNED` (case-sensitive). The existing Amendment 2 marker already satisfies it, so with no change the runner would **not** notice a missing Amendment 3. | V |
 | F8 | No run folder `sl1-*` exists under `docs/brain/evidence/sl_v1/` on `origin/main`, in this worktree, or in the main checkout; `EXPOSURE-LEDGER.md` has zero lines containing `sl-protocol`. I also checked every sibling worktree under `D:\machine learning\`: no `sl-protocol-v1 <cand>` ledger row anywhere. Models named `sl1_*` in the local database: **not checked** (no database access allowed). | V (files); U (database) |
 | F9 | The tag `wf-protocol-v2` (Phase B lock) does **not** exist locally or on origin. Origin has `wf-protocol-v1`, `fd-protocol-v1`, `td-protocol-v1`, `sl-protocol-v1` (no `wf-protocol-v2`). So the wrapper's Phase B check cannot pass today. | V |
-| F10 | The runner does not check the date or Phase B itself. Only the wrapper does (`EARLIEST_START = date(2026, 12, 5)`, IST). | V |
+| F10 | On `b41367a` the runner did not check the date or Phase B itself; only the wrapper did (`EARLIEST_START = date(2026, 12, 5)`, IST). **UPDATE 2026-11-07 (branch `change/lab-runner-guard`, unsigned, owner confirmation needed, see D8):** `run` and `main` now call the wrapper module's check (`selection_lab_start.guard_for_runner`, which runs the same `evaluate` as the wrapper), so a direct run is refused on the same grounds. | V |
 | F11 | The runner trains/scores with `sl.train_lab_model(... record=load_gap_record(...))` and **never passes `drop_unresolved=True`**. The "sensitivity run" that the gap file and design section 4.2 describe is implemented as a function option but is not called by the runner. | V |
 | F12 | Breadth-survivorship sensitivity run (design 6.2a), portfolio view, costs, winner selection, H1 held-back check, Stage 2 and Stage 3 are **not implemented** in the code. `evaluate_ranking` returns `"qualifies_for_winner": False` and `"money": MONEY_NOT_EVALUATED`. A test (`test_the_lab_contains_no_money_management`) enforces no money logic. | V |
 
@@ -128,10 +128,10 @@ winner", "Held-back check H1", Stage 2, Stage 3 and `sl-protocol-v1-locked`:
 
 8. Replacement for every date statement ("after 4 Dec", "after 2026-12-04", "before 9 Nov", "after the December review"):
    > **The lab may not start before 2026-12-05 (India time, calendar date in Asia/Kolkata), after Phase B's lock date
-   > (2026-12-04), and only through the start wrapper with every check passing.** Phase B runs unchanged.
+   > (2026-12-04), and only when every start check passes. The start wrapper and the runner itself both run the same checks.** Phase B runs unchanged.
 9. Nothing in this amendment starts, schedules or authorises a run today. No run happens before 2026-12-05 IST, before the
    **Phase B completion record** is verified (the annotated tag `phase-b-result` and the committed `PHASE_B_RESULT.json` with its
-   ledger row, for EITHER outcome), or before all wrapper guards pass. **`wf-protocol-v2` is not a general precondition:** it is
+   ledger row, for EITHER outcome), or before all start guards pass (one implementation, used by the wrapper and by the runner). **`wf-protocol-v2` is not a general precondition:** it is
    required (annotated, naming the survivor) only when the recorded outcome is SURVIVOR_SELECTED, and it must NOT exist when the
    recorded outcome is NO_SURVIVOR (its presence then makes the wrapper refuse as inconsistent). The wrapper never creates or asks
    for a survivor tag to be invented.
@@ -141,6 +141,7 @@ winner", "Held-back check H1", Stage 2, Stage 3 and `sl-protocol-v1-locked`:
 10. The frozen files are:
     - `backend/src/swing_trade_ml/brain/selection_lab.py`
     - `backend/src/swing_trade_ml/brain/selection_lab_run.py`
+    - `backend/src/swing_trade_ml/brain/selection_lab_start.py` (**PROPOSED ADDITION, see D8**: the runner calls its start checks, so they are frozen with it)
     - `docs/superpowers/specs/2026-10-29-selection-model-experiments-design.md` (with the conforming banner, rev 3.1)
     - `docs/superpowers/specs/2026-11-04-evidence-plan-amendment-3.md` (this amendment, final name when adopted)
 11. The signed marker is `docs/brain/evidence/sl_v1/EVIDENCE_PLAN_AMENDMENT_3_SIGNED.md`. The runner and the wrapper accept it
@@ -272,6 +273,9 @@ has been applied. "Frozen?" = the file is in `FROZEN_FILES` under v1.1, so it mu
 | 22 | `backend/tests/test_selection_lab_run.py` | 109, 115, 124, 260, 270, 322 | literal `"sl-protocol-v1 S0"`, `"git tag sl-protocol-v1 is not in..."`, `"sl-protocol-v1 S0M,"` | use `run.PROTOCOL` in the assertions; add new tests listed in section 8(b) | Tests must follow the constant | no |
 | 23 | WRAPPER `backend/src/swing_trade_ml/brain/selection_lab_start.py` | 2 (docstring) | "(`sl-protocol-v1`)" | "(`sl-protocol-v1.1`)" | Text only. **No tag constant exists to change** (F5) | no |
 | 24 | WRAPPER `docs/brain/SELECTION-LAB-START.md` | items 3, 5, 6 | "`sl-protocol-v1` exists", "(the design document is not on `main` today)", amendment signed | "`sl-protocol-v1.1`", delete the design-document remark, mention Amendment 3 marker | Documentation truth | no |
+| 25a | `backend/src/swing_trade_ml/brain/selection_lab_run.py` (D8, branch `change/lab-runner-guard`) | docstring; `FROZEN_FILES`; `run` (new `start_check` parameter, first statement); new `start_conditions`; `main` (early check) | no start checks inside the runner | `run`/`main` call `selection_lab_start.guard_for_runner` first; `selection_lab_start.py` added to `FROZEN_FILES` | A direct run is refused before 2026-12-05 IST and without the Phase B record, like the wrapper | yes |
+| 25b | WRAPPER `backend/src/swing_trade_ml/brain/selection_lab_start.py` (D8) | new `guard_for_runner`; docstring | wrapper-only guard | one shared function reusing `evaluate`; audit event `runner_start_check` | Single source of truth for wrapper and runner | yes (if D8) |
+| 25c | `backend/tests/test_selection_lab_runner_guard.py` (new), `test_selection_lab_run.py` (stub hook) | — | — | 24 new tests (CLI and direct call refuse; valid fixture passes; same verdict as wrapper); existing run tests pass `start_check` | Test the new guard | no |
 | 25 | WRAPPER `backend/tests/test_selection_lab_start.py` | 24, 56, 143, 148 | fake runner with `"sl-protocol-v1"` | use `"sl-protocol-v1.1"` and add the cases in 8(b) | Fixture follows runner | no |
 | 26 | `shadow_lanes/lane_freeze.py`, `lane_universe.py` | 99; 84, 129 | import `collect_db`, `RunRefusedError`, `load_split` from `selection_lab_run` | **no change**: they import functions, not the protocol name or marker | Checked: no name dependency | — |
 | 27 | `docs/superpowers/specs/2026-11-02-evidence-plan-amendment-2.md`; `sl_v1/EVIDENCE_PLAN_AMENDMENT_SIGNED.md`; `sl_v1/gap_classification.*`; `docs/brain/EXPOSURE-LEDGER.md` | — | — | **not edited** | Signed / append-only / evidence | — |
@@ -332,8 +336,8 @@ the tagged `main`), today or any day before 2026-12-05 [I — this run has not b
 **(e) What stays blocked until 2026-12-05 and Phase B lock.** Every lab run (no candidate may start); S2r; S3; any use of the
 129; any money evaluation; any use of lab output by the brain, lanes or orders. Also blocked until each is separately approved:
 lane freezing from a lab result (`lane_freeze.history_passed` reads `ranking_verdict == "pass"`; see risk R5). The wrapper
-refuses before 2026-12-05 IST and until the Phase B completion record (`phase-b-result`, `PHASE_B_RESULT.json`, ledger rows) is verified for either outcome (`wf-protocol-v2` only after a real survivor, forbidden after NO_SURVIVOR). Running the runner
-directly bypasses the date and Phase B checks (F10); the rule is that nobody does so.
+refuses before 2026-12-05 IST and until the Phase B completion record (`phase-b-result`, `PHASE_B_RESULT.json`, ledger rows) is verified for either outcome (`wf-protocol-v2` only after a real survivor, forbidden after NO_SURVIVOR). The runner enforces
+the same date and Phase B checks itself (PROPOSED CHANGE, D8), so running it directly is refused for the same reasons; it is no longer a rule only.
 
 ---
 
@@ -377,8 +381,8 @@ reads "wrapper version: TO BE NAMED AT SIGNING".
 | D4 | Exact ranking-only wording (section 4.3) and voiding of H1 / M0–M3 / N / winner / Stage 2–3 | Yes |
 | D5 | Whether the design document stays as a conformed document (banner plus markers, recommended) or is rewritten to a clean rev 4 | Banner (smaller diff, history visible, same approach already used for 6.2) |
 | D6 | Unresolved events: option S-A (no sensitivity run; recommended) or S-B (build it); and HINDUNILVR/BAJAJELEC remain in the primary data | S-A; keep both in |
-| D7 | Make Amendment 3 text part of `FROZEN_FILES` and require the new marker path/wording (items 4, 5, 8) | Yes |
-| D8 | Optional hardening: add the date (2026-12-05 IST) and Phase B completion-record checks (`phase-b-result`; never a survivor tag) to the runner itself so a direct run is also refused | Not in this PR (it changes behaviour of a frozen file and the wrapper's call signature); revisit only if you want the lock to be code, not rule |
+| D7 | Make Amendment 3 text part of `FROZEN_FILES` and require the new marker path/wording (items 4, 5, 8) | Yes (if D8 is confirmed, `selection_lab_start.py` is also listed) |
+| D8 | **CHANGED from the earlier recommended default, for your explicit confirmation at signing.** Earlier default: "not in this PR; keep the lock a rule, not code". Owner requirement 2026-11-07: the direct runner must not bypass the execution safeguards. **Implemented (unsigned, local branch `change/lab-runner-guard`):** `selection_lab_run.run` and `.main` call `selection_lab_start.guard_for_runner` (the SAME `evaluate` the wrapper uses: date from 2026-12-05 IST, the Phase B terminal record and tags, protocol tag, clean tree, frozen files, the runner's own helpers), write an audit line (`runner_start_check`), and refuse before reading any data; `selection_lab_start.py` joins `FROZEN_FILES`. No evaluation criterion, number, threshold, seed or rule is touched. | Confirm (or reject, in which case drop the branch and the lock stays a rule). It does change a frozen file and adds the wrapper module to the frozen list, so it must be final before the tag |
 | D9 | Treat any `sl-protocol-v1` ledger row, run folder or `sl1_*` model found later as consuming that candidate's one run (i.e. refuse the same candidate under v1.1) | Yes; none exists today as far as files go |
 | D10 | Wrapper merged on its own PR before the tag (it is not frozen, so order is free) | Merge it first, then the amendment PR, then tag |
 
@@ -397,6 +401,7 @@ reads "wrapper version: TO BE NAMED AT SIGNING".
 | R7 | The gap classification file is described by the assistant as "Prepared by the assistant from news reports; the owner reviews it by merging". Whether the owner's "go a head" signing covered it explicitly is not written anywhere I can find; I treat it as an input in the tree, not as separately signed. | I |
 | R8 | Two numbers for BAJAJELEC (+32% in the gap file, +38.8% in the corporate-action audit). I treat them as different measures; the audit does not state its column definitions in the part I read. | I |
 | R9 | The corporate-action audit is "PRELIMINARY EVIDENCE" and itself says some of the other unadjusted events (ALLCARGO, TRIVENI, NMDC, SIEMENS, SCI, TMPV) have membership in the 177 UNKNOWN. If any is in the 177 and has an overnight move over 20%, the runner refuses (unclassified) rather than running. | V (runner rule) / U (membership) |
+| R11 | D8 edits two files that become frozen (runner, wrapper module). Anyone with write access to the repository can still edit a file, or run Python code that does not use the runner's `run`/`main` (for example calling the library functions in `selection_lab.py` directly). D8 closes the command-line and `run()` entry points, not the repository itself; the frozen-file check and the tag are what detect later edits. The `start_check` hook of `run` is for tests; production code never passes it. | V |
 | R10 | Terminal state: the amendment does not authorise running, only unblocks the guard. The owner's separate go-ahead in the evidence plan sequence (Phase B finished, lock tag) still gates the start. | V |
 | R11 | Tag creation by the owner is an irreversible-in-practice action (a pushed tag should never move). Do not create it until the PR is merged and the dry run on the merge commit is read. | I |
 | R12 | This worktree's `git status` showed no changes before I created the two new files; nothing tracked was edited. | V |

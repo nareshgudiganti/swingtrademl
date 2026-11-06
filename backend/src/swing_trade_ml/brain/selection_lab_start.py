@@ -1,11 +1,15 @@
 # ruff: noqa: E501
-"""The one documented way to start the 15-day selection lab (`sl-protocol-v1`).
+"""The checks that must pass before the 15-day selection lab starts, and the documented way to start it.
 
-It runs every start condition, writes one audit line, and only then calls the frozen runner
+It runs every start condition, writes one audit line, and only then calls the runner
 (`selection_lab_run.main`) with the arguments unchanged. Any check that fails, or cannot be verified, refuses.
 
-This is a guard rail, not a hard lock: someone can still run the frozen runner directly. See
-`docs/brain/SELECTION-LAB-START.md`. This file is not part of the sl-protocol-v1 frozen set and never edits it.
+The runner enforces the SAME checks itself: `selection_lab_run.run` and `selection_lab_run.main` call
+`guard_for_runner` (below), which calls the same `evaluate` as this wrapper, so the two cannot drift. Running the
+runner directly (`python -m swing_trade_ml.brain.selection_lab_run`, or calling `run`) therefore refuses before
+2026-12-05 IST and without the Phase B terminal record, exactly like the wrapper. This file is part of the
+frozen set of `sl-protocol-v1.1` (it is listed in `selection_lab_run.FROZEN_FILES`). See
+`docs/brain/SELECTION-LAB-START.md` for what this does and does not prevent.
 """
 
 from __future__ import annotations
@@ -465,6 +469,58 @@ def write_audit(path: Path, record: Mapping) -> None:
 
 def _stamp(now: datetime) -> dict:
     return {"utc": now.astimezone(UTC).isoformat(), "ist": now.astimezone(IST).isoformat()}
+
+
+# ------------------------------------------------------------------ the runner's own guard
+
+
+def guard_for_runner(
+    candidate: str | None,
+    *,
+    runner: Any,
+    repo_root: Path | None = None,
+    git: GitFn | None = None,
+    now_fn: Callable[[], datetime] | None = None,
+    via: str = "runner",
+) -> list[str]:
+    """Refusal reasons for a start through the runner itself (empty list = allowed).
+
+    Runs the SAME `evaluate` as the wrapper (date, Phase B terminal record, protocol tag, clean tree, frozen files,
+    the runner's own helpers), writes one audit line (event `runner_start_check`, with `via`), prints the
+    warnings (including the NO_SURVIVOR research-only notice), and fails closed: a check that cannot be
+    verified, or an audit line that cannot be written, is a refusal. There is no environment override."""
+    repo_root = repo_root or _repo()
+    git = git or make_git(repo_root)
+    now_fn = now_fn or (lambda: datetime.now(UTC))
+    try:
+        now = now_fn()
+        now.astimezone(IST)
+    except Exception:  # noqa: BLE001
+        now = datetime.now(UTC)  # only for the timestamp; the date check itself will refuse
+    results = evaluate(runner, git, repo_root, now_fn, candidate)
+    reasons = [r for res in results for r in res["reasons"]]
+    try:
+        head = _git_ok(git, "rev-parse", "HEAD")
+    except Exception as e:  # noqa: BLE001
+        head = f"unknown ({e})"
+    record = {
+        **_stamp(now),
+        "event": "runner_start_check",
+        "via": via,
+        "candidate": candidate,
+        "git_head": head,
+        "tag": runner.TAG,
+        "checks": results,
+        "decision": "permitted" if not reasons else "refused",
+    }
+    try:
+        write_audit(_audit_path(repo_root, git), record)
+    except Exception as e:  # noqa: BLE001
+        reasons.append(f"the audit log could not be written ({type(e).__name__}: {e}); the lab was not started.")
+    for res in results:
+        for w in res["warnings"]:
+            print(f"warning [{res['check']}]: {w}")
+    return reasons
 
 
 # ------------------------------------------------------------------ main

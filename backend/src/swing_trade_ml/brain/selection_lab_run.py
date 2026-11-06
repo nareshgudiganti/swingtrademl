@@ -6,7 +6,10 @@ Design: `docs/superpowers/specs/2026-10-29-selection-model-experiments-design.md
 2026-11-02 decision: no money management, ranking only). The pure rules live in `brain/selection_lab.py`; this
 file adds what touches the world: git, files and the database. Nothing in it runs by itself.
 
-A real run refuses unless ALL of these hold: the git tag `sl-protocol-v1.1` is in HEAD's history; the frozen files
+A real run refuses unless ALL of these hold: today (IST) is 2026-12-05 or later; Phase B has its verified terminal
+record (the `phase-b-result` tag, `PHASE_B_RESULT.json`, manifests and ledger, checked by
+`brain/selection_lab_start.py`, the same code the wrapper runs: `run` and `main` call it themselves, so running this
+file directly does not skip it); the git tag `sl-protocol-v1.1` is in HEAD's history; the frozen files
 are unchanged since the tag; the working tree is clean; the signed Amendment 3 marker exists; every overnight
 move over 20% in the 177 stocks has a written classification; the candidate has not run before; and, for S1 and
 S2, the comparison candidate's result exists. It records an exposure-ledger row BEFORE any model is scored.
@@ -39,6 +42,7 @@ AMENDMENT_TEXT = "docs/superpowers/specs/2026-11-04-evidence-plan-amendment-3.md
 FROZEN_FILES = (
     "backend/src/swing_trade_ml/brain/selection_lab.py",
     "backend/src/swing_trade_ml/brain/selection_lab_run.py",
+    "backend/src/swing_trade_ml/brain/selection_lab_start.py",  # the start checks this runner calls itself
     SPEC,
     AMENDMENT_TEXT,
 )
@@ -394,11 +398,23 @@ def run(
     last: date = DEV_WINDOW[1],
     commit: str = "unknown",
     technical_rerun: bool = False,
+    start_check: Callable[[str, Path], Sequence[str]] | None = None,
 ) -> Path:
     """The one real run of `candidate`: guard, ledger row, folds, report. `collect_fn()` returns (bars of the
     stocks, the 49, the 128 extras); `mid_fn()` returns the 14-stock mid-cap group (mid candidates only);
     `model_scores_fn(candidate, bars)` returns the per-fold scoring callback. A failed attempt (ledger row, no run
-    folder) can be rerun with `technical_rerun=True`, see `plan_attempt`."""
+    folder) can be rerun with `technical_rerun=True`, see `plan_attempt`.
+
+    Before anything is read, `start_check(candidate, repo_root)` must return no refusal reasons. The default is the
+    real start check (date, Phase B terminal record, protocol tag, clean tree, frozen files; see `start_conditions`),
+    so calling `run` directly is guarded exactly like the wrapper. `start_check` exists only so unit tests can run
+    this function on a synthetic repository; production code never passes it."""
+    reasons_to_start = (start_check or start_conditions)(candidate, repo_root)
+    if reasons_to_start:
+        raise RunRefusedError(
+            f"{PROTOCOL} {candidate} refused: nothing was trained or scored.\n"
+            + "\n".join(f"- {r}" for r in reasons_to_start)
+        )
     out_dir = repo_root / OUT_DIR
     tag_on_head, changed, dirty = state if state is not None else git_state(repo_root)
     used, extra, split_sha = load_split(repo_root)
@@ -595,6 +611,20 @@ def _repo() -> Path:
     return REPO_ROOT
 
 
+def start_conditions(candidate: str, repo_root: Path, *, via: str = "run") -> list[str]:
+    """Refusal reasons from the shared start checks (empty = allowed). One implementation, in
+    `brain/selection_lab_start.py`, which the wrapper also uses; imported here at call time (that module imports
+    this one only inside its own `main`, so there is no import cycle). Fail closed: any error is a refusal."""
+    import sys
+
+    try:
+        from swing_trade_ml.brain import selection_lab_start as start
+
+        return start.guard_for_runner(candidate, runner=sys.modules[__name__], repo_root=repo_root, via=via)
+    except Exception as e:  # noqa: BLE001
+        return [f"the start conditions could not be verified: {type(e).__name__}: {e}"]
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     import argparse
 
@@ -609,6 +639,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     a = ap.parse_args(argv)
     repo = _repo()
+    early = start_conditions(a.candidate, repo, via="cli")  # before any data is read
+    if early:
+        print(f"{PROTOCOL} {a.candidate} refused: nothing was trained or scored.")
+        for r in early:
+            print(f"- {r}")
+        return 2
     from swing_trade_ml.db.session import SessionLocal
 
     with SessionLocal() as db:

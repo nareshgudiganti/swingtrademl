@@ -1,0 +1,168 @@
+{
+  "rule": "+8% target / -4% stop / 15 trading days, half out at +5%, entry at next open, Zerodha-checked costs and 5 bps slippage per leg (replay_scoring.strict_score)",
+  "outcome_window": "decision days whose 15-day window ends on or before 2023-06-30 (before the lab window 2023-07-01 to 2026-08-15)",
+  "mid_model_id": 16,
+  "large_49": {
+    "structure_in_dev_window": {
+      "group_size": 49,
+      "stocks_with_any_bars": 49,
+      "trading_days": 775,
+      "days_with_fewer_than_10_reference_stocks": 0,
+      "share_of_days_without_labels": 0.0,
+      "reference_per_day_min": 49,
+      "reference_per_day_median": 49,
+      "reference_per_day_max": 49
+    },
+    "outcomes_before_dev_window": {
+      "group_size": 49,
+      "decision_days": 249,
+      "first_day": "2022-06-24",
+      "last_day": "2023-06-27",
+      "break_even_hit_rate_note": "about 33% for +8/-4 before half-out; costs are in the figures",
+      "every_eligible_stock": {
+        "stock_days": 11720,
+        "hit_target": 0.1799,
+        "hit_stop": 0.389,
+        "timeout": 0.4311,
+        "made_money": 0.5266,
+        "avg_net_per_trade": 0.00368
+      },
+      "by_market_type": {
+        "falling": {
+          "decision_days": 19,
+          "stock_days": 931,
+          "hit_target": 0.0859,
+          "hit_stop": 0.551,
+          "timeout": 0.3631,
+          "made_money": 0.3566,
+          "avg_net_per_trade": -0.01276
+        },
+        "rising": {
+          "decision_days": 73,
+          "stock_days": 3577,
+          "hit_target": 0.3131,
+          "hit_stop": 0.2561,
+          "timeout": 0.4308,
+          "made_money": 0.6919,
+          "avg_net_per_trade": 0.02027
+        },
+        "sideways": {
+          "decision_days": 155,
+          "stock_days": 7209,
+          "hit_target": 0.1257,
+          "hit_stop": 0.434,
+          "timeout": 0.4403,
+          "made_money": 0.4665,
+          "avg_net_per_trade": -0.00244
+        },
+        "unlabelled": {
+          "decision_days": 2,
+          "stock_days": 3,
+          "hit_target": 0.6667,
+          "hit_stop": 0.3333,
+          "timeout": 0.0,
+          "made_money": 0.6667,
+          "avg_net_per_trade": 0.02653
+        }
+      },
+      "label_excess_top30": {
+        "ones": 3555,
+        "labelled_stock_days": 11613,
+        "share": 0.3061
+      },
+      "random_5_per_day_avg_net_per_trade": {
+        "draws": 1000,
+        "trade_days_per_draw": 17,
+        "mean": 0.00145,
+        "p5": -0.00495,
+        "p95": 0.00774
+      },
+      "strongest_20d_risers_top5_avg_net_per_trade": -0.0031
+    }
+  },
+  "mid_14": {
+    "symbols": [
+      "BHEL",
+      "BSE",
+      "COFORGE",
+      "DIXON",
+      "IDFCFIRSTB",
+      "LAURUSLABS",
+      "MARICO",
+      "MFSL",
+      "MOTILALOFS",
+      "NAUKRI",
+      "PAYTM",
+      "POLYCAB",
+      "POWERINDIA",
+      "SUZLON"
+    ],
+    "structure_in_dev_window": {
+      "group_size": 14,
+      "stocks_with_any_bars": 14,
+      "trading_days": 775,
+      "days_with_fewer_than_10_reference_stocks": 0,
+      "share_of_days_without_labels": 0.0,
+      "reference_per_day_min": 14,
+      "reference_per_day_median": 14,
+      "reference_per_day_max": 14
+    },
+    "outcomes_before_dev_window": {
+      "group_size": 14,
+      "decision_days": 245,
+      "first_day": "2022-07-01",
+      "last_day": "2023-06-27",
+      "break_even_hit_rate_note": "about 33% for +8/-4 before half-out; costs are in the figures",
+      "every_eligible_stock": {
+        "stock_days": 3144,
+        "hit_target": 0.2958,
+        "hit_stop": 0.534,
+        "timeout": 0.1702,
+        "made_money": 0.4755,
+        "avg_net_per_trade": 0.00036
+      },
+      "by_market_type": {
+        "falling": {
+          "decision_days": 18,
+          "stock_days": 249,
+          "hit_target": 0.1084,
+          "hit_stop": 0.7269,
+          "timeout": 0.1647,
+          "made_money": 0.257,
+          "avg_net_per_trade": -0.02162
+        },
+        "rising": {
+          "decision_days": 113,
+          "stock_days": 1402,
+          "hit_target": 0.4486,
+          "hit_stop": 0.3688,
+          "timeout": 0.1826,
+          "made_money": 0.6377,
+          "avg_net_per_trade": 0.0177
+        },
+        "sideways": {
+          "decision_days": 114,
+          "stock_days": 1493,
+          "hit_target": 0.1835,
+          "hit_stop": 0.6571,
+          "timeout": 0.1594,
+          "made_money": 0.3597,
+          "avg_net_per_trade": -0.01225
+        }
+      },
+      "label_excess_top30": {
+        "ones": 928,
+        "labelled_stock_days": 3053,
+        "share": 0.304
+      },
+      "random_5_per_day_avg_net_per_trade": {
+        "draws": 1000,
+        "trade_days_per_draw": 17,
+        "mean": -0.0041,
+        "p5": -0.01027,
+        "p95": 0.0023
+      },
+      "strongest_20d_risers_top5_avg_net_per_trade": 0.00075
+    }
+  }
+}

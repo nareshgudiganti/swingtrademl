@@ -1,6 +1,6 @@
 # backend/src/swing_trade_ml/brain/selection_lab.py
 # ruff: noqa: E501 (long lines are protocol sentences)
-"""Selection lab (15-day stock selection experiments): building blocks, draft protocol `sl-protocol-v1`.
+"""Selection lab (15-day stock selection experiments): building blocks, protocol `sl-protocol-v1.1`.
 
 Design: `docs/superpowers/specs/2026-10-29-selection-model-experiments-design.md` (rev 3). Nothing here runs an
 experiment, trains a model, writes to the database or is imported by live code. This first piece is the label of
@@ -763,7 +763,7 @@ def evaluate_ranking(
     mom_all = top5_measures(momentum_scores({s: bars[s] for s in scored}, all_days), rets_all)
     r1_res, r2_res, r3_res = r1(ic_all), r2(top_all["excess"], mom_all["excess"]), r3(fold_rows)
     out: dict = {
-        "protocol": "sl-protocol-v1 (draft; ranking only)",
+        "protocol": "sl-protocol-v1.1 (ranking only)",
         "folds": fold_rows,
         "r1": r1_res,
         "r2": r2_res,

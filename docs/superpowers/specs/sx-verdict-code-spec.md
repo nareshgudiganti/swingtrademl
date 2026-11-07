@@ -1,6 +1,6 @@
-# SX5 / SX10 verdict code: specification of `ml/sx_verdict.py`, 2026-11-08
+# SX5 / SX10 verdict code: specification of `ml/sx_verdict.py`
 
-Status: **PROPOSED code and text. Not signed. Not committed.** Built to close audit item M1 (`2026-11-08-sx-survivorship-and-rule-audit.md`, Part B). Tested on synthetic records only (30 tests). No real arm, holdout, model, database, prod, Kite or `.env` was touched.
+Status: **PROPOSED code and text. Not signed. Not committed.** Built to close audit item M1 (`sx-survivorship-and-rule-audit.md`, Part B). Tested on synthetic records only (30 tests). No real arm, holdout, model, database, prod, Kite or `.env` was touched.
 
 ## Plain-English summary
 

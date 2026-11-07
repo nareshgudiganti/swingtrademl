@@ -379,6 +379,22 @@ def test_the_journal_report_and_the_pack_report_are_sealed(db_session):
 # --- learning proposals made during the trial: title, evidence and change are sealed ----------------
 
 PROPOSAL_LEAKS = ("Raise the buy level", "buy level to 73%", "buy level to 65%", "Switch M05", "0.73")
+# "0.73" is a number, not a phrase: match it only as a whole number (0.73, 0.730, -0.73), never inside a longer
+# one such as the timestamp second "30.736075" in the server-memory samples. Every other marker stays a plain
+# substring search, so no sealed phrase is weakened.
+NUMBER_MARKERS = {"0.73": re.compile(r"(?<![\d.])0\.730*(?!\d)")}
+
+
+def _proposal_leaks_in(text: str) -> list[str]:
+    return [x for x in PROPOSAL_LEAKS if (NUMBER_MARKERS[x].search(text) if x in NUMBER_MARKERS else x in text)]
+
+
+def test_number_marker_matches_whole_numbers_only():
+    for hit in ("0.73", '{"buy_level": 0.73}', "0.730", "-0.73", "x=0.7300,"):
+        assert _proposal_leaks_in(hit) == ["0.73"], hit
+    for miss in ("2026-11-03T16:27:30.736075+00:00", "10.73", "0.7312", "0.735", "1.0.73"):
+        assert _proposal_leaks_in(miss) == [], miss
+    assert _proposal_leaks_in("Raise the buy level") == ["Raise the buy level"]
 
 
 def _plant_proposals(db, day: date) -> list[int]:
@@ -408,7 +424,7 @@ def test_proposals_made_during_the_trial_are_sealed_everywhere(obs_client, db_se
     ids = _seed(db_session, SEALED_DAY)  # also holds "Raise the buy level to 65%"
     planted = _plant_proposals(db_session, SEALED_DAY)
     texts = _call_everything(obs_client, ids)
-    found = {url: [x for x in PROPOSAL_LEAKS if x in t] for url, t in texts.items()}
+    found = {url: _proposal_leaks_in(t) for url, t in texts.items()}
     assert {u: f for u, f in found.items() if f} == {}, "a sealed proposal's title or change was shown"
 
     listed = obs_client.get("/api/v1/brain/proposals", headers=API_KEY).json()

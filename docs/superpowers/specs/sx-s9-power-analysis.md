@@ -1,6 +1,6 @@
 # S-9: minimum detectable edge and power limits for SX5 and SX10 (DRAFT, unsigned)
 
-Date: 2026-11-08. Closes S-9 / B18 / L5 of `2026-11-06-sx-presigning-findings.md` and `2026-11-07-sx-blockers-summary.md`.
+Prepared: before signing. Closes S-9 / B18 / L5 of `sx-presigning-findings.md` and `sx-blockers-summary.md`.
 Code: `backend/scripts/sx_power_analysis.py` (tests: `backend/tests/test_sx_power_analysis.py`, 19 pure tests). Results: `docs/brain/evidence/sector_prep/sx_s9_power_v1.json`.
 Nothing here fits a model, evaluates an arm, signs anything, or touches the holdout period (2026-02-01 to 2026-08-15): the only real data used are development-period prices (candle dates up to 2026-01-31) for the signed eligible rows, plus the stored production score on post-holdout days (2026-08-16 onward; first stored day 2026-08-21) for score persistence only.
 

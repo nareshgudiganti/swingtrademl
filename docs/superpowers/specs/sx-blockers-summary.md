@@ -1,6 +1,6 @@
-# SX5 / SX10 blockers summary (2026-11-07)
+# SX5 / SX10 blockers summary
 
-**Status: for owner decision. Nothing is signed, nothing is trained, no authorisation exists.** Companion to `2026-11-07-sx5-approval-package.md` and `2026-11-07-sx10-approval-package.md`. Training stays unauthorised: none before 2026-12-04, and none afterwards without a separate explicit approval.
+**Status: for owner decision. Nothing is signed, nothing is trained, no authorisation exists.** Companion to `sx5-approval-package-superseded.md` and `sx10-approval-package-superseded.md`. Training stays unauthorised: none before 2026-12-04, and none afterwards without a separate explicit approval.
 
 ## In plain English
 

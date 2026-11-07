@@ -1,4 +1,4 @@
-# SX model recipe — FINAL DRAFT (UNSIGNED, 2026-11-06)
+# SX model recipe — FINAL DRAFT (UNSIGNED)
 
 Status: draft for owner review. Nothing here has been fitted, trained, calibrated, evaluated on the holdout, activated or
 signed. Code: `backend/src/swing_trade_ml/ml/sx_recipe.py` (frozen dataclass, canonical JSON, sha256, `build_fit_fn`).

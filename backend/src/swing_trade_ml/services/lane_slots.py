@@ -64,7 +64,7 @@ _INITIAL: tuple[LaneSlot, ...] = (
         "large",
         **_RULE_15,
         prefixes=("sl1_S0_", "sl1_S1_", "sl1_S2_"),
-        protocol="sl-protocol-v1",
+        protocol="sl-protocol-v1.1",
         candidates=("S0", "S1", "S2"),
     ),
     LaneSlot(
@@ -74,7 +74,7 @@ _INITIAL: tuple[LaneSlot, ...] = (
         "mid",
         **_RULE_15,
         prefixes=("sl1_S0M_", "sl1_S1M_", "sl1_S2M_"),
-        protocol="sl-protocol-v1",
+        protocol="sl-protocol-v1.1",
         candidates=("S0M", "S1M", "S2M"),
     ),
 )

@@ -69,6 +69,7 @@ dev = [
 [project.scripts]
 # Operational entrypoints — see backend/src/swing_trade_ml/cli.py
 swingtrade = "swing_trade_ml.cli:main"
+selection-lab-start = "swing_trade_ml.brain.selection_lab_start:main"
 
 [build-system]
 requires = ["setuptools>=75.0"]

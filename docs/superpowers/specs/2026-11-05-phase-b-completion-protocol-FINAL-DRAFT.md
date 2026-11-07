@@ -264,17 +264,29 @@ line) and `ledger_row_sha256`, `survives`. Never rewritten.
 **Procedure, once per candidate, in the order B1, B2, B3:**
 
 1. Preconditions: gates G1 to G13 of section 11 hold; for B2 and B3 the previous candidate is already committed.
-2. Run the candidate once (`swingtrade brain phase-b --candidate Bn`). It writes
+2. Run the candidate once (the command form in the note after step 6; `swingtrade brain phase-b --candidate Bn` as typed fails with a circular import and runs nothing). It writes
    `phase_b_<Bn>_2025-02-01_2026-08-15.{md,json}` and adds the ledger row `Phase B candidate <Bn>` **before** the results.
 3. Do not edit, rename, tidy or re-run anything. Do not edit the candidate's ledger row (not even its decision cell): the tool
    compares the row text exactly [V, rehearsal F8]. The owner's reading of a result goes into a separate dated note after the
    record exists.
-4. `phase_b_finish --manifest Bn` (dry run), read it, then `--apply`.
+4. `phase_b_finish --root . --manifest Bn` (dry run), read it, then `--apply` (always with `--root .`, see the note after step 6).
 5. Run the two printed git commands (`git add` naming the candidate's `.md`, `.json`, `MANIFEST_<Bn>.json` and
    `docs/brain/EXPOSURE-LEDGER.md` explicitly, then `git commit`): one commit with exactly those four items. Look at
    `git show --stat` before moving on: nothing else may be in it (no `.env`, no data, no models). Check the tree is clean. Only then
    start the next candidate. The manifest step already refuses an evidence folder with unexpected, oversized or secret-naming files.
 6. A committed output is never edited, renamed or deleted.
+
+**Command forms verified on 2026-11-07 (documentation only; no code or signed rule changes).** Three traps were found while checking
+every command in this text; each fails closed (nothing runs or is written):
+(i) `python -m swing_trade_ml.cli ...` and the `swingtrade` command fail with a circular import. The working form, typed from the repo
+root, is `python -c "import sys, swing_trade_ml.brain.service; from swing_trade_ml.cli import main; sys.argv=['swingtrade','brain','phase-b','--candidate','Bn']; raise SystemExit(main())"`
+(the same form with `--dry-run` appended was run and printed the plan). (ii) `python -m swing_trade_ml.brain.phase_b_finish` has a wrong
+default repository root (one folder above the repo, so it reports every tag as missing); always run it from the repo root with
+`--root .`. It is left unfixed because its file is bound by blob id in section 11. (iii) The app's default database address (port 5432)
+is not the local Docker database (`localhost:5433`, database `swing_trade_ml`); a real Phase B run reads the database and needs
+`DATABASE_URL` set to that local address (never a production address; the December helper scripts set it and refuse anything else).
+Gate G6 and the other read-only gates do not read the database. The exact typed forms and the helper scripts are in
+`docs/brain/DECEMBER-RUNBOOK.md`.
 
 At the final step the tool checks (via git) that each candidate's evidence commit holds its four items, is an ancestor of HEAD,
 is the **only** commit that ever touched its outputs, and is a strict ancestor of the next candidate's evidence commit; that the

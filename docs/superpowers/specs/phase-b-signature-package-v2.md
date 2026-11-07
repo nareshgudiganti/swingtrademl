@@ -10,12 +10,14 @@ One text, fixed before any Phase B result exists: how the best survivor is chose
 candidates that pass both survival rows), B1 then B2 then B3 with each candidate's results committed before the next, the result record
 (`PHASE_B_RESULT.json` + readable `PHASE_B_RESULT.md`), an idempotent separate finish tool, fail-closed handling of interruptions, and
 the rule that a NO SURVIVOR outcome allows the 5 Dec lab only as independent experimental research, never promoting a failed model.
-Section 13a (added 6 Nov) discloses known price-data steps; it changes no setting or rule.
+Section 13a discloses ALL known price-data steps found by the 7 Nov impact check (the 49, B2's extra training stocks and the reject set, with counts and worst-case bounds); it changes no setting or rule and nothing is corrected or re-fetched.
 
-Two things to confirm when signing: (a) "mandatory gates" = exactly the two survival rows of the signed sentence (protocol section 2a, marked inferred);
-(b) the tag name `phase-b-completion-v1`.
+Owner decisions already given on 2026-11-07 and now written into the text (your signature confirms them): (a) "mandatory gates" = exactly the two
+survival rows of the signed sentence (section 2a); (b) accept and disclose the price-data steps, no fresh fetch for HINDUNILVR or BAJAJELEC required
+(section 13a); (c) D8 confirmed: the 15-day runner enforces the date and the Phase B record itself (section 12, "Runner guard").
+Still open, one item: the tag name `phase-b-completion-v1` (keep it or rename it before signing).
 
-## 2. Code binding (git blob ids; correct values, re-verified 2026-11-06 on `release/phase-b-code` a73b938)
+## 2. Code binding (git blob ids; correct values, re-verified 2026-11-07 on `release/nov-completion` aa9ad47)
 
 | File | Git blob id |
 |---|---|
@@ -45,8 +47,8 @@ Merge-commit hash on `main` carrying all of the above (full 40 hex, you fill it 
 
 | # | Step | When | Deploys? |
 |---|---|---|---|
-| 1 | Read the protocol and section 13a; decide the two confirmations above | by Sat 2026-11-07 | no |
-| 2 | Push `release/phase-b-code` and open ONE pull request to `main`; check CI is green | Sat 2026-11-07 | no |
+| 1 | Read the protocol, sections 2a, 12 (Runner guard) and 13a; confirm or rename the tag name | by Sat 2026-11-07 | no |
+| 2 | Push `release/nov-completion` (it contains Phase B, the lab wrapper and runner guard, Amendment 3 and SX5 preparation) and open ONE pull request to `main`; CI, including the secret scan, must be green | Sat 2026-11-07 | no |
 | 3 | Merge the PR with **"Create a merge commit"** (never squash or rebase), **only after 16:30 IST** (or on a weekend) | Sat 2026-11-07 or Sun 2026-11-08 | **yes, restarts api/worker; no behaviour change**. Needs your explicit approval |
 | 4 | Wait for the deploy to finish green; run the read-only prod checks of `docs/DEPLOY.md` by hand | same day | no |
 | 5 | Verify the nine blob ids on merged `main` (section 2) and write the merge hash into the protocol (section 11) | Sun 2026-11-08 | no |

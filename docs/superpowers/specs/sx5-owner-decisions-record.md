@@ -20,7 +20,7 @@ requirements. This is not training approval."). Companion to `sx-owner-review-ch
 | # | Decision | Recorded outcome | Status |
 |---|---|---|---|
 | 1 | MDE_H | **SX5: 0.0018 (0.18 pp per trade, a fraction)**; SX10: none (deferred). Never changed after a result. | accepted default |
-| 2 | E\* (the gain below which the owner no longer cares) | **PENDING, the owner's own number.** Deliberately left blank: no value was chosen by the preparer. The code does not use it; it only words the plain-English reading and the decision to propose a forward test. The checklist's starting point (0.10 pp for SX5) is a suggestion, not a decision. | **OPEN: owner must supply** |
+| 2 | E\* (the gain below which the owner no longer cares) | **0.10 percentage points per trade, written as the fraction 0.0010 (SX5).** The owner chose the recommended value on 2026-11-07 (in the working session). The code does not use it; it only words the plain-English reading and the decision to propose a forward test. It is written into the protocol at signing and never changed after a result. | **decided 2026-11-07; written in at signing** |
 | 3 | SX10 primary quantity (D-Q10) | Moot while SX10 is deferred. (a) raw 10-day return stays the code's primary. | accepted default, moot |
 | 4 | Meaning of FAIL and INCONCLUSIVE | Accepted as written; every FAIL report carries "this does not show the inputs do nothing". | accepted default |
 | 5 | One-horizon Holm timing | Each horizon read alone at the strict 2.5% bound; the 5% relaxation is never used. | accepted default |
@@ -33,7 +33,7 @@ requirements. This is not training approval."). Companion to `sx-owner-review-ch
 | 12 | Signed git tags over each registry commit | Accepted in principle. Tags are created **by the owner** (after authorisation, after start, after completion). None exists; none was created. | owner act, not done |
 | 13 | Limitation U (47 fixed survivors, no generalisation) | Accept verbatim. | accepted default |
 | 14 | Economics are a no-weight diagnostic forever | Accepted: the primary quantity is gross; costs only partly cancel. | accepted default |
-| 15 | HINDUNILVR | Its 187 rows stay excluded. The fresh fetch is still pending; if it changes anything, every hash is reissued. | accepted default; fetch pending |
+| 15 | HINDUNILVR | Its 187 rows stay excluded, and this is final. The owner decided on 2026-11-07 (in the working session) to accept the exclusion: **no fresh fetch is required** before signing or for SX5. If a fetch were ever run and changed anything, every hash would be reissued under a new protocol version. | **decided 2026-11-07: exclusion final, no fetch required** |
 | 16 | Files with assumed dates | Renamed and redated in one commit before the code was hashed (mapping below). | done |
 | 17 | Who signs | The owner, personally. Not done. | owner act, not done |
 
@@ -107,11 +107,11 @@ fold hashes, the exclusion hashes.
 
 ## Still blocked on the owner
 
-1. **E\*** (decision 2): the owner's number.
+1. **E\*** (decision 2): decided, 0.10 pp per trade (0.0010); it is written into the protocol text at signing.
 2. **Signing** both protocols (blank signature lines; MDE_H and E\* written in) and **signed git tags** (decision 12).
 3. The **experiment-register row** at signing, and the **approval file** (complete `config_sha256`, never a prefix).
 4. A **separate explicit training authorisation**, on or after 2026-12-04, then a dry run first.
-5. The **HINDUNILVR fresh fetch** result (decision 15), or acceptance of the exclusion as final.
+5. ~~The HINDUNILVR fresh fetch result (decision 15)~~ Not required: the owner accepted the exclusion as final on 2026-11-07.
 6. **Matrix hash** (needs the signing environment's pandas) and the **signing-environment lock file** (decision 11): the hash
    sheet carries the matrix hash from the prior sheet and labels it as carried.
 7. A clean **full-suite** result on the signing commit (this preparation ran only the SX and registry tests).

@@ -84,7 +84,7 @@ ideas that is already inside the first row). A candidate that is INCONCLUSIVE, F
 survivor, whatever its other figures are, and is never ranked, however high its `edge_low` is. The ranking ladder (section 5) is
 applied **only** to the survivors; the tool and its tests (`test_best_survivor_is_chosen_only_among_survivors`) enforce this. The
 other rows (the Phase C pass rules) stay "reported, not deciding", because making them mandatory would change the signed
-sentence S1. **[I] This is the owner's wording read against the signed text; the owner confirms it when signing.**
+sentence S1. **[V] Owner confirmed on 2026-11-07 (in the working session) that "mandatory gates" means exactly these two rows; this remains subject to the owner's signature of this text.**
 
 ---
 
@@ -264,17 +264,29 @@ line) and `ledger_row_sha256`, `survives`. Never rewritten.
 **Procedure, once per candidate, in the order B1, B2, B3:**
 
 1. Preconditions: gates G1 to G13 of section 11 hold; for B2 and B3 the previous candidate is already committed.
-2. Run the candidate once (`swingtrade brain phase-b --candidate Bn`). It writes
+2. Run the candidate once (the command form in the note after step 6; `swingtrade brain phase-b --candidate Bn` as typed fails with a circular import and runs nothing). It writes
    `phase_b_<Bn>_2025-02-01_2026-08-15.{md,json}` and adds the ledger row `Phase B candidate <Bn>` **before** the results.
 3. Do not edit, rename, tidy or re-run anything. Do not edit the candidate's ledger row (not even its decision cell): the tool
    compares the row text exactly [V, rehearsal F8]. The owner's reading of a result goes into a separate dated note after the
    record exists.
-4. `phase_b_finish --manifest Bn` (dry run), read it, then `--apply`.
+4. `phase_b_finish --root . --manifest Bn` (dry run), read it, then `--apply` (always with `--root .`, see the note after step 6).
 5. Run the two printed git commands (`git add` naming the candidate's `.md`, `.json`, `MANIFEST_<Bn>.json` and
    `docs/brain/EXPOSURE-LEDGER.md` explicitly, then `git commit`): one commit with exactly those four items. Look at
    `git show --stat` before moving on: nothing else may be in it (no `.env`, no data, no models). Check the tree is clean. Only then
    start the next candidate. The manifest step already refuses an evidence folder with unexpected, oversized or secret-naming files.
 6. A committed output is never edited, renamed or deleted.
+
+**Command forms verified on 2026-11-07 (documentation only; no code or signed rule changes).** Three traps were found while checking
+every command in this text; each fails closed (nothing runs or is written):
+(i) `python -m swing_trade_ml.cli ...` and the `swingtrade` command fail with a circular import. The working form, typed from the repo
+root, is `python -c "import sys, swing_trade_ml.brain.service; from swing_trade_ml.cli import main; sys.argv=['swingtrade','brain','phase-b','--candidate','Bn']; raise SystemExit(main())"`
+(the same form with `--dry-run` appended was run and printed the plan). (ii) `python -m swing_trade_ml.brain.phase_b_finish` has a wrong
+default repository root (one folder above the repo, so it reports every tag as missing); always run it from the repo root with
+`--root .`. It is left unfixed because its file is bound by blob id in section 11. (iii) The app's default database address (port 5432)
+is not the local Docker database (`localhost:5433`, database `swing_trade_ml`); a real Phase B run reads the database and needs
+`DATABASE_URL` set to that local address (never a production address; the December helper scripts set it and refuse anything else).
+Gate G6 and the other read-only gates do not read the database. The exact typed forms and the helper scripts are in
+`docs/brain/DECEMBER-RUNBOOK.md`.
 
 At the final step the tool checks (via git) that each candidate's evidence commit holds its four items, is an ancestor of HEAD,
 is the **only** commit that ever touched its outputs, and is a strict ancestor of the next candidate's evidence commit; that the
@@ -461,6 +473,8 @@ re-derived from the stored labels; the ranking names the survivor first; evidenc
 items and are a strict chain in ledger-row order; `SURVIVOR_SELECTED` requires an annotated `wf-protocol-v2` naming the same
 survivor and `phase-b-result`; `NO_SURVIVOR` requires that `wf-protocol-v2` does not exist [V, wrapper tests and rehearsal].
 
+**Runner guard (owner confirmed 2026-11-07).** The frozen 15-day runner `brain/selection_lab_run.py` no longer relies on the wrapper alone: its own guard (`selection_lab_start.guard_for_runner`, the same check code the wrapper uses, no copy) enforces the date (2026-12-05 IST or later) and the Phase B terminal-record verification of this section, from the command line and from a direct call, and fails closed. It is on branch `change/lab-runner-guard`, inside `release/nov-completion`, and is the reason the wrapper blobs in section 11 differ from the 5 Nov values. It changes no evaluation rule, number, threshold, seed or candidate definition.
+
 ---
 
 ## 13. What is NOT changed
@@ -472,9 +486,19 @@ rules; no number, threshold, seed or window anywhere.
 
 ---
 
-## 13a. Disclosure: known price-data steps (added 2026-11-06; disclosure only)
+## 13a. Disclosure: known price-data steps (added 2026-11-06, widened 2026-11-07; disclosure only)
 
-Known price-data steps exist in the stored daily prices. They are disclosed here, before any result exists. Phase B settings, stock lists, the split file, windows and every signed rule are not changed, and no price is corrected or re-fetched for Phase B: results are disclosed, not corrected. Inside the 49 scored stocks (all three candidates): ITC 2025-01-06 (+6.3%), HINDUNILVR 2025-12-05 (-5.0%, stored unadjusted for the Kwality Wall's demerger) and RELIANCE 2023-07-20 (-3.3%). In B2's extra training set of 128 stocks: BAJAJELEC (+38.8%, unexplained). The owner's read-only fresh fetch for HINDUNILVR and BAJAJELEC is pending, and whatever it shows does not change Phase B. Sources: `docs/brain/evidence/corporate_actions/verify49_report.md` and `docs/brain/evidence/corporate_actions/corporate_actions_audit.md`.
+Known mechanical price steps (splits, bonuses, demergers and spin-offs that the stored daily prices do not fully adjust) exist in the data Phase B reads. They are disclosed here, before any result exists. Phase B settings, stock lists, the split file, windows and every signed rule are not changed, and **no price is corrected, replaced or re-fetched for Phase B: results are disclosed, not corrected.** Source of every figure: `docs/brain/evidence/corporate_actions/phase_b_anomaly_impact.md` (counts of bar dates only; no price, return, model score or candidate output was read) with `verify49_report.md` and `corporate_actions_audit.md` in the same folder.
+
+**Inside the 49 scored stocks (all three candidates).** ITC 2025-01-06 (+6.3%): 0 label days, 231 feature days (1.24% of scored stock-days at the 252-bar lookback), test folds 1 to 13, in training in all 20 folds. HINDUNILVR 2025-12-05 (-5.0%, stored unadjusted for the Kwality Wall's demerger): 14 label days (0.075% of the 18,571 scored stock-days, fold 11), 171 feature days (0.92%, folds 11 to 20), in training in folds 12 to 20. RELIANCE 2023-07-20 (-3.3%): nothing inside the development window.
+
+**In B2's extra training set of 128 stocks (training only, never scored).** ABFRL 2025-05-22 (-55.9%, folds 5 to 20), SANOFI 2024-06-13 (-28.0%, all folds), VEDL 2026-04-30 (-32.9%, folds 18 to 20), BAJAJELEC 2023-09-14 (+38.8%, unexplained; 14 label rows, 0.008% to 0.014%, and 251 feature rows, 0.15% to 0.24%, of B2 training in every fold). Share of training rows touched by any step: 0.92% to 1.39% for B1 and B3, 0.66% to 0.88% for B2.
+
+**In the reject set (never trained on; used only for the reject-set check).** Inside the development window: ALLCARGO 2025-11-12 (-60.1%), TRIVENI 2026-07-22 (-41.6%), SIEMENS 2025-04-07 (-25.1%), TMPV 2025-10-14 (-13.1%): 56 reject-set stock-days (0.115%) have a path crossing a step. Before the window, never scored: NMDC (2022), SCI (2023) and an earlier ALLCARGO event (2023).
+
+**Measured impact (counts and structural bounds only).** The label channel touches 0.075% of scored stock-days. A wrong net return E on one stock on one day moves the mean daily edge by at most A x E x (1/m + 1/49) / N (A affected days, m picks that day, N days with ideas). For HINDUNILVR (A = 14) the bound on a top-5 edge at N = 379 days is 0.016 percentage points for a price-level error of 1.91 points and 0.098 for a worst-case 12-point flip (0.059 and 0.37 at N = 100; 0.20 and 1.2 at N = 30); a one-idea-per-day candidate such as B1 is bounded at 0.45 points (12-point flip, N = 379), a figure that needs the stock to be picked on all 14 days. The reject-set average moves by at most 0.014 percentage points. A false loss lowers the every-stock baseline, so candidates would look slightly better than they are (the optimistic direction). The 30-trading-day minimum counts days with ideas and does not depend on returns, so prices cannot change it. **The feature channel (HUL 171 and ITC 231 stock-days) cannot be bounded tightly without model scores and was deliberately NOT tested, because Phase B results are sealed until the runs; B3's breadth series was likewise not looked at.** Conclusion of the note: negligible in the realistic case, cannot-tell only for the feature channel and an extreme concentration case.
+
+**Owner decision (2026-11-07, relayed in the working session; confirmed by the owner's signature of this text).** Accept and disclose. The owner's read-only fresh fetch for HINDUNILVR and BAJAJELEC is **not required**: the exclusion and the disclosure are final for Phase B, and nothing a later fetch shows changes Phase B. Fetching fresh prices, or excluding stocks or rows, would change the locked inputs (split hash `bc8878f2...`, `phase-b-settings`) and would need a new signed protocol version; neither was chosen.
 
 ## 14. Decisions
 

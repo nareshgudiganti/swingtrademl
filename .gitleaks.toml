@@ -12,4 +12,8 @@ description = "Known fake values used in tests and plans"
 regexes = [
   # Made-up JWT in the Observatory redaction test (signature decodes to "signature-value-here").
   '''eyJhbGciOiJIUzI1NiJ9\.eyJzdWIiOiJvd25lciJ9\.c2lnbmF0dXJlLXZhbHVlLWhlcmU''',
+  # SHA-256 digest of the SX5 exclusion keys in the hash sheet (a public hash, not a credential).
+  '''7a5fbebcb02ece2a5c0675c68ec19ea1fcb9f29de74a723b13cfe430ade631d8''',
+  # SHA-256 digest of the SX5 exclusion keys in the hash sheet (a public hash, not a credential).
+  '''f91418585c918d9f71c2cef5da98cd094e2df04ecd8f1dc8399160e3012f3565''',
 ]

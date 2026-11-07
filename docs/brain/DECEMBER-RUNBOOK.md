@@ -9,8 +9,41 @@ trial and signed evaluation rules are not edited; nothing is deployed before 16:
 printed or committed (`.env`, Kite and API keys). Tags are never moved or deleted. A failed result stays on record.
 
 Test environment (all local commands): from the repo root, Git Bash,
-`env -u API_KEY -u DATABASE_URL -u JWT_SECRET_KEY -u TRADING_MODE PYTHONPATH=backend/src backend/.venv/Scripts/python.exe ...`
+`env -u API_KEY -u JWT_SECRET_KEY -u TRADING_MODE PYTHONPATH=backend/src backend/.venv/Scripts/python.exe ...`
 Docker Postgres must be up for any database command (they hang silently otherwise).
+
+**Database address (corrected 2026-11-07).** The app's own default is port 5432, which does NOT match the Docker setup. The local
+Docker Postgres with the data is `localhost:5433`, database `swing_trade_ml` (the same local-only credential the repo's test
+configuration already commits). For any typed command that reads the database, set
+`DATABASE_URL=postgresql+psycopg://swingtrade:swingtrade_local_pw@localhost:5433/swing_trade_ml` (never a production address, and a
+fresh worktree has no `.env`). The helper scripts below do this for you and refuse any non-local address.
+
+**Two traps found while verifying these commands (both fail closed, nothing is written):**
+- `python -m swing_trade_ml.cli ...` and `swingtrade ...` fail with a circular import. Import the brain service first (the typed Phase B
+  form in section 1 shows how).
+- `python -m swing_trade_ml.brain.phase_b_finish` uses a wrong default repository root (it looks one folder above the repo, so it reports
+  every tag as missing). Always pass `--root .` from the repo root. (Fixing it would change a code file whose blob id is bound by the
+  Phase B protocol, so it is left as it is.)
+
+## 0. Helper scripts (`scripts/december/`, Windows PowerShell)
+
+Thin wrappers that run only checks and dry runs. Each prints in plain English what it will do first, stops on the first error, never
+prints secrets, never pushes, tags, commits or trains, and has NO helper for any live step (the real Phase B run, the lab start, the SX5
+`--run`, every commit and tag stay typed commands). Run from the repo root:
+`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\december\<script> [options]` (if a policy blocks the file, this form works).
+
+| Script | Does | Writes |
+|---|---|---|
+| `01-preflight.ps1` | branch, clean tree, tags, `phase_b.py` equals its tag, reserved tags not early, a real `select 1` on the local database, India date | nothing |
+| `02-phase-b-dry-run.ps1 -Candidate B1` | prints one candidate's plan (no market data, no scoring) | nothing |
+| `03-phase-b-manifest.ps1 -Candidate B1 [-Apply]` | manifest dry run; `-Apply` writes `MANIFEST_B1.json` only | only with `-Apply` |
+| `04-phase-b-finish.ps1 [-Apply]` | final record dry run; `-Apply` writes the record, report and one ledger row | only with `-Apply` |
+| `05-lab-check.ps1 -Candidate S0` | lab start wrapper in `--check-only` mode (can never start the lab) | one audit line (git-ignored) |
+| `06-sx5-dry-run.ps1 [-WithData]` | SX5 plan and checks; `-WithData` also counts rows (SELECT only) | nothing |
+| `07-h05-daily-check.ps1` | one read-only GET of the h05 report, prints sessions, missed sessions, events, verdicts; flags anything off | nothing |
+| `08-weekly-scoreboard.ps1 -Report s1 -From YYYY-MM-DD -To YYYY-MM-DD` | the research scoreboard (working import form) | one report file under `docs/brain/evidence/scoreboard/` |
+
+Start every working session with `01-preflight.ps1`. A FAIL on "clean tree" is normal while you have uncommitted edits.
 
 ## Calendar
 
@@ -27,15 +60,19 @@ Docker Postgres must be up for any database command (they hang silently otherwis
 
 ## 1. Phase B (details in `docs/brain/PHASE-B-FINISH.md` and protocol sections 7 to 9)
 
+Routine steps have helpers (`02`, `03`, `04` above). The typed forms, for reference:
+
 ```
-swingtrade brain phase-b --candidate B1 --dry-run     # plan only, reads no market data, writes nothing
-swingtrade brain phase-b --candidate B1               # the one real run (from 2026-11-09)
-python -m swing_trade_ml.brain.phase_b_finish --manifest B1            # dry run of the manifest
-python -m swing_trade_ml.brain.phase_b_finish --manifest B1 --apply    # writes MANIFEST_B1.json
-# then run the two git commands it prints (explicit files, one commit), check `git show --stat`, clean tree, then B2, then B3
-python -m swing_trade_ml.brain.phase_b_finish                          # dry run of the final record
-python -m swing_trade_ml.brain.phase_b_finish --apply                  # record + report + one ledger row
-# then the git add / git commit / git tag -a phase-b-result commands it prints
+# plan only (helper 02); reads no market data, writes nothing
+python -c "import swing_trade_ml.brain.service; from swing_trade_ml.brain import phase_b as pb; print(pb.dry_run_plan('B1'))"
+# THE ONE REAL RUN (typed by you, from 2026-11-09, from the signed branch, DATABASE_URL = the local Docker address above):
+python -c "import sys, swing_trade_ml.brain.service; from swing_trade_ml.cli import main; sys.argv=['swingtrade','brain','phase-b','--candidate','B1']; raise SystemExit(main())"
+python -m swing_trade_ml.brain.phase_b_finish --root . --manifest B1            # dry run of the manifest (helper 03)
+python -m swing_trade_ml.brain.phase_b_finish --root . --manifest B1 --apply    # writes MANIFEST_B1.json
+# then run the git commands it prints (explicit files, one commit), check the commit contents, clean tree, then B2, then B3
+python -m swing_trade_ml.brain.phase_b_finish --root .                          # dry run of the final record (helper 04)
+python -m swing_trade_ml.brain.phase_b_finish --root . --apply                  # record + report + one ledger row
+# then the commit and annotated-tag commands it prints (typed by you)
 ```
 
 If a run stops for any reason: do not re-run, do not open results, follow protocol section 9 (INTERRUPTION note first).
@@ -76,8 +113,11 @@ The h05 daily job runs by itself (Mon-Sat 07:30, 08:30, 18:30, 20:30, 22:30 IST)
   2 Nov, `missed sessions` 0, no events. INCONCLUSIVE verdicts are normal until about 40 matured days (late December or later).
 - `GET /brain/daily-checks/latest` and `GET /brain/weekly-health`: lines should say OK; a CHECK line needs a look.
 - Telegram: the Saturday 11:00 IST health message must arrive; no message means the worker or Telegram needs a look.
-- Known and understood: `TMCV` shows "not scored: invalid_features" every day (one stock, still to be explained);
-  production-path parity fails on `obv_slope` only (known incident; training-basis parity is OK).
+- Known and understood: `TMCV` shows "not scored: invalid_features" every day. It is a new post-demerger listing with fewer than
+  the 252 bars the `high_52w_dist` input needs; it is skipped, never imputed, and should become scorable around 17-18 Nov (see
+  `docs/superpowers/specs/h05-tmcv-and-obv-slope-note.md`). Production-path parity fails on `obv_slope` only (known incident;
+  training-basis parity is OK, and the h05 primary score is unaffected).
+- The daily check is helper `07-h05-daily-check.ps1` (reads `API_KEY` from `.env` inside the script, never prints it).
 - Read-only local helpers: `python -m swing_trade_ml.brain.lanes.h05_cli report [--run-no N]`, `... protocol`, `... check`, `... parity`
   (database-backed; for prod run them inside the api container, for example `docker exec stml-api python -m swing_trade_ml.brain.lanes.h05_cli report` **[UNVERIFIED on the droplet]**).
 

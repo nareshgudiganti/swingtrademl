@@ -415,3 +415,124 @@ def test_a_crash_while_writing_leaves_no_half_finished_run(repo, bars, monkeypat
 def test_the_cli_has_the_technical_rerun_flag():
     with pytest.raises(SystemExit):
         run.main(["S0", "--bogus"])
+
+
+# ---------------------------------------------------------------- the frozen mid-cap snapshot
+
+
+def write_snapshot(repo, **over):
+    split_sha = run.load_split(repo)[2]
+    snap = {
+        "model_id": 16,
+        "training_symbols": [*MID, *REJECT[:10]],
+        "mid_group": sorted(MID),
+        "split_file_sha256": split_sha,
+    }
+    snap.update(over)
+    path = repo / run.MID_SNAPSHOT
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(snap), encoding="utf-8")
+    return path
+
+
+def snapshot_group(repo):
+    return run.load_mid_snapshot(repo, USED, REJECT, run.load_split(repo)[2])
+
+
+def test_the_snapshot_file_is_a_frozen_file():
+    assert run.MID_SNAPSHOT in run.FROZEN_FILES
+
+
+def test_the_mid_group_comes_from_the_snapshot(repo):
+    write_snapshot(repo)
+    assert snapshot_group(repo) == sorted(MID)
+
+
+def test_a_missing_snapshot_refuses(repo):
+    with pytest.raises(run.RunRefusedError, match="not frozen"):
+        snapshot_group(repo)
+
+
+def test_a_snapshot_group_that_differs_from_its_training_stocks_refuses(repo):
+    write_snapshot(repo, mid_group=sorted([*MID[:13], "M99"]))
+    with pytest.raises(run.RunRefusedError, match="differs from its recorded training stocks"):
+        snapshot_group(repo)
+
+
+def test_a_snapshot_made_against_another_split_file_refuses(repo):
+    write_snapshot(repo, split_file_sha256="0" * 64)
+    with pytest.raises(run.RunRefusedError, match="different split file"):
+        snapshot_group(repo)
+
+
+def test_a_snapshot_with_fewer_than_ten_stocks_refuses(repo):
+    write_snapshot(repo, training_symbols=MID[:9], mid_group=sorted(MID[:9]))
+    with pytest.raises(run.RunRefusedError, match="at least 10"):
+        snapshot_group(repo)
+
+
+def test_a_snapshot_overlapping_the_49_refuses(repo):
+    write_snapshot(repo, training_symbols=[*MID, USED[0]], mid_group=sorted([*MID, USED[0]]))
+    with pytest.raises(run.RunRefusedError, match="overlaps the 49"):
+        snapshot_group(repo)
+
+
+class _NoDb:
+    """Any database access fails: proves the mid group never consults the active-model pointer."""
+
+    def __getattr__(self, name):
+        raise AssertionError(f"collect_db touched the database ({name})")
+
+
+def test_collect_db_reads_the_snapshot_not_the_database_pointer(repo, bars, monkeypatch):
+    import importlib
+
+    importlib.import_module("swing_trade_ml.services.risk")  # load order, as in collect_db
+    five_day = importlib.import_module("swing_trade_ml.brain.five_day")
+    config = importlib.import_module("swing_trade_ml.core.config")
+
+    write_snapshot(repo)
+    monkeypatch.setattr(config, "REPO_ROOT", repo)
+    seen = {}
+
+    def fake_load(db, symbols, until):
+        seen["symbols"] = list(symbols)
+        return {s: bars[s] for s in symbols}
+
+    monkeypatch.setattr(five_day, "load_bars_with_volume", fake_load)
+    _, used, extra, mid = run.collect_db(_NoDb())
+    assert mid == sorted(MID) and used == USED and extra == EXTRA
+    assert not set(seen["symbols"]) & set(REJECT)  # the held-back stocks are never loaded
+
+
+def test_collect_db_refuses_without_a_snapshot_and_does_not_fall_back_to_the_active_model(repo, monkeypatch):
+    import swing_trade_ml.core.config as config
+
+    monkeypatch.setattr(config, "REPO_ROOT", repo)
+    with pytest.raises(run.RunRefusedError, match="not frozen"):
+        run.collect_db(_NoDb())
+
+
+def test_the_runner_no_longer_reads_the_active_model():
+    import inspect
+
+    src = inspect.getsource(run)
+    assert "MLModel" not in src and "ModelStatus" not in src and "MID_MODEL_NAME" not in src
+
+
+def test_the_committed_mid_snapshot_reproduces_from_the_locked_split_file():
+    """The real snapshot file (Amendment 3, D11) loads against the real locked split file: 14 stocks, model 16, same split hash, no
+    overlap with the 49 scored stocks or the 129 held-back stocks. A changed snapshot or split file makes this test fail."""
+    from swing_trade_ml.core.config import REPO_ROOT
+
+    used, extra, split_sha = run.load_split(REPO_ROOT)
+    held_back = run.load_held_back(REPO_ROOT)
+    group = run.load_mid_snapshot(REPO_ROOT, used, held_back, split_sha)
+    snap = json.loads((REPO_ROOT / run.MID_SNAPSHOT).read_text(encoding="utf-8"))
+    assert split_sha == "bc8878f24a730f4b8831914280085ed3ef22ef77959dfd47c00de654362c78b3"
+    assert snap["split_file_sha256"] == split_sha
+    assert snap["model_id"] == 16 and snap["model_name"] == "swing_classifier_midcap" and snap["model_version"] == "v2"
+    assert snap["artifact_sha256"] == "633259b084da1f3f0998c54795a03c8a641aca08e711ecf722021b3a21792a20"
+    assert len(group) == 14 and sorted(snap["mid_group"]) == group
+    assert not set(group) & set(held_back) and not set(group) & set(used)
+    assert run.MID_SNAPSHOT in run.FROZEN_FILES

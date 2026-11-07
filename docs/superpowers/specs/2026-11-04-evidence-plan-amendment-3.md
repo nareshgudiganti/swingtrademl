@@ -144,6 +144,7 @@ winner", "Held-back check H1", Stage 2, Stage 3 and `sl-protocol-v1-locked`:
     - `backend/src/swing_trade_ml/brain/selection_lab_start.py` (**PROPOSED ADDITION, see D8**: the runner calls its start checks, so they are frozen with it)
     - `docs/superpowers/specs/2026-10-29-selection-model-experiments-design.md` (with the conforming banner, rev 3.1)
     - `docs/superpowers/specs/2026-11-04-evidence-plan-amendment-3.md` (this amendment, final name when adopted)
+    - `docs/brain/evidence/sl_v1/mid_universe_snapshot.json` (**PROPOSED ADDITION, see D11**: the frozen mid-cap group, model 16)
 11. The signed marker is `docs/brain/evidence/sl_v1/EVIDENCE_PLAN_AMENDMENT_3_SIGNED.md`. The runner and the wrapper accept it
     only if it has a line beginning **`SIGNED by the owner on `** followed by a date, and names `sl-protocol-v1.1` and
     "Amendment 3". The Amendment 2 marker file remains in place and is not edited.
@@ -176,6 +177,30 @@ winner", "Held-back check H1", Stage 2, Stage 3 and `sl-protocol-v1-locked`:
 17. Moves of 20% or less are never touched by the lab. Known data limitation, disclosed in every report: HINDUNILVR
     (2025-12-05, about −5.0%, a 1:1 demerger step; stored unadjusted; only about 1.6% of it is mechanical) is inside the 49 and
     is kept as an ordinary return.
+
+### 4.9 The mid-cap group is frozen to a snapshot of model 16 (D11, PROPOSED, unsigned)
+
+Source: branch `change/sl-mid-universe-snapshot`, commits `ca700d2` and `bc7dfbc` (2026-11-03), re-applied on the Amendment 3 runner without
+changing any Amendment 3 behaviour. The old standalone draft file `docs/brain/evidence/sl_v1/EVIDENCE_PLAN_AMENDMENT_3_DRAFT.md` on that branch is
+NOT used: this section replaces it, so there is only one Amendment 3 text.
+
+13. **What changes.** The mid-cap group of the lab (candidates S0M, S1M, S2M) is read ONLY from
+    `docs/brain/evidence/sl_v1/mid_universe_snapshot.json`, never from the database's "active `swing_classifier_midcap` model". The snapshot names
+    model id 16 (`swing_classifier_midcap` v2, trained 2026-08-12), its 24 training stocks, the resulting 14-stock mid group, the locked split file
+    hash `bc8878f24a730f4b8831914280085ed3ef22ef77959dfd47c00de654362c78b3`, and the model file hash
+    `633259b084da1f3f0998c54795a03c8a641aca08e711ecf722021b3a21792a20` (as recorded when the snapshot was made).
+14. **Why (reproducibility only).** Activating a different mid-cap model on the machine could silently change the stocks the lab tests. A frozen,
+    hashed file removes that path. It is a data-source change, not a rule change.
+15. **What the code checks** (`selection_lab_run.load_mid_snapshot`): the file exists; its split hash equals the locked split file; its
+    `mid_group` equals, exactly, its recorded training stocks minus the 129 held-back stocks minus the 49 scored stocks (the same function
+    `selection_lab.mid_group_from` as before); the group has at least 10 stocks. Any failure refuses the run before any bar is read. The 129 held-back
+    stocks are never loaded (unchanged assertion).
+16. **What does NOT change.** The six candidates, +8% / -4% / 15 trading days, folds, the ranking-only verdicts R1 to R4, the statistical family and its
+    constants (D3), the 49 large stocks, the 128 extra training stocks, the 129 held-back stocks, `selection_lab.py` (unchanged), the runner guard
+    (D8), the date rule (not before 2026-12-05), the sealed trial, Phase B and every h05 rule. No model is activated or trained and nothing trades.
+17. **Frozen.** The snapshot file is added to `FROZEN_FILES`: if it differs from the tagged version the runner refuses to run.
+18. **Known limit.** The model file hash is a recorded value; the model file is not on the laptop, so the code cannot recompute it. The lane code
+    `shadow_lanes/lane_universe.py` has its own active-model lookup for the (disabled) lane universe and is not changed by this decision.
 
 ---
 
@@ -279,6 +304,7 @@ has been applied. "Frozen?" = the file is in `FROZEN_FILES` under v1.1, so it mu
 | 25 | WRAPPER `backend/tests/test_selection_lab_start.py` | 24, 56, 143, 148 | fake runner with `"sl-protocol-v1"` | use `"sl-protocol-v1.1"` and add the cases in 8(b) | Fixture follows runner | no |
 | 26 | `shadow_lanes/lane_freeze.py`, `lane_universe.py` | 99; 84, 129 | import `collect_db`, `RunRefusedError`, `load_split` from `selection_lab_run` | **no change**: they import functions, not the protocol name or marker | Checked: no name dependency | — |
 | 27 | `docs/superpowers/specs/2026-11-02-evidence-plan-amendment-2.md`; `sl_v1/EVIDENCE_PLAN_AMENDMENT_SIGNED.md`; `sl_v1/gap_classification.*`; `docs/brain/EXPOSURE-LEDGER.md` | — | — | **not edited** | Signed / append-only / evidence | — |
+| 28 | `backend/src/swing_trade_ml/brain/selection_lab_run.py` (D11); `docs/brain/evidence/sl_v1/mid_universe_snapshot.json` (new); `backend/tests/test_selection_lab_run.py` | `MID_MODEL_NAME`, active-model query in `collect_db`; `FROZEN_FILES` | active-model pointer for the mid group | new `MID_SNAPSHOT`, `MIN_MID_GROUP`, `load_mid_snapshot`; snapshot added to `FROZEN_FILES`; tests prove the group no longer follows the pointer and that a changed snapshot or split hash is refused | Data source only. No rule, number, seed, label or candidate definition changes. Needs no new tag beyond `sl-protocol-v1.1`. |
 
 Places that parse or depend on the protocol name or marker [V]: `LEDGER_MARKER`/`RERUN_MARKER` are used with plain `in` substring
 tests and `.format` in `ledger_attempts`, `add_ledger_row`, `ledger_row`; `existing_runs` uses a glob on `sl1-` (not the protocol
@@ -385,6 +411,9 @@ reads "wrapper version: TO BE NAMED AT SIGNING".
 | D8 | **CHANGED from the earlier recommended default, for your explicit confirmation at signing.** Earlier default: "not in this PR; keep the lock a rule, not code". Owner requirement 2026-11-07: the direct runner must not bypass the execution safeguards. **Implemented (unsigned, local branch `change/lab-runner-guard`):** `selection_lab_run.run` and `.main` call `selection_lab_start.guard_for_runner` (the SAME `evaluate` the wrapper uses: date from 2026-12-05 IST, the Phase B terminal record and tags, protocol tag, clean tree, frozen files, the runner's own helpers), write an audit line (`runner_start_check`), and refuse before reading any data; `selection_lab_start.py` joins `FROZEN_FILES`. No evaluation criterion, number, threshold, seed or rule is touched. | Confirm (or reject, in which case drop the branch and the lock stays a rule). It does change a frozen file and adds the wrapper module to the frozen list, so it must be final before the tag |
 | D9 | Treat any `sl-protocol-v1` ledger row, run folder or `sl1_*` model found later as consuming that candidate's one run (i.e. refuse the same candidate under v1.1) | Yes; none exists today as far as files go |
 | D10 | Wrapper merged on its own PR before the tag (it is not frozen, so order is free) | Merge it first, then the amendment PR, then tag |
+| D11 | **NEW (2026-11-07).** Freeze the mid-cap group to the snapshot of model 16 (section 4.9) instead of the active-model pointer; snapshot added to the frozen files | Yes: reproducibility only, no rule changes (what does not change is listed in 4.9, item 16) |
+
+**Owner response, relayed in conversation on 2026-11-07 (NOT a signature):** the owner accepted all recommended defaults for D1 to D10 and confirmed the D8 change (the runner enforces the date and Phase B itself), and asked that the mid-cap snapshot be prepared as a versioned Amendment 3 change (this D11). The status of this document stays **DRAFT, UNSIGNED**. No signed marker file exists and no tag has been created. D11 was directed by the owner in conversation ("prepare the mid-cap snapshot as an explicitly versioned Amendment 3 change before signing"); it is accepted for signature together with D1 to D10, and is signed only when the owner signs the whole amendment.
 
 ---
 

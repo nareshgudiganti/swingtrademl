@@ -50,7 +50,8 @@ function Invoke-CleanPython {
     $saved = @{}
     foreach ($n in $names) { $saved[$n] = [Environment]::GetEnvironmentVariable($n, 'Process') }
     try {
-        foreach ($n in $names) { [Environment]::SetEnvironmentVariable($n, $null, 'Process') }
+        # [NullString]::Value, not $null: PowerShell turns $null into '' and on Linux '' leaves the variable set (empty).
+        foreach ($n in $names) { [Environment]::SetEnvironmentVariable($n, [NullString]::Value, 'Process') }
         [Environment]::SetEnvironmentVariable('PYTHONPATH', $PythonPath, 'Process')
         [Environment]::SetEnvironmentVariable('DATABASE_URL', (Get-LocalDsn), 'Process')
         Push-Location $WorkingDirectory
@@ -62,7 +63,9 @@ function Invoke-CleanPython {
         } finally { Pop-Location }
         return [int]$code
     } finally {
-        foreach ($n in $names) { [Environment]::SetEnvironmentVariable($n, $saved[$n], 'Process') }
+        foreach ($n in $names) {
+            [Environment]::SetEnvironmentVariable($n, $(if ($null -eq $saved[$n]) { [NullString]::Value } else { $saved[$n] }), 'Process')
+        }
     }
 }
 

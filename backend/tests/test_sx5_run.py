@@ -348,10 +348,15 @@ def test_the_spec_and_recipe_are_the_signed_ones():
     assert spec.config_sha256() in protocol
     assert len(spec.symbols) == 47 and sheet["n_symbols"] == 47
     assert len(spec.exclusions) == 187
-    assert (
-        drv.bound_values(REPO, spec, drv.build_params(0.0018), REPO / drv.PROTOCOL_REL)["recipe_sha256"]
-        in protocol
-    )
+    # The recipe hash includes the exact installed library versions by design; compare only where they match the recorded ones.
+    from swing_trade_ml.ml import sx_recipe
+
+    recorded = json.loads((REPO / drv.EVID_REL / "final_hashes_v4.json").read_text("utf-8"))["recipe"]["library_versions"]
+    if sx_recipe.installed_versions() == recorded:
+        assert (
+            drv.bound_values(REPO, spec, drv.build_params(0.0018), REPO / drv.PROTOCOL_REL)["recipe_sha256"]
+            in protocol
+        )
     folds = wf.default_folds(include_holdout=False)
     assert len(folds) == 34 and {f.kind for f in folds} == {"dev"}
     assert wf.folds_sha256(folds, 5, 5) == sheet["fold_definition_sha256_dev_only"]

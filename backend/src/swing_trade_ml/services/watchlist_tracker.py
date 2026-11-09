@@ -28,6 +28,18 @@ def return_pct(entry: float | None, last: float | None) -> float | None:
     return (last / entry - 1.0) * 100.0
 
 
+def invested_amount(entry: float | None, quantity: float | None) -> float | None:
+    if entry is None or quantity is None or entry <= 0 or quantity <= 0:
+        return None
+    return entry * quantity
+
+
+def profit_amount(entry: float | None, last: float | None, quantity: float | None) -> float | None:
+    if entry is None or last is None or quantity is None or entry <= 0 or quantity <= 0:
+        return None
+    return (last - entry) * quantity
+
+
 def today_pct(closes: list[tuple[date, float]]) -> float | None:
     """Last close vs the one before it (oldest first)."""
     if len(closes) < 2 or closes[-2][1] <= 0:
@@ -75,6 +87,7 @@ def build_item(
     buy_price: float | None,
     candles: list[tuple[date, float]],
     scores: list[tuple[date, float]],
+    quantity: float | None = None,
 ) -> dict:
     """One tracker row. `candles`/`scores` are (IST date, value), oldest first."""
     added = ist_date(added_at)
@@ -92,6 +105,10 @@ def build_item(
         "added_at": added_at.isoformat(),
         "note": note,
         "buy_price": buy_price,
+        "bought_on": added.isoformat(),
+        "quantity": quantity,
+        "invested": invested_amount(entry, quantity),
+        "profit_amount": profit_amount(entry, last, quantity),
         "entry_price": entry,
         "entry_source": source,
         "last_price": last,

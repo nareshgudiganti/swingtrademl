@@ -160,3 +160,80 @@ def test_tracker_and_patch_endpoints(client, db_session):
     assert r.json()["buy_price"] is None
 
     assert client.get(f"{URL}/tracker", headers={"X-API-Key": "test-api-key"}).status_code == 403
+
+
+# ---- edit: quantity and bought-on date ------------------------------------------------------
+
+
+def test_invested_and_profit_amounts():
+    assert t.invested_amount(100.0, 10.0) == pytest.approx(1000.0)
+    assert t.profit_amount(100.0, 105.0, 10.0) == pytest.approx(50.0)
+    assert t.profit_amount(100.0, 95.0, 10.0) == pytest.approx(-50.0)
+    for bad in (None, 0.0):
+        assert t.invested_amount(100.0, bad) is None
+        assert t.profit_amount(100.0, 105.0, bad) is None
+    assert t.invested_amount(None, 10.0) is None
+    assert t.profit_amount(100.0, None, 10.0) is None
+
+
+def test_build_item_carries_bought_on_quantity_and_amounts():
+    added = datetime.combine(D + timedelta(days=1), datetime.min.time(), tzinfo=IST)
+    item = t.build_item(
+        symbol="X", name=None, added_at=added, note=None, buy_price=None,
+        candles=_days(4, 100, 1), scores=[], quantity=5.0,
+    )
+    assert item["bought_on"] == (D + timedelta(days=1)).isoformat()
+    assert item["quantity"] == 5.0
+    assert item["entry_price"] == 101.0 and item["invested"] == pytest.approx(505.0)
+    assert item["profit_amount"] == pytest.approx((103.0 - 101.0) * 5.0)
+    bare = t.build_item(
+        symbol="X", name=None, added_at=added, note=None, buy_price=None, candles=[], scores=[]
+    )
+    assert bare["quantity"] is None and bare["invested"] is None and bare["profit_amount"] is None
+
+
+def test_patch_bought_on_quantity_rederives_day_and_entry(client, db_session):
+    inst = Instrument(instrument_token=991_002, tradingsymbol="GRWEDIT", name="Edit Test", exchange=EXCHANGE)
+    db_session.add(inst)
+    db_session.flush()
+    today = datetime.now(IST).date()
+    first = today - timedelta(days=5)
+    for i, close in enumerate([100.0, 102.0, 104.0, 103.0, 105.0, 110.0]):
+        db_session.add(Candle(instrument_id=inst.id, interval="day",
+                              ts=datetime.combine(first + timedelta(days=i), datetime.min.time(), tzinfo=IST),
+                              open=close, high=close, low=close, close=close, volume=1))
+    user, me = _as(db_session, "grw-edit")
+    db_session.add(UserWatchlistItem(
+        user_id=user.id, symbol="GRWEDIT",
+        added_at=datetime.combine(first + timedelta(days=4), datetime.min.time(), tzinfo=IST)))
+    db_session.flush()
+
+    item = client.get(f"{URL}/tracker", headers=me).json()["items"][0]
+    assert item["days_done"] == 1 and item["entry_price"] == 105.0
+    assert item["bought_on"] == (first + timedelta(days=4)).isoformat() and item["quantity"] is None
+
+    r = client.patch(f"{URL}/GRWEDIT", json={"bought_on": first.isoformat(), "quantity": 10}, headers=me)
+    assert r.status_code == 200, r.text
+    assert r.json()["quantity"] == 10.0
+    item = client.get(f"{URL}/tracker", headers=me).json()["items"][0]
+    assert item["bought_on"] == first.isoformat()
+    assert item["days_done"] == 5 and item["entry_price"] == 100.0 and len(item["closes"]) == 6
+    assert item["invested"] == pytest.approx(1000.0) and item["profit_amount"] == pytest.approx(100.0)
+
+    # Omitted fields stay; a null date leaves the date alone; quantity can be cleared.
+    r = client.patch(f"{URL}/GRWEDIT", json={"note": "hi", "bought_on": None}, headers=me)
+    assert r.status_code == 200 and r.json()["quantity"] == 10.0
+    assert client.get(f"{URL}/tracker", headers=me).json()["items"][0]["bought_on"] == first.isoformat()
+    r = client.patch(f"{URL}/GRWEDIT", json={"quantity": None}, headers=me)
+    assert r.json()["quantity"] is None
+
+    # Plain-English refusals: future date, too old, non-positive shares.
+    future = (today + timedelta(days=1)).isoformat()
+    r = client.patch(f"{URL}/GRWEDIT", json={"bought_on": future}, headers=me)
+    assert r.status_code == 422 and "future" in r.json()["detail"]
+    old = (today - timedelta(days=121)).isoformat()
+    r = client.patch(f"{URL}/GRWEDIT", json={"bought_on": old}, headers=me)
+    assert r.status_code == 422 and "120" in r.json()["detail"]
+    assert client.patch(f"{URL}/GRWEDIT", json={"quantity": 0}, headers=me).status_code == 422
+    assert client.patch(f"{URL}/GRWEDIT", json={"bought_on": "not-a-date"}, headers=me).status_code == 422
+    assert client.get(f"{URL}/tracker", headers=me).json()["items"][0]["bought_on"] == first.isoformat()

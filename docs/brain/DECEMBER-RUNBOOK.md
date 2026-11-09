@@ -77,6 +77,13 @@ python -m swing_trade_ml.brain.phase_b_finish --root . --apply                  
 
 If a run stops for any reason: do not re-run, do not open results, follow protocol section 9 (INTERRUPTION note first).
 
+**Before each Phase B run (run safety, added 2026-11-09).** A run that stops after its outputs start is closed as exposed with no recovery
+(protocol section 9, I2), so a sleeping laptop is the most likely way to lose a candidate. Each run: plug the laptop into power; turn
+sleep and hibernate off (Windows: Settings > System > Power > Screen and sleep > "Never" while plugged in); keep the terminal open and do not
+close the lid; close heavy programs (the full test suite and Phase B on one database at the same time can fail); confirm Docker Postgres answers
+a real `select 1` (helper `01-preflight.ps1`); do not run a Windows update restart. Note the start time. The length of a real run is not yet
+known (nothing has run on real data), so after B1 write down how long it took and check that B2 and B3 still fit before 2026-12-04.
+
 ## 2. 15D selection lab (details in `docs/brain/SELECTION-LAB-START.md`)
 
 Only through the wrapper. It refuses before 2026-12-05, without the `phase-b-result` record, without Amendment 3

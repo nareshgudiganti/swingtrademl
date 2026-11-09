@@ -2,8 +2,9 @@
 
 Status: **FINAL DRAFT FOR THE OWNER'S SIGNATURE. NOT SIGNED. NOT TAGGED. NOT IN FORCE.** It replaces the
 working draft `2026-11-04-phase-b-no-survivor-DRAFT.md` (left untouched) and writes into text the six owner decisions A to F of
-2026-11-04. It changes no signed rule, number, setting, tag or result. It must be signed and merged by **2026-11-08**,
-before Phase B starts on **2026-11-09**. Once Phase B execution begins, sections 3 to 5 (survival, confidence method, tie
+2026-11-04. It changes no signed rule, number, setting, tag or result. It must be signed, merged and tagged **before the first
+Phase B run** (the original target was 2026-11-08; the run window 2026-11-09 to 2026-12-04 is unchanged, so a later start only
+shortens the time left, see the note on run time in `docs/brain/DECEMBER-RUNBOOK.md`). Once Phase B execution begins, sections 3 to 5 (survival, confidence method, tie
 ladder) are **sealed** and may not be changed.
 
 Marks: **[V]** verified by reading the file, running a read-only git command, or the scratch rehearsal described in
@@ -17,11 +18,10 @@ research only, and no failed model is promoted (item H); (4) `phase_b_finish.py`
 finalization checks (item E, section 8a); (5) each candidate's reproducible results are committed before the next candidate
 runs, with no secrets and no large datasets (item C, section 7).
 
-Companion code (built, tested on fixtures and in a scratch-repo rehearsal, never run on real data; the final code is committed on the
-local branch `release/phase-b-code` tip `a05c619` (children of `change/phase-b-finish` `9de70ca` and `change/lab-start-wrapper`
-`d7fc0a6`); none pushed; the binding is by blob id in section 11, not by these hashes):
-`backend/src/swing_trade_ml/brain/phase_b_finish.py` (branch `change/phase-b-finish`), the lab wrapper
-`backend/src/swing_trade_ml/brain/selection_lab_start.py` (branch `change/lab-start-wrapper`), and the data file
+Companion code (built and tested on fixtures and in a scratch-repo rehearsal, never run on real data). **Update 2026-11-09:** it is now on
+`main`, merged by pull request #151 as merge commit `5e39bc6c4dfac3b63a98bf0e1a076c2ced687cfe`; the earlier local branch names and hashes (`release/phase-b-code`
+`a05c619` and others) are history only. The binding is by blob id in section 11 (all nine re-verified against `main` on 2026-11-09):
+`backend/src/swing_trade_ml/brain/phase_b_finish.py`, the lab wrapper `backend/src/swing_trade_ml/brain/selection_lab_start.py`, and the data file
 `docs/brain/evidence/phase_b/.gitattributes`. `brain/phase_b.py` is not edited: it is byte-identical to the blob in tag
 `phase-b-settings` [V, `git diff phase-b-settings HEAD -- backend/src/swing_trade_ml/brain/phase_b.py` is empty].
 
@@ -93,7 +93,7 @@ sentence S1. **[V] Owner confirmed on 2026-11-07 (in the working session) that "
 > **Amendment 3a to the evidence plan: completing Phase B.**
 > Status: PROPOSED, unsigned. Amends only what is written here. Every other rule of the plan, Amendment 1, Amendment 2, the
 > settings note `phase-b-settings`, the tags `evidence-defs-v1`, `evidence-defs-v2` and `phase-b-settings`, and the sealed 15-day
-> trial stand unchanged. It must be merged and tagged before 2026-11-09. Items A to C (the evaluation rules) may not be changed
+> trial stand unchanged. It must be merged and tagged before the first Phase B run. Items A to C (the evaluation rules) may not be changed
 > after the first Phase B result exists.
 >
 > **A. `edge_low` (owner decision A).** `edge_low` is the lower confidence bound of the 5th-percentile edge using the predefined
@@ -403,7 +403,7 @@ owner's gate G14 checks it with git history. This is recorded as a residual risk
 | Tag | Exists now | Created by / when | On which commit | Message lines |
 |---|---|---|---|---|
 | `evidence-defs-v1`, `evidence-defs-v2`, `phase-b-settings` | yes [V] | already created | unchanged | unchanged |
-| `phase-b-completion-v1` (proposed name for this signed text; the owner may rename it before signing) | no | the owner, after signing and merging this text and the two code branches, before 2026-11-09 | the commit on `main` that holds the signed text | `signed=<owner name, date>`, `finish_blob=`, `lab_wrapper_blob=`, `phase_b_blob=` (as in the table in section 11) |
+| `phase-b-completion-v1` (proposed name for this signed text; the owner may rename it before signing) | no | the owner, after signing and merging this text (the code is already on `main`), before the first Phase B run | the commit on `main` that holds the signed text | `signed=<owner name, date>`, `finish_blob=`, `lab_wrapper_blob=`, `phase_b_blob=` (as in the table in section 11) |
 | `phase-b-result` | no | the owner, only after the finish tool's `--apply` and the record commit; reserved for a completed verified result; never before | the one commit that adds `PHASE_B_RESULT.json` and the result ledger row (and nothing else) | `outcome=`, `survivor=`, `result_sha256=`, `ledger_row=Phase B result record`, `written_at_ist=` (the tool prints the command) |
 | `wf-protocol-v2` | no | the owner, only for `SURVIVOR_SELECTED`, after `phase-b-result`, by 2026-12-04 | same commit as `phase-b-result` (`phase-b-result~0`) | `survivor=<Bn>`, `result_tag=phase-b-result` |
 
@@ -429,7 +429,7 @@ Python: `D:/machine learning/swing-trade-bot/backend/.venv/Scripts/python.exe`, 
 | G6 | Split file matches its recorded hash, and the runner's own guard has nothing to say | `python -c "import swing_trade_ml.brain.service; from swing_trade_ml.brain import phase_b as pb; from pathlib import Path; print(pb.refusal_reasons(today=pb.ist_today(), tags=pb.git_tags(Path('.')), split_dir=Path('docs/brain/evidence/stock_split')))"` (`[]`) |
 | G7 | Date window, India time | `python -c "from datetime import datetime; from zoneinfo import ZoneInfo; d=datetime.now(ZoneInfo('Asia/Kolkata')).date(); print(d, '2026-11-09' <= str(d) <= '2026-12-04')"` (`True`) |
 | G8 | Code versions are exactly the ones named in the signed text | `git rev-parse HEAD:backend/src/swing_trade_ml/brain/phase_b_finish.py HEAD:backend/tests/test_phase_b_finish.py HEAD:backend/src/swing_trade_ml/brain/selection_lab_start.py HEAD:backend/tests/test_selection_lab_start.py HEAD:backend/src/swing_trade_ml/brain/phase_b.py HEAD:docs/brain/evidence/phase_b/.gitattributes HEAD:docs/brain/PHASE-B-FINISH.md HEAD:docs/brain/SELECTION-LAB-START.md HEAD:backend/tests/trial_freeze.json` (the nine blob ids in the table below); and `git diff --exit-code phase-b-completion-v1 HEAD -- backend/src/swing_trade_ml/brain/phase_b_finish.py backend/src/swing_trade_ml/brain/selection_lab_start.py` (exit 0) |
-| G9 | Finish tests, wrapper tests, freeze test green | `python -m pytest backend/tests/test_phase_b_finish.py backend/tests/test_selection_lab_start.py backend/tests/test_selection_lab_runner_guard.py backend/tests/test_trial_freeze.py -q -p no:cacheprovider` (all pass; 190 passed on 2026-11-07 on `release/nov-completion` after the 15D runner guard (wrapper blobs below re-issued; the five finish blobs, `phase_b.py` and `trial_freeze.json` unchanged); earlier: 166 passed on 2026-11-05 on `release/phase-b-code` a05c619, and 166 passed again on 2026-11-06 on the merged branch (a73b938 = a05c619 merged with `origin/main` cbdb3f6); re-run and record the count at signing) |
+| G9 | Finish tests, wrapper tests, freeze test green | `python -m pytest backend/tests/test_phase_b_finish.py backend/tests/test_selection_lab_start.py backend/tests/test_selection_lab_runner_guard.py backend/tests/test_trial_freeze.py -q -p no:cacheprovider` (all pass; 190 passed on 2026-11-07 on `release/nov-completion` after the 15D runner guard (wrapper blobs below re-issued; the five finish blobs, `phase_b.py` and `trial_freeze.json` unchanged); earlier: 166 passed on 2026-11-05 on `release/phase-b-code` a05c619, and 166 passed again on 2026-11-06 on the merged branch (a73b938 = a05c619 merged with `origin/main` cbdb3f6); re-run 2026-11-09 on `main` `c4a79ba`: 190 passed; re-run again at signing) |
 | G10 | Evidence files are protected from line-ending conversion | `git check-attr text -- docs/brain/evidence/phase_b/x.json` (`text: unset`) |
 | G11 | No Phase B outputs or rows yet (before B1) | `grep -c "Phase B candidate" docs/brain/EXPOSURE-LEDGER.md` (0); `ls -A docs/brain/evidence/phase_b` (only `.gitattributes`) |
 | G12 | Ledger history clean of candidate rows (before B1) | `git log --oneline -S"Phase B candidate" -- docs/brain/EXPOSURE-LEDGER.md` (no output) |
@@ -437,10 +437,9 @@ Python: `D:/machine learning/swing-trade-bot/backend/.venv/Scripts/python.exe`, 
 | G14 | No unresolved interruption; any removed row has a signed recovery note | `git log --oneline -S"Phase B candidate <Bn>" -- docs/brain/EXPOSURE-LEDGER.md` shows exactly one commit (the evidence commit), or for a recovered candidate exactly three (record, removal, evidence) with `RECOVERY_<Bn>_1.md` committed between the first two; `ls docs/brain/evidence/phase_b/INTERRUPTION_*` has a signed `RECOVERY_*` for every I1 |
 | G15 | The owner has said "start" in writing, and the signatures on this text are filled | owner's written note |
 
-Re-verified 2026-11-06 on the merged branch `release/phase-b-code` a73b938 (`a05c619` merged with `origin/main` cbdb3f6, no conflicts): all nine blob ids below equal the table, and `phase_b.py` equals tag `phase-b-settings`. The binding is still by blob id.
+Re-verified 2026-11-09 on `origin/main` (`c4a79ba`): all nine blob ids and the seven sha256 values below equal the table, and `phase_b.py` equals tag `phase-b-settings`. The binding is by blob id.
 
-Code-binding table (git blob ids of the COMMITTED files, local branch `release/phase-b-code` tip
-`a05c619` (see above); re-verify at signing against `main`; any later change to any of them voids this binding
+Code-binding table (git blob ids of the COMMITTED files, now on `main`; re-verify at signing against `main`; any later change to any of them voids this binding
 and the text must be re-issued with new ids). The binding is by blob id, which survives any merge method; the merge-commit hash is
 added by the owner at signing:
 
@@ -458,8 +457,8 @@ added by the owner at signing:
 
 (G8's `git rev-parse` prints the ids in the order of the paths on its command line: finish, its test, wrapper, its test,
 `phase_b.py`, `.gitattributes`, `PHASE-B-FINISH.md`, `SELECTION-LAB-START.md`, `trial_freeze.json`. Compare each to its row.) sha256 values are of git's stored bytes (`git show HEAD:<path> | sha256sum`).
-Merge-commit hash (full 40-hex, filled in by the owner at signing), the commit on `main` that carries all of the above:
-`______________________________________`
+Merge-commit hash (full 40-hex), the commit on `main` that carries all of the above (pull request #151; **owner to confirm at signing**):
+`5e39bc6c4dfac3b63a98bf0e1a076c2ced687cfe`
 
 ---
 
@@ -503,7 +502,7 @@ Known mechanical price steps (splits, bonuses, demergers and spin-offs that the 
 ## 14. Decisions
 
 All six owner decisions A to F are written into section 3. Remaining for the owner at signing: (i) confirm or rename the tag
-`phase-b-completion-v1`; (ii) fill the merge-commit hash in section 11 after the code is on `main` (the safe order of merges, deploys and checks is in
+`phase-b-completion-v1`; (ii) confirm the merge-commit hash in section 11 (already filled in; the code is on `main`) (the safe order of merges, deploys and checks is in
 `phase-b-signature-package.md`, section 5; one combined code PR is recommended); (iii) sign. Nothing else is open.
 
 Signature lines (leave blank until signed):

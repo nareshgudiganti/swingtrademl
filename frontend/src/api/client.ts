@@ -520,8 +520,11 @@ export const api = {
   myWatchlistRemove: (symbol: string) => del<MyWatchlistItem>(`/me/watchlist/${encodeURIComponent(symbol)}`),
   /** Groww Tracker: each stock on the list followed like an open position. */
   myWatchlistTracker: () => get<WatchTracker>('/me/watchlist/tracker'),
-  /** Edit the person's own Groww buy price and/or note for one stock. */
-  myWatchlistUpdate: (symbol: string, body: { buy_price?: number | null; note?: string | null }) =>
+  /** Edit one stock's Groww entry: buy price, shares, buy date (YYYY-MM-DD) and/or note. Only sent fields change. */
+  myWatchlistUpdate: (
+    symbol: string,
+    body: { buy_price?: number | null; quantity?: number | null; bought_on?: string; note?: string | null },
+  ) =>
     patch<MyWatchlistItem>(`/me/watchlist/${encodeURIComponent(symbol)}`, body),
 
   // -------------------------------------------------------- market data --

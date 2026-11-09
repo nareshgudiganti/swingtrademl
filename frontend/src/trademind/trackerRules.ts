@@ -148,6 +148,84 @@ export function parseBuyPrice(text: string): number | null | undefined {
   return Number.isFinite(n) && n > 0 ? n : undefined
 }
 
+/** Shares: empty clears (null); a number above 0 is kept; anything else is unusable (undefined). */
+export function parseQuantity(text: string): number | null | undefined {
+  const t = text.replace(/[,\s]/g, '')
+  if (t === '') return null
+  const n = Number(t)
+  return Number.isFinite(n) && n > 0 && n <= 1e9 ? n : undefined
+}
+
+/** Signed rupees: "+₹1,250", "−₹300", or "—" when unknown. */
+export function fmtMoney(x: number | null | undefined): string {
+  if (!isNum(x)) return '—'
+  const t = `₹${Math.abs(x).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
+  return x <= -0.5 ? `−${t}` : x >= 0.5 ? `+${t}` : t
+}
+
+/** Plain rupees without a sign (for "invested"), or "—". */
+export function fmtRupees(x: number | null | undefined): string {
+  if (!isNum(x)) return '—'
+  return `₹${x.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
+}
+
+/** The server refuses a buy date further back than this. */
+export const MAX_BACKDATE_DAYS = 120
+
+const addDaysIso = (iso: string, days: number): string => {
+  const d = new Date(`${iso}T00:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + days)
+  return d.toISOString().slice(0, 10)
+}
+
+/** Today's calendar date in India (YYYY-MM-DD), whatever the browser's time zone. */
+export function todayIst(now: Date = new Date()): string {
+  return new Date(now.getTime() + 5.5 * 3600 * 1000).toISOString().slice(0, 10)
+}
+
+export type EditForm = { boughtOn: string; price: string; quantity: string; note: string }
+export type EditPatch = { buy_price?: number | null; quantity?: number | null; bought_on?: string; note?: string | null }
+export type EditResult = { patch: EditPatch; errors: Partial<Record<keyof EditForm, string>>; changed: boolean }
+
+export function formFromItem(item: WatchTrackerItem): EditForm {
+  return {
+    boughtOn: item.bought_on ?? '',
+    price: isNum(item.buy_price) ? String(item.buy_price) : '',
+    quantity: isNum(item.quantity) ? String(item.quantity) : '',
+    note: item.note ?? '',
+  }
+}
+
+/**
+ * Check the edit form and build the request. Only fields the person changed are sent, so an old buy date is never
+ * re-sent (the server refuses dates more than 120 days back) unless the person edited it.
+ */
+export function buildPatch(item: WatchTrackerItem, form: EditForm, today: string = todayIst()): EditResult {
+  const errors: EditResult['errors'] = {}
+  const patch: EditPatch = {}
+  const orig = formFromItem(item)
+
+  if (form.boughtOn !== orig.boughtOn) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(form.boughtOn)) errors.boughtOn = 'Pick the day you bought it.'
+    else if (form.boughtOn > today) errors.boughtOn = 'The buy date cannot be in the future.'
+    else if (form.boughtOn < addDaysIso(today, -MAX_BACKDATE_DAYS)) errors.boughtOn = `The buy date cannot be more than ${MAX_BACKDATE_DAYS} days ago.`
+    else patch.bought_on = form.boughtOn
+  }
+  if (form.price.trim() !== orig.price.trim()) {
+    const p = parseBuyPrice(form.price)
+    if (p === undefined) errors.price = 'Type a number above 0, like 4210 or 182.4.'
+    else patch.buy_price = p
+  }
+  if (form.quantity.trim() !== orig.quantity.trim()) {
+    const q = parseQuantity(form.quantity)
+    if (q === undefined) errors.quantity = 'Type the number of shares, above 0, like 10.'
+    else patch.quantity = q
+  }
+  if (form.note.trim() !== orig.note.trim()) patch.note = form.note.trim() === '' ? null : form.note.trim()
+
+  return { patch, errors, changed: Object.keys(patch).length > 0 }
+}
+
 export function entryNote(item: WatchTrackerItem): string {
   if (item.entry_source === 'your_price') return 'Your Groww price'
   if (item.entry_source === 'added_close') return 'Close on the day you added it'

@@ -3,12 +3,18 @@ import { describe, expect, it } from 'vitest'
 import type { WatchTrackerItem } from '../api/types'
 import {
   barPosition,
+  buildPatch,
   deltaView,
   filterItems,
+  fmtMoney,
   fmtPct,
   fmtPrice,
+  fmtRupees,
+  formFromItem,
   needsActionCount,
   parseBuyPrice,
+  parseQuantity,
+  todayIst,
   pips,
   scoreText,
   sortItems,
@@ -17,7 +23,8 @@ import {
 } from './trackerRules'
 
 const item = (symbol: string, state: WatchTrackerItem['state'], over: Partial<WatchTrackerItem> = {}): WatchTrackerItem => ({
-  symbol, name: null, added_at: '2026-11-01T00:00:00Z', note: null, buy_price: null, entry_price: 100, entry_source: 'added_close',
+  symbol, name: null, added_at: '2026-11-01T00:00:00Z', note: null, buy_price: null, bought_on: '2026-11-02', quantity: null,
+  invested: null, profit_amount: null, entry_price: 100, entry_source: 'added_close',
   last_price: 103, return_pct: 3, today_pct: 0.5, days_done: 4, score_today: 80, score_prev: 78, score_delta: 2, score_first: 75,
   scores: [], closes: [], state, ...over,
 })
@@ -92,5 +99,58 @@ describe('tracker rules', () => {
     expect(parseBuyPrice('abc')).toBeUndefined()
     expect(parseBuyPrice('-5')).toBeUndefined()
     expect(parseBuyPrice('0')).toBeUndefined()
+  })
+})
+
+describe('edit form helpers', () => {
+  const base = item('KEI', 'ok', { bought_on: '2026-11-02', buy_price: 4210, quantity: null, note: null })
+
+  it('parses shares: empty clears, positive numbers pass, junk is refused', () => {
+    expect(parseQuantity('')).toBeNull()
+    expect(parseQuantity(' 1,250 ')).toBe(1250)
+    expect(parseQuantity('2.5')).toBe(2.5)
+    expect(parseQuantity('0')).toBeUndefined()
+    expect(parseQuantity('-3')).toBeUndefined()
+    expect(parseQuantity('abc')).toBeUndefined()
+  })
+
+  it('formats rupees with a real minus and a dash for unknown', () => {
+    expect(fmtMoney(1250.4)).toBe('+₹1,250')
+    expect(fmtMoney(-300)).toBe('−₹300')
+    expect(fmtMoney(0)).toBe('₹0')
+    expect(fmtMoney(null)).toBe('—')
+    expect(fmtRupees(42100)).toBe('₹42,100')
+    expect(fmtRupees(undefined)).toBe('—')
+  })
+
+  it('today in India does not slip a day for late-evening UTC', () => {
+    expect(todayIst(new Date('2026-11-09T20:00:00Z'))).toBe('2026-11-10')
+    expect(todayIst(new Date('2026-11-09T10:00:00Z'))).toBe('2026-11-09')
+  })
+
+  it('sends only what changed', () => {
+    const f = formFromItem(base)
+    expect(buildPatch(base, f, '2026-11-09')).toEqual({ patch: {}, errors: {}, changed: false })
+    const r = buildPatch(base, { ...f, quantity: '10', note: ' hi ' }, '2026-11-09')
+    expect(r.patch).toEqual({ quantity: 10, note: 'hi' })
+    expect(r.changed).toBe(true)
+    expect(buildPatch(base, { ...f, price: '' }, '2026-11-09').patch).toEqual({ buy_price: null })
+  })
+
+  it('refuses a future date, a date over 120 days back, a bad price and bad shares in plain words', () => {
+    const f = formFromItem(base)
+    expect(buildPatch(base, { ...f, boughtOn: '2026-11-10' }, '2026-11-09').errors.boughtOn).toMatch(/future/)
+    expect(buildPatch(base, { ...f, boughtOn: '2026-07-01' }, '2026-11-09').errors.boughtOn).toMatch(/120 days/)
+    expect(buildPatch(base, { ...f, boughtOn: '' }, '2026-11-09').errors.boughtOn).toMatch(/Pick/)
+    expect(buildPatch(base, { ...f, price: 'x' }, '2026-11-09').errors.price).toMatch(/number above 0/)
+    expect(buildPatch(base, { ...f, quantity: '0' }, '2026-11-09').errors.quantity).toMatch(/shares/)
+    expect(buildPatch(base, { ...f, boughtOn: '2026-11-05' }, '2026-11-09').patch).toEqual({ bought_on: '2026-11-05' })
+  })
+
+  it('does not re-send an old buy date that was not edited', () => {
+    const old = item('KEI', 'ok', { bought_on: '2026-01-02' })
+    const r = buildPatch(old, { ...formFromItem(old), quantity: '4' }, '2026-11-09')
+    expect(r.errors).toEqual({})
+    expect(r.patch).toEqual({ quantity: 4 })
   })
 })

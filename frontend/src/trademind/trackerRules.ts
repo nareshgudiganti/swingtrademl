@@ -169,6 +169,14 @@ export function fmtRupees(x: number | null | undefined): string {
   return `₹${x.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
 }
 
+/** A buy date (YYYY-MM-DD) as "28 Oct 2026", or "—" when missing or not a date. */
+export function fmtBoughtOn(iso: string | null | undefined): string {
+  if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return '—'
+  const d = new Date(`${iso}T00:00:00Z`)
+  if (Number.isNaN(d.getTime())) return '—'
+  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })
+}
+
 /** The server refuses a buy date further back than this. */
 export const MAX_BACKDATE_DAYS = 120
 

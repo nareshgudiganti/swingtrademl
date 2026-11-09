@@ -8,7 +8,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WatchTracker, WatchTrackerItem } from '../api/types'
 import { LOOK_KEY } from './look'
 import { TRACKER_TAB_KEY, readTrackerTab, writeTrackerTab } from './trackerTab'
-import { EditPanel } from './pages/GrowwTracker'
+import { EditableRow } from './pages/GrowwTracker'
 import TradeMindApp from './TradeMindApp'
 
 const store = new Map<string, string>()
@@ -103,22 +103,56 @@ describe('Groww Tracker page', () => {
     expect(html).not.toMatch(/NaN|undefined/)
   })
 
-  it('the Edit form starts from the saved values and has the four fields and Save / Cancel', () => {
-    const client = new QueryClient()
-    const html = renderToString(
-      <QueryClientProvider client={client}>
-        <EditPanel k={{ ...DATA.items[0]!, note: 'from Today' }} onSaved={() => {}} onCancel={() => {}} />
+  it('the table has Bought on, Price paid and Shares columns that show the saved values or a dash', () => {
+    const html = render('/trademind/groww-tracker', DATA)
+    expect(html).toContain('>Bought on<')
+    expect(html).toContain('>Price paid<')
+    expect(html).toContain('>Shares<')
+    expect(html).toMatch(/data-testid="bought-KEI"[^>]*>28 Oct 2026</)
+    expect(html).toContain('₹4,210')
+    expect(html).toMatch(/data-testid="bought-NEWBIE"/)
+    expect(html).not.toContain('data-testid="edit-row"') // nothing is in edit mode until Edit is tapped
+    expect(html).not.toMatch(/NaN|undefined/)
+  })
+
+  const rowHtml = (over: Partial<WatchTrackerItem> = {}, initial?: Parameters<typeof EditableRow>[0]['initial']) =>
+    renderToString(
+      <QueryClientProvider client={new QueryClient()}>
+        <EditableRow k={{ ...DATA.items[0]!, note: 'from Today', ...over }} horizon={15} onSaved={() => {}} onCancel={() => {}} initial={initial} />
       </QueryClientProvider>,
     )
-    expect(html).toContain('data-testid="edit-form"')
+
+  it('a row in edit mode shows boxes with the saved values, the note box and Save / Cancel', () => {
+    const html = rowHtml()
+    expect(html).toContain('data-testid="edit-row"')
     expect(html).toMatch(/type="date"[^>]*value="2026-10-28"/)
-    expect(html).toMatch(/aria-label="Your Groww buy price"[^>]*/)
+    expect(html).toContain('aria-label="Price you paid in Groww for KEI"')
     expect(html).toContain('value="4210"')
     expect(html).toContain('value="10"')
     expect(html).toContain('value="from Today"')
     expect(html).toContain('>Save<')
     expect(html).toContain('>Cancel<')
+    // the server's numbers stay visible and read-only in the same row
+    expect(html).toContain('+7.2%')
+    expect(html).toContain('Reaching target')
+    expect(html).not.toContain('data-testid="edit-row-error"')
     expect(html).not.toMatch(/NaN|undefined/)
+  })
+
+  it('a row with no saved price or shares starts with empty boxes, never the word null', () => {
+    const html = rowHtml({ buy_price: null, quantity: null, note: null })
+    expect(html).toContain('placeholder="₹ paid"')
+    expect(html).toContain('placeholder="shares"')
+    expect(html).not.toMatch(/NaN|undefined|null/)
+  })
+
+  it('a bad value shows its plain-English message right under the row', () => {
+    const html = rowHtml({}, { price: 'abc', quantity: '-3' })
+    expect(html).toContain('data-testid="edit-row-error"')
+    expect(html).toContain('role="alert"')
+    expect(html).not.toMatch(/NaN|undefined/)
+    const future = rowHtml({}, { boughtOn: '2999-01-01' })
+    expect(future).toContain('The buy date cannot be in the future.')
   })
 
   it('says so in plain English when nothing is followed yet', () => {

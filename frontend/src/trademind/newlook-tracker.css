@@ -45,7 +45,7 @@
 .tm-new .gt-add { margin-left: auto; }
 
 .tm-new .gt-tbl { background: var(--tm-card); border: 1px solid var(--tm-line); border-radius: 10px; overflow-x: auto; }
-.tm-new .gt-grid { display: grid; grid-template-columns: minmax(150px, 1.5fr) 92px 100px 76px 90px 130px 130px 124px 64px; gap: 10px; align-items: center; padding: 10px 14px; min-width: 1040px; }
+.tm-new .gt-grid { display: grid; grid-template-columns: minmax(170px, 1.5fr) 92px 118px 96px 78px 100px 76px 90px 130px 130px 124px 150px; gap: 10px; align-items: center; padding: 10px 14px; min-width: 1500px; }
 .tm-new .gt-headrow { font-size: 0.68rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--tm-dim); border-bottom: 1px solid var(--tm-line); font-weight: 700; }
 .tm-new .gt-row { border: 0; border-bottom: 1px solid var(--tm-line); cursor: pointer; background: transparent; width: 100%; text-align: left; font: inherit; color: inherit; }
 .tm-new .gt-row:last-child { border-bottom: 0; }
@@ -93,12 +93,15 @@
 .tm-new .gt-edit input { font: inherit; padding: 7px 10px; border: 1px solid var(--tm-line-strong); border-radius: 8px; background: var(--tm-card); color: var(--tm-text); min-width: 0; }
 .tm-new .gt-edit input[type='text'] { flex: 1 1 240px; }
 .tm-new .gt-edit-btn { padding: 4px 10px; }
-.tm-new .gt-editform { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px 12px; align-items: end; margin-top: 10px; padding: 12px; border: 1px solid var(--tm-line); border-radius: 10px; background: var(--tm-bg); }
-.tm-new .gt-editform label { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.tm-new .gt-editform input { font: inherit; padding: 7px 10px; border: 1px solid var(--tm-line-strong); border-radius: 8px; background: var(--tm-card); color: var(--tm-text); min-width: 0; width: 100%; }
-.tm-new .gt-editnote { grid-column: 1 / -1; }
-.tm-new .gt-editbtns { display: flex; gap: 8px; flex-wrap: wrap; }
-.tm-new .gt-editnote-hint { grid-column: 1 / -1; margin: 0; }
+.tm-new .gt-notetext { overflow-wrap: anywhere; }
+/* A row being edited: same grid, entry values turned into boxes. */
+.tm-new .gt-row.gt-editing { cursor: default; background: #fff8e6; border-bottom: 0; }
+.tm-new .gt-row.gt-editing:hover { background: #fff8e6; }
+.tm-new .gt-cell { font: inherit; font-size: 0.85rem; padding: 6px 8px; border: 1px solid var(--tm-line-strong); border-radius: 8px; background: var(--tm-card); color: var(--tm-text); min-width: 0; width: 100%; }
+.tm-new .gt-cell-note { margin-top: 6px; }
+.tm-new .gt-editbtns { display: flex; gap: 6px; flex-wrap: nowrap; }
+.tm-new .gt-editbtns .gt-ghost, .tm-new .gt-editbtns .tmn-w2-primary { padding: 5px 10px; font-size: 0.82rem; }
+.tm-new .gt-rowerr { padding: 6px 14px 10px; background: #fff8e6; border-bottom: 1px solid var(--tm-line); min-width: 1500px; }
 .tm-new .gt-empty { padding: 1.4rem 1rem; text-align: center; }
 
 @media (max-width: 640px) {

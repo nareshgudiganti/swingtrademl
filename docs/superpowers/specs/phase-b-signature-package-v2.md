@@ -68,4 +68,4 @@ history). Price-data steps (section 13a) are disclosed, not corrected. Phase B r
 
 Owner: ______________________   Date (IST): ______________
 
-Tag name and commit: ______________________
+Tag name: ______________________  (the commit cannot be written here before the merge exists; it is the merge commit of the signing PR and is recorded in the tag annotation; see the note under the signature lines in the protocol)

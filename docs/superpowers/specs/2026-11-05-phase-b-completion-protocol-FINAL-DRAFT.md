@@ -509,7 +509,9 @@ Signature lines (leave blank until signed):
 
 Owner: ______________________   Date (IST): ______________
 
-Tag name and commit: ______________________
+Tag name (the commit is defined by the note below, not written here): ______________________
+
+**How the "Tag name" line works (clarification added 2026-11-09, before signing; no rule, threshold, gate or date changed).** The commit that holds this signed text is created only by merging the signing pull request, which happens after the signature, so its hash cannot be written inside this file. Therefore: (a) at signing, write only the tag name (default `phase-b-completion-v1`) and fill the Owner and Date lines; the signing pull request changes those lines and nothing else; (b) the signed commit is *defined* as the commit on `main` that first contains this file with the Owner and Date lines filled in (the merge commit of the signing pull request); (c) the owner creates the annotated tag on exactly that commit and writes the full 40-hex commit hash in the tag annotation (`signed=<owner name, date>`, `commit=<40-hex>`, plus the blob fields in the section 10 tag table); the annotation, not this file, is the record of the commit; (d) gates G1 and G3 check the tag; a reader can confirm the signature with `git show phase-b-completion-v1:docs/superpowers/specs/2026-11-05-phase-b-completion-protocol-FINAL-DRAFT.md` and confirm the commit with `git rev-parse phase-b-completion-v1^{commit}`; (e) the merge-commit hash in section 11 (`5e39bc6c...`) is a different commit, the one that put the code on `main`, and is unaffected.
 
 [V] The 2026-11-05 additions (report, idempotent re-run, hygiene, NO SURVIVOR notice) are covered by unit tests with fake git
 (166 pass across the finish, wrapper and freeze tests); they were **not** re-run in the earlier scratch-repo rehearsal and have never touched real data.

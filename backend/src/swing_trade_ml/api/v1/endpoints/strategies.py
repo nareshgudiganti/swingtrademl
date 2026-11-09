@@ -6,10 +6,10 @@ from dataclasses import asdict
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, Request, status
 from sqlalchemy import func, select
 
-from swing_trade_ml.api.deps import DbSession
+from swing_trade_ml.api.deps import DbSession, PrincipalDep, actor_name
 from swing_trade_ml.brokers import get_broker
 from swing_trade_ml.core.enums import PositionStatus
 from swing_trade_ml.core.logging import get_logger
@@ -25,7 +25,7 @@ from swing_trade_ml.schemas import (
     StrategyTypeInfo,
     StrategyUpdate,
 )
-from swing_trade_ml.services import engine
+from swing_trade_ml.services import audit, engine
 from swing_trade_ml.services import portfolio as portfolio_service
 from swing_trade_ml.strategies import STRATEGY_REGISTRY
 from swing_trade_ml.strategies.tier import cap_tier
@@ -247,10 +247,21 @@ def delete_strategy(strategy_id: int, db: DbSession) -> MessageResponse:
 
 
 @router.post("/{strategy_id}/activate", response_model=StrategyOut)
-def activate(strategy_id: int, db: DbSession) -> Strategy:
+def activate(strategy_id: int, db: DbSession, request: Request, principal: PrincipalDep) -> Strategy:
     strategy = db.get(Strategy, strategy_id)
     if strategy is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Strategy not found")
+    audit.record(
+        db,
+        "strategy.activate",
+        actor=principal.user,
+        actor_label=actor_name(principal),
+        target_type="strategy",
+        target_id=strategy.id,
+        before={"is_active": strategy.is_active},
+        after={"is_active": True, "name": strategy.name},
+        request=request,
+    )
     strategy.is_active = True
     db.commit()
     db.refresh(strategy)
@@ -258,10 +269,21 @@ def activate(strategy_id: int, db: DbSession) -> Strategy:
 
 
 @router.post("/{strategy_id}/deactivate", response_model=StrategyOut)
-def deactivate(strategy_id: int, db: DbSession) -> Strategy:
+def deactivate(strategy_id: int, db: DbSession, request: Request, principal: PrincipalDep) -> Strategy:
     strategy = db.get(Strategy, strategy_id)
     if strategy is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Strategy not found")
+    audit.record(
+        db,
+        "strategy.deactivate",
+        actor=principal.user,
+        actor_label=actor_name(principal),
+        target_type="strategy",
+        target_id=strategy.id,
+        before={"is_active": strategy.is_active},
+        after={"is_active": False, "name": strategy.name},
+        request=request,
+    )
     strategy.is_active = False
     db.commit()
     _brain_switched_off(db, strategy)

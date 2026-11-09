@@ -11,11 +11,11 @@ from collections.abc import Iterator
 from datetime import UTC, datetime
 from typing import IO, Literal
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import Integer, cast, func, select
 
-from swing_trade_ml.api.deps import DbSession
+from swing_trade_ml.api.deps import DbSession, PrincipalDep, actor_name
 from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.db.models.market import Instrument
 from swing_trade_ml.db.models.ml import MLModel, Prediction
@@ -25,6 +25,7 @@ from swing_trade_ml.ml import predict as predict_service
 from swing_trade_ml.ml import train as train_service
 from swing_trade_ml.ml.backup import registered_artifacts
 from swing_trade_ml.ml.registry import activate_model, get_active_model
+from swing_trade_ml.services import audit
 from swing_trade_ml.schemas import (
     CalibrationReport,
     MessageResponse,
@@ -178,8 +179,24 @@ def train(payload: TrainRequest, background: BackgroundTasks) -> MessageResponse
 
 
 @router.post("/models/{model_id}/activate", response_model=MLModelOut)
-def activate(model_id: int, db: DbSession) -> MLModel:
+def activate(model_id: int, db: DbSession, request: Request, principal: PrincipalDep) -> MLModel:
     """Promote a model to ACTIVE; any previous active version is archived."""
+    # One audit row, written in the same transaction as the promotion (activate_model commits both). It records who,
+    # which model and which version it replaces. It changes no behaviour: a refusal below leaves no promotion.
+    target = db.get(MLModel, model_id)
+    if target is not None:
+        current = get_active_model(db, target.name)
+        audit.record(
+            db,
+            "model.activate",
+            actor=principal.user,
+            actor_label=actor_name(principal),
+            target_type="ml_model",
+            target_id=model_id,
+            before={"active_id": current.id if current else None, "active_version": current.version if current else None},
+            after={"id": target.id, "name": target.name, "version": target.version},
+            request=request,
+        )
     try:
         model = activate_model(db, model_id)
     except ValueError as exc:

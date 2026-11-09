@@ -140,6 +140,15 @@ already had one.
 | 7 | Store artifact hash at registration; recompute on load (log and refuse on mismatch) | `ml/registry.py` (`load_artifact`) | touches serving; staged, shadow first |
 | 8 | Quantitative-threshold template for protocols (docs) | `docs/superpowers/specs/` (new template only; no signed file edited) | none |
 
+## 9a. Build status (2026-11-09, owner approved steps 1 to 3 only)
+
+| Step | State |
+|---|---|
+| 1 Slot map and test | **Built**: `services/model_slots.py` (read-only, imported by nothing but its test) and `tests/test_model_slots.py`. The mid-cap name matches code (`MID_MODEL_NAME`); the small-cap name `swing_classifier_smallcap` follows the naming rule seen in code comments and tests and is **not yet verified against prod model names**. The 5D lane models are chosen by id and are not in the map. |
+| 2 Named lookups | **Not done on purpose.** `brain/reader.py` is trial-frozen. The four name-less callers (`portfolio.py`, `system.py`, `ml/predict.py`, `cli.py`) are listed in `UNNAMED_LOOKUPS` and pinned by a characterisation test (gap G5) until the owner decides how each should behave. |
+| 3 Audit rows | **Built**: `model.activate`, `strategy.activate`, `strategy.deactivate` each write one `audit_log` row (who, before, after) in the same transaction. No behaviour change; refused promotions leave no promotion. `tests/test_activation_audit.py` also covers unauthorised callers and that activation changes no trading switch. |
+| 4 to 7 | **Not started**; need the owner's separate approval (section 11). |
+
 ## 10. Test plan (all synthetic; no production model touched)
 
 1. Unauthorised activation: member, tester and no-credential calls to model and strategy activate return 401 or 403; non-approver owner refused.

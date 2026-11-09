@@ -39,6 +39,7 @@ import StockNew from './pages/StockNew'
 import DiscoverNew from './pages/DiscoverNew'
 import PortfolioNew from './pages/PortfolioNew'
 import WatchlistNew from './pages/WatchlistNew'
+import GrowwTracker from './pages/GrowwTracker'
 import Portfolio from './pages/Portfolio'
 import Positions from './pages/Positions'
 import AIDecision from './pages/AIDecision'
@@ -316,6 +317,8 @@ export function TradeMindRoutes({
           path="watchlist"
           element={look === 'new' ? <WatchlistNew /> : ownerConsole ? <Watchlist /> : <Navigate to="/trademind/opportunities" replace />}
         />
+        {/* Groww Tracker: everyone's own followed stocks (/me/watchlist/tracker); same page in both looks. */}
+        <Route path="groww-tracker" element={<GrowwTracker />} />
         {/* Stock Compare: price changes side by side. Owner only, like the Company tab it sits beside. */}
         <Route path="compare" element={ownerConsole ? <Compare /> : <Navigate to="/trademind/opportunities" replace />} />
         <Route path="stock/:symbol" element={look === 'new' ? <StockNew /> : <StockDetail />} />

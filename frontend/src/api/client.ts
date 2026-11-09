@@ -85,6 +85,7 @@ import type {
   MyWatchlist,
   MyWatchlistItem,
   WatchlistHit,
+  WatchTracker,
   KiteLoginResponse,
   LatestSignal,
   HorizonAccuracy,
@@ -517,6 +518,11 @@ export const api = {
   myWatchlistSearch: (q: string) => get<WatchlistHit[]>(`/me/watchlist/search?q=${encodeURIComponent(q)}`),
   myWatchlistAdd: (symbol: string, note?: string) => post<MyWatchlistItem>('/me/watchlist', { symbol, note }),
   myWatchlistRemove: (symbol: string) => del<MyWatchlistItem>(`/me/watchlist/${encodeURIComponent(symbol)}`),
+  /** Groww Tracker: each stock on the list followed like an open position. */
+  myWatchlistTracker: () => get<WatchTracker>('/me/watchlist/tracker'),
+  /** Edit the person's own Groww buy price and/or note for one stock. */
+  myWatchlistUpdate: (symbol: string, body: { buy_price?: number | null; note?: string | null }) =>
+    patch<MyWatchlistItem>(`/me/watchlist/${encodeURIComponent(symbol)}`, body),
 
   // -------------------------------------------------------- market data --
   candles: (symbol: string, limit = 11) =>

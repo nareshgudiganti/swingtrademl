@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from swing_trade_ml.db.base import Base, TimestampMixin, utcnow
@@ -27,5 +27,7 @@ class UserWatchlistItem(Base, TimestampMixin):
     # Null while the stock is on the list; set when the person removes it.
     removed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     note: Mapped[str | None] = mapped_column(String(200))
+    # The person's own real buy price (e.g. in Groww). Display only; nothing trades on it.
+    buy_price: Mapped[float | None] = mapped_column(Float)
 
     __table_args__ = (UniqueConstraint("user_id", "symbol", name="uq_user_watchlist_items_user_symbol"),)

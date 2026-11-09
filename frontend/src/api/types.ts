@@ -663,6 +663,39 @@ export interface MyWatchlist {
   limit: number
 }
 
+/** Where the entry price of a tracked stock came from. */
+export type TrackerEntrySource = 'your_price' | 'added_close'
+/** Status the server gives each tracked stock; the page never recomputes it. */
+export type TrackerState = 'stop' | 'target' | 'time' | 'weak' | 'ok'
+
+/** One stock in the Groww Tracker (GET /me/watchlist/tracker). Every number can be null. */
+export interface WatchTrackerItem {
+  symbol: string
+  name: string | null
+  added_at: string
+  note: string | null
+  buy_price: number | null
+  entry_price: number | null
+  entry_source: TrackerEntrySource | null
+  last_price: number | null
+  return_pct: number | null
+  today_pct: number | null
+  days_done: number
+  score_today: number | null
+  score_prev: number | null
+  score_delta: number | null
+  score_first: number | null
+  scores: { date: string; score: number }[]
+  closes: { date: string; close: number }[]
+  state: TrackerState
+}
+
+export interface WatchTracker {
+  as_of: string | null
+  horizon_days: number
+  items: WatchTrackerItem[]
+}
+
 export interface WatchlistHit {
   symbol: string
   name: string | null

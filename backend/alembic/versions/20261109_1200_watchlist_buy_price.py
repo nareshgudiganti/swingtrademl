@@ -1,6 +1,6 @@
-"""user_watchlist_items.buy_price: the person's own Groww buy price (display only)
+"""user_watchlist_items.buy_price and quantity: the person's own Groww entry (display only)
 
-One nullable column. Nothing in trading, sizing or the brain reads it. Safe to run twice.
+Two nullable columns. Nothing in trading, sizing or the brain reads them. Safe to run twice.
 
 Revision ID: wlbuyprice01
 Revises: corpact1a2b3
@@ -19,17 +19,22 @@ down_revision: str | None = "corpact1a2b3"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
+_COLUMNS = ("buy_price", "quantity")
 
-def _has_column() -> bool:
-    cols = {c["name"] for c in sa.inspect(op.get_bind()).get_columns("user_watchlist_items")}
-    return "buy_price" in cols
+
+def _have() -> set[str]:
+    return {c["name"] for c in sa.inspect(op.get_bind()).get_columns("user_watchlist_items")}
 
 
 def upgrade() -> None:
-    if not _has_column():
-        op.add_column("user_watchlist_items", sa.Column("buy_price", sa.Float(), nullable=True))
+    have = _have()
+    for name in _COLUMNS:
+        if name not in have:
+            op.add_column("user_watchlist_items", sa.Column(name, sa.Float(), nullable=True))
 
 
 def downgrade() -> None:
-    if _has_column():
-        op.drop_column("user_watchlist_items", "buy_price")
+    have = _have()
+    for name in reversed(_COLUMNS):
+        if name in have:
+            op.drop_column("user_watchlist_items", name)

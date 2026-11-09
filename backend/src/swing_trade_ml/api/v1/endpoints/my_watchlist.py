@@ -33,6 +33,8 @@ router = APIRouter(prefix="/me/watchlist", tags=["my-watchlist"])
 
 #: At most this many stocks on one person's list at a time (removed ones do not count).
 MAX_ITEMS = 50
+#: The buy date can be moved back at most this far (the plan's horizon is 15 trading days).
+MAX_BACKDATE_DAYS = 120
 EXCHANGE = "NSE"
 _SYMBOL = re.compile(r"^[A-Z0-9&_.\-]{1,32}$")
 
@@ -54,6 +56,7 @@ class WatchlistItemOut(BaseModel):
     removed_at: datetime | None
     note: str | None
     buy_price: float | None = None
+    quantity: float | None = None
 
 
 class WatchlistOut(BaseModel):
@@ -68,6 +71,9 @@ class WatchlistAdd(BaseModel):
 
 class WatchlistPatch(BaseModel):
     buy_price: float | None = Field(default=None, gt=0)
+    quantity: float | None = Field(default=None, gt=0, le=1e9)
+    #: IST calendar date the person bought it. Null or omitted leaves the date as it is.
+    bought_on: date | None = None
     note: str | None = Field(default=None, max_length=200)
 
 
@@ -110,6 +116,7 @@ def _out(item: UserWatchlistItem, name: str | None) -> WatchlistItemOut:
         removed_at=item.removed_at,
         note=item.note,
         buy_price=item.buy_price,
+        quantity=item.quantity,
     )
 
 
@@ -214,6 +221,15 @@ def update_stock(symbol: str, body: WatchlistPatch, db: DbSession, me: Me) -> Wa
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"{sym} is not on your list.")
     if "buy_price" in body.model_fields_set:
         item.buy_price = body.buy_price
+    if "quantity" in body.model_fields_set:
+        item.quantity = body.quantity
+    if "bought_on" in body.model_fields_set and body.bought_on is not None:
+        today = datetime.now(tracker.IST).date()
+        if body.bought_on > today:
+            raise HTTPException(422, "The buy date cannot be in the future.")
+        if body.bought_on < today - timedelta(days=MAX_BACKDATE_DAYS):
+            raise HTTPException(422, f"The buy date cannot be more than {MAX_BACKDATE_DAYS} days ago.")
+        item.added_at = datetime.combine(body.bought_on, datetime.min.time(), tzinfo=tracker.IST)
     if "note" in body.model_fields_set:
         item.note = body.note.strip() if body.note and body.note.strip() else None
     db.commit()
@@ -268,6 +284,7 @@ def my_tracker(db: DbSession, me: Me) -> dict:
                 added_at=r.added_at,
                 note=r.note,
                 buy_price=r.buy_price,
+                quantity=r.quantity,
                 candles=candles.get(iid, []),
                 scores=scores.get(iid, []),
             )

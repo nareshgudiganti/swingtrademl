@@ -25,15 +25,20 @@ import {
   filterItems,
   fmtPct,
   fmtPrice,
+  buildPatch,
+  fmtMoney,
+  fmtRupees,
+  formFromItem,
   needsActionCount,
-  parseBuyPrice,
   pips,
   scoreText,
   signClass,
   sortItems,
   stopTarget,
   symbolsIn,
+  todayIst,
   whatToDo,
+  type EditForm,
   type TrackerFilter,
 } from '../trackerRules'
 import { useTrackerTab } from '../trackerTab'
@@ -50,6 +55,8 @@ export default function GrowwTracker() {
   const [tabOn, setTabOn] = useTrackerTab()
   const [filter, setFilter] = useState<TrackerFilter>('all')
   const [picked, setPicked] = useState<string | null>(null)
+  // The stock whose Edit form is open (one at a time). Opening it also picks the stock.
+  const [editSym, setEditSym] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -163,11 +170,24 @@ export default function GrowwTracker() {
                   <div>Stop ← → Target</div>
                   <div>Score, last days</div>
                   <div>Status</div>
+                  <div>Edit</div>
                 </div>
                 {shown.length === 0 ? (
                   <div className="gt-grid dim">No stock matches this filter.</div>
                 ) : (
-                  shown.map((k) => <Row key={k.symbol} k={k} horizon={horizon} selected={selected?.symbol === k.symbol} onPick={() => setPicked(k.symbol)} />)
+                  shown.map((k) => (
+                    <Row
+                      key={k.symbol}
+                      k={k}
+                      horizon={horizon}
+                      selected={selected?.symbol === k.symbol}
+                      onPick={() => setPicked(k.symbol)}
+                      onEdit={() => {
+                        setPicked(k.symbol)
+                        setEditSym(k.symbol)
+                      }}
+                    />
+                  ))
                 )}
               </div>
               {selected && (
@@ -175,9 +195,12 @@ export default function GrowwTracker() {
                   key={selected.symbol}
                   k={selected}
                   horizon={horizon}
+                  editing={editSym === selected.symbol}
+                  onEditing={(open) => setEditSym(open ? selected.symbol : null)}
                   onChanged={refresh}
                   onRemoved={() => {
                     setPicked(null)
+                    setEditSym(null)
                     refresh()
                   }}
                 />
@@ -247,10 +270,24 @@ function Spark({ scores }: { scores: { score: number }[] }) {
   )
 }
 
-function Row({ k, horizon, selected, onPick }: { k: WatchTrackerItem; horizon: number; selected: boolean; onPick: () => void }) {
+// A div, not a button, so the Edit button inside it is valid HTML; Enter and Space still pick the row.
+function Row({ k, horizon, selected, onPick, onEdit }: { k: WatchTrackerItem; horizon: number; selected: boolean; onPick: () => void; onEdit: () => void }) {
   const dv = deltaView(k.score_delta)
   return (
-    <button type="button" className={`gt-grid gt-row${selected ? ' sel' : ''}`} onClick={onPick} aria-pressed={selected} data-symbol={k.symbol}>
+    <div
+      role="button"
+      tabIndex={0}
+      className={`gt-grid gt-row${selected ? ' sel' : ''}`}
+      onClick={onPick}
+      onKeyDown={(e) => {
+        if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
+          e.preventDefault()
+          onPick()
+        }
+      }}
+      aria-pressed={selected}
+      data-symbol={k.symbol}
+    >
       <div>
         <div className="gt-sym">{k.symbol}</div>
         <div className="gt-sub">{k.name ?? ''}</div>
@@ -283,7 +320,21 @@ function Row({ k, horizon, selected, onPick }: { k: WatchTrackerItem; horizon: n
       <div>
         <StateChip state={k.state} />
       </div>
-    </button>
+      <div>
+        <button
+          type="button"
+          className="gt-ghost gt-edit-btn"
+          data-testid={`edit-${k.symbol}`}
+          aria-label={`Edit ${k.symbol}`}
+          onClick={(e) => {
+            e.stopPropagation()
+            onEdit()
+          }}
+        >
+          Edit
+        </button>
+      </div>
+    </div>
   )
 }
 
@@ -397,21 +448,99 @@ function ReturnChart({ closes, entry }: { closes: { close: number }[]; entry: nu
 
 // ------------------------------------------------------------------ detail --
 
-function Detail({ k, horizon, onChanged, onRemoved }: { k: WatchTrackerItem; horizon: number; onChanged: () => void; onRemoved: () => void }) {
-  const [mode, setMode] = useState<'none' | 'price' | 'note' | 'sold'>('none')
-  const [price, setPrice] = useState(k.buy_price != null ? String(k.buy_price) : '')
-  const [note, setNote] = useState(k.note ?? '')
+/** The Edit form: buy date, price paid, shares and a note. Only changed fields are sent. Exported for tests. */
+export function EditPanel({ k, onSaved, onCancel }: { k: WatchTrackerItem; onSaved: () => void; onCancel: () => void }) {
+  const [form, setForm] = useState<EditForm>(() => formFromItem(k))
+  const [serverError, setServerError] = useState<string | null>(null)
+  const [tried, setTried] = useState(false)
+  const today = todayIst()
+  const { patch, errors, changed } = buildPatch(k, form, today)
+  const update = useMutation({
+    mutationFn: () => api.myWatchlistUpdate(k.symbol, patch),
+    onSuccess: () => {
+      setServerError(null)
+      onSaved()
+    },
+    onError: (e) => setServerError((e as Error).message),
+  })
+  const set = (field: keyof EditForm) => (e: { target: { value: string } }) => setForm((f) => ({ ...f, [field]: e.target.value }))
+  const bad = Object.keys(errors).length > 0
+  const err = (field: keyof EditForm) =>
+    tried && errors[field] ? (
+      <span className="tm-neg tmn-small" role="alert">
+        {errors[field]}
+      </span>
+    ) : null
+  return (
+    <form
+      className="gt-editform"
+      data-testid="edit-form"
+      aria-label={`Edit ${k.symbol}`}
+      onSubmit={(e) => {
+        e.preventDefault()
+        setTried(true)
+        if (bad) return
+        if (!changed) return onCancel()
+        update.mutate()
+      }}
+    >
+      <label>
+        <span className="tm-dim tmn-small">Bought on</span>
+        <input type="date" value={form.boughtOn} max={today} onChange={set('boughtOn')} aria-label="Bought on" />
+        {err('boughtOn')}
+      </label>
+      <label>
+        <span className="tm-dim tmn-small">Price you paid in Groww (₹)</span>
+        <input type="text" inputMode="decimal" value={form.price} onChange={set('price')} placeholder="empty = use the price when added" aria-label="Your Groww buy price" />
+        {err('price')}
+      </label>
+      <label>
+        <span className="tm-dim tmn-small">Shares</span>
+        <input type="text" inputMode="decimal" value={form.quantity} onChange={set('quantity')} placeholder="for ₹ profit" aria-label="Shares" />
+        {err('quantity')}
+      </label>
+      <label className="gt-editnote">
+        <span className="tm-dim tmn-small">Note</span>
+        <input type="text" value={form.note} onChange={set('note')} placeholder="A short note for yourself" aria-label="Note" maxLength={200} />
+      </label>
+      <div className="gt-editbtns">
+        <button type="submit" className="tmn-w2-primary" disabled={update.isPending}>
+          {update.isPending ? 'Saving…' : 'Save'}
+        </button>
+        <button type="button" className="gt-ghost" onClick={onCancel}>
+          Cancel
+        </button>
+      </div>
+      <p className="tm-dim tmn-small gt-editnote-hint">
+        Changing the date moves the day count, the start price and the charts. Nothing is bought or sold by this app.
+      </p>
+      {serverError && (
+        <p className="tm-neg tmn-small" role="alert">
+          {serverError}
+        </p>
+      )}
+    </form>
+  )
+}
+
+function Detail({
+  k,
+  horizon,
+  editing,
+  onEditing,
+  onChanged,
+  onRemoved,
+}: {
+  k: WatchTrackerItem
+  horizon: number
+  editing: boolean
+  onEditing: (open: boolean) => void
+  onChanged: () => void
+  onRemoved: () => void
+}) {
+  const [mode, setMode] = useState<'none' | 'sold'>('none')
   const [error, setError] = useState<string | null>(null)
 
-  const update = useMutation({
-    mutationFn: (body: { buy_price?: number | null; note?: string | null }) => api.myWatchlistUpdate(k.symbol, body),
-    onSuccess: () => {
-      setError(null)
-      setMode('none')
-      onChanged()
-    },
-    onError: (e) => setError((e as Error).message),
-  })
   const remove = useMutation({
     mutationFn: () => api.myWatchlistRemove(k.symbol),
     onSuccess: onRemoved,
@@ -420,7 +549,6 @@ function Detail({ k, horizon, onChanged, onRemoved }: { k: WatchTrackerItem; hor
 
   const dv = deltaView(k.score_delta)
   const st = stopTarget(k.entry_price)
-  const parsed = parseBuyPrice(price)
 
   return (
     <section className="gt-detail" aria-live="polite" data-testid="tracker-detail" data-symbol={k.symbol}>
@@ -459,10 +587,28 @@ function Detail({ k, horizon, onChanged, onRemoved }: { k: WatchTrackerItem; hor
           <span>Stop / Target</span>
           <b className="num">{st ? `${fmtPrice(st.stop)} / ${fmtPrice(st.target)}` : '—'}</b>
         </div>
+        <div className="gt-fact" data-testid="fact-bought-on">
+          <span>Bought on</span>
+          <b className="num">{k.bought_on ? new Date(`${k.bought_on}T00:00:00Z`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }) : '—'}</b>
+        </div>
+        <div className="gt-fact">
+          <span>Shares</span>
+          <b className="num">{k.quantity != null ? k.quantity.toLocaleString('en-IN') : '—'}</b>
+        </div>
+        <div className="gt-fact">
+          <span>Invested</span>
+          <b className="num">{fmtRupees(k.invested)}</b>
+        </div>
+        <div className="gt-fact">
+          <span>Profit / loss</span>
+          <b className={`num ${signClass(k.profit_amount)}`}>{fmtMoney(k.profit_amount)}</b>
+        </div>
       </div>
-      {k.entry_source === 'added_close' && (
+      {(k.entry_source === 'added_close' || k.quantity == null) && (
         <p className="dim tmn-small">
-          No Groww price saved, so the day you added it is used as the start. Tap “Edit my Groww buy price” to use what you paid.
+          {k.entry_source === 'added_close' ? 'No Groww price saved, so the close on the buy date is used as the start. ' : ''}
+          {k.quantity == null ? 'Add your shares to see profit and loss in rupees. ' : ''}
+          Tap Edit to change the date, price or shares.
         </p>
       )}
 
@@ -490,43 +636,16 @@ function Detail({ k, horizon, onChanged, onRemoved }: { k: WatchTrackerItem; hor
         <b>What to do:</b> {whatToDo(k, horizon)}
       </p>
 
-      {mode === 'price' && (
-        <form
-          className="gt-edit"
-          onSubmit={(e) => {
-            e.preventDefault()
-            if (parsed !== undefined) update.mutate({ buy_price: parsed })
+      {editing && (
+        <EditPanel
+          key={`${k.symbol}-${k.bought_on}-${k.buy_price}-${k.quantity}-${k.note}`}
+          k={k}
+          onSaved={() => {
+            onEditing(false)
+            onChanged()
           }}
-        >
-          <label>
-            <span className="tm-dim tmn-small">Price you paid in Groww (₹), empty to clear </span>
-            <input type="text" inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} aria-label="Your Groww buy price" autoFocus />
-          </label>
-          <button type="submit" className="tmn-w2-primary" disabled={update.isPending || parsed === undefined}>
-            Save price
-          </button>
-          <button type="button" className="gt-ghost" onClick={() => setMode('none')}>
-            Cancel
-          </button>
-          {parsed === undefined && <span className="tm-neg tmn-small">Type a number above 0, like 4210 or 182.4.</span>}
-        </form>
-      )}
-      {mode === 'note' && (
-        <form
-          className="gt-edit"
-          onSubmit={(e) => {
-            e.preventDefault()
-            update.mutate({ note: note.trim() === '' ? null : note.trim() })
-          }}
-        >
-          <input type="text" value={note} onChange={(e) => setNote(e.target.value)} placeholder="A short note for yourself" aria-label="Note" autoFocus maxLength={200} />
-          <button type="submit" className="tmn-w2-primary" disabled={update.isPending}>
-            Save note
-          </button>
-          <button type="button" className="gt-ghost" onClick={() => setMode('none')}>
-            Cancel
-          </button>
-        </form>
+          onCancel={() => onEditing(false)}
+        />
       )}
       {mode === 'sold' && (
         <div className="gt-edit" role="alertdialog" aria-label={`Remove ${k.symbol}`}>
@@ -548,11 +667,8 @@ function Detail({ k, horizon, onChanged, onRemoved }: { k: WatchTrackerItem; hor
       )}
 
       <div className="gt-actions">
-        <button type="button" className="gt-ghost" onClick={() => setMode(mode === 'price' ? 'none' : 'price')}>
-          Edit my Groww buy price
-        </button>
-        <button type="button" className="gt-ghost" onClick={() => setMode(mode === 'note' ? 'none' : 'note')}>
-          Add a note
+        <button type="button" className="gt-ghost" aria-expanded={editing} onClick={() => onEditing(!editing)} data-testid="detail-edit">
+          {editing ? 'Close edit' : 'Edit'}
         </button>
         <button type="button" className="gt-ghost sold" onClick={() => setMode('sold')}>
           I sold it in Groww, remove

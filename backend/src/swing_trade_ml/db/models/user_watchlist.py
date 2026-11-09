@@ -29,5 +29,7 @@ class UserWatchlistItem(Base, TimestampMixin):
     note: Mapped[str | None] = mapped_column(String(200))
     # The person's own real buy price (e.g. in Groww). Display only; nothing trades on it.
     buy_price: Mapped[float | None] = mapped_column(Float)
+    # How many shares the person bought. Display only (invested / profit in rupees).
+    quantity: Mapped[float | None] = mapped_column(Float)
 
     __table_args__ = (UniqueConstraint("user_id", "symbol", name="uq_user_watchlist_items_user_symbol"),)

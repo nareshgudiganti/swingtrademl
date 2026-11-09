@@ -655,6 +655,8 @@ export interface MyWatchlistItem {
   /** Set when the person took it off the list (shown under "Removed"). */
   removed_at: string | null
   note: string | null
+  buy_price?: number | null
+  quantity?: number | null
 }
 
 export interface MyWatchlist {
@@ -675,6 +677,14 @@ export interface WatchTrackerItem {
   added_at: string
   note: string | null
   buy_price: number | null
+  /** IST calendar date the person bought it (YYYY-MM-DD). */
+  bought_on: string
+  /** Shares bought; null when not entered. */
+  quantity: number | null
+  /** Entry price x shares, in rupees; null without shares or an entry price. */
+  invested: number | null
+  /** (Now - entry) x shares, in rupees; null without shares or prices. */
+  profit_amount: number | null
   entry_price: number | null
   entry_source: TrackerEntrySource | null
   last_price: number | null

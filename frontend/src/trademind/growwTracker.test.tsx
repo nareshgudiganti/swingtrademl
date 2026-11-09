@@ -8,6 +8,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WatchTracker, WatchTrackerItem } from '../api/types'
 import { LOOK_KEY } from './look'
 import { TRACKER_TAB_KEY, readTrackerTab, writeTrackerTab } from './trackerTab'
+import { EditPanel } from './pages/GrowwTracker'
 import TradeMindApp from './TradeMindApp'
 
 const store = new Map<string, string>()
@@ -29,7 +30,8 @@ beforeAll(() => {
 beforeEach(() => store.clear())
 
 const item = (symbol: string, state: WatchTrackerItem['state'], over: Partial<WatchTrackerItem> = {}): WatchTrackerItem => ({
-  symbol, name: `${symbol} Ltd`, added_at: '2026-10-28T05:00:00Z', note: null, buy_price: 4210, entry_price: 4210, entry_source: 'your_price',
+  symbol, name: `${symbol} Ltd`, added_at: '2026-10-28T05:00:00Z', note: null, buy_price: 4210, bought_on: '2026-10-28', quantity: 10, invested: 42100,
+  profit_amount: 3020, entry_price: 4210, entry_source: 'your_price',
   last_price: 4512, return_pct: 7.2, today_pct: 0.7, days_done: 9, score_today: 92, score_prev: 90, score_delta: 2, score_first: 84,
   scores: [84, 86, 90, 92].map((score, i) => ({ date: `2026-10-${28 + i}`, score })),
   closes: [4210, 4262, 4400, 4512].map((close, i) => ({ date: `2026-10-${28 + i}`, close })), state, ...over,
@@ -40,7 +42,7 @@ const DATA: WatchTracker = {
   items: [
     item('KEI', 'target'),
     item('GREENPANEL', 'weak', { return_pct: -6.9, score_today: 54, score_first: 78, score_delta: -4 }),
-    item('NEWBIE', 'ok', { buy_price: null, entry_price: null, entry_source: null, last_price: null, return_pct: null, today_pct: null, score_today: null, score_delta: null, scores: [], closes: [], days_done: 0 }),
+    item('NEWBIE', 'ok', { quantity: null, invested: null, profit_amount: null, buy_price: null, entry_price: null, entry_source: null, last_price: null, return_pct: null, today_pct: null, score_today: null, score_delta: null, scores: [], closes: [], days_done: 0 }),
   ],
 }
 
@@ -68,7 +70,17 @@ describe('Groww Tracker page', () => {
     expect(html).toContain('Score falling')
     expect(html).toContain('+7.2%')
     expect(html).toContain('data-testid="tracker-detail"')
-    expect(html).toContain('Edit my Groww buy price')
+    // An Edit button on every row and one in the detail panel; the old separate price / note buttons are gone.
+    expect(html).toContain('data-testid="edit-KEI"')
+    expect(html).toContain('data-testid="edit-GREENPANEL"')
+    expect(html).toContain('data-testid="edit-NEWBIE"')
+    expect(html).toContain('data-testid="detail-edit"')
+    expect(html).not.toContain('Edit my Groww buy price')
+    expect(html).not.toContain('Add a note')
+    // Bought on, shares, invested and profit in rupees come from the server
+    expect(html).toContain('data-testid="fact-bought-on"')
+    expect(html).toContain('₹42,100')
+    expect(html).toContain('+₹3,020')
     expect(html).toContain('I sold it in Groww, remove')
     expect(html).toContain('+ Add stock I bought')
     // KEI needs action first, so it is the picked stock
@@ -83,6 +95,30 @@ describe('Groww Tracker page', () => {
     expect(html).toContain('—')
     expect(html).toContain('Add your Groww buy price to see the return chart.')
     expect(html).not.toMatch(/NaN|undefined|null/)
+  })
+
+  it('without shares the rupee facts are dashes and the page offers to add them', () => {
+    const html = render('/trademind/groww-tracker', { ...DATA, items: [DATA.items[2]!] })
+    expect(html).toContain('Add your shares to see profit and loss in rupees.')
+    expect(html).not.toMatch(/NaN|undefined/)
+  })
+
+  it('the Edit form starts from the saved values and has the four fields and Save / Cancel', () => {
+    const client = new QueryClient()
+    const html = renderToString(
+      <QueryClientProvider client={client}>
+        <EditPanel k={{ ...DATA.items[0]!, note: 'from Today' }} onSaved={() => {}} onCancel={() => {}} />
+      </QueryClientProvider>,
+    )
+    expect(html).toContain('data-testid="edit-form"')
+    expect(html).toMatch(/type="date"[^>]*value="2026-10-28"/)
+    expect(html).toMatch(/aria-label="Your Groww buy price"[^>]*/)
+    expect(html).toContain('value="4210"')
+    expect(html).toContain('value="10"')
+    expect(html).toContain('value="from Today"')
+    expect(html).toContain('>Save<')
+    expect(html).toContain('>Cancel<')
+    expect(html).not.toMatch(/NaN|undefined/)
   })
 
   it('says so in plain English when nothing is followed yet', () => {

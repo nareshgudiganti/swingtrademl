@@ -34,9 +34,15 @@ from pathlib import Path
 
 import pandas as pd
 
+# isort: off
+# trial_seal first: it breaks an existing import cycle (replay_scoring -> m09_learn -> trial_seal ->
+# trial_journal -> replay_report -> replay_scoring), which made `python -m swing_trade_ml.brain.scoreboard`
+# fail with ImportError. Only the import order changes; no scoreboard computation does.
+from swing_trade_ml.services import trial_seal
 from swing_trade_ml.brain.replay_scoring import HORIZON_BARS, STOP, TARGET
 from swing_trade_ml.brain.walk_forward import BLOCK_DAYS, bootstrap_low, make_folds, outcomes_for
-from swing_trade_ml.services import trial_seal
+
+# isort: on
 
 PROTECTED_START = date(2023, 7, 1)  # wf-protocol-v1 confirmation sample: pass/fail only, never diagnostics
 PROTECTED_END = date(2025, 1, 31)

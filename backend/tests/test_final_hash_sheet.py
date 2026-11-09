@@ -178,8 +178,14 @@ def test_real_repo_files_reproduce_the_verified_v3_hashes():
     if not (prior_p.is_file() and (EVID / "sx5_47_rows_v3.txt.gz").is_file()):
         pytest.skip("evidence files not present")
     prior = json.loads(prior_p.read_text("utf-8"))
+    # The recipe hash includes the exact installed library versions by design. On a machine whose versions differ from
+    # the recorded ones (for example the CI runner) the recipe hash legitimately differs, so only compare when they match.
+    from swing_trade_ml.ml import sx_recipe
+
+    same_libs = sx_recipe.installed_versions() == prior["recipe"]["library_versions"]
     s = fhs.build_sheet(REPO, "0" * 40, prior=prior)
-    assert s["recipe"]["sx_recipe_sha256"] == prior["recipe"]["sx_recipe_sha256"]
+    if same_libs:
+        assert s["recipe"]["sx_recipe_sha256"] == prior["recipe"]["sx_recipe_sha256"]
     for cand in ("SX5", "SX10"):
         got, want = s["candidates"][cand], prior["candidates"][cand]
         assert got["datasetspec_config_sha256"] == want["datasetspec_config_sha256"]

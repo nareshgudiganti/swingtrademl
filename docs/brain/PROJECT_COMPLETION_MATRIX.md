@@ -1,5 +1,14 @@
 # PROJECT_COMPLETION_MATRIX (authoritative, as of 2026-11-07)
 
+## Status update 2026-11-09 (evening IST; supersedes any older "nothing pushed / unsigned" wording below)
+
+- **Merged to `main` and deployed:** the November release (PR #151 and the small PRs), the activation-readiness audit and read-only slot map (#165), protocol wording corrections (#166), the "Tag name" line clarification (#171). Deploys of c4a79ba and 47350a9 succeeded.
+- **Phase B protocol SIGNED** by the owner on 2026-11-09 (merge `fee8d98b3a6020ea6b6b730bcc32284520601944`, PR #172). Only the three signature lines changed. Annotated tag `phase-b-completion-v1` (object `cdf671b34e662682f0ef9e4c945f9f3b0b06c0bc`) points at that merge. A first tag made by mistake on the unsigned commit `629f1b0` was deleted by the owner before any use (owner's option 1); no run or record ever referred to it.
+- **Pre-start gates G1-G14 PASSED 2026-11-09 on branch `phase-b-run`** (worktree `D:/machine learning/phase-b-wt`, cut from the tag); G9 = 190 passed; nine bound blob ids match; G15 satisfied by the owner's written "start". **B1 has NOT been run yet** (ledger has 0 candidate rows; evidence folder holds only `.gitattributes`).
+- **Q10 production flags verified by the owner on the droplet, 2026-11-09:** `TRADING_MODE=paper`, `ALLOW_LIVE_TRADING=false`, `ALLOW_REAL_HOLDINGS_ORDERS=false`, `BRAIN_ENABLED=true`; `TESTING_NO_LIMITS` and `LANE_SHADOW_ENABLED` unset (code defaults are false). Environment flags only; the model registry was not checked by this step.
+- **Still open (owner):** run B1, B2, B3 by 2026-12-04; Amendment 3 D1-D10, signed marker and tag `sl-protocol-v1.1` before 2026-12-05; SX5 protocol by 2026-11-30 (no training authorisation yet); mid-cap model-file hash; activation-guard design (steps 4-7) not approved, nothing built; HINDUNILVR/BAJAJELEC exclusion is final for Phase B (owner decision 2026-11-07).
+- **Held:** Telegram changes, m09 speed fix (trial freeze), 10D, unapproved lanes, worktree cleanup until after the freeze.
+
 Objective: finish development by 2026-11-30; controlled model experiments in December. Priorities: P0 trading safety, sealed evidence,
 database correctness, production stability; P1 Phase B, Amendment 3, SX5, November release readiness; P2 reliability reporting, UI,
 backups; P3 future work. Nothing below is pushed, merged, signed, tagged, deployed or trained. `origin/main` = `cbdb3f6`.

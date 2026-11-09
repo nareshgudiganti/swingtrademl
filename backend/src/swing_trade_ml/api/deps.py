@@ -203,6 +203,8 @@ SELF_SERVICE_ROUTES: frozenset[tuple[str, str]] = frozenset(
         ("GET", "/me/watchlist/search"),
         ("POST", "/me/watchlist"),
         ("DELETE", "/me/watchlist/{symbol}"),
+        ("PATCH", "/me/watchlist/{symbol}"),
+        ("GET", "/me/watchlist/tracker"),
     }
 )
 SELF_SERVICE_NEEDS_PERSON = "Sign in with your own account to use your watchlist."

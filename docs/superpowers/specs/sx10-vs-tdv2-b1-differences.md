@@ -1,4 +1,4 @@
-# SX10 versus the unsigned td-protocol-v2 draft's B1: exact differences (2026-11-05)
+# SX10 versus the unsigned td-protocol-v2 draft's B1: exact differences
 
 Status: **comparison note only.** No combination of the two is proposed, no result of one is to be reused for the other,
 and the td-protocol-v2 draft (branch `change/td-protocol-v2-draft`, file `2026-11-03-td-protocol-v2-DRAFT.md`) is not
@@ -8,22 +8,22 @@ Labels: **VERIFIED** = read in the two draft files this session (the td-v2 draft
 draft proposes (not agreed); **UNVERIFIED** = not checked. Whatever the td-v2 draft says about its own inputs is PROPOSED
 by that draft and unbuilt.
 
-Owner decision 2026-11-05: SX10 and td-v2 B1 stay SEPARATE protocols; their exact differences are documented here before any
+Owner decisibefore signing: SX10 and td-v2 B1 stay SEPARATE protocols; their exact differences are documented here before any
 combination is even proposed. This note proposes none.
 
 ## Differences
 
-| Item | SX10 (`2026-11-05-sx10-research-protocol-DRAFT.md`) | td-v2 B1 (`2026-11-03-td-protocol-v2-DRAFT.md`) |
+| Item | SX10 (`sx10-research-protocol-superseded.md`) | td-v2 B1 (`2026-11-03-td-protocol-v2-DRAFT.md`) |
 |---|---|---|
 | **Question** | Does adding three official-sector-index inputs to the 53 existing inputs help rank the 47 mapped large stocks, compared with the 53 alone (arm C_56 versus A_53), on identical rows and folds? (VERIFIED) | Does adding breadth and sector strength (8 new inputs) help rank the 49 large stocks, judged by absolute results against benchmarks? (VERIFIED) |
 | **Label** | Barrier: +6% before -3.5% within 10 trading bars (`ml/features.build_label`; `ten_day.TARGET/STOP/HORIZON_BARS`). Tested equal to the `ten_day` definition in code. (VERIFIED) | Barrier: reaches +6% before -3.5% within 10 trading days, "as in v1". Same words; **unbuilt**, so equality with SX10's tested label is UNVERIFIED. (VERIFIED text, UNVERIFIED equality) |
 | **Trade rule judged** | td-v1 trade, via `ten_day.score_trade`; reported beside the ranking result, descriptive (PROPOSED) | Same trade (next open, +6%/-3.5%, close of day 10, top 5, no repeats), and it is a pass row (PROPOSED) |
-| **Existing inputs** | The 53 (`FEATURE_COLUMNS`) as the primary baseline; arm R_37 = model 2's 37 as a separate reference (owner decision 2026-11-05) | "The 37-46 existing price-and-volume inputs the production-style 10D model already uses" (so 37 or 46; not the 53) |
-| **New inputs** | 3: `sector_ret_10d_vs_nifty`, `sector_rank_10d`, `stock_vs_sector_10d` (equals B1-5, B1-7 and B1-8 in concept; B1-6, the 20-day version, was dropped on 2026-11-06 because it is the difference of two existing inputs) | 8: B1-1 breadth above 50-day average, B1-2 breadth above 20-day average, B1-3 advancers share, B1-4 new-highs share, plus B1-5 to B1-8 (sector return 10d and 20d minus NIFTY, sector rank, stock minus sector) |
+| **Existing inputs** | The 53 (`FEATURE_COLUMNS`) as the primary baseline; arm R_37 = model 2's 37 as a separate reference (owner decision before signing) | "The 37-46 existing price-and-volume inputs the production-style 10D model already uses" (so 37 or 46; not the 53) |
+| **New inputs** | 3: `sector_ret_10d_vs_nifty`, `sector_rank_10d`, `stock_vs_sector_10d` (equals B1-5, B1-7 and B1-8 in concept; B1-6, the 20-day version, was dropped before signing because it is the difference of two existing inputs) | 8: B1-1 breadth above 50-day average, B1-2 breadth above 20-day average, B1-3 advancers share, B1-4 new-highs share, plus B1-5 to B1-8 (sector return 10d and 20d minus NIFTY, sector rank, stock minus sector) |
 | **How "sector" is defined** | The stock's official NSE sector index from `ml/sector_map.py`; rank among 15 sector indices (`include_unverified=False`) | Equal-weight mean of the stocks of the sector inside the universe (the stock's existing sector label); not an official index. Whether a reliable sector label exists for all 49 is untested in that draft. |
 | **Breadth** | None new. (The 53 already hold `breadth_pct_above_sma50` and `breadth_advance_pct`, built from today's watchlist.) | 4 new breadth inputs over a "dated universe" with point-in-time membership, or a with/without-breadth diagnostic (section 3.2) |
-| **Number of inputs in the challenger** | 56 (53 + 3; renamed from C_57 on 2026-11-06) | 45 to 54 (37 or 46 existing + 8) |
-| **Sector overlap with existing inputs** | Measured on real data (see the SX10 draft section 4): the one input that was a difference of two existing inputs was dropped (2026-11-06); the other three partly overlap | The draft says nothing about overlap; B1-5 to B1-8 are subject to the same concept overlap (UNVERIFIED, not measured) |
+| **Number of inputs in the challenger** | 56 (53 + 3; renamed from C_57 before signing) | 45 to 54 (37 or 46 existing + 8) |
+| **Sector overlap with existing inputs** | Measured on real data (see the SX10 draft section 4): the one input that was a difference of two existing inputs was dropped; the other three partly overlap | The draft says nothing about overlap; B1-5 to B1-8 are subject to the same concept overlap (UNVERIFIED, not measured) |
 | **Universe** | 47 of the 49 model stocks (ASIANPAINT, BHARTIARTL have no verified official sector index; owner decision) | The 49 model stocks, frozen at the lock date; breadth over the 306 local stocks |
 | **Time / folds** | Retrospective walk-forward: 34 chronological 28-day test folds 2023-07-01 to 2026-01-31 plus a holdout 2026-02-01 to 2026-08-15 scored once; expanding window, label-purged, embargo 10 sessions (PROPOSED, harness built) | No walk-forward folds. Train on all history to the lock date, freeze, then judge **forward only** in a shadow lane (about 6 months, month 3 counts only, hard stop month 9). Routes E1/E2/E3 undecided. |
 | **Evidence class** | History already looked at; a pass only means "worth proposing a forward shadow test" (PROPOSED) | Forward, independent evidence; the old 2023-07..2025-01 window "may never be the pass-or-fail sample" |

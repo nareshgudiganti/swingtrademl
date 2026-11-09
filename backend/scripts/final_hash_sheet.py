@@ -47,6 +47,7 @@ CUTOFF = date(2026, 12, 31)
 SCHEMA = "final_hash_sheet_v1"
 PLACEHOLDER = "TO_BE_FILLED_AT_SIGNING"
 HEX40 = re.compile(r"^[0-9a-f]{40}$")
+HEX64 = re.compile(r"^[0-9a-f]{64}$")
 
 
 class SheetRefused(RuntimeError):
@@ -230,7 +231,9 @@ def candidate_block(candidate: str, repo: Path, symbols, rowlist_name: str, prio
     if prior and candidate in prior.get("candidates", {}):
         carried = prior["candidates"][candidate]
         for k, v in carried.items():
-            if k.startswith("dataset_matrix_sha256"):
+            # Only the hash itself: the plain key (v4 onwards) or the descriptive v3 key. NEVER the `_status` text key,
+            # which would overwrite the hash with its label when a carried sheet is carried again.
+            if (k == "dataset_matrix_sha256" or k.startswith("dataset_matrix_sha256 (")) and isinstance(v, str) and HEX64.match(v):
                 block["dataset_matrix_sha256"] = v
                 block["dataset_matrix_sha256_status"] = "CARRIED from --prior-sheet, not recomputed here"
     return block

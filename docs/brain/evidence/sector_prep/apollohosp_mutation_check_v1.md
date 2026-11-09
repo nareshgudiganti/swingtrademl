@@ -1,6 +1,6 @@
 # APOLLOHOSP future-data mutation check, v1 (completes the two INCONCLUSIVE cases)
 
-Date: 2026-11-08. Status: evidence, UNSIGNED. Local database, SELECT only (read-only transaction); no model was fitted, no holdout evaluated.
+Prepared: before signing. Status: evidence, UNSIGNED. Local database, SELECT only (read-only transaction); no model was fitted, no holdout evaluated.
 Code: `backend/tests/test_apollohosp_pit_mutation.py` (14 tests: 10 real-data, 4 synthetic twin; real-data tests skip when the local Postgres is unreachable). Table regenerated with `python tests/test_apollohosp_pit_mutation.py --write-md <path>`.
 
 ## What was checked, in plain words

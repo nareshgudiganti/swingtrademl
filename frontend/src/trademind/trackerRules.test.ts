@@ -6,6 +6,7 @@ import {
   buildPatch,
   deltaView,
   filterItems,
+  fmtBoughtOn,
   fmtMoney,
   fmtPct,
   fmtPrice,
@@ -121,6 +122,14 @@ describe('edit form helpers', () => {
     expect(fmtMoney(null)).toBe('—')
     expect(fmtRupees(42100)).toBe('₹42,100')
     expect(fmtRupees(undefined)).toBe('—')
+  })
+
+  it('shows the buy date in words and a dash when it is missing or not a date', () => {
+    expect(fmtBoughtOn('2026-10-28')).toMatch(/28 Oct 2026/)
+    expect(fmtBoughtOn(null)).toBe('—')
+    expect(fmtBoughtOn('')).toBe('—')
+    expect(fmtBoughtOn('2026-13-45')).toBe('—')
+    expect(fmtBoughtOn('not a date')).toBe('—')
   })
 
   it('today in India does not slip a day for late-evening UTC', () => {

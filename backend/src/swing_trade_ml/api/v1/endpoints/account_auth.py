@@ -1,0 +1,239 @@
+"""Self-service sign-up, email verification and password recovery (backend only).
+
+- `POST /auth/register`: 404 unless ALLOW_SIGNUP is on. Makes a Free `member`, sends a verification email.
+- `POST /auth/verify-email`, `/auth/resend-verification`, `/auth/forgot-password`, `/auth/reset-password`.
+  The resend/forgot routes give the SAME answer whether or not the account exists.
+- `POST /admin/users/{id}/send-reset`: the signed-in owner can send someone a reset email. The owner never
+  sets or sees the password, and the token is never returned.
+
+Emails are sent after the response (background task), so the answer takes the same time either way.
+Tokens: services/auth_tokens.py (hash only, single use). Sign-in enforcement lives in endpoints/auth.py
+behind REQUIRE_EMAIL_VERIFICATION (default off).
+"""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from pydantic import BaseModel, Field
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
+
+from swing_trade_ml.api.deps import DbSession, Principal
+from swing_trade_ml.api.rate_limit import auth_limit, public_limit
+from swing_trade_ml.api.v1.endpoints.auth import _unique_username_from_email, issue_token
+from swing_trade_ml.api.v1.endpoints.invites import normalise_email, require_owner_signed_in, valid_email
+from swing_trade_ml.core.config import settings
+from swing_trade_ml.core.logging import get_logger
+from swing_trade_ml.core.mobile import normalise_full_name, normalise_mobile
+from swing_trade_ml.core.password_policy import check_password
+from swing_trade_ml.core.security import hash_password
+from swing_trade_ml.db.models.session import User
+from swing_trade_ml.services import audit, auth_tokens
+from swing_trade_ml.services.email import get_sender
+from swing_trade_ml.services.email.templates import reset_email, verification_email
+
+log = get_logger(__name__)
+
+router = APIRouter(prefix="/auth", tags=["auth"])
+admin = APIRouter(prefix="/admin/users", tags=["auth"])
+
+REGISTER_CLOSED = "Not found"
+EMAIL_TAKEN = "We couldn't create an account with those details. If you already have one, please sign in."
+CHECK_EMAIL = "Check your email for a link to confirm your address."
+VERIFY_RESENT = "If that email belongs to an account that still needs confirming, we have sent a new link."
+RESET_SENT = "If that email belongs to an account, we have sent a link to reset the password."
+BAD_LINK = "This link is not valid any more. Please ask for a new one."
+
+
+class RegisterIn(BaseModel):
+    full_name: str = Field(..., max_length=200)
+    email: str = Field(..., max_length=254)
+    password: str = Field(..., max_length=512)
+    mobile: str | None = Field(None, max_length=40)
+
+
+class TokenIn(BaseModel):
+    token: str = Field(..., min_length=1, max_length=256)
+
+
+class EmailIn(BaseModel):
+    email: str = Field(..., max_length=254)
+
+
+class ResetIn(BaseModel):
+    token: str = Field(..., min_length=1, max_length=256)
+    new_password: str = Field(..., max_length=512)
+
+
+def _send(to: str, message: tuple[str, str, str]) -> None:
+    subject, text, html = message
+    get_sender().send(to, subject, text, html)
+
+
+def _bad(detail: str) -> HTTPException:
+    return HTTPException(status.HTTP_400_BAD_REQUEST, detail)
+
+
+def _ip(request: Request) -> str | None:
+    return request.client.host if request.client else None
+
+
+@router.post("/register", status_code=status.HTTP_201_CREATED, dependencies=[Depends(auth_limit)])
+def register(payload: RegisterIn, db: DbSession, request: Request, background: BackgroundTasks) -> dict:
+    if not settings.ALLOW_SIGNUP:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, REGISTER_CLOSED)
+    try:
+        name = normalise_full_name(payload.full_name)
+        mobile = normalise_mobile(payload.mobile) if payload.mobile and payload.mobile.strip() else None
+    except ValueError as exc:
+        raise _bad(str(exc)) from exc
+    email = normalise_email(payload.email)
+    if not valid_email(email):
+        raise _bad("Enter a valid email address.")
+    problems = check_password(payload.password, email=email, name=name)
+    if problems:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, " ".join(problems))
+    taken = db.execute(select(User.id).where(func.lower(User.email) == email).limit(1)).first()
+    if taken:
+        raise HTTPException(status.HTTP_409_CONFLICT, EMAIL_TAKEN)
+
+    user = User(
+        username=_unique_username_from_email(db, email),
+        email=email,
+        full_name=name,
+        mobile=mobile,
+        hashed_password=hash_password(payload.password),
+        auth_provider="local",
+        email_verified_at=None,
+        is_active=True,
+        # Spelled out, never inferred: a self-made account is an ordinary free member.
+        role="member",
+        is_superuser=False,
+    )
+    db.add(user)
+    try:
+        db.flush()
+    except IntegrityError as exc:  # raced with another sign-up for the same email/username
+        db.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, EMAIL_TAKEN) from exc
+    raw = auth_tokens.issue(db, user, "verify_email", _ip(request))
+    audit.record(
+        db,
+        "auth.register",
+        actor=user,
+        target_type="user",
+        target_id=user.id,
+        after={"verification_required": settings.REQUIRE_EMAIL_VERIFICATION},
+        request=request,
+    )
+    db.commit()
+    db.refresh(user)
+    background.add_task(_send, email, verification_email(raw))
+
+    out: dict = {"message": CHECK_EMAIL}
+    if not settings.REQUIRE_EMAIL_VERIFICATION:
+        out["token"] = issue_token(user).model_dump()
+    return out
+
+
+@router.post("/verify-email", dependencies=[Depends(auth_limit)])
+def verify_email(payload: TokenIn, db: DbSession, request: Request) -> dict:
+    user = auth_tokens.redeem(db, payload.token, "verify_email")
+    if user is None:
+        db.commit()
+        raise _bad(BAD_LINK)
+    if user.email_verified_at is None:
+        user.email_verified_at = datetime.now(UTC)
+    audit.record(
+        db, "auth.email_verified", actor=user, target_type="user", target_id=user.id, request=request
+    )
+    db.commit()
+    return {"message": "Your email is confirmed. You can sign in."}
+
+
+@router.post("/resend-verification", dependencies=[Depends(public_limit)])
+def resend_verification(
+    payload: EmailIn, db: DbSession, request: Request, background: BackgroundTasks
+) -> dict:
+    email = normalise_email(payload.email)
+    user = db.execute(select(User).where(func.lower(User.email) == email).limit(1)).scalar_one_or_none()
+    raw = None
+    if (
+        user is not None
+        and user.auth_provider == "local"
+        and user.is_active
+        and user.email_verified_at is None
+    ):
+        raw = auth_tokens.issue(db, user, "verify_email", _ip(request))
+        db.commit()
+    if raw is not None:
+        background.add_task(_send, email, verification_email(raw))
+    else:
+        auth_tokens.hash_token("equalise-timing")  # same shape of work either way
+    return {"message": VERIFY_RESENT}
+
+
+@router.post("/forgot-password", dependencies=[Depends(public_limit)])
+def forgot_password(payload: EmailIn, db: DbSession, request: Request, background: BackgroundTasks) -> dict:
+    email = normalise_email(payload.email)
+    user = db.execute(select(User).where(func.lower(User.email) == email).limit(1)).scalar_one_or_none()
+    if user is not None and user.auth_provider == "local" and user.is_active:
+        raw = auth_tokens.issue(db, user, "reset_password", _ip(request))
+        audit.record(
+            db, "auth.reset_requested", actor=user, target_type="user", target_id=user.id, request=request
+        )
+        db.commit()
+        background.add_task(_send, email, reset_email(raw))
+    else:
+        auth_tokens.hash_token("equalise-timing")
+    return {"message": RESET_SENT}
+
+
+@router.post("/reset-password", dependencies=[Depends(auth_limit)])
+def reset_password(payload: ResetIn, db: DbSession, request: Request) -> dict:
+    owner = auth_tokens.peek(db, payload.token, "reset_password")
+    if owner is None:
+        raise _bad(BAD_LINK)
+    problems = check_password(payload.new_password, email=owner.email, name=owner.full_name)
+    if problems:  # checked before the link is used up, so a weak try does not burn it
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, " ".join(problems))
+    user = auth_tokens.redeem(db, payload.token, "reset_password")
+    if user is None:
+        db.commit()
+        raise _bad(BAD_LINK)
+    user.hashed_password = hash_password(payload.new_password)
+    user.token_version = (user.token_version or 0) + 1  # ends every existing session
+    user.failed_login_count = 0
+    user.locked_until = None
+    if user.email_verified_at is None:
+        user.email_verified_at = datetime.now(UTC)  # they just proved they own the inbox
+    audit.record(db, "auth.reset_done", actor=user, target_type="user", target_id=user.id, request=request)
+    db.commit()
+    return {"message": "Your password has been changed. Please sign in."}
+
+
+@admin.post("/{user_id}/send-reset")
+def admin_send_reset(
+    user_id: int,
+    db: DbSession,
+    request: Request,
+    background: BackgroundTasks,
+    principal: Principal = Depends(require_owner_signed_in),
+) -> dict:
+    target = db.get(User, user_id)
+    if target is None or not target.email:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No such account, or it has no email address.")
+    raw = auth_tokens.issue(db, target, "reset_password", _ip(request))
+    audit.record(
+        db,
+        "auth.admin_reset_sent",
+        actor=principal.user,
+        target_type="user",
+        target_id=target.id,
+        request=request,
+    )
+    db.commit()
+    background.add_task(_send, target.email, reset_email(raw))
+    return {"message": "A password reset email has been sent to that member."}

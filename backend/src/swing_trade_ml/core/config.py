@@ -59,6 +59,15 @@ class Settings(BaseSettings):
     # Self-registration. Off by default; invitations replace it (release C). Turn on in .env only for local development.
     ALLOW_SIGNUP: bool = False
 
+    # Email (Resend). "log" = nothing leaves the machine (dev/test); "resend" = real email.
+    # Verification is only enforced at sign-in when REQUIRE_EMAIL_VERIFICATION is on (off: every
+    # existing member signs in as before). See docs/EMAIL-SETUP.md.
+    EMAIL_PROVIDER: str = "log"
+    RESEND_API_KEY: str = ""
+    EMAIL_FROM: str = ""
+    APP_BASE_URL: str = ""
+    REQUIRE_EMAIL_VERIFICATION: bool = False
+
     # Google "Sign in with Google" — from console.cloud.google.com, an OAuth
     # 2.0 Client ID (type: Web application) with this exact redirect URI added.
     GOOGLE_CLIENT_ID: str = ""

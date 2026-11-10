@@ -187,6 +187,14 @@ def login(payload: LoginRequest, db: DbSession, request: Request) -> TokenRespon
     if not user.is_active:
         # Same answer as a wrong password: a disabled account doesn't confirm the password was right.
         raise refuse("auth.login_disabled")
+    if (
+        settings.REQUIRE_EMAIL_VERIFICATION
+        and user.auth_provider == "local"
+        and user.email_verified_at is None
+        and user.role != "owner"
+        and not user.is_superuser
+    ):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Please verify your email first")
 
     user.failed_login_count = 0
     user.locked_until = None

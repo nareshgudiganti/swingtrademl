@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 
 import { ScoreMonitor } from './stockParts'
 
-const day = (date: string, score: number) => ({ date, score })
+const day = (date: string, score: number) => ({ date, score, model: 'swing_classifier:v2' })
 
 describe('ScoreMonitor', () => {
   it('lists the last 7 days with the score, the move and a mark after a gap', () => {

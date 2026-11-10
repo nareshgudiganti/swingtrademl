@@ -1,0 +1,109 @@
+name: h05 watch
+
+# Once each evening (every day, including weekends), from OUTSIDE the server, read the 5-day (h05) evaluation report and message the owner
+# on Telegram if a session was missed or the lane recorded an event. READ ONLY: one GET of
+# /research/h05/report and the Telegram send. No state is stored anywhere
+# (no cache, no artifacts: the repo is public). Needs repository secrets API_KEY, TELEGRAM_BOT_TOKEN and
+# TELEGRAM_CHAT_ID. Without API_KEY it only prints a notice.
+#
+# NO REPEAT ALERTS WITHOUT STORAGE: only things dated inside the last ~26 hours are reported (an event's own
+# "at" timestamp, or a missed/unrecorded session's own date being today or yesterday in IST). An old miss
+# therefore alerts once, or at most twice if it lands in the 2 hour overlap between two runs, never every
+# evening. It runs EVERY day (not only trading days) on purpose: h05 marks a Friday session missed on Saturday
+# morning, so a Monday-to-Friday schedule would never see it. Every error path (no answer, not JSON, missing
+# fields, Telegram not HTTP 200) ends the job red. The only quiet success besides "all fine": no API_KEY secret.
+#
+# Controlled test later (sends a clearly labelled TEST message, then fails on purpose):
+#   gh workflow run h05-watch.yml -f simulate=failure --ref <branch>
+on:
+  schedule:
+    - cron: "15 14 * * *" # 19:45 IST every day; GitHub may start it 5-20 minutes late, which is fine here
+  workflow_dispatch:
+    inputs:
+      simulate:
+        description: "none = normal run; failure = send a TEST ONLY message and fail on purpose"
+        type: choice
+        options:
+          - none
+          - failure
+        default: none
+
+permissions: {}
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Read the h05 report
+        id: check
+        env:
+          BASE: https://swingtrademl.com/api/v1
+          API_KEY: ${{ secrets.API_KEY }}
+          SIMULATE: ${{ inputs.simulate }}
+        run: |
+          emit() { { echo "problem<<EOF_PROBLEM"; printf '%s\n' "$1"; echo "EOF_PROBLEM"; } >>"$GITHUB_OUTPUT"; }
+          if [ "$SIMULATE" = "failure" ]; then
+            emit "TEST ONLY - simulated h05 failure, no real problem"
+            exit 0
+          fi
+          if [ -z "$API_KEY" ]; then echo "::notice::No API_KEY repository secret; add it to turn this watch on."; exit 0; fi
+          today=$(TZ=Asia/Kolkata date +%F)
+          curl -s -m 30 -H "X-API-Key: $API_KEY" -o "$RUNNER_TEMP/h05.json" "$BASE/research/h05/report" || true
+          cat >"$RUNNER_TEMP/h05check.py" <<'PY'
+          import json, sys
+          from datetime import datetime, timedelta, timezone
+          IST = timezone(timedelta(hours=5, minutes=30))
+          now = datetime.now(timezone.utc)
+          cutoff = now - timedelta(hours=26)
+          cutoff_day = cutoff.astimezone(IST).date()  # dates use the same ~26 hour window
+          try:
+              rep = json.load(open(sys.argv[1]))
+              code, runs = rep["protocol_code"], rep["runs"]
+              assert isinstance(runs, list) and "protocol_accepted" in rep and "verdict" in rep
+              for r in runs:
+                  for k in ("run_no", "days_recorded", "sessions_in_window", "missed_sessions", "events"):
+                      assert k in r
+          except Exception:
+              print("The h05 report did not come back as expected (no answer, not JSON, or fields missing).")
+              sys.exit(0)
+          lines = []
+          for r in runs:
+              n = r["run_no"]
+              seen = set()
+              for e in r["events"]:
+                  at = datetime.fromisoformat(e["at"])
+                  if at.tzinfo is None:
+                      at = at.replace(tzinfo=timezone.utc)
+                  if at >= cutoff:
+                      seen.add(e.get("signal_day"))
+                      lines.append(f"Run {n}: {e['kind'].replace('_', ' ')} for {e.get('signal_day')} ({str(e['detail'])[:120]})")
+              for m in r["missed_sessions"]:
+                  d = m["signal_day"]
+                  if d not in seen and datetime.fromisoformat(d).date() >= cutoff_day:
+                      seen.add(d)
+                      lines.append(f"Run {n}: session {d} was missed")
+              for d in r.get("days_missed", []):
+                  if d not in seen and datetime.fromisoformat(d).date() >= cutoff_day:
+                      lines.append(f"Run {n}: no record for session {d} (recorded {r['days_recorded']} of {r['sessions_in_window']})")
+          if lines:
+              print(f"h05 ({code}): " + " | ".join(lines[:8]))
+          PY
+          problem=$(python3 "$RUNNER_TEMP/h05check.py" "$RUNNER_TEMP/h05.json")
+          rm -f "$RUNNER_TEMP/h05.json" "$RUNNER_TEMP/h05check.py"
+          if [ -n "$problem" ]; then emit "$problem"; else echo "h05 report fine for $today."; fi
+
+      - name: Message on Telegram and fail the run
+        if: steps.check.outputs.problem != ''
+        env:
+          TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
+          PROBLEM: ${{ steps.check.outputs.problem }}
+        run: |
+          text=$(printf '🟠 h05 watch (%s)\n%s' "$(TZ=Asia/Kolkata date '+%d %b')" "$PROBLEM")
+          if [ -z "$TOKEN" ] || [ -z "$CHAT" ]; then echo "::error::Telegram secrets missing; cannot deliver the alert."; exit 1; fi
+          code=$(curl -s -m 20 -o /dev/null -w '%{http_code}' "https://api.telegram.org/bot${TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${CHAT}" --data-urlencode "text=${text}" || true)
+          echo "telegram http $code"
+          if [ "$code" != "200" ]; then echo "::error::Telegram did not accept the alert (HTTP $code)."; fi
+          exit 1

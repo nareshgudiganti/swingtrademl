@@ -34,7 +34,7 @@ Limits (plans.py l.82-98 and defaults l.104 / l.109)
 | Company sizes shown | Large only | Large, mid and small | Free large only, Pro all | Small caps are riskier; a natural Pro tier. |
 | Days of history | 30 | no limit | Free 30, Pro no limit | Matches row 5. |
 
-Always on for every signed-in person, no plan needed (not in the catalogue; `api/deps.py` l.~198):
+Always on for every signed-in person, no plan needed (not in the catalogue; `api/deps.py` l.200):
 their own watchlist and its tracker (`/me/watchlist...`), their own account (sign in, password, logout everywhere)
 and "what does my plan show" (`/me/plan`). Suggested: keep as is. (ASSUMPTION A2: the watchlist stays free for all.)
 

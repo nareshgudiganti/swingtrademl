@@ -4,7 +4,7 @@ Read this first in every session. Then read `docs/architecture/CURRENT-STATE.md`
 
 ## What this repo is
 
-- **Production** runs from GitHub `main` (latest on origin: `8ea5e63`, “One market clock”). Push to
+- **Production** runs from GitHub `main` (latest on origin: `9deb26a`, a merge of PR #181). Push to
   `main` deploys to swingtrademl.com (DigitalOcean droplet). Git tag `v1` = `64fcb05` is a **frozen
   rollback reference only** — prod does not run from that tag.
 - **Version 1 (v1)**: the swing-trading app stack (FastAPI + Postgres/TimescaleDB + Redis +

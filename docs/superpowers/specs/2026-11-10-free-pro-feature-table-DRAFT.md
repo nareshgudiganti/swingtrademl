@@ -71,9 +71,9 @@ not audit every handler for it (ASSUMPTION A3). Recommendation: keep row 9 OFF f
 
 1. `/signals/buy-list` (Pro, row 7) ignores the plan filters: it lists every strategy's BUY signals, including
    rule strategies and the hand-bought `real_trading` strategy, and every company size, and leaves out stocks the
-   bot holds. Free cannot reach it. Suggested fix: apply the same visibility filter as `/signals/picks`.
+   bot holds. Free cannot reach it. Suggested fix: apply the same visibility filter as `/signals/picks`. **FIXED on main (holdings PR): owner-private strategies are hidden from members; see `tests/test_pro_real_holdings_gaps.py`.**
 2. `/brain/track/{symbol}?book=real` (Pro, row 9) accepts a `book` from the caller with no check, so a Pro user could
-   ask for the real-holdings track. Suggested fix: force the bot's book for non-owners. Flagged by an xfail test.
+   ask for the real-holdings track. **FIXED on main (holdings PR, 2026-11-10/11): the handler now refuses any non-paper book for a non-owner (403). The former xfail test is now a normal passing test.**
 3. `/ml/models` and `/ml/calibration` (Pro, row 8) accept `strategy_id`, `mode`, `model_id` filters and return every model,
    not only the ones the plan covers. Low risk, but not plan-filtered.
 4. `/auth/kite/login` has no sign-in requirement (by design for the browser redirect). It starts a Zerodha login.

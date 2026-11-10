@@ -51,6 +51,12 @@ PUBLIC_ROUTES: dict[tuple[str, str], str] = {
     ("GET", "/auth/google/login"): "starts Google sign-in",
     ("GET", "/auth/google/callback"): "Google redirect, browser cannot send headers",
     ("POST", "/auth/google/exchange"): "swaps a Google one-time code for a login",
+    ("POST", "/auth/register"): "self sign-up; answers 404 unless ALLOW_SIGNUP is on",
+    ("POST", "/auth/verify-email"): "the one-time emailed token is the credential",
+    ("POST", "/auth/resend-verification"): "same answer for every email; rate-limited",
+    ("POST", "/auth/forgot-password"): "same answer for every email; rate-limited",
+    ("POST", "/auth/reset-password"): "the one-time emailed token is the credential",
+    ("POST", "/billing/webhook"): "the payment provider calls it; the signature over the raw body is the credential",
     ("GET", "/auth/kite/login"): "starts the Zerodha login (redirect only; see report finding)",
     ("GET", "/auth/kite/callback"): "Zerodha redirect, browser cannot send headers",
 }
@@ -61,6 +67,11 @@ SIGNED_IN_ONLY_ROUTES: dict[tuple[str, str], str] = {
     ("POST", "/auth/password"): "change own password",
     ("POST", "/auth/logout-all"): "end own sessions",
     ("GET", "/me/plan"): "how the app learns what to show; must answer every plan",
+    ("GET", "/billing/plans"): "a signed-in person sees the plans (404 unless BILLING_ENABLED)",
+    ("GET", "/billing/me"): "a signed-in person sees their own subscription",
+    ("POST", "/billing/checkout"): "a signed-in person starts their own subscription (sandbox only)",
+    ("POST", "/billing/cancel"): "a signed-in person cancels their own subscription only",
+    ("POST", "/billing/fake/simulate"): "fake provider only; the caller's own subscription",
 }
 
 #: Dependencies that mean "the handler is checked as the owner itself".
@@ -285,13 +296,14 @@ def test_deps_module_is_the_one_under_test():
     assert deps.require_auth is require_auth
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason=(
-        "FINDING: /brain/track/{symbol} is open to Pro (TradeMind read) and takes `book` from the "
-        "query with no check, so a Pro caller can ask for book=real (the owner's real holdings track)."
-    ),
-)
 def test_pro_cannot_read_the_real_book_through_brain_track():
-    with pytest.raises(HTTPException):
-        _gate("GET", "/brain/track/{symbol}", "book=real", "pro")
+    # Fixed on main (holdings PR): the handler refuses any non-paper book for a non-owner.
+    # The plan gate lets a Pro member in (it is a TradeMind read), so the check lives in the handler;
+    # it raises before touching the database, so no database is needed here.
+    from swing_trade_ml.api.v1.endpoints.brain import holding_track
+
+    assert _gate("GET", "/brain/track/{symbol}", "book=real", "pro") is None  # the gate lets Pro in
+    principal = SimpleNamespace(via_api_key=False, is_owner=False)
+    with pytest.raises(HTTPException) as err:
+        holding_track("ABC", None, principal, book="real")
+    assert err.value.status_code == 403

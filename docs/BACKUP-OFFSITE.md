@@ -76,3 +76,43 @@ The drill also accepts the server's own `database.sql.gz` copies directly.
 - The nightly job fails (no copy, damaged copy, or the Drive upload failed): Telegram, with a link to the run.
 - Not set up yet: no message; the log says "not set up".
 - `/root/backups/daily-last.txt` on the droplet always shows the last result.
+
+## Model files and the full restore drill
+
+Before this section the Drive held only the database dump. Model files lived on the server (volume
+`model_data`, second copy in volume `model_backups`: same disk) and in a zip the owner pulled by hand to a PC
+(`scripts/backup-models-from-prod.ps1`). The database stores each model's path, not its sha256, and the
+`brain_meta_v*` combiner files have no database row at all.
+
+**What now leaves the server each night** (`infra/deploy/backup-models-offsite.sh`, called by the daily backup,
+needs nothing new on the Drive beyond the setup above):
+
+| Drive folder | Content | Kept |
+|---|---|---|
+| `swingtrademl-backups/database-<stamp>.sql.gz.enc` | database dump (as before) | 15 days |
+| `swingtrademl-backups/models/<sha256>.enc` | one encrypted model file, named by its content hash | forever, never overwritten |
+| `swingtrademl-backups/manifests/manifest-<stamp>.json.enc` | name, version, status, file, size, sha256 of every model row plus `brain_meta_v*` files | forever |
+
+An unchanged model file is never sent twice (the file name is its hash; the script checks the Drive first).
+A file whose hash on the server differs from the manifest is not uploaded and the nightly run fails, so you get
+the usual Telegram message.
+
+**Drill (on your PC, needs Docker with the local Postgres container running; it creates and drops a scratch
+database `drill_scratch_<time>` and never touches `swing_trade_ml`):**
+
+1. Make a folder, e.g. `drill-set`, and put in it: `database.sql.gz` (decrypted as in "Getting a copy back"),
+   `manifest.json` (decrypt `manifests/manifest-<stamp>.json.enc` with the same `openssl enc -d` command), and a
+   subfolder `files/` holding each model file under its manifest name: for every entry in the manifest,
+   decrypt `models/<sha256>.enc` to `files/<file>`.
+2. Run: `python scripts/verify_restore.py --backup-dir drill-set`
+3. Read the table. `OVERALL: PASS` means: the database restored with no real errors, every file's sha256 and size
+   match the manifest, every `ml_models` row has a file, every file has a row, and status/version/file name equal
+   what the manifest recorded. Any FAIL line names the model or file.
+
+Rows whose file was already gone on the server when the backup ran show as `missing_at_source` and make the drill
+FAIL on purpose: that is a real hole (local rehearsal 2026-11-03: 216 of 278 rows).
+
+**Still manual or untested:** the nightly upload has not run against a real Drive; `python3` must exist on the
+droplet; the weekly PC zip (`backup-models-from-prod.ps1`) is unchanged and still useful as a second route.
+
+**Switched off by default.** The model-file copy and manifest only run if the file `/root/.backup-models-enabled` exists on the droplet. Create it (`touch /root/.backup-models-enabled`) only after rclone is set up and `scripts/verify_restore.py` has passed a recovery test. Remove the file to switch it off again. Until then the nightly backup behaves exactly as before.

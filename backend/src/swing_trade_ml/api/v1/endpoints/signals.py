@@ -326,7 +326,7 @@ def top_picks(
 
 
 @router.get("/buy-list", response_model=list[dict])
-def buy_list(db: DbSession) -> list[dict]:
+def buy_list(db: DbSession, access: PlanAccessDep) -> list[dict]:
     """Every symbol that is a fresh, still-current BUY right now — nothing else.
 
     Answers "the Signals page shows a BUY row for this stock, but is that
@@ -338,6 +338,8 @@ def buy_list(db: DbSession) -> list[dict]:
     dismissal needed for that case, since a stale row is structurally
     impossible here. Already-held symbols are excluded — this list is only
     for fresh entries, not stocks already bought (that's the Portfolio page).
+    Plan members only see model strategies (`strategy_visible`): never the
+    owner's hand-bought `real_trading` book or other non-bot strategies.
     """
     latest_signal = (
         select(Signal)
@@ -352,7 +354,7 @@ def buy_list(db: DbSession) -> list[dict]:
     )
 
     stmt = (
-        select(LatestSignal, Instrument.tradingsymbol, Instrument.name, Strategy.name)
+        select(LatestSignal, Instrument.tradingsymbol, Instrument.name, Strategy)
         .join(Instrument, Instrument.id == LatestSignal.instrument_id)
         .join(Strategy, Strategy.id == LatestSignal.strategy_id)
         .where(
@@ -367,7 +369,7 @@ def buy_list(db: DbSession) -> list[dict]:
         {
             "symbol": symbol,
             "name": name,
-            "strategy_name": strategy_name,
+            "strategy_name": strategy.name,
             "price": sig.price,
             "confidence": sig.confidence,
             "stop_loss": sig.stop_loss,
@@ -375,8 +377,8 @@ def buy_list(db: DbSession) -> list[dict]:
             "reason": sig.reason,
             "generated_at": sig.generated_at,
         }
-        for sig, symbol, name, strategy_name in rows
-        if not _practice_evidence(sig)
+        for sig, symbol, name, strategy in rows
+        if not _practice_evidence(sig) and strategy_visible(strategy, access)
     ]
 
 

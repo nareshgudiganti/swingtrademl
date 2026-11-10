@@ -1,92 +1,91 @@
-# Current state — 2026-10-08
+# Current state: 2026-11-10
 
-## Completed
+Written from `origin/main` `9deb26a` (2026-11-10). The authoritative project status is
+`docs/brain/PROJECT_COMPLETION_MATRIX.md` (status updates dated 2026-11-09 and 2026-11-10). This file is a short
+summary that points at it; if the two disagree, the matrix wins. Anything not confirmed from a document or git history
+is marked **unverified**.
 
-- **v1** live in production (DigitalOcean, swingtrademl.com). Rollback tag `v1` = `64fcb05`.
-  Paper trial running from 2026-09-28.
-- **Brain M00–M18** on GitHub `main`. TradeMind screens (`/trademind`) wired to live brain data.
-  **Production: M18 practice (shadow)** since 2026-10-04 — no auto brain-driven live orders.
-- **M18 go-live switch**: shadow strategy, brain-vs-v1 comparison, 30-idea gate, approvals path,
-  rollback, console cards — see `docs/brain/GO_LIVE.md`.
-- **Service 1 P0 (shipped `fcaef35`)**: split-check CLI; `watchlist_snapshots` + PIT replay universe;
-  `candle_corrections` on ingest + M02 `feature_snapshots` invalidation from corrected bar;
-  provisional **2027** holidays; `data_manifest` on brain runs;
-  feed `connector_status` on `/brain/health`; `obv_slope` train/serve fix; nightly + ingest
-  watchlist snapshot hooks in `workers/jobs.py`.
-- **Phase 1 gate (local, 2026-10-05)**: `brain replay-week` + `brain rescore-learning` — evidence in
-  `docs/brain/evidence/PHASE2_EVIDENCE_TEMPLATE.md`. B0 split-check clean → **gap #3 adjusted prices
-  deferred**.
-- **Plans manager** (Free / Pro) is on `main` and live since the 2026-10-06 deploy; the owner switch is
-  OFF, so the owner sees everything and nobody is limited.
-- **Deploy gate fixed 2026-10-06 (`f69134a`)**: every push to `main` from 2026-10-04 to 2026-10-05 failed
-  the backend test gate (M08 read sector data without declaring `SectorState@1`; one stale replay test)
-  and nothing deployed; then a migration ran in the wrong order on the server and rolled back. Both
-  fixed. A red "Deploy to production" run in GitHub Actions means nothing was deployed.
-- **Login / Testing tab (`19d3cb0`)**: login page hides "Sign up" when sign-up is closed
-  (`GET /auth/options`); the Testing tab explains it is switched off (`PAPER_TESTER_ENABLED=false`).
+## What is on `main` and deployed
 
-## In progress / ops (not new feature code)
+- **Production** runs from `main` on the DigitalOcean droplet (swingtrademl.com). Every merge to `main` deploys, after the
+  tests pass and outside the deploy window (see `docs/DEPLOY.md` and `docs/OPERATIONS-AND-LAUNCH.md`).
+  Rollback tag `v1` = `64fcb05` is a frozen reference only.
+- **Paper only.** Matrix, read-only prod checks 2026-11-07 and owner check on the droplet 2026-11-09: `TRADING_MODE=paper`,
+  `ALLOW_LIVE_TRADING=false`, `ALLOW_REAL_HOLDINGS_ORDERS=false`, `BRAIN_ENABLED=true`; `TESTING_NO_LIMITS` and
+  `LANE_SHADOW_ENABLED` unset (code defaults are off). The model registry was not checked by that step.
+- **Brain** modules M00-M18 are live in practice (shadow) stage since 2026-10-04: it records ideas and their outcomes and
+  places no orders. Stage is `shadow` (matrix, 2026-11-07 read-only check).
+- **November release merged and deployed** (PR #151 and the smaller PRs): Phase B finish tool and protocol, Amendment 3
+  tooling, 15D lab runner guard, SX5 preparation (no training), December runbook, activation-readiness audit, protocol
+  wording fixes. Deploys of `c4a79ba` and `47350a9` succeeded (matrix 2026-11-09).
+- **After that, on `main` up to `9deb26a`:** matrix status updates (#173, #174), off-machine model backup and restore
+  verifier (code merged; the model copy stays OFF until the owner creates `/root/.backup-models-enabled`, see
+  `docs/BACKUP-OFFSITE.md`), Dependabot holding back frontend major bumps, h05 watch workflow (daily Telegram check of the
+  5-day report), daily-check watch with a simulate input, the December readiness check
+  (`docs/brain/DECEMBER-READINESS-CHECK.md`), a tv27 proposal marked NOT FOR MERGE, and small frontend dependency bumps.
+  Whether each of these has finished deploying to the droplet is **unverified** (check Actions, "Deploy to production").
+- **Also on `main`** (matrix P3 list): Open positions screen, Stock Compare, Company tab, manual real-holdings orders
+  (switch off), Plans manager (owner switch off), New-look switch, tv22 reserved slot, 20% stressed cap, explanation layer,
+  Observatory, Groww Tracker with edit, beginner features.
 
-- **Production droplet**: the deploy script (`infra/deploy/release.sh`) builds api/worker/frontend,
-  takes a database dump (server-side only), runs alembic, verifies a worker heartbeat and rolls back to
-  the previous images on failure. After a deploy, still do the split-check/snapshot items in
-  `docs/brain/evidence/prod_deploy_20261005.md`. SSH is owner-side.
-- **Built 2026-10-08, ships with the next `main` deploy**: Saturday 11:00 IST brain health report
-  (Telegram + `GET /brain/weekly-health`, alembic head `w7h3a1t5h0c1`); `swingtrade brain validate-week`,
-  golden-day test, WHY integrity check and rescore watchdog (validation steps 1-5); authenticated model
-  zip `GET /ml/backup/models.zip` + `scripts/backup-models-from-prod.ps1` for an off-server copy
-  (database dumps are still only on the server).
-- **M18 evidence**: collect **30 finished shadow ideas** before approval stage opens.
-- **Weekly brain health**: `docs/brain/weekly_health_checklist.md` + `docs/brain/TESTING.md`.
-- **Model artifacts**: primary dir `MODEL_ARTIFACT_DIR` (default `./data/models`); optional
-  `MODEL_BACKUP_DIR` — runbook `docs/brain/evidence/model_artifact_backup.md`.
+## Trial seal and freeze
 
-## Remains (approved roadmap)
+- The blind brain trial is sealed: frozen files change only through `scripts/approve_trial_change.py`. Reports keep the
+  brain slot out of the "Bot results" while sealed (`pr/brain-seal-weekly-report`; its merge status is **unverified**).
+- Development freeze: feature development ends 2026-11-30 (matrix objective), testing-first after. Held until after the
+  freeze: Telegram SELL-log changes, the m09 speed fix, 10D, unapproved lanes, worktree cleanup.
 
-| Area | What |
-|------|------|
-| Phase 0 ops | Prod ingest freshness on trading days; off-droplet model backup habit |
-| Phase 2 | M06 meta-train + M09 before/after evidence doc |
-| Phase 3 | Playbook candidates, M11 sector gate (config off), shadow comparison gate |
-| Phase 4 | Live blockers (`docs/brain/LIVE_READINESS.md`); M18 approval trial after gates |
-| Deferred | Gap **#3** adjusted layer unless split-check flags contamination; M19 / Pro |
+## Experiments and signatures
 
-## Next exact tasks
+| Item | State on 2026-11-10 (source: matrix) |
+|---|---|
+| Phase B protocol | **Signed 2026-11-09** (merge `fee8d98`, PR #172); annotated tag `phase-b-completion-v1` points at it. Gates G1-G14 passed on branch `phase-b-run`. |
+| Phase B runs B1, B2, B3 | **B1 not run yet** (ledger has 0 candidate rows). All three due by **2026-12-04**. |
+| Amendment 3 (`sl-protocol-v1.1`, ranking only) | **Unsigned.** Needs D1-D10 decisions, a signed marker file and tag before **2026-12-05**. |
+| SX5 sector challenger protocol | **Unsigned**, due by 2026-11-30. Built and tested on synthetic data only, never trained; training needs a separate written owner authorisation and cannot start before 2026-12-04. |
+| 5D (h05 lane, models 2, 16, 17) | Run 1 **in progress** (2 Nov to 28 Jan 2027); INCONCLUSIVE until about 40 matured days. Runs 2 and 3 are started by hand after 2027-01-28. |
+| 10D | **Failed** (td-protocol-v1, about -0.34% per trade) and **deferred**; no v2, no retrain, no 10D slot. |
+| 15D selection lab (S0/S1/S2, S0M/S1M/S2M) | Tooling done; **starts 2026-12-05** at the earliest, after the Phase B record and a signed, tagged Amendment 3. Runner refuses earlier. Shadow lanes off. |
+| Activation guard (design steps 4-7) | Not approved, nothing built. Passing tests never authorises activation. |
+| HINDUNILVR / BAJAJELEC | Excluded from Phase B (owner decision 2026-11-07, final). |
 
-1. **Owner on droplet**: complete `prod_deploy_20261005.md` for commit `fcaef35` (or latest `main`).
-2. **Owner weekly**: Level 1–2 in TESTING.md; track M18 “N of 30”.
-3. **Dev (optional)**: Phase 2 evidence after meta-train; Phase 3 only in paper.
+## Release controls (all off, per code defaults)
 
-## Tests (reference)
+`ALLOW_SIGNUP`, `ALLOW_REAL_HOLDINGS_ORDERS`, `ALLOW_LIVE_TRADING` default to false in `core/config.py`. Plans manager and
+New-look are owner switches (off). The names `ALLOW_CUSTOMER_SCREENS` and `ALLOW_MODEL_PROMOTION` were **not found** in the
+code on `9deb26a`: treat them as planned, not existing (unverified meaning). Payments and billing are not built.
+See `docs/OPERATIONS-AND-LAUNCH.md`.
 
-- Service 1 P0 + replay-week tests added 2026-10-05 (`test_split_check`, `test_watchlist_snapshots`,
-  `test_candle_corrections`, `test_brain_replay_week`, etc.).
-- Full brain suite on `main` before deploy: use `backend/.venv` + Docker Postgres per `CLAUDE.md`.
+## Known issues (still true, verified against matrix unless noted)
 
-## Known issues (still true)
+- **`obv_slope` train/serve mismatch** for 5D models 2/16/17 (prod serves it differently from training since 2026-10-05).
+  Inside the sealed trial, NOT fixed; decision after the trial. Note: the older entry in this file that said an `obv_slope`
+  train/serve fix shipped in `fcaef35` conflicts with the matrix; the matrix is the later source.
+- **Seal-leak test fix `783c3dd`**: the matrix says it was needed on main; it is in the release that has since merged
+  (whether it is on `main` is **unverified**; confirm with `git branch -r --contains 783c3dd`).
+- **`/brain/learning` page can time out** (m09 speed fix is blocked by the trial freeze; trading and evidence unaffected).
+- **Telegram SELL alert log** not merged (on hold; touches order path).
+- **Off-site (Google Drive) database backup not set up**, droplet disk filling, Telegram token a single point of failure,
+  GitHub may switch off scheduled workflows after 60 days without commits, restore drill not re-run since its fix: all from
+  `docs/brain/DECEMBER-READINESS-CHECK.md` (2026-11-10; the 60-day date is its own calculation and unverified).
+- **M06 meta-model** below break-even; ideas often WAIT (expected). **Gap #3** adjusted price layer deferred (split-check
+  clean 2026-10-05; not re-verified since). Service 1 gap list: `docs/architecture/architecture-gaps.md`.
+- **Removed as no longer current:** the 2026-10-09 "brain recorded no ideas" bug. Its fix (`blocked_by_risk_limit`) is in
+  `strategies/brain.py` and `brain_golive/compare.py` on `main`, but whether it behaves correctly on prod today is
+  **unverified**; the matrix does not list it as open.
 
-- **Brain recorded no ideas, 2026-10-04 to 10-09 (root cause found 2026-10-09, fix on `develop`)**: the
-  brain's own risk module (M07) asks version 1's `check_entry`; when it says no, M08 `_risk_check`
-  (`brain/modules/m08_decide/rules.py`) lowers TRADE to WATCH ("Good idea, but the risk check said no").
-  `strategies/brain.py` turned every non-TRADE into a HOLD with no stop/target, and the compare report and
-  the "N of 30" gate only count BUYs with stop and target — so nothing was ever counted (74-108 such ideas
-  a day on prod). The earlier note that "version 1 rejected 108" was wrong: these were brain-side
-  downgrades, and the v1-side tag (`a139d9f`) never fired. **Fix:** in the practice stage only, such a
-  WATCH (downgraded from TRADE purely by the risk check, levels present, no owner overrule) is emitted as
-  a BUY tagged `features["blocked_by_risk_limit"]`, so it is scored to outcome, counted as
-  `finished_blocked` (not toward the gate; switch `COUNT_BLOCKED_TOWARD_GATE` in `compare.py`), kept off
-  `/signals/picks`, `/buy-list`, the suggestion list and the track record, and never made an approval.
-  The brain strategy is advisory, so nothing is bought. Tests: `test_brain_risk_downgrade_evidence.py`.
+## Next exact tasks (owner; from the matrix)
 
-- **M06 SHADOW**: meta-model below break-even; ideas often **WAIT** — expected until evidence improves.
-- **Gap #3**: no adjusted price layer; B0 clean 2026-10-05 — monitor with periodic `brain split-check`.
-- **M18 minors**: no v1 cash reservation on brain buys; paper “live” price can be prior close without Kite;
-  approvals endpoint may wait on Telegram; `by` is client-set.
-- **Local check DB** may show bad opening equity on some dates (v1 data quirk).
+1. Run B1, B2, B3 from the clean `phase-b-run` worktree by 2026-12-04.
+2. Decide Amendment 3 D1-D10; sign, merge, tag `sl-protocol-v1.1` before 2026-12-05.
+3. Sign the SX5 protocol by 2026-11-30 (training separately authorised, 2026-12-04 or later).
+4. Set up the off-site backup (`docs/BACKUP-OFFSITE.md`).
+5. Daily and weekly checks: `docs/OPERATIONS-AND-LAUNCH.md`.
 
 ## Doc pointers
 
-- **Solution vision (diagram → code → gaps):** `docs/architecture/TRADEMIND-SOLUTION-OVERVIEW.md`
-- Roadmap: `docs/brain/ROADMAP.md`
-- Gaps: `docs/architecture/architecture-gaps.md`
-- Testing: `docs/brain/TESTING.md`
+- Matrix (authoritative): `docs/brain/PROJECT_COMPLETION_MATRIX.md`; December: `docs/brain/DECEMBER-RUNBOOK.md`,
+  `docs/brain/DECEMBER-READINESS-CHECK.md`
+- Operations and launch: `docs/OPERATIONS-AND-LAUNCH.md`
+- Solution vision: `docs/architecture/TRADEMIND-SOLUTION-OVERVIEW.md`; gaps: `docs/architecture/architecture-gaps.md`
+- Roadmap: `docs/brain/ROADMAP.md`, `docs/ROADMAP_TRACKER.md`; testing: `docs/brain/TESTING.md`

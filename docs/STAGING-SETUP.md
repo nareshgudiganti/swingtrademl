@@ -262,6 +262,24 @@ does not run), so use the checks above, or run it knowing the brain-stage line w
 Then do one end-to-end pass: sign up with a `+tag` alias (section 11), receive the Resend email, click
 the staging link, subscribe with a Razorpay test card, and confirm the webhook arrived.
 
+### 10a. Memory check during the demo (OWNER, 2 minutes)
+
+The staging server has only 2 GB. `docker-compose.staging.yml` caps each container so one runaway
+process cannot take the whole server down: postgres 512 MB, redis 128 MB, api 768 MB, frontend 64 MB.
+That is 1,472 MB in total, which leaves about 550 MB for Ubuntu, nginx and Docker, plus the swap from
+step 5.4 as a safety net. (There is no worker container, no brain and no model training, so these
+numbers are not tight for sign-up, email and billing tests. They are estimates, not measurements: check them.)
+
+Run these once after the first start, once during a sign-up and a test payment, and once more at the end:
+
+```bash
+docker stats --no-stream      # MEM USAGE / LIMIT per container; any one above 80% of its limit is a warning
+free -m                       # "available" should stay above ~300 MB and swap "used" should stay small
+```
+
+If `api` is close to 768 MB or a container shows as restarted (`docker ps`), tell Claude before
+raising a limit; do not just remove it.
+
 ---
 
 ## 11. Synthetic accounts, and resetting to a clean state
@@ -331,6 +349,7 @@ Set-up (OWNER, GitHub, Settings):
 Heads-up: GitHub lists a workflow in the Actions screen only when its file is on the default branch
 (`main`). Merging this change to `main` also triggers one normal production deploy, because every push
 to `main` does; it only adds files, no runtime code changes. Or deploy by hand with section 10 until then.
+For the very first demo prefer the by-hand route (section 10, `release-staging.sh`): it needs no GitHub secrets, no Environment and no dispatch, and a failure is visible on the server straight away. GitHub only allows `workflow_dispatch` for a workflow file that exists on the default branch, so use the workflow after the file is on `main`.
 
 The app secrets (section 6) are **not** in GitHub; they stay in the server `.env`.
 

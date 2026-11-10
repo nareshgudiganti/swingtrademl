@@ -14,6 +14,7 @@ name: stml-staging
 services:
   postgres:
     container_name: stml-staging-postgres
+    mem_limit: 512m          # 2 GB droplet budget (docs/STAGING-SETUP.md section 10a): idle staging DB is ~150-250 MB
     ports: !reset []          # reached over the compose network only, never published
     environment:
       # No default: a missing password stops compose instead of using the repo's local one.
@@ -21,10 +22,12 @@ services:
 
   redis:
     container_name: stml-staging-redis
+    mem_limit: 128m
     ports: !reset []          # never published (production had this exposed once; not again)
 
   api:
     container_name: stml-staging-api
+    mem_limit: 768m          # FastAPI without scheduler/brain/models; hard cap so a leak kills the container, not the server
     # Loopback only, on a DIFFERENT host port from production's 8000, so a co-hosted run could not
     # clash. The host nginx proxies "/api/" here (infra/staging/nginx-staging.conf.template).
     ports: !override
@@ -62,6 +65,7 @@ services:
       args:
         VITE_API_BASE_URL: https://staging.swingtrademl.com/api/v1
     container_name: stml-staging-frontend
+    mem_limit: 64m           # static nginx
     ports: !override
       - "127.0.0.1:8180:80"
     depends_on:

@@ -28,8 +28,16 @@ def _user(db, name: str, role: str, plan: str = "free") -> dict[str, str]:
 def _track(db, book: str, symbol: str) -> None:
     db.add(
         BrainTrack(
-            book=book, symbol=symbol, opened_on=date(2026, 11, 2), day=date(2026, 11, 3),
-            day_n=1, ret=0.01, status="ON_TRACK", reason="", stop=96.0, band=[],
+            book=book,
+            symbol=symbol,
+            opened_on=date(2026, 11, 2),
+            day=date(2026, 11, 3),
+            day_n=1,
+            ret=0.01,
+            status="ON_TRACK",
+            reason="",
+            stop=96.0,
+            band=[],
         )
     )
     db.flush()
@@ -42,9 +50,17 @@ def _signal(db, strat_name: str, strat_type: str, symbol: str, token: int) -> No
     inst = instrument(db, symbol, token)
     db.add(
         Signal(
-            strategy_id=strat.id, instrument_id=inst.id, signal_type=SignalType.BUY, mode="paper",
-            price=100.0, confidence=0.7, stop_loss=96.0, take_profit=108.0, horizon_days=5,
-            generated_at=at(DAY), features={},
+            strategy_id=strat.id,
+            instrument_id=inst.id,
+            signal_type=SignalType.BUY,
+            mode="paper",
+            price=100.0,
+            confidence=0.7,
+            stop_loss=96.0,
+            take_profit=108.0,
+            horizon_days=5,
+            generated_at=at(DAY),
+            features={},
         )
     )
     db.flush()
@@ -64,6 +80,7 @@ def people(db_session, monkeypatch):
 
 
 # ---- /brain/track -----------------------------------------------------------------
+
 
 @pytest.mark.parametrize("who", ["free", "pro"])
 @pytest.mark.parametrize("book", ["real", "live", "tester", "all"])
@@ -96,6 +113,7 @@ def test_pro_member_still_reads_paper_track(client, db_session, people):
 
 
 # ---- /signals/buy-list ------------------------------------------------------------
+
 
 def _seed_buy_list(db):
     _signal(db, "prg_real_trading", "ml_swing", "PRGHAND", 929001)
@@ -131,8 +149,15 @@ def test_owner_buy_list_unchanged(client, db_session, people, headers_key):
     assert r.status_code == 200, r.text
     assert _syms(r) == {"PRGHAND", "PRGREALSIG", "PRGRULE", "PRGMODEL"}
     assert set(r.json()[0]) == {
-        "symbol", "name", "strategy_name", "price", "confidence",
-        "stop_loss", "take_profit", "reason", "generated_at",
+        "symbol",
+        "name",
+        "strategy_name",
+        "price",
+        "confidence",
+        "stop_loss",
+        "take_profit",
+        "reason",
+        "generated_at",
     }
 
 

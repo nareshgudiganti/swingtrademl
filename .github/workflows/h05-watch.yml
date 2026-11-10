@@ -1,21 +1,23 @@
 name: h05 watch
 
-# Once each weekday evening, from OUTSIDE the server, read the 5-day (h05) evaluation report and message the owner
+# Once each evening (every day, including weekends), from OUTSIDE the server, read the 5-day (h05) evaluation report and message the owner
 # on Telegram if a session was missed or the lane recorded an event. READ ONLY: one GET of
-# /research/h05/report, one GET of /market/session, and the Telegram send. No state is stored anywhere
+# /research/h05/report and the Telegram send. No state is stored anywhere
 # (no cache, no artifacts: the repo is public). Needs repository secrets API_KEY, TELEGRAM_BOT_TOKEN and
 # TELEGRAM_CHAT_ID. Without API_KEY it only prints a notice.
 #
 # NO REPEAT ALERTS WITHOUT STORAGE: only things dated inside the last ~26 hours are reported (an event's own
 # "at" timestamp, or a missed/unrecorded session's own date being today or yesterday in IST). An old miss
-# therefore alerts once, not every evening. Every error path (no answer, not JSON, missing fields, Telegram
-# not HTTP 200) ends the job red. The only quiet successes: no API_KEY secret, or not a trading day.
+# therefore alerts once, or at most twice if it lands in the 2 hour overlap between two runs, never every
+# evening. It runs EVERY day (not only trading days) on purpose: h05 marks a Friday session missed on Saturday
+# morning, so a Monday-to-Friday schedule would never see it. Every error path (no answer, not JSON, missing
+# fields, Telegram not HTTP 200) ends the job red. The only quiet success besides "all fine": no API_KEY secret.
 #
 # Controlled test later (sends a clearly labelled TEST message, then fails on purpose):
 #   gh workflow run h05-watch.yml -f simulate=failure --ref <branch>
 on:
   schedule:
-    - cron: "15 14 * * 1-5" # 19:45 IST; GitHub may start it 5-20 minutes late, which is fine here
+    - cron: "15 14 * * *" # 19:45 IST every day; GitHub may start it 5-20 minutes late, which is fine here
   workflow_dispatch:
     inputs:
       simulate:
@@ -47,13 +49,6 @@ jobs:
           fi
           if [ -z "$API_KEY" ]; then echo "::notice::No API_KEY repository secret; add it to turn this watch on."; exit 0; fi
           today=$(TZ=Asia/Kolkata date +%F)
-          session=$(curl -s -m 30 -H "X-API-Key: $API_KEY" "$BASE/market/session" || true)
-          closed=$(echo "$session" | jq -r '.last_closed_trading_day // empty' 2>/dev/null || true)
-          if [ -z "$closed" ]; then
-            emit "The app did not answer the market-session check, so the h05 evaluation could not be confirmed today."
-            exit 0
-          fi
-          if [ "$closed" != "$today" ]; then echo "Not a trading day ($today); nothing to check."; exit 0; fi
           curl -s -m 30 -H "X-API-Key: $API_KEY" -o "$RUNNER_TEMP/h05.json" "$BASE/research/h05/report" || true
           cat >"$RUNNER_TEMP/h05check.py" <<'PY'
           import json, sys

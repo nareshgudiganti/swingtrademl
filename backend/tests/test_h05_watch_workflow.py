@@ -28,7 +28,7 @@ def test_api_key_never_echoed():
 
 def test_only_two_api_routes_fetched():
     urls = re.findall(r'"\$BASE/([^"]+)"', CODE)
-    assert sorted(urls) == ["market/session", "research/h05/report"]
+    assert sorted(urls) == ["research/h05/report"]
     assert "-X POST" not in CODE and "-X PUT" not in CODE and "-X DELETE" not in CODE
 
 
@@ -47,5 +47,9 @@ def test_telegram_step_fails_job_on_non_200():
 
 def test_quiet_success_only_for_no_key_or_non_trading_day():
     run = DOC["jobs"]["watch"]["steps"][0]["run"]
-    assert "No API_KEY" in run and "Not a trading day" in run
+    assert "No API_KEY" in run and "Not a trading day" not in run  # runs every day: Friday misses surface on Saturday
     assert "did not come back as expected" in run  # bad answers become an alert, which ends red
+
+def test_it_runs_every_day_not_only_on_weekdays():
+    crons = [e["cron"] for e in DOC[True]["schedule"]] if True in DOC else [e["cron"] for e in DOC["on"]["schedule"]]
+    assert all(c.split()[-1] == "*" for c in crons), crons

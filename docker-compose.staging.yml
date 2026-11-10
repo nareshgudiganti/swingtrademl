@@ -1,0 +1,68 @@
+# Staging override - combine with docker-compose.yml (docs/STAGING-SETUP.md):
+#
+#   docker compose -f docker-compose.yml -f docker-compose.staging.yml up -d --build
+#
+# A second, fully separate copy of the app on its OWN droplet. It shares nothing with production:
+# own project name (so volumes and networks cannot collide), own database volume, own secrets
+# (.env on the staging server), no Kite, no Telegram, no scheduler, no live orders.
+#
+# Needs Docker Compose 2.24+ (`!reset` / `!override`), same as docker-compose.prod.yml.
+# Run infra/staging/preflight.sh first: it refuses to continue when .env is unsafe.
+
+name: stml-staging
+
+services:
+  postgres:
+    container_name: stml-staging-postgres
+    ports: !reset []          # reached over the compose network only, never published
+    environment:
+      # No default: a missing password stops compose instead of using the repo's local one.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in the staging .env}
+
+  redis:
+    container_name: stml-staging-redis
+    ports: !reset []          # never published (production had this exposed once; not again)
+
+  api:
+    container_name: stml-staging-api
+    # Loopback only, on a DIFFERENT host port from production's 8000, so a co-hosted run could not
+    # clash. The host nginx proxies "/api/" here (infra/staging/nginx-staging.conf.template).
+    ports: !override
+      - "127.0.0.1:8100:8000"
+    environment:
+      # Built from the staging .env password; the base file's default URL carries the local password.
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-swingtrade}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in the staging .env}@postgres:5432/${POSTGRES_DB:-swing_trade_ml}
+      ENVIRONMENT: staging
+      ENABLE_SCHEDULER: "false"
+      BRAIN_ENABLED: "false"          # the base file hard-codes true; staging does not run the brain
+      TRADING_MODE: paper
+      ALLOW_LIVE_TRADING: "false"
+      ALLOW_REAL_HOLDINGS_ORDERS: "false"
+    volumes:
+      - model_data:/app/data/models   # staging's own volume (project-prefixed), holds no real models
+
+  # No worker in staging: it owns the scheduler (ingest, scans, Kite jobs, exits). The profile keeps
+  # `docker compose up` from starting it. Do not add --profile staging-worker without the owner.
+  worker:
+    container_name: stml-staging-worker
+    profiles: ["staging-worker"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-swingtrade}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in the staging .env}@postgres:5432/${POSTGRES_DB:-swing_trade_ml}
+      ENVIRONMENT: staging
+      ENABLE_SCHEDULER: "false"
+      BRAIN_ENABLED: "false"
+      TRADING_MODE: paper
+      ALLOW_LIVE_TRADING: "false"
+      ALLOW_REAL_HOLDINGS_ORDERS: "false"
+
+  frontend:
+    # Static production build, as in prod (the base file's Vite dev server is for laptops only).
+    build:
+      target: production
+      args:
+        VITE_API_BASE_URL: https://staging.swingtrademl.com/api/v1
+    container_name: stml-staging-frontend
+    ports: !override
+      - "127.0.0.1:8180:80"
+    depends_on:
+      - api

@@ -54,6 +54,11 @@ class User(Base, TimestampMixin):
     # Consecutive wrong passwords; reset on success. See endpoints/auth.py login.
     failed_login_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # What the person tells us at signup (core/mobile.py cleans both). The mobile is the
+    # planned login key: canonical 10-digit Indian number, stored UNVERIFIED (no SMS
+    # code). Unique, but many accounts may have none (Postgres lets NULLs repeat).
+    full_name: Mapped[str | None] = mapped_column(String(80))
+    mobile: Mapped[str | None] = mapped_column(String(10), unique=True, index=True)
 
     def __repr__(self) -> str:
         return f"<User {self.username}>"

@@ -13,6 +13,16 @@ Objective: finish development by 2026-11-30; controlled model experiments in Dec
 database correctness, production stability; P1 Phase B, Amendment 3, SX5, November release readiness; P2 reliability reporting, UI,
 backups; P3 future work. Nothing below is pushed, merged, signed, tagged, deployed or trained. `origin/main` = `cbdb3f6`.
 
+## Three horizons: status on 2026-11-10 (implementation is not activation)
+
+| Horizon | Implementation | Evaluation | Active in prod |
+|---|---|---|---|
+| 5 days | Done: production 5D models 2, 16, 17 exist; h05 evaluation lane built and running | Run 1 in progress 2 Nov to 28 Jan 2027; INCONCLUSIVE until about 40 matured days; `obv_slope` train/serve mismatch known, inside the sealed trial, not fixed | Existing models only; nothing new |
+| 10 days | Tooling exists; DEFERRED by the owner | td-protocol-v1 FAILED (about -0.34% per trade); no td-protocol-v2, no retrain | None; no 10D slot |
+| 15 days | Done as tooling: selection lab (S0/S1/S2, S0M/S1M/S2M), runner guard, Amendment 3 (UNSIGNED), lane slots | Not run on real data; starts from 2026-12-05 after the Phase B record and a signed, tagged Amendment 3 | None; shadow lanes off |
+
+Related, not horizon models in production: Phase B (B1-B3) is an offline selection experiment, not yet run; SX5 sector challenger is built and tested on synthetic data only, never trained, and training needs separate written owner approval and cannot start before 2026-12-04. Passing tests never authorises activation; activation needs the separate guard design (steps 4-7), which is NOT approved and NOT built.
+
 Status words: **MAIN** = already on `origin/main` (checked by ancestry, file names or blob content); **BRANCH** = built and tested on a
 local branch only; **INCOMPLETE** = work remains; **DEFERRED/DROPPED** = decided.
 

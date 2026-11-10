@@ -44,3 +44,24 @@ def reset_email(token: str) -> tuple[str, str, str]:
         "<p>If you did not ask for this, ignore this message; your password has not changed.</p>"
     )
     return "Reset your TradeMind password", text, html
+
+
+def already_registered_email() -> tuple[str, str, str]:
+    base = settings.APP_BASE_URL.rstrip("/")
+    signin, reset = f"{base}/login", f"{base}/reset-password"
+    text = (
+        "Someone tried to sign up for TradeMind with this email address.\n\n"
+        "If it was you, you already have an account. Sign in here:\n"
+        f"{signin}\n\n"
+        "Forgotten your password? Ask for a reset here:\n"
+        f"{reset}\n\n"
+        "If it was not you, ignore this message; nothing has changed on your account."
+    )
+    html = (
+        "<p>Someone tried to sign up for TradeMind with this email address.</p>"
+        "<p>If it was you, you already have an account.</p>"
+        f'<p><a href="{escape(signin)}">Sign in</a> or '
+        f'<a href="{escape(reset)}">reset your password</a>.</p>'
+        "<p>If it was not you, ignore this message; nothing has changed on your account.</p>"
+    )
+    return "Someone tried to sign up with your email on TradeMind", text, html

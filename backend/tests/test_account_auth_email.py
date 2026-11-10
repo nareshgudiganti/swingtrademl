@@ -12,7 +12,7 @@ from sqlalchemy import select
 
 from swing_trade_ml.api.v1.endpoints import account_auth
 from swing_trade_ml.core.config import settings
-from swing_trade_ml.core.security import create_access_token, hash_password
+from swing_trade_ml.core.security import create_access_token, hash_password, verify_password
 from swing_trade_ml.db.models.audit import AuditLog
 from swing_trade_ml.db.models.auth_tokens import AuthToken
 from swing_trade_ml.db.models.session import User
@@ -23,7 +23,11 @@ from swing_trade_ml.services.email import (
     get_sender,
     set_sender_for_tests,
 )
-from swing_trade_ml.services.email.templates import reset_email, verification_email
+from swing_trade_ml.services.email.templates import (
+    already_registered_email,
+    reset_email,
+    verification_email,
+)
 
 API = "/api/v1"
 GOOD_PW = "correct horse battery staple"
@@ -32,6 +36,7 @@ NEW_PW = "another long passphrase here"
 
 @pytest.fixture(autouse=True)
 def _outbox(monkeypatch):
+    account_auth._notice_last.clear()
     sender = LogEmailSender()
     set_sender_for_tests(sender)
     monkeypatch.setattr(settings, "ALLOW_SIGNUP", True)
@@ -189,7 +194,7 @@ def test_register_404_when_signup_closed(client, monkeypatch, _outbox):
 def test_register_creates_free_member_and_sends_verification(client, db_session, _outbox):
     r = _register(client, mobile="98765 43210")
     assert r.status_code == 201, r.text
-    assert "token" in r.json()  # switch off: signed in straight away
+    assert set(r.json()) == {"message"}  # never a login token, whatever the switch says
     u = db_session.execute(select(User).where(User.email == "asha@example.com")).scalar_one()
     assert (u.role, u.plan, u.is_superuser, u.auth_provider) == ("member", "free", False, "local")
     assert u.email_verified_at is None and u.full_name == "Asha Rao" and u.mobile == "9876543210"
@@ -199,10 +204,15 @@ def test_register_creates_free_member_and_sends_verification(client, db_session,
     assert "auth.register" in acts
 
 
-def test_register_withholds_login_token_when_verification_required(client, monkeypatch):
-    monkeypatch.setattr(settings, "REQUIRE_EMAIL_VERIFICATION", True)
+@pytest.mark.parametrize("switch", [False, True])
+@pytest.mark.parametrize("existing", [False, True])
+def test_register_never_returns_a_token(client, db_session, monkeypatch, switch, existing):
+    monkeypatch.setattr(settings, "REQUIRE_EMAIL_VERIFICATION", switch)
+    if existing:
+        _user(db_session, "old", email="asha@example.com")
     r = _register(client)
-    assert r.status_code == 201 and "token" not in r.json()
+    assert r.status_code == 201 and set(r.json()) == {"message"}
+    assert "token" not in r.text and "access" not in r.text
 
 
 def test_register_rejects_weak_password_bad_name_bad_mobile_bad_email(client, _outbox):
@@ -214,11 +224,67 @@ def test_register_rejects_weak_password_bad_name_bad_mobile_bad_email(client, _o
     assert _outbox.outbox == []
 
 
-def test_register_duplicate_email_is_409_generic(client, db_session):
-    _user(db_session, "old", email="Asha@Example.com")
-    r = _register(client)
-    assert r.status_code == 409
-    assert "already" in r.json()["detail"] and "asha@example.com" not in r.json()["detail"].lower()
+def test_register_new_and_existing_email_get_identical_public_answer(client, db_session, _outbox):
+    _user(db_session, "old", email="Taken@Example.com", verified=datetime(2026, 1, 1, tzinfo=UTC))
+    old = db_session.execute(select(User).where(User.username == "old")).scalar_one()
+    before = (old.hashed_password, old.email_verified_at, old.role, old.full_name, old.is_superuser)
+    n_users = len(db_session.execute(select(User)).scalars().all())
+
+    existing = _register(client, email="taken@example.com", full_name="Someone Else", password=NEW_PW)
+    fresh = _register(client, email="brand-new@example.com")
+    assert (existing.status_code, existing.json()) == (fresh.status_code, fresh.json())
+    assert existing.status_code == 201 and set(existing.json()) == {"message"}
+    for h in ("content-type", "content-length", "set-cookie", "location", "www-authenticate"):
+        assert existing.headers.get(h) == fresh.headers.get(h), h
+
+    db_session.expire_all()
+    old = db_session.execute(select(User).where(User.username == "old")).scalar_one()
+    assert (old.hashed_password, old.email_verified_at, old.role, old.full_name, old.is_superuser) == before
+    assert len(db_session.execute(select(User)).scalars().all()) == n_users + 1  # only the new one
+    assert db_session.execute(select(AuthToken).where(AuthToken.user_id == old.id)).first() is None
+
+
+def test_register_existing_email_sends_notice_new_email_sends_verification(client, db_session, _outbox):
+    _user(db_session, "old", email="taken@example.com")
+    _register(client, email="taken@example.com")
+    assert len(_outbox.outbox) == 1 and _outbox.outbox[0].to == "taken@example.com"
+    note = _outbox.outbox[0]
+    assert note.subject == already_registered_email()[0]
+    assert "Someone tried to sign up" in note.text
+    assert "https://app.test/login" in note.text and "https://app.test/reset-password" in note.text
+    assert "token=" not in note.text and "/verify-email" not in note.text
+
+    _register(client, email="fresh@example.com")
+    assert len(_outbox.outbox) == 2 and _outbox.outbox[1].to == "fresh@example.com"
+    assert "/verify-email?token=" in _outbox.outbox[1].text
+
+
+def test_register_notice_is_limited_to_one_per_hour_per_address(client, db_session, _outbox, monkeypatch):
+    _user(db_session, "old", email="taken@example.com")
+    r1 = _register(client, email="taken@example.com")
+    r2 = _register(client, email="TAKEN@example.com")
+    assert (r1.status_code, r1.json()) == (r2.status_code, r2.json())
+    assert len(_outbox.outbox) == 1  # second one suppressed, answer unchanged
+    _register(client, email="taken@example.com", password=NEW_PW)  # other password, same address
+    assert len(_outbox.outbox) == 1
+    monkeypatch.setattr(account_auth, "NOTICE_EVERY_SECONDS", 0)
+    _register(client, email="taken@example.com")
+    assert len(_outbox.outbox) == 2
+
+
+def test_register_validation_errors_do_not_depend_on_the_email_existing(client, db_session, _outbox):
+    _user(db_session, "old", email="taken@example.com")
+    for email in ("taken@example.com", "free@example.com"):
+        assert _register(client, email=email, password="short").status_code == 400
+        assert _register(client, email=email, full_name="1234").status_code == 400
+    assert _outbox.outbox == []
+
+
+def test_already_registered_template_has_links_and_no_token(monkeypatch):
+    monkeypatch.setattr(settings, "APP_BASE_URL", "https://app.test/")
+    _, text, html = already_registered_email()
+    assert "https://app.test/login" in text and "https://app.test/reset-password" in html
+    assert "token" not in text and "token" not in html
 
 
 def test_audit_never_holds_tokens_or_passwords(client, db_session, _outbox):
@@ -375,3 +441,82 @@ def test_public_routes_have_rate_limit_dependencies():
         ]
     for path, limiter in wanted.items():
         assert limiter in found[path], path
+
+
+# ------------------------------------------------- common-password list --
+
+
+def _long_common() -> str:
+    from swing_trade_ml.core.password_policy import load_common_passwords
+
+    return sorted(w for w in load_common_passwords() if len(w) >= 15)[0]
+
+
+def test_bundled_common_password_list_is_loaded_and_has_long_entries():
+    from swing_trade_ml.core.password_policy import check_password, load_common_passwords
+
+    assert len(load_common_passwords()) > 100
+    assert "passwordpassword" in load_common_passwords()
+    assert any("too common" in p for p in check_password("passwordpassword"))  # default None = bundled list
+
+
+def test_no_caller_overrides_the_common_password_list():
+    import pathlib
+
+    root = pathlib.Path(account_auth.__file__).parents[2]
+    for f in root.rglob("*.py"):
+        if f.name != "password_policy.py":
+            assert "common_passwords=" not in f.read_text(encoding="utf-8"), f
+
+
+@pytest.mark.parametrize("pw", ["passwordpassword", "PasswordPassword"])
+def test_register_refuses_a_common_password_even_when_long_enough(client, db_session, _outbox, pw):
+    assert len(pw) >= 15
+    r = _register(client, password=pw)
+    assert r.status_code == 400 and "too common" in r.json()["detail"]
+    r2 = _register(client, password=_long_common())
+    assert r2.status_code == 400 and "too common" in r2.json()["detail"]
+    assert _outbox.outbox == []
+    assert db_session.execute(select(User).where(User.email == "asha@example.com")).first() is None
+
+
+def test_reset_password_refuses_a_common_password_and_keeps_the_link(client, db_session, _outbox):
+    u = _user(db_session, "who")
+    raw = auth_tokens.issue(db_session, u, "reset_password")
+    for pw in ("passwordpassword", _long_common()):
+        r = client.post(f"{API}/auth/reset-password", json={"token": raw, "new_password": pw})
+        assert r.status_code == 400 and "too common" in r.json()["detail"]
+    db_session.refresh(u)
+    assert verify_password(GOOD_PW, u.hashed_password)  # unchanged
+    ok = client.post(f"{API}/auth/reset-password", json={"token": raw, "new_password": NEW_PW})
+    assert ok.status_code == 200  # the link was not burned by the refused tries
+
+
+def test_admin_triggered_reset_goes_through_the_same_checked_route(client, db_session, _outbox):
+    owner = _user(db_session, "boss", role="owner")
+    target = _user(db_session, "who")
+    r = client.post(f"{API}/admin/users/{target.id}/send-reset", headers=_bearer(owner))
+    assert r.status_code == 200
+    raw = _token_from(_outbox, "reset-password")
+    bad = client.post(f"{API}/auth/reset-password", json={"token": raw, "new_password": "passwordpassword"})
+    assert bad.status_code == 400 and "too common" in bad.json()["detail"]
+
+
+@pytest.mark.xfail(
+    strict=True, reason="GAP: /auth/signup (invite path) only checks min_length=8, not check_password"
+)
+def test_gap_invite_signup_does_not_check_common_passwords(client, monkeypatch):
+    monkeypatch.setattr(settings, "ALLOW_SIGNUP", True)
+    r = client.post(f"{API}/auth/signup", json={"username": "gapuser", "password": "passwordpassword"})
+    assert r.status_code == 400
+
+
+@pytest.mark.xfail(strict=True, reason="GAP: /auth/password only checks min_length=8, not check_password")
+def test_gap_change_password_does_not_check_common_passwords(client, db_session):
+    u = _user(db_session, "who")
+    r = client.post(
+        f"{API}/auth/password",
+        headers=_bearer(u),
+        json={"current_password": GOOD_PW, "new_password": "passwordpassword"},
+    )
+    assert r.status_code == 400

@@ -36,7 +36,11 @@ it does not crash.
 3. Open the same link again: it should say the link is no longer valid (single use). Links expire after 1 hour
    (reset) or 24 hours (confirm email).
 4. Ask for a reset for an email that has no account: the page must give the same answer and nothing is sent.
-5. To test sign-up and confirmation, set `ALLOW_SIGNUP=true` temporarily in a non-production environment (or
+5. Sign-up gives the SAME answer whether or not the email is already registered ("If this email can be used, we
+   have sent you a message with the next steps.") and never returns a login token. A new address gets the
+   confirmation email; an existing one gets a private "someone tried to sign up" notice (at most one per hour)
+   and nothing about the account changes. The person signs in after confirming.
+6. To test sign-up and confirmation, set `ALLOW_SIGNUP=true` temporarily in a non-production environment (or
    briefly in production), register with your own second address, confirm the email, then set it back to false.
 
 Do not send test emails to anyone else's address.

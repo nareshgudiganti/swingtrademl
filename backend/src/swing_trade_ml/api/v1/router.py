@@ -34,6 +34,7 @@ from swing_trade_ml.api.v1.endpoints import (
     plans,
     portfolio,
     real_report,
+    release_switches,
     risk,
     safety,
     server_watch,
@@ -60,6 +61,8 @@ api_router.include_router(invites.admin)
 # the app learns what to show), and /admin/* checks for the owner itself.
 api_router.include_router(plans.router)
 api_router.include_router(plans.admin)
+# Owner-only, read-only list of the release switches (checks require_owner itself).
+api_router.include_router(release_switches.admin)
 
 # Everything that can read positions or move money requires either a real
 # dashboard login (JWT) or the shared X-API-Key (for scripts/automation),

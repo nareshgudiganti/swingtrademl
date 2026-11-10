@@ -31,15 +31,19 @@ def test_bundled_list_loads_and_rejects_long_common_one():
     assert check_password("passwordpassword")
 
 
-def test_contains_email_local_part_rejected():
-    assert check_password("my-asha.rao-secret-phrase", email="asha.rao@example.com", common_passwords=NONE)
-    assert check_password("ASHAxrandomwordsxhere", email="asha@example.com", common_passwords=NONE)
-    assert check_password("blue-fox-jumps-high-now", email="asha@example.com", common_passwords=NONE) == []
+def test_password_equal_to_the_email_or_its_name_part_is_rejected():
+    # Only an exact match is refused. Containing a name or email fragment is allowed (owner decision).
+    assert check_password("asha.rao@example.com", email="asha.rao@example.com", common_passwords=NONE)
+    long_local = "averyveryverylongemailname"
+    assert check_password(long_local.upper(), email=f"{long_local}@example.com", common_passwords=NONE)
 
 
-def test_contains_name_token_rejected():
-    assert check_password("lovely-rao-family-trip", name="Asha Rao", common_passwords=NONE)
-    assert check_password("blue-fox-jumps-high-now", name="Asha Rao", common_passwords=NONE) == []
+def test_containing_name_or_email_parts_is_allowed():
+    assert (
+        check_password("my-asha.rao-secret-phrase", email="asha.rao@example.com", common_passwords=NONE) == []
+    )
+    assert check_password("ASHAxrandomwordsxhere", email="asha@example.com", common_passwords=NONE) == []
+    assert check_password("lovely-rao-family-trip", name="Asha Rao", common_passwords=NONE) == []
 
 
 def test_empty_rejected():

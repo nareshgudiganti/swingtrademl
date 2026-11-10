@@ -84,7 +84,9 @@ class LoginRequest(BaseModel):
 
 class SignupRequest(BaseModel):
     username: str = Field(..., min_length=3, max_length=64)
-    password: str = Field(..., min_length=8)
+    # Length and the common-password list are checked by core.password_policy in the endpoint, with
+    # plain-English messages; the schema only bounds the size.
+    password: str = Field(..., max_length=512)
     email: str | None = Field(None, max_length=254)
     # The one-time code from an approved invite (Admin > Invites). With it, sign-up works for
     # that invite's email even while ALLOW_SIGNUP is off.
@@ -100,7 +102,7 @@ class SignupRequest(BaseModel):
 
 class PasswordChangeRequest(BaseModel):
     current_password: str
-    new_password: str = Field(..., min_length=8)
+    new_password: str = Field(..., max_length=512)  # rules: core.password_policy, in the endpoint
 
 
 class TokenResponse(BaseModel):

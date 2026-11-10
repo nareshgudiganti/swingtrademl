@@ -502,21 +502,147 @@ def test_admin_triggered_reset_goes_through_the_same_checked_route(client, db_se
     assert bad.status_code == 400 and "too common" in bad.json()["detail"]
 
 
-@pytest.mark.xfail(
-    strict=True, reason="GAP: /auth/signup (invite path) only checks min_length=8, not check_password"
-)
-def test_gap_invite_signup_does_not_check_common_passwords(client, monkeypatch):
+
+
+def test_invite_signup_refuses_weak_and_common_passwords(client, db_session, monkeypatch):
     monkeypatch.setattr(settings, "ALLOW_SIGNUP", True)
+    for pw in ("passwordpassword", "short", "newperson@example.com"):
+        body = {"username": "gapuser", "password": pw, "email": "newperson@example.com"}
+        assert client.post(f"{API}/auth/signup", json=body).status_code == 400, pw
     r = client.post(f"{API}/auth/signup", json={"username": "gapuser", "password": "passwordpassword"})
-    assert r.status_code == 400
+    assert r.status_code == 400 and "too common" in r.json()["detail"]
+    assert db_session.execute(select(User).where(User.username == "gapuser")).first() is None
+    ok = client.post(f"{API}/auth/signup", json={"username": "gapuser", "password": NEW_PW})
+    assert ok.status_code == 201
 
 
-@pytest.mark.xfail(strict=True, reason="GAP: /auth/password only checks min_length=8, not check_password")
-def test_gap_change_password_does_not_check_common_passwords(client, db_session):
+def test_change_password_refuses_weak_and_common_but_keeps_old_password(client, db_session):
     u = _user(db_session, "who")
-    r = client.post(
-        f"{API}/auth/password",
-        headers=_bearer(u),
-        json={"current_password": GOOD_PW, "new_password": "passwordpassword"},
-    )
-    assert r.status_code == 400
+    for pw in ("passwordpassword", "short", "who@example.com"):
+        body = {"current_password": GOOD_PW, "new_password": pw}
+        r = client.post(f"{API}/auth/password", headers=_bearer(u), json=body)
+        assert r.status_code == 400 and r.json()["detail"], pw
+    db_session.refresh(u)
+    assert verify_password(GOOD_PW, u.hashed_password)
+    body = {"current_password": GOOD_PW, "new_password": NEW_PW}
+    assert client.post(f"{API}/auth/password", headers=_bearer(u), json=body).status_code == 200
+
+
+def test_existing_short_legacy_password_still_logs_in_and_me_works(client, db_session):
+    _user(db_session, "legacy", pw="short1")  # 6 characters, set before the policy
+    r = client.post(f"{API}/auth/login", json={"username": "legacy", "password": "short1"})
+    assert r.status_code == 200, r.text
+    token = r.json()["access_token"]
+    me = client.get(f"{API}/auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert me.status_code == 200 and me.json()["username"] == "legacy"
+
+
+def test_cli_create_user_refuses_weak_and_common_passwords(monkeypatch, capsys):
+    import argparse
+
+    from swing_trade_ml import cli
+    from swing_trade_ml.db import session as db_session_mod
+
+    def boom(*a, **k):
+        raise AssertionError("must not reach the database")
+
+    monkeypatch.setattr(db_session_mod, "session_scope", boom)
+    for pw in ("short", "passwordpassword"):
+        args = argparse.Namespace(username="x", password=pw, email="x@example.com", role="member")
+        assert cli.cmd_create_user(args) == 1
+        out = capsys.readouterr().out
+        assert "at least 15" in out or "too common" in out
+
+
+def test_cli_create_user_accepts_a_good_password(db_session, monkeypatch):
+    import argparse
+    from contextlib import contextmanager
+
+    from swing_trade_ml import cli
+    from swing_trade_ml.db import session as db_session_mod
+
+    @contextmanager
+    def scope():
+        yield db_session
+
+    monkeypatch.setattr(db_session_mod, "session_scope", scope)
+    args = argparse.Namespace(username="cliuser", password=NEW_PW, email=None, role="member")
+    assert cli.cmd_create_user(args) == 0
+    u = db_session.execute(select(User).where(User.username == "cliuser")).scalar_one()
+    assert verify_password(NEW_PW, u.hashed_password)
+
+
+def test_open_signup_conflicts_use_one_generic_message(client, db_session, monkeypatch):
+    monkeypatch.setattr(settings, "ALLOW_SIGNUP", True)
+    _user(db_session, "taken", email="taken@example.com")
+    by_name = client.post(f"{API}/auth/signup", json={"username": "taken", "password": NEW_PW})
+    body = {"username": "other", "password": NEW_PW, "email": "TAKEN@example.com"}
+    by_mail = client.post(f"{API}/auth/signup", json=body)
+    assert by_name.status_code == by_mail.status_code == 409
+    assert by_name.json() == by_mail.json()
+
+
+# ------------------------------------------------ notice throttle: Redis --
+
+
+class _SetNxRedis:
+    def __init__(self):
+        self.keys: dict[str, tuple[str, int | None]] = {}
+
+    def pipeline(self, transaction=True):  # the per-IP request limiter also talks to Redis
+        class _P:
+            def incr(self, key): ...
+            def expire(self, key, ttl): ...
+            def execute(self):
+                return [1, True]
+
+        return _P()
+
+    def set(self, key, value, nx=False, ex=None):
+        if nx and key in self.keys:
+            return None
+        self.keys[key] = (value, ex)
+        return True
+
+
+class _BrokenRedis:
+    def set(self, *a, **k):
+        raise ConnectionError("down")
+
+
+def test_notice_throttle_uses_shared_redis_with_hashed_key_and_one_hour_expiry(
+    client, db_session, _outbox, monkeypatch
+):
+    from swing_trade_ml.api import rate_limit
+
+    monkeypatch.setattr(settings, "RATE_LIMIT_ENABLED", True)
+    fake = _SetNxRedis()
+    rate_limit.set_redis_client(fake)
+    try:
+        _user(db_session, "old", email="taken@example.com")
+        _register(client, email="taken@example.com")
+        _register(client, email="taken@example.com")
+        assert len(_outbox.outbox) == 1
+        ((key, (_, ttl)),) = fake.keys.items()
+        assert ttl == 3600 and key.startswith("notice:already-registered:")
+        assert "taken" not in key and "example" not in key and len(key.rsplit(":", 1)[1]) == 64
+        assert account_auth._notice_last == {}  # in-process memory unused while Redis answers
+        _register(client, email="taken@example.com")  # "another worker": same Redis
+        assert len(_outbox.outbox) == 1
+    finally:
+        rate_limit.set_redis_client(None)
+
+
+def test_notice_throttle_falls_back_to_memory_when_redis_is_down(client, db_session, _outbox, monkeypatch):
+    from swing_trade_ml.api import rate_limit
+
+    monkeypatch.setattr(settings, "RATE_LIMIT_ENABLED", True)
+    rate_limit.set_redis_client(_BrokenRedis())
+    try:
+        _user(db_session, "old", email="taken@example.com")
+        r1 = _register(client, email="taken@example.com")
+        r2 = _register(client, email="taken@example.com")
+        assert (r1.status_code, r1.json()) == (r2.status_code, r2.json())
+        assert r1.status_code == 201 and len(_outbox.outbox) == 1
+    finally:
+        rate_limit.set_redis_client(None)

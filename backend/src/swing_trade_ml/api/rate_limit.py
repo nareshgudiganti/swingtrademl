@@ -134,6 +134,21 @@ def _hit(key: str) -> int | None:
         return None
 
 
+def claim_once(key: str, ttl_seconds: int) -> bool | None:
+    """Shared across workers: True if this call is the first for `key` within `ttl_seconds`
+    (SET NX EX), False if someone already claimed it. None when Redis is off or unusable, so the
+    caller can fall back to its own memory. Never raises. `key` must not hold personal data."""
+    global _down_until
+    if not settings.RATE_LIMIT_ENABLED or time.monotonic() < _down_until:
+        return None
+    try:
+        return bool(_redis().set(key, "1", nx=True, ex=ttl_seconds))
+    except Exception as exc:  # noqa: BLE001 — any Redis/network error: caller falls back
+        _down_until = time.monotonic() + _BACKOFF_SECONDS
+        log.warning("rate_limit.redis_unavailable_allowing", error=type(exc).__name__)
+        return None
+
+
 def _wait_text(seconds: int) -> str:
     return "a minute" if seconds >= 45 else f"{seconds} seconds"
 

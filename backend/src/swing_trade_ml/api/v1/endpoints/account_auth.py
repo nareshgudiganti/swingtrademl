@@ -16,6 +16,7 @@ behind REQUIRE_EMAIL_VERIFICATION (default off).
 
 from __future__ import annotations
 
+import hashlib
 import threading
 import time
 from datetime import UTC, datetime
@@ -26,7 +27,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
 from swing_trade_ml.api.deps import DbSession, Principal
-from swing_trade_ml.api.rate_limit import auth_limit, public_limit
+from swing_trade_ml.api.rate_limit import auth_limit, claim_once, public_limit
 from swing_trade_ml.api.v1.endpoints.auth import _unique_username_from_email
 from swing_trade_ml.api.v1.endpoints.invites import normalise_email, require_owner_signed_in, valid_email
 from swing_trade_ml.core.config import settings
@@ -77,8 +78,13 @@ _notice_last: dict[str, float] = {}
 
 
 def _notice_allowed(email: str) -> bool:
-    """True at most once per hour per address. In-process (no Redis/DB), so with several workers the
-    worst case is one notice per worker per hour; it only ever errs towards a few extra messages."""
+    """True at most once per hour per address. Shared across workers through Redis (the same client the
+    request limiters use); if Redis is off or down it falls back to this process's memory, where several
+    workers could each send one per hour. Either way it never changes the HTTP answer."""
+    digest = hashlib.sha256(email.encode("utf-8")).hexdigest()  # never the raw email in a Redis key
+    shared = claim_once(f"notice:already-registered:{digest}", NOTICE_EVERY_SECONDS)
+    if shared is not None:
+        return shared
     now = time.monotonic()
     with _notice_lock:
         if len(_notice_last) > 5000:  # keep memory bounded

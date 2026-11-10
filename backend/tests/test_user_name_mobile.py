@@ -98,7 +98,8 @@ def test_invalid_names_are_refused(raw):
 def test_single_migration_head_and_parent():
     script = ScriptDirectory.from_config(Config(str(BACKEND / "alembic.ini")))
     heads = script.get_heads()
-    assert heads == ["usernamemob01"]  # final chain asserted in test_migration_chain after integration
+    assert heads == ["authtokens01"]  # the auth-tokens migration sits on top of usernamemob01
+    assert script.get_revision("authtokens01").down_revision == "usernamemob01"
     assert script.get_revision("usernamemob01").down_revision == "ownerprivate01"
 
 

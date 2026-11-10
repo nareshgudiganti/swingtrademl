@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends
 
 from swing_trade_ml.api.deps import require_auth
 from swing_trade_ml.api.v1.endpoints import (
+    account_auth,
     auth,
     backtest,
     beginner,
@@ -54,6 +55,8 @@ api_router = APIRouter()
 #    cannot send custom headers.
 api_router.include_router(system.router)
 api_router.include_router(auth.router)
+api_router.include_router(account_auth.router)
+api_router.include_router(account_auth.admin)
 # Asking for an invite is public (rate-limited); /admin/invites/* checks for the signed-in owner itself.
 api_router.include_router(invites.router)
 api_router.include_router(invites.admin)

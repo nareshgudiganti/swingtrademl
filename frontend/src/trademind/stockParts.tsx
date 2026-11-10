@@ -25,7 +25,46 @@ import './stockpage.css'
 
 // ------------------------------------------------------------------ data --
 
-export type TrailPoint = { date: string; score: number }
+/** One day's score. `model` is the model that gave it ("swing_classifier_smallcap:v1"); null/absent = not recorded. */
+export type TrailPoint = { date: string; score: number; model?: string | null }
+
+// A score only means something next to scores from the SAME model: the daily trail is written by each cap tier's
+// own model, the brain's number comes from the one model it always loads. Those can differ for one stock (KEC:
+// 81 in the trail, 77 from the brain on the same day), so they are never joined into one line.
+const NO_MODEL = 'model not recorded'
+
+/** "swing_classifier_smallcap:v1" and "swing_classifier_smallcap v1" are the same model; null when not recorded. */
+export function modelKey(m: string | null | undefined): string | null {
+  const s = (m ?? '').replace(/:/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase()
+  return s ? s : null
+}
+
+/** The model's name and version as shown to people, or "model not recorded". */
+export function modelLabel(m: string | null | undefined): string {
+  const s = (m ?? '').replace(/:/g, ' ').replace(/\s+/g, ' ').trim()
+  return s || NO_MODEL
+}
+
+/** True only when both sides name a model and it is the same one. A missing name never matches. */
+export function sameModel(a: string | null | undefined, b: string | null | undefined): boolean {
+  const ka = modelKey(a)
+  return ka != null && ka === modelKey(b)
+}
+
+/** The model the brain's stored lines name ("The active model (swing_classifier v2) scores ..."), or null when
+ *  the decision does not say (holdings, and ideas below the buy level, carry no model name).
+ *  DISPLAY TEXT ONLY: it is read from an explanation, so it is never used to decide whether two scores may be
+ *  joined or compared. That needs a structured score_model field captured when the score is made. */
+export function brainModelOf(d: BrainDecision): string | null {
+  for (const r of d.reasons ?? []) {
+    const m = /active model \(([^)]+)\)/i.exec(r)
+    if (m?.[1]) return m[1]
+  }
+  return null
+}
+
+/** The model behind a daily trail: the latest day's model (null when that day did not record one). */
+export const trailModel = (trail: TrailPoint[]): string | null => trail.at(-1)?.model ?? null
 
 /** Everything the two pages read for one stock, in one place (same query keys as the rest of the app). */
 export function useStockData(decision: BrainDecision, run: BrainRun) {
@@ -63,7 +102,7 @@ export function useStockData(decision: BrainDecision, run: BrainRun) {
     last,
     prev,
     change,
-    trail: (trail.data?.score_trail ?? []).map((t) => ({ date: t.date, score: t.score })),
+    trail: (trail.data?.score_trail ?? []).map((t) => ({ date: t.date, score: t.score, model: t.model_version })),
     brief: brief.data as StockBriefData | undefined,
     idea,
     changesNote: changes.data && !changes.data.comparable ? changes.data.note : null,
@@ -294,7 +333,11 @@ export function Glance({
   const word = shownWord(d)
   const pts = scorePoints(d.confidence)
   const level = buyLevel(d)
-  const week = trailWithToday(trail, scoreToday(d, run)).slice(-5)
+  // The bars and the rising/easing mark come from the daily trail's latest single-model run. The big number is the
+  // brain's and is never part of that line.
+  const brain = scoreToday(d, run)
+  const daily = latestRun(trail)
+  const week = daily.slice(-5)
   const first = week[0]?.score
   const latest = week.at(-1)?.score
   const delta = first != null && latest != null ? Math.round((latest - first) * 100) : null
@@ -305,7 +348,7 @@ export function Glance({
   return (
     <div className="sp-glance" data-testid="stock-glance">
       <div className="sp-card sp-stat">
-        <div className="sp-label">Strength score</div>
+        <div className="sp-label">5-day model score</div>
         <div className="sp-row">
           <span className="sp-big">{pts ?? '—'}</span>
           {pts != null && <span className="sp-small" style={{ fontSize: 14 }}>out of 100</span>}
@@ -328,6 +371,11 @@ export function Glance({
           <span>{week.length >= 2 ? `Last ${week.length} days` : ' '}</span>
           {level != null && <span>Buy level: {level}</span>}
         </div>
+        <p className="sp-small" data-testid="glance-score-model">
+          {brain ? `Big number: brain, ${modelLabel(brain.model)}.` : ''}
+          {week.length >= 2 ? ` Bars: daily check, ${modelLabel(trailModel(trail))}.` : ''}
+          {daily.length < trail.length && daily.length > 0 ? ' Earlier days used a different model and are left out.' : ''}
+        </p>
       </div>
 
       <div className="sp-card sp-stat">
@@ -387,15 +435,24 @@ const MONITOR_DAYS = 7
 export function scoreToday(d: BrainDecision, run: BrainRun): TrailPoint | null {
   if (d.confidence == null || !run.started_at) return null
   const date = new Date(run.started_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
-  return { date, score: d.confidence }
+  return { date, score: d.confidence, model: brainModelOf(d) }
 }
 
-/** The daily readings with today's headline score as the last point, so the list ends on the SAME number the
- *  page headline shows. The earlier days are the daily model's readings; a reading dated today (or later) is
- *  replaced by the headline rather than shown beside it. */
-export function trailWithToday(trail: TrailPoint[], today?: TrailPoint | null): TrailPoint[] {
-  if (!today) return trail
-  return [...trail.filter((t) => t.date < today.date), today]
+/** The latest unbroken run of days that came from ONE known model, oldest first. Every trend (arrow, weekly change,
+ *  bars) and any threshold line must be built from this and nothing longer: a line drawn across a model change
+ *  shows the change of model as if it were the stock changing. A latest day with no recorded model has no
+ *  comparable run (empty). The brain's own score is never part of this series. */
+export function latestRun(trail: TrailPoint[]): TrailPoint[] {
+  const key = modelKey(trail.at(-1)?.model)
+  if (key == null) return []
+  let start = trail.length - 1
+  while (start > 0 && modelKey(trail[start - 1]!.model) === key) start--
+  return trail.slice(start)
+}
+
+/** True when day `b` follows day `a` on the same known model, so a move between them means something. */
+export function comparableDays(a: TrailPoint | undefined, b: TrailPoint): boolean {
+  return a != null && sameModel(a.model, b.model)
 }
 
 const dayMonth = (iso: string) =>
@@ -417,15 +474,17 @@ export function ScoreMonitor({
   level?: number | string | null
   today?: TrailPoint | null
 }) {
-  const days = trailWithToday(trail, today).slice(-MONITOR_DAYS)
+  // The daily days only. The brain's score (`today`) is shown on its own below and is never a point on this line.
+  const days = trail.slice(-MONITOR_DAYS)
+  const broken = days.some((t, i) => i > 0 && !comparableDays(days[i - 1], t))
   return (
-    <section className="sp-card sp-monitor" aria-label="Strength score, day by day" data-testid="score-monitor">
+    <section className="sp-card sp-monitor" aria-label="5-day model score, day by day" data-testid="score-monitor">
       <div className="sp-flow-head" style={{ marginBottom: 0 }}>
         <div>
           <h2 className="sp-h2">Is the score holding up?</h2>
           <div className="sp-sub">
-            The strength score on each of the last days the model checked this stock. The last one is today’s score, the same
-            number as the headline.
+            {`The 5-day model score on each of the last days the daily check ran (${modelLabel(trailModel(trail))}).`}
+            {broken && ' Where the model changed, the line is broken and no move is counted across the break.'}
           </div>
         </div>
         {level != null && <span className="sp-pill sp-pill-amber">Buy level: {level}</span>}
@@ -437,13 +496,26 @@ export function ScoreMonitor({
           <ol className="sp-monitor-days">
             {days.map((t, i) => {
               const before = days[i - 1]
-              const move = before ? Math.round((t.score - before.score) * 100) : null
+              // A move only means something between two days of the SAME KNOWN model.
+              const same = comparableDays(before, t)
+              const move = same ? Math.round((t.score - before!.score) * 100) : null
               const gap = before ? daysBetween(before.date, t.date) > 3 : false
               return (
-                <li key={t.date} data-testid="score-monitor-day" className={i === days.length - 1 ? 'sp-monitor-now' : undefined}>
+                <li
+                  key={t.date}
+                  data-testid="score-monitor-day"
+                  data-model-break={before && !same ? 'true' : undefined}
+                  className={i === days.length - 1 ? 'sp-monitor-now' : undefined}
+                  style={before && !same ? { borderLeft: '2px dashed currentColor', paddingLeft: 8 } : undefined}
+                  title={modelLabel(t.model)}
+                >
                   <span className="sp-small">{dayMonth(t.date)}</span>
                   <strong>{Math.round(t.score * 100)}</strong>
-                  {move != null && move !== 0 ? (
+                  {before && !same ? (
+                    <span className="sp-small" data-testid="score-monitor-break">
+                      model changed: {modelLabel(t.model)}
+                    </span>
+                  ) : move != null && move !== 0 ? (
                     <span className={move > 0 ? 'sp-pos' : 'sp-neg'}>
                       {move > 0 ? '▲' : '▼'} {Math.abs(move)}
                     </span>
@@ -456,6 +528,12 @@ export function ScoreMonitor({
             })}
           </ol>
         </div>
+      )}
+      {today && (
+        <p className="sp-small" data-testid="score-monitor-brain">
+          <b>Brain’s score today: {Math.round(today.score * 100)}</b> · 5-day model score · {modelLabel(today.model)}. It is
+          shown on its own: it is not a point on the daily line above, and the two are not compared.
+        </p>
       )}
     </section>
   )
@@ -862,7 +940,11 @@ export function IdeaFigures({ d }: { d: BrainDecision }) {
   // Daily candles are stamped IST midnight (18:30 UTC the day before): read the date in India, not UTC.
   const lastTs = rows.at(-1)?.ts
   const closeDay = lastTs ? dayLabel(new Date(lastTs).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })) : null
-  const week = (trail.data?.score_trail ?? []).slice(-5)
+  // The number is the BRAIN's. The arrow and bars are the daily trail's own latest single-model run: a separate
+  // series, named in the tooltips, never joined to the brain's number and never across a model change.
+  const fullTrail = (trail.data?.score_trail ?? []).map((t) => ({ date: t.date, score: t.score, model: t.model_version }))
+  const week = latestRun(fullTrail).slice(-5)
+  const dailyModel = modelLabel(trailModel(fullTrail))
   const pts = scorePoints(d.confidence)
   const first = week[0]?.score
   const latest = week.at(-1)?.score
@@ -870,15 +952,20 @@ export function IdeaFigures({ d }: { d: BrainDecision }) {
   return (
     <span className="spf" data-testid="idea-figures">
       <span className="spf-col">
-        <span className="spf-k">SCORE</span>
+        <span className="spf-k" title={`5-day model score · brain · ${modelLabel(brainModelOf(d))}`}>SCORE</span>
         <span className="spf-v">
           {pts ?? '—'}
           {week.length >= 2 && Math.abs(delta) >= 2 && (
-            <span className={`spf-d ${delta > 0 ? 'sp-pos' : 'sp-neg'}`}>{delta > 0 ? '▲' : '▼'}</span>
+            <span
+              className={`spf-d ${delta > 0 ? 'sp-pos' : 'sp-neg'}`}
+              title={`Daily check, ${dailyModel}: ${delta > 0 ? 'up' : 'down'} ${Math.abs(delta)} over ${week.length} days`}
+            >
+              {delta > 0 ? '▲' : '▼'}
+            </span>
           )}
         </span>
         {week.length >= 2 && (
-          <span className="spf-bars" aria-hidden="true">
+          <span className="spf-bars" aria-hidden="true" title={`Daily check, ${dailyModel}`}>
             {week.map((t, i) => (
               <i key={t.date} style={{ background: i === 0 || t.score >= week[i - 1]!.score ? '#1f9d6b' : '#d93a49' }} />
             ))}
@@ -914,7 +1001,9 @@ export function PeekCard({ decision: d, run, reason }: { decision: BrainDecision
   const rank = d.kind === 'idea' ? scoreRank(d.confidence, scores) : null
   const moved = data.idea?.placesMoved ?? null
   const pct = data.change != null && data.prev ? (data.change / data.prev) * 100 : null
-  const trend = trendText(data.trail.slice(-5))
+  // The trend is the daily trail's own latest single-model run, a separate series from the brain's number.
+  const trend = trendText(latestRun(data.trail).slice(-5))
+  const trendTitle = `Daily check, ${modelLabel(trailModel(data.trail))}`
   const cap = caps.get(d.symbol.toUpperCase())
   const to = `/trademind/stock/${encodeURIComponent(d.symbol)}/analysis`
   const tone = wordTone(word)
@@ -936,9 +1025,15 @@ export function PeekCard({ decision: d, run, reason }: { decision: BrainDecision
       </div>
       <div className="spf-tiles">
         <div>
-          <span className="sp-label">Score</span>
+          <span className="sp-label" title={`5-day model score · ${modelLabel(brainModelOf(d))}`}>
+            Score
+          </span>
           <b>{pts ?? '—'}</b>
-          {trend && <small className={trend.startsWith('▼') ? 'sp-neg' : trend.startsWith('▲') ? 'sp-pos' : ''}>{trend}</small>}
+          {trend && (
+            <small title={trendTitle} className={trend.startsWith('▼') ? 'sp-neg' : trend.startsWith('▲') ? 'sp-pos' : ''}>
+              {trend}
+            </small>
+          )}
         </div>
         <div>
           <span className="sp-label">Rank</span>

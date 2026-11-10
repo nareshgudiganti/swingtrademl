@@ -21,6 +21,8 @@ import {
   BrainFlow,
   buyLevel,
   CompanyCard,
+  latestRun,
+  modelLabel,
   PlanLadder,
   QuickAnswers,
   ScoreMonitor,
@@ -28,6 +30,7 @@ import {
   shownWord,
   StockHeader,
   stepPasses,
+  trailModel,
   useStockData,
   WhyNoTrade,
   wordSay,
@@ -135,7 +138,7 @@ function StockAnalysisView({ decision: d, run }: { decision: BrainDecision; run:
       <ModelEvidence decision={d} />
 
       <div className="sp-split">
-        <ScoreChart decision={d} trail={data.trail} />
+        <ScoreChart trail={data.trail} />
         <WhatAISees decision={d} run={run} />
       </div>
 
@@ -184,25 +187,26 @@ function StockAnalysisView({ decision: d, run }: { decision: BrainDecision; run:
 
 // ------------------------------------------------------------- score chart
 
-function ScoreChart({ decision: d, trail }: { decision: BrainDecision; trail: TrailPoint[] }) {
-  const days = trail.slice(-12)
-  const level = buyLevel(d)
+export function ScoreChart({ trail }: { trail: TrailPoint[] }) {
+  // Only the latest unbroken run of one known model is drawn. The brain's buy level belongs to the brain's score,
+  // not to this model, so it is deliberately not drawn here.
+  const run = latestRun(trail)
+  const days = run.slice(-12)
+  const cut = run.length < trail.length ? trail[trail.length - run.length - 1] : undefined
   return (
-    <section className="sp-card sp-stack" style={{ flex: '1 1 560px' }} aria-label="Strength score, day by day" data-testid="score-chart">
+    <section className="sp-card sp-stack" style={{ flex: '1 1 560px' }} aria-label="5-day model score, day by day" data-testid="score-chart">
       <div>
-        <h2 className="sp-h2">Strength score, day by day</h2>
-        <div className="sp-sub">{level != null ? 'Above the dashed line, the brain likes it enough to buy.' : 'How strongly the model liked this stock each day.'}</div>
+        <h2 className="sp-h2">5-day model score, day by day</h2>
+        <div className="sp-sub" data-testid="score-chart-model">
+          How strongly the daily check’s model liked this stock each day. Model: {modelLabel(trailModel(trail))}.
+          {cut && ` Days up to ${cut.date} came from a different model and are left out.`}
+        </div>
       </div>
       {days.length < 2 ? (
-        <p className="sp-small">No daily scores saved for this stock yet. The list starts with the next daily check.</p>
+        <p className="sp-small">Not enough daily scores from one model yet. The line starts with the next daily checks.</p>
       ) : (
         <>
           <div className="sp-chart">
-            {level != null && (
-              <div className="sp-chart-line" style={{ bottom: `${level}%` }}>
-                <span>Buy level {level}</span>
-              </div>
-            )}
             {days.map((t, i) => (
               <i key={t.date} style={{ height: `${Math.max(3, Math.round(t.score * 100))}%` }} title={`${t.date}: ${Math.round(t.score * 100)}`}>
                 {i === days.length - 1 && <em>{Math.round(t.score * 100)}</em>}

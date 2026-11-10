@@ -158,6 +158,16 @@ def trails_for(db: Session, position_ids: list[int], limit: int = 30) -> dict[in
 # --------------------------------------------------------------------------
 
 
+# The one-year value model answers a different question from the swing models; its score is never
+# drawn on the stock trail.
+EXCLUDED_TRAIL_MODELS = frozenset({"long_term_value"})
+
+
+def model_name_of(model_version: str | None) -> str:
+    """"swing_classifier:v2" -> "swing_classifier"; no model recorded -> "" (its own line)."""
+    return (model_version or "").split(":", 1)[0][:64]
+
+
 def record_stock_scores(
     db: Session,
     scores: list[tuple[int, float, str | None]],
@@ -166,28 +176,33 @@ def record_stock_scores(
 ) -> int:
     """Store today's score for each (instrument_id, score, model_version).
 
-    A second scan the same day replaces that day's row. Never raises: this is
-    a display feature and must not be able to break scanning or trading, so any
-    failure is logged and rolled back inside a savepoint. Returns rows written.
+    One row per stock, day and model: a second scan by the SAME model replaces that day's row,
+    a different model gets its own row instead of overwriting. Never raises: this is a display
+    feature and must not be able to break scanning or trading, so any failure is logged and
+    rolled back inside a savepoint. Returns rows written.
     """
+    scores = [t for t in scores if model_name_of(t[2]) not in EXCLUDED_TRAIL_MODELS]
     if not scores:
         return 0
     today = today or datetime.now(IST).date()
     try:
         with db.begin_nested():
-            latest: dict[int, tuple[float, str | None]] = {i: (s, m) for i, s, m in scores}
+            latest: dict[tuple[int, str], tuple[float, str | None]] = {
+                (i, model_name_of(m)): (s, m) for i, s, m in scores
+            }
             existing = {
-                r.instrument_id: r
+                (r.instrument_id, r.model_name): r
                 for r in db.execute(
                     select(StockScore).where(
-                        StockScore.as_of == today, StockScore.instrument_id.in_(list(latest))
+                        StockScore.as_of == today,
+                        StockScore.instrument_id.in_({i for i, _ in latest}),
                     )
                 ).scalars()
             }
-            for instrument_id, (score, model_version) in latest.items():
+            for (instrument_id, name), (score, model_version) in latest.items():
                 version = model_version[:64] if model_version else None
                 band = score_band(score, exit_confidence)
-                row = existing.get(instrument_id)
+                row = existing.get((instrument_id, name))
                 if row is None:
                     db.add(
                         StockScore(
@@ -196,6 +211,7 @@ def record_stock_scores(
                             score=score,
                             band=band,
                             model_version=version,
+                            model_name=name,
                         )
                     )
                 else:
@@ -206,17 +222,32 @@ def record_stock_scores(
         return 0
 
 
+def one_model_rows(rows: list[StockScore]) -> list[StockScore]:
+    """Keep only the rows of the model that scored this stock most recently.
+
+    A stock's trail is one line from one model. If several models wrote rows, the newest day wins
+    (ties go to the model name that sorts first, so the choice never flips between calls).
+    """
+    rows = [r for r in rows if r.model_name not in EXCLUDED_TRAIL_MODELS]
+    if not rows:
+        return []
+    newest = max(r.as_of for r in rows)
+    name = min(r.model_name for r in rows if r.as_of == newest)
+    return [r for r in rows if r.model_name == name]
+
+
 def stock_trail(db: Session, instrument_id: int, limit: int = 30) -> list[dict[str, Any]]:
-    """Oldest-first {date, score, band, model_version} for one stock; gaps stay gaps."""
+    """Oldest-first {date, score, band, model_version} for one stock, from ONE model; gaps stay gaps."""
     rows = list(
         db.execute(
             select(StockScore)
             .where(StockScore.instrument_id == instrument_id)
             .order_by(StockScore.as_of.desc())
-            .limit(limit)
+            .limit(limit * 4)  # headroom: other models' rows share the same days
         ).scalars()
     )
+    kept = one_model_rows(rows)[:limit]
     return [
         {"date": r.as_of.isoformat(), "score": r.score, "band": r.band, "model_version": r.model_version}
-        for r in reversed(rows)
+        for r in reversed(kept)
     ]

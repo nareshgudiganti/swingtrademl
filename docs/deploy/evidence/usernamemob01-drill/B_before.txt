@@ -1,0 +1,6 @@
+1|owner1|owner@example.test|local|member
+2|member1|member1@example.test|local|member
+3|member_noemail||local|member
+4|g_email|g1@example.test|google|member
+5|g_noemail||google|member
+6|tester1|tester@example.test|local|tester

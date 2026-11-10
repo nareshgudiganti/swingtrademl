@@ -122,6 +122,10 @@ class CurrentUserOut(BaseModel):
     is_superuser: bool
     role: str
     plan: str
+    # Own profile only (/auth/me). Never add these to a listing other members can see.
+    full_name: str | None = None
+    mobile: str | None = None
+    email_verified_at: datetime | None = None
 
 
 class KiteLoginResponse(BaseModel):

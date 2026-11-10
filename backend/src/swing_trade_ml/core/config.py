@@ -59,6 +59,12 @@ class Settings(BaseSettings):
     # Self-registration. Off by default; invitations replace it (release C). Turn on in .env only for local development.
     ALLOW_SIGNUP: bool = False
 
+    # Release switches (core/release_switches.py). Both OFF: they only gate NEW surfaces.
+    # Customer screens visible to non-owner customers.
+    ALLOW_CUSTOMER_SCREENS: bool = False
+    # A trained model may be promoted to live use.
+    ALLOW_MODEL_PROMOTION: bool = False
+
     # Google "Sign in with Google" — from console.cloud.google.com, an OAuth
     # 2.0 Client ID (type: Web application) with this exact redirect URI added.
     GOOGLE_CLIENT_ID: str = ""

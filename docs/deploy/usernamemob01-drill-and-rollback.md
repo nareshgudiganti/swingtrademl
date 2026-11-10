@@ -46,3 +46,7 @@ This does not matter today because nothing reads the column. It matters as soon 
 | Real Google sign-in end to end | OPEN | The drill seeded Google users straight into the database. It did not exercise the Google OAuth flow. |
 | Kite smoke test (login, token, a read-only call) | OPEN | Not touched by the drill. Kite logins go to production only. |
 | Rollback runbook updated with the warning above before verification is enabled | OPEN | Must be done before `REQUIRE_EMAIL_VERIFICATION` is turned on. |
+
+## Integration note, 2026-11-11
+
+At integration (branch `integration/saas-private`) the parent of `usernamemob01` changed from `wlquantity01` to `ownerprivate01` (the owner-private migration that reached `main` first). The chain is now `wlquantity01 -> ownerprivate01 -> usernamemob01 -> authtokens01 -> billing01`. The drill above covered `ae83428` on the old parent only and must be re-run on the final integration commit. See `docs/deploy/evidence/integration-drill/`.

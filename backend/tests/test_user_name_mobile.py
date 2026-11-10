@@ -98,8 +98,8 @@ def test_invalid_names_are_refused(raw):
 def test_single_migration_head_and_parent():
     script = ScriptDirectory.from_config(Config(str(BACKEND / "alembic.ini")))
     heads = script.get_heads()
-    assert heads == ["usernamemob01"]
-    assert script.get_revision("usernamemob01").down_revision == "wlquantity01"
+    assert heads == ["usernamemob01"]  # final chain asserted in test_migration_chain after integration
+    assert script.get_revision("usernamemob01").down_revision == "ownerprivate01"
 
 
 def test_model_columns_are_nullable_and_mobile_not_unique():
@@ -149,7 +149,7 @@ def _load_migration(conn):
     spec = spec_from_file_location("user_name_mobile_migration", path)
     migration = module_from_spec(spec)
     spec.loader.exec_module(migration)
-    assert migration.down_revision == "wlquantity01"
+    assert migration.down_revision == "ownerprivate01"
     migration.op = Operations(MigrationContext.configure(conn))
     return migration
 

@@ -159,7 +159,10 @@ def plan_access_for(db: Session, principal: Principal, preview: str | None = Non
         # A member never: "plans off" no longer means "everyone sees the house book" (S1).
         return PlanAccess(unrestricted=True, plan=None)
     else:
-        user_plan = principal.user.plan if principal.user else None
+        from swing_trade_ml.services.billing.entitlement import effective_plan_for_user
+
+        # Stored plan unless billing is on and a subscription or grant lifts this person to Pro.
+        user_plan = effective_plan_for_user(db, principal.user) if principal.user else None
         key, previewing = (user_plan if user_plan in PLAN_KEYS else DEFAULT_PLAN), False
     plan = get_plan(db, key)
     return PlanAccess(

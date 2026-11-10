@@ -9,6 +9,7 @@ from swing_trade_ml.api.v1.endpoints import (
     auth,
     backtest,
     beginner,
+    billing,
     brain,
     brain_changes,
     brain_golive,
@@ -60,6 +61,9 @@ api_router.include_router(invites.admin)
 # the app learns what to show), and /admin/* checks for the owner itself.
 api_router.include_router(plans.router)
 api_router.include_router(plans.admin)
+# Pro billing: 404 unless BILLING_ENABLED; each route checks its own caller (see endpoints/billing.py).
+api_router.include_router(billing.router)
+api_router.include_router(billing.admin)
 
 # Everything that can read positions or move money requires either a real
 # dashboard login (JWT) or the shared X-API-Key (for scripts/automation),

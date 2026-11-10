@@ -476,6 +476,7 @@ def _get_or_create_real_trading_strategy(db: DbSession) -> Strategy:
         is_active=True,
         mode="live",
         execution_mode="advisory",
+        owner_private=True,  # the owner's real Zerodha book: never a member's to see
     )
     db.add(strategy)
     db.flush()

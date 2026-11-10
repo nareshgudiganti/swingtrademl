@@ -44,6 +44,7 @@ def ensure_brain_strategy(db: Session) -> Strategy:
         is_active=True,
         mode=current_mode(),
         execution_mode="advisory",
+        owner_private=False,  # the brain's ideas are member-facing
     )
     db.add(row)
     db.commit()

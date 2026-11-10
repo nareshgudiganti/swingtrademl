@@ -90,7 +90,7 @@ def strategy_visible(strategy: Strategy | None, access: PlanAccess) -> bool:
         return True
     if strategy is None or strategy.strategy_type != "ml_swing":
         return False
-    if strategy.name == REAL_TRADING_STRATEGY_NAME:
+    if strategy.name == REAL_TRADING_STRATEGY_NAME or is_owner_private_strategy(strategy):
         return False
     model_name = (strategy.params or {}).get("model_name") or BASE_MODEL
     if not access.has("all_models") and model_name != BASE_MODEL:
@@ -102,8 +102,11 @@ def strategy_visible(strategy: Strategy | None, access: PlanAccess) -> bool:
 def is_owner_private_strategy(strategy: Strategy | None, owns_live_book: bool = False) -> bool:
     """Is this strategy the owner's own hand-recorded book, never a member's to see?
 
-    Decided from data markers, not the name alone, so renaming a strategy does
-    not unhide it. Private when ANY of these holds:
+    Decided from the explicit `owner_private` flag AND data markers, not the
+    name alone, so renaming a strategy does not unhide it. Private when ANY
+    of these holds:
+    - its `owner_private` flag is set (the default for a strategy nobody has
+      classified; member-facing creation paths clear it);
     - its name is a hand-book name (`real_trading`, `tester_paper`);
     - its type is the manual paper-testing type (`tester_paper`);
     - it is advisory (never auto-ordered) AND either stored as mode `live`
@@ -113,6 +116,9 @@ def is_owner_private_strategy(strategy: Strategy | None, owns_live_book: bool = 
     """
     if strategy is None:
         return False
+    # Defence in depth: the explicit flag OR the data markers. Can only be MORE private.
+    if strategy.owner_private is True:
+        return True
     if strategy.name in HAND_BOOK_STRATEGY_NAMES or strategy.strategy_type in NON_SCAN_STRATEGY_TYPES:
         return True
     if strategy.strategy_type in STAGED_TYPES:
@@ -125,7 +131,8 @@ def owner_private_strategy_ids(db: Session) -> set[int]:
     live_owners = set(
         db.execute(select(Position.strategy_id).where(Position.mode == "live")).scalars()
     ) | set(db.execute(select(Trade.strategy_id).where(Trade.mode == "live")).scalars())
-    return {
+    flagged = set(db.execute(select(Strategy.id).where(Strategy.owner_private.is_(True))).scalars())
+    return flagged | {
         s.id
         for s in db.execute(select(Strategy)).scalars()
         if is_owner_private_strategy(s, s.id in live_owners)

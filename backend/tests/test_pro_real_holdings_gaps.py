@@ -6,6 +6,7 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
+from sqlalchemy import update
 
 from brain_m18_fixtures import DAY, at, instrument
 from swing_trade_ml.core.enums import SignalType
@@ -52,6 +53,7 @@ def _signal(
     *,
     strat_mode: str = "paper",
     execution_mode: str = "auto",
+    owner_private: bool = False,
 ) -> Strategy:
     strat = Strategy(
         name=strat_name,
@@ -60,6 +62,7 @@ def _signal(
         is_active=True,
         mode=strat_mode,
         execution_mode=execution_mode,
+        owner_private=owner_private,
     )
     db.add(strat)
     db.flush()
@@ -148,15 +151,25 @@ def _seed_buy_list(db, *, rename_real: bool = False):
     """Member-facing rows (model, brain, rule) beside every kind of owner-private row."""
     _signal(db, "prg_model", "ml_swing", "PRGMODEL", 929004)
     _signal(db, "prg_brain", "brain", "PRGBRAIN", 929005, execution_mode="advisory")
-    _signal(db, "prg_rules", "rule_based", "PRGRULE", 929003)
+    _signal(db, "prg_rules", "sma_crossover", "PRGRULE", 929003)
     # The owner's real Zerodha book, exactly as import-holdings creates it.
     real = _signal(
-        db, "real_trading", "ml_swing", "PRGREALSIG", 929002, strat_mode="live", execution_mode="advisory"
+        db, "real_trading",
+        "ml_swing",
+        "PRGREALSIG",
+        929002,
+        strat_mode="live",
+        execution_mode="advisory",
+        owner_private=True,
     )
     # Manual paper-testing book.
-    tester = _signal(db, "tester_paper", "tester_paper", "PRGTESTER", 929006, execution_mode="auto")
+    tester = _signal(
+        db, "tester_paper", "tester_paper", "PRGTESTER", 929006, execution_mode="auto", owner_private=True
+    )
     # A hand book that kept no name or mode marker, only its live positions.
-    owned = _signal(db, "prg_owned_live", "ml_swing", "PRGOWNED", 929007, execution_mode="advisory")
+    owned = _signal(
+        db, "prg_owned_live", "ml_swing", "PRGOWNED", 929007, execution_mode="advisory", owner_private=True
+    )
     other = instrument(db, "PRGOWNEDPOS", 929008)
     db.add(
         Position(
@@ -169,13 +182,15 @@ def _seed_buy_list(db, *, rename_real: bool = False):
             entry_at=at(DAY),
         )
     )
+    # Ambiguous: a type nobody has classified. Private until reviewed (the flag's safe default).
+    _signal(db, "prg_unknown", "prg_mystery_type", "PRGUNKNOWN", 929009, owner_private=True)
     if rename_real:
         real.name = "prg_renamed_real"
         tester.name = "prg_renamed_tester"
     db.flush()
 
 
-PRIVATE = {"PRGREALSIG", "PRGTESTER", "PRGOWNED"}
+PRIVATE = {"PRGREALSIG", "PRGTESTER", "PRGOWNED", "PRGUNKNOWN"}
 SHOWN = {"PRGMODEL", "PRGBRAIN", "PRGRULE"}
 
 
@@ -219,3 +234,113 @@ def test_owner_buy_list_unchanged(client, db_session, people, headers_key):
 
 def test_anonymous_refused_on_buy_list(client):
     assert client.get("/api/v1/signals/buy-list").status_code in (401, 403)
+
+
+# ---- the explicit owner_private flag -----------------------------------------------
+
+
+def test_flag_false_on_ambiguous_strategy_makes_it_visible(client, db_session, people):
+    _seed_buy_list(db_session)
+    db_session.execute(update(Strategy).where(Strategy.name == "prg_unknown").values(owner_private=False))
+    r = client.get("/api/v1/signals/buy-list", headers=people["pro"])
+    assert _syms(r) == SHOWN | {"PRGUNKNOWN"}
+
+
+def test_flag_false_does_not_unhide_a_strategy_the_old_markers_call_private(client, db_session, people):
+    _seed_buy_list(db_session, rename_real=True)
+    db_session.execute(update(Strategy).values(owner_private=False))  # every flag cleared
+    r = client.get("/api/v1/signals/buy-list", headers=people["pro"])
+    # real (renamed, advisory + live), tester (type marker) and owned (live position) stay hidden by
+    # markers; only the unclassified one becomes visible.
+    assert _syms(r) == SHOWN | {"PRGUNKNOWN"}
+
+
+def test_flag_true_hides_even_a_model_strategy(client, db_session, people):
+    _signal(db_session, "prg_model_hidden", "ml_swing", "PRGHIDDEN", 929010, owner_private=True)
+    r = client.get("/api/v1/signals/buy-list", headers=people["pro"])
+    assert "PRGHIDDEN" not in _syms(r)
+
+
+def test_owner_private_ids_use_the_flag(db_session):
+    from swing_trade_ml.services.plans import is_owner_private_strategy, owner_private_strategy_ids
+
+    a = _signal(db_session, "prg_a", "ml_swing", "PRGA", 929011, owner_private=True)
+    b = _signal(db_session, "prg_b", "ml_swing", "PRGB", 929012, owner_private=False)
+    ids = owner_private_strategy_ids(db_session)
+    assert a.id in ids and b.id not in ids
+    assert is_owner_private_strategy(a) and not is_owner_private_strategy(b)
+    assert not is_owner_private_strategy(None)
+
+
+def test_strategy_visible_unchanged_for_member_facing_model_strategies(db_session):
+    """Regression: with the flag cleared, members see exactly what they saw before the flag existed."""
+    from swing_trade_ml.api.deps import PlanAccess
+    from swing_trade_ml.services.plans import strategy_visible
+
+    limits_all = {"allowed_cap_tiers": ["large", "midcap", "smallcap"]}
+    pro = PlanAccess(unrestricted=False, plan="pro", features=frozenset({"all_models"}), limits=limits_all)
+    free = PlanAccess(unrestricted=False, plan="free", features=frozenset(), limits=limits_all)
+    owner = PlanAccess(unrestricted=True, plan=None)
+    model = _signal(db_session, "prg_vis_model", "ml_swing", "PRGV1", 929013)
+    other = _signal(db_session, "prg_vis_other", "ml_swing", "PRGV2", 929014)
+    other.params = {"model_name": "some_other_model"}
+    brain = _signal(db_session, "prg_vis_brain", "brain", "PRGV3", 929015, execution_mode="advisory")
+    sma = _signal(db_session, "prg_vis_sma", "sma_crossover", "PRGV4", 929016)
+    names = ("prg_vis_model", "prg_vis_other", "prg_vis_brain", "prg_vis_sma")
+    got = {
+        (who, s.name): strategy_visible(s, acc)
+        for who, acc in (("pro", pro), ("free", free), ("owner", owner))
+        for s in (model, other, brain, sma)
+    }
+    # Old rule: plan users see ml_swing only (other models need all_models); the owner sees all.
+    assert got[("pro", "prg_vis_model")] and got[("pro", "prg_vis_other")]
+    assert not got[("pro", "prg_vis_brain")] and not got[("pro", "prg_vis_sma")]
+    assert got[("free", "prg_vis_model")] and not got[("free", "prg_vis_other")]
+    assert all(got[("owner", n)] for n in names)
+    # A flagged model strategy is now refused for plan users, never for the owner.
+    model.owner_private = True
+    assert not strategy_visible(model, pro) and strategy_visible(model, owner)
+
+
+# ---- creation paths ----------------------------------------------------------------
+
+
+def test_service_creation_paths_set_the_flag(db_session):
+    from swing_trade_ml.api.v1.endpoints.portfolio import _get_or_create_real_trading_strategy
+    from swing_trade_ml.services.brain_golive.shadow import ensure_brain_strategy
+    from swing_trade_ml.services.tester_paper import get_or_create_strategy
+
+    assert get_or_create_strategy(db_session).owner_private is True
+    assert _get_or_create_real_trading_strategy(db_session).owner_private is True
+    assert ensure_brain_strategy(db_session).owner_private is False
+
+
+@pytest.mark.parametrize(
+    ("name", "stype", "execution_mode", "mode", "private"),
+    [
+        ("m", "ml_swing", "auto", "paper", False),
+        ("r", "sma_crossover", "auto", "paper", False),
+        ("b", "brain", "advisory", "paper", False),
+        ("real_trading", "ml_swing", "advisory", "live", True),
+        ("x", "ml_swing", "advisory", "live", True),
+        ("t", "tester_paper", "auto", "paper", True),
+        ("l", "long_term_value", "advisory", "paper", True),
+        ("tester_paper", "ml_swing", "auto", "paper", True),
+    ],
+)
+def test_create_policy(name, stype, execution_mode, mode, private):
+    from swing_trade_ml.core.strategy_policy import creates_owner_private_strategy
+
+    assert creates_owner_private_strategy(name, stype, execution_mode, mode) is private
+
+
+def test_strategies_endpoint_sets_the_flag(client, db_session):
+    def make(name, stype, **extra):
+        body = {"name": name, "strategy_type": stype, **extra}
+        r = client.post("/api/v1/strategies", json=body, headers=KEY)
+        assert r.status_code in (200, 201), r.text
+        return db_session.query(Strategy).filter_by(name=name).one().owner_private
+
+    assert make("prg_new_model", "ml_swing") is False
+    assert make("prg_new_rule", "sma_crossover") is False
+    assert make("prg_new_live", "ml_swing", execution_mode="advisory", mode="live") is True

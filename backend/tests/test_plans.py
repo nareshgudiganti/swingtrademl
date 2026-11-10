@@ -38,6 +38,7 @@ def _strategy(db_session, name, model_name=None, strategy_type="ml_swing") -> St
         mode="paper",
         is_active=True,
         params={"model_name": model_name} if model_name else {},
+        owner_private=name == "real_trading",  # member-facing model strategy unless it is the real book
     )
     db_session.add(strat)
     db_session.flush()

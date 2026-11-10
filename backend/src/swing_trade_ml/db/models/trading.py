@@ -27,6 +27,7 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.sql import true as sa_true
 
 from swing_trade_ml.core.enums import (
     OrderStatus,
@@ -64,6 +65,14 @@ class Strategy(Base, TimestampMixin):
     # notifies with a recommendation — see services/execution.py. Never
     # auto-executed regardless of mode once set to advisory.
     execution_mode: Mapped[str] = mapped_column(String(16), default="auto", index=True)
+
+    # The owner's own book (real holdings, manual paper testing) or a strategy nobody has
+    # classified yet. A plan member never sees an owner-private strategy's signals. Safe
+    # default: unclassified = private until reviewed, so every creation path sets this
+    # explicitly (False for member-facing brain / model / rule strategies).
+    owner_private: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=sa_true(), nullable=False
+    )
 
     # Opt-in: add another tranche to an already-open, currently-profitable
     # position instead of rejecting the entry outright. See services/risk.py

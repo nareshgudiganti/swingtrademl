@@ -1,7 +1,7 @@
 """Tidy-up and checks for a person's name and Indian mobile number.
 
-Pure helpers, no database. The mobile number is stored UNVERIFIED (no SMS code):
-it is a contact detail and the planned login key, nothing more.
+Pure helpers, no database. Mobile is an optional, unverified profile field (no SMS code,
+not unique, not used for login or recovery).
 """
 
 from __future__ import annotations

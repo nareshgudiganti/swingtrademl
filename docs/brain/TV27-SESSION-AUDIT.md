@@ -73,6 +73,8 @@ Tests added (`backend/tests/test_brain_trial_journal.py`):
 - switching the rule off keeps all 20 days as before;
 - the gate stays "too early" at both 18 and 20 sessions while no idea has finished.
 
+Side effect found by CI: `prediction_reliability.brain_series` also reads `load_sessions`, so the exclusion changes that report too (correctly: a holiday run is not a session). One existing test used synthetic decision days that include holidays (14 Sep, 20 Oct) and counted 24 rows instead of 12 after the change; that test now treats every day as a trading day, because it checks the sealed and replay filters, not the calendar.
+
 Test evidence: 46 passed (trial journal, trial journal API, trial freeze, trial seal leaks, and the four new tests), run against the
 dedicated local test database. `trial_journal.py` is not on the trial-freeze list, so the freeze test does not need a new approval,
 but the session count is a counter the owner said not to change without written approval.

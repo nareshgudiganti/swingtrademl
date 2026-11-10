@@ -76,7 +76,10 @@ def _bar(db, inst, day, high=100.0):
     )
 
 
-def test_brain_top5_reader_excludes_open_sealed_and_replay_rows(db_session):
+def test_brain_top5_reader_excludes_open_sealed_and_replay_rows(db_session, monkeypatch):
+    # The fixture days are synthetic calendar days (14 Sep and 20 Oct are NSE holidays). tv27 would drop holiday
+    # sessions, which is not what this test is about, so treat every day as a trading day here.
+    monkeypatch.setattr("swing_trade_ml.core.market_session.is_trading_day", lambda d: True)
     db = db_session
     _require_empty(db, BrainRun)
     sessions = weekdays(date(2026, 8, 17), date(2026, 12, 31))

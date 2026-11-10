@@ -12,7 +12,7 @@ from swing_trade_ml.core.enums import SignalType
 from swing_trade_ml.core.security import create_access_token
 from swing_trade_ml.db.models.brain import BrainTrack
 from swing_trade_ml.db.models.session import User
-from swing_trade_ml.db.models.trading import Signal, Strategy
+from swing_trade_ml.db.models.trading import Position, Signal, Strategy
 from swing_trade_ml.services.plans import set_plans_enabled
 
 KEY = {"X-API-Key": "test-api-key"}
@@ -43,8 +43,24 @@ def _track(db, book: str, symbol: str) -> None:
     db.flush()
 
 
-def _signal(db, strat_name: str, strat_type: str, symbol: str, token: int) -> None:
-    strat = Strategy(name=strat_name, strategy_type=strat_type, params={}, is_active=True, mode="paper")
+def _signal(
+    db,
+    strat_name: str,
+    strat_type: str,
+    symbol: str,
+    token: int,
+    *,
+    strat_mode: str = "paper",
+    execution_mode: str = "auto",
+) -> Strategy:
+    strat = Strategy(
+        name=strat_name,
+        strategy_type=strat_type,
+        params={},
+        is_active=True,
+        mode=strat_mode,
+        execution_mode=execution_mode,
+    )
     db.add(strat)
     db.flush()
     inst = instrument(db, symbol, token)
@@ -64,6 +80,7 @@ def _signal(db, strat_name: str, strat_type: str, symbol: str, token: int) -> No
         )
     )
     db.flush()
+    return strat
 
 
 @pytest.fixture()
@@ -91,13 +108,25 @@ def test_member_cannot_read_non_paper_track(client, db_session, people, who, boo
     assert "points" not in r.json()
 
 
-@pytest.mark.parametrize("headers_key", ["owner", "key"])
-def test_owner_and_api_key_read_real_track(client, db_session, people, headers_key):
+def test_owner_user_reads_real_track(client, db_session, people):
     _track(db_session, "real", "PRGREAL")
-    h = people["owner"] if headers_key == "owner" else KEY
-    r = client.get("/api/v1/brain/track/PRGREAL?book=real", headers=h)
+    r = client.get("/api/v1/brain/track/PRGREAL?book=real", headers=people["owner"])
     assert r.status_code == 200, r.text
     assert len(r.json()["points"]) == 1
+
+
+@pytest.mark.parametrize("book", ["real", "live", "tester", "all"])
+def test_shared_api_key_refused_for_non_paper_track(client, db_session, people, book):
+    # Nothing in the repo calls /brain/track with the key; the key stays paper-only.
+    _track(db_session, "real", "PRGREAL")
+    r = client.get(f"/api/v1/brain/track/PRGREAL?book={book}", headers=KEY)
+    assert r.status_code == 403, r.text
+
+
+def test_shared_api_key_still_reads_paper_track(client, db_session, people):
+    _track(db_session, "paper", "PRGPAPER")
+    r = client.get("/api/v1/brain/track/PRGPAPER?book=paper", headers=KEY)
+    assert r.status_code == 200, r.text
 
 
 def test_anonymous_refused_on_track(client):
@@ -115,24 +144,51 @@ def test_pro_member_still_reads_paper_track(client, db_session, people):
 # ---- /signals/buy-list ------------------------------------------------------------
 
 
-def _seed_buy_list(db):
-    _signal(db, "prg_real_trading", "ml_swing", "PRGHAND", 929001)
-    _signal(db, "real_trading", "ml_swing", "PRGREALSIG", 929002)
-    _signal(db, "prg_rules", "rule_based", "PRGRULE", 929003)
+def _seed_buy_list(db, *, rename_real: bool = False):
+    """Member-facing rows (model, brain, rule) beside every kind of owner-private row."""
     _signal(db, "prg_model", "ml_swing", "PRGMODEL", 929004)
+    _signal(db, "prg_brain", "brain", "PRGBRAIN", 929005, execution_mode="advisory")
+    _signal(db, "prg_rules", "rule_based", "PRGRULE", 929003)
+    # The owner's real Zerodha book, exactly as import-holdings creates it.
+    real = _signal(
+        db, "real_trading", "ml_swing", "PRGREALSIG", 929002, strat_mode="live", execution_mode="advisory"
+    )
+    # Manual paper-testing book.
+    tester = _signal(db, "tester_paper", "tester_paper", "PRGTESTER", 929006, execution_mode="auto")
+    # A hand book that kept no name or mode marker, only its live positions.
+    owned = _signal(db, "prg_owned_live", "ml_swing", "PRGOWNED", 929007, execution_mode="advisory")
+    other = instrument(db, "PRGOWNEDPOS", 929008)
+    db.add(
+        Position(
+            strategy_id=owned.id,
+            instrument_id=other.id,
+            mode="live",
+            status="OPEN",
+            quantity=1,
+            entry_price=100.0,
+            entry_at=at(DAY),
+        )
+    )
+    if rename_real:
+        real.name = "prg_renamed_real"
+        tester.name = "prg_renamed_tester"
+    db.flush()
+
+
+PRIVATE = {"PRGREALSIG", "PRGTESTER", "PRGOWNED"}
+SHOWN = {"PRGMODEL", "PRGBRAIN", "PRGRULE"}
 
 
 def _syms(r):
     return {row["symbol"] for row in r.json() if row["symbol"].startswith("PRG")}
 
 
-def test_pro_member_buy_list_excludes_real_and_non_model(client, db_session, people):
-    _seed_buy_list(db_session)
+@pytest.mark.parametrize("rename", [False, True])
+def test_pro_member_buy_list_keeps_member_signals_and_hides_private(client, db_session, people, rename):
+    _seed_buy_list(db_session, rename_real=rename)
     r = client.get("/api/v1/signals/buy-list", headers=people["pro"])
     assert r.status_code == 200, r.text
-    syms = _syms(r)
-    assert "PRGREALSIG" not in syms and "PRGRULE" not in syms
-    assert "PRGMODEL" in syms  # normal bot-model idea still shown
+    assert _syms(r) == SHOWN
 
 
 def test_free_member_buy_list_denied(client, db_session, people):
@@ -147,7 +203,7 @@ def test_owner_buy_list_unchanged(client, db_session, people, headers_key):
     h = people["owner"] if headers_key == "owner" else KEY
     r = client.get("/api/v1/signals/buy-list", headers=h)
     assert r.status_code == 200, r.text
-    assert _syms(r) == {"PRGHAND", "PRGREALSIG", "PRGRULE", "PRGMODEL"}
+    assert _syms(r) == SHOWN | PRIVATE
     assert set(r.json()[0]) == {
         "symbol",
         "name",

@@ -9,11 +9,17 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from swing_trade_ml.core.plans import BASE_MODEL, DEFAULT_PLANS, PLAN_KEYS, clean_plan, default_plan
+from swing_trade_ml.core.strategy_policy import (
+    HAND_BOOK_STRATEGY_NAMES,
+    NON_SCAN_STRATEGY_TYPES,
+    STAGED_TYPES,
+)
 from swing_trade_ml.db.models.session import PlanSettings, SubscriptionPlan
-from swing_trade_ml.db.models.trading import Strategy
+from swing_trade_ml.db.models.trading import Position, Strategy, Trade
 from swing_trade_ml.services.portfolio import REAL_TRADING_STRATEGY_NAME
 from swing_trade_ml.strategies.tier import cap_tier
 
@@ -91,6 +97,39 @@ def strategy_visible(strategy: Strategy | None, access: PlanAccess) -> bool:
         return False
     tiers = access.cap_tiers
     return tiers is None or cap_tier(model_name) in tiers
+
+
+def is_owner_private_strategy(strategy: Strategy | None, owns_live_book: bool = False) -> bool:
+    """Is this strategy the owner's own hand-recorded book, never a member's to see?
+
+    Decided from data markers, not the name alone, so renaming a strategy does
+    not unhide it. Private when ANY of these holds:
+    - its name is a hand-book name (`real_trading`, `tester_paper`);
+    - its type is the manual paper-testing type (`tester_paper`);
+    - it is advisory (never auto-ordered) AND either stored as mode `live`
+      or owns live-mode positions/trades (`owns_live_book`): that is how
+      import-holdings records real Zerodha shares. The brain's own staged
+      strategy is exempt: it is advisory by design and member-facing.
+    """
+    if strategy is None:
+        return False
+    if strategy.name in HAND_BOOK_STRATEGY_NAMES or strategy.strategy_type in NON_SCAN_STRATEGY_TYPES:
+        return True
+    if strategy.strategy_type in STAGED_TYPES:
+        return False
+    return strategy.execution_mode == "advisory" and (strategy.mode == "live" or owns_live_book)
+
+
+def owner_private_strategy_ids(db: Session) -> set[int]:
+    """Ids of every owner-private strategy (see `is_owner_private_strategy`)."""
+    live_owners = set(
+        db.execute(select(Position.strategy_id).where(Position.mode == "live")).scalars()
+    ) | set(db.execute(select(Trade.strategy_id).where(Trade.mode == "live")).scalars())
+    return {
+        s.id
+        for s in db.execute(select(Strategy)).scalars()
+        if is_owner_private_strategy(s, s.id in live_owners)
+    }
 
 
 def history_cutoff(access: PlanAccess) -> datetime | None:

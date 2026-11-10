@@ -15,7 +15,7 @@ from swing_trade_ml.db.models.market import Candle, Instrument
 from swing_trade_ml.db.models.trading import Position, Signal, Strategy, Trade
 from swing_trade_ml.schemas import SignalOut
 from swing_trade_ml.services import trial_seal
-from swing_trade_ml.services.plans import history_cutoff, strategy_visible
+from swing_trade_ml.services.plans import history_cutoff, owner_private_strategy_ids, strategy_visible
 from swing_trade_ml.strategies.brain import BLOCKED_BY_RISK_KEY
 from swing_trade_ml.strategies.tier import cap_tier
 
@@ -338,8 +338,9 @@ def buy_list(db: DbSession, access: PlanAccessDep) -> list[dict]:
     dismissal needed for that case, since a stale row is structurally
     impossible here. Already-held symbols are excluded — this list is only
     for fresh entries, not stocks already bought (that's the Portfolio page).
-    Plan members only see model strategies (`strategy_visible`): never the
-    owner's hand-bought `real_trading` book or other non-bot strategies.
+    Plan members see every member-facing strategy (model, brain, rules) but
+    never the owner's private books (`owner_private_strategy_ids`: real
+    holdings and manual paper testing), whatever those strategies are named.
     """
     latest_signal = (
         select(Signal)
@@ -364,6 +365,7 @@ def buy_list(db: DbSession, access: PlanAccessDep) -> list[dict]:
         .order_by(LatestSignal.confidence.desc().nullslast())
     )
     rows = db.execute(stmt).all()
+    private_ids = set() if access.unrestricted else owner_private_strategy_ids(db)
 
     return [
         {
@@ -378,7 +380,7 @@ def buy_list(db: DbSession, access: PlanAccessDep) -> list[dict]:
             "generated_at": sig.generated_at,
         }
         for sig, symbol, name, strategy in rows
-        if not _practice_evidence(sig) and strategy_visible(strategy, access)
+        if not _practice_evidence(sig) and strategy.id not in private_ids
     ]
 
 

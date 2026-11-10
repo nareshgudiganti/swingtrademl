@@ -202,6 +202,21 @@ class Settings(BaseSettings):
     # records decisions. Off by default so production is unchanged until the
     # owner turns it on; set BRAIN_ENABLED=true locally to schedule its runs.
     BRAIN_ENABLED: bool = False
+    # Pro subscription billing (sandbox only for now). BILLING_ENABLED off = every billing
+    # route answers 404 and plan resolution ignores subscriptions and grants.
+    BILLING_ENABLED: bool = False
+    # HARD GUARD: with this False any Razorpay key id not starting with rzp_test_ is refused.
+    # Nothing sets it True; live billing stays off through 2026.
+    ALLOW_LIVE_BILLING: bool = False
+    BILLING_PROVIDER: str = "fake"  # "fake" (no network) | "razorpay"
+    RAZORPAY_KEY_ID: str = ""
+    RAZORPAY_KEY_SECRET: str = ""
+    RAZORPAY_WEBHOOK_SECRET: str = ""
+    RAZORPAY_PLAN_ID_PRO_MONTHLY: str = ""
+    # PLACEHOLDER price in paise (49900 = Rs 499). The owner sets the real price.
+    PRO_PRICE_MONTHLY_PAISE: int = 49900
+    # Days Pro continues past the paid-through date while a renewal is retried (Razorpay: ~3-4 days).
+    BILLING_GRACE_DAYS: int = 4
     # Daily shadow-testing lanes (10-day, 15-day). Off by default; the job is not wired into the scheduler yet.
     LANE_SHADOW_ENABLED: bool = False
     # Owner-chosen model per lane slot, JSON like {"10d-large": 123}. Never auto-picked.

@@ -19,10 +19,17 @@ from swing_trade_ml.services.billing.razorpay import BASE_URL, RazorpayProvider
 
 NOW = datetime(2026, 11, 10, 12, 0, tzinfo=UTC)
 DAY = timedelta(days=1)
+MIN = timedelta(minutes=1)
 
 
-def sub(status, end=None, cancel=False):
-    return SimpleNamespace(status=status, current_end=end, cancel_at_cycle_end=cancel)
+def sub(status, end=None, cancel=False, requested=None, ended=None):
+    return SimpleNamespace(
+        status=status,
+        current_end=end,
+        cancel_at_cycle_end=cancel,
+        cycle_end_requested_at=requested,
+        cancelled_at=ended,
+    )
 
 
 def grant(starts=NOW - DAY, expires=None, revoked=None, plan="pro"):
@@ -46,9 +53,14 @@ def grant(starts=NOW - DAY, expires=None, revoked=None, plan="pro"):
         (sub("authenticated"), "free"),
         (sub("completed", NOW + 5 * DAY), "free"),
         (sub("completed", NOW - 5 * DAY), "free"),
-        (sub("cancelled", NOW + 5 * DAY, cancel=True), "pro"),  # cancel at cycle end, before current_end
-        (sub("cancelled", NOW - 1 * DAY, cancel=True), "free"),  # ... and after
+        # cancelled: Pro only if WE asked for a cycle-end cancel AND the provider's ended_at confirms it
+        (sub("cancelled", NOW + 5 * DAY, requested=NOW - DAY, ended=NOW + 5 * DAY - 5 * MIN), "pro"),
+        (sub("cancelled", NOW - 1 * DAY, requested=NOW - 9 * DAY, ended=NOW - 1 * DAY), "free"),  # past it
         (sub("cancelled", NOW + 5 * DAY, cancel=False), "free"),  # immediate cancel
+        (sub("cancelled", NOW + 5 * DAY, cancel=True), "free"),  # stale flag alone never earns access
+        (sub("cancelled", NOW + 5 * DAY, cancel=True, requested=NOW - DAY, ended=NOW), "free"),  # dashboard
+        (sub("cancelled", NOW + 5 * DAY, cancel=True, requested=NOW - DAY), "free"),  # no ended_at: ambiguous
+        (sub("cancelled", NOW + 5 * DAY, ended=NOW + 5 * DAY), "free"),  # never requested by us
         (sub("active", NOW + 5 * DAY, cancel=True), "pro"),
         (sub("active", NOW - 1 * DAY, cancel=True), "free"),  # ending subscription gets no grace
         (None, "free"),
@@ -94,12 +106,38 @@ def test_naive_datetimes_are_treated_as_utc():
     assert effective_plan_for("free", s, [], NOW) == "pro"
 
 
-def test_glue_returns_stored_plan_untouched_when_billing_is_off(monkeypatch):
-    monkeypatch.setattr(settings, "BILLING_ENABLED", False)
-    user = SimpleNamespace(id=1, plan="free")
-    assert effective_plan_for_user(None, user) == "free"  # db never touched
-    assert effective_plan_for_user(None, SimpleNamespace(id=2, plan="weird")) == "weird"
+def test_glue_edge_cases_never_touch_the_db():
+    assert effective_plan_for_user(None, SimpleNamespace(id=3, plan="pro")) == "pro"
     assert effective_plan_for_user(None, None) is None
+
+
+def test_cancel_at_cycle_end_via_pure_rule_pro_until_current_end_then_free():
+    end = NOW + 5 * DAY
+    active = sub("active", end, cancel=True, requested=NOW)
+    assert effective_plan_for("free", active, [], end - timedelta(minutes=1)) == "pro"
+    assert effective_plan_for("free", active, [], end) == "free"
+    # provider then reports the cycle-end cancel having happened at current_end
+    done = sub("cancelled", end, requested=NOW, ended=end)
+    assert effective_plan_for("free", done, [], end - timedelta(minutes=1)) == "pro"
+    assert effective_plan_for("free", done, [], end + timedelta(minutes=1)) == "free"
+
+
+def test_active_with_our_flag_then_sync_reports_immediate_cancel_is_free_at_once():
+    s = sub("cancelled", NOW + 20 * DAY, cancel=False, requested=NOW - DAY, ended=NOW)
+    assert effective_plan_for("free", s, [], NOW) == "free"
+
+
+def test_fetch_unreadable_replies_are_failed_lookups_not_states():
+    for reply in ({"id": "sub_1"}, {"id": "sub_1", "status": None}, [], {"status": "active"},
+                  {"id": "s", "status": "active", "current_end": "garbage"}):
+        p = _provider(lambda r, reply=reply: httpx.Response(200, json=reply))
+        with pytest.raises(BillingError):
+            p.fetch_subscription("sub_1")
+    for code in (500, 502, 401, 403):
+        with pytest.raises(BillingError):
+            _provider(lambda r, code=code: httpx.Response(code, json={})).fetch_subscription("sub_1")
+    with pytest.raises(BillingError):
+        _provider(lambda r: httpx.Response(200, content=b"<html>")).fetch_subscription("sub_1")
 
 
 # ------------------------------------------------------------------ signature

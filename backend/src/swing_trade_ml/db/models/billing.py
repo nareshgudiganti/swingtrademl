@@ -40,6 +40,9 @@ class Subscription(Base):
     current_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     cancel_at_cycle_end: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # When WE asked the provider to cancel at the end of the cycle. Only this (plus the provider's
+    # ended_at) can earn access after a provider "cancelled"; a dashboard cancel never sets it.
+    cycle_end_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

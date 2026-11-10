@@ -1,8 +1,9 @@
 """Pro subscription billing (Razorpay SANDBOX only, behind BILLING_ENABLED).
 
 Every route here answers 404 while BILLING_ENABLED is false (404 = switched off for this
-environment; 403 = switched on but not allowed). Plan resolution reads the result through
-services/billing/entitlement.py.
+environment; 403 = switched on but not allowed). POST /billing/checkout additionally answers 404
+unless BILLING_ACCEPT_NEW_CHECKOUTS is true; /me, /cancel and the webhook work either way.
+Plan resolution reads the result through services/billing/entitlement.py and ignores both switches.
 
 Plan-gate classification (see tests/test_billing_routes_classified.py):
 - /billing/plans, /me, /checkout, /cancel, /fake/simulate: any signed-in PERSON, own data only.
@@ -49,6 +50,12 @@ NOT_AVAILABLE = "Not found"
 
 def billing_enabled() -> None:
     if not settings.BILLING_ENABLED:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, NOT_AVAILABLE)
+
+
+def checkout_open() -> None:
+    """New checkouts are a separate, narrower switch: closed = 404 for this route only."""
+    if not settings.BILLING_ACCEPT_NEW_CHECKOUTS:
         raise HTTPException(status.HTTP_404_NOT_FOUND, NOT_AVAILABLE)
 
 
@@ -116,6 +123,7 @@ def plans(_user: Person) -> dict[str, Any]:
         "plans": out,
         "provider": settings.BILLING_PROVIDER,
         "sandbox": not settings.ALLOW_LIVE_BILLING,
+        "checkout_open": bool(settings.BILLING_ACCEPT_NEW_CHECKOUTS),
     }
 
 
@@ -134,7 +142,7 @@ def my_billing(user: Person, db: DbSession) -> dict[str, Any]:
     }
 
 
-@router.post("/checkout", response_model=dict)
+@router.post("/checkout", response_model=dict, dependencies=[Depends(checkout_open)])
 def checkout(user: Person, db: DbSession) -> dict[str, Any]:
     now = datetime.now(UTC)
     existing = billing.latest_subscription(db, user.id)

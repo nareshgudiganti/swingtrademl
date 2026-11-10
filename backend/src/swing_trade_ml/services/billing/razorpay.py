@@ -108,15 +108,24 @@ class RazorpayProvider:
 
     def fetch_subscription(self, provider_subscription_id: str) -> ProviderSubscription:
         data = self._request("GET", f"subscriptions/{provider_subscription_id}")
-        return ProviderSubscription(
-            provider_subscription_id=data["id"],
-            status=data["status"],
-            provider_plan_id=data.get("plan_id"),
-            current_start=_ts(data.get("current_start")),
-            current_end=_ts(data.get("current_end")),
-            cancel_at_cycle_end=None,  # fetch does not report it (UNVERIFIED); the app keeps its own flag
-            cancelled_at=_ts(data.get("ended_at")) if data["status"] == "cancelled" else None,
-        )
+        # A reply we cannot read is a FAILED lookup (BillingError), never a state: the caller then
+        # leaves the stored row untouched and the webhook answers 5xx so the provider retries.
+        try:
+            if not isinstance(data, dict) or not isinstance(data["status"], str) or not data["status"]:
+                raise ValueError("no status")
+            status = data["status"]
+            return ProviderSubscription(
+                provider_subscription_id=str(data["id"]),
+                status=status,
+                provider_plan_id=data.get("plan_id"),
+                current_start=_ts(data.get("current_start")),
+                current_end=_ts(data.get("current_end")),
+                cancel_at_cycle_end=None,  # fetch does not report it (UNVERIFIED)
+                # ended_at is UNVERIFIED as the cancellation time; it confirms a cycle-end cancel
+                cancelled_at=_ts(data.get("ended_at")) if status == "cancelled" else None,
+            )
+        except (KeyError, TypeError, ValueError, OverflowError, OSError):
+            raise BillingError("Razorpay sent a subscription reply we cannot read") from None
 
     def cancel_subscription(self, provider_subscription_id: str, at_cycle_end: bool) -> None:
         self._request(

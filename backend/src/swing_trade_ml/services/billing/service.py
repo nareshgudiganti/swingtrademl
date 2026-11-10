@@ -26,6 +26,7 @@ from swing_trade_ml.services.billing.base import (
     CheckoutInfo,
     ProviderSubscription,
 )
+from swing_trade_ml.services.billing.entitlement import cycle_end_cancel_confirmed
 from swing_trade_ml.services.billing.fake import FakeProvider
 from swing_trade_ml.services.billing.razorpay import RazorpayProvider
 
@@ -65,9 +66,18 @@ def apply_provider_state(sub: Subscription, state: ProviderSubscription) -> None
     sub.current_start = state.current_start
     sub.current_end = state.current_end
     sub.cancelled_at = state.cancelled_at
-    if state.cancel_at_cycle_end is not None:
-        sub.cancel_at_cycle_end = state.cancel_at_cycle_end
-    # Provider silent about the flag: keep what we recorded when the member asked to cancel.
+    # `cancel_at_cycle_end` (the UI's "cancel scheduled") is derived from the fetched state:
+    # active/pending = we asked for a cycle-end cancel; cancelled = only if that request is confirmed
+    # by the provider's ended_at; any other status = False. A provider that says False explicitly wins.
+    if state.status == "cancelled":
+        scheduled = cycle_end_cancel_confirmed(sub)
+    elif state.status in ("active", "pending"):
+        scheduled = sub.cycle_end_requested_at is not None
+    else:
+        scheduled = False
+    if state.cancel_at_cycle_end is False:
+        scheduled = False
+    sub.cancel_at_cycle_end = scheduled
 
 
 def sync_subscription(
@@ -108,11 +118,10 @@ def create_checkout(db: Session, user: Any, plan_key: str = "pro") -> CheckoutIn
 def cancel(db: Session, sub: Subscription, at_cycle_end: bool) -> Subscription:
     provider = get_provider()
     provider.cancel_subscription(sub.provider_subscription_id, at_cycle_end)
-    if at_cycle_end:
-        sub.cancel_at_cycle_end = True  # recorded by us: Razorpay's fetch does not report it
+    # Record who scheduled it: only our own cycle-end request can later earn access after a
+    # provider "cancelled". An immediate cancel clears any earlier request.
+    sub.cycle_end_requested_at = datetime.now(UTC) if at_cycle_end else None
     sync_subscription(db, sub, provider)
-    if at_cycle_end:
-        sub.cancel_at_cycle_end = True
     db.flush()
     return sub
 

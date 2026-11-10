@@ -27,6 +27,7 @@ NOW = datetime.now(UTC)
 @pytest.fixture(autouse=True)
 def billing_on(monkeypatch):
     monkeypatch.setattr(settings, "BILLING_ENABLED", True)
+    monkeypatch.setattr(settings, "BILLING_ACCEPT_NEW_CHECKOUTS", True)
     monkeypatch.setattr(settings, "BILLING_PROVIDER", "fake")
     monkeypatch.setattr(settings, "ALLOW_LIVE_BILLING", False)
     fake = FakeProvider()
@@ -345,14 +346,184 @@ def test_owner_is_never_limited(db_session):
     assert deps.plan_access_for(db_session, deps.Principal(user=owner)).unrestricted is True
 
 
-def test_billing_off_ignores_subscriptions_and_grants(db_session, monkeypatch):
-    user, _ = make_user(db_session, "ignored")
+def test_billing_off_still_honours_existing_grants_and_subscriptions(db_session, monkeypatch):
+    user, _ = make_user(db_session, "honoured")
+    sub_user, _ = make_user(db_session, "honoured_sub")
     db_session.add(
         PlanGrant(user_id=user.id, plan_key="pro", starts_at=NOW - timedelta(days=1), reason="test")
     )
+    db_session.add(
+        Subscription(
+            user_id=sub_user.id,
+            provider="fake",
+            provider_subscription_id="s_off",
+            status="active",
+            current_end=NOW + timedelta(days=10),
+        )
+    )
     db_session.flush()
+    for enabled, accept in ((True, True), (False, False), (False, True)):
+        monkeypatch.setattr(settings, "BILLING_ENABLED", enabled)
+        monkeypatch.setattr(settings, "BILLING_ACCEPT_NEW_CHECKOUTS", accept)
+        assert plan_of(db_session, user) == "pro"
+        assert plan_of(db_session, sub_user) == "pro"
+
+
+# ---------------------------------------------------------------- new checkouts closed, existing honoured
+
+
+def test_checkout_closed_404_for_free_user_and_plans_says_so(client, db_session, monkeypatch):
+    monkeypatch.setattr(settings, "BILLING_ACCEPT_NEW_CHECKOUTS", False)
+    _, hdr = make_user(db_session, "closed")
+    assert client.post("/api/v1/billing/checkout", headers=hdr).status_code == 404
+    plans = client.get("/api/v1/billing/plans", headers=hdr)
+    assert plans.status_code == 200 and plans.json()["checkout_open"] is False
+    monkeypatch.setattr(settings, "BILLING_ACCEPT_NEW_CHECKOUTS", True)
+    assert client.get("/api/v1/billing/plans", headers=hdr).json()["checkout_open"] is True
+
+
+def test_checkout_closed_existing_subscriber_stays_pro_reads_me_cancels_and_webhooks_apply(
+    client, db_session, fake, monkeypatch
+):
+    user, hdr = make_user(db_session, "loyal")
+    sid = start_subscription(client, hdr)
+    client.post("/api/v1/billing/fake/simulate", json={"event": "activated"}, headers=hdr)
+    monkeypatch.setattr(settings, "BILLING_ACCEPT_NEW_CHECKOUTS", False)
     assert plan_of(db_session, user) == "pro"
-    monkeypatch.setattr(settings, "BILLING_ENABLED", False)
+    me = client.get("/api/v1/billing/me", headers=hdr)
+    assert me.status_code == 200 and me.json()["plan"] == "pro"
+    assert client.post("/api/v1/billing/checkout", headers=hdr).status_code == 404
+    assert client.post("/api/v1/billing/cancel", json={"at_cycle_end": True}, headers=hdr).status_code == 200
+    # a webhook still applies: the provider says it halted
+    fake.simulate(sid, "halted", NOW)
+    assert webhook(client, event_body("halted", sid), event_id="loyal-h").status_code == 200
+    assert plan_of(db_session, user) == "free"
+
+
+# ---------------------------------------------------------------- cancellation: who scheduled it
+
+
+def activate(client, db_session, name):
+    user, hdr = make_user(db_session, name)
+    sid = start_subscription(client, hdr)
+    client.post("/api/v1/billing/fake/simulate", json={"event": "activated"}, headers=hdr)
+    return user, hdr, sid
+
+
+def row(db_session, sid) -> Subscription:
+    db_session.expire_all()
+    return db_session.query(Subscription).filter_by(provider_subscription_id=sid).one()
+
+
+def test_cycle_end_cancel_via_api_pro_until_current_end_then_free_no_job(client, db_session, fake):
+    user, hdr, sid = activate(client, db_session, "cyc")
+    r = client.post("/api/v1/billing/cancel", json={"at_cycle_end": True}, headers=hdr)
+    assert r.json()["subscription"]["cancel_scheduled"] is True
+    s = row(db_session, sid)
+    assert s.cycle_end_requested_at is not None
+    end = s.current_end
+    assert entitlement.effective_plan_for_user(db_session, user, end - timedelta(minutes=1)) == "pro"
+    assert entitlement.effective_plan_for_user(db_session, user, end + timedelta(minutes=1)) == "free"
+    # the provider then really cancels at the cycle end (ended_at = current_end): still correct
+    fake.set_state(sid, status="cancelled", cancelled_at=end)
+    webhook(client, event_body("cancelled", sid), event_id="cyc-c")
+    assert entitlement.effective_plan_for_user(db_session, user, end - timedelta(minutes=1)) == "pro"
+    assert entitlement.effective_plan_for_user(db_session, user, end + timedelta(minutes=1)) == "free"
+
+
+def test_dashboard_immediate_cancel_while_our_flag_is_set_is_free_at_once(client, db_session, fake):
+    user, hdr, sid = activate(client, db_session, "dash")
+    client.post("/api/v1/billing/cancel", json={"at_cycle_end": True}, headers=hdr)
+    assert plan_of(db_session, user) == "pro"
+    fake.set_state(sid, status="cancelled", cancelled_at=datetime.now(UTC))  # owner cancels in dashboard
+    webhook(client, event_body("cancelled", sid), event_id="dash-c")
+    s = row(db_session, sid)
+    assert s.status == "cancelled" and s.cancel_at_cycle_end is False
+    assert plan_of(db_session, user) == "free"
+
+
+def test_immediate_cancel_via_api_is_free_at_once_and_clears_earlier_request(client, db_session, fake):
+    user, hdr, sid = activate(client, db_session, "imm2")
+    client.post("/api/v1/billing/cancel", json={"at_cycle_end": True}, headers=hdr)
+    client.post("/api/v1/billing/cancel", json={"at_cycle_end": False}, headers=hdr)
+    s = row(db_session, sid)
+    assert s.cycle_end_requested_at is None and s.status == "cancelled"
+    assert plan_of(db_session, user) == "free"
+
+
+def test_ambiguous_successful_fetch_cancelled_without_ended_at_is_free(client, db_session, fake):
+    user, hdr, sid = activate(client, db_session, "ambig")
+    client.post("/api/v1/billing/cancel", json={"at_cycle_end": True}, headers=hdr)
+    fake.set_state(sid, status="cancelled", cancelled_at=None)  # provider fields cannot confirm
+    webhook(client, event_body("cancelled", sid), event_id="ambig-c")
+    assert row(db_session, sid).cancel_at_cycle_end is False
+    assert plan_of(db_session, user) == "free"
+
+
+def test_out_of_order_events_converge_on_fetched_state_after_our_cycle_end_request(
+    client, db_session, fake
+):
+    user, hdr, sid = activate(client, db_session, "ooo")
+    client.post("/api/v1/billing/cancel", json={"at_cycle_end": True}, headers=hdr)
+    fake.set_state(sid, status="cancelled", cancelled_at=datetime.now(UTC))
+    webhook(client, event_body("cancelled", sid), event_id="ooo-1")
+    webhook(client, event_body("activated", sid), event_id="ooo-2")  # stale, delivered late
+    webhook(client, event_body("charged", sid), event_id="ooo-3")
+    assert row(db_session, sid).status == "cancelled"
+    assert plan_of(db_session, user) == "free"
+
+
+# ---------------------------------------------------------------- failed lookup is not a cancellation
+
+
+def snapshot(s: Subscription):
+    return (
+        s.status,
+        s.current_start,
+        s.current_end,
+        s.cancel_at_cycle_end,
+        s.cancelled_at,
+        s.cycle_end_requested_at,
+        s.updated_at,
+    )
+
+
+def _failures():
+    from swing_trade_ml.services.billing.base import BillingError
+
+    def err(_):
+        raise BillingError("boom")
+
+    def odd(_):
+        raise BillingError("Razorpay sent a subscription reply we cannot read")
+
+    return [err, odd]
+
+
+@pytest.mark.parametrize("scheduled", [False, True])
+def test_failed_lookup_changes_nothing_and_subscriber_stays_pro(
+    client, db_session, fake, monkeypatch, scheduled
+):
+    user, hdr, sid = activate(client, db_session, f"fail{int(scheduled)}")
+    if scheduled:
+        client.post("/api/v1/billing/cancel", json={"at_cycle_end": True}, headers=hdr)
+    before = snapshot(row(db_session, sid))
+    original = fake.fetch_subscription
+    for i, broken in enumerate(_failures()):
+        monkeypatch.setattr(fake, "fetch_subscription", broken)
+        eid = f"fail{scheduled}-{i}"
+        r = webhook(client, event_body("cancelled", sid), event_id=eid)
+        assert r.status_code == 502
+        assert db_session.query(BillingEvent).filter_by(event_id=eid).count() == 0
+        assert snapshot(row(db_session, sid)) == before
+        assert plan_of(db_session, user) == "pro"
+        me = client.get("/api/v1/billing/me", headers=hdr).json()
+        assert me["plan"] == "pro" and me["subscription"]["status"] == "active"
+    monkeypatch.setattr(fake, "fetch_subscription", original)
+    # a later SUCCESSFUL fetch that confirms the cancellation ends access
+    fake.set_state(sid, status="cancelled", cancelled_at=datetime.now(UTC))
+    assert webhook(client, event_body("cancelled", sid), event_id=f"fail{scheduled}-ok").status_code == 200
+    assert row(db_session, sid).status == "cancelled"
     assert plan_of(db_session, user) == "free"
 
 

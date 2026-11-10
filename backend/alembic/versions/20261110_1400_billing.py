@@ -41,6 +41,7 @@ def upgrade() -> None:
             sa.Column("current_end", sa.DateTime(timezone=True)),
             sa.Column("cancel_at_cycle_end", sa.Boolean, nullable=False, server_default=sa.text("false")),
             sa.Column("cancelled_at", sa.DateTime(timezone=True)),
+            sa.Column("cycle_end_requested_at", sa.DateTime(timezone=True)),
             sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=_NOW),
             sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=_NOW),
         )

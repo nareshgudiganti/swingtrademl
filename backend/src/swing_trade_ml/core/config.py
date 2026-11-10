@@ -202,9 +202,11 @@ class Settings(BaseSettings):
     # records decisions. Off by default so production is unchanged until the
     # owner turns it on; set BRAIN_ENABLED=true locally to schedule its runs.
     BRAIN_ENABLED: bool = False
-    # Pro subscription billing (sandbox only for now). BILLING_ENABLED off = every billing
-    # route answers 404 and plan resolution ignores subscriptions and grants.
+    # Pro subscription billing (sandbox only for now). BILLING_ENABLED is the master switch for the
+    # billing ROUTES (off = 404). It never affects plan resolution: existing grants and entitled
+    # subscriptions are always honoured. BILLING_ACCEPT_NEW_CHECKOUTS only gates POST /billing/checkout.
     BILLING_ENABLED: bool = False
+    BILLING_ACCEPT_NEW_CHECKOUTS: bool = False
     # HARD GUARD: with this False any Razorpay key id not starting with rzp_test_ is refused.
     # Nothing sets it True; live billing stays off through 2026.
     ALLOW_LIVE_BILLING: bool = False

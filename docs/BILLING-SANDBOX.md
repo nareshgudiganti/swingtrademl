@@ -11,8 +11,29 @@ Live billing stays off through 2026.
   and only up to the paid-through date plus `BILLING_GRACE_DAYS` (default 4). Cancelling at the end of the
   period keeps Pro until the paid-through date, then it returns to Free by itself (worked out when read; no job).
   `halted`, `paused`, `completed`, never-paid (`created`/`authenticated`) and cancelled-past-the-date are Free.
-- Everything is behind `BILLING_ENABLED` (default false). While false, every billing route answers 404 and the
-  plan system ignores subscriptions and grants, so today's members resolve exactly as before.
+- Who scheduled a cancel matters. When WE ask for a cycle-end cancel we store `cycle_end_requested_at`. A provider
+  status `cancelled` keeps Pro until the paid-through date ONLY if that request is recorded AND the fetched
+  `ended_at` is at (within an hour of) the paid-through date. An immediate cancel in the Razorpay dashboard, a
+  `cancelled` with no `ended_at`, or one we never requested all count as ended now (less access, never more).
+  An `active` subscription with our request keeps Pro until the paid-through date; our cancel with
+  `at_cycle_end=false` ends access at once.
+- A FAILED lookup is not a cancellation. If the fetch from Razorpay fails (network error, timeout, 4xx/5xx, auth
+  error, a reply that is not readable) nothing is stored: status, paid-through date and flags stay exactly as
+  they were, the webhook answers 502 so Razorpay retries, and the event id is forgotten so the retry is
+  processed. Plan resolution and `/billing/me` keep serving the last stored state, so an entitled subscriber
+  stays Pro until a confirmed state arrives or the paid-through date plus grace passes. Only a SUCCESSFUL fetch
+  can end access. The conservative "treat as ended" rule above applies only to successful fetches whose fields
+  are ambiguous, never to failed lookups.
+- Two switches, both default false, and plan resolution obeys neither:
+
+  | Switch | Controls | Does NOT control |
+  |---|---|---|
+  | `BILLING_ENABLED` | the billing routes (false = every one answers 404) | who is Pro |
+  | `BILLING_ACCEPT_NEW_CHECKOUTS` | only `POST /billing/checkout` (false = 404); `GET /billing/plans` still works and says `checkout_open: false` so the screen can show "upgrades are closed" | `/billing/me`, `/billing/cancel`, the webhook (all keep working when `BILLING_ENABLED` is true) |
+
+  Existing entitlements (unrevoked grants, entitled subscriptions in the database) are ALWAYS honoured by plan
+  resolution, whatever the switches say, so turning billing off never silently drops a paying member. A person
+  with no subscription and no grant resolves exactly as before.
 - `BILLING_PROVIDER=fake` (default) needs no keys and no network: the private journey can be walked with
   `POST /api/v1/billing/fake/simulate` (activated, charged, pending, halted, cancelled, completed).
 
@@ -48,7 +69,12 @@ event so Razorpay's retry is processed.
 
 ## Still UNVERIFIED (confirm in the sandbox before trusting)
 
-- Whether a cancel-at-cycle-end shows up in the fetched subscription (we keep our own flag and do not rely on it).
+- Provider fields the cancel rule relies on: that a fetched `cancelled` subscription carries `ended_at`, that for a
+  cycle-end cancel `ended_at` is at the paid-through date and for an immediate cancel it is the time of the cancel,
+  and that an `active` subscription stays `active` (not `cancelled`) between our cycle-end request and the cycle end.
+  `cancel_at_cycle_end` and `has_scheduled_changes` are NOT read; the code is conservative if these assumptions
+  fail (it ends access rather than extending it).
+- Whether a cancel-at-cycle-end shows up in the fetched subscription (we keep our own record and do not rely on it).
 - That `current_end` stays set on a cancelled subscription, and what `current_end` is for a `pending` one.
 - Webhook retry count, schedule and timeout; the exact event header name casing (we read `X-Razorpay-Event-Id`;
   without it the body hash is used as the id).

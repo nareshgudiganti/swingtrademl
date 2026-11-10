@@ -60,7 +60,11 @@ if command -v rclone >/dev/null 2>&1 && [ -s "$PASSPHRASE_FILE" ] \
     offsite=ok
     echo "Off-server copy: $REMOTE/$(basename "$enc")"
     # Model files + their sha256 manifest (same stamp as the database copy). A failure here fails the run.
-    if ! bash "$(dirname "$0")/backup-models-offsite.sh" "$stamp"; then
+    # OFF by default (owner decision Q11): runs only when the flag file exists on the droplet, created by the owner
+    # after rclone is set up and scripts/verify_restore.py has been tested (docs/BACKUP-OFFSITE.md).
+    if [ ! -e "${MODELS_OFFSITE_FLAG:-/root/.backup-models-enabled}" ]; then
+      echo "Off-server model copy is switched off (no ${MODELS_OFFSITE_FLAG:-/root/.backup-models-enabled}); see docs/BACKUP-OFFSITE.md."
+    elif ! bash "$(dirname "$0")/backup-models-offsite.sh" "$stamp"; then
       offsite=failed
       echo "OFF-SERVER MODEL COPY FAILED: the database copy is fine; see the lines above." >&2
     fi

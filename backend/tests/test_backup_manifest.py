@@ -95,3 +95,14 @@ def test_dump_lines_takes_only_app_section_of_a_dumpall(tmp_path):
     plain = tmp_path / "database.sql"
     plain.write_bytes(b"-- PostgreSQL database dump\nSELECT 1;\n")
     assert list(mod.dump_lines(plain, "swing_trade_ml")) == ["-- PostgreSQL database dump\n", "SELECT 1;\n"]
+
+
+def test_model_offsite_copy_is_off_unless_the_flag_file_exists():
+    """Owner decision Q11: the model upload stays disabled until the owner creates the flag file on the droplet."""
+    from pathlib import Path
+
+    script = (Path(__file__).resolve().parents[2] / "infra" / "deploy" / "daily-backup.sh").read_text()
+    call = script.index("backup-models-offsite.sh\" \"$stamp\"")
+    gate = script.index("/root/.backup-models-enabled")
+    assert gate < call, "the flag check must come before the upload call"
+    assert "switched off" in script

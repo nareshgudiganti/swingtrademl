@@ -114,3 +114,5 @@ FAIL on purpose: that is a real hole (local rehearsal 2026-11-03: 216 of 278 row
 
 **Still manual or untested:** the nightly upload has not run against a real Drive; `python3` must exist on the
 droplet; the weekly PC zip (`backup-models-from-prod.ps1`) is unchanged and still useful as a second route.
+
+**Switched off by default.** The model-file copy and manifest only run if the file `/root/.backup-models-enabled` exists on the droplet. Create it (`touch /root/.backup-models-enabled`) only after rclone is set up and `scripts/verify_restore.py` has passed a recovery test. Remove the file to switch it off again. Until then the nightly backup behaves exactly as before.

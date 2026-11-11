@@ -269,7 +269,112 @@ function answer(role: Role, method: string, path: string, query: URLSearchParams
   return undefined
 }
 
+/** What a person's own sign-up, email links and plan do in the fake backend (private-SaaS journey tests). */
+export type SaasOpts = {
+  /** Open sign-up is on (GET /auth/options says so). */
+  signupOpen?: boolean
+  /** Billing routes answer 404 (billing switched off for this environment). */
+  billingOff?: boolean
+  /** New upgrades are accepted. Default true. */
+  checkoutOpen?: boolean
+  /** Start with this subscription already in place. */
+  subscription?: { status: string; paid_through: string | null; cancel_scheduled: boolean } | null
+  /** Sign-in answers 403 "Please verify your email first". */
+  unverified?: boolean
+}
+
+export const VALID_LINK_TOKEN = 'good-link-token'
+export const PAID_THROUGH = '2026-12-14T10:00:00+00:00'
+
+type SaasState = { sub: NonNullable<SaasOpts['subscription']> | null; calls: string[] }
+
+function saasAnswer(opts: SaasOpts, st: SaasState, method: string, path: string, body: unknown): Answer | undefined {
+  const b = (body ?? {}) as Record<string, string | undefined>
+  st.calls.push(`${method} ${path}`)
+  if (method === 'GET' && path === '/auth/options') {
+    return opts.signupOpen ? { body: { signup_allowed: true, invites: true, google: false } } : undefined
+  }
+  if (method === 'POST' && path === '/auth/login' && opts.unverified) {
+    return { status: 403, body: { detail: 'Please verify your email first' } }
+  }
+  if (method === 'POST' && path === '/auth/register') {
+    // Same answer for a new and an existing address, and never a token.
+    return { status: 201, body: { message: 'If this email can be used, we have sent you a message with the next steps.' } }
+  }
+  if (method === 'POST' && path === '/auth/verify-email') {
+    return b.token === VALID_LINK_TOKEN
+      ? { body: { message: 'Your email is confirmed. You can sign in.' } }
+      : { status: 400, body: { detail: 'This link is not valid any more. Please ask for a new one.' } }
+  }
+  if (method === 'POST' && path === '/auth/resend-verification') {
+    return { body: { message: 'If that email belongs to an account that still needs confirming, we have sent a new link.' } }
+  }
+  if (method === 'POST' && path === '/auth/forgot-password') {
+    return { body: { message: 'If that email belongs to an account, we have sent a link to reset the password.' } }
+  }
+  if (method === 'POST' && path === '/auth/reset-password') {
+    if (b.token !== VALID_LINK_TOKEN) return { status: 400, body: { detail: 'This link is not valid any more. Please ask for a new one.' } }
+    return { body: { message: 'Your password has been changed. Please sign in.' } }
+  }
+
+  if (!path.startsWith('/billing')) return undefined
+  if (opts.billingOff) return { status: 404, body: { detail: 'Not found' } }
+  const entitled = st.sub && (st.sub.status === 'active' || (st.sub.status === 'cancelled' && st.sub.cancel_scheduled))
+  if (method === 'GET' && path === '/billing/plans') {
+    return {
+      body: {
+        plans: [
+          { key: 'free', name: 'Free', features: {} },
+          { key: 'pro', name: 'Pro', features: {}, price: { amount_paise: 49900, currency: 'INR', interval: 'monthly' } },
+        ],
+        provider: 'fake',
+        sandbox: true,
+        checkout_open: opts.checkoutOpen ?? true,
+      },
+    }
+  }
+  if (method === 'GET' && path === '/billing/me') {
+    return {
+      body: {
+        plan: entitled ? 'pro' : 'free',
+        stored_plan: 'free',
+        complimentary: false,
+        provider: 'fake',
+        sandbox: true,
+        subscription: st.sub
+          ? { provider: 'fake', ...st.sub, cancelled_at: null }
+          : null,
+      },
+    }
+  }
+  if (method === 'POST' && path === '/billing/checkout') {
+    st.sub = { status: 'created', paid_through: null, cancel_scheduled: false }
+    return {
+      body: {
+        provider: 'fake',
+        subscription_id: 'sub_fake_1',
+        key_id: null,
+        completion_url: '/billing/fake/simulate',
+        completion_token: 'sub_fake_1',
+        price: { amount_paise: 49900, currency: 'INR', interval: 'monthly' },
+      },
+    }
+  }
+  if (method === 'POST' && path === '/billing/fake/simulate') {
+    st.sub = { status: 'active', paid_through: PAID_THROUGH, cancel_scheduled: false }
+    return { body: { subscription: { provider: 'fake', ...st.sub, cancelled_at: null } } }
+  }
+  if (method === 'POST' && path === '/billing/cancel') {
+    if (!st.sub) return { status: 404, body: { detail: 'You have no subscription to cancel.' } }
+    st.sub = { ...st.sub, cancel_scheduled: true }
+    return { body: { subscription: { provider: 'fake', ...st.sub, cancelled_at: null } } }
+  }
+  return undefined
+}
+
 export type MockApi = {
+  /** Paths the app asked for that this fake backend does not know (answered 404). Useful when adding a page. */
+  saasCalls: string[]
   /** Paths the app asked for that this fake backend does not know (answered 404). Useful when adding a page. */
   unmocked: string[]
 }
@@ -278,9 +383,14 @@ export type MockApi = {
  * Serve the fake backend for this page. With `signedIn`, the browser starts with a (fake) saved sign-in, so the
  * app opens straight into TradeMind; without it, the sign-in screen shows first.
  */
-export async function mockApi(page: Page, opts: { role?: Role; signedIn?: boolean; tourSeen?: boolean } = {}): Promise<MockApi> {
+export async function mockApi(
+  page: Page,
+  opts: { role?: Role; signedIn?: boolean; tourSeen?: boolean; saas?: SaasOpts } = {},
+): Promise<MockApi> {
   const role = opts.role ?? 'owner'
-  const state: MockApi = { unmocked: [] }
+  const saasOpts = opts.saas ?? {}
+  const saasState: SaasState = { sub: saasOpts.subscription ?? null, calls: [] }
+  const state: MockApi = { unmocked: [], saasCalls: saasState.calls }
 
   // The first-time tour opens by itself for an account that has not seen it, and would cover every journey.
   // Mark it seen for both fake accounts unless a test is about the tour (tour.spec.ts passes tourSeen: false).
@@ -318,7 +428,7 @@ export async function mockApi(page: Page, opts: { role?: Role; signedIn?: boolea
       } catch {
         /* no JSON body */
       }
-      const found = answer(role, req.method(), path, url.searchParams, body)
+      const found = saasAnswer(saasOpts, saasState, req.method(), path, body) ?? answer(role, req.method(), path, url.searchParams, body)
       if (!found) state.unmocked.push(`${req.method()} ${path}`)
       const reply = found ?? { status: 404, body: { detail: 'Not found (not in the browser-test fixtures).' } }
       await route.fulfill({ status: reply.status ?? 200, contentType: 'application/json', body: JSON.stringify(reply.body) })

@@ -45,6 +45,9 @@ OPEN_WRITES: dict[tuple[str, str], str] = {
     ("POST", "/billing/cancel"): "a signed-in person cancels their own subscription only",
     ("POST", "/billing/fake/simulate"): "fake provider only; the caller's own subscription (the owner: any)",
     ("POST", "/billing/webhook"): "the provider calls it; the signature over the raw body is the credential",
+    ("POST", "/account/deletion/request"): "a signed-in person asks to delete their own account, nobody else's",
+    ("POST", "/account/deletion/confirm"): "the one-time emailed token is the credential",
+    ("POST", "/account/deletion/cancel"): "the one-time emailed keep-my-account token is the credential",
 }
 
 # Routes anyone may call without credentials, and why. Everything else must answer 401/403.
@@ -66,6 +69,8 @@ PUBLIC: dict[tuple[str, str], str] = {
     ("POST", "/auth/reset-password"): "the one-time emailed token is the credential",
     ("GET", "/auth/google/callback"): "Google sends the browser back here and cannot add our credentials",
     ("POST", "/billing/webhook"): "the provider calls it; refuses (400) any body without a valid signature",
+    ("POST", "/account/deletion/confirm"): "the one-time emailed token is the credential; 404 unless enabled",
+    ("POST", "/account/deletion/cancel"): "the one-time emailed keep-my-account token is the credential",
     ("GET", "/auth/kite/login"): "starts Zerodha login; the token is only kept for the owner's own client ID",
     (
         "GET",

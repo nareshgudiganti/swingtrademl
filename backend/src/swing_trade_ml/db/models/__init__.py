@@ -4,6 +4,7 @@ Alembic autogenerate and `create_all` both depend on that, so any new model
 module must be re-exported here.
 """
 
+from swing_trade_ml.db.models.account_deletion import AccountDeletion
 from swing_trade_ml.db.models.alerts import AlertOutbox, AlertSettings
 from swing_trade_ml.db.models.audit import AuditLog, LoginCode
 from swing_trade_ml.db.models.auth_tokens import AuthToken
@@ -114,6 +115,7 @@ __all__ = [
     "Instrument",
     "BillingEvent",
     "InviteRequest",
+    "AccountDeletion",
     "AuthToken",
     "PlanGrant",
     "Subscription",

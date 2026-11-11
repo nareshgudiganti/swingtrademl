@@ -12,7 +12,14 @@ from sqlalchemy.orm import Session
 from swing_trade_ml.db.models.auth_tokens import AuthToken
 from swing_trade_ml.db.models.session import User
 
-TTL = {"verify_email": timedelta(hours=24), "reset_password": timedelta(hours=1)}
+TTL = {
+    "verify_email": timedelta(hours=24),
+    "reset_password": timedelta(hours=1),
+    "delete_account": timedelta(hours=1),
+    # The "changed my mind" link sent when deletion is confirmed; the grace period (default 14 days) is
+    # the real limit, enforced by services/account_deletion.py.
+    "cancel_delete": timedelta(days=30),
+}
 
 
 def hash_token(raw: str) -> str:

@@ -34,7 +34,7 @@ from swing_trade_ml.schemas import (
     SignupRequest,
     TokenResponse,
 )
-from swing_trade_ml.services import audit, login_codes
+from swing_trade_ml.services import account_deletion, audit, login_codes
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 log = get_logger(__name__)
@@ -191,6 +191,9 @@ def login(payload: LoginRequest, db: DbSession, request: Request) -> TokenRespon
     if not user.is_active:
         # Same answer as a wrong password: a disabled account doesn't confirm the password was right.
         raise refuse("auth.login_disabled")
+    if account_deletion.blocks_sign_in(db, user):
+        # Deletion confirmed: same answer as a wrong password. The emailed link is the way back.
+        raise refuse("auth.login_deleting")
     if (
         settings.REQUIRE_EMAIL_VERIFICATION
         and user.auth_provider == "local"
@@ -589,6 +592,12 @@ def google_callback(code: str, state: str, db: DbSession) -> HTMLResponse | Redi
             status_code=403,
         )
 
+    if account_deletion.blocks_sign_in(db, user):
+        return HTMLResponse(
+            _page("🚫", "Account being deleted", "This account is scheduled for deletion.", ok=False),
+            status_code=403,
+        )
+
     user.last_login_at = datetime.now(UTC)
     db.commit()
     db.refresh(user)
@@ -606,6 +615,11 @@ def google_exchange(payload: LoginCodeExchange, db: DbSession, request: Request)
     user = login_codes.redeem(db, payload.code)
     if user is None:
         db.commit()  # keep the code marked used even when the account is disabled
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED, "This sign-in link has expired. Please sign in again."
+        )
+    if account_deletion.blocks_sign_in(db, user):
+        db.commit()
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED, "This sign-in link has expired. Please sign in again."
         )

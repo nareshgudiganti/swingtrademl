@@ -13,6 +13,7 @@ import { PageState, StaleNotice } from '../PageState'
 import { pickState } from '../stateRules'
 import { ActToday, DetailPanel, LevelTag, PositionBar, levelOf, retPct } from './PositionParts'
 import type { LevelState } from './positionLevels'
+import { AllocationCard, ClosedScoreboard } from './PortfolioInsights'
 
 const SECTOR_COLORS = ['#3f55d6', '#1f9d6b', '#e0a72b', '#d9486a', '#7a4fd6', '#17a2b8', '#e8702a', '#5a6b8c']
 
@@ -199,7 +200,12 @@ export default function PaperPositions() {
         <Card title={`Your positions (${rows.length})`}>
           {close.isError && <p className="tm-dim">Could not sell that position.</p>}
           {positionsState === 'empty' && (
-            <PageState kind="empty" reason="Nothing held yet. Make a practice buy on Portfolio → Manual test." />
+            <>
+              <PageState kind="empty" reason="Nothing held yet. Make a practice buy on Portfolio → Manual test." />
+              <Link className="tm-btn" to="/trademind/manual-test">
+                + Add practice position
+              </Link>
+            </>
           )}
           {rows.length > 0 && (
             <>
@@ -290,6 +296,8 @@ export default function PaperPositions() {
       </div>
 
 
+      <AllocationCard rows={rows} />
+
       {sectors.length > 0 && (
         <Card title="By sector">
           <div className="tm-sector-rail" role="region" aria-label="Sectors, scroll sideways to see more" tabIndex={0}>
@@ -340,6 +348,7 @@ export default function PaperPositions() {
         {tradesState === 'ready' && reportRows.length === 0 && (
           <PageState kind="empty" reason="No closed paper trades yet. A trade shows here once you sell it." />
         )}
+        {tradesState === 'ready' && <ClosedScoreboard trades={trades.data ?? []} />}
         {tradesState === 'ready' && <SellList trades={trades.data ?? []} book="Testing" />}
         {reportRows.length > 0 && <PeriodTable rows={reportRows} />}
       </Card>

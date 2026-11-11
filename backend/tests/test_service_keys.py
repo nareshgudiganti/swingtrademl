@@ -211,6 +211,7 @@ def test_invalid_scope_rejected_by_the_api(client, db_session):
 
 
 def test_migration_chains_from_billing01_and_head_is_single():
+    # servicekeys01 is one of two branches (with adminmfa01) joined by acctdelete01, the single head.
     from alembic.config import Config
     from alembic.script import ScriptDirectory
 
@@ -219,4 +220,5 @@ def test_migration_chains_from_billing01_and_head_is_single():
     cfg.set_main_option("script_location", str(root / "alembic"))
     script = ScriptDirectory.from_config(cfg)
     assert script.get_revision("servicekeys01").down_revision == "billing01"
-    assert script.get_heads() == ["servicekeys01"]
+    assert script.get_heads() == ["acctdelete01"]
+    assert set(script.get_revision("acctdelete01").down_revision) == {"servicekeys01", "adminmfa01"}

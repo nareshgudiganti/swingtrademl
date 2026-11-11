@@ -27,6 +27,7 @@ from swing_trade_ml.db.models.market import Candle, Instrument
 from swing_trade_ml.db.models.session import User
 from swing_trade_ml.db.models.trading import StockScore
 from swing_trade_ml.db.models.user_watchlist import UserWatchlistItem
+from swing_trade_ml.services import score_history
 from swing_trade_ml.services import watchlist_tracker as tracker
 
 router = APIRouter(prefix="/me/watchlist", tags=["my-watchlist"])
@@ -267,13 +268,18 @@ def my_tracker(db: DbSession, me: Me) -> dict:
         .order_by(Candle.instrument_id, Candle.ts)
     ).all():
         candles.setdefault(iid, []).append((tracker.ist_date(ts), close))
-    scores: dict[int, list[tuple[date, float]]] = {}
-    for iid, as_of, score in db.execute(
-        select(StockScore.instrument_id, StockScore.as_of, StockScore.score)
+    by_stock: dict[int, list[StockScore]] = {}
+    for row in db.execute(
+        select(StockScore)
         .where(StockScore.instrument_id.in_(ids), StockScore.as_of >= since)
         .order_by(StockScore.instrument_id, StockScore.as_of)
-    ).all():
-        scores.setdefault(iid, []).append((as_of, score))
+    ).scalars():
+        by_stock.setdefault(row.instrument_id, []).append(row)
+    # One model per stock, so another model's score never reads as this stock's own change.
+    scores: dict[int, list[tuple[date, float]]] = {
+        iid: [(r.as_of, r.score) for r in score_history.one_model_rows(rows)]
+        for iid, rows in by_stock.items()
+    }
     items = []
     for r in rows:
         iid, name = inst.get(r.symbol, (None, None))

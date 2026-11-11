@@ -11,6 +11,7 @@ from swing_trade_ml.api.v1.endpoints import (
     auth,
     backtest,
     beginner,
+    account_deletion,
     billing,
     brain,
     brain_changes,
@@ -73,6 +74,8 @@ api_router.include_router(service_keys.admin)
 # Pro billing: 404 unless BILLING_ENABLED; each route checks its own caller (see endpoints/billing.py).
 api_router.include_router(billing.router)
 api_router.include_router(billing.admin)
+# Account deletion: request/confirm/status/export 404 unless ACCOUNT_DELETION_ENABLED; cancel always works.
+api_router.include_router(account_deletion.router)
 # Admin console: owner-role person + two-step code; anyone else gets 404 (endpoints/admin_console.py).
 api_router.include_router(admin_console.mfa_router)
 api_router.include_router(admin_console.console)

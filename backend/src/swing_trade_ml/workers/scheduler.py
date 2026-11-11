@@ -65,6 +65,15 @@ def start_scheduler() -> None:
         replace_existing=True,
     )
 
+    # Always-on (no-op while ACCOUNT_DELETION_ENABLED is off): finish account deletions whose
+    # waiting period has ended. Housekeeping only; it never trades.
+    scheduler.add_job(
+        jobs.job_process_account_deletions,
+        CronTrigger(hour=3, minute=30, timezone=IST),
+        id="account_deletions",
+        replace_existing=True,
+    )
+
     # Always-on: memory record, early warning and a safe restart of a bloated worker
     # (services/server_watch.py). Housekeeping only; it never trades.
     scheduler.add_job(

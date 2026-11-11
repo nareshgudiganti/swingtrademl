@@ -57,6 +57,8 @@ PUBLIC_ROUTES: dict[tuple[str, str], str] = {
     ("POST", "/auth/forgot-password"): "same answer for every email; rate-limited",
     ("POST", "/auth/reset-password"): "the one-time emailed token is the credential",
     ("POST", "/billing/webhook"): "the provider calls it; the signature over the raw body is the credential",
+    ("POST", "/account/deletion/confirm"): "the one-time emailed token is the credential; 404 unless ACCOUNT_DELETION_ENABLED",
+    ("POST", "/account/deletion/cancel"): "the one-time emailed keep-my-account token is the credential",
     ("GET", "/auth/kite/login"): "starts the Zerodha login (redirect only; see report finding)",
     ("GET", "/auth/kite/callback"): "Zerodha redirect, browser cannot send headers",
 }
@@ -72,6 +74,9 @@ SIGNED_IN_ONLY_ROUTES: dict[tuple[str, str], str] = {
     ("POST", "/billing/checkout"): "a signed-in person starts their own subscription (sandbox only)",
     ("POST", "/billing/cancel"): "a signed-in person cancels their own subscription only",
     ("POST", "/billing/fake/simulate"): "fake provider only; the caller's own subscription",
+    ("POST", "/account/deletion/request"): "a signed-in person asks to delete their own account",
+    ("GET", "/account/deletion"): "a signed-in person sees their own deletion status",
+    ("GET", "/account/export"): "a signed-in person downloads their own data",
 }
 
 #: Dependencies that mean "the handler is checked as the owner itself".

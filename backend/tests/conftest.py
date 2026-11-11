@@ -108,4 +108,5 @@ def _billing_on_for_route_audits(request, monkeypatch):
         from swing_trade_ml.core.config import settings
 
         monkeypatch.setattr(settings, "BILLING_ENABLED", True)
+        monkeypatch.setattr(settings, "ACCOUNT_DELETION_ENABLED", True)
         monkeypatch.setattr(settings, "BILLING_ACCEPT_NEW_CHECKOUTS", True)  # checkout is audited too

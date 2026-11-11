@@ -57,6 +57,7 @@ from swing_trade_ml.db.models.ml import MLModel, Prediction
 from swing_trade_ml.db.models.mutual_funds import MutualFund, MutualFundHolding, MutualFundNav
 from swing_trade_ml.db.models.registry import ModelResearchSlot
 from swing_trade_ml.db.models.safety import RiskEvent, SystemState
+from swing_trade_ml.db.models.service_keys import ServiceKey
 from swing_trade_ml.db.models.session import BrokerSession, PlanSettings, SubscriptionPlan, User
 from swing_trade_ml.db.models.trading import (
     CapitalDeposit,
@@ -132,6 +133,7 @@ __all__ = [
     "Prediction",
     "Quote",
     "RiskEvent",
+    "ServiceKey",
     "Signal",
     "Strategy",
     "SubscriptionPlan",

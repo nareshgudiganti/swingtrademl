@@ -7,6 +7,8 @@ import type {
   ExperimentPickIn,
   ExperimentReport,
   ExperimentSelection,
+  IdeaReport,
+  IdeaReportQuery,
   ObsDays,
   ObsForwardGate,
   ObsScoreBands,
@@ -437,6 +439,8 @@ export const api = {
   realSell: (id: number, quantity?: number) =>
     post<RealOrder>(`/portfolio/real/positions/${id}/sell`, quantity ? { quantity } : {}),
   trades: (limit = 100) => get<Trade[]>(`/portfolio/trades?limit=${limit}&book=bot`),
+  // Every sale recorded in the owner's real book (My Holdings), all time. Refused by the server for non-owners.
+  realTrades: (limit = 1000) => get<Trade[]>(`/portfolio/trades?limit=${limit}&book=real&all_time=true`),
   testerSummary: () => get<PortfolioSummary>('/portfolio/summary?book=tester'),
   testerPositions: () => get<DetailedPosition[]>('/portfolio/positions/detailed?book=tester'),
   testerTrades: (limit = 500) => get<Trade[]>(`/portfolio/trades?limit=${limit}&book=tester&all_time=true`),
@@ -699,6 +703,17 @@ export const api = {
   brainApprovals: () => get<BrainApproval[]>('/brain/approvals'),
   brainApprove: (id: number, note: string) => post<BrainApproval>(`/brain/approvals/${id}/approve`, { note }),
   brainReject: (id: number, reason: string) => post<BrainApproval>(`/brain/approvals/${id}/reject`, { reason }),
+
+  // ---------------------------------------------- Portfolio > Reports (owner, read-only) --
+  ideaReport: (q: IdeaReportQuery) => {
+    const p = new URLSearchParams()
+    if (q.from) p.set('from', q.from)
+    if (q.to) p.set('to', q.to)
+    for (const k of ['word', 'band', 'horizon', 'regime', 'outcome'] as const)
+      for (const v of q[k] ?? []) p.append(k, String(v))
+    if (q.current_only) p.set('current_only', 'true')
+    return get<IdeaReport>(`/brain/idea-report?${p.toString()}`)
+  },
 
   // ---------------------------------------------- brain observatory (owner, read-only) --
   obsDays: (from: string, to: string) => get<ObsDays>(`/brain/observatory/days?from=${from}&to=${to}`),

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
@@ -14,6 +14,7 @@ import { pickState } from '../stateRules'
 import { ActToday, DetailPanel, LevelTag, PositionBar, levelOf, retPct } from './PositionParts'
 import type { LevelState } from './positionLevels'
 import { AllocationCard, ClosedScoreboard } from './PortfolioInsights'
+import IdeaReports from './IdeaReports'
 
 const SECTOR_COLORS = ['#3f55d6', '#1f9d6b', '#e0a72b', '#d9486a', '#7a4fd6', '#17a2b8', '#e8702a', '#5a6b8c']
 
@@ -173,22 +174,22 @@ export default function PaperPositions() {
           </Card>
           {bestDay && (
             <Card>
-              <Stat label="Best today" value={bestDay.symbol} tone={toneClass(dayPct(bestDay))} note={signed(dayPct(bestDay))} />
+              <Stat label="Best today" value={<StockLink symbol={bestDay.symbol} withScore={false} />} tone={toneClass(dayPct(bestDay))} note={signed(dayPct(bestDay))} />
             </Card>
           )}
           {worstDay && (
             <Card>
-              <Stat label="Worst today" value={worstDay.symbol} tone={toneClass(dayPct(worstDay))} note={signed(dayPct(worstDay))} />
+              <Stat label="Worst today" value={<StockLink symbol={worstDay.symbol} withScore={false} />} tone={toneClass(dayPct(worstDay))} note={signed(dayPct(worstDay))} />
             </Card>
           )}
           {best && (
             <Card>
-              <Stat label="Best overall (open)" value={best.symbol} tone={toneClass(best.unrealized_pnl_pct)} note={signed(best.unrealized_pnl_pct * 100)} />
+              <Stat label="Best overall (open)" value={<StockLink symbol={best.symbol} withScore={false} />} tone={toneClass(best.unrealized_pnl_pct)} note={signed(best.unrealized_pnl_pct * 100)} />
             </Card>
           )}
           {worst && (
             <Card>
-              <Stat label="Worst overall (open)" value={worst.symbol} tone={toneClass(worst.unrealized_pnl_pct)} note={signed(worst.unrealized_pnl_pct * 100)} />
+              <Stat label="Worst overall (open)" value={<StockLink symbol={worst.symbol} withScore={false} />} tone={toneClass(worst.unrealized_pnl_pct)} note={signed(worst.unrealized_pnl_pct * 100)} />
             </Card>
           )}
         </div>
@@ -319,7 +320,7 @@ export default function PaperPositions() {
                     <div key={st.symbol} className="tm-flex" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
                       <span className="tm-stock-cell">
                         <StockLogo symbol={st.symbol} />
-                        {st.symbol}
+                        <StockLink symbol={st.symbol} withScore={false} />
                       </span>
                       <span className={`${toneClass(st.pct)} tm-num`}>{signed(st.pct)}</span>
                     </div>
@@ -330,6 +331,8 @@ export default function PaperPositions() {
           </div>
         </Card>
       )}
+
+      <IdeaReports />
 
       <Card title="Closed trades">
         <div className="tm-toolbar" style={{ marginBottom: '0.6rem' }}>
@@ -363,7 +366,7 @@ function Stat({
   tone,
 }: {
   label: string
-  value: string
+  value: ReactNode
   note?: string
   tone?: string
 }) {

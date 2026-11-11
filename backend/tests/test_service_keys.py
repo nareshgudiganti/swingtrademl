@@ -219,4 +219,4 @@ def test_migration_chains_from_billing01_and_head_is_single():
     cfg.set_main_option("script_location", str(root / "alembic"))
     script = ScriptDirectory.from_config(cfg)
     assert script.get_revision("servicekeys01").down_revision == "billing01"
-    assert script.get_heads() == ["servicekeys01"]
+    assert len(script.get_heads()) == 1  # later migrations sit on top; the chain stays linear

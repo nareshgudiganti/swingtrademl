@@ -6,6 +6,8 @@ module must be re-exported here.
 
 from swing_trade_ml.db.models.alerts import AlertOutbox, AlertSettings
 from swing_trade_ml.db.models.audit import AuditLog, LoginCode
+from swing_trade_ml.db.models.auth_tokens import AuthToken
+from swing_trade_ml.db.models.billing import BillingEvent, PlanGrant, Subscription
 from swing_trade_ml.db.models.brain import (
     BrainAlert,
     BrainDecision,
@@ -110,7 +112,11 @@ __all__ = [
     "LanePick",
     "InstitutionalFlow",
     "Instrument",
+    "BillingEvent",
     "InviteRequest",
+    "AuthToken",
+    "PlanGrant",
+    "Subscription",
     "LoginCode",
     "MLModel",
     "ModelResearchSlot",

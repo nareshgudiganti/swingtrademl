@@ -15,7 +15,7 @@ score, so the sealed trial (services/trial_seal.py) and the lane's own results s
 are history evaluations with no forward picks, so their matured count is reported as "n/a", never guessed.
 
 Thresholds are READ from code, not invented: h05 from `lanes.h05_protocol.RUN_VALUES` (U2) and
-`lanes.h05_report.RESOLVED`; 15D from `selection_lab_start` / `selection_lab_run`; SX5 from `scripts/sx5_run.py`
+`lanes.h05_report.RESOLVED`; 15D from `selection_lab_start` / `selection_lab_run`; SX5 from the SX5 run script (scripts/, EARLIEST_REAL_DATE)
 (EARLIEST_REAL_DATE; scripts/ is not importable, so it is mirrored below and a test compares the two).
 
 Run:  python -m swing_trade_ml.brain.eligibility_report
@@ -40,7 +40,7 @@ H05_MIN_MATURED_DAYS = 40  # h05_protocol.RUN_VALUES["min_evidence_per_group"]["
 H05_MIN_ELIGIBLE = 10  # ... ["min_eligible_per_day"]
 H05_RESOLVED = ("target", "stop", "expiry")  # h05_report.RESOLVED
 LAB_EARLIEST = date(2026, 12, 5)  # selection_lab_start.EARLIEST_START (Amendment 2, item 2)
-SX5_EARLIEST = date(2026, 12, 4)  # scripts/sx5_run.py EARLIEST_REAL_DATE
+SX5_EARLIEST = date(2026, 12, 4)  # the SX5 run script's EARLIEST_REAL_DATE
 AMENDMENT3_SIGNED_FILE = (
     "docs/brain/evidence/sl_v1/EVIDENCE_PLAN_AMENDMENT_3_SIGNED.md"  # selection_lab_run.AMENDMENT
 )
@@ -156,7 +156,7 @@ def build_report(today: date, facts: dict) -> dict:
         _lane(
             "SX5",
             earliest_date=str(SX5_EARLIEST),
-            needed_source="scripts/sx5_run.py EARLIEST_REAL_DATE; docs/brain/SX5-RUN.md",
+            needed_source="the SX5 run script EARLIEST_REAL_DATE; docs/brain/SX5-RUN.md",
             blocking=sx5_blocking,
             verdict="BLOCKED_BY_PROTOCOL" if sx5_blocking else "ELIGIBLE_NOT_AUTHORISED",
             note="n/a: development-only walk-forward, no forward picks. Needs the signed protocol, a signing tag, the approval file and a SEPARATE training authorisation (sx5-training-authorisation-v1). This report cannot see those, so authorisation is never assumed.",

@@ -36,6 +36,15 @@ OPEN_WRITES: dict[tuple[str, str], str] = {
     ("DELETE", "/me/watchlist/{symbol}"): "a signed-in person removes a stock from their own watchlist only",
     ("PATCH", "/me/watchlist/{symbol}"): "a signed-in person edits their own Groww buy price and note, on their own list only",
     ("POST", "/auth/invite-request"): _INVITE,
+    ("POST", "/auth/register"): "self sign-up; answers 404 unless ALLOW_SIGNUP is on",
+    ("POST", "/auth/verify-email"): "the one-time emailed token is the credential",
+    ("POST", "/auth/resend-verification"): "same answer for every email; rate-limited",
+    ("POST", "/auth/forgot-password"): "same answer for every email; rate-limited",
+    ("POST", "/auth/reset-password"): "the one-time emailed token is the credential",
+    ("POST", "/billing/checkout"): "a signed-in person starts their own Pro subscription (sandbox only)",
+    ("POST", "/billing/cancel"): "a signed-in person cancels their own subscription only",
+    ("POST", "/billing/fake/simulate"): "fake provider only; the caller's own subscription (the owner: any)",
+    ("POST", "/billing/webhook"): "the provider calls it; the signature over the raw body is the credential",
 }
 
 # Routes anyone may call without credentials, and why. Everything else must answer 401/403.
@@ -50,7 +59,13 @@ PUBLIC: dict[tuple[str, str], str] = {
     ("POST", "/auth/google/exchange"): "finishes Google sign-in; the one-time code is the credential",
     ("GET", "/auth/google/login"): "starts Google sign-in",
     ("POST", "/auth/invite-request"): _INVITE,
+    ("POST", "/auth/register"): "self sign-up; answers 404 unless ALLOW_SIGNUP is on",
+    ("POST", "/auth/verify-email"): "the one-time emailed token is the credential",
+    ("POST", "/auth/resend-verification"): "same answer for every email; rate-limited",
+    ("POST", "/auth/forgot-password"): "same answer for every email; rate-limited",
+    ("POST", "/auth/reset-password"): "the one-time emailed token is the credential",
     ("GET", "/auth/google/callback"): "Google sends the browser back here and cannot add our credentials",
+    ("POST", "/billing/webhook"): "the provider calls it; refuses (400) any body without a valid signature",
     ("GET", "/auth/kite/login"): "starts Zerodha login; the token is only kept for the owner's own client ID",
     (
         "GET",

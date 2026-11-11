@@ -138,3 +138,11 @@ def test_summary_results_when_unsealed(unsealed):
 
 def test_no_sessions_gives_no_rows():
     assert r.build_rows([], []) == []
+
+
+def test_only_symbols_keeps_just_the_stocks_we_hold_or_sold(unsealed):
+    obs = [ob("AAA", d) for d in DAYS[:2]] + [ob("BBB", d) for d in DAYS[:2]]
+    rows = r.build_rows(obs, DAYS)
+    assert {x["symbol"] for x in r.apply_filters(rows)} == {"AAA", "BBB"}
+    assert {x["symbol"] for x in r.apply_filters(rows, only_symbols={"AAA"})} == {"AAA"}
+    assert r.apply_filters(rows, only_symbols=set()) == []  # nothing held or sold: nothing to show

@@ -45,6 +45,7 @@ def idea_report_route(
     regime: Annotated[list[str] | None, Query()] = None,
     outcome: Annotated[list[str] | None, Query()] = None,
     current_only: bool = False,
+    mine_only: bool = True,
 ) -> dict:
     today = datetime.now(IST).date()
     end = end or today
@@ -71,4 +72,5 @@ def idea_report_route(
         regimes=regime or [],
         outcomes=outcome or [],
         current_only=current_only,
+        mine_only=mine_only,
     )

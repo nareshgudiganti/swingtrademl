@@ -27,7 +27,7 @@ const report = (rows: IdeaReportRow[], sealed: boolean): IdeaReport => ({
 
 function draw(data: IdeaReport) {
   const qc = new QueryClient()
-  qc.setQueryData(['ideaReport', ['WATCH'], [], [], [], [], false], data)
+  qc.setQueryData(['ideaReport', 'mine', 'WATCH', '', '', '', '', false], data)
   // React puts <!-- --> between text pieces; drop them so assertions read like the page.
   return renderToString(
     <QueryClientProvider client={qc}>
@@ -42,8 +42,7 @@ describe('IdeaReports', () => {
   it('shows days done and left and the score then and now, but no result, while sealed', () => {
     const html = draw(report([row()], true))
     expect(html).toContain('CYIENT')
-    expect(html).toContain('4 done')
-    expect(html).toContain('11 left')
+    expect(html).toContain('11 of 15')
     expect(html).toContain('72')
     expect(html).toContain('76')
     expect(html).toContain('data-testid="report-sealed"')
@@ -63,5 +62,14 @@ describe('IdeaReports', () => {
   it('lets the owner pick the score ranges', () => {
     const html = draw(report([row()], true))
     for (const b of ['90+', '80-90', '70-80', '60-70']) expect(html).toContain(b)
+  })
+
+  it('shows only the stocks we hold or sold by default, with every filter as a dropdown', () => {
+    const html = draw(report([row()], true))
+    expect(html).toContain('Only stocks we hold or sold')
+    expect(html).toContain('Reset filters')
+    expect(html).toContain('data-testid="report-filters"')
+    expect((html.match(/<select/g) ?? []).length).toBe(4) // score, horizon, market mood, outcome (Decision is a button group)
+    expect(html).toContain('aria-pressed="true">Watch') // Decision starts on Watch
   })
 })

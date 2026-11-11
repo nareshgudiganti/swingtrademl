@@ -1,18 +1,25 @@
 // Portfolio > Reports: "I picked WATCH (or Buy) with a score of 70-80 — how many stocks is that, how many days have
-// passed, how many are left, and what happened?" Read-only: it only reads the brain's stored ideas. While the blind
-// trial is sealed the server sends no returns or results, only days and scores, and this card says so.
+// passed, how many are left, and what happened?" Read-only: it only reads the brain's stored ideas. By default it
+// lists only the stocks we hold or have sold. While the blind trial is sealed the server sends no returns or
+// results, only days and scores, and this card says so.
 
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 
 import { api } from '../../api/client'
 import type { IdeaReportRow } from '../../api/types'
-import { Card, toneClass } from '../ui'
+import { Card, Icon, Tag, toneClass } from '../ui'
 import StockLink from '../StockLink'
 import { PageState } from '../PageState'
 import { pickState } from '../stateRules'
 
 const WORD_NAME: Record<string, string> = { TRADE: 'Buy', WATCH: 'Watch', WAIT: 'Wait', AVOID: 'Avoid' }
+const WORD_TONE: Record<string, 'green' | 'amber' | 'red' | 'blue'> = {
+  TRADE: 'green',
+  WATCH: 'green',
+  WAIT: 'amber',
+  AVOID: 'red',
+}
 const MOOD_NAME: Record<string, string> = {
   NORMAL: 'Normal market',
   DEFENSIVE: 'Cautious market',
@@ -24,44 +31,38 @@ const OUTCOME_NAME: Record<string, string> = {
   timeout: 'Ended without either',
   open: 'Still running',
 }
+const DEFAULTS = { scope: 'mine' as 'mine' | 'all', word: 'WATCH', band: '', horizon: '', mood: '', outcome: '', currentOnly: false }
 
-type Multi = string[]
-const toggle = (list: Multi, v: string): Multi => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v])
-
-function Chips({
+/** One compact dropdown; '' means "Any" (no filter). */
+function Pick({
   label,
   options,
   value,
   onChange,
   name,
   disabled,
+  anyText = 'Any',
 }: {
   label: string
   options: string[]
-  value: Multi
-  onChange: (v: Multi) => void
+  value: string
+  onChange: (v: string) => void
   name?: (v: string) => string
   disabled?: boolean
+  anyText?: string
 }) {
-  if (options.length === 0) return null
   return (
-    <div style={{ marginBottom: '0.5rem' }}>
-      <div className="tm-stat-label">{label}</div>
-      <div className="tm-toolbar">
+    <label className="ir-pick">
+      <span className="tm-stat-label">{label}</span>
+      <select className="tm-select" value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)}>
+        <option value="">{anyText}</option>
         {options.map((o) => (
-          <button
-            key={o}
-            type="button"
-            className="tm-btn op-chip"
-            aria-pressed={value.includes(o)}
-            disabled={disabled}
-            onClick={() => onChange(toggle(value, o))}
-          >
+          <option key={o} value={o}>
             {name ? name(o) : o}
-          </button>
+          </option>
         ))}
-      </div>
-    </div>
+      </select>
+    </label>
   )
 }
 
@@ -71,7 +72,8 @@ const pct = (n: number | null) => (n === null ? '—' : `${n > 0 ? '+' : n < 0 ?
 
 function ResultCell({ r, sealed }: { r: IdeaReportRow; sealed: boolean }) {
   if (sealed) return <span className="tm-dim">Sealed</span>
-  if (r.outcome === null) return <span className="tm-dim">{r.status === 'due' ? 'Waiting for result' : 'Not finished'}</span>
+  if (r.outcome === null)
+    return r.status === 'due' ? <Tag tone="amber">Waiting for result</Tag> : <Tag tone="green">Still running</Tag>
   return (
     <span className={toneClass(r.return_pct ?? 0)}>
       {pct(r.return_pct)} <span className="tm-dim">· {OUTCOME_NAME[r.outcome]}</span>
@@ -79,24 +81,51 @@ function ResultCell({ r, sealed }: { r: IdeaReportRow; sealed: boolean }) {
   )
 }
 
+function Stat({ icon, label, value, note }: { icon: ReactNode; label: string; value: string; note?: string }) {
+  return (
+    <div className="ir-stat">
+      <span className="ir-stat-icon" aria-hidden="true">
+        {icon}
+      </span>
+      <div>
+        <div className="tm-stat-value">{value}</div>
+        <div className="tm-stat-label">{label}</div>
+        {note && <div className="tm-dim">{note}</div>}
+      </div>
+    </div>
+  )
+}
+
 export default function IdeaReports() {
-  const [words, setWords] = useState<Multi>(['WATCH'])
-  const [bands, setBands] = useState<Multi>([])
-  const [horizons, setHorizons] = useState<Multi>([])
-  const [moods, setMoods] = useState<Multi>([])
-  const [outcomes, setOutcomes] = useState<Multi>([])
-  const [currentOnly, setCurrentOnly] = useState(false)
+  const [scope, setScope] = useState(DEFAULTS.scope) // only stocks we hold or have sold, unless asked
+  const [word, setWord] = useState(DEFAULTS.word)
+  const [band, setBand] = useState(DEFAULTS.band)
+  const [horizon, setHorizon] = useState(DEFAULTS.horizon)
+  const [mood, setMood] = useState(DEFAULTS.mood)
+  const [outcome, setOutcome] = useState(DEFAULTS.outcome)
+  const [currentOnly, setCurrentOnly] = useState(DEFAULTS.currentOnly)
+  const one = (v: string) => (v ? [v] : [])
+  const reset = () => {
+    setScope(DEFAULTS.scope)
+    setWord(DEFAULTS.word)
+    setBand(DEFAULTS.band)
+    setHorizon(DEFAULTS.horizon)
+    setMood(DEFAULTS.mood)
+    setOutcome(DEFAULTS.outcome)
+    setCurrentOnly(DEFAULTS.currentOnly)
+  }
 
   const q = useQuery({
-    queryKey: ['ideaReport', words, bands, horizons, moods, outcomes, currentOnly],
+    queryKey: ['ideaReport', scope, word, band, horizon, mood, outcome, currentOnly],
     queryFn: () =>
       api.ideaReport({
-        word: words,
-        band: bands,
-        horizon: horizons.map(Number),
-        regime: moods,
-        outcome: outcomes,
+        word: one(word),
+        band: one(band),
+        horizon: one(horizon).map(Number),
+        regime: one(mood),
+        outcome: one(outcome),
         current_only: currentOnly,
+        mine_only: scope === 'mine',
       }),
     retry: false,
     placeholderData: (prev) => prev,
@@ -108,29 +137,76 @@ export default function IdeaReports() {
 
   const d = q.data
   const sealed = !!d?.seal.active
+  const wordText = word ? (WORD_NAME[word] ?? word) : 'this word'
+  const res = d?.summary.results
+  const resTotal = res ? res.target + res.stop + res.timeout : 0
+  const share = (n: number) => (resTotal ? Math.round((n / resTotal) * 100) : 0)
   return (
     <Card
       title="Idea reports"
-      sub="Pick a word and a score range to see how many stocks, how many days have passed, and what happened."
+      sub="Only the stocks we hold or have sold, unless you switch to every idea. See how many days have passed and what happened."
     >
       {d && (
         <>
-          <Chips label="What the brain said" options={d.options.words} value={words} onChange={setWords} name={(w) => WORD_NAME[w] ?? w} />
-          <Chips label="Score" options={d.options.bands} value={bands} onChange={setBands} />
-          <Chips label="Days allowed" options={d.options.horizons.map(String)} value={horizons} onChange={setHorizons} name={(h) => `${h} days`} />
-          <Chips label="Market mood that day" options={d.options.regimes} value={moods} onChange={setMoods} name={(m) => MOOD_NAME[m] ?? m} />
-          <Chips
-            label="What happened"
-            options={d.options.outcomes}
-            value={outcomes}
-            onChange={setOutcomes}
-            name={(o) => OUTCOME_NAME[o] ?? o}
-            disabled={sealed}
-          />
-          <label className="tm-dim" style={{ display: 'block', margin: '0.4rem 0 0.8rem' }}>
-            <input type="checkbox" checked={currentOnly} onChange={(e) => setCurrentOnly(e.target.checked)} /> Only stocks that
-            still have this word today
-          </label>
+          <div className="ir-filters" data-testid="report-filters">
+            <div className="ir-pick ir-decision">
+              <span className="tm-stat-label">Decision</span>
+              <div className="ir-seg" role="group" aria-label="Decision">
+                <button type="button" aria-pressed={word === ''} onClick={() => setWord('')}>
+                  All
+                </button>
+                {d.options.words.map((w) => (
+                  <button key={w} type="button" aria-pressed={word === w} onClick={() => setWord(w)}>
+                    {WORD_NAME[w] ?? w}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <Pick label="Score" options={d.options.bands} value={band} onChange={setBand} anyText="All scores" />
+            <Pick
+              label="Horizon"
+              options={d.options.horizons.map(String)}
+              value={horizon}
+              onChange={setHorizon}
+              name={(h) => `${h} days`}
+              anyText="All horizons"
+            />
+            <Pick
+              label="Market mood"
+              options={d.options.regimes}
+              value={mood}
+              onChange={setMood}
+              name={(m) => MOOD_NAME[m] ?? m}
+              anyText="All moods"
+            />
+            <Pick
+              label="Outcome"
+              options={d.options.outcomes}
+              value={outcome}
+              onChange={setOutcome}
+              name={(o) => OUTCOME_NAME[o] ?? o}
+              disabled={sealed}
+              anyText="All outcomes"
+            />
+            <div className="ir-toggles">
+              <label className="ir-toggle">
+                <input type="checkbox" role="switch" checked={currentOnly} onChange={(e) => setCurrentOnly(e.target.checked)} />
+                <span>Still rated {wordText} today</span>
+              </label>
+              <label className="ir-toggle">
+                <input
+                  type="checkbox"
+                  role="switch"
+                  checked={scope === 'mine'}
+                  onChange={(e) => setScope(e.target.checked ? 'mine' : 'all')}
+                />
+                <span>Only stocks we hold or sold</span>
+              </label>
+            </div>
+            <button type="button" className="ir-reset" onClick={reset}>
+              Reset filters
+            </button>
+          </div>
           {sealed && (
             <p className="tm-dim" data-testid="report-sealed">
               Results are hidden while the test is running (from {d.seal.from ? day(d.seal.from) : 'its start'}), so the
@@ -138,19 +214,69 @@ export default function IdeaReports() {
               the +8% / −4% results unlock when the test is reviewed.
             </p>
           )}
-          <div className="tm-grid tm-cols-4" data-testid="report-summary" style={{ margin: '0.6rem 0' }}>
-            <Stat label="Stocks" value={String(d.summary.ideas)} note={`${d.summary.still_this_word} still have this word`} />
-            <Stat label="Still running" value={String(d.summary.tracking)} note="days left to go" />
-            <Stat label="Finished" value={String(d.summary.finished + d.summary.due)} note={d.summary.due ? `${d.summary.due} waiting for result` : undefined} />
+          <div className="ir-stats" data-testid="report-summary">
             <Stat
-              label={sealed ? 'Results' : 'Hit +8% / −4%'}
-              value={sealed ? 'Hidden' : `${d.summary.results.target} / ${d.summary.results.stop}`}
-              note={sealed ? 'until the test is reviewed' : d.summary.results.avg_return_pct === null ? undefined : `average ${pct(d.summary.results.avg_return_pct)}`}
+              icon={<Icon.Layers size={22} />}
+              label="Tracked ideas"
+              value={String(d.summary.ideas)}
+              note={`${d.summary.still_this_word} still have this word`}
+            />
+            <Stat icon={<Icon.Pulse size={22} />} label="Still running" value={String(d.summary.tracking)} />
+            <Stat
+              icon={<Icon.Check size={22} />}
+              label="Finished"
+              value={String(d.summary.finished + d.summary.due)}
+              note={d.summary.due ? `${d.summary.due} waiting for result` : undefined}
+            />
+            <Stat
+              icon={<Icon.Chart size={22} />}
+              label={sealed ? 'Results' : 'Average return'}
+              value={sealed ? 'Hidden' : res?.avg_return_pct == null ? '—' : pct(res.avg_return_pct)}
+              note={sealed ? 'until the test is reviewed' : 'for finished ideas'}
             />
           </div>
+          {!sealed && res && resTotal > 0 && (
+            <div className="ir-outcomes" data-testid="report-outcomes">
+              <h4 className="ir-h">Finished outcomes</h4>
+              <div
+                className="ir-bar"
+                role="img"
+                aria-label={`Hit +8% first ${share(res.target)}%, hit −4% first ${share(res.stop)}%, neither ${share(res.timeout)}%`}
+              >
+                {res.target > 0 && (
+                  <span className="ir-bar-win" style={{ flexGrow: res.target }}>
+                    {share(res.target)}%
+                  </span>
+                )}
+                {res.stop > 0 && (
+                  <span className="ir-bar-loss" style={{ flexGrow: res.stop }}>
+                    {share(res.stop)}%
+                  </span>
+                )}
+                {res.timeout > 0 && (
+                  <span className="ir-bar-flat" style={{ flexGrow: res.timeout }}>
+                    {share(res.timeout)}%
+                  </span>
+                )}
+              </div>
+              <div className="ir-legend">
+                <span>
+                  <i className="ir-bar-win" /> Hit +8% first · {res.target}
+                </span>
+                <span>
+                  <i className="ir-bar-loss" /> Hit −4% first · {res.stop}
+                </span>
+                <span>
+                  <i className="ir-bar-flat" /> Neither · {res.timeout}
+                </span>
+              </div>
+            </div>
+          )}
         </>
       )}
-      {!d && state !== 'ready' && state !== 'empty' && <PageState kind={state} what="the idea report" error={q.error} onRetry={q.refetch} />}
+      {!d && state !== 'ready' && state !== 'empty' && (
+        <PageState kind={state} what="the idea report" error={q.error} onRetry={q.refetch} />
+      )}
       {d && d.rows.length === 0 && (
         <PageState kind="empty" reason="No stocks match these choices in the last 60 days. Try fewer filters." />
       )}
@@ -160,12 +286,12 @@ export default function IdeaReports() {
             <thead>
               <tr>
                 <th>Stock</th>
-                <th>Word</th>
+                <th>Decision</th>
                 <th>First seen</th>
-                <th>Days done / left</th>
+                <th>Sessions left</th>
                 <th>Score then → now</th>
                 <th>Market mood</th>
-                <th>Result</th>
+                <th>Outcome</th>
               </tr>
             </thead>
             <tbody>
@@ -175,17 +301,17 @@ export default function IdeaReports() {
                     <StockLink symbol={r.symbol} />
                   </td>
                   <td>
-                    {WORD_NAME[r.word] ?? r.word}
+                    <Tag tone={WORD_TONE[r.word] ?? 'blue'}>{WORD_NAME[r.word] ?? r.word}</Tag>
                     {!r.still_this_word && <div className="tm-dim">now {WORD_NAME[r.latest_word] ?? r.latest_word}</div>}
                   </td>
                   <td>{day(r.entry_day)}</td>
                   <td className="tm-num">
-                    {r.days_done} done · {r.days_left} left <span className="tm-dim">of {r.horizon_days}</span>
+                    {r.days_left} of {r.horizon_days}
                   </td>
                   <td className="tm-num">
                     {r.entry_score ?? '—'} → {r.latest_score ?? '—'}
                   </td>
-                  <td>{r.regime ? MOOD_NAME[r.regime] ?? r.regime : '—'}</td>
+                  <td>{r.regime ? (MOOD_NAME[r.regime] ?? r.regime) : '—'}</td>
                   <td>
                     <ResultCell r={r} sealed={r.sealed} />
                   </td>
@@ -196,15 +322,5 @@ export default function IdeaReports() {
         </div>
       )}
     </Card>
-  )
-}
-
-function Stat({ label, value, note }: { label: string; value: string; note?: string }) {
-  return (
-    <div>
-      <div className="tm-stat-label">{label}</div>
-      <div className="tm-stat-value">{value}</div>
-      {note && <div className="tm-dim">{note}</div>}
-    </div>
   )
 }

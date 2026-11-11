@@ -2033,6 +2033,7 @@ export interface IdeaReportRow {
 }
 
 export interface IdeaReport {
+  mine_only?: boolean
   from: string
   to: string
   sessions: number
@@ -2060,4 +2061,6 @@ export interface IdeaReportQuery {
   regime?: string[]
   outcome?: string[]
   current_only?: boolean
+  /** Only stocks we hold or have sold (the server's default). False = every idea. */
+  mine_only?: boolean
 }

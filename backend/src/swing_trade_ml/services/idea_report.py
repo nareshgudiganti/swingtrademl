@@ -18,7 +18,7 @@ target or stop hit. Filters on results (outcome) never match sealed rows.
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Iterable, Sequence
+from collections.abc import Collection, Iterable, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
@@ -171,10 +171,15 @@ def apply_filters(
     regimes: Sequence[str] = (),
     outcomes: Sequence[str] = (),
     current_only: bool = False,
+    only_symbols: Collection[str] | None = None,
 ) -> list[dict]:
-    """Every filter is "any of"; an empty one does not filter. Outcome filters never match a sealed row."""
+    """Every filter is "any of"; an empty one does not filter. Outcome filters never match a sealed row.
+
+    `only_symbols` (None = every stock) keeps just those stocks: the ones we hold or have held and sold."""
     out = []
     for r in rows:
+        if only_symbols is not None and r["symbol"].upper() not in only_symbols:
+            continue
         if words and r["word"] not in words:
             continue
         if bands and r["score_band"] not in bands:
@@ -271,6 +276,20 @@ def load_observations(db, start: date, end: date, book: str) -> tuple[list[Obs],
     return obs, sorted(latest)
 
 
+def held_or_sold_symbols(db, mode: str) -> set[str]:
+    """Upper-case symbols of every position in this trading mode, open or closed (held now, or sold)."""
+    from swing_trade_ml.db.models.market import Instrument
+    from swing_trade_ml.db.models.trading import Position
+
+    rows = db.execute(
+        select(Instrument.tradingsymbol)
+        .join(Position, Position.instrument_id == Instrument.id)
+        .where(Position.mode == mode)
+        .distinct()
+    ).scalars()
+    return {str(sym).upper() for sym in rows}
+
+
 def build(
     db,
     start: date,
@@ -283,6 +302,7 @@ def build(
     regimes: Sequence[str] = (),
     outcomes: Sequence[str] = (),
     current_only: bool = False,
+    mine_only: bool = False,
 ) -> dict:
     obs, sessions = load_observations(db, start, end, book)
     all_rows = build_rows(obs, sessions)
@@ -294,6 +314,7 @@ def build(
         regimes=regimes,
         outcomes=outcomes,
         current_only=current_only,
+        only_symbols=held_or_sold_symbols(db, book) if mine_only else None,
     )
     sealed_touched = any(r["sealed"] for r in all_rows)
     return {
@@ -301,6 +322,7 @@ def build(
         "to": end.isoformat(),
         "sessions": len(sessions),
         "last_session": sessions[-1].isoformat() if sessions else None,
+        "mine_only": mine_only,
         "rows": rows,
         "summary": summarise(rows),
         "seal": {

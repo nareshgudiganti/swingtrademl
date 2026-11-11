@@ -799,6 +799,7 @@ export const api = {
     for (const k of ['word', 'band', 'horizon', 'regime', 'outcome'] as const)
       for (const v of q[k] ?? []) p.append(k, String(v))
     if (q.current_only) p.set('current_only', 'true')
+    if (q.mine_only !== undefined) p.set('mine_only', String(q.mine_only))
     return get<IdeaReport>(`/brain/idea-report?${p.toString()}`)
   },
 

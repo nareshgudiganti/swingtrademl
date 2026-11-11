@@ -239,3 +239,45 @@ export function entryNote(item: WatchTrackerItem): string {
   if (item.entry_source === 'added_close') return 'Close on the day you added it'
   return 'Not known yet'
 }
+
+export interface PortfolioSummary {
+  /** Money put in, rupees: only stocks with an entry price and shares count. */
+  invested: number
+  /** Gain or loss since buying, rupees, and as a % of the money put in. */
+  totalReturn: number
+  totalReturnPct: number | null
+  /** Change since yesterday's close, rupees, and as a % of yesterday's value. */
+  dayReturn: number
+  dayReturnPct: number | null
+  /** How many stocks had shares + prices entered (the rest are left out of the sums). */
+  counted: number
+}
+
+/** Totals for the strip above the table. Display only: stocks without shares or prices are left out, never guessed. */
+export function portfolioSummary(items: readonly WatchTrackerItem[]): PortfolioSummary | null {
+  let invested = 0
+  let totalReturn = 0
+  let dayReturn = 0
+  let yesterday = 0
+  let counted = 0
+  for (const i of items) {
+    if (!isNum(i.invested) || !isNum(i.profit_amount)) continue
+    counted += 1
+    invested += i.invested
+    totalReturn += i.profit_amount
+    if (isNum(i.last_price) && isNum(i.today_pct) && isNum(i.quantity) && i.today_pct > -100) {
+      const prev = i.last_price / (1 + i.today_pct / 100)
+      dayReturn += (i.last_price - prev) * i.quantity
+      yesterday += prev * i.quantity
+    }
+  }
+  if (counted === 0) return null
+  return {
+    invested,
+    totalReturn,
+    totalReturnPct: invested > 0 ? (totalReturn / invested) * 100 : null,
+    dayReturn,
+    dayReturnPct: yesterday > 0 ? (dayReturn / yesterday) * 100 : null,
+    counted,
+  }
+}

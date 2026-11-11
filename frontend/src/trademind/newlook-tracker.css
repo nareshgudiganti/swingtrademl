@@ -137,6 +137,11 @@
   .tm-new .gt-side { position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow-y: auto; }
 }
 .tm-new .gt-side .gt-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+/* Panel closed: the table takes the full width. */
+.tm-new .gt-split.gt-solo { grid-template-columns: minmax(0, 1fr); }
+.tm-new .gt-dh { position: relative; padding-right: 2.2rem; }
+.tm-new .gt-close { position: absolute; top: 0; right: 0; width: 1.9rem; height: 1.9rem; border-radius: 50%; border: 1px solid var(--tm-line); background: var(--tm-card); color: inherit; font-size: 1rem; line-height: 1; cursor: pointer; }
+.tm-new .gt-close:hover { background: var(--tm-line); }
 
 /* Sold records table and the sell form. */
 .tm-new .gt-sold-grid { grid-template-columns: minmax(170px, 1.5fr) 118px 118px 90px 100px 100px 80px 100px 120px; min-width: 1050px; }

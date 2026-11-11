@@ -382,8 +382,14 @@ def cmd_backfill(args: argparse.Namespace) -> int:
 
 
 def cmd_train(args: argparse.Namespace) -> int:
+    from swing_trade_ml.core.release_switches import promotion_refusal
     from swing_trade_ml.db.session import session_scope
     from swing_trade_ml.ml.train import train_model
+
+    if args.activate and (refusal := promotion_refusal()):
+        print(f"❌ {refusal}")
+        print("   Nothing was trained. Run again without --activate to train and save the model.")
+        return 1
 
     with session_scope() as db:
         try:

@@ -196,3 +196,46 @@ def test_risk_blocked_ideas_never_count_toward_the_gate():
     assert j["summaries"]["brain_trade"]["ideas"] == 0
     assert gate(j)["word"] == "too early"
     assert "blocked by the risk check" in plain_report(j)
+
+
+# --- tv27: holidays and special sessions are not trial sessions ---------------------------------------
+
+PROD_RUN_DAYS = [  # the 20 days the trial journal counted on 2026-11-10 (read-only audit of production)
+    date(2026, 10, 14), date(2026, 10, 15), date(2026, 10, 16), date(2026, 10, 19), date(2026, 10, 20),
+    date(2026, 10, 21), date(2026, 10, 22), date(2026, 10, 23), date(2026, 10, 26), date(2026, 10, 27),
+    date(2026, 10, 28), date(2026, 10, 29), date(2026, 10, 30), date(2026, 11, 2), date(2026, 11, 3),
+    date(2026, 11, 4), date(2026, 11, 5), date(2026, 11, 6), date(2026, 11, 9), date(2026, 11, 10),
+]
+
+
+def test_the_two_holidays_in_the_real_run_days_are_not_counted():
+    from swing_trade_ml.brain.trial_journal import split_session_days
+
+    counted, excluded = split_session_days(PROD_RUN_DAYS)
+    assert len(counted) == 18
+    assert excluded == [date(2026, 10, 20), date(2026, 11, 10)]  # Dussehra, Diwali Balipratipada
+
+
+def test_a_weekend_or_special_sunday_session_is_not_counted():
+    from swing_trade_ml.brain.trial_journal import split_session_days
+
+    muhurat_sunday, saturday = date(2026, 11, 8), date(2026, 11, 7)
+    counted, excluded = split_session_days([date(2026, 11, 6), saturday, muhurat_sunday, date(2026, 11, 9)])
+    assert counted == [date(2026, 11, 6), date(2026, 11, 9)]
+    assert excluded == [saturday, muhurat_sunday]
+
+
+def test_switching_the_rule_off_keeps_every_day_as_before():
+    from swing_trade_ml.brain.trial_journal import split_session_days
+
+    counted, excluded = split_session_days(PROD_RUN_DAYS, trading_days_only=False)
+    assert len(counted) == 20 and excluded == []
+
+
+def test_the_gate_stays_too_early_whatever_the_session_count_while_no_idea_has_finished():
+    from swing_trade_ml.brain.trial_journal import MIN_SESSIONS, gate
+
+    row = {"ideas": 0, "avg_net": None, "edge_vs_every_stock": None}
+    for sessions in (18, 20):
+        out = gate({"sessions": sessions, "summaries": {"brain_trade": row}})
+        assert sessions >= MIN_SESSIONS and out["word"] == "too early"

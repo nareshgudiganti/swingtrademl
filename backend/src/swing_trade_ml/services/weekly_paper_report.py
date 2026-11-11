@@ -56,6 +56,13 @@ def source_of(strategy_name: str | None) -> str | None:
     return "bot"
 
 
+def is_brain_strategy(name: str | None, strategy_type: str | None = None) -> bool:
+    """The TradeMind brain's own paper strategy, matched by name and by type (as `ensure_brain_strategy` does)."""
+    from swing_trade_ml.services.brain_golive.shadow import BRAIN_STRATEGY_NAME
+
+    return name == BRAIN_STRATEGY_NAME or strategy_type == "brain"
+
+
 # ----------------------------------------------------------------------- pure summary --
 
 
@@ -168,6 +175,12 @@ def _ist_date(value: datetime) -> date:
     return value.astimezone(IST).date()
 
 
+def _brain_ids(db: Session) -> set[int]:
+    return {
+        s.id for s in db.execute(select(Strategy)).scalars() if is_brain_strategy(s.name, s.strategy_type)
+    }
+
+
 def _strategy_maps(db: Session) -> tuple[dict[int, str], dict[int, str]]:
     names, tiers = {}, {}
     for s in db.execute(select(Strategy)).scalars():
@@ -188,11 +201,14 @@ def collect(db: Session, start: date, end: date) -> dict[str, dict[str, list[dic
     names, tiers = _strategy_maps(db)
     since = datetime.combine(start - timedelta(days=1), datetime.min.time(), tzinfo=UTC)
     out: dict[str, dict[str, list[dict]]] = {
-        s: {"orders": [], "trades": [], "open_positions": []} for s in ("bot", "testing")
+        s: {"orders": [], "trades": [], "open_positions": []} for s in ("bot", "testing", "brain_paper")
     }
+    brain_ids = _brain_ids(db)
 
     def pick(strategy_id: int | None) -> tuple[str | None, str | None, str | None]:
         name = names.get(strategy_id) if strategy_id is not None else None
+        if strategy_id in brain_ids:  # the brain's reserved paper slot: its own book, never the Bot's
+            return "brain_paper", name, tiers.get(strategy_id)
         # A row with no strategy at all belongs to the bot (same rule as outside_tester_book).
         return (source_of(name) if name is not None else "bot"), name, tiers.get(strategy_id)
 
@@ -266,6 +282,7 @@ def collect(db: Session, start: date, end: date) -> dict[str, dict[str, list[dic
                 "symbol": p.instrument.tradingsymbol if p.instrument else str(p.instrument_id),
                 "strategy": name,
                 "cap_tier": tier,
+                "entry_on": _ist_date(p.entry_at) if p.entry_at else None,
                 "invested": p.entry_price * p.quantity,
                 "unrealized_pnl": (price - p.entry_price) * p.quantity,
                 "current_price": price,
@@ -273,6 +290,43 @@ def collect(db: Session, start: date, end: date) -> dict[str, dict[str, list[dic
                 "take_profit": p.take_profit,
             }
         )
+    return out
+
+
+def brain_paper_section(books: dict[str, list[dict]], start: date, end: date) -> dict[str, Any]:
+    """The brain's paper slot as its own book. While the trial seal is on, days from the trial start are
+    COUNTS ONLY (buys, sell orders, open positions): no symbol, price, P&L, return, win, exit reason or
+    strategy breakdown. Days before the trial start keep the full book. Never added to the Bot or Testing."""
+    from swing_trade_ml.services import trial_seal
+
+    inwin = lambda d: start <= d <= end  # noqa: E731
+    done = [o for o in books["orders"] if o["status"] == "COMPLETE" and inwin(o["on"])]
+    sealed_o = [o for o in done if trial_seal.is_sealed_day(o["on"])]
+    open_sealed = books["open_positions"] if trial_seal.active() else []
+    out: dict[str, Any] = {
+        "source": "brain_paper",
+        "note": "The brain's reserved paper slot. Kept apart from the Bot's results and never added to them.",
+    }
+    if trial_seal.active():
+        out.update(
+            sealed=True,
+            text="sealed during the trial",
+            buys=sum(1 for o in sealed_o if o["side"] == "BUY"),
+            sell_orders=sum(1 for o in sealed_o if o["side"] == "SELL"),
+            open_positions=len(open_sealed),
+        )
+    else:
+        out["sealed"] = False
+    # Days before the trial start (or everything, with the seal off) keep the ordinary full book.
+    open_full = [] if trial_seal.active() else books["open_positions"]
+    before = summarise_book(
+        [o for o in books["orders"] if not trial_seal.is_sealed_day(o["on"])],
+        [t for t in books["trades"] if not trial_seal.is_sealed_day(t["exit_on"])],
+        open_full,
+        start,
+        end,
+    )
+    out["before_trial"] = None if before["data_status"].startswith("no buys") and not open_full else before
     return out
 
 
@@ -440,6 +494,7 @@ def build_report(db: Session, now: datetime | None = None) -> dict[str, Any]:
         "h05": h05_section(db, start, end),
         "bot": summarise_book(**books["bot"], start=start, end=end),
         "testing": summarise_book(**books["testing"], start=start, end=end),
+        "brain_paper": brain_paper_section(books["brain_paper"], start, end),
         "benchmark": benchmark(db, start, end),
         "horizons": {
             "5D": "h05 shadow lane above (existing models 2/16/17)",

@@ -73,13 +73,13 @@ describe('B: front page', () => {
 })
 
 describe('C: sign-in', () => {
-  it('has email-or-username and password, ask for an invite, and no forgot-password (no reset flow exists)', () => {
+  it('has email-or-username and password, ask for an invite, and a forgot-password link', () => {
     const t = text(render('/signin'))
     expect(t).toContain('Email or username')
     expect(t).toContain('Password')
     expect(t).toContain('Ask for an invite')
     expect(t).toContain('Welcome back')
-    expect(t.toLowerCase()).not.toContain('forgot')
+    expect(t.toLowerCase()).toContain('forgot your password') // the reset flow exists now (sa7)
     expect(t).not.toContain('తెలుగు') // the language switch waits until Telugu exists
   })
 
@@ -152,7 +152,7 @@ describe('plain-English errors', () => {
   it('turns a 422 list into its first message', () => {
     const detail = JSON.stringify([{ loc: ['body', 'email'], msg: 'Value error, Please enter a valid email address.' }])
     expect(friendlyError(detail, 422)).toBe('Please enter a valid email address.')
-    expect(friendlyError('[{"msg":"String should have at least 8 characters"}]', 422)).toMatch(/8 characters/)
+    expect(friendlyError('[{"msg":"String should have at least 8 characters"}]', 422)).toMatch(/15 characters/)
     expect(friendlyError('not json', 422)).toMatch(/check the form/)
     expect(friendlyError('Incorrect username or password.', 401)).toBe('Incorrect username or password.')
   })

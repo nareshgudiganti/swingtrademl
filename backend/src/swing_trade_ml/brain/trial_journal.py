@@ -252,7 +252,25 @@ def gate(journal: dict) -> dict:
 # --- reading the database -----------------------------------------------------------------------
 
 
-def load_sessions(db, start: date, end: date, *, live: bool = True) -> list[Session]:
+def split_session_days(days, *, trading_days_only: bool = True):
+    """(counted, excluded) from the IST days that have a finished nightly run (tracker tv27).
+
+    A market holiday, a weekend, or a special session (for example Diwali Muhurat on a Sunday) is not a normal
+    trading session: the brain re-decides on the previous close, so it adds no new data and must not count
+    toward the minimum number of sessions. The decision is the owner's (tv27); with `trading_days_only=False`
+    nothing is excluded, which is the behaviour before this change.
+    """
+    from swing_trade_ml.core.market_session import is_trading_day
+
+    days = sorted(set(days))
+    if not trading_days_only:
+        return days, []
+    return [d for d in days if is_trading_day(d)], [d for d in days if not is_trading_day(d)]
+
+
+def load_sessions(
+    db, start: date, end: date, *, live: bool = True, trading_days_only: bool = True
+) -> list[Session]:
     """Nightly brain runs, one per IST day, with that day's ideas. `live=False` reads replayed runs
     instead (no TRADE words: the risk gate refuses a replay, so only the score-based sets fill in)."""
     from sqlalchemy import select
@@ -279,7 +297,8 @@ def load_sessions(db, start: date, end: date, *, live: bool = True) -> list[Sess
     for r in runs:  # a later run of the same day replaces an earlier one
         latest[r.as_of.astimezone(IST).date()] = r
     sessions = []
-    for day in sorted(latest):
+    counted, _excluded = split_session_days(latest, trading_days_only=trading_days_only)
+    for day in counted:
         run = latest[day]
         rows = db.execute(
             select(BrainDecision).where(BrainDecision.run_id == run.id, BrainDecision.kind == "idea")

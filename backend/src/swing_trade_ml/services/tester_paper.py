@@ -71,6 +71,7 @@ def get_or_create_strategy(db: Session) -> Strategy:
         is_active=False,
         mode=TradingMode.PAPER,
         execution_mode="auto",
+        owner_private=True,  # the owner's manual paper-testing book
     )
     db.add(row)
     db.flush()

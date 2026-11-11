@@ -1,13 +1,16 @@
 # backend/src/swing_trade_ml/brain/selection_lab_run.py
 # ruff: noqa: E501 (long lines are report sentences)
-"""Selection lab runner (draft `sl-protocol-v1`): the guard, the data, the fold loop and the report.
+"""Selection lab runner (`sl-protocol-v1.1`, Amendment 3, ranking only): the guard, the data, the fold loop and the report.
 
 Design: `docs/superpowers/specs/2026-10-29-selection-model-experiments-design.md` (rev 3, with the owner's
 2026-11-02 decision: no money management, ranking only). The pure rules live in `brain/selection_lab.py`; this
 file adds what touches the world: git, files and the database. Nothing in it runs by itself.
 
-A real run refuses unless ALL of these hold: the git tag `sl-protocol-v1` is in HEAD's history; the frozen files
-are unchanged since the tag; the working tree is clean; the evidence-plan amendment is signed; every overnight
+A real run refuses unless ALL of these hold: today (IST) is 2026-12-05 or later; Phase B has its verified terminal
+record (the `phase-b-result` tag, `PHASE_B_RESULT.json`, manifests and ledger, checked by
+`brain/selection_lab_start.py`, the same code the wrapper runs: `run` and `main` call it themselves, so running this
+file directly does not skip it); the git tag `sl-protocol-v1.1` is in HEAD's history; the frozen files
+are unchanged since the tag; the working tree is clean; the signed Amendment 3 marker exists; every overnight
 move over 20% in the 177 stocks has a written classification; the candidate has not run before; and, for S1 and
 S2, the comparison candidate's result exists. It records an exposure-ledger row BEFORE any model is scored.
 Candidates built: S0, S1, S2 (large group, the 49) and S0M, S1M, S2M (the same three ideas on the 14-stock mid-cap
@@ -32,16 +35,24 @@ from pathlib import Path
 
 from swing_trade_ml.brain import selection_lab as sl
 
-PROTOCOL = "sl-protocol-v1"
+PROTOCOL = "sl-protocol-v1.1"
 TAG = PROTOCOL
 SPEC = "docs/superpowers/specs/2026-10-29-selection-model-experiments-design.md"
+AMENDMENT_TEXT = "docs/superpowers/specs/2026-11-04-evidence-plan-amendment-3.md"
+OUT_DIR = "docs/brain/evidence/sl_v1"
+MID_SNAPSHOT = f"{OUT_DIR}/mid_universe_snapshot.json"  # Amendment 3 D11: the mid group is read only from here
 FROZEN_FILES = (
     "backend/src/swing_trade_ml/brain/selection_lab.py",
     "backend/src/swing_trade_ml/brain/selection_lab_run.py",
+    "backend/src/swing_trade_ml/brain/selection_lab_start.py",  # the start checks this runner calls itself
     SPEC,
+    AMENDMENT_TEXT,
+    MID_SNAPSHOT,
 )
-OUT_DIR = "docs/brain/evidence/sl_v1"
-AMENDMENT = f"{OUT_DIR}/EVIDENCE_PLAN_AMENDMENT_SIGNED.md"
+AMENDMENT_2 = (
+    f"{OUT_DIR}/EVIDENCE_PLAN_AMENDMENT_SIGNED.md"  # signed 2026-11-02; stays in place, never edited
+)
+AMENDMENT = f"{OUT_DIR}/EVIDENCE_PLAN_AMENDMENT_3_SIGNED.md"
 GAP_FILE = f"{OUT_DIR}/gap_classification.json"
 SPLIT_DIR = "docs/brain/evidence/stock_split"
 HELD_BACK_KEY = "reject_set"  # key in the locked split file; its members are excluded, never used
@@ -54,12 +65,12 @@ COMPARE_WITH = {
     "S1M": "S0M",
     "S2M": "S1M",
 }  # R4: S1 beats S0, S2 beats S1 (mid alike)
-LEDGER_MARKER = "sl-protocol-v1 {cand}, {first} to {last}"
-RERUN_MARKER = "sl-protocol-v1 technical rerun {n} {cand}, {first} to {last}"
+LEDGER_MARKER = PROTOCOL + " {cand}, {first} to {last}"
+RERUN_MARKER = PROTOCOL + " technical rerun {n} {cand}, {first} to {last}"
 MAX_TECHNICAL_RERUNS = 2
 INCIDENT_DIR = "incidents"
 INCIDENT_KINDS = ("execution_failure", "data_integrity_failure")
-MID_MODEL_NAME = "swing_classifier_midcap"
+MIN_MID_GROUP = 10  # the lab needs at least this many mid stocks a day
 
 
 def is_mid(candidate: str) -> bool:
@@ -94,6 +105,36 @@ def load_held_back(repo_root: Path) -> list[str]:
     return list(data[HELD_BACK_KEY])
 
 
+def load_mid_snapshot(
+    repo_root: Path, used: Sequence[str], held_back: Sequence[str], split_sha: str
+) -> list[str]:
+    """The frozen mid-cap group, read ONLY from the snapshot file (a named model version and its exact stock list).
+    The app's 'active mid-cap model' is never consulted: activating another model cannot change the lab's stocks.
+    Refuses if the file is missing, was made against a different split file, does not reproduce from its own recorded
+    training stocks, or holds fewer than MIN_MID_GROUP stocks."""
+    path = repo_root / MID_SNAPSHOT
+    if not path.exists():
+        raise RunRefusedError(
+            f"{MID_SNAPSHOT} is missing: the mid-cap group is not frozen, so no mid run may start."
+        )
+    snap = json.loads(path.read_text(encoding="utf-8"))
+    if snap.get("split_file_sha256") != split_sha:
+        raise RunRefusedError(f"{path.name} was made against a different split file than the locked one.")
+    try:
+        rebuilt = sl.mid_group_from(snap.get("training_symbols") or [], held_back, used)
+    except ValueError as exc:
+        raise RunRefusedError(f"{path.name}: {exc}") from exc
+    if sorted(snap.get("mid_group") or []) != rebuilt:
+        raise RunRefusedError(
+            f"The mid group in {path.name} differs from its recorded training stocks minus the held-back set."
+        )
+    if len(rebuilt) < MIN_MID_GROUP:
+        raise RunRefusedError(
+            f"The frozen mid-cap group has {len(rebuilt)} stocks; the lab needs at least {MIN_MID_GROUP}."
+        )
+    return rebuilt
+
+
 def load_gap_record(path: Path) -> dict[tuple[str, date], str]:
     """{(symbol, day): class} from a JSON object whose keys read 'SYMBOL|YYYY-MM-DD'. Missing file = empty."""
     if not path.exists():
@@ -119,8 +160,17 @@ def git_state(repo_root: Path) -> tuple[bool, list[str], bool]:
 
 
 def amendment_signed(repo_root: Path) -> bool:
-    p = repo_root / AMENDMENT
-    return p.exists() and "SIGNED" in p.read_text(encoding="utf-8")
+    """True only when the Amendment 2 marker exists AND the Amendment 3 marker has a line starting
+    `SIGNED by the owner on <ISO date>` and names `sl-protocol-v1.1` and `Amendment 3`. ('UNSIGNED' does not count.)"""
+    a2, a3 = repo_root / AMENDMENT_2, repo_root / AMENDMENT
+    if not (a2.exists() and a3.exists()):
+        return False
+    text = a3.read_text(encoding="utf-8")
+    return (
+        re.search(r"^SIGNED by the owner on \d{4}-\d{2}-\d{2}", text, re.M) is not None
+        and PROTOCOL in text
+        and "Amendment 3" in text
+    )
 
 
 def refusal_reasons(
@@ -144,7 +194,7 @@ def refusal_reasons(
             f"The git tag {TAG} is not in this commit's history: the protocol is not signed and frozen."
         )
     reasons += [
-        f"{p} differs from the tagged version: a changed rule is sl-protocol-v2, not v1."
+        f"{p} differs from the tagged version: a changed rule is a new protocol version, not {PROTOCOL}."
         for p in changed_since_tag
     ]
     if dirty:
@@ -242,7 +292,7 @@ def plan_attempt(
     if attempts - 1 >= MAX_TECHNICAL_RERUNS:
         raise RunRefusedError(
             f"{PROTOCOL} {candidate} refused: {MAX_TECHNICAL_RERUNS} technical reruns are already used. Anything "
-            "more is sl-protocol-v2, a new protocol."
+            f"more is a new protocol version, not {PROTOCOL}."
         )
     notes = incident_notes(out_dir, candidate)
     if len(notes) < attempts:
@@ -380,11 +430,23 @@ def run(
     last: date = DEV_WINDOW[1],
     commit: str = "unknown",
     technical_rerun: bool = False,
+    start_check: Callable[[str, Path], Sequence[str]] | None = None,
 ) -> Path:
     """The one real run of `candidate`: guard, ledger row, folds, report. `collect_fn()` returns (bars of the
     stocks, the 49, the 128 extras); `mid_fn()` returns the 14-stock mid-cap group (mid candidates only);
     `model_scores_fn(candidate, bars)` returns the per-fold scoring callback. A failed attempt (ledger row, no run
-    folder) can be rerun with `technical_rerun=True`, see `plan_attempt`."""
+    folder) can be rerun with `technical_rerun=True`, see `plan_attempt`.
+
+    Before anything is read, `start_check(candidate, repo_root)` must return no refusal reasons. The default is the
+    real start check (date, Phase B terminal record, protocol tag, clean tree, frozen files; see `start_conditions`),
+    so calling `run` directly is guarded exactly like the wrapper. `start_check` exists only so unit tests can run
+    this function on a synthetic repository; production code never passes it."""
+    reasons_to_start = (start_check or start_conditions)(candidate, repo_root)
+    if reasons_to_start:
+        raise RunRefusedError(
+            f"{PROTOCOL} {candidate} refused: nothing was trained or scored.\n"
+            + "\n".join(f"- {r}" for r in reasons_to_start)
+        )
     out_dir = repo_root / OUT_DIR
     tag_on_head, changed, dirty = state if state is not None else git_state(repo_root)
     used, extra, split_sha = load_split(repo_root)
@@ -487,31 +549,17 @@ def run(
 
 def collect_db(db, last: date = DEV_WINDOW[1]):
     """(bars of the stocks with volume, the 49, the 128, the mid-cap 14). The lists come from the locked split file and
-    the app's mid-cap model; the held-back 129 are never loaded (asserted before any bar is read)."""
+    the frozen mid-universe snapshot (never the app's active model); the held-back 129 are
+    never loaded (asserted before any bar is read)."""
     from datetime import timedelta
-
-    from sqlalchemy import select
 
     import swing_trade_ml.services.risk  # noqa: F401  # load order only: avoids a circular import when run on its own
     from swing_trade_ml.brain.five_day import load_bars_with_volume
     from swing_trade_ml.core.config import REPO_ROOT
-    from swing_trade_ml.core.enums import ModelStatus
-    from swing_trade_ml.db.models.ml import MLModel
 
-    used, extra, _sha = load_split(REPO_ROOT)
+    used, extra, split_sha = load_split(REPO_ROOT)
     held_back = load_held_back(REPO_ROOT)
-    model = (
-        db.execute(
-            select(MLModel)
-            .where(MLModel.name == MID_MODEL_NAME, MLModel.status == ModelStatus.ACTIVE)
-            .order_by(MLModel.trained_at.desc())
-        )
-        .scalars()
-        .first()
-    )
-    if model is None:
-        raise RunRefusedError(f"No active {MID_MODEL_NAME} model: the mid-cap group cannot be built.")
-    mid = sl.mid_group_from(model.training_symbols or [], held_back, used)
+    mid = load_mid_snapshot(REPO_ROOT, used, held_back, split_sha)
     symbols = sorted({*used, *extra, *mid})
     sl.assert_no_held_back(held_back, symbols=symbols)
     bars = {
@@ -581,6 +629,20 @@ def _repo() -> Path:
     return REPO_ROOT
 
 
+def start_conditions(candidate: str, repo_root: Path, *, via: str = "run") -> list[str]:
+    """Refusal reasons from the shared start checks (empty = allowed). One implementation, in
+    `brain/selection_lab_start.py`, which the wrapper also uses; imported here at call time (that module imports
+    this one only inside its own `main`, so there is no import cycle). Fail closed: any error is a refusal."""
+    import sys
+
+    try:
+        from swing_trade_ml.brain import selection_lab_start as start
+
+        return start.guard_for_runner(candidate, runner=sys.modules[__name__], repo_root=repo_root, via=via)
+    except Exception as e:  # noqa: BLE001
+        return [f"the start conditions could not be verified: {type(e).__name__}: {e}"]
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     import argparse
 
@@ -595,6 +657,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     a = ap.parse_args(argv)
     repo = _repo()
+    early = start_conditions(a.candidate, repo, via="cli")  # before any data is read
+    if early:
+        print(f"{PROTOCOL} {a.candidate} refused: nothing was trained or scored.")
+        for r in early:
+            print(f"- {r}")
+        return 2
     from swing_trade_ml.db.session import SessionLocal
 
     with SessionLocal() as db:

@@ -9,9 +9,9 @@ it shows under "Removed"), and adding it again clears the stamp.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import Date, DateTime, Float, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from swing_trade_ml.db.base import Base, TimestampMixin, utcnow
@@ -27,5 +27,31 @@ class UserWatchlistItem(Base, TimestampMixin):
     # Null while the stock is on the list; set when the person removes it.
     removed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     note: Mapped[str | None] = mapped_column(String(200))
+    # The person's own real buy price (e.g. in Groww). Display only; nothing trades on it.
+    buy_price: Mapped[float | None] = mapped_column(Float)
+    # How many shares the person bought. Display only (invested / profit in rupees).
+    quantity: Mapped[float | None] = mapped_column(Float)
 
     __table_args__ = (UniqueConstraint("user_id", "symbol", name="uq_user_watchlist_items_user_symbol"),)
+
+
+class UserWatchlistSale(Base, TimestampMixin):
+    """One sold stock in the Groww Tracker's "Sold records". Display only: the app sells nothing.
+
+    A row per sale (not a flag on the list item) so selling, adding the stock again and selling
+    again keeps every result. The entry price is saved at the time of the sale so the record
+    never changes when prices or the list item are edited later.
+    """
+
+    __tablename__ = "user_watchlist_sales"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    symbol: Mapped[str] = mapped_column(String(64))
+    bought_on: Mapped[date] = mapped_column(Date)
+    entry_price: Mapped[float] = mapped_column(Float)
+    # your_price | added_close, same meaning as in the tracker
+    entry_source: Mapped[str] = mapped_column(String(16))
+    quantity: Mapped[float | None] = mapped_column(Float)
+    sell_price: Mapped[float] = mapped_column(Float)
+    sold_on: Mapped[date] = mapped_column(Date)

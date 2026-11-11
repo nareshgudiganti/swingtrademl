@@ -6,3 +6,8 @@ docs/brain/evidence/sector_prep/*.md text eol=lf
 # Test fixtures that are hashed byte-for-byte must keep LF line endings on every platform.
 backend/tests/fixtures/** text eol=lf
 backend/tests/fixtures/features_before_fcaef35.py.txt text eol=lf
+
+# Staging scripts run on Linux: keep LF in every checkout (a CRLF checkout breaks bash with "pipefail invalid option").
+infra/staging/*.sh text eol=lf
+infra/staging/*.py text eol=lf
+infra/staging/*.template text eol=lf

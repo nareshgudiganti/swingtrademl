@@ -14,7 +14,7 @@ trading, sizing, exits, limits or the brain reads it.
 from __future__ import annotations
 
 import re
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -23,14 +23,19 @@ from sqlalchemy import case, func, select
 
 from swing_trade_ml.api.deps import SELF_SERVICE_NEEDS_PERSON, DbSession, Principal, get_principal
 from swing_trade_ml.db.base import utcnow
-from swing_trade_ml.db.models.market import Instrument
+from swing_trade_ml.db.models.market import Candle, Instrument
 from swing_trade_ml.db.models.session import User
-from swing_trade_ml.db.models.user_watchlist import UserWatchlistItem
+from swing_trade_ml.db.models.trading import StockScore
+from swing_trade_ml.db.models.user_watchlist import UserWatchlistItem, UserWatchlistSale
+from swing_trade_ml.services import score_history
+from swing_trade_ml.services import watchlist_tracker as tracker
 
 router = APIRouter(prefix="/me/watchlist", tags=["my-watchlist"])
 
 #: At most this many stocks on one person's list at a time (removed ones do not count).
 MAX_ITEMS = 50
+#: The buy date can be moved back at most this far (the plan's horizon is 15 trading days).
+MAX_BACKDATE_DAYS = 120
 EXCHANGE = "NSE"
 _SYMBOL = re.compile(r"^[A-Z0-9&_.\-]{1,32}$")
 
@@ -51,6 +56,8 @@ class WatchlistItemOut(BaseModel):
     added_at: datetime
     removed_at: datetime | None
     note: str | None
+    buy_price: float | None = None
+    quantity: float | None = None
 
 
 class WatchlistOut(BaseModel):
@@ -61,6 +68,20 @@ class WatchlistOut(BaseModel):
 class WatchlistAdd(BaseModel):
     symbol: str = Field(min_length=1, max_length=32)
     note: str | None = Field(default=None, max_length=200)
+
+
+class WatchlistPatch(BaseModel):
+    buy_price: float | None = Field(default=None, gt=0)
+    quantity: float | None = Field(default=None, gt=0, le=1e9)
+    #: IST calendar date the person bought it. Null or omitted leaves the date as it is.
+    bought_on: date | None = None
+    note: str | None = Field(default=None, max_length=200)
+
+
+class SoldBody(BaseModel):
+    sell_price: float = Field(gt=0)
+    #: IST calendar date it was sold. Omitted means today.
+    sold_on: date | None = None
 
 
 class InstrumentHit(BaseModel):
@@ -98,7 +119,11 @@ def _names(db: DbSession, symbols: list[str]) -> dict[str, str | None]:
 
 def _out(item: UserWatchlistItem, name: str | None) -> WatchlistItemOut:
     return WatchlistItemOut(
-        symbol=item.symbol, name=name, added_at=item.added_at, removed_at=item.removed_at, note=item.note
+        symbol=item.symbol, name=name, added_at=item.added_at,
+        removed_at=item.removed_at,
+        note=item.note,
+        buy_price=item.buy_price,
+        quantity=item.quantity,
     )
 
 
@@ -192,3 +217,174 @@ def remove_stock(symbol: str, db: DbSession, me: Me) -> WatchlistItemOut:
     db.commit()
     db.refresh(item)
     return _out(item, _names(db, [sym]).get(sym))
+
+
+@router.patch("/{symbol}", response_model=WatchlistItemOut)
+def update_stock(symbol: str, body: WatchlistPatch, db: DbSession, me: Me) -> WatchlistItemOut:
+    """Set or clear your own Groww buy price and/or note. Only fields you send change."""
+    sym = _clean(symbol)
+    item = _mine(db, me, sym)
+    if item is None or item.removed_at is not None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"{sym} is not on your list.")
+    if "buy_price" in body.model_fields_set:
+        item.buy_price = body.buy_price
+    if "quantity" in body.model_fields_set:
+        item.quantity = body.quantity
+    if "bought_on" in body.model_fields_set and body.bought_on is not None:
+        today = datetime.now(tracker.IST).date()
+        if body.bought_on > today:
+            raise HTTPException(422, "The buy date cannot be in the future.")
+        if body.bought_on < today - timedelta(days=MAX_BACKDATE_DAYS):
+            raise HTTPException(422, f"The buy date cannot be more than {MAX_BACKDATE_DAYS} days ago.")
+        item.added_at = datetime.combine(body.bought_on, datetime.min.time(), tzinfo=tracker.IST)
+    if "note" in body.model_fields_set:
+        item.note = body.note.strip() if body.note and body.note.strip() else None
+    db.commit()
+    db.refresh(item)
+    return _out(item, _names(db, [sym]).get(sym))
+
+
+@router.get("/tracker")
+def my_tracker(db: DbSession, me: Me) -> dict:
+    """Read-only tracker over the caller's ACTIVE stocks (newest first). Display only."""
+    rows = list(
+        db.execute(
+            select(UserWatchlistItem)
+            .where(UserWatchlistItem.user_id == me.id, UserWatchlistItem.removed_at.is_(None))
+            .order_by(UserWatchlistItem.added_at.desc())
+        ).scalars()
+    )
+    if not rows:
+        return {"as_of": None, "horizon_days": tracker.HORIZON_DAYS, "items": []}
+    inst = {
+        t: (i, n)
+        for i, t, n in db.execute(
+            select(Instrument.id, Instrument.tradingsymbol, Instrument.name).where(
+                Instrument.exchange == EXCHANGE, Instrument.tradingsymbol.in_([r.symbol for r in rows])
+            )
+        ).all()
+    }
+    ids = [i for i, _ in inst.values()]
+    since = tracker.ist_date(min(r.added_at for r in rows)) - timedelta(days=10)
+    since_ts = datetime.combine(since, datetime.min.time(), tzinfo=tracker.IST)
+    candles: dict[int, list[tuple[date, float]]] = {}
+    for iid, ts, close in db.execute(
+        select(Candle.instrument_id, Candle.ts, Candle.close)
+        .where(Candle.instrument_id.in_(ids), Candle.interval == "day", Candle.ts >= since_ts)
+        .order_by(Candle.instrument_id, Candle.ts)
+    ).all():
+        candles.setdefault(iid, []).append((tracker.ist_date(ts), close))
+    by_stock: dict[int, list[StockScore]] = {}
+    for row in db.execute(
+        select(StockScore)
+        .where(StockScore.instrument_id.in_(ids), StockScore.as_of >= since)
+        .order_by(StockScore.instrument_id, StockScore.as_of)
+    ).scalars():
+        by_stock.setdefault(row.instrument_id, []).append(row)
+    # One model per stock, so another model's score never reads as this stock's own change.
+    scores: dict[int, list[tuple[date, float]]] = {
+        iid: [(r.as_of, r.score) for r in score_history.one_model_rows(rows)]
+        for iid, rows in by_stock.items()
+    }
+    items = []
+    for r in rows:
+        iid, name = inst.get(r.symbol, (None, None))
+        items.append(
+            tracker.build_item(
+                symbol=r.symbol,
+                name=name,
+                added_at=r.added_at,
+                note=r.note,
+                buy_price=r.buy_price,
+                quantity=r.quantity,
+                candles=candles.get(iid, []),
+                scores=scores.get(iid, []),
+                today=tracker.today_ist(),
+            )
+        )
+    last_dates = [c[-1][0] for c in candles.values() if c]
+    return {
+        "as_of": max(last_dates).isoformat() if last_dates else None,
+        "horizon_days": tracker.HORIZON_DAYS,
+        "items": items,
+    }
+
+
+def _sale_out(db: DbSession, sales: list[UserWatchlistSale]) -> list[dict]:
+    names = _names(db, [s.symbol for s in sales])
+    return [
+        tracker.sale_record(
+            symbol=s.symbol,
+            name=names.get(s.symbol),
+            bought_on=s.bought_on,
+            entry_price=s.entry_price,
+            entry_source=s.entry_source,
+            quantity=s.quantity,
+            sell_price=s.sell_price,
+            sold_on=s.sold_on,
+        )
+        for s in sales
+    ]
+
+
+@router.post("/{symbol}/sold")
+def mark_sold(symbol: str, body: SoldBody, db: DbSession, me: Me) -> dict:
+    """Record that you sold this stock in Groww: it leaves the tracker and its result is kept under
+    "Sold records". Nothing is sold by the app. The entry price is your Groww price, or the close on
+    the day you added it."""
+    sym = _clean(symbol)
+    item = _mine(db, me, sym)
+    if item is None or item.removed_at is not None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"{sym} is not on your list.")
+    today = tracker.today_ist()
+    bought_on = tracker.ist_date(item.added_at)
+    sold_on = body.sold_on or today
+    if sold_on > today:
+        raise HTTPException(422, "The sell date cannot be in the future.")
+    if sold_on < bought_on:
+        raise HTTPException(422, "The sell date cannot be before the buy date.")
+    entry, source = item.buy_price, "your_price" if item.buy_price and item.buy_price > 0 else None
+    if source is None:
+        iid = db.execute(
+            select(Instrument.id).where(Instrument.exchange == EXCHANGE, Instrument.tradingsymbol == sym)
+        ).scalar_one_or_none()
+        since_ts = datetime.combine(bought_on, datetime.min.time(), tzinfo=tracker.IST)
+        closes = [
+            (tracker.ist_date(ts), close)
+            for ts, close in db.execute(
+                select(Candle.ts, Candle.close)
+                .where(Candle.instrument_id == iid, Candle.interval == "day", Candle.ts >= since_ts)
+                .order_by(Candle.ts)
+            ).all()
+        ]
+        entry, source, _ = tracker.pick_entry(bought_on, None, closes)
+    if entry is None or source is None:
+        raise HTTPException(422, "Add the price you paid first, so the result can be worked out.")
+    sale = UserWatchlistSale(
+        user_id=me.id,
+        symbol=sym,
+        bought_on=bought_on,
+        entry_price=float(entry),
+        entry_source=source,
+        quantity=item.quantity,
+        sell_price=body.sell_price,
+        sold_on=sold_on,
+    )
+    db.add(sale)
+    item.removed_at = utcnow()
+    db.commit()
+    db.refresh(sale)
+    return _sale_out(db, [sale])[0]
+
+
+@router.get("/sold")
+def my_sold(db: DbSession, me: Me) -> dict:
+    """Sold records, newest sale first. Display only."""
+    sales = list(
+        db.execute(
+            select(UserWatchlistSale)
+            .where(UserWatchlistSale.user_id == me.id)
+            .order_by(UserWatchlistSale.sold_on.desc(), UserWatchlistSale.id.desc())
+        ).scalars()
+    )
+    return {"items": _sale_out(db, sales)}

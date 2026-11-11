@@ -24,7 +24,7 @@ export const SECTIONS: Section[] = [
     // One page, so no row of tabs under the bar. oa5 folded Swing Picks into Today; its old tab is gone, but
     // /trademind/dashboard still opens Today at the full pick list (the route is in TradeMindApp.tsx).
     pages: [{ to: '/trademind', label: 'Today', end: true }],
-    also: ['/trademind/dashboard'],
+    also: ['/trademind/dashboard', '/trademind/account'],
   },
   {
     id: 'discover',
@@ -73,6 +73,8 @@ export const SECTIONS: Section[] = [
       { to: '/trademind/observatory', label: 'Observatory' },
       { to: '/trademind/jobs', label: 'Jobs' },
       { to: '/trademind/invites', label: 'Invites' },
+      // The admin console: people, Free/Pro, gifts, change log. Asks for a two-step code; the server enforces it.
+      { to: '/trademind/people', label: 'People' },
       { to: '/trademind/plans', label: 'Plans' },
     ],
   },

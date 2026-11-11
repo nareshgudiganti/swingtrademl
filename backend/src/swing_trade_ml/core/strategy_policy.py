@@ -29,6 +29,22 @@ def outside_tester_book(strategy_id_col):
     return or_(strategy_id_col.is_(None), strategy_id_col.not_in(tester_ids))
 
 
+def creates_owner_private_strategy(name: str, strategy_type: str, execution_mode: str, mode: str) -> bool:
+    """The `owner_private` flag a newly created strategy starts with.
+
+    Private: a hand-book name, the manual-testing or manual-only type, or an advisory strategy
+    stored as `live` (that is how real shares are recorded). The brain's staged
+    type is always member-facing. Everything else made through the API is a
+    registered model/rule strategy, which members may see.
+    """
+    # long_term_value is the owner's hand-recorded book (MANUAL_ONLY_TYPES): private until reviewed.
+    if name in HAND_BOOK_STRATEGY_NAMES or strategy_type in NON_SCAN_STRATEGY_TYPES | MANUAL_ONLY_TYPES:
+        return True
+    if strategy_type in STAGED_TYPES:
+        return False
+    return execution_mode == "advisory" and mode == "live"
+
+
 def requires_advisory(strategy_type: str) -> bool:
     return strategy_type in MANUAL_ONLY_TYPES or strategy_type in STAGED_TYPES
 

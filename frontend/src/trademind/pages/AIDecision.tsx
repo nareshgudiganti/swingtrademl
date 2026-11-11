@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useParams } from 'react-router-dom'
 
 import { usePlan } from '../../lib/plan'
-import { finalWord, ideasFrom, useBrainStatus, useLatestRun, useRunTrace, useWhy } from '../live'
+import { finalWord, shownWord, ideasFrom, useBrainStatus, useLatestRun, useRunTrace, useWhy } from '../live'
 import { MODULE_PLAIN, STEP_LABEL, moduleName, traceLine, wordClassName, wordTone } from '../vocab'
 import { TrackRecord, chancePercent, chanceText, chanceTitle } from '../honest'
 import { IdeaExplain } from '../IdeaExplain'
@@ -151,7 +151,7 @@ function AIDecisionBody() {
             <>
               <p className="tm-strong" style={{ marginTop: 0 }}>
                 TradeMind {decision.kind === 'idea' ? 'recommends' : 'currently has'}{' '}
-                <span className={wordClassName(finalWord(decision))}>{finalWord(decision)}</span> for {symbol}
+                <span className={wordClassName(shownWord(decision))}>{shownWord(decision)}</span> for {symbol}
                 {chancePercent(decision) != null && (
                   <>
                     {' '}

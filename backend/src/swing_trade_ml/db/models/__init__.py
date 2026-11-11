@@ -4,8 +4,12 @@ Alembic autogenerate and `create_all` both depend on that, so any new model
 module must be re-exported here.
 """
 
+from swing_trade_ml.db.models.account_deletion import AccountDeletion
+from swing_trade_ml.db.models.admin_mfa import AdminMfa, AdminRecoveryCode
 from swing_trade_ml.db.models.alerts import AlertOutbox, AlertSettings
 from swing_trade_ml.db.models.audit import AuditLog, LoginCode
+from swing_trade_ml.db.models.auth_tokens import AuthToken
+from swing_trade_ml.db.models.billing import BillingEvent, PlanGrant, Subscription
 from swing_trade_ml.db.models.brain import (
     BrainAlert,
     BrainDecision,
@@ -55,6 +59,7 @@ from swing_trade_ml.db.models.ml import MLModel, Prediction
 from swing_trade_ml.db.models.mutual_funds import MutualFund, MutualFundHolding, MutualFundNav
 from swing_trade_ml.db.models.registry import ModelResearchSlot
 from swing_trade_ml.db.models.safety import RiskEvent, SystemState
+from swing_trade_ml.db.models.service_keys import ServiceKey
 from swing_trade_ml.db.models.session import BrokerSession, PlanSettings, SubscriptionPlan, User
 from swing_trade_ml.db.models.trading import (
     CapitalDeposit,
@@ -66,7 +71,7 @@ from swing_trade_ml.db.models.trading import (
     Strategy,
     Trade,
 )
-from swing_trade_ml.db.models.user_watchlist import UserWatchlistItem
+from swing_trade_ml.db.models.user_watchlist import UserWatchlistItem, UserWatchlistSale
 
 __all__ = [
     "AlertOutbox",
@@ -114,7 +119,14 @@ __all__ = [
     "LanePick",
     "InstitutionalFlow",
     "Instrument",
+    "AdminMfa",
+    "AdminRecoveryCode",
+    "BillingEvent",
     "InviteRequest",
+    "AccountDeletion",
+    "AuthToken",
+    "PlanGrant",
+    "Subscription",
     "LoginCode",
     "MLModel",
     "ModelResearchSlot",
@@ -130,6 +142,7 @@ __all__ = [
     "Prediction",
     "Quote",
     "RiskEvent",
+    "ServiceKey",
     "Signal",
     "Strategy",
     "SubscriptionPlan",
@@ -139,5 +152,6 @@ __all__ = [
     "UpcomingEvent",
     "User",
     "UserWatchlistItem",
+    "UserWatchlistSale",
     "WatchlistSnapshot",
 ]

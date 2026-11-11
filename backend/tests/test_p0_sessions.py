@@ -72,7 +72,7 @@ def test_password_change_needs_the_current_password(client, db_session):
     assert r.status_code == 400
 
 
-def test_new_password_must_be_8_or_more(client, db_session):
+def test_new_password_must_be_15_or_more(client, db_session):
     user = _user(db_session, "s-pw3")
     tok = _bearer(create_access_token(user.username, {"uid": user.id, "tv": 0}))
     r = client.post(
@@ -80,7 +80,7 @@ def test_new_password_must_be_8_or_more(client, db_session):
         headers=tok,
         json={"current_password": "correct-horse-1", "new_password": "short"},
     )
-    assert r.status_code == 422
+    assert r.status_code == 400 and "at least 15" in r.json()["detail"]
 
 
 def test_logout_all_ends_every_session(client, db_session):

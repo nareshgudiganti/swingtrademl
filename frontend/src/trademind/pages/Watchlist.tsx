@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 
 import { api } from '../../api/client'
 import type { BrainDecision } from '../../api/types'
-import { finalWord, ideasFrom, useLatestRun } from '../live'
+import { ideasFrom, shownWord, useLatestRun } from '../live'
 import type { Action } from '../types'
 import { CapFlag, useSymbolCaps } from '../cap'
 import { SortTh, useSort } from '../sort'
@@ -41,7 +41,7 @@ function WatchlistBody() {
     stock: (i: { tradingsymbol: string }) => i.tradingsymbol,
     decision: (i: { tradingsymbol: string }) => {
       const d = bySymbol.get(i.tradingsymbol.toUpperCase())
-      return d ? finalWord(d) : null
+      return d ? shownWord(d) : null
     },
     score: (i: { tradingsymbol: string }) => bySymbol.get(i.tradingsymbol.toUpperCase())?.confidence,
     target: (i: { tradingsymbol: string }) => bySymbol.get(i.tradingsymbol.toUpperCase())?.target,
@@ -75,7 +75,7 @@ function WatchlistBody() {
               <tbody>
                 {symbols.map((inst) => {
                   const d = bySymbol.get(inst.tradingsymbol.toUpperCase())
-                  const word = d ? finalWord(d) : null
+                  const word = d ? shownWord(d) : null
                   return (
                     <tr
                       key={inst.tradingsymbol}

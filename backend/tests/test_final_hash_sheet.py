@@ -156,13 +156,36 @@ def test_prior_sheet_matrix_hash_is_carried_and_labelled(tmp_repo):
     assert "CARRIED" in s["candidates"]["SX5"]["dataset_matrix_sha256_status"]
 
 
+def test_a_carried_matrix_hash_survives_being_carried_again(tmp_repo):
+    # v3 stored the hash under a descriptive key; v4 onwards stores it under the plain key plus a `_status` text key.
+    # Carrying v4 into v5 once replaced the hash by the status text (the status key was copied into the hash field).
+    v3 = {"candidates": {"SX5": {"dataset_matrix_sha256 (sr.matrix_sha256: x)": "ab" * 32}}}
+    v4 = fhs.build_sheet(tmp_repo, "0" * 40, symbols=["AAA"], prior=v3)
+    v5 = fhs.build_sheet(tmp_repo, "1" * 40, symbols=["AAA"], prior=v4)
+    v6 = fhs.build_sheet(tmp_repo, "2" * 40, symbols=["AAA"], prior=v5)
+    for sheet in (v4, v5, v6):
+        assert sheet["candidates"]["SX5"]["dataset_matrix_sha256"] == "ab" * 32
+        assert "CARRIED" in sheet["candidates"]["SX5"]["dataset_matrix_sha256_status"]
+    # a prior sheet without a real hash carries nothing (the field stays empty, never a label or a guess)
+    bad = {"candidates": {"SX5": {"dataset_matrix_sha256": "CARRIED from --prior-sheet, not recomputed here"}}}
+    assert fhs.build_sheet(tmp_repo, "3" * 40, symbols=["AAA"], prior=bad)["candidates"]["SX5"][
+        "dataset_matrix_sha256"
+    ] is None
+
+
 def test_real_repo_files_reproduce_the_verified_v3_hashes():
     prior_p = EVID / "final_hashes_v3.json"
     if not (prior_p.is_file() and (EVID / "sx5_47_rows_v3.txt.gz").is_file()):
         pytest.skip("evidence files not present")
     prior = json.loads(prior_p.read_text("utf-8"))
+    # The recipe hash includes the exact installed library versions by design. On a machine whose versions differ from
+    # the recorded ones (for example the CI runner) the recipe hash legitimately differs, so only compare when they match.
+    from swing_trade_ml.ml import sx_recipe
+
+    same_libs = sx_recipe.installed_versions() == prior["recipe"]["library_versions"]
     s = fhs.build_sheet(REPO, "0" * 40, prior=prior)
-    assert s["recipe"]["sx_recipe_sha256"] == prior["recipe"]["sx_recipe_sha256"]
+    if same_libs:
+        assert s["recipe"]["sx_recipe_sha256"] == prior["recipe"]["sx_recipe_sha256"]
     for cand in ("SX5", "SX10"):
         got, want = s["candidates"][cand], prior["candidates"][cand]
         assert got["datasetspec_config_sha256"] == want["datasetspec_config_sha256"]

@@ -19,6 +19,7 @@ from swing_trade_ml.api.v1.endpoints.invites import code_matches, normalise_emai
 from swing_trade_ml.brokers.kite import kite_broker
 from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.logging import get_logger
+from swing_trade_ml.core.password_policy import check_password
 from swing_trade_ml.core.security import create_access_token, hash_password, verify_password
 from swing_trade_ml.db.models.invites import InviteRequest
 from swing_trade_ml.db.models.session import BrokerSession, User
@@ -33,7 +34,7 @@ from swing_trade_ml.schemas import (
     SignupRequest,
     TokenResponse,
 )
-from swing_trade_ml.services import audit, login_codes
+from swing_trade_ml.services import account_deletion, audit, login_codes
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 log = get_logger(__name__)
@@ -117,6 +118,9 @@ def change_password(
         )
         db.commit()
         raise HTTPException(status.HTTP_400_BAD_REQUEST, CURRENT_PASSWORD_WRONG)
+    problems = check_password(payload.new_password, email=user.email, name=user.full_name)
+    if problems:  # only NEW passwords are checked; existing ones keep working at login
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, " ".join(problems))
     user.failed_login_count = 0
     user.hashed_password = hash_password(payload.new_password)
     user.token_version = (user.token_version or 0) + 1
@@ -187,6 +191,17 @@ def login(payload: LoginRequest, db: DbSession, request: Request) -> TokenRespon
     if not user.is_active:
         # Same answer as a wrong password: a disabled account doesn't confirm the password was right.
         raise refuse("auth.login_disabled")
+    if account_deletion.blocks_sign_in(db, user):
+        # Deletion confirmed: same answer as a wrong password. The emailed link is the way back.
+        raise refuse("auth.login_deleting")
+    if (
+        settings.REQUIRE_EMAIL_VERIFICATION
+        and user.auth_provider == "local"
+        and user.email_verified_at is None
+        and user.role != "owner"
+        and not user.is_superuser
+    ):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Please verify your email first")
 
     user.failed_login_count = 0
     user.locked_until = None
@@ -205,16 +220,14 @@ def login(payload: LoginRequest, db: DbSession, request: Request) -> TokenRespon
     dependencies=[Depends(auth_limit)],
 )
 def signup(payload: SignupRequest, db: DbSession, request: Request) -> TokenResponse:
-    """Self-registration.
+    """Sign-up by invite only.
 
-    Gated by ALLOW_SIGNUP because this system can place real trades once
-    TRADING_MODE=live is set — an open registration endpoint on that is an
-    account-takeover surface, not a convenience. Turn it off in .env once
-    everyone who should have an account does.
-
-    With ALLOW_SIGNUP off, the only way in is an invite: an `invite_code` the owner
-    approved in Admin > Invites, for the same email, used once. Either way the new
-    account is an ordinary member: never owner, never tester, never the real account.
+    This route needs a valid `invite_code` the owner approved in Admin > Invites, for the same
+    email, used once. It checks the invite BEFORE it looks at any account, so a caller without an
+    invite learns nothing about which usernames or emails exist. Open public registration lives
+    at `POST /auth/register` (behind ALLOW_SIGNUP, same answer for new and existing emails),
+    never here. The new account is an ordinary member: never owner, never tester, never the
+    real account.
     """
     invite: InviteRequest | None = None
     code = (payload.invite_code or "").strip()
@@ -232,20 +245,22 @@ def signup(payload: SignupRequest, db: DbSession, request: Request) -> TokenResp
             )
             db.commit()
             raise HTTPException(status.HTTP_403_FORBIDDEN, INVITE_REFUSED)
-    elif not settings.ALLOW_SIGNUP:
+    else:
+        # No invite: refused before any account lookup, whatever ALLOW_SIGNUP says.
         raise HTTPException(status.HTTP_403_FORBIDDEN, SIGNUP_CLOSED)
+    problems = check_password(payload.password, email=email)
+    if problems:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, " ".join(problems))
 
     exists = db.execute(select(User).where(User.username == payload.username)).scalar_one_or_none()
     if exists:
-        raise HTTPException(status.HTTP_409_CONFLICT, "That username is already taken")
+        raise HTTPException(status.HTTP_409_CONFLICT, SIGNUP_UNAVAILABLE)
     if email is not None:
         email_taken = db.execute(
             select(User.id).where(func.lower(User.email) == email.lower()).limit(1)
         ).first()
         if email_taken:
-            raise HTTPException(
-                status.HTTP_409_CONFLICT, "An account with this email already exists. Please sign in instead."
-            )
+            raise HTTPException(status.HTTP_409_CONFLICT, SIGNUP_UNAVAILABLE)
 
     now = datetime.now(UTC)
     user = User(
@@ -281,6 +296,11 @@ def signup(payload: SignupRequest, db: DbSession, request: Request) -> TokenResp
     return issue_token(user)
 
 
+# One answer for a taken username and a taken email, so the message does not say which one exists.
+SIGNUP_UNAVAILABLE = (
+    "We could not create an account with those details. Try a different username or email, "
+    "or sign in if you already have an account."
+)
 SIGNUP_CLOSED = "Sign-up is by invite only. Ask for an invite on the front page."
 INVITE_REFUSED = (
     "This invite link doesn't match that email, or it has already been used. "
@@ -571,6 +591,12 @@ def google_callback(code: str, state: str, db: DbSession) -> HTMLResponse | Redi
             status_code=403,
         )
 
+    if account_deletion.blocks_sign_in(db, user):
+        return HTMLResponse(
+            _page("🚫", "Account being deleted", "This account is scheduled for deletion.", ok=False),
+            status_code=403,
+        )
+
     user.last_login_at = datetime.now(UTC)
     db.commit()
     db.refresh(user)
@@ -588,6 +614,11 @@ def google_exchange(payload: LoginCodeExchange, db: DbSession, request: Request)
     user = login_codes.redeem(db, payload.code)
     if user is None:
         db.commit()  # keep the code marked used even when the account is disabled
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED, "This sign-in link has expired. Please sign in again."
+        )
+    if account_deletion.blocks_sign_in(db, user):
+        db.commit()
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED, "This sign-in link has expired. Please sign in again."
         )

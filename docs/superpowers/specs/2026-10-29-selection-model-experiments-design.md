@@ -1,5 +1,16 @@
 # 15-day stock selection experiments — design for owner approval (rev 3, final corrections 11-01)
 
+> **REV 3.1 — CONFORMED TO AMENDMENT 3 (`sl-protocol-v1.1`).** This document was written before the owner's later decisions.
+> Where it disagrees with Evidence-plan Amendment 2 (signed 2026-11-02) or Amendment 3, those win (Amendment 3 > Amendment 2 >
+> this document). In force under `sl-protocol-v1.1`: the label rule (4.1), the data-quality gate (4.2), leakage rules (5),
+> R1 to R4 (6.1 with the rank-IC and top-5 measures), the fold design, labels (6.5), the two-questions paragraph (6.4a), the
+> reproducibility record (8), the cap-group split (6.4). **Not in force**: S2r (section 12), S3 (4.3, blocked), F1 (4.4), M0–M3 and N
+> (6.2, 6.2a, 6.3), "Both verdicts are required", winner selection, H1 and any use of the 129 held-back stocks, Stage 2, Stage 3
+> and `sl-protocol-v1-locked`, the "4 uses" count, Release 1 = "S0, S1, S2, S2r". The candidates are S0, S1, S2, S0M, S1M, S2M (controls S0 and S0M); the statistical family is S1, S2, S1M, S2M (Bonferroni 5% ÷ 4). The lab may start on or after
+> 2026-12-05 India time, only through the start wrapper. Protocol name: `sl-protocol-v1.1`; the tag `sl-protocol-v1` is not used.
+
+> Status under Amendment 3: adopted as conformed by the rev 3.1 banner above; the name is sl-protocol-v1.1.
+
 Status: **DESIGN rev 3 for owner approval, 2026-11-01 (rev 3 = six technical corrections, section 19). Not approved to build, not approved to run.**
 No code, model, table, protocol, ledger row or trading rule has been changed by this document.
 Proposed protocol name: **`sl-protocol-v1`** (selection lab). Frozen only when the owner signs section 17 and
@@ -160,6 +171,8 @@ Training stocks = the 49 + ev15 extra 128 (`stock_split_ev15.json`, SHA-256 chec
 
 ### 4.3 Experiment C — results and shareholding (S3)
 
+> Not in force: S3 stays blocked (Amendment 2 item 1; Amendment 3 4.2).
+
 Fixed now; not changed after any result:
 
 Definitions. *Q* = the latest quarterly result public before 15:30 IST on decision day *d* (L1–L2); *Q−4* = the
@@ -197,6 +210,8 @@ conservative choice. **S3 stays blocked** (owner 11-01) until timestamps, comple
 licensing are all verified; nothing else in the lab waits for it.
 
 ### 4.4 F1 — earnings filter (report-only)
+
+> Not in force: report-only items are outside sl-protocol-v1.1.
 
 The rule already exists live: the brain's M13 blocks new ideas with results due within 5 trading days
 (`m13_news/calendar.py`), v1 blacks out 3 days (`services/avoid.py`). Both are trial-frozen. History of
@@ -297,6 +312,8 @@ added as a column if it exists at run time.
 
 ### 6.2a Report-only additions (rev 3) — never pass or fail rules
 
+> Not in force: money management is out of the lab (owner 2026-11-02; Amendment 2 item 3; Amendment 3 4.3).
+
 **Portfolio-level view, reported separately from the locked trade-level result.** From the `portfolio_sim`
 replay (₹10 lakh, ladder limits, 25% sector cap, 15% halt), per candidate and per baseline:
 
@@ -324,6 +341,8 @@ stored in the run record and shown on the screen. "Depends on" = passes R1 or M0
 without them.
 
 ### 6.3 Pass rules — fixed before any run
+
+> Replaced by Amendment 3 4.3: ranking only. R1 to R4 apply; family S1, S2, S1M, S2M; M0 to M3, N, winner, H1, Stage 2 and Stage 3 do not exist in this protocol.
 
 Development folds: expanding walk-forward, 28-day test folds, **2023-07-01 → 2026-08-15** (≈ 41 folds), same
 start as wf-v1 and fd-v1. Every candidate trains exactly like `train_model` (20% chronological hold-back at the
@@ -611,6 +630,8 @@ includes horizon and model id; display tests check the horizon label.
 
 ## 12. Workstream: feature reduction (candidate S2r)
 
+> Not in force: S2r is not added (Amendment 2 item 1; Amendment 3 4.2).
+
 **Boundary:** a lab candidate (S2r), inside the lab family of four — **not** a Phase B candidate. Uses
 development data only, inside each fold's training window (L7). The held-back 129 are never used to choose
 inputs. The production feature list is not changed.
@@ -778,6 +799,8 @@ protocol (`td-protocol-v1` stays unsigned), considered only if a 15D candidate p
 
 ## 16. Effort, compute, cost, risks
 
+> Read "Release 1" as: S0, S1, S2, S0M, S1M, S2M; start not before 2026-12-05 IST.
+
 | Release | Content | Effort (dev-days) | Money |
 |---|---|---|---|
 | 0 | Audits (done, read-only) + sign protocol before 9 Nov | 1 | ₹0 |
@@ -805,6 +828,8 @@ on the laptop (S2r ≈ 2×). All of Stage 1 ≈ one working day of machine time.
 | Scope creep | medium | family of four, frozen |
 
 ## 17. For your approval
+
+> Q5 is void: the 129 held-back stocks are not used by the lab (Amendment 2 item 4; Amendment 3 4.7).
 
 | # | Question | My recommendation |
 |---|---|---|
@@ -861,6 +886,8 @@ except by adding these checks; none of them runs before the evidence-plan amendm
 | 5 | Ranking vs actual +8% / -4% trade outcome stated in all reports | 6.4a |
 
 ### 19.2 Pre-registration checklist (what signing Q1 covers)
+
+> Superseded by Amendment 3; see its section 8 for the sign-off sequence.
 
 - [x] Protocol text is rev 3 final; family of four fixed (S1, S2, S2r, S3); S0 control; no fifth candidate.
 - [x] Pass rules 6.3 accepted (Q4 final yes, 11-01).

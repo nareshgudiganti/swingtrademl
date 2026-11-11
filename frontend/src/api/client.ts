@@ -1,6 +1,10 @@
 // Thin fetch wrapper around the FastAPI backend.
 
 import type {
+  BillingCheckout,
+  BillingMe,
+  BillingPlans,
+  BillingSubscription,
   ExperimentOutcome,
   HealthBook,
   HoldingsHealth,
@@ -87,6 +91,8 @@ import type {
   MyWatchlist,
   MyWatchlistItem,
   WatchlistHit,
+  SoldRecord,
+  WatchTracker,
   KiteLoginResponse,
   LatestSignal,
   HorizonAccuracy,
@@ -115,6 +121,7 @@ import type {
 import type { AlertSettings, AlertSettingsUpdate } from '../trademind/alerts'
 import type { AdminJobs } from '../trademind/jobs'
 import type { AuthOptions, InviteForm } from '../auth/authRules'
+import type { DeletionStatus } from '../lib/deletionRules'
 import type { InviteDecision, InviteRequestRow } from '../trademind/invites'
 import type { BrainChanges } from '../trademind/changes'
 import type { RealTaxExport } from '../trademind/taxRecords'
@@ -173,14 +180,20 @@ function authHeaders(token: string): Record<string, string> {
 /**
  * Google sign-in comes back with `?login_code=...` (one use, 60 seconds).
  * Read it and strip it from the address bar before anything renders. An old
- * `?token=` link is stripped and never honoured.
+ * `?token=` link is stripped and never honoured, EXCEPT on the two email-link pages
+ * (/verify-email and /reset-password): there `?token=` is the one-time link from the email
+ * and those pages read it themselves, then take it out of the address bar.
  */
+export const EMAIL_LINK_PATHS = ['/verify-email', '/reset-password', '/confirm-deletion', '/cancel-deletion']
+
 export function takeLoginCodeFromRedirect(): string | null {
   const url = new URL(window.location.href)
-  if (!url.searchParams.has('login_code') && !url.searchParams.has('token')) return null
+  const path = url.pathname.replace(/\/+$/, '')
+  const keepToken = EMAIL_LINK_PATHS.includes(path)
+  if (!url.searchParams.has('login_code') && !(url.searchParams.has('token') && !keepToken)) return null
   const code = url.searchParams.get('login_code')
   url.searchParams.delete('login_code')
-  url.searchParams.delete('token')
+  if (!keepToken) url.searchParams.delete('token')
   window.history.replaceState({}, '', url.toString())
   return code
 }
@@ -189,20 +202,36 @@ export class ApiError extends Error {
   constructor(
     message: string,
     readonly status: number,
+    readonly code: string | null = null,
   ) {
     super(message)
     this.name = 'ApiError'
   }
 }
 
+/** Two-step code for the privileged /admin/* calls. Lives in memory only (it expires after 15 minutes). */
+let adminStepUp = ''
+export function setAdminStepUp(token: string): void {
+  adminStepUp = token
+}
+export type StepUpKind = 'verify' | 'enrol'
+type StepUpHandler = (kind: StepUpKind) => Promise<string | null>
+let stepUpHandler: StepUpHandler | null = null
+/** The app registers one prompt; request() uses it when the server asks for the admin's two-step code. */
+export function registerStepUpHandler(handler: StepUpHandler | null): void {
+  stepUpHandler = handler
+}
+
 /** `anonymous` sends no credentials at all, so a 401 can never clear a stored token. */
-async function request<T>(path: string, init?: RequestInit, anonymous = false): Promise<T> {
+async function request<T>(path: string, init?: RequestInit, anonymous = false, retried = false): Promise<T> {
   const token = anonymous ? '' : getToken()
+  const isAdminPath = path.startsWith('/admin/')
   const response = await fetch(`${BASE_URL}${path}`, {
     ...init,
     headers: {
       'Content-Type': 'application/json',
       ...(anonymous ? {} : authHeaders(token)),
+      ...(isAdminPath && adminStepUp ? { 'X-Admin-Mfa': adminStepUp } : {}),
       ...init?.headers,
     },
   })
@@ -218,13 +247,36 @@ async function request<T>(path: string, init?: RequestInit, anonymous = false): 
     // FastAPI returns {detail: ...}; fall back to the status line when the
     // body is empty or not JSON (a proxy error page, for instance).
     let detail = response.statusText
+    let code: string | null = null
     try {
       const body = await response.json()
-      detail = typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail)
+      if (typeof body.detail === 'string') {
+        detail = body.detail
+      } else if (body.detail && typeof body.detail.message === 'string') {
+        detail = body.detail.message
+        code = typeof body.detail.code === 'string' ? body.detail.code : null
+      } else {
+        detail = JSON.stringify(body.detail)
+      }
     } catch {
       /* keep statusText */
     }
-    throw new ApiError(detail, response.status)
+    // The server wants the admin's two-step code: ask once, then repeat the same call.
+    if (
+      response.status === 403 &&
+      isAdminPath &&
+      !retried &&
+      stepUpHandler &&
+      (code === 'mfa_required' || code === 'mfa_setup_required')
+    ) {
+      adminStepUp = ''
+      const fresh = await stepUpHandler(code === 'mfa_setup_required' ? 'enrol' : 'verify')
+      if (fresh) {
+        adminStepUp = fresh
+        return request<T>(path, init, anonymous, true)
+      }
+    }
+    throw new ApiError(detail, response.status, code)
   }
 
   if (response.status === 204) return undefined as T
@@ -329,6 +381,29 @@ export const api = {
       ...(inviteCode ? { invite_code: inviteCode } : {}),
     }),
   authOptions: () => get<AuthOptions>('/auth/options'),
+  // Open sign-up: never returns a token (the same answer for a new and an existing email). Sign in afterwards.
+  register: (body: { full_name: string; email: string; password: string; mobile?: string }) =>
+    postPublic<{ message: string }>('/auth/register', body),
+  verifyEmail: (token: string) => postPublic<{ message: string }>('/auth/verify-email', { token }),
+  resendVerification: (email: string) => postPublic<{ message: string }>('/auth/resend-verification', { email }),
+  forgotPassword: (email: string) => postPublic<{ message: string }>('/auth/forgot-password', { email }),
+  resetPassword: (token: string, new_password: string) =>
+    postPublic<{ message: string }>('/auth/reset-password', { token, new_password }),
+  // ----------------------------------------------------------- billing --
+  billingPlans: () => get<BillingPlans>('/billing/plans'),
+  billingMe: () => get<BillingMe>('/billing/me'),
+  billingCheckout: () => post<BillingCheckout>('/billing/checkout'),
+  billingCancel: (atCycleEnd = true) => post<{ subscription: BillingSubscription | null }>('/billing/cancel', { at_cycle_end: atCycleEnd }),
+  billingFakePay: (subscriptionId: string) =>
+    post<{ subscription: BillingSubscription | null }>('/billing/fake/simulate', { event: 'activated', subscription_id: subscriptionId }),
+  // ------------------------------------------------- account deletion --
+  deletionStatus: () => get<DeletionStatus>('/account/deletion'),
+  requestDeletion: (password: string | null) =>
+    post<{ message: string }>('/account/deletion/request', { password: password || null }),
+  confirmDeletion: (token: string) =>
+    postPublic<{ message: string; scheduled_for: string }>('/account/deletion/confirm', { token }),
+  keepAccount: (token: string) => postPublic<{ message: string }>('/account/deletion/cancel', { token }),
+  exportMyData: () => get<Record<string, unknown>>('/account/export'),
   requestInvite: (body: InviteForm) => {
     const phone = body.phone.trim()
     return postPublic<{ message: string }>('/auth/invite-request', { ...body, phone: phone || null })
@@ -521,6 +596,18 @@ export const api = {
   myWatchlistSearch: (q: string) => get<WatchlistHit[]>(`/me/watchlist/search?q=${encodeURIComponent(q)}`),
   myWatchlistAdd: (symbol: string, note?: string) => post<MyWatchlistItem>('/me/watchlist', { symbol, note }),
   myWatchlistRemove: (symbol: string) => del<MyWatchlistItem>(`/me/watchlist/${encodeURIComponent(symbol)}`),
+  /** Record a sale made in Groww: the stock leaves the tracker and its result is kept in Sold records. */
+  myWatchlistSold: (symbol: string, body: { sell_price: number; sold_on?: string }) =>
+    post<SoldRecord>(`/me/watchlist/${encodeURIComponent(symbol)}/sold`, body),
+  myWatchlistSoldList: () => get<{ items: SoldRecord[] }>('/me/watchlist/sold'),
+  /** Groww Tracker: each stock on the list followed like an open position. */
+  myWatchlistTracker: () => get<WatchTracker>('/me/watchlist/tracker'),
+  /** Edit one stock's Groww entry: buy price, shares, buy date (YYYY-MM-DD) and/or note. Only sent fields change. */
+  myWatchlistUpdate: (
+    symbol: string,
+    body: { buy_price?: number | null; quantity?: number | null; bought_on?: string; note?: string | null },
+  ) =>
+    patch<MyWatchlistItem>(`/me/watchlist/${encodeURIComponent(symbol)}`, body),
 
   // -------------------------------------------------------- market data --
   candles: (symbol: string, limit = 11) =>

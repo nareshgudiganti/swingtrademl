@@ -5,7 +5,7 @@
 
 import type { BrainDecision, BrainRun, MyWatchlistItem } from '../api/types'
 import { stopOf } from './brainSteps'
-import { finalWord, ideasFrom } from './live'
+import { finalWord, ideasFrom, shownWord } from './live'
 import { scoreRank, type ScoreRank } from './scoreText'
 import { oneReason } from './today/answerRules'
 import { changeLines } from './WhatWouldChange'
@@ -51,7 +51,7 @@ export function watchRows(items: MyWatchlistItem[], run: BrainRun | undefined): 
     return {
       item,
       decision,
-      word: decision ? finalWord(decision) : null,
+      word: decision ? shownWord(decision) : null,
       rank: decision && decision.kind === 'idea' ? scoreRank(decision.confidence, dayScores) : null,
       waitingFor: run ? waitingFor(decision) : 'The brain’s last run could not be loaded.',
       close: isCloseToTrade(decision),

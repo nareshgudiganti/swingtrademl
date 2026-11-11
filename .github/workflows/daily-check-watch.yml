@@ -10,6 +10,14 @@ on:
   schedule:
     - cron: "45 11 * * 1-5" # 17:15 IST; GitHub may start it 5-20 minutes late, which is fine here
   workflow_dispatch:
+    inputs:
+      simulate:
+        description: "none = normal run; failure = send a TEST ONLY message and fail on purpose"
+        type: choice
+        options:
+          - none
+          - failure
+        default: none
 
 permissions: {}
 
@@ -23,7 +31,12 @@ jobs:
         env:
           BASE: https://swingtrademl.com/api/v1
           API_KEY: ${{ secrets.API_KEY }}
+          SIMULATE: ${{ inputs.simulate }}
         run: |
+          if [ "$SIMULATE" = "failure" ]; then
+            echo "problem=TEST ONLY - simulated failure of the daily-check watcher; no real problem" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
           if [ -z "$API_KEY" ]; then echo "::notice::No API_KEY repository secret; add it to turn this watch on."; exit 0; fi
           today=$(TZ=Asia/Kolkata date +%F)
           session=$(curl -s -m 30 -H "X-API-Key: $API_KEY" "$BASE/market/session" || true)
@@ -49,6 +62,7 @@ jobs:
           PROBLEM: ${{ steps.check.outputs.problem }}
         run: |
           text=$(printf '🟠 Brain daily check missing (%s)\n%s' "$(TZ=Asia/Kolkata date '+%d %b')" "$PROBLEM")
-          curl -s -m 20 -o /dev/null -w 'telegram %{http_code}\n' "https://api.telegram.org/bot${TOKEN}/sendMessage" \
-            --data-urlencode "chat_id=${CHAT}" --data-urlencode "text=${text}"
+          code=$(curl -s -m 20 -o /dev/null -w '%{http_code}' "https://api.telegram.org/bot${TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${CHAT}" --data-urlencode "text=${text}" || true)
+          if [ "$code" = "200" ]; then echo "telegram delivered (HTTP 200)"; else echo "::error::telegram NOT delivered (HTTP $code)"; fi
           exit 1

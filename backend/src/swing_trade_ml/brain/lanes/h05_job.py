@@ -2,8 +2,9 @@
 # ruff: noqa: E501, N812 (short P / R import aliases and long report sentences, as in brain/five_day.py)
 """The h05 daily job: record the latest closed session, report missed sessions, mature outcomes.
 
-DISABLED by default and not wired into the scheduler: `register(scheduler)` adds nothing unless the lane is
-enabled AND the owner has accepted the protocol hash, and nobody calls it until the owner approves the wiring.
+DISABLED by default. It is wired into the scheduler (`workers/scheduler.py::add_h05_job`, since the lane was added
+on 2026-10-30), but `register(scheduler)` adds nothing unless the lane is enabled AND the owner has
+accepted the protocol hash.
 It never starts a run (the owner does), never trades, and writes only the h05_* tables.
 
 One pass (`run_daily`) does, in order:

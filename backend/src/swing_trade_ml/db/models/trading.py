@@ -27,6 +27,7 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.sql import true as sa_true
 
 from swing_trade_ml.core.enums import (
     OrderStatus,
@@ -64,6 +65,14 @@ class Strategy(Base, TimestampMixin):
     # notifies with a recommendation — see services/execution.py. Never
     # auto-executed regardless of mode once set to advisory.
     execution_mode: Mapped[str] = mapped_column(String(16), default="auto", index=True)
+
+    # The owner's own book (real holdings, manual paper testing) or a strategy nobody has
+    # classified yet. A plan member never sees an owner-private strategy's signals. Safe
+    # default: unclassified = private until reviewed, so every creation path sets this
+    # explicitly (False for member-facing brain / model / rule strategies).
+    owner_private: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=sa_true(), nullable=False
+    )
 
     # Opt-in: add another tranche to an already-open, currently-profitable
     # position instead of rejecting the entry outright. See services/risk.py
@@ -427,12 +436,14 @@ class StockScore(Base, TimestampMixin):
     """One day's strength score for one stock, held or not.
 
     Same idea as PositionScore but per stock, so the stock page can show the
-    trail for anything on the watchlist. One row per stock per IST day (a
-    second scan replaces it); a day with no scan has no row, never a copy.
+    trail for anything on the watchlist. One row per stock per model per IST day (a
+    second scan by the same model replaces it); a day with no scan has no row, never a copy.
     """
 
     __tablename__ = "stock_score_history"
-    __table_args__ = (UniqueConstraint("instrument_id", "as_of", name="uq_stock_score_day"),)
+    __table_args__ = (
+        UniqueConstraint("instrument_id", "as_of", "model_name", name="uq_stock_score_day_model"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     instrument_id: Mapped[int] = mapped_column(
@@ -443,6 +454,9 @@ class StockScore(Base, TimestampMixin):
     # strong | easing | weak — see services/score_history.py
     band: Mapped[str] = mapped_column(String(8))
     model_version: Mapped[str | None] = mapped_column(String(64))
+    # The model's name without its version ("swing_classifier"): one trail line per model, so a
+    # different model's score can never be drawn as this stock's own change.
+    model_name: Mapped[str] = mapped_column(String(64), default="", server_default="")
 
 
 class PortfolioSnapshot(Base, TimestampMixin):

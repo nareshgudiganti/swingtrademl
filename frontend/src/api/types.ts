@@ -655,12 +655,75 @@ export interface MyWatchlistItem {
   /** Set when the person took it off the list (shown under "Removed"). */
   removed_at: string | null
   note: string | null
+  buy_price?: number | null
+  quantity?: number | null
 }
 
 export interface MyWatchlist {
   items: MyWatchlistItem[]
   /** Most stocks one list may hold at a time. */
   limit: number
+}
+
+/** Where the entry price of a tracked stock came from. */
+export type TrackerEntrySource = 'your_price' | 'added_close'
+/** Status the server gives each tracked stock; the page never recomputes it. */
+export type TrackerState = 'stop' | 'target' | 'time' | 'weak' | 'ok'
+
+/** One stock in the Groww Tracker (GET /me/watchlist/tracker). Every number can be null. */
+export interface WatchTrackerItem {
+  symbol: string
+  name: string | null
+  added_at: string
+  note: string | null
+  buy_price: number | null
+  /** IST calendar date the person bought it (YYYY-MM-DD). */
+  bought_on: string
+  /** Shares bought; null when not entered. */
+  quantity: number | null
+  /** Entry price x shares, in rupees; null without shares or an entry price. */
+  invested: number | null
+  /** (Now - entry) x shares, in rupees; null without shares or prices. */
+  profit_amount: number | null
+  entry_price: number | null
+  entry_source: TrackerEntrySource | null
+  last_price: number | null
+  return_pct: number | null
+  today_pct: number | null
+  days_done: number
+  /** The day it is on; the day you added it is Day 1. Older servers omit it. */
+  day_number?: number
+  score_today: number | null
+  score_prev: number | null
+  score_delta: number | null
+  score_first: number | null
+  scores: { date: string; score: number }[]
+  closes: { date: string; close: number }[]
+  state: TrackerState
+}
+
+/** One sold stock in the Groww Tracker's "Sold records" (GET /me/watchlist/sold). */
+export interface SoldRecord {
+  symbol: string
+  name: string | null
+  bought_on: string
+  sold_on: string
+  /** Day 1 is the day it was bought. */
+  days_held: number
+  entry_price: number
+  entry_source: TrackerEntrySource | null
+  sell_price: number
+  quantity: number | null
+  invested: number | null
+  return_pct: number | null
+  profit_amount: number | null
+  result: 'win' | 'loss' | 'flat' | null
+}
+
+export interface WatchTracker {
+  as_of: string | null
+  horizon_days: number
+  items: WatchTrackerItem[]
 }
 
 export interface WatchlistHit {
@@ -1956,4 +2019,45 @@ export interface IdeaReportQuery {
   regime?: string[]
   outcome?: string[]
   current_only?: boolean
+}
+
+// ---------------------------------------------------------------- billing --
+
+export interface BillingSubscription {
+  provider: string
+  /** The provider's word: created, authenticated, active, pending, halted, paused, cancelled, completed. */
+  status: string
+  /** The end of the period already paid for (ISO time), or null. */
+  paid_through: string | null
+  /** The person asked to stop at the end of the paid period. */
+  cancel_scheduled: boolean
+  cancelled_at: string | null
+}
+
+/** GET /billing/me: the plan this person has right now, and the subscription behind it. */
+export interface BillingMe {
+  plan: 'free' | 'pro'
+  stored_plan: string
+  /** Pro was given by the owner (no payment). */
+  complimentary: boolean
+  provider: string
+  sandbox: boolean
+  subscription: BillingSubscription | null
+}
+
+export interface BillingPlans {
+  plans: { key: string; name: string; features: Record<string, boolean>; price?: { amount_paise: number; currency: string; interval: string } }[]
+  provider: string
+  sandbox: boolean
+  /** New upgrades are accepted (a separate switch from billing itself). */
+  checkout_open: boolean
+}
+
+export interface BillingCheckout {
+  provider: string
+  subscription_id: string
+  key_id: string | null
+  completion_url: string | null
+  completion_token: string | null
+  price: { amount_paise: number; currency: string; interval: string }
 }

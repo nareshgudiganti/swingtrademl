@@ -52,6 +52,9 @@ class Settings(BaseSettings):
     REAL_ACCOUNT_USERS: str = "sudeeksha"
 
     API_KEY: str = "change-me"
+    # The shared X-API-Key still works while this is true. Turn it off (false) once every script
+    # uses its own scoped key (POST /admin/service-keys); then the shared key is refused outright.
+    LEGACY_API_KEY_ENABLED: bool = True
     JWT_SECRET_KEY: str = "change-me"
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_MINUTES: int = 720
@@ -217,6 +220,10 @@ class Settings(BaseSettings):
     # records decisions. Off by default so production is unchanged until the
     # owner turns it on; set BRAIN_ENABLED=true locally to schedule its runs.
     BRAIN_ENABLED: bool = False
+    # Customer account deletion (request, confirm by email, grace period, anonymise). OFF by default: while
+    # off, request/confirm answer 404 and the daily job does nothing. Cancelling a scheduled deletion always works.
+    ACCOUNT_DELETION_ENABLED: bool = False
+    ACCOUNT_DELETION_GRACE_DAYS: int = 14
     # Pro subscription billing (sandbox only for now). BILLING_ENABLED is the master switch for the
     # billing ROUTES (off = 404). It never affects plan resolution: existing grants and entitled
     # subscriptions are always honoured. BILLING_ACCEPT_NEW_CHECKOUTS only gates POST /billing/checkout.

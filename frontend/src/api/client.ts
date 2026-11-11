@@ -1,6 +1,10 @@
 // Thin fetch wrapper around the FastAPI backend.
 
 import type {
+  BillingCheckout,
+  BillingMe,
+  BillingPlans,
+  BillingSubscription,
   ExperimentOutcome,
   HealthBook,
   HoldingsHealth,
@@ -172,14 +176,20 @@ function authHeaders(token: string): Record<string, string> {
 /**
  * Google sign-in comes back with `?login_code=...` (one use, 60 seconds).
  * Read it and strip it from the address bar before anything renders. An old
- * `?token=` link is stripped and never honoured.
+ * `?token=` link is stripped and never honoured, EXCEPT on the two email-link pages
+ * (/verify-email and /reset-password): there `?token=` is the one-time link from the email
+ * and those pages read it themselves, then take it out of the address bar.
  */
+export const EMAIL_LINK_PATHS = ['/verify-email', '/reset-password']
+
 export function takeLoginCodeFromRedirect(): string | null {
   const url = new URL(window.location.href)
-  if (!url.searchParams.has('login_code') && !url.searchParams.has('token')) return null
+  const path = url.pathname.replace(/\/+$/, '')
+  const keepToken = EMAIL_LINK_PATHS.includes(path)
+  if (!url.searchParams.has('login_code') && !(url.searchParams.has('token') && !keepToken)) return null
   const code = url.searchParams.get('login_code')
   url.searchParams.delete('login_code')
-  url.searchParams.delete('token')
+  if (!keepToken) url.searchParams.delete('token')
   window.history.replaceState({}, '', url.toString())
   return code
 }
@@ -328,6 +338,21 @@ export const api = {
       ...(inviteCode ? { invite_code: inviteCode } : {}),
     }),
   authOptions: () => get<AuthOptions>('/auth/options'),
+  // Open sign-up: never returns a token (the same answer for a new and an existing email). Sign in afterwards.
+  register: (body: { full_name: string; email: string; password: string; mobile?: string }) =>
+    postPublic<{ message: string }>('/auth/register', body),
+  verifyEmail: (token: string) => postPublic<{ message: string }>('/auth/verify-email', { token }),
+  resendVerification: (email: string) => postPublic<{ message: string }>('/auth/resend-verification', { email }),
+  forgotPassword: (email: string) => postPublic<{ message: string }>('/auth/forgot-password', { email }),
+  resetPassword: (token: string, new_password: string) =>
+    postPublic<{ message: string }>('/auth/reset-password', { token, new_password }),
+  // ----------------------------------------------------------- billing --
+  billingPlans: () => get<BillingPlans>('/billing/plans'),
+  billingMe: () => get<BillingMe>('/billing/me'),
+  billingCheckout: () => post<BillingCheckout>('/billing/checkout'),
+  billingCancel: (atCycleEnd = true) => post<{ subscription: BillingSubscription | null }>('/billing/cancel', { at_cycle_end: atCycleEnd }),
+  billingFakePay: (subscriptionId: string) =>
+    post<{ subscription: BillingSubscription | null }>('/billing/fake/simulate', { event: 'activated', subscription_id: subscriptionId }),
   requestInvite: (body: InviteForm) => {
     const phone = body.phone.trim()
     return postPublic<{ message: string }>('/auth/invite-request', { ...body, phone: phone || null })

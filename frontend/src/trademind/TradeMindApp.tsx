@@ -20,6 +20,7 @@ import TopBarAlerts from './TopBarAlerts'
 import RealOrdersBadge from './RealOrdersBadge'
 import { Tour } from './Tour'
 import Today from './pages/Today'
+import Account from './Account'
 import NewLookShell from './NewLookShell'
 import { useLook, type Look } from './look'
 import Market from './pages/Market'
@@ -224,12 +225,17 @@ function ClassicShell({ ownerConsole }: { ownerConsole: boolean }) {
                 <Icon.User />
               </button>
               {/* The Admin pages, then Log out (moved off the bar for the owner, so the bar stays on one line). */}
-              {menuOpen && <AccountMenuList pages={ADMIN_SECTION.pages} onNewLook={() => setLook('new')} />}
+              {menuOpen && (
+                <AccountMenuList
+                  pages={[{ to: '/trademind/account', label: 'Account and plan' }, ...ADMIN_SECTION.pages]}
+                  onNewLook={() => setLook('new')}
+                />
+              )}
             </div>
           ) : (
-            <span className="tm-avatar" title="TradeMind Pro">
+            <Link to="/trademind/account" className="tm-avatar" title="Your account and plan">
               <Icon.User />
-            </span>
+            </Link>
           )}
           {/* The owner switches look from the account menu (the bar is full); everyone else from the bar. */}
           {!ownerConsole && (
@@ -354,6 +360,7 @@ export function TradeMindRoutes({
             )
           }
         />
+        <Route path="account" element={<Account />} />
         <Route path="manual-test" element={<ManualTestRoute ownerConsole={ownerConsole} />} />
         <Route path="ai" element={<AIDecision />} />
         <Route path="ai/:symbol" element={<AIDecision />} />

@@ -65,3 +65,39 @@ def already_registered_email() -> tuple[str, str, str]:
         "<p>If it was not you, ignore this message; nothing has changed on your account.</p>"
     )
     return "Someone tried to sign up with your email on TradeMind", text, html
+
+
+def deletion_confirm_email(token: str) -> tuple[str, str, str]:
+    link = _link("confirm-deletion", token)
+    text = (
+        "We received a request to delete your TradeMind account.\n\n"
+        "To go ahead, open this link (it works once, for 1 hour):\n"
+        f"{link}\n\n"
+        "Nothing is deleted yet. After you confirm, a waiting period lets you change your mind.\n"
+        "If you did not ask for this, ignore this message; your account is unchanged."
+    )
+    html = (
+        "<p>We received a request to delete your TradeMind account.</p>"
+        f'<p><a href="{escape(link)}">Yes, delete my account</a> (the link works once, for 1 hour).</p>'
+        "<p>Nothing is deleted yet. After you confirm, a waiting period lets you change your mind.</p>"
+        "<p>If you did not ask for this, ignore this message; your account is unchanged.</p>"
+    )
+    return "Confirm deleting your TradeMind account", text, html
+
+
+def deletion_scheduled_email(cancel_token: str, when: str, cancelled_pro: bool) -> tuple[str, str, str]:
+    link = _link("cancel-deletion", cancel_token)
+    pro = "\nYour Pro subscription has been cancelled and will not renew." if cancelled_pro else ""
+    text = (
+        f"Your TradeMind account will be deleted on {when}.{pro}\n\n"
+        "You are signed out everywhere and cannot sign in until then.\n"
+        "Changed your mind? Open this link before that date to keep your account:\n"
+        f"{link}"
+    )
+    html = (
+        f"<p>Your TradeMind account will be deleted on <b>{escape(when)}</b>.</p>"
+        + ("<p>Your Pro subscription has been cancelled and will not renew.</p>" if cancelled_pro else "")
+        + "<p>You are signed out everywhere and cannot sign in until then.</p>"
+        + f'<p>Changed your mind? <a href="{escape(link)}">Keep my account</a> before that date.</p>'
+    )
+    return "Your TradeMind account will be deleted", text, html

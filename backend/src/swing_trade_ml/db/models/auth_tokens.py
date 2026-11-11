@@ -10,7 +10,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from swing_trade_ml.db.base import Base
 
-PURPOSES = ("verify_email", "reset_password")
+PURPOSES = ("verify_email", "reset_password", "delete_account", "cancel_delete")
 
 
 class AuthToken(Base):

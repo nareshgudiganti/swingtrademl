@@ -1949,3 +1949,44 @@ export interface LanePickRow {
   net_return: number | null
   excess_return: number | null
 }
+
+// ---------------------------------------------------------------- billing --
+
+export interface BillingSubscription {
+  provider: string
+  /** The provider's word: created, authenticated, active, pending, halted, paused, cancelled, completed. */
+  status: string
+  /** The end of the period already paid for (ISO time), or null. */
+  paid_through: string | null
+  /** The person asked to stop at the end of the paid period. */
+  cancel_scheduled: boolean
+  cancelled_at: string | null
+}
+
+/** GET /billing/me: the plan this person has right now, and the subscription behind it. */
+export interface BillingMe {
+  plan: 'free' | 'pro'
+  stored_plan: string
+  /** Pro was given by the owner (no payment). */
+  complimentary: boolean
+  provider: string
+  sandbox: boolean
+  subscription: BillingSubscription | null
+}
+
+export interface BillingPlans {
+  plans: { key: string; name: string; features: Record<string, boolean>; price?: { amount_paise: number; currency: string; interval: string } }[]
+  provider: string
+  sandbox: boolean
+  /** New upgrades are accepted (a separate switch from billing itself). */
+  checkout_open: boolean
+}
+
+export interface BillingCheckout {
+  provider: string
+  subscription_id: string
+  key_id: string | null
+  completion_url: string | null
+  completion_token: string | null
+  price: { amount_paise: number; currency: string; interval: string }
+}

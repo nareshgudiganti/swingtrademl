@@ -1,6 +1,7 @@
 """Company filings: announcements and shareholding, for the Company and news tab
 
-Two new tables, nothing else touched. Display only.
+Two new tables, nothing else touched. Display only. Named company_filing_* so they cannot clash with any older
+table of a similar name.
 
 Revision ID: f9c3o7m1p5n2
 Revises: c8d2p9s1t4k6
@@ -29,7 +30,7 @@ def _stamps() -> list[sa.Column]:
 
 def upgrade() -> None:
     op.create_table(
-        "company_announcements",
+        "company_filing_announcements",
         sa.Column("id", sa.BigInteger(), primary_key=True),
         sa.Column("symbol", sa.String(64), nullable=False),
         sa.Column("source", sa.String(16), nullable=False),
@@ -39,13 +40,15 @@ def upgrade() -> None:
         sa.Column("summary", sa.Text(), nullable=False),
         sa.Column("attachment_url", sa.String(400), nullable=True),
         *_stamps(),
-        sa.UniqueConstraint("source", "seq_id", name="uq_company_announcement"),
+        sa.UniqueConstraint("source", "seq_id", name="uq_company_filing_announcement"),
     )
-    op.create_index("ix_company_announcements_symbol", "company_announcements", ["symbol"])
-    op.create_index("ix_company_announcements_announced_at", "company_announcements", ["announced_at"])
+    op.create_index("ix_company_filing_announcements_symbol", "company_filing_announcements", ["symbol"])
+    op.create_index(
+        "ix_company_filing_announcements_announced_at", "company_filing_announcements", ["announced_at"]
+    )
 
     op.create_table(
-        "company_shareholdings",
+        "company_filing_shareholdings",
         sa.Column("id", sa.BigInteger(), primary_key=True),
         sa.Column("symbol", sa.String(64), nullable=False),
         sa.Column("source", sa.String(16), nullable=False),
@@ -54,12 +57,12 @@ def upgrade() -> None:
         sa.Column("promoter_pct", sa.Float(), nullable=False),
         sa.Column("public_pct", sa.Float(), nullable=False),
         *_stamps(),
-        sa.UniqueConstraint("symbol", "source", "as_of", name="uq_company_shareholding"),
+        sa.UniqueConstraint("symbol", "source", "as_of", name="uq_company_filing_shareholding"),
     )
-    op.create_index("ix_company_shareholdings_symbol", "company_shareholdings", ["symbol"])
-    op.create_index("ix_company_shareholdings_as_of", "company_shareholdings", ["as_of"])
+    op.create_index("ix_company_filing_shareholdings_symbol", "company_filing_shareholdings", ["symbol"])
+    op.create_index("ix_company_filing_shareholdings_as_of", "company_filing_shareholdings", ["as_of"])
 
 
 def downgrade() -> None:
-    op.drop_table("company_shareholdings")
-    op.drop_table("company_announcements")
+    op.drop_table("company_filing_shareholdings")
+    op.drop_table("company_filing_announcements")

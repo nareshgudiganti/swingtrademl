@@ -28,6 +28,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from swing_trade_ml.api.admin_step_up import StepUp
 from swing_trade_ml.api.deps import DbSession, Principal, require_owner
 from swing_trade_ml.api.rate_limit import auth_limit
 from swing_trade_ml.core.logging import get_logger
@@ -234,7 +235,7 @@ def _with_code(db: Session, row: InviteRequest, code: str) -> dict[str, Any]:
     return out
 
 
-@admin.post("/{invite_id}/approve", response_model=dict)
+@admin.post("/{invite_id}/approve", response_model=dict, dependencies=[StepUp])
 def approve_invite(
     invite_id: int, db: DbSession, principal: OwnerDep, request: Request, body: DecisionIn | None = None
 ) -> dict[str, Any]:
@@ -259,7 +260,7 @@ def approve_invite(
     return _with_code(db, row, code)
 
 
-@admin.post("/{invite_id}/new-code", response_model=dict)
+@admin.post("/{invite_id}/new-code", response_model=dict, dependencies=[StepUp])
 def new_invite_code(invite_id: int, db: DbSession, principal: OwnerDep, request: Request) -> dict[str, Any]:
     """A fresh code for an approved, unused invite (the old one stops working)."""
     row = _load(db, invite_id)
@@ -275,7 +276,7 @@ def new_invite_code(invite_id: int, db: DbSession, principal: OwnerDep, request:
     return _with_code(db, row, code)
 
 
-@admin.post("/{invite_id}/reject", response_model=dict)
+@admin.post("/{invite_id}/reject", response_model=dict, dependencies=[StepUp])
 def reject_invite(
     invite_id: int, db: DbSession, principal: OwnerDep, request: Request, body: DecisionIn | None = None
 ) -> dict[str, Any]:

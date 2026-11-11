@@ -5,7 +5,7 @@ import AxeBuilder from '@axe-core/playwright'
 import type { Page } from '@playwright/test'
 
 import allowlist from './a11y-allowlist.json' with { type: 'json' }
-import { mockApi } from './support/mockApi'
+import { VALID_LINK_TOKEN, mockApi, type SaasOpts } from './support/mockApi'
 import { expect, openPage, test } from './support/test'
 
 type Allowed = { rule: string; page: string; todo: string }
@@ -36,6 +36,36 @@ const SCANNED: Record<string, { open: (page: Page) => Promise<void>; ready: stri
   'horizon-picks': { open: (page) => signedIn(page, '/horizon-picks'), ready: 'All three horizons side by side' },
   admin: { open: (page) => signedIn(page, '/trademind/control'), ready: 'Money being used' },
   'admin-alerts': { open: (page) => signedIn(page, '/trademind/alerts'), ready: 'Messages you can switch off' },
+  // Private-SaaS customer screens (sa7 and account deletion). Fake backend only.
+  signup: { open: (page) => publicPage(page, '/signup', { saas: { signupOpen: true } }), ready: 'Create your account' },
+  'verify-email': { open: (page) => publicPage(page, `/verify-email?token=${VALID_LINK_TOKEN}`), ready: 'Your email is confirmed' },
+  'forgot-password': { open: (page) => publicPage(page, '/forgot-password'), ready: 'Forgot your password?' },
+  'reset-password': { open: (page) => publicPage(page, `/reset-password?token=${VALID_LINK_TOKEN}`), ready: 'Choose a new password' },
+  'account-plan': { open: (page) => memberPage(page, '/trademind/account', {}), ready: 'You are on Free' },
+  'account-delete': {
+    open: (page) => memberPage(page, '/trademind/account', { deletion: { status: null } }),
+    ready: 'Delete my account',
+  },
+  'account-delete-requested': {
+    open: (page) => memberPage(page, '/trademind/account', { deletion: { status: 'pending' } }),
+    ready: 'Check your email to finish',
+  },
+  'delete-confirm-link': {
+    open: (page) => publicPage(page, `/confirm-deletion?token=${VALID_LINK_TOKEN}`, { saas: { deletion: { status: 'pending' } } }),
+    ready: 'Delete your account?',
+  },
+  'keep-account-link': { open: (page) => publicPage(page, `/cancel-deletion?token=${VALID_LINK_TOKEN}`), ready: 'Keep your account?' },
+  'admin-people': { open: (page) => signedIn(page, '/trademind/people'), ready: 'Set up two-step sign-in' },
+}
+
+async function publicPage(page: Page, path: string, opts: { saas?: SaasOpts } = {}) {
+  await mockApi(page, { signedIn: false, ...opts })
+  await page.goto(path)
+}
+
+async function memberPage(page: Page, path: string, saas: SaasOpts) {
+  await mockApi(page, { role: 'member', saas })
+  await openPage(page, path)
 }
 
 async function signedIn(page: Page, path: string) {

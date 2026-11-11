@@ -8,6 +8,7 @@ import { ApiError, api } from '../api/client'
 import type { BillingCheckout, BillingMe, BillingPlans } from '../api/types'
 import { PRO_FEATURES_FALLBACK, accountView, billingErrorText, formatDate, proPriceLine } from '../lib/billingRules'
 import { Confirm } from './Confirm'
+import DeleteAccount from './DeleteAccount'
 import { QueryState } from './PageState'
 
 const CHECKOUT_JS = 'https://checkout.razorpay.com/v1/checkout.js'
@@ -157,6 +158,8 @@ export default function Account() {
           />
         )}
       </QueryState>
+
+      {me.data && <DeleteAccount usesPassword={me.data.auth_provider !== 'google'} />}
 
       {confirmCancel && (
         <Confirm

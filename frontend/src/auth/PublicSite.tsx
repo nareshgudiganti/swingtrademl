@@ -766,7 +766,7 @@ function SignUp({ options, invite }: { options: AuthOptions | null; invite: { co
 
 // ------------------------------------------------------------------ email links: confirm, forgot, reset --
 
-function LinkPage({ label, children }: { label: string; children: ReactNode }) {
+export function LinkPage({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="na na-split">
       <Promises />

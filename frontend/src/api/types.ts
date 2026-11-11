@@ -2008,3 +2008,56 @@ export interface BillingCheckout {
   completion_token: string | null
   price: { amount_paise: number; currency: string; interval: string }
 }
+
+// ---- Portfolio > Reports: brain ideas by word / score / horizon / market mood (owner, read-only) ----
+export interface IdeaReportRow {
+  symbol: string
+  word: string
+  entry_day: string
+  entry_score: number | null
+  score_band: string | null
+  latest_score: number | null
+  latest_word: string
+  still_this_word: boolean
+  horizon_days: number
+  days_done: number
+  days_left: number
+  regime: string | null
+  status: 'tracking' | 'due' | 'finished'
+  sealed: boolean
+  outcome: 'target' | 'stop' | 'timeout' | null
+  return_pct: number | null
+  best_pct: number | null
+  worst_pct: number | null
+  result_days: number | null
+}
+
+export interface IdeaReport {
+  from: string
+  to: string
+  sessions: number
+  last_session: string | null
+  rows: IdeaReportRow[]
+  summary: {
+    ideas: number
+    tracking: number
+    due: number
+    finished: number
+    still_this_word: number
+    sealed_ideas: number
+    results: { ideas: number; target: number; stop: number; timeout: number; avg_return_pct: number | null }
+  }
+  seal: { active: boolean; from: string | null; text: string; outcome_filter_hides_sealed: boolean }
+  options: { words: string[]; bands: string[]; horizons: number[]; regimes: string[]; outcomes: string[] }
+}
+
+export interface IdeaReportQuery {
+  from?: string
+  to?: string
+  word?: string[]
+  band?: string[]
+  horizon?: number[]
+  regime?: string[]
+  outcome?: string[]
+  current_only?: boolean
+}

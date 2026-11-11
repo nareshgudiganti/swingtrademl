@@ -9,6 +9,7 @@ import { CapFlag, useSymbolCaps } from '../cap'
 import { BrainArt, BrainGate, Card, CheckItem, Icon, Tag } from '../ui'
 import { noTradeReason } from '../emptyReasons'
 import { PageState } from '../PageState'
+import StockLink from '../StockLink'
 import { ChangesSummaryCard } from '../IdeaExplain'
 import LiveIdeaCard from '../beginner/LiveIdeaCard'
 
@@ -149,7 +150,7 @@ function HomeBody() {
                   onClick={() => navigate(`/trademind/stock/${encodeURIComponent(d.symbol)}`)}
                 >
                   <span className="tm-flex" style={{ gap: '0.55rem' }}>
-                    <span className="tm-strong">{d.symbol}</span>
+                    <StockLink symbol={d.symbol} withScore={false} />
                     <span className="tm-dim">{d.reasons[0]}</span>
                   </span>
                   <WordTag word={finalWord(d)} />

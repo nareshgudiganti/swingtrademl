@@ -29,7 +29,7 @@ from zoneinfo import ZoneInfo
 from swing_trade_ml.brain.trial_journal import GATE_MIN_IDEAS, MIN_SESSIONS, TRIAL_START
 
 IST = ZoneInfo("Asia/Kolkata")
-SEALED = True
+SEALED = False
 SEALED_FROM: date = TRIAL_START
 SEALED_TEXT = "Sealed until the trial's evaluation (blind test): counts only."
 GATE_SEALED_TEXT = "The trial gate is not met yet (details sealed until the trial's evaluation)."

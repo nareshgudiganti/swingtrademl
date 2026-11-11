@@ -504,15 +504,34 @@ def test_admin_triggered_reset_goes_through_the_same_checked_route(client, db_se
 
 
 
+def _approved_invite(db, email: str, code: str) -> None:
+    """An approved, unused invite for `email` whose one-time code is `code` (as Admin > Invites makes)."""
+    from swing_trade_ml.api.v1.endpoints.invites import hash_code
+    from swing_trade_ml.db.models.invites import InviteRequest
+
+    db.add(
+        InviteRequest(
+            name="Invited Person",
+            email=email,
+            experience="just_starting",
+            language="english",
+            status="approved",
+            code_hash=hash_code(code),
+        )
+    )
+    db.flush()
+
+
 def test_invite_signup_refuses_weak_and_common_passwords(client, db_session, monkeypatch):
-    monkeypatch.setattr(settings, "ALLOW_SIGNUP", True)
+    monkeypatch.setattr(settings, "ALLOW_SIGNUP", False)
+    code = "made-up-invite-code-1"
+    _approved_invite(db_session, "newperson@example.com", code)
     for pw in ("passwordpassword", "short", "newperson@example.com"):
-        body = {"username": "gapuser", "password": pw, "email": "newperson@example.com"}
+        body = {"username": "gapuser", "password": pw, "email": "newperson@example.com", "invite_code": code}
         assert client.post(f"{API}/auth/signup", json=body).status_code == 400, pw
-    r = client.post(f"{API}/auth/signup", json={"username": "gapuser", "password": "passwordpassword"})
-    assert r.status_code == 400 and "too common" in r.json()["detail"]
     assert db_session.execute(select(User).where(User.username == "gapuser")).first() is None
-    ok = client.post(f"{API}/auth/signup", json={"username": "gapuser", "password": NEW_PW})
+    ok_body = {"username": "gapuser", "password": NEW_PW, "email": "newperson@example.com", "invite_code": code}
+    ok = client.post(f"{API}/auth/signup", json=ok_body)
     assert ok.status_code == 201
 
 
@@ -572,12 +591,20 @@ def test_cli_create_user_accepts_a_good_password(db_session, monkeypatch):
     assert verify_password(NEW_PW, u.hashed_password)
 
 
-def test_open_signup_conflicts_use_one_generic_message(client, db_session, monkeypatch):
-    monkeypatch.setattr(settings, "ALLOW_SIGNUP", True)
+def test_invite_signup_conflicts_use_one_generic_message(client, db_session, monkeypatch):
+    """Even a real invite holder is told one thing for a taken username and for a taken email."""
+    monkeypatch.setattr(settings, "ALLOW_SIGNUP", False)
     _user(db_session, "taken", email="taken@example.com")
-    by_name = client.post(f"{API}/auth/signup", json={"username": "taken", "password": NEW_PW})
-    body = {"username": "other", "password": NEW_PW, "email": "TAKEN@example.com"}
-    by_mail = client.post(f"{API}/auth/signup", json=body)
+    _approved_invite(db_session, "fresh@example.com", "made-up-invite-code-2")
+    _approved_invite(db_session, "taken@example.com", "made-up-invite-code-3")
+    by_name = client.post(
+        f"{API}/auth/signup",
+        json={"username": "taken", "password": NEW_PW, "email": "fresh@example.com", "invite_code": "made-up-invite-code-2"},
+    )
+    by_mail = client.post(
+        f"{API}/auth/signup",
+        json={"username": "other", "password": NEW_PW, "email": "TAKEN@example.com", "invite_code": "made-up-invite-code-3"},
+    )
     assert by_name.status_code == by_mail.status_code == 409
     assert by_name.json() == by_mail.json()
 

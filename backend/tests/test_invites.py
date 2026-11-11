@@ -314,11 +314,40 @@ def test_invite_signup_refuses_an_email_that_already_has_an_account(client, db_s
     assert _signup(client, "asha@example.com", code).status_code == 409
 
 
-def test_open_signup_unchanged_when_allowed_and_still_never_owner(client, db_session, monkeypatch):
+def test_signup_needs_an_invite_even_when_public_registration_is_on(client, db_session, monkeypatch):
+    """/auth/signup is the invite route only. Public sign-up is /auth/register, never this path."""
     monkeypatch.setattr(settings, "ALLOW_SIGNUP", True)
     r = client.post(SIGNUP, json={"username": "openperson", "password": "longenough-passphrase-1"})
-    assert r.status_code == 201
-    user = db_session.execute(select(User).where(User.username == "openperson")).scalar_one()
+    assert r.status_code == 403
+    assert db_session.execute(select(User).where(User.username == "openperson")).first() is None
+
+
+def test_signup_without_invite_gives_the_same_answer_for_taken_and_free_names_and_emails(
+    client, db_session, monkeypatch
+):
+    """The refusal comes before any account lookup, so it cannot reveal who is registered."""
+    monkeypatch.setattr(settings, "ALLOW_SIGNUP", True)
+    db_session.add(User(username="taken", email="taken@example.com", hashed_password="x", role="member"))
+    db_session.flush()
+    pw = "longenough-passphrase-1"
+    answers = [
+        client.post(SIGNUP, json={"username": "taken", "password": pw}),
+        client.post(SIGNUP, json={"username": "fresh", "password": pw}),
+        client.post(SIGNUP, json={"username": "fresh", "password": pw, "email": "taken@example.com"}),
+        client.post(SIGNUP, json={"username": "fresh", "password": pw, "email": "fresh@example.com"}),
+    ]
+    assert {a.status_code for a in answers} == {403}
+    assert len({a.text for a in answers}) == 1
+
+
+def test_public_registration_is_the_open_path_and_never_makes_an_owner(client, db_session, monkeypatch):
+    monkeypatch.setattr(settings, "ALLOW_SIGNUP", True)
+    r = client.post(
+        f"{API}/auth/register",
+        json={"full_name": "Open Person", "email": "open@example.com", "password": "longenough-passphrase-1"},
+    )
+    assert r.status_code == 201 and "access_token" not in r.text
+    user = db_session.execute(select(User).where(User.email == "open@example.com")).scalar_one()
     assert user.role == "member" and user.is_superuser is False
 
 

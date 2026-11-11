@@ -26,6 +26,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
+from swing_trade_ml.api.admin_step_up import StepUp
 from swing_trade_ml.api.deps import DbSession, Principal
 from swing_trade_ml.api.rate_limit import auth_limit, claim_once, public_limit
 from swing_trade_ml.api.v1.endpoints.auth import _unique_username_from_email
@@ -252,7 +253,7 @@ def reset_password(payload: ResetIn, db: DbSession, request: Request) -> dict:
     return {"message": "Your password has been changed. Please sign in."}
 
 
-@admin.post("/{user_id}/send-reset")
+@admin.post("/{user_id}/send-reset", dependencies=[StepUp])
 def admin_send_reset(
     user_id: int,
     db: DbSession,

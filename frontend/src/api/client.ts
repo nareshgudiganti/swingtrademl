@@ -198,20 +198,36 @@ export class ApiError extends Error {
   constructor(
     message: string,
     readonly status: number,
+    readonly code: string | null = null,
   ) {
     super(message)
     this.name = 'ApiError'
   }
 }
 
+/** Two-step code for the privileged /admin/* calls. Lives in memory only (it expires after 15 minutes). */
+let adminStepUp = ''
+export function setAdminStepUp(token: string): void {
+  adminStepUp = token
+}
+export type StepUpKind = 'verify' | 'enrol'
+type StepUpHandler = (kind: StepUpKind) => Promise<string | null>
+let stepUpHandler: StepUpHandler | null = null
+/** The app registers one prompt; request() uses it when the server asks for the admin's two-step code. */
+export function registerStepUpHandler(handler: StepUpHandler | null): void {
+  stepUpHandler = handler
+}
+
 /** `anonymous` sends no credentials at all, so a 401 can never clear a stored token. */
-async function request<T>(path: string, init?: RequestInit, anonymous = false): Promise<T> {
+async function request<T>(path: string, init?: RequestInit, anonymous = false, retried = false): Promise<T> {
   const token = anonymous ? '' : getToken()
+  const isAdminPath = path.startsWith('/admin/')
   const response = await fetch(`${BASE_URL}${path}`, {
     ...init,
     headers: {
       'Content-Type': 'application/json',
       ...(anonymous ? {} : authHeaders(token)),
+      ...(isAdminPath && adminStepUp ? { 'X-Admin-Mfa': adminStepUp } : {}),
       ...init?.headers,
     },
   })
@@ -227,13 +243,36 @@ async function request<T>(path: string, init?: RequestInit, anonymous = false): 
     // FastAPI returns {detail: ...}; fall back to the status line when the
     // body is empty or not JSON (a proxy error page, for instance).
     let detail = response.statusText
+    let code: string | null = null
     try {
       const body = await response.json()
-      detail = typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail)
+      if (typeof body.detail === 'string') {
+        detail = body.detail
+      } else if (body.detail && typeof body.detail.message === 'string') {
+        detail = body.detail.message
+        code = typeof body.detail.code === 'string' ? body.detail.code : null
+      } else {
+        detail = JSON.stringify(body.detail)
+      }
     } catch {
       /* keep statusText */
     }
-    throw new ApiError(detail, response.status)
+    // The server wants the admin's two-step code: ask once, then repeat the same call.
+    if (
+      response.status === 403 &&
+      isAdminPath &&
+      !retried &&
+      stepUpHandler &&
+      (code === 'mfa_required' || code === 'mfa_setup_required')
+    ) {
+      adminStepUp = ''
+      const fresh = await stepUpHandler(code === 'mfa_setup_required' ? 'enrol' : 'verify')
+      if (fresh) {
+        adminStepUp = fresh
+        return request<T>(path, init, anonymous, true)
+      }
+    }
+    throw new ApiError(detail, response.status, code)
   }
 
   if (response.status === 204) return undefined as T

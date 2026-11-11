@@ -493,6 +493,8 @@ def job_signal_scan() -> None:
             # score is taken here, after the scan. Display only, and it never raises. Kept
             # out of services/engine.py, which is frozen for the forward trial.
             held_read.score_tester_positions(db)
+            # Same for stocks followed in the Groww Tracker (they are not in any strategy's list).
+            held_read.score_tracked_stocks(db)
             log.info(
                 "job.scan.done",
                 strategies=result.strategies_run,

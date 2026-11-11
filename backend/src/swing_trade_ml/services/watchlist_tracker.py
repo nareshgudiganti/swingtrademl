@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from swing_trade_ml.core.market_session import IST
+from swing_trade_ml.core.market_session import IST, trading_days_between
 
 HORIZON_DAYS = 15
 STOP_WARN_PCT = -3.0  # within 1 point of the -4% stop, or beyond it
@@ -64,6 +64,18 @@ def days_done(after: list[tuple[date, float]]) -> int:
     return max(0, min(len(after) - 1, HORIZON_DAYS))
 
 
+def today_ist() -> date:
+    return datetime.now(IST).date()
+
+
+def calendar_days(added: date, today: date | None) -> int | None:
+    """Trading days from the day it was added up to `today` (0 on the day itself), from the market
+    calendar rather than from candles, so a late price feed never makes the day count lag."""
+    if today is None or today < added:
+        return None
+    return trading_days_between(added, today)
+
+
 def state(ret: float | None, days: int, score_first: float | None, score_today: float | None) -> str:
     """stop > target > time > weak > ok. Missing data never makes it more aggressive."""
     if ret is not None:
@@ -88,6 +100,7 @@ def build_item(
     candles: list[tuple[date, float]],
     scores: list[tuple[date, float]],
     quantity: float | None = None,
+    today: date | None = None,
 ) -> dict:
     """One tracker row. `candles`/`scores` are (IST date, value), oldest first."""
     added = ist_date(added_at)
@@ -95,6 +108,10 @@ def build_item(
     last = candles[-1][1] if candles else None
     ret = return_pct(entry, last)
     days = days_done(after)
+    cal = calendar_days(added, today)
+    if cal is not None:
+        # Whichever is further along: a missing price day never hides a day that has really passed.
+        days = max(days, min(cal, HORIZON_DAYS))
     sc = [(d, s) for d, s in scores if d >= added]
     s_today = sc[-1][1] if sc else None
     s_prev = sc[-2][1] if len(sc) >= 2 else None
@@ -115,6 +132,8 @@ def build_item(
         "return_pct": ret,
         "today_pct": today_pct(candles),
         "days_done": days,
+        # The day it is on: the day you added it is Day 1.
+        "day_number": min(days + 1, HORIZON_DAYS),
         "score_today": s_today,
         "score_prev": s_prev,
         "score_delta": (s_today - s_prev) if s_today is not None and s_prev is not None else None,

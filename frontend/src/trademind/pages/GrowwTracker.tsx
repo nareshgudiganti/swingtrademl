@@ -21,6 +21,7 @@ import {
   STOP_PCT,
   TARGET_PCT,
   barPosition,
+  dayNumber,
   deltaView,
   entryNote,
   filterItems,
@@ -58,7 +59,7 @@ const STATUS_RANK: Record<TrackerState, number> = { stop: 0, target: 1, time: 2,
 
 const TRACKER_SORT: Record<TrackerSortKey, (k: WatchTrackerItem) => number | string | null> = {
   symbol: (k) => k.symbol,
-  day: (k) => k.days_done,
+  day: (k) => dayNumber(k),
   bought: (k) => k.bought_on,
   paid: (k) => k.buy_price ?? k.entry_price,
   shares: (k) => k.quantity,
@@ -356,10 +357,10 @@ function Spark({ scores }: { scores: { score: number }[] }) {
 function DayCell({ k, horizon }: { k: WatchTrackerItem; horizon: number }) {
   return (
     <div>
-      <b className="num">{k.days_done}</b>
+      <b className="num">{dayNumber(k)}</b>
       <span className="dim"> of {horizon}</span>
       <br />
-      <Pips days={k.days_done} horizon={horizon} />
+      <Pips days={dayNumber(k)} horizon={horizon} />
     </div>
   )
 }
@@ -574,7 +575,7 @@ const dayLabels = (n: number, x: (i: number) => number, H: number) =>
 function ScoreChart({ scores }: { scores: { score: number }[] }) {
   const sc = scores.map((s) => s.score).filter((v) => Number.isFinite(v))
   const n = sc.length
-  if (n === 0) return <p className="dim tmn-small">No score yet for this stock.</p>
+  if (n === 0) return <p className="dim tmn-small">No score yet. The model scores your stocks after the market closes (about 16:30 IST); the first point appears then.</p>
   const W = 420
   const H = 170
   const L = 30
@@ -707,7 +708,7 @@ function Detail({
         <div className="gt-fact">
           <span>Day</span>
           <b className="num">
-            {k.days_done} of {horizon}
+            {dayNumber(k)} of {horizon}
           </b>
         </div>
         <div className="gt-fact">
@@ -730,7 +731,14 @@ function Detail({
         </div>
         <div className="gt-fact">
           <span>Stop / Target</span>
-          <b className="num">{st ? `${fmtPrice(st.stop)} / ${fmtPrice(st.target)}` : '—'}</b>
+          <b className="num">
+            {st ? `${fmtPrice(st.stop)} (${fmtPct(STOP_PCT, 0)}) / ${fmtPrice(st.target)} (${fmtPct(TARGET_PCT, 0)})` : '—'}
+          </b>
+          {st && k.last_price != null && k.last_price > 0 && (
+            <small className="dim">
+              From today’s price: stop {fmtPct((st.stop / k.last_price - 1) * 100)}, target {fmtPct((st.target / k.last_price - 1) * 100)}
+            </small>
+          )}
         </div>
         <div className="gt-fact" data-testid="fact-bought-on">
           <span>Bought on</span>

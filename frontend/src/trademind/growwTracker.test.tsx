@@ -85,7 +85,7 @@ describe('Groww Tracker page', () => {
     expect(html).toContain('+ Add stock I bought')
     // KEI needs action first, so it is the picked stock
     expect(html).toMatch(/data-testid="tracker-detail" data-symbol="KEI"/)
-    expect(html).toContain('₹4,042 / ₹4,547') // stop / target from the entry price
+    expect(html).toContain('₹4,042 (−4%) / ₹4,547 (+8%)') // stop / target from the entry price
     expect(html).not.toMatch(/NaN|undefined/)
   })
 

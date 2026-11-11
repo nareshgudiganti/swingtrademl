@@ -691,6 +691,8 @@ export interface WatchTrackerItem {
   return_pct: number | null
   today_pct: number | null
   days_done: number
+  /** The day it is on; the day you added it is Day 1. Older servers omit it. */
+  day_number?: number
   score_today: number | null
   score_prev: number | null
   score_delta: number | null

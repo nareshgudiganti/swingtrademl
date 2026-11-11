@@ -115,6 +115,11 @@ export function scoreText(x: number | null | undefined): string {
   return isNum(x) ? String(Math.round(x)) : '—'
 }
 
+/** The day the stock is on: the day it was added is Day 1. */
+export function dayNumber(item: Pick<WatchTrackerItem, 'days_done' | 'day_number'>): number {
+  return item.day_number ?? item.days_done + 1
+}
+
 /** One dot per trading day of the plan; the last three are "late" (amber). */
 export function pips(daysDone: number, horizon: number): { filled: boolean; late: boolean }[] {
   const n = Math.max(1, Math.round(horizon))
@@ -132,7 +137,7 @@ export function whatToDo(item: WatchTrackerItem, horizon: number): string {
     case 'target':
       return `${item.symbol} is ${ret}. The plan says sell half at +5% and the rest at +8%. Check Groww and book profit.`
     case 'time':
-      return `Day ${item.days_done} of ${horizon}. The plan is to exit by day ${horizon}, so decide this week.`
+      return `Day ${dayNumber(item)} of ${horizon}. The plan is to exit by day ${horizon}, so decide this week.`
     case 'weak':
       return `The model score fell from ${scoreText(item.score_first)} to ${scoreText(item.score_today)} since you added it. The model likes it less each day. Price is ${ret}.`
     default:

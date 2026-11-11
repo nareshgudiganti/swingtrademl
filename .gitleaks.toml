@@ -16,4 +16,6 @@ regexes = [
   '''7a5fbebcb02ece2a5c0675c68ec19ea1fcb9f29de74a723b13cfe430ade631d8''',
   # SHA-256 digest of the SX5 exclusion keys in the hash sheet (a public hash, not a credential).
   '''f91418585c918d9f71c2cef5da98cd094e2df04ecd8f1dc8399160e3012f3565''',
+  # Made-up live-looking Razorpay key id used by the staging preflight test to prove a live key is refused.
+  '''rzp_live_abcdef123456''',
 ]

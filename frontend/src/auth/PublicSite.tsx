@@ -3,7 +3,7 @@
 // sign-up needs the owner's approved invite link unless the server has open sign-up switched on.
 // Replaces components/AuthScreen.tsx and keeps all its behaviour: the token goes to localStorage via setToken,
 // the Google button is a real redirect to /auth/google/login, and the server's own error words are shown.
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 
@@ -13,9 +13,14 @@ import {
   EXPERIENCE_OPTIONS,
   LANGUAGE_OPTIONS,
   afterSignIn,
+  PASSWORD_PLACEHOLDER,
   friendlyError,
   inviteFormProblem,
+  isValidEmail,
+  passwordProblem,
+  readEmailToken,
   readInviteLink,
+  registerFormProblem,
   viewFor,
   type AuthOptions,
   type InviteForm,
@@ -289,17 +294,37 @@ function SignIn({ options, initialError }: { options: AuthOptions | null; initia
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(initialError)
   const [busy, setBusy] = useState(false)
+  const [needsVerify, setNeedsVerify] = useState(false)
+  const [resent, setResent] = useState(false)
 
   async function submit(event: FormEvent) {
     event.preventDefault()
     setError(null)
+    setNeedsVerify(false)
+    setResent(false)
     setBusy(true)
     try {
       const result = await api.login(username.trim(), password)
       startSession(result.access_token)
     } catch (err) {
       setError(errorText(err))
+      // The server asks for a confirmed email first: offer a new link right here.
+      setNeedsVerify(err instanceof ApiError && err.status === 403 && /verify your email/i.test(err.message))
       setBusy(false)
+    }
+  }
+
+  async function resend() {
+    const email = username.trim()
+    if (!isValidEmail(email)) {
+      setError('Type the email address you signed up with in the first box, then ask again.')
+      return
+    }
+    try {
+      await api.resendVerification(email)
+      setResent(true)
+    } catch (err) {
+      setError(errorText(err))
     }
   }
 
@@ -311,6 +336,17 @@ function SignIn({ options, initialError }: { options: AuthOptions | null; initia
           <h1 className="na-h1 na-h1-sm">Welcome back</h1>
           <p className="na-fine na-body">Sign in to see tonight’s ideas.</p>
           <ErrorBox text={error} />
+          {needsVerify && (
+            <p className="na-fine" data-testid="verify-first">
+              {resent ? (
+                'If that email belongs to an account that still needs confirming, we have sent a new link.'
+              ) : (
+                <button type="button" className="na-link" onClick={resend}>
+                  Send me a new confirmation link
+                </button>
+              )}
+            </p>
+          )}
           {options?.google && (
             <>
               <GoogleButton />
@@ -343,6 +379,9 @@ function SignIn({ options, initialError }: { options: AuthOptions | null; initia
           <button className="na-btn na-go" type="submit" disabled={busy}>
             {busy ? 'Signing in…' : 'Sign in'}
           </button>
+          <p className="na-fine na-center">
+            <Link to="/forgot-password">Forgot your password?</Link>
+          </p>
           <p className="na-fine na-center">
             New here? <Link to="/invite">Ask for an invite</Link>
             {options?.signup_allowed && (
@@ -513,26 +552,127 @@ function InviteRequest() {
   )
 }
 
-// ------------------------------------------------------------------ sign up (with an invite) --
+// ------------------------------------------------------------------ sign up --
 
-function SignUp({ options, invite }: { options: AuthOptions | null; invite: { code: string; email: string } | null }) {
-  const [email, setEmail] = useState(invite?.email ?? '')
-  const [username, setUsername] = useState('')
-  const [password, setPassword] = useState('')
+/** Open sign-up (the server has it switched on): name, email, optional mobile, password. No sign-in happens
+ *  here: the server never returns a token for it. We say "check your email", then the person signs in. */
+function OpenSignUp() {
+  const [form, setForm] = useState({ name: '', email: '', mobile: '', password: '' })
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const allowed = !!invite || !!options?.signup_allowed
+  const [sentTo, setSentTo] = useState<string | null>(null)
+  const set = (k: keyof typeof form) => (e: { target: { value: string } }) => setForm((f) => ({ ...f, [k]: e.target.value }))
 
   async function submit(event: FormEvent) {
     event.preventDefault()
     setError(null)
-    if (password.length < 8) {
-      setError('Please use a password of at least 8 characters.')
+    const problem = registerFormProblem(form)
+    if (problem) {
+      setError(problem)
       return
     }
     setBusy(true)
     try {
-      const result = await api.signup(username.trim(), password, email.trim() || undefined, invite?.code)
+      await api.register({
+        full_name: form.name.trim(),
+        email: form.email.trim(),
+        password: form.password,
+        ...(form.mobile.trim() ? { mobile: form.mobile.trim() } : {}),
+      })
+      setSentTo(form.email.trim())
+    } catch (err) {
+      setError(errorText(err))
+    }
+    setBusy(false)
+  }
+
+  if (sentTo) {
+    return (
+      <div className="na-form" data-testid="signup-sent">
+        <h1 className="na-h1 na-h1-sm">Check your email</h1>
+        <p className="na-body">
+          We sent a message to <strong>{sentTo}</strong>. Open the link in it to confirm your address, then sign in.
+        </p>
+        <p className="na-fine">
+          Nothing arrived? Look in your spam folder. If you already have an account with this address, the message tells
+          you so.
+        </p>
+        <Link to="/signin" className="na-btn na-go">
+          Go to sign in
+        </Link>
+      </div>
+    )
+  }
+
+  return (
+    <form className="na-form" onSubmit={submit}>
+      <h1 className="na-h1 na-h1-sm">Create your account</h1>
+      <p className="na-fine na-body">You start on the Free plan with paper money: no real money is used.</p>
+      <ErrorBox text={error} />
+      <label className="na-label">
+        Your name
+        <input className="na-input" value={form.name} onChange={set('name')} autoComplete="name" maxLength={80} required />
+      </label>
+      <label className="na-label">
+        Email
+        <input
+          className="na-input"
+          type="email"
+          value={form.email}
+          onChange={set('email')}
+          autoComplete="email"
+          autoCapitalize="none"
+          required
+        />
+      </label>
+      <label className="na-label">
+        Mobile number (optional)
+        <input className="na-input" type="tel" value={form.mobile} onChange={set('mobile')} autoComplete="tel" />
+      </label>
+      <label className="na-label">
+        Choose a password
+        <input
+          className="na-input"
+          type="password"
+          value={form.password}
+          onChange={set('password')}
+          autoComplete="new-password"
+          placeholder={PASSWORD_PLACEHOLDER}
+          minLength={15}
+          required
+        />
+      </label>
+      <p className="na-fine">A few random words with spaces works well. No symbols needed.</p>
+      <button className="na-btn na-go" type="submit" disabled={busy}>
+        {busy ? 'Please wait…' : 'Create account'}
+      </button>
+      <p className="na-fine na-center">
+        Already have an account? <Link to="/signin">Sign in</Link>
+      </p>
+      <p className="na-fine na-center">{DISCLAIMER}</p>
+    </form>
+  )
+}
+
+/** With an owner's invite link: the older username form (the invite code ties it to one email). */
+function InviteSignUp({ invite }: { invite: { code: string; email: string } }) {
+  const [email, setEmail] = useState(invite.email)
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  async function submit(event: FormEvent) {
+    event.preventDefault()
+    setError(null)
+    const problem = passwordProblem(password)
+    if (problem) {
+      setError(problem)
+      return
+    }
+    setBusy(true)
+    try {
+      const result = await api.signup(username.trim(), password, email.trim() || undefined, invite.code)
       startSession(result.access_token)
     } catch (err) {
       setError(errorText(err))
@@ -541,62 +681,69 @@ function SignUp({ options, invite }: { options: AuthOptions | null; invite: { co
   }
 
   return (
+    <form className="na-form" onSubmit={submit}>
+      <h1 className="na-h1 na-h1-sm">Create your account</h1>
+      <p className="na-fine na-body">Your invite is ready. You start with paper money: no real money is used.</p>
+      <ErrorBox text={error} />
+      <label className="na-label">
+        Email (the one your invite was sent for)
+        <input
+          className="na-input"
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          autoComplete="email"
+          autoCapitalize="none"
+          required
+        />
+      </label>
+      <label className="na-label">
+        Choose a username
+        <input
+          className="na-input"
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+          autoComplete="username"
+          autoCapitalize="none"
+          minLength={3}
+          maxLength={64}
+          required
+        />
+      </label>
+      <label className="na-label">
+        Choose a password
+        <input
+          className="na-input"
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          autoComplete="new-password"
+          placeholder={PASSWORD_PLACEHOLDER}
+          minLength={15}
+          required
+        />
+      </label>
+      <p className="na-fine">A few random words with spaces works well. No symbols needed.</p>
+      <button className="na-btn na-go" type="submit" disabled={busy}>
+        {busy ? 'Please wait…' : 'Create account'}
+      </button>
+      <p className="na-fine na-center">
+        Already have an account? <Link to="/signin">Sign in</Link>
+      </p>
+      <p className="na-fine na-center">{DISCLAIMER}</p>
+    </form>
+  )
+}
+
+function SignUp({ options, invite }: { options: AuthOptions | null; invite: { code: string; email: string } | null }) {
+  return (
     <div className="na na-split">
       <Promises />
       <section className="na-formside" aria-label="Create your account">
-        {allowed ? (
-          <form className="na-form" onSubmit={submit}>
-            <h1 className="na-h1 na-h1-sm">Create your account</h1>
-            <p className="na-fine na-body">
-              {invite ? 'Your invite is ready. ' : ''}You start with paper money: no real money is used.
-            </p>
-            <ErrorBox text={error} />
-            <label className="na-label">
-              Email{invite ? ' (the one your invite was sent for)' : ' (optional)'}
-              <input
-                className="na-input"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                autoComplete="email"
-                autoCapitalize="none"
-                required={!!invite}
-              />
-            </label>
-            <label className="na-label">
-              Choose a username
-              <input
-                className="na-input"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                autoComplete="username"
-                autoCapitalize="none"
-                minLength={3}
-                maxLength={64}
-                required
-              />
-            </label>
-            <label className="na-label">
-              Choose a password
-              <input
-                className="na-input"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoComplete="new-password"
-                placeholder="At least 8 characters"
-                minLength={8}
-                required
-              />
-            </label>
-            <button className="na-btn na-go" type="submit" disabled={busy}>
-              {busy ? 'Please wait…' : 'Create account'}
-            </button>
-            <p className="na-fine na-center">
-              Already have an account? <Link to="/signin">Sign in</Link>
-            </p>
-            <p className="na-fine na-center">{DISCLAIMER}</p>
-          </form>
+        {invite ? (
+          <InviteSignUp invite={invite} />
+        ) : options?.signup_allowed ? (
+          <OpenSignUp />
         ) : (
           <div className="na-form" data-testid="signup-closed">
             <h1 className="na-h1 na-h1-sm">Sign-up is by invite only</h1>
@@ -614,6 +761,235 @@ function SignUp({ options, invite }: { options: AuthOptions | null; invite: { co
         )}
       </section>
     </div>
+  )
+}
+
+// ------------------------------------------------------------------ email links: confirm, forgot, reset --
+
+function LinkPage({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="na na-split">
+      <Promises />
+      <section className="na-formside" aria-label={label}>
+        <div className="na-form">{children}</div>
+      </section>
+    </div>
+  )
+}
+
+/** The link in the confirmation email. The token is read once and taken out of the address bar. */
+function VerifyEmail() {
+  const location = useLocation()
+  const [token] = useState(() => readEmailToken(location.search))
+  const [state, setState] = useState<'working' | 'done' | 'bad'>(token ? 'working' : 'bad')
+  const [message, setMessage] = useState('')
+  const ran = useRef(false)
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') window.history.replaceState({}, '', '/verify-email')
+    if (!token || ran.current) return
+    ran.current = true
+    api
+      .verifyEmail(token)
+      .then((r) => {
+        setMessage(r.message)
+        setState('done')
+      })
+      .catch((err) => {
+        setMessage(errorText(err))
+        setState('bad')
+      })
+  }, [token])
+
+  return (
+    <LinkPage label="Confirm your email">
+      {state === 'working' && (
+        <>
+          <h1 className="na-h1 na-h1-sm">Confirming your email…</h1>
+          <p className="na-body" role="status">
+            One moment.
+          </p>
+        </>
+      )}
+      {state === 'done' && (
+        <>
+          <h1 className="na-h1 na-h1-sm">Your email is confirmed</h1>
+          <p className="na-body" data-testid="verify-done">
+            {message || 'You can sign in now.'}
+          </p>
+          <Link to="/signin" className="na-btn na-go">
+            Sign in
+          </Link>
+        </>
+      )}
+      {state === 'bad' && (
+        <>
+          <h1 className="na-h1 na-h1-sm">This link is not valid any more</h1>
+          <p className="na-body" data-testid="verify-bad">
+            {token
+              ? message || 'Please ask for a new one.'
+              : 'The link looks incomplete. Please use the link in your email, or ask for a new one.'}
+          </p>
+          <p className="na-fine">Sign in and choose “Send me a new confirmation link”.</p>
+          <Link to="/signin" className="na-btn na-go">
+            Go to sign in
+          </Link>
+        </>
+      )}
+    </LinkPage>
+  )
+}
+
+function ForgotPassword() {
+  const [email, setEmail] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [sent, setSent] = useState<string | null>(null)
+
+  async function submit(event: FormEvent) {
+    event.preventDefault()
+    setError(null)
+    if (!isValidEmail(email)) {
+      setError('Please enter a valid email address.')
+      return
+    }
+    setBusy(true)
+    try {
+      const r = await api.forgotPassword(email.trim())
+      setSent(r.message)
+    } catch (err) {
+      setError(errorText(err))
+    }
+    setBusy(false)
+  }
+
+  return (
+    <div className="na na-split">
+      <Promises />
+      <section className="na-formside" aria-label="Reset your password">
+        {sent ? (
+          <div className="na-form" data-testid="forgot-sent">
+            <h1 className="na-h1 na-h1-sm">Check your email</h1>
+            <p className="na-body">{sent}</p>
+            <p className="na-fine">The link works once and expires soon. Look in spam if you do not see it.</p>
+            <Link to="/signin" className="na-btn na-go">
+              Back to sign in
+            </Link>
+          </div>
+        ) : (
+          <form className="na-form" onSubmit={submit}>
+            <h1 className="na-h1 na-h1-sm">Forgot your password?</h1>
+            <p className="na-fine na-body">Type your email. We will send you a link to choose a new one.</p>
+            <ErrorBox text={error} />
+            <label className="na-label">
+              Email
+              <input
+                className="na-input"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                autoComplete="email"
+                autoCapitalize="none"
+                autoFocus
+                required
+              />
+            </label>
+            <button className="na-btn na-go" type="submit" disabled={busy}>
+              {busy ? 'Sending…' : 'Send the link'}
+            </button>
+            <p className="na-fine na-center">
+              <Link to="/signin">Back to sign in</Link>
+            </p>
+          </form>
+        )}
+      </section>
+    </div>
+  )
+}
+
+function ResetPassword() {
+  const location = useLocation()
+  const [token] = useState(() => readEmailToken(location.search))
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [done, setDone] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (token && typeof window !== 'undefined') window.history.replaceState({}, '', '/reset-password')
+  }, [token])
+
+  async function submit(event: FormEvent) {
+    event.preventDefault()
+    setError(null)
+    const problem = passwordProblem(password)
+    if (problem) {
+      setError(problem)
+      return
+    }
+    if (!token) return
+    setBusy(true)
+    try {
+      const r = await api.resetPassword(token, password)
+      setDone(r.message)
+    } catch (err) {
+      setError(errorText(err))
+    }
+    setBusy(false)
+  }
+
+  if (!token) {
+    return (
+      <LinkPage label="Choose a new password">
+        <h1 className="na-h1 na-h1-sm">This link is not valid any more</h1>
+        <p className="na-body" data-testid="reset-bad">
+          Please ask for a new one.
+        </p>
+        <Link to="/forgot-password" className="na-btn na-go">
+          Send me a new link
+        </Link>
+      </LinkPage>
+    )
+  }
+  if (done) {
+    return (
+      <LinkPage label="Password changed">
+        <h1 className="na-h1 na-h1-sm">Password changed</h1>
+        <p className="na-body" data-testid="reset-done">
+          {done}
+        </p>
+        <Link to="/signin" className="na-btn na-go">
+          Sign in
+        </Link>
+      </LinkPage>
+    )
+  }
+  return (
+    <LinkPage label="Choose a new password">
+      <form onSubmit={submit}>
+        <h1 className="na-h1 na-h1-sm">Choose a new password</h1>
+        <ErrorBox text={error} />
+        <label className="na-label">
+          New password
+          <input
+            className="na-input"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete="new-password"
+            placeholder={PASSWORD_PLACEHOLDER}
+            minLength={15}
+            autoFocus
+            required
+          />
+        </label>
+        <p className="na-fine">A few random words with spaces works well. This signs you out everywhere else.</p>
+        <button className="na-btn na-go" type="submit" disabled={busy}>
+          {busy ? 'Saving…' : 'Save my new password'}
+        </button>
+        {error && /not valid/i.test(error) && <Link to="/forgot-password">Send me a new link</Link>}
+      </form>
+    </LinkPage>
   )
 }
 
@@ -649,11 +1025,22 @@ export default function PublicSite({
   const view = viewFor(location.pathname, !!initialError)
   useEffect(() => {
     document.title =
-      view === 'invite' ? 'Ask for an invite · TradeMind' : view === 'signin' ? 'Sign in · TradeMind' : 'TradeMind'
+      view === 'invite'
+        ? 'Ask for an invite · TradeMind'
+        : view === 'signin'
+          ? 'Sign in · TradeMind'
+          : view === 'verify'
+            ? 'Confirm your email · TradeMind'
+            : view === 'forgot' || view === 'reset'
+              ? 'Reset your password · TradeMind'
+              : 'TradeMind'
   }, [view])
 
   if (view === 'landing') return <Landing options={options} />
   if (view === 'invite') return <InviteRequest />
   if (view === 'signup') return <SignUp options={options} invite={invite} />
+  if (view === 'verify') return <VerifyEmail />
+  if (view === 'forgot') return <ForgotPassword />
+  if (view === 'reset') return <ResetPassword />
   return <SignIn options={options} initialError={initialError} />
 }

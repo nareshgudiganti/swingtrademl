@@ -106,6 +106,9 @@ export default function NewLookShell({ ownerConsole }: { ownerConsole: boolean }
           >
             {svg(<path d="M15 18l-6-6 6-6" />)} Classic look
           </button>
+          <Link to="/trademind/account" className="tmn-switch" data-testid="account-link">
+            Account and plan
+          </Link>
           <button type="button" className="tmn-logout" onClick={logOut} title="Log out of this app">
             Log out
           </button>

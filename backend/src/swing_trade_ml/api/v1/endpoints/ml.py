@@ -17,6 +17,7 @@ from sqlalchemy import Integer, cast, func, select
 
 from swing_trade_ml.api.deps import DbSession
 from swing_trade_ml.core.logging import get_logger
+from swing_trade_ml.core.release_switches import promotion_refusal
 from swing_trade_ml.db.models.market import Instrument
 from swing_trade_ml.db.models.ml import MLModel, Prediction
 from swing_trade_ml.db.session import session_scope
@@ -146,6 +147,8 @@ def train(payload: TrainRequest, background: BackgroundTasks) -> MessageResponse
     daily bars runs for minutes, well past an HTTP timeout. Poll GET /ml/models
     for the result.
     """
+    if payload.auto_activate and (refusal := promotion_refusal()):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, refusal)
 
     def _run() -> None:
         try:
@@ -180,6 +183,8 @@ def train(payload: TrainRequest, background: BackgroundTasks) -> MessageResponse
 @router.post("/models/{model_id}/activate", response_model=MLModelOut)
 def activate(model_id: int, db: DbSession) -> MLModel:
     """Promote a model to ACTIVE; any previous active version is archived."""
+    if refusal := promotion_refusal():
+        raise HTTPException(status.HTTP_403_FORBIDDEN, refusal)
     try:
         model = activate_model(db, model_id)
     except ValueError as exc:

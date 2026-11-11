@@ -16,6 +16,7 @@ from swing_trade_ml.core.plans import DEFAULT_PLAN, FEATURES, PLAN_KEYS, ROUTE_R
 from swing_trade_ml.core.security import decode_access_token
 from swing_trade_ml.db.models.session import User
 from swing_trade_ml.db.session import get_db
+from swing_trade_ml.services import service_keys
 
 DbSession = Annotated[Session, Depends(get_db)]
 
@@ -65,6 +66,9 @@ class Principal:
 
     user: User | None
     via_api_key: bool = False
+    # A scoped service key (services/service_keys.py): never an owner, never a person.
+    service_scope: str | None = None
+    service_name: str | None = None
 
     @property
     def role(self) -> str:
@@ -110,7 +114,17 @@ async def get_principal(
     if credentials is not None:
         return Principal(user=_user_from_bearer(credentials, db))
 
-    if x_api_key is not None and hmac.compare_digest(x_api_key, settings.API_KEY):
+    if x_api_key is not None and x_api_key.startswith(service_keys.KEY_PREFIX):
+        caller = service_keys.authenticate(db, x_api_key)
+        if caller is not None:
+            return Principal(user=None, service_scope=caller.scope, service_name=caller.name)
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid, expired or revoked service key")
+
+    if (
+        x_api_key is not None
+        and settings.LEGACY_API_KEY_ENABLED
+        and hmac.compare_digest(x_api_key, settings.API_KEY)
+    ):
         return Principal(user=None, via_api_key=True)
 
     raise HTTPException(
@@ -269,6 +283,11 @@ async def require_auth(
     safety switch, which it silently allowed before (audit F-17).
     """
     path = _route_path(request)
+    # A scoped service key: only the GET routes its scope names, nothing else, whatever plans say.
+    if principal.service_scope is not None:
+        if not service_keys.scope_allows(principal.service_scope, request.method, path):
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "This key is not allowed to use this route.")
+        return
     # A person's own watchlist: open to every signed-in person (no plan needed), never to the API key.
     if (request.method, path) in SELF_SERVICE_ROUTES:
         if principal.user is None:
@@ -319,6 +338,8 @@ def actor_name(principal: Principal) -> str:
     """Who made a change, from the credential itself: never a name sent in the request body."""
     if principal.user is not None:
         return principal.user.username
+    if principal.service_name:
+        return f"service:{principal.service_name}"
     return "api-key"
 
 

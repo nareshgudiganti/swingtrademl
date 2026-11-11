@@ -52,6 +52,9 @@ class Settings(BaseSettings):
     REAL_ACCOUNT_USERS: str = "sudeeksha"
 
     API_KEY: str = "change-me"
+    # The shared X-API-Key still works while this is true. Turn it off (false) once every script
+    # uses its own scoped key (POST /admin/service-keys); then the shared key is refused outright.
+    LEGACY_API_KEY_ENABLED: bool = True
     JWT_SECRET_KEY: str = "change-me"
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_MINUTES: int = 720

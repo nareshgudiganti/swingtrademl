@@ -98,5 +98,17 @@ with e.begin() as c:
             "from strategies s join instruments i on i.instrument_token = 900000 + s.id"
         )
     )
-    for t in ("users", "strategies", "instruments", "signals"):
+    c.execute(
+        text(
+            "insert into stock_score_history(instrument_id,as_of,score,band,model_version) "
+            "select id, date '2026-11-05', 55.0, 'mid', 'swing_v7:abc123' from instruments where instrument_token in (900001, 900002)"
+        )
+    )
+    c.execute(
+        text(
+            "insert into stock_score_history(instrument_id,as_of,score,band,model_version) "
+            "select id, date '2026-11-06', 61.0, 'high', null from instruments where instrument_token = 900001"
+        )
+    )
+    for t in ("users", "strategies", "instruments", "signals", "stock_score_history"):
         print(t, c.execute(text(f"select count(*) from {t}")).scalar())

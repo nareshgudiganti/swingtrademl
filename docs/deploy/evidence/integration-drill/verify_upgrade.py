@@ -25,6 +25,10 @@ with e.connect() as c:
         c.execute(text("select count(*) from instruments")).scalar() == 8,
     )
     chk("signals=8", c.execute(text("select count(*) from signals")).scalar() == 8)
+    rows = c.execute(text("select instrument_id, as_of::text, model_name from stock_score_history order by 1,2")).all()
+    print("score history:", rows)
+    chk("score history 3 rows kept", len(rows) == 3)
+    chk("model_name backfilled before the colon, empty when no version", sorted(r[2] for r in rows) == ["", "swing_v7", "swing_v7"])
     got = dict(c.execute(text("select name, owner_private from strategies")).all())
     print("owner_private:", got)
     private = {

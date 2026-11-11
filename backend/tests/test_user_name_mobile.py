@@ -101,7 +101,8 @@ def test_single_migration_head_and_parent():
     assert heads == ["billing01"]  # billing sits on auth tokens, which sit on usernamemob01
     assert script.get_revision("billing01").down_revision == "authtokens01"
     assert script.get_revision("authtokens01").down_revision == "usernamemob01"
-    assert script.get_revision("usernamemob01").down_revision == "ownerprivate01"
+    assert script.get_revision("usernamemob01").down_revision == "mergeheads01"
+    assert set(script.get_revision("mergeheads01").down_revision) == {"ownerprivate01", "f11m0d3l5c0r3"}
 
 
 def test_model_columns_are_nullable_and_mobile_not_unique():
@@ -151,7 +152,7 @@ def _load_migration(conn):
     spec = spec_from_file_location("user_name_mobile_migration", path)
     migration = module_from_spec(spec)
     spec.loader.exec_module(migration)
-    assert migration.down_revision == "ownerprivate01"
+    assert migration.down_revision == "mergeheads01"
     migration.op = Operations(MigrationContext.configure(conn))
     return migration
 

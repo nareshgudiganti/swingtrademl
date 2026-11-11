@@ -50,3 +50,7 @@ This does not matter today because nothing reads the column. It matters as soon 
 ## Integration note, 2026-11-11
 
 At integration (branch `integration/saas-private`) the parent of `usernamemob01` changed from `wlquantity01` to `ownerprivate01` (the owner-private migration that reached `main` first). The chain is now `wlquantity01 -> ownerprivate01 -> usernamemob01 -> authtokens01 -> billing01`. The drill above covered `ae83428` on the old parent only and must be re-run on the final integration commit. See `docs/deploy/evidence/integration-drill/`.
+
+### Second integration note, 2026-11-11
+
+`main` then gained a second head (`f11m0d3l5c0r3`, parent `wlquantity01`) next to `ownerprivate01`, joined by the no-op merge revision `mergeheads01`. The parent of `usernamemob01` is now `mergeheads01`. Final chain: `wlquantity01 -> {ownerprivate01, f11m0d3l5c0r3} -> mergeheads01 -> usernamemob01 -> authtokens01 -> billing01`, one head `billing01`. The drill was re-run on this chain (see `evidence/integration-drill/`). `alembic downgrade -1` from `mergeheads01` is ambiguous; use explicit revisions.

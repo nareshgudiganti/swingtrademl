@@ -5,7 +5,9 @@ import sys
 from drill_common import *
 
 DB = "drill_int_clean"
-CHAIN = ["ownerprivate01", "usernamemob01", "authtokens01", "billing01"]
+# Explicit revisions: "-1" is ambiguous at the merge point (mergeheads01 has two parents).
+DOWN = ["authtokens01", "usernamemob01", "mergeheads01"]
+UP = ["mergeheads01", "usernamemob01", "authtokens01", "billing01"]
 ok = True
 
 
@@ -58,10 +60,14 @@ check(
 )
 
 # step down the last four, one at a time, then back up one at a time
-before = {c: set() for c in CHAIN}
-for rev in reversed(CHAIN):
-    rc, _ = run_alembic(DB, "downgrade", "-1")
-    check(f"downgrade -1 (leaving {rev}) rc=0", rc == 0)
+for rev in DOWN:
+    rc, _ = run_alembic(DB, "downgrade", rev)
+    check(f"downgrade to {rev} rc=0", rc == 0)
+    rc, out = run_alembic(DB, "current")
+    check(f"current is {rev}", rev in out, out)
+for rev in ("ownerprivate01", "wlquantity01"):
+    rc, _ = run_alembic(DB, "downgrade", rev)
+    check(f"downgrade to {rev} rc=0", rc == 0)
 check("after 4 downs: owner_private gone", "owner_private" not in cols("strategies"))
 check(
     "after 4 downs: users columns gone",
@@ -73,9 +79,9 @@ check(
 )
 rc, out = run_alembic(DB, "current")
 check("after 4 downs: current is wlquantity01", "wlquantity01" in out, out)
-for rev in CHAIN:
-    rc, _ = run_alembic(DB, "upgrade", "+1")
-    check(f"upgrade +1 (to {rev}) rc=0", rc == 0)
+for rev in UP:
+    rc, _ = run_alembic(DB, "upgrade", rev)
+    check(f"upgrade to {rev} rc=0", rc == 0)
 rc, out = run_alembic(DB, "current")
 check("after 4 ups: current is billing01 and one head", "billing01" in out)
 check(

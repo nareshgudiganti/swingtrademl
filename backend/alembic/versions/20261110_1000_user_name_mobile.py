@@ -8,7 +8,7 @@ Also drops the unique ix_users_mobile index if an earlier draft of this migratio
 Safe to run twice.
 
 Revision ID: usernamemob01
-Revises: ownerprivate01
+Revises: mergeheads01
 Create Date: 2026-11-10 10:00:00.000000+00:00
 """
 
@@ -20,7 +20,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "usernamemob01"
-down_revision: str | None = "ownerprivate01"
+down_revision: str | None = "mergeheads01"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

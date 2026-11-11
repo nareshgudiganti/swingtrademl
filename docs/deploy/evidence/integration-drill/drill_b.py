@@ -18,7 +18,7 @@ def check(name, cond, detail=""):
 def counts():
     return {
         t: psql_db(DB, f"select count(*) from {t}")
-        for t in ("users", "strategies", "instruments", "signals")
+        for t in ("users", "strategies", "instruments", "signals", "stock_score_history")
     }
 
 
@@ -45,6 +45,8 @@ rc, _ = run_alembic(DB, "upgrade", "head")
 check("upgrade head rc=0", rc == 0)
 rc, out = run_alembic(DB, "current")
 check("current is billing01", "billing01" in out, out)
+rc, out = run_alembic(DB, "heads")
+check("exactly one head billing01", out.count("(head)") == 1 and "billing01" in out, out)
 after = counts()
 log(f"COUNTS after {after}")
 check("row counts unchanged", before == after)

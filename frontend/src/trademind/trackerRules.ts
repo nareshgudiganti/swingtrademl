@@ -298,6 +298,15 @@ export interface SoldSummary {
   decided: number
   /** Sales left out of the rupee totals because no shares were entered. */
   withoutShares: number
+  /** How many sales, and how many different stocks they were. */
+  count: number
+  stocks: number
+  /** Days held: the average over all sales, and the longest one. Null when there are no sales. */
+  avgDays: number | null
+  longest: { symbol: string; days: number } | null
+  /** Best and worst sale in rupees. Only sales with shares entered can be ranked; never guessed. */
+  best: { symbol: string; profit: number } | null
+  worst: { symbol: string; profit: number } | null
 }
 
 /** Totals for the Sold records strip. Rupee totals count only sales with shares entered; never guessed. */
@@ -307,7 +316,23 @@ export function soldSummary(items: readonly SoldRecord[]): SoldSummary {
   let wins = 0
   let decided = 0
   let withoutShares = 0
+  let daySum = 0
+  let dayCount = 0
+  let longest: SoldSummary['longest'] = null
+  let best: SoldSummary['best'] = null
+  let worst: SoldSummary['worst'] = null
+  let ranked = 0
   for (const i of items) {
+    if (isNum(i.days_held)) {
+      daySum += i.days_held
+      dayCount += 1
+      if (!longest || i.days_held > longest.days) longest = { symbol: i.symbol, days: i.days_held }
+    }
+    if (isNum(i.profit_amount)) {
+      ranked += 1
+      if (!best || i.profit_amount > best.profit) best = { symbol: i.symbol, profit: i.profit_amount }
+      if (!worst || i.profit_amount < worst.profit) worst = { symbol: i.symbol, profit: i.profit_amount }
+    }
     if (i.result) {
       decided += 1
       if (i.result === 'win') wins += 1
@@ -317,5 +342,19 @@ export function soldSummary(items: readonly SoldRecord[]): SoldSummary {
       profit += i.profit_amount
     } else withoutShares += 1
   }
-  return { invested, profit, profitPct: invested > 0 ? (profit / invested) * 100 : null, wins, decided, withoutShares }
+  return {
+    invested,
+    profit,
+    profitPct: invested > 0 ? (profit / invested) * 100 : null,
+    wins,
+    decided,
+    withoutShares,
+    count: items.length,
+    stocks: new Set(items.map((i) => i.symbol)).size,
+    avgDays: dayCount > 0 ? daySum / dayCount : null,
+    longest,
+    best,
+    // With one ranked sale there is no "worst": it would only repeat the best.
+    worst: ranked > 1 ? worst : null,
+  }
 }

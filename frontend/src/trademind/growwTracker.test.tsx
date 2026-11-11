@@ -92,6 +92,13 @@ describe('Groww Tracker page', () => {
     expect(html).not.toMatch(/NaN|undefined/)
   })
 
+  it('the detail panel has a close button, and starts open', () => {
+    const html = render('/trademind/groww-tracker', DATA)
+    expect(html).toContain('data-testid="tracker-detail-close"')
+    expect(html).toContain('aria-label="Close this panel"')
+    expect(html).not.toContain('gt-solo')
+  })
+
   it('missing numbers show a dash, never NaN', () => {
     const html = render('/trademind/groww-tracker', { ...DATA, items: [DATA.items[2]!] })
     expect(html).toContain('NEWBIE')

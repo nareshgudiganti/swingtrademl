@@ -265,6 +265,8 @@ function answer(role: Role, method: string, path: string, query: URLSearchParams
   if (path === '/portfolio/real/orders-status') return owner ? { body: realAccount.ordersStatus } : undefined
   if (path === '/real-report') return owner ? { body: realAccount.report } : undefined
   if (path === '/real-report/tax') return owner ? { body: realTax } : { status: 403, body: { detail: 'This is a private account.' } }
+  // The admin console: the owner has not set up two-step sign-in yet; anyone else is refused (the server does the same).
+  if (path === '/admin/mfa') return owner ? { body: { enrolled: false } } : { status: 403, body: { detail: 'Admin only.' } }
 
   return undefined
 }
@@ -281,12 +283,22 @@ export type SaasOpts = {
   subscription?: { status: string; paid_through: string | null; cancel_scheduled: boolean } | null
   /** Sign-in answers 403 "Please verify your email first". */
   unverified?: boolean
+  /** Account deletion: omit for "switch off" (every deletion route answers 404); give a status to switch it on. */
+  deletion?: { status: 'pending' | 'scheduled' | 'cancelled' | null; scheduled_for?: string | null }
 }
 
 export const VALID_LINK_TOKEN = 'good-link-token'
 export const PAID_THROUGH = '2026-12-14T10:00:00+00:00'
 
-type SaasState = { sub: NonNullable<SaasOpts['subscription']> | null; calls: string[] }
+export const DELETION_DATE = '2026-11-25T10:00:00+00:00'
+export const BILLING_FAIL_TOKEN = 'billing-fail-token'
+export const DELETION_PASSWORD = 'purple tractor eats seven cold noodles'
+
+type SaasState = {
+  sub: NonNullable<SaasOpts['subscription']> | null
+  calls: string[]
+  del: NonNullable<SaasOpts['deletion']> | null
+}
 
 function saasAnswer(opts: SaasOpts, st: SaasState, method: string, path: string, body: unknown): Answer | undefined {
   const b = (body ?? {}) as Record<string, string | undefined>
@@ -315,6 +327,35 @@ function saasAnswer(opts: SaasOpts, st: SaasState, method: string, path: string,
   if (method === 'POST' && path === '/auth/reset-password') {
     if (b.token !== VALID_LINK_TOKEN) return { status: 400, body: { detail: 'This link is not valid any more. Please ask for a new one.' } }
     return { body: { message: 'Your password has been changed. Please sign in.' } }
+  }
+
+  if (path.startsWith('/account/')) {
+    const notFound = { status: 404, body: { detail: 'Not found' } }
+    if (method === 'POST' && path === '/account/deletion/cancel') {
+      if (b.token !== VALID_LINK_TOKEN) return { status: 400, body: { detail: 'This link is not valid any more.' } }
+      st.del = { status: 'cancelled', scheduled_for: null }
+      return { body: { message: 'Your account is kept. You can sign in again. Start Pro again if you had it.' } }
+    }
+    if (!st.del) return notFound
+    if (method === 'GET' && path === '/account/deletion') {
+      return { body: { enabled: true, protected: false, grace_days: 14, status: st.del.status, scheduled_for: st.del.scheduled_for ?? null } }
+    }
+    if (method === 'POST' && path === '/account/deletion/request') {
+      if (!b.password) return { status: 400, body: { detail: 'Enter your password to confirm it is you.' } }
+      if (b.password !== DELETION_PASSWORD) return { status: 400, body: { detail: 'That password is not right.' } }
+      st.del = { status: 'pending', scheduled_for: null }
+      return { body: { message: 'We have emailed you a link. Open it to confirm. Nothing is deleted until you do.' } }
+    }
+    if (method === 'POST' && path === '/account/deletion/confirm') {
+      if (b.token === BILLING_FAIL_TOKEN) {
+        return { status: 502, body: { detail: 'We could not cancel your Pro subscription just now, so nothing has been changed. Please try the link again in a few minutes.' } }
+      }
+      if (b.token !== VALID_LINK_TOKEN) return { status: 400, body: { detail: 'This link is not valid any more.' } }
+      st.del = { status: 'scheduled', scheduled_for: DELETION_DATE }
+      return { body: { message: 'Your account will be deleted on 25 Nov 2026. You are signed out. Use the link we emailed to keep it.', scheduled_for: DELETION_DATE } }
+    }
+    if (method === 'GET' && path === '/account/export') return { body: { profile: { email: 'asha@example.test' }, watchlist: [] } }
+    return undefined
   }
 
   if (!path.startsWith('/billing')) return undefined
@@ -389,7 +430,7 @@ export async function mockApi(
 ): Promise<MockApi> {
   const role = opts.role ?? 'owner'
   const saasOpts = opts.saas ?? {}
-  const saasState: SaasState = { sub: saasOpts.subscription ?? null, calls: [] }
+  const saasState: SaasState = { sub: saasOpts.subscription ?? null, calls: [], del: saasOpts.deletion ?? null }
   const state: MockApi = { unmocked: [], saasCalls: saasState.calls }
 
   // The first-time tour opens by itself for an account that has not seen it, and would cover every journey.

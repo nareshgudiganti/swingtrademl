@@ -118,6 +118,7 @@ import type {
 import type { AlertSettings, AlertSettingsUpdate } from '../trademind/alerts'
 import type { AdminJobs } from '../trademind/jobs'
 import type { AuthOptions, InviteForm } from '../auth/authRules'
+import type { DeletionStatus } from '../lib/deletionRules'
 import type { InviteDecision, InviteRequestRow } from '../trademind/invites'
 import type { BrainChanges } from '../trademind/changes'
 import type { RealTaxExport } from '../trademind/taxRecords'
@@ -180,7 +181,7 @@ function authHeaders(token: string): Record<string, string> {
  * (/verify-email and /reset-password): there `?token=` is the one-time link from the email
  * and those pages read it themselves, then take it out of the address bar.
  */
-export const EMAIL_LINK_PATHS = ['/verify-email', '/reset-password']
+export const EMAIL_LINK_PATHS = ['/verify-email', '/reset-password', '/confirm-deletion', '/cancel-deletion']
 
 export function takeLoginCodeFromRedirect(): string | null {
   const url = new URL(window.location.href)
@@ -392,6 +393,14 @@ export const api = {
   billingCancel: (atCycleEnd = true) => post<{ subscription: BillingSubscription | null }>('/billing/cancel', { at_cycle_end: atCycleEnd }),
   billingFakePay: (subscriptionId: string) =>
     post<{ subscription: BillingSubscription | null }>('/billing/fake/simulate', { event: 'activated', subscription_id: subscriptionId }),
+  // ------------------------------------------------- account deletion --
+  deletionStatus: () => get<DeletionStatus>('/account/deletion'),
+  requestDeletion: (password: string | null) =>
+    post<{ message: string }>('/account/deletion/request', { password: password || null }),
+  confirmDeletion: (token: string) =>
+    postPublic<{ message: string; scheduled_for: string }>('/account/deletion/confirm', { token }),
+  keepAccount: (token: string) => postPublic<{ message: string }>('/account/deletion/cancel', { token }),
+  exportMyData: () => get<Record<string, unknown>>('/account/export'),
   requestInvite: (body: InviteForm) => {
     const phone = body.phone.trim()
     return postPublic<{ message: string }>('/auth/invite-request', { ...body, phone: phone || null })

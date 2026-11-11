@@ -56,7 +56,7 @@ PUBLIC_ROUTES: dict[tuple[str, str], str] = {
     ("POST", "/auth/resend-verification"): "same answer for every email; rate-limited",
     ("POST", "/auth/forgot-password"): "same answer for every email; rate-limited",
     ("POST", "/auth/reset-password"): "the one-time emailed token is the credential",
-    ("POST", "/billing/webhook"): "the payment provider calls it; the signature over the raw body is the credential",
+    ("POST", "/billing/webhook"): "the provider calls it; the signature over the raw body is the credential",
     ("GET", "/auth/kite/login"): "starts the Zerodha login (redirect only; see report finding)",
     ("GET", "/auth/kite/callback"): "Zerodha redirect, browser cannot send headers",
 }

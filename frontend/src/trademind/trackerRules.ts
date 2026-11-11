@@ -115,6 +115,11 @@ export function scoreText(x: number | null | undefined): string {
   return isNum(x) ? String(Math.round(x)) : '—'
 }
 
+/** The day the stock is on: the day it was added is Day 1. */
+export function dayNumber(item: Pick<WatchTrackerItem, 'days_done' | 'day_number'>): number {
+  return item.day_number ?? item.days_done + 1
+}
+
 /** One dot per trading day of the plan; the last three are "late" (amber). */
 export function pips(daysDone: number, horizon: number): { filled: boolean; late: boolean }[] {
   const n = Math.max(1, Math.round(horizon))
@@ -132,7 +137,7 @@ export function whatToDo(item: WatchTrackerItem, horizon: number): string {
     case 'target':
       return `${item.symbol} is ${ret}. The plan says sell half at +5% and the rest at +8%. Check Groww and book profit.`
     case 'time':
-      return `Day ${item.days_done} of ${horizon}. The plan is to exit by day ${horizon}, so decide this week.`
+      return `Day ${dayNumber(item)} of ${horizon}. The plan is to exit by day ${horizon}, so decide this week.`
     case 'weak':
       return `The model score fell from ${scoreText(item.score_first)} to ${scoreText(item.score_today)} since you added it. The model likes it less each day. Price is ${ret}.`
     default:
@@ -238,4 +243,46 @@ export function entryNote(item: WatchTrackerItem): string {
   if (item.entry_source === 'your_price') return 'Your Groww price'
   if (item.entry_source === 'added_close') return 'Close on the day you added it'
   return 'Not known yet'
+}
+
+export interface PortfolioSummary {
+  /** Money put in, rupees: only stocks with an entry price and shares count. */
+  invested: number
+  /** Gain or loss since buying, rupees, and as a % of the money put in. */
+  totalReturn: number
+  totalReturnPct: number | null
+  /** Change since yesterday's close, rupees, and as a % of yesterday's value. */
+  dayReturn: number
+  dayReturnPct: number | null
+  /** How many stocks had shares + prices entered (the rest are left out of the sums). */
+  counted: number
+}
+
+/** Totals for the strip above the table. Display only: stocks without shares or prices are left out, never guessed. */
+export function portfolioSummary(items: readonly WatchTrackerItem[]): PortfolioSummary | null {
+  let invested = 0
+  let totalReturn = 0
+  let dayReturn = 0
+  let yesterday = 0
+  let counted = 0
+  for (const i of items) {
+    if (!isNum(i.invested) || !isNum(i.profit_amount)) continue
+    counted += 1
+    invested += i.invested
+    totalReturn += i.profit_amount
+    if (isNum(i.last_price) && isNum(i.today_pct) && isNum(i.quantity) && i.today_pct > -100) {
+      const prev = i.last_price / (1 + i.today_pct / 100)
+      dayReturn += (i.last_price - prev) * i.quantity
+      yesterday += prev * i.quantity
+    }
+  }
+  if (counted === 0) return null
+  return {
+    invested,
+    totalReturn,
+    totalReturnPct: invested > 0 ? (totalReturn / invested) * 100 : null,
+    dayReturn,
+    dayReturnPct: yesterday > 0 ? (dayReturn / yesterday) * 100 : null,
+    counted,
+  }
 }

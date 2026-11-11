@@ -87,7 +87,7 @@ describe('tracker rules', () => {
   it('what to do is plain English for each state and survives nulls', () => {
     expect(whatToDo(item('KEI', 'stop', { return_pct: -3.5 }), 15)).toMatch(/−3.5% since you added it.*sell in Groww/)
     expect(whatToDo(item('KEI', 'target', { return_pct: 6 }), 15)).toMatch(/\+6.0%.*sell half at \+5%/)
-    expect(whatToDo(item('KEI', 'time', { days_done: 13 }), 15)).toMatch(/Day 13 of 15/)
+    expect(whatToDo(item('KEI', 'time', { days_done: 13 }), 15)).toMatch(/Day 14 of 15/)
     expect(whatToDo(item('KEI', 'weak', { score_first: 78, score_today: 54 }), 15)).toMatch(/fell from 78 to 54/)
     expect(whatToDo(item('KEI', 'ok', { days_done: 3 }), 15)).toMatch(/12 trading days remain/)
     expect(whatToDo(item('KEI', 'ok', { return_pct: null, score_today: null }), 15)).not.toMatch(/NaN|null/)

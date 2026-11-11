@@ -121,7 +121,8 @@ def _as(db, username):
     return user, {"Authorization": f"Bearer {create_access_token(user.username, {'uid': user.id, 'tv': 0})}"}
 
 
-def test_tracker_and_patch_endpoints(client, db_session):
+def test_tracker_and_patch_endpoints(client, db_session, monkeypatch):
+    monkeypatch.setattr(t, "today_ist", lambda: date(2026, 11, 4))  # the day of the last candle
     inst = Instrument(instrument_token=991_001, tradingsymbol="GRWTEST", name="Groww Test", exchange=EXCHANGE)
     db_session.add(inst)
     db_session.flush()
@@ -237,3 +238,21 @@ def test_patch_bought_on_quantity_rederives_day_and_entry(client, db_session):
     assert client.patch(f"{URL}/GRWEDIT", json={"quantity": 0}, headers=me).status_code == 422
     assert client.patch(f"{URL}/GRWEDIT", json={"bought_on": "not-a-date"}, headers=me).status_code == 422
     assert client.get(f"{URL}/tracker", headers=me).json()["items"][0]["bought_on"] == first.isoformat()
+
+
+def test_day_one_is_the_day_it_was_added():
+    added = datetime(2026, 11, 2, 5, 0, tzinfo=UTC)
+    kw = dict(symbol="X", name=None, added_at=added, note=None, buy_price=100.0, scores=[])
+    # no clock given: Day 1 on the entry day (one candle), Day 2 with the next
+    assert t.build_item(candles=_days(1, 100, 1), **kw)["day_number"] == 1
+    assert t.build_item(candles=_days(2, 100, 1), **kw)["day_number"] == 2
+
+
+def test_day_count_does_not_lag_a_late_price_feed():
+    added = datetime(2026, 11, 2, 5, 0, tzinfo=UTC)  # Monday 2 Nov
+    kw = dict(symbol="X", name=None, added_at=added, note=None, buy_price=100.0, scores=[])
+    today = date(2026, 11, 6)  # Friday, but prices only reach the day it was added
+    it = t.build_item(candles=_days(1, 100, 1), today=today, **kw)
+    assert it["days_done"] == t.calendar_days(date(2026, 11, 2), today)
+    assert it["day_number"] == it["days_done"] + 1 and it["day_number"] > 1
+    assert t.calendar_days(date(2026, 11, 2), date(2026, 11, 1)) is None  # a date before it was added

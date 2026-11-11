@@ -110,3 +110,30 @@
 
 /* Count badge on the Groww Tracker menu item. */
 .tm-new .tmn-badge { margin-left: auto; min-width: 18px; padding: 1px 6px; border-radius: 9px; background: var(--tm-red); color: #ffffff; font-size: 0.7rem; font-weight: 700; text-align: center; }
+
+/* Sortable column headings: the arrow lights up on the column in use. */
+.tm-new .gt-headrow [aria-sort='ascending'] .tm-sort-arrow,
+.tm-new .gt-headrow [aria-sort='descending'] .tm-sort-arrow { opacity: 1; color: var(--tm-blue); }
+.tm-new .gt-headrow .tm-sort { text-transform: inherit; letter-spacing: inherit; font-weight: inherit; }
+
+/* Invested / 1D / total strip, like the Groww holdings header. */
+.tm-new .gt-sum { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 24px; background: var(--tm-card); border: 1px solid var(--tm-line); border-radius: 12px; padding: 1rem 1.2rem; }
+.tm-new .gt-sum > div:nth-child(2) { text-align: right; }
+.tm-new .gt-sum > div:nth-child(3) { text-align: right; }
+.tm-new .gt-sum-l { font-size: 0.8rem; color: var(--tm-dim); }
+.tm-new .gt-sum-v { font-size: 1.35rem; font-weight: 700; color: var(--tm-text); margin-top: 2px; }
+.tm-new .gt-sum-v small { font-size: 0.85rem; font-weight: 600; }
+.tm-new .gt-sum-v.pos { color: var(--gt-good); }
+.tm-new .gt-sum-v.neg { color: var(--gt-bad); }
+.tm-new .gt-sum-note { grid-column: 1 / -1; margin: 0; }
+@media (max-width: 560px) { .tm-new .gt-sum-v { font-size: 1.05rem; } }
+
+/* Table on the left, the picked stock's details in a panel on the right (stacks on narrow screens). */
+.tm-new .gt { max-width: 1520px; }
+.tm-new .gt-split { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; align-items: start; }
+.tm-new .gt-split > * { min-width: 0; }
+@media (min-width: 1100px) {
+  .tm-new .gt-split { grid-template-columns: minmax(0, 1fr) 400px; }
+  .tm-new .gt-side { position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow-y: auto; }
+}
+.tm-new .gt-side .gt-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }

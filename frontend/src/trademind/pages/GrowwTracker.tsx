@@ -3,13 +3,14 @@
 // it. Data: GET /me/watchlist/tracker. The status of each stock is the server's; nothing is recomputed here.
 // Display and bookkeeping only: nothing on this page places an order.
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api } from '../../api/client'
 import type { TrackerState, WatchTracker, WatchTrackerItem } from '../../api/types'
 import { useLatestRun } from '../live'
 import { QueryNotice } from '../PageState'
+import { useSort, type Sorter } from '../sort'
 import {
   ACT_CARDS,
   BAR_HI,
@@ -20,6 +21,7 @@ import {
   STOP_PCT,
   TARGET_PCT,
   barPosition,
+  dayNumber,
   deltaView,
   entryNote,
   filterItems,
@@ -32,6 +34,7 @@ import {
   formFromItem,
   needsActionCount,
   pips,
+  portfolioSummary,
   scoreText,
   signClass,
   sortItems,
@@ -48,6 +51,41 @@ import '../newlook-w2.css'
 import '../newlook-tracker.css'
 
 export const TRACKER_KEY = ['myWatchlistTracker']
+
+type TrackerSortKey = 'symbol' | 'day' | 'bought' | 'paid' | 'shares' | 'since' | 'today' | 'score' | 'range' | 'trend' | 'status'
+
+// Status sorts by urgency (stop first), the same ranking the page starts with.
+const STATUS_RANK: Record<TrackerState, number> = { stop: 0, target: 1, time: 2, weak: 3, ok: 4 }
+
+const TRACKER_SORT: Record<TrackerSortKey, (k: WatchTrackerItem) => number | string | null> = {
+  symbol: (k) => k.symbol,
+  day: (k) => dayNumber(k),
+  bought: (k) => k.bought_on,
+  paid: (k) => k.buy_price ?? k.entry_price,
+  shares: (k) => k.quantity,
+  since: (k) => k.return_pct,
+  today: (k) => k.today_pct,
+  score: (k) => k.score_today,
+  range: (k) => k.return_pct, // where the stock sits between the stop and the target is its return
+  trend: (k) => k.score_delta,
+  status: (k) => STATUS_RANK[k.state],
+}
+// First click: A-Z for the stock name and most urgent first for status; every number sorts biggest first.
+const TRACKER_FIRST_DIR: Partial<Record<TrackerSortKey, 'asc' | 'desc'>> = { symbol: 'asc', status: 'asc' }
+
+function HeadSort({ sorter, k, children }: { sorter: Sorter<TrackerSortKey>; k: TrackerSortKey; children: string }) {
+  const active = sorter.key === k
+  return (
+    <div role="columnheader" aria-sort={active ? (sorter.dir === 'asc' ? 'ascending' : 'descending') : 'none'}>
+      <button type="button" className="tm-sort" onClick={() => sorter.toggle(k)}>
+        {children}
+        <span className="tm-sort-arrow" aria-hidden>
+          {active ? (sorter.dir === 'asc' ? '▲' : '▼') : '↕'}
+        </span>
+      </button>
+    </div>
+  )
+}
 
 export default function GrowwTracker() {
   const client = useQueryClient()
@@ -76,8 +114,11 @@ export default function GrowwTracker() {
 
   const data: WatchTracker | undefined = q.data
   const horizon = data?.horizon_days && data.horizon_days > 0 ? data.horizon_days : 15
-  const all = data ? sortItems(data.items) : []
+  const base = useMemo(() => (data ? sortItems(data.items) : []), [data])
+  // Click a column heading to sort by it; click again to reverse. Until then: the urgent-first order above.
+  const { sorted: all, sorter } = useSort<WatchTrackerItem, TrackerSortKey>(base, TRACKER_SORT, { key: null }, TRACKER_FIRST_DIR)
   const shown = filterItems(all, filter)
+  const summary = useMemo(() => portfolioSummary(all), [all])
   const selected = all.find((i) => i.symbol === picked) ?? shown[0] ?? all[0] ?? null
 
   return (
@@ -118,6 +159,31 @@ export default function GrowwTracker() {
       ) : (
         <>
           <QueryNotice q={q} what="your Groww tracker" />
+          {summary && (
+            <section className="gt-sum" aria-label="Your Groww stocks in total" data-testid="tracker-summary">
+              <div>
+                <div className="gt-sum-l">Invested value</div>
+                <div className="gt-sum-v num">{fmtRupees(summary.invested)}</div>
+              </div>
+              <div>
+                <div className="gt-sum-l">1D returns</div>
+                <div className={`gt-sum-v num ${signClass(summary.dayReturn)}`}>
+                  {fmtMoney(summary.dayReturn)} <small>({fmtPct(summary.dayReturnPct, 2)})</small>
+                </div>
+              </div>
+              <div>
+                <div className="gt-sum-l">Total returns</div>
+                <div className={`gt-sum-v num ${signClass(summary.totalReturn)}`}>
+                  {fmtMoney(summary.totalReturn)} <small>({fmtPct(summary.totalReturnPct, 2)})</small>
+                </div>
+              </div>
+              {summary.counted < all.length && (
+                <p className="tm-dim tmn-small gt-sum-note">
+                  Counts {summary.counted} of {all.length} stocks. Add shares and the price paid to the others to include them.
+                </p>
+              )}
+            </section>
+          )}
           <section className="gt-act" aria-label="Act today" data-testid="act-strip">
             {ACT_CARDS.map((c) => {
               const syms = symbolsIn(all, c.state)
@@ -160,20 +226,20 @@ export default function GrowwTracker() {
               </p>
             </section>
           ) : (
-            <>
+            <div className="gt-split">
               <div className="gt-tbl" role="region" aria-label="Table, scroll sideways to see more" tabIndex={0} data-testid="tracker-table">
                 <div className="gt-grid gt-headrow">
-                  <div>Stock</div>
-                  <div>Day</div>
-                  <div>Bought on</div>
-                  <div>Price paid</div>
-                  <div>Shares</div>
-                  <div>Since added</div>
-                  <div>Today</div>
-                  <div>Score today</div>
-                  <div>Stop ← → Target</div>
-                  <div>Score, last days</div>
-                  <div>Status</div>
+                  <HeadSort sorter={sorter} k="symbol">Stock</HeadSort>
+                  <HeadSort sorter={sorter} k="day">Day</HeadSort>
+                  <HeadSort sorter={sorter} k="bought">Bought on</HeadSort>
+                  <HeadSort sorter={sorter} k="paid">Price paid</HeadSort>
+                  <HeadSort sorter={sorter} k="shares">Shares</HeadSort>
+                  <HeadSort sorter={sorter} k="since">Since added</HeadSort>
+                  <HeadSort sorter={sorter} k="today">Today</HeadSort>
+                  <HeadSort sorter={sorter} k="score">Score today</HeadSort>
+                  <HeadSort sorter={sorter} k="range">Stop ← → Target</HeadSort>
+                  <HeadSort sorter={sorter} k="trend">Score, last days</HeadSort>
+                  <HeadSort sorter={sorter} k="status">Status</HeadSort>
                   <div>Edit</div>
                 </div>
                 {shown.length === 0 ? (
@@ -208,6 +274,7 @@ export default function GrowwTracker() {
                 )}
               </div>
               {selected && (
+                <aside className="gt-side">
                 <Detail
                   key={selected.symbol}
                   k={selected}
@@ -220,8 +287,9 @@ export default function GrowwTracker() {
                     refresh()
                   }}
                 />
+                </aside>
               )}
-            </>
+            </div>
           )}
           <p className="tm-dim tmn-small">
             {needsActionCount(all)} of {all.length} need a look today. The plan for each stock: +8% target, −4% stop, sell
@@ -289,10 +357,10 @@ function Spark({ scores }: { scores: { score: number }[] }) {
 function DayCell({ k, horizon }: { k: WatchTrackerItem; horizon: number }) {
   return (
     <div>
-      <b className="num">{k.days_done}</b>
+      <b className="num">{dayNumber(k)}</b>
       <span className="dim"> of {horizon}</span>
       <br />
-      <Pips days={k.days_done} horizon={horizon} />
+      <Pips days={dayNumber(k)} horizon={horizon} />
     </div>
   )
 }
@@ -507,7 +575,7 @@ const dayLabels = (n: number, x: (i: number) => number, H: number) =>
 function ScoreChart({ scores }: { scores: { score: number }[] }) {
   const sc = scores.map((s) => s.score).filter((v) => Number.isFinite(v))
   const n = sc.length
-  if (n === 0) return <p className="dim tmn-small">No score yet for this stock.</p>
+  if (n === 0) return <p className="dim tmn-small">No score yet. The model scores your stocks after the market closes (about 16:30 IST); the first point appears then.</p>
   const W = 420
   const H = 170
   const L = 30
@@ -640,7 +708,7 @@ function Detail({
         <div className="gt-fact">
           <span>Day</span>
           <b className="num">
-            {k.days_done} of {horizon}
+            {dayNumber(k)} of {horizon}
           </b>
         </div>
         <div className="gt-fact">
@@ -663,7 +731,14 @@ function Detail({
         </div>
         <div className="gt-fact">
           <span>Stop / Target</span>
-          <b className="num">{st ? `${fmtPrice(st.stop)} / ${fmtPrice(st.target)}` : '—'}</b>
+          <b className="num">
+            {st ? `${fmtPrice(st.stop)} (${fmtPct(STOP_PCT, 0)}) / ${fmtPrice(st.target)} (${fmtPct(TARGET_PCT, 0)})` : '—'}
+          </b>
+          {st && k.last_price != null && k.last_price > 0 && (
+            <small className="dim">
+              From today’s price: stop {fmtPct((st.stop / k.last_price - 1) * 100)}, target {fmtPct((st.target / k.last_price - 1) * 100)}
+            </small>
+          )}
         </div>
         <div className="gt-fact" data-testid="fact-bought-on">
           <span>Bought on</span>

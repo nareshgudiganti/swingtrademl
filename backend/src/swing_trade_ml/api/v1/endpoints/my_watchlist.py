@@ -293,6 +293,7 @@ def my_tracker(db: DbSession, me: Me) -> dict:
                 quantity=r.quantity,
                 candles=candles.get(iid, []),
                 scores=scores.get(iid, []),
+                today=tracker.today_ist(),
             )
         )
     last_dates = [c[-1][0] for c in candles.values() if c]

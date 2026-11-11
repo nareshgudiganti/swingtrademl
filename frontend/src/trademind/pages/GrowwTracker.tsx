@@ -11,6 +11,7 @@ import type { SoldRecord, TrackerState, WatchTracker, WatchTrackerItem } from '.
 import { useLatestRun } from '../live'
 import { QueryNotice } from '../PageState'
 import { useSort, type Sorter } from '../sort'
+import StockLink from '../StockLink'
 import {
   ACT_CARDS,
   BAR_HI,
@@ -96,6 +97,8 @@ export default function GrowwTracker() {
   const [tabOn, setTabOn] = useTrackerTab()
   const [filter, setFilter] = useState<TrackerFilter>('all')
   const [picked, setPicked] = useState<string | null>(null)
+  // The right-hand panel can be closed to see the whole table; picking a stock opens it again.
+  const [panelOpen, setPanelOpen] = useState(true)
   // 'sold' shows the Sold records instead of the stocks being followed.
   const [view, setView] = useState<'following' | 'sold'>('following')
   const soldQ = useQuery({ queryKey: SOLD_KEY, queryFn: api.myWatchlistSoldList, retry: false, staleTime: 30_000 })
@@ -246,7 +249,7 @@ export default function GrowwTracker() {
               </p>
             </section>
           ) : (
-            <div className="gt-split">
+            <div className={`gt-split${panelOpen ? '' : ' gt-solo'}`}>
               <div className="gt-tbl" role="region" aria-label="Table, scroll sideways to see more" tabIndex={0} data-testid="tracker-table">
                 <div className="gt-grid gt-headrow">
                   <HeadSort sorter={sorter} k="symbol">Stock</HeadSort>
@@ -282,10 +285,14 @@ export default function GrowwTracker() {
                         key={k.symbol}
                         k={k}
                         horizon={horizon}
-                        selected={selected?.symbol === k.symbol}
-                        onPick={() => setPicked(k.symbol)}
+                        selected={panelOpen && selected?.symbol === k.symbol}
+                        onPick={() => {
+                          setPicked(k.symbol)
+                          setPanelOpen(true)
+                        }}
                         onEdit={() => {
                           setPicked(k.symbol)
+                          setPanelOpen(true)
                           setEditSym(k.symbol)
                         }}
                       />
@@ -293,7 +300,7 @@ export default function GrowwTracker() {
                   )
                 )}
               </div>
-              {selected && (
+              {selected && panelOpen && (
                 <aside className="gt-side">
                 <Detail
                   key={selected.symbol}
@@ -301,6 +308,10 @@ export default function GrowwTracker() {
                   horizon={horizon}
                   editing={editSym === selected.symbol}
                   onEditing={(open) => setEditSym(open ? selected.symbol : null)}
+                  onClose={() => {
+                    setPanelOpen(false)
+                    setEditSym(null)
+                  }}
                   onRemoved={() => {
                     setPicked(null)
                     setEditSym(null)
@@ -701,12 +712,14 @@ function Detail({
   editing,
   onEditing,
   onRemoved,
+  onClose,
 }: {
   k: WatchTrackerItem
   horizon: number
   editing: boolean
   onEditing: (open: boolean) => void
   onRemoved: () => void
+  onClose?: () => void
 }) {
   const [mode, setMode] = useState<'none' | 'sold'>('none')
   const [error, setError] = useState<string | null>(null)
@@ -736,6 +749,11 @@ function Detail({
         {k.name && <span className="dim">{k.name}</span>}
         <StateChip state={k.state} />
         {k.note && <span className="dim">{k.note}</span>}
+        {onClose && (
+          <button type="button" className="gt-close" onClick={onClose} aria-label="Close this panel" title="Close this panel" data-testid="tracker-detail-close">
+            ✕
+          </button>
+        )}
       </div>
       <div className="gt-facts">
         <div className="gt-fact">
@@ -899,6 +917,19 @@ const SOLD_SORT: Record<SoldSortKey, (r: SoldRecord) => number | string | null> 
   profit: (r) => r.profit_amount,
 }
 
+function downloadSold(rows: SoldRecord[]) {
+  const header = ['Stock', 'Bought on', 'Sold on', 'Days held', 'Price paid', 'Sold at', 'Shares', 'Invested', 'Return %', 'Profit or loss']
+  const body = rows.map((r) => [r.symbol, r.bought_on, r.sold_on, r.days_held, r.entry_price, r.sell_price, r.quantity ?? '', r.invested ?? '', r.return_pct ?? '', r.profit_amount ?? ''])
+  const esc = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`
+  const text = [header, ...body].map((row) => row.map(esc).join(',')).join('\n')
+  const url = URL.createObjectURL(new Blob([text], { type: 'text/csv;charset=utf-8' }))
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'groww-tracker-sold.csv'
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 // Newest sale first until a heading is clicked (the server sends them that way).
 function SoldRecords({ q, items }: { q: Parameters<typeof QueryNotice>[0]['q']; items: SoldRecord[] }) {
   const { sorted, sorter } = useSort<SoldRecord, SoldSortKey>(items, SOLD_SORT, { key: null }, { symbol: 'asc' })
@@ -920,6 +951,11 @@ function SoldRecords({ q, items }: { q: Parameters<typeof QueryNotice>[0]['q']; 
     <>
       <section className="gt-sum" aria-label="Your sold stocks in total" data-testid="sold-summary">
         <div>
+          <div className="gt-sum-l">Stocks sold</div>
+          <div className="gt-sum-v num" data-testid="sold-count">{sum.count}</div>
+          <small className="tm-dim">{sum.stocks} different stock{sum.stocks === 1 ? '' : 's'}</small>
+        </div>
+        <div>
           <div className="gt-sum-l">Invested in sold stocks</div>
           <div className="gt-sum-v num">{fmtRupees(sum.invested)}</div>
         </div>
@@ -935,6 +971,27 @@ function SoldRecords({ q, items }: { q: Parameters<typeof QueryNotice>[0]['q']; 
             {sum.wins} of {sum.decided}
           </div>
         </div>
+        {sum.avgDays !== null && (
+          <div>
+            <div className="gt-sum-l">Held for, on average</div>
+            <div className="gt-sum-v num">{Math.round(sum.avgDays)} days</div>
+            {sum.longest && <small className="tm-dim">longest {sum.longest.symbol}, {sum.longest.days} days</small>}
+          </div>
+        )}
+        {sum.best && (
+          <div>
+            <div className="gt-sum-l">Best sale</div>
+            <div className={`gt-sum-v num ${signClass(sum.best.profit)}`}>{fmtMoney(sum.best.profit)}</div>
+            <small className="tm-dim"><StockLink symbol={sum.best.symbol} withScore={false} /></small>
+          </div>
+        )}
+        {sum.worst && (
+          <div>
+            <div className="gt-sum-l">Worst sale</div>
+            <div className={`gt-sum-v num ${signClass(sum.worst.profit)}`}>{fmtMoney(sum.worst.profit)}</div>
+            <small className="tm-dim"><StockLink symbol={sum.worst.symbol} withScore={false} /></small>
+          </div>
+        )}
         {sum.withoutShares > 0 && (
           <p className="tm-dim tmn-small gt-sum-note">
             {sum.withoutShares} sale{sum.withoutShares === 1 ? '' : 's'} had no shares entered, so only the % is shown for
@@ -942,6 +999,11 @@ function SoldRecords({ q, items }: { q: Parameters<typeof QueryNotice>[0]['q']; 
           </p>
         )}
       </section>
+      <div style={{ margin: '0.4rem 0' }}>
+        <button type="button" className="gt-ghost" onClick={() => downloadSold(sorted)} data-testid="sold-download">
+          Download sold list as spreadsheet
+        </button>
+      </div>
       <div className="gt-tbl" role="region" aria-label="Sold records, scroll sideways to see more" tabIndex={0} data-testid="sold-table">
         <div className="gt-grid gt-sold-grid gt-headrow">
           <HeadSort sorter={sorter} k="symbol">Stock</HeadSort>
@@ -957,7 +1019,7 @@ function SoldRecords({ q, items }: { q: Parameters<typeof QueryNotice>[0]['q']; 
         {sorted.map((r, i) => (
           <div key={`${r.symbol}-${r.sold_on}-${i}`} className="gt-grid gt-sold-grid gt-row" data-testid={`sold-${r.symbol}`}>
             <div>
-              <div className="gt-sym">{r.symbol}</div>
+              <div className="gt-sym"><StockLink symbol={r.symbol} withScore={false} /></div>
               <div className="gt-sub">{r.name ?? ''}</div>
             </div>
             <div className="num">{fmtBoughtOn(r.bought_on)}</div>

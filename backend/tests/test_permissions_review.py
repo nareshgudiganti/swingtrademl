@@ -34,6 +34,7 @@ OPEN_WRITES: dict[tuple[str, str], str] = {
     ("POST", "/auth/google/exchange"): "finishes Google sign-in; the one-time code is the credential",
     ("POST", "/me/watchlist"): "a signed-in person adds a stock to their own watchlist, nobody else's",
     ("DELETE", "/me/watchlist/{symbol}"): "a signed-in person removes a stock from their own watchlist only",
+    ("POST", "/me/watchlist/{symbol}/sold"): "a signed-in person records a sale of a stock on their own watchlist only",
     ("PATCH", "/me/watchlist/{symbol}"): "a signed-in person edits their own Groww buy price and note, on their own list only",
     ("POST", "/auth/invite-request"): _INVITE,
     ("POST", "/auth/register"): "self sign-up; answers 404 unless ALLOW_SIGNUP is on",

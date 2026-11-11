@@ -25,6 +25,7 @@ import { HorizonSelector, HorizonUnavailable } from '../HorizonSelector'
 import { HORIZONS, horizonById, type HorizonId } from '../horizons'
 import { finalWord, ideasFrom, stockSituations } from '../live'
 import { ResearchExperiment } from '../ResearchExperiment'
+import StockLink from '../StockLink'
 import { Term, TermIf } from '../term'
 import type { Action } from '../types'
 import { ActionPill, BrainArt, Card, CheckItem, GlowArea, Meter, Ring, StockLogo, Tag, inr } from '../ui'
@@ -287,7 +288,7 @@ export function SwingPicksList({ run, win, onWin }: { run: BrainRun; win: Horizo
                       <td className="tm-strong">
                         <span className="tm-flex" style={{ gap: '0.5rem', alignItems: 'center' }}>
                           <StockLogo symbol={d.symbol} />
-                          {d.symbol}
+                          <StockLink symbol={d.symbol} withScore={false} />
                           <ActionPill action={finalWord(d) as Action} />
                         </span>
                       </td>

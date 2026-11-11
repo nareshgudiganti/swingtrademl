@@ -19,6 +19,7 @@ from swing_trade_ml.api.v1.endpoints.invites import code_matches, normalise_emai
 from swing_trade_ml.brokers.kite import kite_broker
 from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.logging import get_logger
+from swing_trade_ml.core.password_policy import check_password
 from swing_trade_ml.core.security import create_access_token, hash_password, verify_password
 from swing_trade_ml.db.models.invites import InviteRequest
 from swing_trade_ml.db.models.session import BrokerSession, User
@@ -117,6 +118,9 @@ def change_password(
         )
         db.commit()
         raise HTTPException(status.HTTP_400_BAD_REQUEST, CURRENT_PASSWORD_WRONG)
+    problems = check_password(payload.new_password, email=user.email, name=user.full_name)
+    if problems:  # only NEW passwords are checked; existing ones keep working at login
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, " ".join(problems))
     user.failed_login_count = 0
     user.hashed_password = hash_password(payload.new_password)
     user.token_version = (user.token_version or 0) + 1
@@ -187,6 +191,14 @@ def login(payload: LoginRequest, db: DbSession, request: Request) -> TokenRespon
     if not user.is_active:
         # Same answer as a wrong password: a disabled account doesn't confirm the password was right.
         raise refuse("auth.login_disabled")
+    if (
+        settings.REQUIRE_EMAIL_VERIFICATION
+        and user.auth_provider == "local"
+        and user.email_verified_at is None
+        and user.role != "owner"
+        and not user.is_superuser
+    ):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Please verify your email first")
 
     user.failed_login_count = 0
     user.locked_until = None
@@ -234,18 +246,19 @@ def signup(payload: SignupRequest, db: DbSession, request: Request) -> TokenResp
             raise HTTPException(status.HTTP_403_FORBIDDEN, INVITE_REFUSED)
     elif not settings.ALLOW_SIGNUP:
         raise HTTPException(status.HTTP_403_FORBIDDEN, SIGNUP_CLOSED)
+    problems = check_password(payload.password, email=email)
+    if problems:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, " ".join(problems))
 
     exists = db.execute(select(User).where(User.username == payload.username)).scalar_one_or_none()
     if exists:
-        raise HTTPException(status.HTTP_409_CONFLICT, "That username is already taken")
+        raise HTTPException(status.HTTP_409_CONFLICT, SIGNUP_UNAVAILABLE)
     if email is not None:
         email_taken = db.execute(
             select(User.id).where(func.lower(User.email) == email.lower()).limit(1)
         ).first()
         if email_taken:
-            raise HTTPException(
-                status.HTTP_409_CONFLICT, "An account with this email already exists. Please sign in instead."
-            )
+            raise HTTPException(status.HTTP_409_CONFLICT, SIGNUP_UNAVAILABLE)
 
     now = datetime.now(UTC)
     user = User(
@@ -281,6 +294,11 @@ def signup(payload: SignupRequest, db: DbSession, request: Request) -> TokenResp
     return issue_token(user)
 
 
+# One answer for a taken username and a taken email, so the message does not say which one exists.
+SIGNUP_UNAVAILABLE = (
+    "We could not create an account with those details. Try a different username or email, "
+    "or sign in if you already have an account."
+)
 SIGNUP_CLOSED = "Sign-up is by invite only. Ask for an invite on the front page."
 INVITE_REFUSED = (
     "This invite link doesn't match that email, or it has already been used. "

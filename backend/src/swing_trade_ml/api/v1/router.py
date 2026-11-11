@@ -6,9 +6,11 @@ from fastapi import APIRouter, Depends
 
 from swing_trade_ml.api.deps import require_auth
 from swing_trade_ml.api.v1.endpoints import (
+    account_auth,
     auth,
     backtest,
     beginner,
+    billing,
     brain,
     brain_changes,
     brain_golive,
@@ -54,6 +56,8 @@ api_router = APIRouter()
 #    cannot send custom headers.
 api_router.include_router(system.router)
 api_router.include_router(auth.router)
+api_router.include_router(account_auth.router)
+api_router.include_router(account_auth.admin)
 # Asking for an invite is public (rate-limited); /admin/invites/* checks for the signed-in owner itself.
 api_router.include_router(invites.router)
 api_router.include_router(invites.admin)
@@ -63,6 +67,9 @@ api_router.include_router(plans.router)
 api_router.include_router(plans.admin)
 # Owner-only, read-only list of the release switches (checks require_owner itself).
 api_router.include_router(release_switches.admin)
+# Pro billing: 404 unless BILLING_ENABLED; each route checks its own caller (see endpoints/billing.py).
+api_router.include_router(billing.router)
+api_router.include_router(billing.admin)
 
 # Everything that can read positions or move money requires either a real
 # dashboard login (JWT) or the shared X-API-Key (for scripts/automation),

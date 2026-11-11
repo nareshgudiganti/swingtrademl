@@ -1,7 +1,7 @@
 """Operational CLI — the setup and maintenance tasks that are awkward over HTTP.
 
 swingtrade init-db
-swingtrade create-user --username admin --password secret --role owner
+swingtrade create-user --username admin --password "a long passphrase here" --role owner
 swingtrade sync-instruments
 swingtrade sync-context-indices
 swingtrade backfill --days 1825
@@ -153,10 +153,15 @@ def apply_revoke(db, username: str) -> str:
 def cmd_create_user(args: argparse.Namespace) -> int:
     from sqlalchemy import select
 
+    from swing_trade_ml.core.password_policy import check_password
     from swing_trade_ml.core.security import hash_password
     from swing_trade_ml.db.models.session import User
     from swing_trade_ml.db.session import session_scope
 
+    problems = check_password(args.password, email=args.email)
+    if problems:
+        print("❌ " + " ".join(problems))
+        return 1
     with session_scope() as db:
         if db.execute(select(User).where(User.username == args.username)).scalar_one_or_none():
             print(f"❌ User '{args.username}' already exists")

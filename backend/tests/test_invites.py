@@ -214,7 +214,7 @@ def test_owner_lists_approves_and_the_decider_comes_from_the_sign_in(client, db_
 
 
 def _signup(client, email: str, code: str | None, username: str = "asha") -> object:
-    body = {"username": username, "password": "longenough1", "email": email}
+    body = {"username": username, "password": "longenough-passphrase-1", "email": email}
     if code is not None:
         body["invite_code"] = code
     return client.post(SIGNUP, json=body)
@@ -316,7 +316,7 @@ def test_invite_signup_refuses_an_email_that_already_has_an_account(client, db_s
 
 def test_open_signup_unchanged_when_allowed_and_still_never_owner(client, db_session, monkeypatch):
     monkeypatch.setattr(settings, "ALLOW_SIGNUP", True)
-    r = client.post(SIGNUP, json={"username": "openperson", "password": "longenough1"})
+    r = client.post(SIGNUP, json={"username": "openperson", "password": "longenough-passphrase-1"})
     assert r.status_code == 201
     user = db_session.execute(select(User).where(User.username == "openperson")).scalar_one()
     assert user.role == "member" and user.is_superuser is False
@@ -329,7 +329,7 @@ def test_signup_body_cannot_ask_for_privileges(client, db_session):
         SIGNUP,
         json={
             "username": "asha",
-            "password": "longenough1",
+            "password": "longenough-passphrase-1",
             "email": "asha@example.com",
             "invite_code": code,
             "role": "owner",

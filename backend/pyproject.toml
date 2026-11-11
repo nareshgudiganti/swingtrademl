@@ -79,7 +79,7 @@ build-backend = "setuptools.build_meta"
 where = ["src"]
 
 [tool.setuptools.package-data]
-swing_trade_ml = ["services/finance/category_rules.csv", "brain/score_evidence_barrier.json"]
+swing_trade_ml = ["services/finance/category_rules.csv", "brain/score_evidence_barrier.json", "core/common_passwords.txt"]
 
 [tool.ruff]
 # 110 rather than 100: SQLAlchemy ForeignKey column declarations and Alembic's

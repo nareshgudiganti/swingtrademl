@@ -82,6 +82,10 @@ SIGNED_IN_ONLY_ROUTES: dict[tuple[str, str], str] = {
 #: Dependencies that mean "the handler is checked as the owner itself".
 OWNER_SELF_CHECKS = {"require_owner", "require_owner_signed_in"}
 
+#: The Admin console (admin_console.py): every /admin/mfa and /admin/console route must carry one of
+#: these. require_admin_user = signed-in admin; require_admin_mfa = admin with a fresh step-up code.
+ADMIN_CONSOLE_CHECKS = {"require_admin_user", "require_admin_mfa"}
+
 
 def _contexts():
     """Flattened (method, path-without-prefix, dependency-call-names, route-call-set) for every /api/v1 route.
@@ -128,6 +132,8 @@ def classify(method: str, path: str) -> str:
         return "signed_in_only"
     if names & OWNER_SELF_CHECKS:
         return "owner_self_checked"
+    if names & ADMIN_CONSOLE_CHECKS and path.startswith(("/admin/mfa", "/admin/console")):
+        return "admin_console_checked"
     return "UNCLASSIFIED"
 
 

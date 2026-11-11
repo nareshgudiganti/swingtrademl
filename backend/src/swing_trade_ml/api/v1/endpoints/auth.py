@@ -220,16 +220,14 @@ def login(payload: LoginRequest, db: DbSession, request: Request) -> TokenRespon
     dependencies=[Depends(auth_limit)],
 )
 def signup(payload: SignupRequest, db: DbSession, request: Request) -> TokenResponse:
-    """Self-registration.
+    """Sign-up by invite only.
 
-    Gated by ALLOW_SIGNUP because this system can place real trades once
-    TRADING_MODE=live is set — an open registration endpoint on that is an
-    account-takeover surface, not a convenience. Turn it off in .env once
-    everyone who should have an account does.
-
-    With ALLOW_SIGNUP off, the only way in is an invite: an `invite_code` the owner
-    approved in Admin > Invites, for the same email, used once. Either way the new
-    account is an ordinary member: never owner, never tester, never the real account.
+    This route needs a valid `invite_code` the owner approved in Admin > Invites, for the same
+    email, used once. It checks the invite BEFORE it looks at any account, so a caller without an
+    invite learns nothing about which usernames or emails exist. Open public registration lives
+    at `POST /auth/register` (behind ALLOW_SIGNUP, same answer for new and existing emails),
+    never here. The new account is an ordinary member: never owner, never tester, never the
+    real account.
     """
     invite: InviteRequest | None = None
     code = (payload.invite_code or "").strip()
@@ -247,7 +245,8 @@ def signup(payload: SignupRequest, db: DbSession, request: Request) -> TokenResp
             )
             db.commit()
             raise HTTPException(status.HTTP_403_FORBIDDEN, INVITE_REFUSED)
-    elif not settings.ALLOW_SIGNUP:
+    else:
+        # No invite: refused before any account lookup, whatever ALLOW_SIGNUP says.
         raise HTTPException(status.HTTP_403_FORBIDDEN, SIGNUP_CLOSED)
     problems = check_password(payload.password, email=email)
     if problems:

@@ -722,10 +722,12 @@ def test_nothing_outside_the_lane_imports_it_except_its_own_owner_only_route():
             continue
         if "brain.lanes" in f.read_text(encoding="utf-8"):
             users.append(rel)
-    # the owner-only route, the read-only side-by-side report, and the scheduler's disabled-by-default hook
-    # (tested in test_h05_job.py)
+    # the owner-only route, the read-only weekly eligibility report (reads the lane's protocol numbers and
+    # settings flags, writes nothing), the read-only side-by-side report, and the scheduler's
+    # disabled-by-default hook (tested in test_h05_job.py)
     assert sorted(users) == [
         "api/v1/endpoints/h05.py",
+        "brain/eligibility_report.py",
         "shadow_lanes/horizon_report.py",
         "workers/scheduler.py",
     ]

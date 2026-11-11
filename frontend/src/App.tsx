@@ -17,6 +17,7 @@ import Safety from './pages/Safety'
 import Capital from './pages/Capital'
 import ModelLab from './pages/ModelLab'
 import PlanHome from './pages/PlanHome'
+import AdminUsers from './pages/AdminUsers'
 import HorizonPicks from './pages/HorizonPicks'
 import ModelRegistry from './pages/ModelRegistry'
 import PlansManager from './pages/PlansManager'
@@ -114,6 +115,8 @@ const SCREENS: Screen[] = [
   },
   { to: '/safety', label: 'Safety', Icon: AlertTriangleIcon, element: <Safety />, inNav: true },
   { to: '/plans', label: 'Plans', Icon: GearIcon, element: <PlansManager />, manage: true },
+  // Admin console (people, Free/Pro, gifts, change log): real owner only, asks for a two-step code.
+  { to: '/admin', label: 'Admin', Icon: GearIcon, element: <AdminUsers />, manage: true },
   { to: '/models', label: 'ML Models', Icon: BarChartIcon, element: <Models /> },
   { to: '/finance', label: 'Finance', Icon: WalletIcon, element: <Finance /> },
   { to: '/settings', label: 'Settings', Icon: GearIcon, element: <Settings /> },

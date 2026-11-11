@@ -12,7 +12,7 @@ import './newlook-tracker.css'
 import { logOut } from './AccountMenu'
 import StockSearch from './beginner/StockSearch'
 import { api } from '../api/client'
-import { useLook } from './look'
+import { classicLookEnabled, useLook } from './look'
 import { splitLabel } from './menu'
 import { activeNav, navPages, visibleNav, type NavId } from './newMenu'
 import { OfflineBanner } from './PageState'
@@ -97,15 +97,17 @@ export default function NewLookShell({ ownerConsole }: { ownerConsole: boolean }
           })}
         </nav>
         <div className="tmn-side-foot">
-          <button
-            type="button"
-            className="tmn-switch"
-            onClick={() => setLook('classic')}
-            title="Go back to the classic dark look. Nothing else changes."
-            data-testid="look-switch"
-          >
-            {svg(<path d="M15 18l-6-6 6-6" />)} Classic look
-          </button>
+          {classicLookEnabled() && (
+            <button
+              type="button"
+              className="tmn-switch"
+              onClick={() => setLook('classic')}
+              title="Go back to the classic dark look. Nothing else changes."
+              data-testid="look-switch"
+            >
+              {svg(<path d="M15 18l-6-6 6-6" />)} Classic look
+            </button>
+          )}
           <Link to="/trademind/account" className="tmn-switch" data-testid="account-link">
             Account and plan
           </Link>

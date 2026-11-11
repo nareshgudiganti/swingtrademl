@@ -1,11 +1,19 @@
 // Which TradeMind look this viewer uses: 'classic' (the dark top-menu app) or 'new' (the light sidebar app).
 // A per-viewer convenience only, kept in this browser: both looks show the same pages, read the same API and
-// change nothing on the server, so switching back and forth loses nothing. Classic is the default.
+// change nothing on the server, so switching back and forth loses nothing. Classic is the default while it is enabled; while hidden, New is the only look.
 // `?look=new` / `?look=classic` in the address also switches (and remembers it), for sharing a link.
 
 import { useCallback, useEffect, useState } from 'react'
 
 export type Look = 'classic' | 'new'
+
+/** The Classic look is HIDDEN (owner, 2026-11-11): its functions differ from the New look, so everyone gets the
+ *  New look and no switch back is offered. To bring Classic back, change this one line to `true`. The tests turn
+ *  it on through VITE_CLASSIC_LOOK=on (vitest.config.ts) so the Classic shell stays covered while hidden. */
+const CLASSIC_LOOK_IN_CODE = false
+export function classicLookEnabled(): boolean {
+  return CLASSIC_LOOK_IN_CODE || import.meta.env.VITE_CLASSIC_LOOK === 'on'
+}
 
 export const LOOK_KEY = 'tm-look'
 const EVENT = 'tm-look-change'
@@ -18,6 +26,7 @@ function isLook(v: unknown): v is Look {
 
 /** The look in the address (?look=…), else the saved one, else classic. Storage may be blocked: never throws. */
 export function readLook(search?: string): Look {
+  if (!classicLookEnabled()) return 'new' // hidden: ignore ?look=classic and any saved 'classic'
   if (search === undefined) {
     search = (typeof window === 'undefined' ? '' : window.location.search) || firstSearch
     firstSearch = '' // used once, so a later switch in the app is not undone by the old address
@@ -56,6 +65,7 @@ export function useLook(): [Look, (look: Look) => void] {
     return () => window.removeEventListener(EVENT, onChange)
   }, [])
   const setLook = useCallback((next: Look) => {
+    if (next === 'classic' && !classicLookEnabled()) return
     saveLook(next)
     setState(next)
     window.dispatchEvent(new CustomEvent<Look>(EVENT, { detail: next }))

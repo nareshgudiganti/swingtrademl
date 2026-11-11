@@ -71,7 +71,7 @@ from swing_trade_ml.db.models.trading import (
     Strategy,
     Trade,
 )
-from swing_trade_ml.db.models.user_watchlist import UserWatchlistItem
+from swing_trade_ml.db.models.user_watchlist import UserWatchlistItem, UserWatchlistSale
 
 __all__ = [
     "AlertOutbox",
@@ -148,5 +148,6 @@ __all__ = [
     "UpcomingEvent",
     "User",
     "UserWatchlistItem",
+    "UserWatchlistSale",
     "WatchlistSnapshot",
 ]

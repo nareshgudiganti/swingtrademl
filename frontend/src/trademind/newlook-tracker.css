@@ -137,3 +137,9 @@
   .tm-new .gt-side { position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow-y: auto; }
 }
 .tm-new .gt-side .gt-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+/* Sold records table and the sell form. */
+.tm-new .gt-sold-grid { grid-template-columns: minmax(170px, 1.5fr) 118px 118px 90px 100px 100px 80px 100px 120px; min-width: 1050px; }
+.tm-new .gt-sellform { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
+.tm-new .gt-sellform > span { flex: 1 1 100%; }
+.tm-new .gt-sellform label { display: grid; gap: 3px; font-size: 0.78rem; color: var(--tm-dim); }

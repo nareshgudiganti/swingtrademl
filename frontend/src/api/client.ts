@@ -89,6 +89,7 @@ import type {
   MyWatchlist,
   MyWatchlistItem,
   WatchlistHit,
+  SoldRecord,
   WatchTracker,
   KiteLoginResponse,
   LatestSignal,
@@ -591,6 +592,10 @@ export const api = {
   myWatchlistSearch: (q: string) => get<WatchlistHit[]>(`/me/watchlist/search?q=${encodeURIComponent(q)}`),
   myWatchlistAdd: (symbol: string, note?: string) => post<MyWatchlistItem>('/me/watchlist', { symbol, note }),
   myWatchlistRemove: (symbol: string) => del<MyWatchlistItem>(`/me/watchlist/${encodeURIComponent(symbol)}`),
+  /** Record a sale made in Groww: the stock leaves the tracker and its result is kept in Sold records. */
+  myWatchlistSold: (symbol: string, body: { sell_price: number; sold_on?: string }) =>
+    post<SoldRecord>(`/me/watchlist/${encodeURIComponent(symbol)}/sold`, body),
+  myWatchlistSoldList: () => get<{ items: SoldRecord[] }>('/me/watchlist/sold'),
   /** Groww Tracker: each stock on the list followed like an open position. */
   myWatchlistTracker: () => get<WatchTracker>('/me/watchlist/tracker'),
   /** Edit one stock's Groww entry: buy price, shares, buy date (YYYY-MM-DD) and/or note. Only sent fields change. */

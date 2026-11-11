@@ -256,3 +256,47 @@ def test_day_count_does_not_lag_a_late_price_feed():
     assert it["days_done"] == t.calendar_days(date(2026, 11, 2), today)
     assert it["day_number"] == it["days_done"] + 1 and it["day_number"] > 1
     assert t.calendar_days(date(2026, 11, 2), date(2026, 11, 1)) is None  # a date before it was added
+
+
+# ---- sold records ---------------------------------------------------------------------------
+
+
+def test_sale_record_maths():
+    r = t.sale_record(
+        symbol="X", name=None, bought_on=date(2026, 11, 2), entry_price=100.0, entry_source="your_price",
+        quantity=10.0, sell_price=108.0, sold_on=date(2026, 11, 2),
+    )
+    assert r["return_pct"] == pytest.approx(8.0) and r["profit_amount"] == pytest.approx(80.0)
+    assert r["invested"] == pytest.approx(1000.0) and r["result"] == "win" and r["days_held"] == 1
+    loss = t.sale_record(
+        symbol="X", name=None, bought_on=date(2026, 11, 2), entry_price=100.0, entry_source="added_close",
+        quantity=None, sell_price=96.0, sold_on=date(2026, 11, 3),
+    )
+    assert loss["result"] == "loss" and loss["profit_amount"] is None and loss["days_held"] == 2
+
+
+def test_mark_sold_moves_stock_to_sold_records(client, db_session, monkeypatch):
+    monkeypatch.setattr(t, "today_ist", lambda: date(2026, 11, 4))
+    inst = Instrument(instrument_token=991_002, tradingsymbol="SOLDTEST", name="Sold Test", exchange=EXCHANGE)
+    db_session.add(inst)
+    db_session.flush()
+    user, me = _as(db_session, "sold-a")
+    _, other = _as(db_session, "sold-b")
+    db_session.add(UserWatchlistItem(
+        user_id=user.id, symbol="SOLDTEST", added_at=datetime(2026, 11, 2, 6, tzinfo=IST), buy_price=100.0, quantity=10
+    ))
+    db_session.flush()
+
+    assert client.post(f"{URL}/SOLDTEST/sold", json={"sell_price": 0}, headers=me).status_code == 422
+    assert client.post(f"{URL}/SOLDTEST/sold", json={"sell_price": 90, "sold_on": "2026-11-09"}, headers=me).status_code == 422
+    assert client.post(f"{URL}/SOLDTEST/sold", json={"sell_price": 90}, headers=other).status_code == 404
+
+    r = client.post(f"{URL}/SOLDTEST/sold", json={"sell_price": 94.0}, headers=me)
+    assert r.status_code == 200, r.text
+    assert r.json()["return_pct"] == pytest.approx(-6.0) and r.json()["profit_amount"] == pytest.approx(-60.0)
+    assert r.json()["sold_on"] == "2026-11-04" and r.json()["result"] == "loss"
+    assert client.get(f"{URL}/tracker", headers=me).json()["items"] == []  # left the tracker
+    sold = client.get(f"{URL}/sold", headers=me).json()["items"]
+    assert [s["symbol"] for s in sold] == ["SOLDTEST"] and sold[0]["name"] == "Sold Test"
+    assert client.get(f"{URL}/sold", headers=other).json()["items"] == []
+    assert client.post(f"{URL}/SOLDTEST/sold", json={"sell_price": 94.0}, headers=me).status_code == 404  # already gone

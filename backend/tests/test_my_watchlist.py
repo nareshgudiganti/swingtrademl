@@ -161,6 +161,8 @@ def test_the_self_service_set_is_only_the_watchlist():
         "/me/watchlist/search",
         "/me/watchlist/{symbol}",
         "/me/watchlist/tracker",
+        "/me/watchlist/sold",
+        "/me/watchlist/{symbol}/sold",
     }
 
 

@@ -68,6 +68,9 @@ describe('Groww Tracker page', () => {
     expect(html).toContain('data-testid="tracker-table"')
     expect(html).toContain('Reaching target')
     expect(html).toContain('Score falling')
+    // The Sold records chip sits right after the last filter chip
+    expect(html).toContain('data-testid="sold-chip"')
+    expect(html.indexOf('data-testid="sold-chip"')).toBeGreaterThan(html.lastIndexOf('>Score falling</button>'))
     expect(html).toContain('+7.2%')
     expect(html).toContain('data-testid="tracker-detail"')
     // An Edit button on every row and one in the detail panel; the old separate price / note buttons are gone.
@@ -81,7 +84,7 @@ describe('Groww Tracker page', () => {
     expect(html).toContain('data-testid="fact-bought-on"')
     expect(html).toContain('₹42,100')
     expect(html).toContain('+₹3,020')
-    expect(html).toContain('I sold it in Groww, remove')
+    expect(html).toContain('I sold it in Groww')
     expect(html).toContain('+ Add stock I bought')
     // KEI needs action first, so it is the picked stock
     expect(html).toMatch(/data-testid="tracker-detail" data-symbol="KEI"/)

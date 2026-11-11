@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy import select
 
+from swing_trade_ml.api.admin_step_up import StepUp
 from swing_trade_ml.api.deps import (
     DbSession,
     PlanAccessDep,
@@ -82,7 +83,7 @@ def get_switch(db: DbSession) -> dict[str, bool]:
     return {"enabled": plan_service.plans_enabled(db)}
 
 
-@admin.put("/switch", response_model=dict)
+@admin.put("/switch", response_model=dict, dependencies=[StepUp])
 def set_switch(body: SwitchUpdate, db: DbSession, principal: PrincipalDep) -> dict[str, bool]:
     """Turn plans on or off for everyone. Off is the app exactly as it was
     before plans: every signed-in account sees everything."""
@@ -113,7 +114,7 @@ def list_plans(db: DbSession) -> list[dict[str, Any]]:
     return plan_service.list_plans(db)
 
 
-@admin.put("/plans/{key}", response_model=dict)
+@admin.put("/plans/{key}", response_model=dict, dependencies=[StepUp])
 def update_plan(key: str, body: PlanUpdate, db: DbSession, principal: PrincipalDep) -> dict[str, Any]:
     if key not in PLAN_KEYS:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"No plan called {key!r}")
@@ -147,13 +148,13 @@ def _user_out(user: User) -> dict[str, Any]:
     }
 
 
-@admin.get("/users", response_model=list[dict])
+@admin.get("/users", response_model=list[dict], dependencies=[StepUp])
 def list_users(db: DbSession) -> list[dict[str, Any]]:
     users = db.execute(select(User).order_by(User.created_at)).scalars().all()
     return [_user_out(u) for u in users]
 
 
-@admin.put("/users/{user_id}/plan", response_model=dict)
+@admin.put("/users/{user_id}/plan", response_model=dict, dependencies=[StepUp])
 def set_user_plan(
     user_id: int, body: UserPlanUpdate, db: DbSession, principal: PrincipalDep
 ) -> dict[str, Any]:

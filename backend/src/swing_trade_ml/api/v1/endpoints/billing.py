@@ -23,6 +23,7 @@ from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
+from swing_trade_ml.api.admin_step_up import StepUp
 from swing_trade_ml.api.deps import (
     DbSession,
     Principal,
@@ -276,13 +277,18 @@ def _grant_out(g: PlanGrant) -> dict[str, Any]:
     }
 
 
-@admin.get("/users/{user_id}/grants", response_model=list[dict])
+@admin.get("/users/{user_id}/grants", response_model=list[dict], dependencies=[StepUp])
 def list_grants(user_id: int, db: DbSession) -> list[dict[str, Any]]:
     rows = db.execute(select(PlanGrant).where(PlanGrant.user_id == user_id).order_by(PlanGrant.id)).scalars()
     return [_grant_out(g) for g in rows]
 
 
-@admin.post("/users/{user_id}/grants", response_model=dict, status_code=status.HTTP_201_CREATED)
+@admin.post(
+    "/users/{user_id}/grants",
+    response_model=dict,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[StepUp],
+)
 def create_grant(
     user_id: int, body: GrantCreate, db: DbSession, principal: PrincipalDep, request: Request
 ) -> dict[str, Any]:
@@ -323,7 +329,7 @@ def create_grant(
     return _grant_out(grant)
 
 
-@admin.delete("/users/{user_id}/grants/{grant_id}", response_model=dict)
+@admin.delete("/users/{user_id}/grants/{grant_id}", response_model=dict, dependencies=[StepUp])
 def revoke_grant(
     user_id: int, grant_id: int, db: DbSession, principal: PrincipalDep, request: Request
 ) -> dict[str, Any]:

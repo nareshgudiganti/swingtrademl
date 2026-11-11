@@ -80,7 +80,7 @@ SIGNED_IN_ONLY_ROUTES: dict[tuple[str, str], str] = {
 }
 
 #: Dependencies that mean "the handler is checked as the owner itself".
-OWNER_SELF_CHECKS = {"require_owner", "require_owner_signed_in"}
+OWNER_SELF_CHECKS = {"require_owner", "require_owner_signed_in", "require_admin_user", "require_admin_mfa"}
 
 #: The Admin console (admin_console.py): every /admin/mfa and /admin/console route must carry one of
 #: these. require_admin_user = signed-in admin; require_admin_mfa = admin with a fresh step-up code.

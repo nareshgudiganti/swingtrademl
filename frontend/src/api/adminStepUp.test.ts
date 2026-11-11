@@ -26,7 +26,7 @@ describe('admin two-step code on privileged calls', () => {
 
     expect(ask).toHaveBeenCalledWith('verify')
     expect(fetchMock).toHaveBeenCalledTimes(2)
-    const second = fetchMock.mock.calls[1][1] as RequestInit
+    const second = fetchMock.mock.calls[1]![1] as RequestInit
     expect((second.headers as Record<string, string>)['X-Admin-Mfa']).toBe('tok123')
   })
 
@@ -71,7 +71,7 @@ describe('admin two-step code on privileged calls', () => {
     vi.stubGlobal('fetch', fetchMock)
     setAdminStepUp('tok')
     await api.h05Report()
-    const init = fetchMock.mock.calls[0][1] as RequestInit
+    const init = fetchMock.mock.calls[0]![1] as RequestInit
     expect((init.headers as Record<string, string>)['X-Admin-Mfa']).toBeUndefined()
   })
 })

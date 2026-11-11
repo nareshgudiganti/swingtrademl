@@ -7,7 +7,7 @@ import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api } from '../../api/client'
-import type { TrackerState, WatchTracker, WatchTrackerItem } from '../../api/types'
+import type { SoldRecord, TrackerState, WatchTracker, WatchTrackerItem } from '../../api/types'
 import { useLatestRun } from '../live'
 import { QueryNotice } from '../PageState'
 import { useSort, type Sorter } from '../sort'
@@ -37,6 +37,7 @@ import {
   portfolioSummary,
   scoreText,
   signClass,
+  soldSummary,
   sortItems,
   stopTarget,
   symbolsIn,
@@ -51,6 +52,7 @@ import '../newlook-w2.css'
 import '../newlook-tracker.css'
 
 export const TRACKER_KEY = ['myWatchlistTracker']
+export const SOLD_KEY = ['myWatchlistSold']
 
 type TrackerSortKey = 'symbol' | 'day' | 'bought' | 'paid' | 'shares' | 'since' | 'today' | 'score' | 'range' | 'trend' | 'status'
 
@@ -73,7 +75,7 @@ const TRACKER_SORT: Record<TrackerSortKey, (k: WatchTrackerItem) => number | str
 // First click: A-Z for the stock name and most urgent first for status; every number sorts biggest first.
 const TRACKER_FIRST_DIR: Partial<Record<TrackerSortKey, 'asc' | 'desc'>> = { symbol: 'asc', status: 'asc' }
 
-function HeadSort({ sorter, k, children }: { sorter: Sorter<TrackerSortKey>; k: TrackerSortKey; children: string }) {
+function HeadSort<K extends string>({ sorter, k, children }: { sorter: Sorter<K>; k: K; children: string }) {
   const active = sorter.key === k
   return (
     <div role="columnheader" aria-sort={active ? (sorter.dir === 'asc' ? 'ascending' : 'descending') : 'none'}>
@@ -94,6 +96,9 @@ export default function GrowwTracker() {
   const [tabOn, setTabOn] = useTrackerTab()
   const [filter, setFilter] = useState<TrackerFilter>('all')
   const [picked, setPicked] = useState<string | null>(null)
+  // 'sold' shows the Sold records instead of the stocks being followed.
+  const [view, setView] = useState<'following' | 'sold'>('following')
+  const soldQ = useQuery({ queryKey: SOLD_KEY, queryFn: api.myWatchlistSoldList, retry: false, staleTime: 30_000 })
   // The stock whose Edit form is open (one at a time). Opening it also picks the stock.
   const [editSym, setEditSym] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
@@ -101,6 +106,7 @@ export default function GrowwTracker() {
 
   const refresh = () => {
     void client.invalidateQueries({ queryKey: TRACKER_KEY })
+    void client.invalidateQueries({ queryKey: SOLD_KEY })
     void client.invalidateQueries({ queryKey: ['myWatchlist'] })
   }
   const add = useMutation({
@@ -119,6 +125,8 @@ export default function GrowwTracker() {
   const { sorted: all, sorter } = useSort<WatchTrackerItem, TrackerSortKey>(base, TRACKER_SORT, { key: null }, TRACKER_FIRST_DIR)
   const shown = filterItems(all, filter)
   const summary = useMemo(() => portfolioSummary(all), [all])
+  const soldView = view === 'sold'
+  const soldItems = soldQ.data?.items ?? []
   const selected = all.find((i) => i.symbol === picked) ?? shown[0] ?? all[0] ?? null
 
   return (
@@ -159,7 +167,7 @@ export default function GrowwTracker() {
       ) : (
         <>
           <QueryNotice q={q} what="your Groww tracker" />
-          {summary && (
+          {!soldView && summary && (
             <section className="gt-sum" aria-label="Your Groww stocks in total" data-testid="tracker-summary">
               <div>
                 <div className="gt-sum-l">Invested value</div>
@@ -184,6 +192,7 @@ export default function GrowwTracker() {
               )}
             </section>
           )}
+          {!soldView && (
           <section className="gt-act" aria-label="Act today" data-testid="act-strip">
             {ACT_CARDS.map((c) => {
               const syms = symbolsIn(all, c.state)
@@ -196,18 +205,29 @@ export default function GrowwTracker() {
               )
             })}
           </section>
+          )}
 
           <div className="gt-bar" role="group" aria-label="Filter">
             {FILTERS.map((f) => (
-              <button key={f.id} type="button" className="gt-chip" aria-pressed={filter === f.id} onClick={() => setFilter(f.id)}>
+              <button key={f.id} type="button" className="gt-chip" aria-pressed={!soldView && filter === f.id} onClick={() => {
+                setView('following')
+                setFilter(f.id)
+              }}>
                 {f.id === 'all' ? `All (${all.length})` : f.label}
               </button>
             ))}
+            <button type="button" className="gt-chip" aria-pressed={soldView} onClick={() => setView('sold')} data-testid="sold-chip">
+              Sold records ({soldItems.length})
+            </button>
             <button type="button" className="tmn-w2-primary gt-add" onClick={() => setAdding((a) => !a)} aria-expanded={adding} data-testid="add-bought">
               {adding ? 'Close' : '+ Add stock I bought'}
             </button>
           </div>
 
+          {soldView ? (
+            <SoldRecords q={soldQ} items={soldItems} />
+          ) : (
+            <>
           {adding && <AddStock run={latest.data} onAdd={(s) => add.mutateAsync(s)} busy={add.isPending} />}
           {error && (
             <p className="tm-neg tmn-small" role="alert">
@@ -291,10 +311,14 @@ export default function GrowwTracker() {
               )}
             </div>
           )}
+            </>
+          )}
+          {!soldView && (
           <p className="tm-dim tmn-small">
             {needsActionCount(all)} of {all.length} need a look today. The plan for each stock: +8% target, −4% stop, sell
             half at +5%, and be out within {horizon} trading days.
           </p>
+          )}
         </>
       )}
     </div>
@@ -692,6 +716,15 @@ function Detail({
     onSuccess: onRemoved,
     onError: (e) => setError((e as Error).message),
   })
+  // The price starts at today's price as a suggestion; the person should type what Groww really paid out.
+  const [sellPrice, setSellPrice] = useState(k.last_price != null ? String(k.last_price) : '')
+  const [soldOn, setSoldOn] = useState(todayIst())
+  const sell = useMutation({
+    mutationFn: () => api.myWatchlistSold(k.symbol, { sell_price: Number(sellPrice), sold_on: soldOn }),
+    onSuccess: onRemoved,
+    onError: (e) => setError((e as Error).message),
+  })
+  const priceOk = Number.isFinite(Number(sellPrice)) && Number(sellPrice) > 0
 
   const dv = deltaView(k.score_delta)
   const st = stopTarget(k.entry_price)
@@ -790,15 +823,46 @@ function Detail({
       </p>
 
       {mode === 'sold' && (
-        <div className="gt-edit" role="alertdialog" aria-label={`Remove ${k.symbol}`}>
+        <div className="gt-edit gt-sellform" role="group" aria-label={`Record the sale of ${k.symbol}`}>
           <span>
-            Remove <b>{k.symbol}</b> from the tracker? Do this once you have sold it in Groww. Nothing is sold by this app.
+            Sold <b>{k.symbol}</b> in Groww? Enter the price you got. It moves to <b>Sold records</b> with its profit or loss.
+            Nothing is sold by this app.
           </span>
-          <button type="button" className="gt-ghost sold-yes" disabled={remove.isPending} onClick={() => remove.mutate()}>
-            Yes, remove it
+          <label>
+            Sold at (₹ per share)
+            <input
+              className="gt-cell"
+              inputMode="decimal"
+              value={sellPrice}
+              onChange={(e) => setSellPrice(e.target.value)}
+              aria-label={`Sell price for ${k.symbol}`}
+            />
+          </label>
+          <label>
+            Sold on
+            <input
+              type="date"
+              className="gt-cell"
+              value={soldOn}
+              max={todayIst()}
+              onChange={(e) => setSoldOn(e.target.value)}
+              aria-label={`Sell date for ${k.symbol}`}
+            />
+          </label>
+          <button type="button" className="gt-ghost sold-yes" disabled={!priceOk || sell.isPending} onClick={() => sell.mutate()}>
+            Save sale
           </button>
           <button type="button" className="gt-ghost" onClick={() => setMode('none')}>
             Keep it
+          </button>
+          <button
+            type="button"
+            className="gt-ghost"
+            disabled={remove.isPending}
+            onClick={() => remove.mutate()}
+            title="For a stock you never bought: it is removed and no result is kept"
+          >
+            Just remove it, no result
           </button>
         </div>
       )}
@@ -813,9 +877,104 @@ function Detail({
           {editing ? 'Close edit' : 'Edit in the row'}
         </button>
         <button type="button" className="gt-ghost sold" onClick={() => setMode('sold')}>
-          I sold it in Groww, remove
+          I sold it in Groww
         </button>
       </div>
     </section>
+  )
+}
+
+
+type SoldSortKey = 'symbol' | 'bought' | 'sold' | 'days' | 'paid' | 'sellp' | 'shares' | 'ret' | 'profit'
+
+const SOLD_SORT: Record<SoldSortKey, (r: SoldRecord) => number | string | null> = {
+  symbol: (r) => r.symbol,
+  bought: (r) => r.bought_on,
+  sold: (r) => r.sold_on,
+  days: (r) => r.days_held,
+  paid: (r) => r.entry_price,
+  sellp: (r) => r.sell_price,
+  shares: (r) => r.quantity,
+  ret: (r) => r.return_pct,
+  profit: (r) => r.profit_amount,
+}
+
+// Newest sale first until a heading is clicked (the server sends them that way).
+function SoldRecords({ q, items }: { q: Parameters<typeof QueryNotice>[0]['q']; items: SoldRecord[] }) {
+  const { sorted, sorter } = useSort<SoldRecord, SoldSortKey>(items, SOLD_SORT, { key: null }, { symbol: 'asc' })
+  const sum = useMemo(() => soldSummary(items), [items])
+  if (items.length === 0) {
+    return (
+      <section className="tmn-card gt-empty" data-state="no-sold" data-testid="sold-empty">
+        <QueryNotice q={q} what="your sold records" />
+        <p>
+          <b>No sold stocks yet.</b>
+        </p>
+        <p className="tm-dim">
+          When you sell a stock in Groww, open it here and tap “I sold it in Groww”. Its profit or loss is then kept in this list.
+        </p>
+      </section>
+    )
+  }
+  return (
+    <>
+      <section className="gt-sum" aria-label="Your sold stocks in total" data-testid="sold-summary">
+        <div>
+          <div className="gt-sum-l">Invested in sold stocks</div>
+          <div className="gt-sum-v num">{fmtRupees(sum.invested)}</div>
+        </div>
+        <div>
+          <div className="gt-sum-l">Made or lost on sales</div>
+          <div className={`gt-sum-v num ${signClass(sum.profit)}`}>
+            {fmtMoney(sum.profit)} <small>({fmtPct(sum.profitPct, 2)})</small>
+          </div>
+        </div>
+        <div>
+          <div className="gt-sum-l">Sales that made money</div>
+          <div className="gt-sum-v num">
+            {sum.wins} of {sum.decided}
+          </div>
+        </div>
+        {sum.withoutShares > 0 && (
+          <p className="tm-dim tmn-small gt-sum-note">
+            {sum.withoutShares} sale{sum.withoutShares === 1 ? '' : 's'} had no shares entered, so only the % is shown for
+            them and they are left out of the rupee totals.
+          </p>
+        )}
+      </section>
+      <div className="gt-tbl" role="region" aria-label="Sold records, scroll sideways to see more" tabIndex={0} data-testid="sold-table">
+        <div className="gt-grid gt-sold-grid gt-headrow">
+          <HeadSort sorter={sorter} k="symbol">Stock</HeadSort>
+          <HeadSort sorter={sorter} k="bought">Bought on</HeadSort>
+          <HeadSort sorter={sorter} k="sold">Sold on</HeadSort>
+          <HeadSort sorter={sorter} k="days">Days held</HeadSort>
+          <HeadSort sorter={sorter} k="paid">Price paid</HeadSort>
+          <HeadSort sorter={sorter} k="sellp">Sold at</HeadSort>
+          <HeadSort sorter={sorter} k="shares">Shares</HeadSort>
+          <HeadSort sorter={sorter} k="ret">Return</HeadSort>
+          <HeadSort sorter={sorter} k="profit">Profit / loss</HeadSort>
+        </div>
+        {sorted.map((r, i) => (
+          <div key={`${r.symbol}-${r.sold_on}-${i}`} className="gt-grid gt-sold-grid gt-row" data-testid={`sold-${r.symbol}`}>
+            <div>
+              <div className="gt-sym">{r.symbol}</div>
+              <div className="gt-sub">{r.name ?? ''}</div>
+            </div>
+            <div className="num">{fmtBoughtOn(r.bought_on)}</div>
+            <div className="num">{fmtBoughtOn(r.sold_on)}</div>
+            <div className="num">{r.days_held}</div>
+            <div className="num">{fmtPrice(r.entry_price)}</div>
+            <div className="num">{fmtPrice(r.sell_price)}</div>
+            <div className="num">{r.quantity ?? '—'}</div>
+            <div className={`num ${signClass(r.return_pct)}`}>
+              <b>{fmtPct(r.return_pct, 2)}</b>
+            </div>
+            <div className={`num ${signClass(r.profit_amount)}`}>
+              <b>{fmtMoney(r.profit_amount)}</b>
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
   )
 }

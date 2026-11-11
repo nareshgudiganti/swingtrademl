@@ -98,7 +98,8 @@ def test_invalid_names_are_refused(raw):
 def test_single_migration_head_and_parent():
     script = ScriptDirectory.from_config(Config(str(BACKEND / "alembic.ini")))
     heads = script.get_heads()
-    assert heads == ["billing01"]  # billing sits on auth tokens, which sit on usernamemob01
+    assert heads == ["wlsales01"]  # sold records sit on billing, which sits on auth tokens
+    assert script.get_revision("wlsales01").down_revision == "billing01"
     assert script.get_revision("billing01").down_revision == "authtokens01"
     assert script.get_revision("authtokens01").down_revision == "usernamemob01"
     assert script.get_revision("usernamemob01").down_revision == "mergeheads01"

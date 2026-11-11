@@ -702,6 +702,24 @@ export interface WatchTrackerItem {
   state: TrackerState
 }
 
+/** One sold stock in the Groww Tracker's "Sold records" (GET /me/watchlist/sold). */
+export interface SoldRecord {
+  symbol: string
+  name: string | null
+  bought_on: string
+  sold_on: string
+  /** Day 1 is the day it was bought. */
+  days_held: number
+  entry_price: number
+  entry_source: TrackerEntrySource | null
+  sell_price: number
+  quantity: number | null
+  invested: number | null
+  return_pct: number | null
+  profit_amount: number | null
+  result: 'win' | 'loss' | 'flat' | null
+}
+
 export interface WatchTracker {
   as_of: string | null
   horizon_days: number

@@ -142,3 +142,36 @@ def build_item(
         "closes": [{"date": d.isoformat(), "close": c} for d, c in after],
         "state": state(ret, days, s_first, s_today),
     }
+
+
+def sale_record(
+    *,
+    symbol: str,
+    name: str | None,
+    bought_on: date,
+    entry_price: float,
+    entry_source: str,
+    quantity: float | None,
+    sell_price: float,
+    sold_on: date,
+) -> dict:
+    """One row of "Sold records": the realized result of a sale. Pure maths, no database."""
+    ret = return_pct(entry_price, sell_price)
+    invested = invested_amount(entry_price, quantity)
+    profit = profit_amount(entry_price, sell_price, quantity)
+    return {
+        "symbol": symbol,
+        "name": name,
+        "bought_on": bought_on.isoformat(),
+        "sold_on": sold_on.isoformat(),
+        # Day 1 is the day it was bought, as on the open tracker.
+        "days_held": trading_days_between(bought_on, sold_on) + 1 if sold_on >= bought_on else 1,
+        "entry_price": entry_price,
+        "entry_source": entry_source,
+        "sell_price": sell_price,
+        "quantity": quantity,
+        "invested": invested,
+        "return_pct": ret,
+        "profit_amount": profit,
+        "result": None if ret is None else ("win" if ret > 0 else "loss" if ret < 0 else "flat"),
+    }

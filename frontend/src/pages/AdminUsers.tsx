@@ -83,7 +83,7 @@ export function planText(u: Pick<AdminUserRow, 'stored_plan' | 'effective_plan' 
   return 'Free'
 }
 
-function SecondStep({ onToken }: { onToken: (token: string) => void }) {
+export function SecondStep({ onToken }: { onToken: (token: string) => void }) {
   const [code, setCode] = useState('')
   const [useRecovery, setUseRecovery] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -129,7 +129,7 @@ function SecondStep({ onToken }: { onToken: (token: string) => void }) {
   )
 }
 
-function Enrol({ onDone }: { onDone: (token: string) => void }) {
+export function Enrol({ onDone }: { onDone: (token: string) => void }) {
   const [setup, setSetup] = useState<{ secret: string; otpauth_uri: string } | null>(null)
   const [code, setCode] = useState('')
   const [error, setError] = useState<string | null>(null)

@@ -219,4 +219,5 @@ def test_migration_chains_from_billing01_and_head_is_single():
     cfg.set_main_option("script_location", str(root / "alembic"))
     script = ScriptDirectory.from_config(cfg)
     assert script.get_revision("servicekeys01").down_revision == "billing01"
-    assert script.get_heads() == ["servicekeys01"]
+    # acctdelete01 later joins servicekeys01 and adminmfa01, so it is the single head now.
+    assert script.get_heads() == ["acctdelete01"]

@@ -80,7 +80,7 @@ SIGNED_IN_ONLY_ROUTES: dict[tuple[str, str], str] = {
 }
 
 #: Dependencies that mean "the handler is checked as the owner itself".
-OWNER_SELF_CHECKS = {"require_owner", "require_owner_signed_in"}
+OWNER_SELF_CHECKS = {"require_owner", "require_owner_signed_in", "require_admin_user", "require_admin_mfa"}
 
 
 def _contexts():

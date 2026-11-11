@@ -7,9 +7,9 @@ surfaces added later - it is deliberately not attached to any existing route.
 Where each switch applies today:
   open_signup       -> settings.ALLOW_SIGNUP (existing, enforced in auth.py)
   customer_screens  -> NEW; apply with Depends(require_release("customer_screens"))
-  model_promotion   -> NEW; to be applied to POST /ml/models/{id}/activate and the
-                       `--activate` training flag once the owner approves touching them
-                       (not applied yet: existing path, left unchanged)
+  model_promotion   -> enforced at POST /ml/models/{id}/activate, POST /ml/train with
+                       auto_activate, and `swingtrade train --activate` (see
+                       `promotion_refusal`). Training itself is never blocked.
   real_orders       -> settings.ALLOW_REAL_HOLDINGS_ORDERS (existing, My Holdings
                        orders); live trading is separately latched by ALLOW_LIVE_TRADING
 """
@@ -89,6 +89,17 @@ def switch_states() -> list[dict]:
         }
         for s in SWITCHES
     ]
+
+
+PROMOTION_OFF_MESSAGE = (
+    "Promoting a model to live use is switched off. Training still works and the model is saved, "
+    "but it cannot become the active model until the owner turns on ALLOW_MODEL_PROMOTION."
+)
+
+
+def promotion_refusal() -> str | None:
+    """Plain-English refusal while model promotion is off, else None."""
+    return None if is_enabled("model_promotion") else PROMOTION_OFF_MESSAGE
 
 
 def require_release(key: str) -> Callable[[], None]:

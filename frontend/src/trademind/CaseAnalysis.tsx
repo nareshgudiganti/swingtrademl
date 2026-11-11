@@ -5,7 +5,7 @@
 
 import type { BrainDecision, BrainRun } from '../api/types'
 import type { StockBriefData } from './beginner/types'
-import { finalWord } from './live'
+import { shownWord } from './live'
 import { rankText, scorePoints, scoreRank, SCORE_HINT } from './scoreText'
 import { SCORE_VS_PLAN } from './scoreVsPlan'
 import { buyLevel, wordSay } from './stockParts'
@@ -81,7 +81,7 @@ export function CaseAnalysis({
   brief?: StockBriefData
 }) {
   if (d.kind !== 'idea') return null
-  const word = finalWord(d)
+  const word = shownWord(d)
   const f = caseFigures(d, run)
   const mode = run.banner.mode
   const events = brief?.q5_events.events ?? []

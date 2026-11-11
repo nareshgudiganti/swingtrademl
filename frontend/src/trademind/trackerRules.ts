@@ -2,7 +2,7 @@
 // "what to do" sentence. The status of each stock (stop / target / time / weak / ok) comes from the server and is
 // never recomputed here. Every number can be null: show a dash, never NaN.
 
-import type { TrackerState, WatchTrackerItem } from '../api/types'
+import type { SoldRecord, TrackerState, WatchTrackerItem } from '../api/types'
 
 export const STOP_PCT = -4
 export const HALF_PCT = 5
@@ -285,4 +285,37 @@ export function portfolioSummary(items: readonly WatchTrackerItem[]): PortfolioS
     dayReturnPct: yesterday > 0 ? (dayReturn / yesterday) * 100 : null,
     counted,
   }
+}
+
+export interface SoldSummary {
+  /** Money put into the stocks that were sold (only those with shares entered). */
+  invested: number
+  /** Money gained or lost on them, rupees and as a % of what was put in. */
+  profit: number
+  profitPct: number | null
+  /** Sales with a known result: how many made money out of how many. */
+  wins: number
+  decided: number
+  /** Sales left out of the rupee totals because no shares were entered. */
+  withoutShares: number
+}
+
+/** Totals for the Sold records strip. Rupee totals count only sales with shares entered; never guessed. */
+export function soldSummary(items: readonly SoldRecord[]): SoldSummary {
+  let invested = 0
+  let profit = 0
+  let wins = 0
+  let decided = 0
+  let withoutShares = 0
+  for (const i of items) {
+    if (i.result) {
+      decided += 1
+      if (i.result === 'win') wins += 1
+    }
+    if (isNum(i.invested) && isNum(i.profit_amount)) {
+      invested += i.invested
+      profit += i.profit_amount
+    } else withoutShares += 1
+  }
+  return { invested, profit, profitPct: invested > 0 ? (profit / invested) * 100 : null, wins, decided, withoutShares }
 }

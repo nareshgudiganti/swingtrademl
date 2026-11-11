@@ -55,6 +55,9 @@ class Settings(BaseSettings):
     # The shared X-API-Key still works while this is true. Turn it off (false) once every script
     # uses its own scoped key (POST /admin/service-keys); then the shared key is refused outright.
     LEGACY_API_KEY_ENABLED: bool = True
+    # Privileged legacy admin routes (plan changes, grants, invite decisions, service keys, reset emails)
+    # also need the admin two-step code. OFF until the owner has set up two-step sign-in.
+    ADMIN_MFA_ENFORCED: bool = False
     JWT_SECRET_KEY: str = "change-me"
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_MINUTES: int = 720

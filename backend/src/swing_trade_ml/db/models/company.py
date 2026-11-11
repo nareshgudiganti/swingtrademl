@@ -19,8 +19,8 @@ class CompanyAnnouncement(Base, TimestampMixin):
     """One corporate announcement. `seq_id` is the exchange's own id, so reloading is a no-op;
     `created_at` is when we collected it."""
 
-    __tablename__ = "company_announcements"
-    __table_args__ = (UniqueConstraint("source", "seq_id", name="uq_company_announcement"),)
+    __tablename__ = "company_filing_announcements"
+    __table_args__ = (UniqueConstraint("source", "seq_id", name="uq_company_filing_announcement"),)
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     symbol: Mapped[str] = mapped_column(String(64), index=True)
@@ -36,8 +36,8 @@ class CompanyShareholding(Base, TimestampMixin):
     """Who owns the company at a quarter end (promoters against everyone else), as filed on
     `filed_on`. Only a filing that adds up to 100% is stored."""
 
-    __tablename__ = "company_shareholdings"
-    __table_args__ = (UniqueConstraint("symbol", "source", "as_of", name="uq_company_shareholding"),)
+    __tablename__ = "company_filing_shareholdings"
+    __table_args__ = (UniqueConstraint("symbol", "source", "as_of", name="uq_company_filing_shareholding"),)
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     symbol: Mapped[str] = mapped_column(String(64), index=True)

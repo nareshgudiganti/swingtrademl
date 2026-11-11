@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { portfolioSummary } from './trackerRules'
-import type { WatchTrackerItem } from '../api/types'
+import { portfolioSummary, soldSummary } from './trackerRules'
+import type { SoldRecord, WatchTrackerItem } from '../api/types'
 
 const item = (o: Partial<WatchTrackerItem>) => o as WatchTrackerItem
 
@@ -19,5 +19,20 @@ describe('portfolioSummary', () => {
   })
   it('is null when nothing has shares and a price paid', () => {
     expect(portfolioSummary([item({ invested: null, profit_amount: null })])).toBeNull()
+  })
+})
+
+describe('soldSummary', () => {
+  const sale = (o: Partial<SoldRecord>) => o as SoldRecord
+  it('adds up realized profit, counts wins, and leaves out sales without shares from the rupee totals', () => {
+    const s = soldSummary([
+      sale({ invested: 1000, profit_amount: 80, result: 'win' }),
+      sale({ invested: 1000, profit_amount: -60, result: 'loss' }),
+      sale({ invested: null, profit_amount: null, result: 'win' }),
+    ])
+    expect(s.invested).toBe(2000)
+    expect(s.profit).toBe(20)
+    expect(s.profitPct).toBeCloseTo(1)
+    expect([s.wins, s.decided, s.withoutShares]).toEqual([2, 3, 1])
   })
 })

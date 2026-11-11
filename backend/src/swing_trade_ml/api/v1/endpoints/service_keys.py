@@ -8,6 +8,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
+from swing_trade_ml.api.admin_step_up import StepUp
 from swing_trade_ml.api.deps import DbSession, Principal, actor_name, require_owner
 from swing_trade_ml.services import audit, service_keys
 
@@ -85,7 +86,7 @@ def list_keys(db: DbSession) -> dict:
     }
 
 
-@admin.post("", status_code=status.HTTP_201_CREATED)
+@admin.post("", status_code=status.HTTP_201_CREATED, dependencies=[StepUp])
 def create(
     body: KeyCreate, db: DbSession, request: Request, principal: Principal = Depends(_owner_person)
 ) -> dict:
@@ -110,7 +111,7 @@ def create(
     return {"key": raw, "shown_once": True, "item": _out(row)}
 
 
-@admin.post("/{key_id}/rotate", status_code=status.HTTP_201_CREATED)
+@admin.post("/{key_id}/rotate", status_code=status.HTTP_201_CREATED, dependencies=[StepUp])
 def rotate(
     key_id: int,
     body: KeyRotate,
@@ -138,7 +139,7 @@ def rotate(
     return {"key": raw, "shown_once": True, "item": _out(new), "old": _out(old)}
 
 
-@admin.post("/{key_id}/revoke")
+@admin.post("/{key_id}/revoke", dependencies=[StepUp])
 def revoke(
     key_id: int, db: DbSession, request: Request, principal: Principal = Depends(_owner_person)
 ) -> dict:

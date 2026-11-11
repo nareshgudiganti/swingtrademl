@@ -26,7 +26,7 @@ from swing_trade_ml.db.base import utcnow
 from swing_trade_ml.db.models.market import Candle, Instrument
 from swing_trade_ml.db.models.session import User
 from swing_trade_ml.db.models.trading import StockScore
-from swing_trade_ml.db.models.user_watchlist import UserWatchlistItem
+from swing_trade_ml.db.models.user_watchlist import UserWatchlistItem, UserWatchlistSale
 from swing_trade_ml.services import score_history
 from swing_trade_ml.services import watchlist_tracker as tracker
 
@@ -76,6 +76,12 @@ class WatchlistPatch(BaseModel):
     #: IST calendar date the person bought it. Null or omitted leaves the date as it is.
     bought_on: date | None = None
     note: str | None = Field(default=None, max_length=200)
+
+
+class SoldBody(BaseModel):
+    sell_price: float = Field(gt=0)
+    #: IST calendar date it was sold. Omitted means today.
+    sold_on: date | None = None
 
 
 class InstrumentHit(BaseModel):
@@ -302,3 +308,83 @@ def my_tracker(db: DbSession, me: Me) -> dict:
         "horizon_days": tracker.HORIZON_DAYS,
         "items": items,
     }
+
+
+def _sale_out(db: DbSession, sales: list[UserWatchlistSale]) -> list[dict]:
+    names = _names(db, [s.symbol for s in sales])
+    return [
+        tracker.sale_record(
+            symbol=s.symbol,
+            name=names.get(s.symbol),
+            bought_on=s.bought_on,
+            entry_price=s.entry_price,
+            entry_source=s.entry_source,
+            quantity=s.quantity,
+            sell_price=s.sell_price,
+            sold_on=s.sold_on,
+        )
+        for s in sales
+    ]
+
+
+@router.post("/{symbol}/sold")
+def mark_sold(symbol: str, body: SoldBody, db: DbSession, me: Me) -> dict:
+    """Record that you sold this stock in Groww: it leaves the tracker and its result is kept under
+    "Sold records". Nothing is sold by the app. The entry price is your Groww price, or the close on
+    the day you added it."""
+    sym = _clean(symbol)
+    item = _mine(db, me, sym)
+    if item is None or item.removed_at is not None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"{sym} is not on your list.")
+    today = tracker.today_ist()
+    bought_on = tracker.ist_date(item.added_at)
+    sold_on = body.sold_on or today
+    if sold_on > today:
+        raise HTTPException(422, "The sell date cannot be in the future.")
+    if sold_on < bought_on:
+        raise HTTPException(422, "The sell date cannot be before the buy date.")
+    entry, source = item.buy_price, "your_price" if item.buy_price and item.buy_price > 0 else None
+    if source is None:
+        iid = db.execute(
+            select(Instrument.id).where(Instrument.exchange == EXCHANGE, Instrument.tradingsymbol == sym)
+        ).scalar_one_or_none()
+        since_ts = datetime.combine(bought_on, datetime.min.time(), tzinfo=tracker.IST)
+        closes = [
+            (tracker.ist_date(ts), close)
+            for ts, close in db.execute(
+                select(Candle.ts, Candle.close)
+                .where(Candle.instrument_id == iid, Candle.interval == "day", Candle.ts >= since_ts)
+                .order_by(Candle.ts)
+            ).all()
+        ]
+        entry, source, _ = tracker.pick_entry(bought_on, None, closes)
+    if entry is None or source is None:
+        raise HTTPException(422, "Add the price you paid first, so the result can be worked out.")
+    sale = UserWatchlistSale(
+        user_id=me.id,
+        symbol=sym,
+        bought_on=bought_on,
+        entry_price=float(entry),
+        entry_source=source,
+        quantity=item.quantity,
+        sell_price=body.sell_price,
+        sold_on=sold_on,
+    )
+    db.add(sale)
+    item.removed_at = utcnow()
+    db.commit()
+    db.refresh(sale)
+    return _sale_out(db, [sale])[0]
+
+
+@router.get("/sold")
+def my_sold(db: DbSession, me: Me) -> dict:
+    """Sold records, newest sale first. Display only."""
+    sales = list(
+        db.execute(
+            select(UserWatchlistSale)
+            .where(UserWatchlistSale.user_id == me.id)
+            .order_by(UserWatchlistSale.sold_on.desc(), UserWatchlistSale.id.desc())
+        ).scalars()
+    )
+    return {"items": _sale_out(db, sales)}

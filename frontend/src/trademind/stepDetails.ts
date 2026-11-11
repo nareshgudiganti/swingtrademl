@@ -3,7 +3,7 @@
 // (no room, no size, no limit): a customer decides how much to invest himself.
 
 import type { BrainDecision, BrainRun } from '../api/types'
-import { finalWord, stockSituations } from './live'
+import { shownWord, stockSituations } from './live'
 import { rankText, scorePoints, scoreRank } from './scoreText'
 import { MARKET_PLAIN } from './vocab'
 
@@ -42,7 +42,7 @@ export function stepDetail(d: BrainDecision, run: BrainRun, n: number): StepDeta
   const sym = d.symbol
   const bullets: Bullet[] = []
   const links: StepLink[] = []
-  const word = finalWord(d)
+  const word = shownWord(d)
   const scores = run.decisions.filter((x) => x.kind === 'idea').map((x) => x.confidence)
   const rank = d.kind === 'idea' ? scoreRank(d.confidence, scores) : null
   const pts = scorePoints(d.confidence)

@@ -9,7 +9,7 @@
 //   * the score is a ranking, never a chance of profit; step 8 (learning) only happens after an idea ends.
 
 import type { BrainDecision, BrainRun } from '../api/types'
-import { finalWord, stockSituations } from './live'
+import { finalWord, shownWord, stockSituations } from './live'
 import { SCORE_VS_PLAN_SHORT } from './scoreVsPlan'
 import { rankText, scorePoints, scoreRank } from './scoreText'
 import { MARKET_LABEL, MARKET_PLAIN } from './vocab'
@@ -84,7 +84,7 @@ export function brainSteps(d: BrainDecision, run: BrainRun, owner = true): Brain
   const stop = stopOf(d, owner)
   const stopAt = stop?.step ?? 99
   const after = (n: number) => n > stopAt
-  const word = finalWord(d)
+  const word = owner ? finalWord(d) : shownWord(d)
   const steps: BrainStep[] = []
   const push = (n: number, line: string, state: StepState, tag: string) =>
     steps.push({ n, title: STEP_TITLES[n - 1]!, line, state, tag })

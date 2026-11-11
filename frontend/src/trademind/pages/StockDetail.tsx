@@ -6,7 +6,7 @@ import { api } from '../../api/client'
 import type { BrainDecision } from '../../api/types'
 import type { Action } from '../types'
 import { barsFrom } from '../live-stock'
-import { finalWord, stockSituations, useBrainStatus, useLatestRun, useWhy } from '../live'
+import { finalWord, shownWord, stockSituations, useBrainStatus, useLatestRun, useWhy } from '../live'
 import { wordClassName, wordTone } from '../vocab'
 import { Term, TermIf, WordTag } from '../term'
 import ScoreTrail from '../ScoreTrail'
@@ -254,9 +254,9 @@ function StockDetailBody() {
           </span>
         )}
         {decision.kind === 'idea' ? (
-          <ActionPill action={finalWord(decision) as Action} />
+          <ActionPill action={shownWord(decision) as Action} />
         ) : (
-          <WordTag word={finalWord(decision)} />
+          <WordTag word={shownWord(decision)} />
         )}
         {decision.confidence != null && (
           <Term k="model_score">
@@ -276,7 +276,7 @@ function StockDetailBody() {
             <Card glow title="TradeMind Decision">
               {decision.reasons.length > 0 ? (
                 decision.reasons.map((r, i) => (
-                  <CheckItem key={i} tone={wordTone(finalWord(decision))}>
+                  <CheckItem key={i} tone={wordTone(shownWord(decision))}>
                     {withoutScorePercent(r)}
                   </CheckItem>
                 ))
@@ -409,7 +409,7 @@ function StockDetailBody() {
           <Card glow title="Why the brain decided this">
             {decision.reasons.length > 0 ? (
               decision.reasons.map((r, i) => (
-                <CheckItem key={i} tone={wordTone(finalWord(decision))}>
+                <CheckItem key={i} tone={wordTone(shownWord(decision))}>
                   {withoutScorePercent(r)}
                 </CheckItem>
               ))
@@ -421,8 +421,8 @@ function StockDetailBody() {
           <Card title="In plain words">
             <p style={{ marginTop: 0 }}>
               TradeMind {decision.kind === 'idea' ? 'suggests' : 'currently has'}{' '}
-              <strong className={wordClassName(finalWord(decision))}>
-                <TermIf k={finalWord(decision)}>{finalWord(decision)}</TermIf>
+              <strong className={wordClassName(shownWord(decision))}>
+                <TermIf k={shownWord(decision)}>{shownWord(decision)}</TermIf>
               </strong>{' '}
               for {symbol}
               {decision.confidence != null && (

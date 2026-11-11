@@ -127,6 +127,11 @@ function StockAnalysisView({ decision: d, run }: { decision: BrainDecision; run:
           <span className="sp-answer-word">{wordLabel(word)}</span>
           <span className="sp-answer-text">{answer}</span>
         </div>
+        {canManage && d.stock_verdict_restored && !d.overruled_word && (
+          <span className="sp-small" data-testid="room-note">
+            The stock passed every check. The practice account had no room for it, so it did not buy.
+          </span>
+        )}
         <span className="sp-small">Brain’s run on {formatDateTime(run.started_at)}</span>
       </section>
 

@@ -3,7 +3,9 @@ import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { ApiError, api, clearToken, getToken, setPreviewPlan, setToken, takeLoginCodeFromRedirect } from './api/client'
+import DeletionLink from './auth/DeletionLinks'
 import PublicSite from './auth/PublicSite'
+import { deletionLinkKind } from './lib/deletionRules'
 import { Loading } from './components/Loading'
 import Dashboard from './pages/Dashboard'
 import Finance from './pages/Finance'
@@ -247,6 +249,9 @@ export default function App() {
   )
 
   if (exchanging) return <div style={{ padding: '2rem' }}>Signing you in…</div>
+
+  // The account-deletion email links work signed in or out (confirming signs the person out everywhere).
+  if (deletionLinkKind(location.pathname)) return <DeletionLink />
 
   if (!hasToken) {
     return <PublicSite initialError={loginError} />

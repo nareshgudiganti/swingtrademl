@@ -73,6 +73,8 @@ export const SECTIONS: Section[] = [
       { to: '/trademind/observatory', label: 'Observatory' },
       { to: '/trademind/jobs', label: 'Jobs' },
       { to: '/trademind/invites', label: 'Invites' },
+      // The admin console: people, Free/Pro, gifts, change log. Asks for a two-step code; the server enforces it.
+      { to: '/trademind/people', label: 'People' },
       { to: '/trademind/plans', label: 'Plans' },
     ],
   },

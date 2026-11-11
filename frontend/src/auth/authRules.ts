@@ -10,12 +10,22 @@ export type AuthOptions = {
   google?: boolean
 }
 
-export type PublicView = 'landing' | 'signin' | 'invite' | 'signup'
+export type PublicView =
+  | 'landing'
+  | 'signin'
+  | 'invite'
+  | 'signup'
+  | 'verify'
+  | 'forgot'
+  | 'reset'
 
 export const PUBLIC_PATHS: Record<Exclude<PublicView, 'landing'>, string> = {
   signin: '/signin',
   invite: '/invite',
   signup: '/signup',
+  verify: '/verify-email',
+  forgot: '/forgot-password',
+  reset: '/reset-password',
 }
 
 /**
@@ -27,6 +37,9 @@ export function viewFor(pathname: string, hasError = false): PublicView {
   const path = pathname.replace(/\/+$/, '') || '/'
   if (path === PUBLIC_PATHS.invite) return 'invite'
   if (path === PUBLIC_PATHS.signup) return 'signup'
+  if (path === PUBLIC_PATHS.verify) return 'verify'
+  if (path === PUBLIC_PATHS.forgot) return 'forgot'
+  if (path === PUBLIC_PATHS.reset) return 'reset'
   if (hasError) return 'signin'
   if (path === '/') return 'landing'
   return 'signin'
@@ -44,6 +57,40 @@ export function readInviteLink(search: string): { code: string; email: string } 
   const code = (params.get('invite') ?? '').trim()
   if (!code) return null
   return { code, email: (params.get('email') ?? '').trim().toLowerCase() }
+}
+
+/** The password rule in plain words (server: 15 or more characters, no symbol rules, not a very common one). */
+export const PASSWORD_MIN = 15
+export const PASSWORD_HINT = `Please use a password of at least ${PASSWORD_MIN} characters. A few random words with spaces works well.`
+export const PASSWORD_PLACEHOLDER = `At least ${PASSWORD_MIN} characters`
+
+/** The first problem with a new password, or null. The server has the final say (it also refuses very common ones). */
+export function passwordProblem(password: string): string | null {
+  if (!password) return 'Please choose a password.'
+  if (password.length < PASSWORD_MIN) return PASSWORD_HINT
+  if (password.length > 256) return 'Please keep your password under 256 characters.'
+  return null
+}
+
+/** The link in the email: /verify-email?token=... or /reset-password?token=... Null when there is no token. */
+export function readEmailToken(search: string): string | null {
+  const token = (new URLSearchParams(search).get('token') ?? '').trim()
+  return token || null
+}
+
+export type RegisterForm = { name: string; email: string; mobile: string; password: string }
+
+/** The first problem with the open sign-up form, in plain words; null when it can be sent. */
+export function registerFormProblem(f: RegisterForm): string | null {
+  const name = f.name.trim()
+  if (!name) return 'Please tell us your name.'
+  if (name.length > 80) return 'Please keep your name under 80 letters.'
+  if (!isValidEmail(f.email)) return 'Please enter a valid email address.'
+  const mobile = f.mobile.trim()
+  if (mobile && !/^\+?[0-9][0-9 -]{5,18}$/.test(mobile)) {
+    return 'Please enter a mobile number with digits only, or leave it empty.'
+  }
+  return passwordProblem(f.password)
 }
 
 const EMAIL_RE = /^[^@\s]{1,64}@[^@\s]+\.[^@\s.]{2,}$/
@@ -95,7 +142,7 @@ export function friendlyError(message: string, status?: number): string {
       const first = Array.isArray(items) ? items[0] : undefined
       if (first?.msg) {
         const msg = first.msg.replace(/^Value error, /, '')
-        if (/at least 8/.test(msg)) return 'Please use a password of at least 8 characters.'
+        if (/at least 15/.test(msg) || /at least 8/.test(msg)) return PASSWORD_HINT
         if (/at least 3/.test(msg)) return 'Please use a username of at least 3 characters.'
         return msg.endsWith('.') ? msg : `${msg}.`
       }

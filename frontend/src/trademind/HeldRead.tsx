@@ -5,6 +5,7 @@
 import { useState } from 'react'
 
 import type { DetailedPosition, Trade } from '../api/types'
+import StockLink from './StockLink'
 import { Tag } from './ui'
 
 export type Suggestion = NonNullable<DetailedPosition['suggestion']>
@@ -101,7 +102,7 @@ export function SellList({ trades, book, title = 'Sells' }: { trades: Trade[]; b
       <ul style={{ margin: '0.3rem 0 0', paddingLeft: '1.1rem' }}>
         {shown.map((t) => (
           <li key={t.id}>
-            <strong>{t.symbol}</strong> · <Tag tone={typeOf(t) === 'Partial SELL completed' ? 'blue' : 'green'}>{typeOf(t)}</Tag>{' '}
+            <StockLink symbol={t.symbol} withScore={false} /> · <Tag tone={typeOf(t) === 'Partial SELL completed' ? 'blue' : 'green'}>{typeOf(t)}</Tag>{' '}
             ({t.book_label ?? book}) · {reasonOf(t)} · {t.exit_at.slice(0, 10)}
           </li>
         ))}

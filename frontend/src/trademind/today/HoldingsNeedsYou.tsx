@@ -12,6 +12,7 @@ import type { BrainDecision, BrainRun } from '../../api/types'
 import { withoutScorePercent } from '../scoreText'
 import { finalWord, holdingsFrom } from '../live'
 import { PageState } from '../PageState'
+import StockLink from '../StockLink'
 import { WordTag } from '../term'
 import { Card, Tag } from '../ui'
 
@@ -43,7 +44,7 @@ export function HoldingsNeedsYou({ run }: { run: BrainRun | undefined }) {
                 onClick={() => navigate(`/trademind/stock/${encodeURIComponent(d.symbol)}`)}
               >
                 <span className="tm-flex" style={{ gap: '0.55rem' }}>
-                  <span className="tm-strong">{d.symbol}</span>
+                  <StockLink symbol={d.symbol} withScore={false} />
                   <span className="tm-dim">{d.reasons[0] ? withoutScorePercent(d.reasons[0]) : ''}</span>
                 </span>
                 <WordTag word={finalWord(d)} />

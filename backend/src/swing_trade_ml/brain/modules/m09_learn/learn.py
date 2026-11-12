@@ -59,33 +59,55 @@ def _scored_rows(db: Session, since: date | None) -> pd.DataFrame:
     """One row per scored idea decision (`scoring.score_pending` already
     restricted these to live nightly runs — see its docstring), with the
     extra `market`/`sector` columns `failures.failure_patterns` needs."""
+    # Speed (the page-load timeout on /brain/learning, 2026-11-05): read only the columns used, and the
+    # run's big `context` JSON once per run (not once per idea), and look each sector up once per stock.
+    # The rows produced are exactly the same as before.
     stmt = (
-        select(BrainDecision, BrainRun.started_at, BrainRun.as_of, BrainRun.context)
+        select(
+            BrainDecision.run_id,
+            BrainDecision.symbol,
+            BrainDecision.word,
+            BrainDecision.confidence,
+            BrainDecision.score_source,
+            BrainDecision.outcome,
+            BrainDecision.outcome_return,
+            BrainRun.started_at,
+            BrainRun.as_of,
+        )
         .join(BrainRun, BrainRun.id == BrainDecision.run_id)
         # Superseded runs are hidden from Performance (owner decision
         # 2026-10-04); they stay stored for history.
         .where(BrainDecision.outcome.in_(SCORED_OUTCOMES), BrainRun.status == "done")
     )
-    records = []
     if since is not None:
         # decision day = the run's as_of read in IST, so its first instant is
         # IST midnight of `since`.
         stmt = stmt.where(BrainRun.as_of >= datetime.combine(since, time(0, 0), tzinfo=IST))
-    for decision, started_at, as_of, context in db.execute(stmt).all():
-        decision_day = as_of.astimezone(IST).date()
+    found = db.execute(stmt).all()
+    run_ids = {r.run_id for r in found}
+    market_by_run: dict = {}
+    if run_ids:
+        contexts = select(BrainRun.id, BrainRun.context).where(BrainRun.id.in_(run_ids))
+        for run_id, context in db.execute(contexts).all():
+            market_by_run[run_id] = _market_label(context)
+    sector_by_symbol: dict[str, str] = {}
+    records = []
+    for r in found:
+        if r.symbol not in sector_by_symbol:
+            sector_by_symbol[r.symbol] = get_sector_bucket(r.symbol)
         records.append(
             {
-                "run_id": decision.run_id,
-                "run_started": started_at,
-                "decision_day": decision_day,
-                "symbol": decision.symbol,
-                "word": decision.word,
-                "confidence": decision.confidence,
-                "score_source": decision.score_source,
-                "outcome": decision.outcome,
-                "ret": decision.outcome_return,
-                "market": _market_label(context),
-                "sector": get_sector_bucket(decision.symbol),
+                "run_id": r.run_id,
+                "run_started": r.started_at,
+                "decision_day": r.as_of.astimezone(IST).date(),
+                "symbol": r.symbol,
+                "word": r.word,
+                "confidence": r.confidence,
+                "score_source": r.score_source,
+                "outcome": r.outcome,
+                "ret": r.outcome_return,
+                "market": market_by_run.get(r.run_id),
+                "sector": sector_by_symbol[r.symbol],
             }
         )
     return pd.DataFrame(records, columns=list(_ROW_COLUMNS))

@@ -163,7 +163,9 @@ describe('Evidence (new look)', () => {
     expect(html).toContain('Results are sealed until 7 Nov 2026')
     expect(html).toContain('no profit and no win rate')
     expect(html).toContain('Stocks checked tonight')
-    expect(html).toContain('Locked')
+    // The empty "Daily scorecard" placeholder is hidden: it showed only dashes.
+    expect(html).not.toContain('data-testid="scorecard"')
+    expect(html).not.toContain('Daily scorecard')
     expect(html).toContain('data-testid="road-to-real"')
     expect(html).not.toContain('data-testid="finished-count"')
     expect(html).not.toContain('Observatory (owner only)')

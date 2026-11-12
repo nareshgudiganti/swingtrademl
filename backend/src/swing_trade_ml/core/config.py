@@ -52,12 +52,33 @@ class Settings(BaseSettings):
     REAL_ACCOUNT_USERS: str = "sudeeksha"
 
     API_KEY: str = "change-me"
+    # The shared X-API-Key still works while this is true. Turn it off (false) once every script
+    # uses its own scoped key (POST /admin/service-keys); then the shared key is refused outright.
+    LEGACY_API_KEY_ENABLED: bool = True
+    # Privileged legacy admin routes (plan changes, grants, invite decisions, service keys, reset emails)
+    # also need the admin two-step code. OFF until the owner has set up two-step sign-in.
+    ADMIN_MFA_ENFORCED: bool = False
     JWT_SECRET_KEY: str = "change-me"
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_MINUTES: int = 720
 
     # Self-registration. Off by default; invitations replace it (release C). Turn on in .env only for local development.
     ALLOW_SIGNUP: bool = False
+
+    # Release switches (core/release_switches.py). Both OFF: they only gate NEW surfaces.
+    # Customer screens visible to non-owner customers.
+    ALLOW_CUSTOMER_SCREENS: bool = False
+    # A trained model may be promoted to live use.
+    ALLOW_MODEL_PROMOTION: bool = False
+
+    # Email (Resend). "log" = nothing leaves the machine (dev/test); "resend" = real email.
+    # Verification is only enforced at sign-in when REQUIRE_EMAIL_VERIFICATION is on (off: every
+    # existing member signs in as before). See docs/EMAIL-SETUP.md.
+    EMAIL_PROVIDER: str = "log"
+    RESEND_API_KEY: str = ""
+    EMAIL_FROM: str = ""
+    APP_BASE_URL: str = ""
+    REQUIRE_EMAIL_VERIFICATION: bool = False
 
     # Google "Sign in with Google" — from console.cloud.google.com, an OAuth
     # 2.0 Client ID (type: Web application) with this exact redirect URI added.
@@ -202,6 +223,27 @@ class Settings(BaseSettings):
     # records decisions. Off by default so production is unchanged until the
     # owner turns it on; set BRAIN_ENABLED=true locally to schedule its runs.
     BRAIN_ENABLED: bool = False
+    # Customer account deletion (request, confirm by email, grace period, anonymise). OFF by default: while
+    # off, request/confirm answer 404 and the daily job does nothing. Cancelling a scheduled deletion always works.
+    ACCOUNT_DELETION_ENABLED: bool = False
+    ACCOUNT_DELETION_GRACE_DAYS: int = 14
+    # Pro subscription billing (sandbox only for now). BILLING_ENABLED is the master switch for the
+    # billing ROUTES (off = 404). It never affects plan resolution: existing grants and entitled
+    # subscriptions are always honoured. BILLING_ACCEPT_NEW_CHECKOUTS only gates POST /billing/checkout.
+    BILLING_ENABLED: bool = False
+    BILLING_ACCEPT_NEW_CHECKOUTS: bool = False
+    # HARD GUARD: with this False any Razorpay key id not starting with rzp_test_ is refused.
+    # Nothing sets it True; live billing stays off through 2026.
+    ALLOW_LIVE_BILLING: bool = False
+    BILLING_PROVIDER: str = "fake"  # "fake" (no network) | "razorpay"
+    RAZORPAY_KEY_ID: str = ""
+    RAZORPAY_KEY_SECRET: str = ""
+    RAZORPAY_WEBHOOK_SECRET: str = ""
+    RAZORPAY_PLAN_ID_PRO_MONTHLY: str = ""
+    # PLACEHOLDER price in paise (49900 = Rs 499). The owner sets the real price.
+    PRO_PRICE_MONTHLY_PAISE: int = 49900
+    # Days Pro continues past the paid-through date while a renewal is retried (Razorpay: ~3-4 days).
+    BILLING_GRACE_DAYS: int = 4
     # Daily shadow-testing lanes (10-day, 15-day). Off by default; the job is not wired into the scheduler yet.
     LANE_SHADOW_ENABLED: bool = False
     # Owner-chosen model per lane slot, JSON like {"10d-large": 123}. Never auto-picked.

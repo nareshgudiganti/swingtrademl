@@ -62,17 +62,17 @@ function SignInCard() {
             <input type="password" value={current} onChange={(e) => setCurrent(e.target.value)} />
           </label>
           <label>
-            <div className="stat-label">New password (8 or more characters)</div>
+            <div className="stat-label">New password (15 or more characters; a few random words with spaces works well)</div>
             <input
               type="password"
               value={next}
-              minLength={8}
+              minLength={15}
               onChange={(e) => setNext(e.target.value)}
             />
           </label>
           <button
             className="primary"
-            disabled={change.isPending || next.length < 8}
+            disabled={change.isPending || next.length < 15}
             onClick={() => change.mutate()}
           >
             Change password

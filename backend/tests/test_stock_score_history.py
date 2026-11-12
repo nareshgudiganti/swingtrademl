@@ -74,3 +74,56 @@ def test_api_empty_trail_for_unscored_stock(client, db_session):
     _stock(db_session, "TRAILNONE")
     body = client.get("/api/v1/ml/score-trail/TRAILNONE", headers=HEADERS).json()
     assert body["score_trail"] == [] and body["score_band"] is None
+
+
+def test_two_models_the_same_day_keep_separate_rows(db_session):
+    inst = _stock(db_session, "TRAILTWO")
+    day = date(2026, 10, 4)
+    score_history.record_stock_scores(
+        db_session,
+        [(inst.id, 0.80, "swing_classifier:v2"), (inst.id, 0.30, "swing_classifier_midcap:v1")],
+        EXIT,
+        today=day,
+    )
+    db_session.commit()
+    count = db_session.execute(
+        select(func.count()).select_from(StockScore).where(StockScore.instrument_id == inst.id)
+    ).scalar_one()
+    assert count == 2
+
+
+def test_trail_is_one_models_line_not_a_mix(db_session):
+    inst = _stock(db_session, "TRAILMIX")
+    for d, base, mid in ((1, 0.80, 0.30), (2, 0.78, 0.35), (3, 0.76, 0.90)):
+        score_history.record_stock_scores(
+            db_session,
+            [(inst.id, base, "swing_classifier:v2"), (inst.id, mid, "swing_classifier_midcap:v1")],
+            EXIT,
+            today=date(2026, 10, d),
+        )
+    db_session.commit()
+    trail = score_history.stock_trail(db_session, inst.id)
+    assert len({t["model_version"] for t in trail}) == 1
+    assert [t["date"] for t in trail] == ["2026-10-01", "2026-10-02", "2026-10-03"]
+    # Same newest day: the name that sorts first wins, every time.
+    assert [t["score"] for t in trail] == [0.80, 0.78, 0.76]
+
+
+def test_long_term_value_never_reaches_the_trail(db_session):
+    inst = _stock(db_session, "TRAILLTV")
+    day = date(2026, 10, 5)
+    ltv = [(inst.id, 0.95, "long_term_value:v1")]
+    written = score_history.record_stock_scores(db_session, ltv, EXIT, today=day)
+    db_session.commit()
+    assert written == 0
+    assert score_history.stock_trail(db_session, inst.id) == []
+
+
+def test_new_version_of_same_model_replaces_not_duplicates(db_session):
+    inst = _stock(db_session, "TRAILVER")
+    day = date(2026, 10, 6)
+    score_history.record_stock_scores(db_session, [(inst.id, 0.7, "swing_classifier:v1")], EXIT, today=day)
+    score_history.record_stock_scores(db_session, [(inst.id, 0.6, "swing_classifier:v2")], EXIT, today=day)
+    db_session.commit()
+    trail = score_history.stock_trail(db_session, inst.id)
+    assert len(trail) == 1 and trail[0]["model_version"] == "swing_classifier:v2"

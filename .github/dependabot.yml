@@ -12,6 +12,12 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    # Major versions are held back (tracker ss7): on 25 Oct five major bumps (eslint 10, vite 8, TypeScript 7,
+    # recharts 3) were merged together and broke 'npm install' in CI. Minor and patch updates still arrive weekly;
+    # a major upgrade is done by hand, on purpose, after checking that the packages work together.
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
     schedule:

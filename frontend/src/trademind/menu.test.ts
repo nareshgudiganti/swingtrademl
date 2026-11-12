@@ -27,6 +27,7 @@ const EXPECTED: Record<string, string> = {
   '/trademind/jobs': 'admin',
   '/trademind/alerts': 'admin',
   '/trademind/plans': 'admin',
+  '/trademind/people': 'admin',
   '/trademind/invites': 'admin',
 }
 const PARAM_ROUTES: Record<string, string> = {
@@ -81,7 +82,7 @@ describe('where every existing page lives', () => {
     concrete.push('/trademind')
     expect(concrete.length).toBeGreaterThan(15) // the route table was actually read
     // New look only (owner): the classic menu has no Shadow Test; in the classic look the route goes back to Today.
-    const newLookOnly = ['/trademind/shadow-test']
+    const newLookOnly = ['/trademind/shadow-test', '/trademind/groww-tracker']
     const orphans = concrete.filter((p) => findSection(p) === undefined && !newLookOnly.includes(p))
     expect(orphans).toEqual([])
   })
@@ -258,5 +259,20 @@ describe('oa7: the old "Brain Logs" section is broken up', () => {
     for (const r of ['index element={<Today ', 'path="dashboard" element={<Today ', 'path="ai" element', 'path="ai/:symbol" element', 'path="observatory" element']) {
       expect(appSource).toContain(r)
     }
+  })
+})
+
+describe('the admin console is an Admin page for the owner only', () => {
+  it('sits in Admin under the name "People"', () => {
+    expect(ADMIN_SECTION.pages).toContainEqual({ to: '/trademind/people', label: 'People' })
+  })
+
+  it('is hidden from a non-owner', () => {
+    const shown = visibleSections(false).flatMap((s) => visiblePages(s, false).map((p) => p.to))
+    expect(shown).not.toContain('/trademind/people')
+  })
+
+  it('is behind the owner check on direct navigation (a non-owner is sent back to Today)', () => {
+    expect(appSource).toMatch(/<Route path="people" element=\{ownerConsole \? <div className="tm-page"><AdminUsers \/><\/div> : <Navigate to="\/trademind" replace \/>\} \/>/)
   })
 })

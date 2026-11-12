@@ -15,7 +15,7 @@ from swing_trade_ml.db.models.market import Candle, Instrument
 from swing_trade_ml.db.models.trading import Position, Signal, Strategy, Trade
 from swing_trade_ml.schemas import SignalOut
 from swing_trade_ml.services import trial_seal
-from swing_trade_ml.services.plans import history_cutoff, strategy_visible
+from swing_trade_ml.services.plans import history_cutoff, owner_private_strategy_ids, strategy_visible
 from swing_trade_ml.strategies.brain import BLOCKED_BY_RISK_KEY
 from swing_trade_ml.strategies.tier import cap_tier
 
@@ -326,7 +326,7 @@ def top_picks(
 
 
 @router.get("/buy-list", response_model=list[dict])
-def buy_list(db: DbSession) -> list[dict]:
+def buy_list(db: DbSession, access: PlanAccessDep) -> list[dict]:
     """Every symbol that is a fresh, still-current BUY right now — nothing else.
 
     Answers "the Signals page shows a BUY row for this stock, but is that
@@ -338,6 +338,9 @@ def buy_list(db: DbSession) -> list[dict]:
     dismissal needed for that case, since a stale row is structurally
     impossible here. Already-held symbols are excluded — this list is only
     for fresh entries, not stocks already bought (that's the Portfolio page).
+    Plan members see every member-facing strategy (model, brain, rules) but
+    never the owner's private books (`owner_private_strategy_ids`: real
+    holdings and manual paper testing), whatever those strategies are named.
     """
     latest_signal = (
         select(Signal)
@@ -352,7 +355,7 @@ def buy_list(db: DbSession) -> list[dict]:
     )
 
     stmt = (
-        select(LatestSignal, Instrument.tradingsymbol, Instrument.name, Strategy.name)
+        select(LatestSignal, Instrument.tradingsymbol, Instrument.name, Strategy)
         .join(Instrument, Instrument.id == LatestSignal.instrument_id)
         .join(Strategy, Strategy.id == LatestSignal.strategy_id)
         .where(
@@ -362,12 +365,13 @@ def buy_list(db: DbSession) -> list[dict]:
         .order_by(LatestSignal.confidence.desc().nullslast())
     )
     rows = db.execute(stmt).all()
+    private_ids = set() if access.unrestricted else owner_private_strategy_ids(db)
 
     return [
         {
             "symbol": symbol,
             "name": name,
-            "strategy_name": strategy_name,
+            "strategy_name": strategy.name,
             "price": sig.price,
             "confidence": sig.confidence,
             "stop_loss": sig.stop_loss,
@@ -375,8 +379,8 @@ def buy_list(db: DbSession) -> list[dict]:
             "reason": sig.reason,
             "generated_at": sig.generated_at,
         }
-        for sig, symbol, name, strategy_name in rows
-        if not _practice_evidence(sig)
+        for sig, symbol, name, strategy in rows
+        if not _practice_evidence(sig) and strategy.id not in private_ids
     ]
 
 

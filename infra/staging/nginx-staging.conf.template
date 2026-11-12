@@ -1,0 +1,74 @@
+# Host nginx for STAGING. Copy to /etc/nginx/sites-available/staging on the STAGING droplet only.
+#
+#   sed -e 's|__OWNER_IP__|203.0.113.7|' infra/staging/nginx-staging.conf.template \
+#     | sudo tee /etc/nginx/sites-available/staging >/dev/null     # use YOUR ip, not the example
+#   sudo ln -s /etc/nginx/sites-available/staging /etc/nginx/sites-enabled/staging
+#   sudo nginx -t && sudo systemctl reload nginx
+#   sudo certbot --nginx -d staging.swingtrademl.com     # adds the 443 block + http->https redirect
+#
+# This file is plain port 80 on purpose: certbot copies these rules into the TLS server block it
+# creates. Add more testers' IPs with more "allow x.x.x.x;" lines (here and in the allowlist block).
+#
+# Access rules
+#   Everything: only the allowed IPs (deny all otherwise).
+#   Public on purpose: the Razorpay webhook (protected by its signature check; confirm the exact path
+#   in docs/BILLING-SANDBOX.md on branch change/billing-razorpay-sandbox) and /api/v1/health.
+# Why an IP allowlist and not password (basic) auth: the app sends its own login token in the
+# Authorization header on every /api/ call, and that replaces the basic-auth header, so basic auth
+# would lock the app out of its own API. Basic auth could cover only the page shell, leaving the API
+# open; not recommended.
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name staging.swingtrademl.com;
+
+    allow __OWNER_IP__;
+    deny all;
+
+    # Never indexed: the X-Robots-Tag header below is sent on every response.
+    add_header X-Robots-Tag "noindex, nofollow" always;
+
+    client_max_body_size 5m;
+
+    # The two public routes forward the NORMALISED path ($uri), the same path nginx matched on, so a
+    # request like "//api/v1/billing/webhook" cannot reach the app under a different spelling.
+    # Razorpay (test mode) calls this from its own servers. Public, signature-verified by the app.
+    # CONFIRM the path against docs/BILLING-SANDBOX.md before relying on it.
+    location = /api/v1/billing/webhook {
+        allow all;
+        add_header X-Robots-Tag "noindex, nofollow" always;
+        proxy_pass http://127.0.0.1:8100$uri$is_args$args;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Uptime / deploy check.
+    location = /api/v1/health {
+        allow all;
+        add_header X-Robots-Tag "noindex, nofollow" always;
+        proxy_pass http://127.0.0.1:8100$uri$is_args$args;
+        proxy_set_header Host $host;
+    }
+
+    # The API (allowlist inherited from the server block).
+    location /api/ {
+        add_header X-Robots-Tag "noindex, nofollow" always;
+        proxy_pass http://127.0.0.1:8100;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 120s;
+    }
+
+    # The web app (static build in the frontend container).
+    location / {
+        add_header X-Robots-Tag "noindex, nofollow" always;
+        proxy_pass http://127.0.0.1:8180;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}

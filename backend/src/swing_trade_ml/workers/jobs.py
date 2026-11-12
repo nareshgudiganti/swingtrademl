@@ -155,6 +155,25 @@ def job_kite_auto_login() -> None:
         _report_error("kite_auto_login", exc)
 
 
+def job_process_account_deletions() -> None:
+    """Daily: finish confirmed account deletions whose waiting period has ended
+    (services/account_deletion.py). Does nothing while ACCOUNT_DELETION_ENABLED is off. It only touches
+    the accounts of people who asked; never trading or market data."""
+    from swing_trade_ml.core.config import settings
+
+    if not settings.ACCOUNT_DELETION_ENABLED:
+        return
+    try:
+        from swing_trade_ml.services import account_deletion
+
+        with session_scope() as db:
+            result = account_deletion.process_due(db)
+        log.info("job.account_deletions", **result)
+    except Exception as exc:  # noqa: BLE001 - retried tomorrow; nothing else depends on this
+        log.error("job.account_deletions.failed", error=str(exc))
+        job_runs.note_failure(exc)
+
+
 def job_flush_alerts() -> None:
     """Send the informational Telegram messages held for quiet hours or the daily
     digest, once they are due (services/alert_settings.py, tracker ux3). Skips
@@ -493,6 +512,8 @@ def job_signal_scan() -> None:
             # score is taken here, after the scan. Display only, and it never raises. Kept
             # out of services/engine.py, which is frozen for the forward trial.
             held_read.score_tester_positions(db)
+            # Same for stocks followed in the Groww Tracker (they are not in any strategy's list).
+            held_read.score_tracked_stocks(db)
             log.info(
                 "job.scan.done",
                 strategies=result.strategies_run,

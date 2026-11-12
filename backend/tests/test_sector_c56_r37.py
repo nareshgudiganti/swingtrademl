@@ -115,7 +115,14 @@ def test_no_old_arm_name_is_left_in_code_manifests_or_new_evidence():
     for p in EVID.glob("*_v3*.json"):
         txt = p.read_text("utf-8")
         assert txt.count("C_57") == txt.count("renamed from C_57"), p
-    for p in (REPO / "docs/superpowers/specs").glob("2026-11-05-sx*"):
+    for p in (
+        REPO / "docs/superpowers/specs" / n
+        for n in (
+            "sx5-research-protocol-superseded.md",
+            "sx10-research-protocol-superseded.md",
+            "sx10-vs-tdv2-b1-differences.md",
+        )
+    ):
         txt = p.read_text("utf-8")
         assert txt.count("C_57") == txt.count("formerly C_57") + txt.count("renamed from C_57"), p
 

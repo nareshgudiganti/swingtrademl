@@ -152,6 +152,8 @@ describe('Discover: where the brain stopped each idea', () => {
     expect(html).toContain('data-testid="discover-table"')
     expect(html).toContain('Where it stopped')
     expect(html).not.toContain('Safety check')
+    expect(html).toContain('tmn-w2-tablebox-tall') // the list scrolls inside its own box, not the page
+    expect(html).not.toContain('data-testid="stock-rail"')
     expect(html).toContain('Passed')
     expect(html).toContain('AI analysis →')
     expect(html).toContain('href="/trademind/stock/GOODCO"')

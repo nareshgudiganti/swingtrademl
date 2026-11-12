@@ -7,6 +7,7 @@ SELL count, and buys come from the order log, so a position opened and closed in
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, date, datetime, timedelta
 
 from swing_trade_ml.db.models.market import Instrument
@@ -302,3 +303,113 @@ def test_an_empty_week_says_so_instead_of_showing_zeros_as_results():
     out = w.summarise_book([], [], [], START, END)
     assert out["data_status"] == "no buys or sells this week"
     assert out["realized_pnl"]["net"] == 0.0 and out["avg_sell_return_pct"] is None
+
+
+# --- the brain's reserved paper slot is sealed and never part of the Bot's numbers -----------------
+
+
+def _seed_week(db, day, with_brain=True):
+    inst = Instrument(
+        instrument_token=991_002, tradingsymbol="BRAINSYM", exchange="NSE", is_watchlisted=False
+    )
+    db.add(inst)
+    db.flush()
+    strats = [(_book(db, "wk_bot"), 45.0)]
+    if with_brain:
+        strats.append((_book(db, "TradeMind brain", "brain"), 777.0))
+    when = datetime.combine(day, datetime.min.time(), tzinfo=UTC).replace(hour=10)
+    for strat, net in strats:
+        pos = Position(
+            strategy_id=strat.id, instrument_id=inst.id, mode="paper", status="CLOSED", quantity=10,
+            entry_price=100.0, entry_at=when - timedelta(days=2),
+        )  # fmt: skip
+        db.add(pos)
+        db.flush()
+        for side, at in (("BUY", when - timedelta(days=2)), ("SELL", when)):
+            db.add(
+                Order(
+                    strategy_id=strat.id, position_id=pos.id, instrument_id=inst.id, mode="paper",
+                    transaction_type=side, quantity=10, status="COMPLETE", average_price=105.0, placed_at=at,
+                )
+            )  # fmt: skip
+        db.add(
+            Trade(
+                position_id=pos.id, strategy_id=strat.id, instrument_id=inst.id, mode="paper",
+                symbol="BRAINSYM", quantity=10, entry_price=100.0, exit_price=107.77,
+                entry_at=when - timedelta(days=2), exit_at=when, holding_days=2, gross_pnl=net + 5,
+                charges=5.0, net_pnl=net, return_pct=0.0777 if net == 777.0 else 0.05,
+                exit_reason="TARGET_HIT", is_win=True,
+            )
+        )  # fmt: skip
+        db.add(
+            Position(
+                strategy_id=strat.id, instrument_id=inst.id, mode="paper", status="OPEN", quantity=5,
+                entry_price=100.0, current_price=102.33 if net == 777.0 else 101.5, entry_at=when,
+            )
+        )  # fmt: skip
+    db.flush()
+
+
+def _window():
+    return w.window(datetime(2026, 11, 3, 5, 0, tzinfo=UTC))
+
+
+def test_brain_paper_trade_never_reaches_the_bot_numbers_or_the_message(db_session):
+    from test_trial_seal_leaks import _leaks
+
+    _seed_week(db_session, date(2026, 10, 30))
+    rep = w.build_report(db_session, datetime(2026, 11, 3, 5, 0, tzinfo=UTC))
+    bot = rep["bot"]
+    assert bot["realized_pnl"]["net"] == 45.0 and bot["buys"]["orders"] == 1
+    assert set(bot["buys"]["by_strategy"]) == {"wk_bot"}
+    assert set(bot["sells"]["by_strategy"]) == {"wk_bot"}
+    assert bot["positions"]["open"] == 1
+    assert all(e["strategy"] == "wk_bot" for e in bot["events"])
+    brain = rep["brain_paper"]
+    assert brain["sealed"] is True and brain["text"] == "sealed during the trial"
+    assert (brain["buys"], brain["sell_orders"], brain["open_positions"]) == (1, 1, 1)
+    assert brain["before_trial"] is None
+    text = json.dumps(rep, default=str)
+    brain_text = json.dumps(brain, default=str)
+    for bad in ("BRAINSYM", "TradeMind brain", "777", "102.33", "TARGET_HIT", "0.0777"):
+        assert bad not in brain_text
+    assert "777" not in text and "TradeMind brain" not in text and "102.33" not in text
+    assert _leaks(text) == []
+    msg = w.format_message(rep)
+    assert "777" not in msg and "brain" not in msg.lower()
+    assert _leaks(msg) == []
+
+
+def test_bot_and_testing_unchanged_without_a_brain_strategy(db_session):
+    _seed_week(db_session, date(2026, 10, 30), with_brain=False)
+    a = w.build_report(db_session, datetime(2026, 11, 3, 5, 0, tzinfo=UTC))
+    assert a["bot"]["realized_pnl"]["net"] == 45.0
+    bp = a["brain_paper"]
+    assert bp["buys"] == bp["sell_orders"] == bp["open_positions"] == 0
+    assert a["testing"]["buys"]["orders"] == 0
+
+
+def test_brain_rows_before_the_trial_start_keep_their_full_book_apart_from_the_bot(db_session):
+    _seed_week(db_session, date(2026, 10, 9))
+    start, end = date(2026, 10, 5), date(2026, 10, 11)
+    books = w.collect(db_session, start, end)
+    sec = w.brain_paper_section(books["brain_paper"], start, end)
+    assert sec["before_trial"]["realized_pnl"]["net"] == 777.0
+    assert sec["buys"] == 0 and sec["sell_orders"] == 0
+    assert w.summarise_book(**books["bot"], start=start, end=end)["realized_pnl"]["net"] == 45.0
+
+
+def test_seal_off_shows_the_brain_book_in_full_but_still_apart(db_session, monkeypatch):
+    from swing_trade_ml.services import trial_seal
+
+    monkeypatch.setattr(trial_seal, "SEALED", False)
+    _seed_week(db_session, date(2026, 10, 30))
+    rep = w.build_report(db_session, datetime(2026, 11, 3, 5, 0, tzinfo=UTC))
+    assert rep["brain_paper"]["sealed"] is False
+    assert rep["brain_paper"]["before_trial"]["realized_pnl"]["net"] == 777.0
+    assert rep["bot"]["realized_pnl"]["net"] == 45.0
+
+
+def test_is_brain_strategy_matches_by_name_and_type():
+    assert w.is_brain_strategy("TradeMind brain") and w.is_brain_strategy("x", "brain")
+    assert not w.is_brain_strategy("ml_swing_main", "ml_swing")

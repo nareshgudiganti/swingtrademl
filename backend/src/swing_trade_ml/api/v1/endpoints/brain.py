@@ -375,8 +375,20 @@ def what_if_trade(body: WhatIfIn, db: DbSession) -> dict:
 
 
 @router.get("/track/{symbol}")
-def holding_track(symbol: str, db: DbSession, book: str = Query("paper")) -> dict:
-    """An open trade day by day against the band of similar trades (M15)."""
+def holding_track(
+    symbol: str,
+    db: DbSession,
+    principal: Annotated[Principal, Depends(get_principal)],
+    book: str = Query("paper"),
+) -> dict:
+    """An open trade day by day against the band of similar trades (M15).
+
+    Plan members (Pro) read the brain's own paper book only. Any other book,
+    the owner's real Zerodha holdings included, is for a signed-in owner only.
+    The shared API key is paper-only here: nothing in the repo calls this route
+    with it for another book."""
+    if book != "paper" and (principal.via_api_key or not principal.is_owner):
+        raise HTTPException(403, "This is a private account. You don't have access.")
     from swing_trade_ml.brain.modules.m15_tracker.store import track_rows
 
     symbol = symbol.strip().upper()

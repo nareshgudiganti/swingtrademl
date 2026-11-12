@@ -97,3 +97,26 @@ def _brain_on_for_brain_tests(request, monkeypatch):
         from swing_trade_ml.core.config import settings
 
         monkeypatch.setattr(settings, "BRAIN_ENABLED", True)
+
+
+@pytest.fixture(autouse=True)
+def _trial_seal_on_for_tests(monkeypatch):
+    """Production has the blind-trial seal switched OFF (owner's decision, 2026-11-11). The seal logic is
+    still guarded: tests run with it ON so the leak tests keep proving that, when it is on, nothing leaks.
+    A test of the unsealed behaviour patches trial_seal.SEALED back to False."""
+    from swing_trade_ml.services import trial_seal
+
+    monkeypatch.setattr(trial_seal, "SEALED", True)
+
+
+@pytest.fixture(autouse=True)
+def _billing_on_for_route_audits(request, monkeypatch):
+    """Billing routes answer 404 while BILLING_ENABLED is false (the default). The route-by-route
+    permission audits must see them, so they run with billing on; they never reach a provider."""
+    audits = ("test_permissions_review", "test_p0_role_matrix", "test_p0_tester_private")
+    if request.module.__name__ in audits:
+        from swing_trade_ml.core.config import settings
+
+        monkeypatch.setattr(settings, "BILLING_ENABLED", True)
+        monkeypatch.setattr(settings, "ACCOUNT_DELETION_ENABLED", True)
+        monkeypatch.setattr(settings, "BILLING_ACCEPT_NEW_CHECKOUTS", True)  # checkout is audited too

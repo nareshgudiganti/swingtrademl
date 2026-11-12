@@ -20,6 +20,7 @@ import TopBarAlerts from './TopBarAlerts'
 import RealOrdersBadge from './RealOrdersBadge'
 import { Tour } from './Tour'
 import Today from './pages/Today'
+import Account from './Account'
 import NewLookShell from './NewLookShell'
 import { useLook, type Look } from './look'
 import Market from './pages/Market'
@@ -39,6 +40,7 @@ import StockNew from './pages/StockNew'
 import DiscoverNew from './pages/DiscoverNew'
 import PortfolioNew from './pages/PortfolioNew'
 import WatchlistNew from './pages/WatchlistNew'
+import GrowwTracker from './pages/GrowwTracker'
 import Portfolio from './pages/Portfolio'
 import Positions from './pages/Positions'
 import AIDecision from './pages/AIDecision'
@@ -54,6 +56,7 @@ import Observatory from './pages/Observatory'
 import Invites from './pages/Invites'
 import Jobs from './pages/Jobs'
 import Alerts from './pages/Alerts'
+import AdminUsers from '../pages/AdminUsers'
 import PlansManager from '../pages/PlansManager'
 import { bookOf } from './books'
 import StockSearch from './beginner/StockSearch'
@@ -223,12 +226,17 @@ function ClassicShell({ ownerConsole }: { ownerConsole: boolean }) {
                 <Icon.User />
               </button>
               {/* The Admin pages, then Log out (moved off the bar for the owner, so the bar stays on one line). */}
-              {menuOpen && <AccountMenuList pages={ADMIN_SECTION.pages} onNewLook={() => setLook('new')} />}
+              {menuOpen && (
+                <AccountMenuList
+                  pages={[{ to: '/trademind/account', label: 'Account and plan' }, ...ADMIN_SECTION.pages]}
+                  onNewLook={() => setLook('new')}
+                />
+              )}
             </div>
           ) : (
-            <span className="tm-avatar" title="TradeMind Pro">
+            <Link to="/trademind/account" className="tm-avatar" title="Your account and plan">
               <Icon.User />
-            </span>
+            </Link>
           )}
           {/* The owner switches look from the account menu (the bar is full); everyone else from the bar. */}
           {!ownerConsole && (
@@ -316,6 +324,8 @@ export function TradeMindRoutes({
           path="watchlist"
           element={look === 'new' ? <WatchlistNew /> : ownerConsole ? <Watchlist /> : <Navigate to="/trademind/opportunities" replace />}
         />
+        {/* Groww Tracker: everyone's own followed stocks (/me/watchlist/tracker); same page in both looks. */}
+        <Route path="groww-tracker" element={<GrowwTracker />} />
         {/* Stock Compare: price changes side by side. Owner only, like the Company tab it sits beside. */}
         <Route path="compare" element={ownerConsole ? <Compare /> : <Navigate to="/trademind/opportunities" replace />} />
         <Route path="stock/:symbol" element={look === 'new' ? <StockNew /> : <StockDetail />} />
@@ -351,6 +361,7 @@ export function TradeMindRoutes({
             )
           }
         />
+        <Route path="account" element={<Account />} />
         <Route path="manual-test" element={<ManualTestRoute ownerConsole={ownerConsole} />} />
         <Route path="ai" element={<AIDecision />} />
         <Route path="ai/:symbol" element={<AIDecision />} />
@@ -370,6 +381,7 @@ export function TradeMindRoutes({
         <Route path="invites" element={ownerConsole ? <Invites /> : <Navigate to="/trademind" replace />} />
         <Route path="alerts" element={ownerConsole ? <Alerts /> : <Navigate to="/trademind" replace />} />
         {/* Admin > Plans: the existing Plans manager, unchanged (it keeps its own owner check too). */}
+        <Route path="people" element={ownerConsole ? <div className="tm-page"><AdminUsers /></div> : <Navigate to="/trademind" replace />} />
         <Route path="plans" element={ownerConsole ? <div className="tm-page"><PlansManager /></div> : <Navigate to="/trademind" replace />} />
         <Route path="*" element={<Navigate to="/trademind" replace />} />
       </Route>

@@ -1,0 +1,82 @@
+name: Deploy to staging
+
+# MANUAL ONLY. No push, pull_request or schedule trigger exists here, on purpose: a push to main
+# deploys PRODUCTION through deploy.yml, and this file must never be able to do that.
+# Pick the branch in "Use workflow from" (the tip of that branch is what gets tested and deployed).
+# Needs the GitHub Environment "staging" with its own secrets (docs/STAGING-SETUP.md section 12).
+on:
+  workflow_dispatch:
+    inputs:
+      run_tests:
+        description: "Run the full test suite first (recommended)"
+        type: boolean
+        default: true
+
+concurrency:
+  group: staging-deployment
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    if: ${{ inputs.run_tests }}
+    uses: ./.github/workflows/test.yml
+
+  deploy:
+    needs: validate
+    # validate is skipped when run_tests is off; still deploy in that case, but never after a failure.
+    if: ${{ !cancelled() && (needs.validate.result == 'success' || needs.validate.result == 'skipped') }}
+    # Separate environment with its own secrets. The production environment's secrets are not
+    # readable from here.
+    environment: staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Refuse anything that could be production
+        env:
+          STAGING_HOST: ${{ secrets.STAGING_HOST }}
+          PRODUCTION_HOST: ${{ vars.PRODUCTION_HOST }}
+        run: |
+          host=$(printf '%s' "$STAGING_HOST" | tr 'A-Z' 'a-z')
+          if [ -z "$host" ]; then echo "::error::STAGING_HOST is not set in the staging environment."; exit 1; fi
+          if [ -n "$PRODUCTION_HOST" ] && [ "$host" = "$(printf '%s' "$PRODUCTION_HOST" | tr 'A-Z' 'a-z')" ]; then
+            echo "::error::STAGING_HOST equals the production host. Refusing."; exit 1
+          fi
+          case "$host" in
+            swingtrademl.com|www.swingtrademl.com|*.swingtrademl.com)
+              if [ "$host" != "staging.swingtrademl.com" ]; then
+                echo "::error::STAGING_HOST points at a production name. Refusing."; exit 1
+              fi ;;
+          esac
+          echo "Target host looks like staging."
+
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.5
+        env:
+          RELEASE_SHA: ${{ github.sha }}
+        with:
+          host: ${{ secrets.STAGING_HOST }}
+          username: ${{ secrets.STAGING_USER }}
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          envs: RELEASE_SHA
+          command_timeout: 30m
+          script_stop: true
+          script: |
+            set -eu
+            cd /root/app-staging
+            git fetch origin "$RELEASE_SHA"
+            git checkout --detach "$RELEASE_SHA"
+            bash infra/staging/release-staging.sh "$RELEASE_SHA"
+
+      - name: Check from outside (read-only)
+        env:
+          STAGING_URL: ${{ secrets.STAGING_URL }}
+        run: |
+          # Behind the IP allowlist only /api/v1/health and the webhook path are public (see
+          # infra/staging/nginx-staging.conf.template), so health is what a runner can see.
+          if [ -z "$STAGING_URL" ]; then echo "::warning::No STAGING_URL secret; outside check skipped."; exit 0; fi
+          code=$(curl -s -o /dev/null -w '%{http_code}' -m 20 "$STAGING_URL/api/v1/health" || true)
+          echo "staging /api/v1/health -> $code"
+          test "$code" = 200

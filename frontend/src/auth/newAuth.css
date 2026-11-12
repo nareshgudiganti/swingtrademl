@@ -145,6 +145,13 @@
   width: 100%;
   font-size: 16px;
 }
+/* The button that starts something hard to undo (account deletion): red, not the friendly green. */
+.na .na-go.na-danger {
+  background: #b91c1c;
+}
+.na .na-go.na-danger:hover:not(:disabled) {
+  background: #991b1b;
+}
 .na .na-wide {
   width: 100%;
 }
@@ -660,4 +667,15 @@
 .na-body a {
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+.na-link {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
 }

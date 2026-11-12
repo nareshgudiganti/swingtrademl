@@ -5,7 +5,7 @@
 
 import { ADMIN_SECTION, matches, type Page } from './menu'
 
-export type NavId = 'today' | 'discover' | 'portfolio' | 'shadow' | 'watchlist' | 'market' | 'evidence' | 'history' | 'admin'
+export type NavId = 'today' | 'discover' | 'portfolio' | 'shadow' | 'watchlist' | 'tracker' | 'market' | 'evidence' | 'history' | 'admin'
 export type NavItem = {
   id: NavId
   label: string
@@ -34,6 +34,9 @@ export const NAV: NavItem[] = [
   { id: 'shadow', label: 'Shadow Test', pages: [{ to: '/trademind/shadow-test', label: 'Shadow Test' }], ownerOnly: true },
   // Wave 2: everyone's own list (/me/watchlist), so the item is no longer owner-only.
   { id: 'watchlist', label: 'Watchlist', pages: [{ to: '/trademind/watchlist', label: 'My Watchlist' }] },
+  // Groww Tracker: stocks bought in Groww, followed like open positions. Everyone has one (their own list). Each
+  // browser can hide this item (trackerTab.ts); the page still opens by URL.
+  { id: 'tracker', label: 'Groww Tracker', pages: [{ to: '/trademind/groww-tracker', label: 'Groww Tracker' }] },
   { id: 'market', label: 'Market', pages: [{ to: '/trademind/market', label: 'Market' }] },
   {
     id: 'evidence',
@@ -53,13 +56,15 @@ function holds(item: NavItem, path: string): boolean {
 }
 
 /** The items this viewer sees. */
-export function visibleNav(owner: boolean): NavItem[] {
-  return NAV.filter((n) => owner || !n.ownerOnly)
+export function visibleNav(owner: boolean, opts: { trackerOn?: boolean } = {}): NavItem[] {
+  const trackerOn = opts.trackerOn ?? true
+  return NAV.filter((n) => (owner || !n.ownerOnly) && (trackerOn || n.id !== 'tracker'))
 }
 
 /** The item to highlight for a path; Today when no visible item lists it. */
 export function activeNav(path: string, owner: boolean): NavItem {
-  return visibleNav(owner).find((n) => holds(n, path)) ?? NAV[0]!
+  // Looks through every item, so the hidden Groww Tracker page still highlights its own title when opened by URL.
+  return NAV.filter((n) => owner || !n.ownerOnly).find((n) => holds(n, path)) ?? NAV[0]!
 }
 
 /** The pages listed under an item for this viewer (same filters as the classic menu). */

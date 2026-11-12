@@ -204,7 +204,7 @@ function Row({ r, busy, onRemove, onAddBack }: { r: WatchRow; busy: boolean; onR
 }
 
 /** Search the NSE list by symbol or company name, then add. Says whether the brain checked the stock on its last run. */
-function AddStock({ run, onAdd, busy }: { run: BrainRun | undefined; onAdd: (symbol: string) => Promise<unknown>; busy: boolean }) {
+export function AddStock({ run, onAdd, busy }: { run: BrainRun | undefined; onAdd: (symbol: string) => Promise<unknown>; busy: boolean }) {
   const [text, setText] = useState('')
   const [q, setQ] = useState('')
   useEffect(() => {

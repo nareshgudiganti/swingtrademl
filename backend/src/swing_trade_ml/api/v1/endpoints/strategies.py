@@ -13,7 +13,12 @@ from swing_trade_ml.api.deps import DbSession
 from swing_trade_ml.brokers import get_broker
 from swing_trade_ml.core.enums import PositionStatus
 from swing_trade_ml.core.logging import get_logger
-from swing_trade_ml.core.strategy_policy import is_staged, requires_advisory, validate_execution_mode
+from swing_trade_ml.core.strategy_policy import (
+    creates_owner_private_strategy,
+    is_staged,
+    requires_advisory,
+    validate_execution_mode,
+)
 from swing_trade_ml.db.models.market import Instrument
 from swing_trade_ml.db.models.trading import Position, Signal, Strategy
 from swing_trade_ml.schemas import (
@@ -180,6 +185,11 @@ def create_strategy(payload: StrategyCreate, db: DbSession) -> Strategy:
 
     strategy = Strategy(
         **fields,
+        # Member-facing unless it is a hand book or a hand-recorded live book. An unknown
+        # type was already refused above, so only registered kinds reach here.
+        owner_private=creates_owner_private_strategy(
+            payload.name, payload.strategy_type, payload.execution_mode, resolved_mode
+        ),
         # Bound to the current mode at creation, so a strategy made during the
         # paper phase does not start trading the moment live mode is enabled.
         mode=resolved_mode,

@@ -215,3 +215,68 @@ def describe(
         "suggestion": code,
         "suggestion_reason": reason,
     }
+
+
+def score_tracked_stocks(db: Session) -> int:
+    """Store today's model score for every stock someone follows in the Groww Tracker.
+
+    Display only: it writes the same per-stock score trail the scan writes, never touches trading,
+    and never raises. Stocks the scan already scored are simply scored again by the same model
+    (same-day rows are replaced). A stock the model cannot read today is a gap, never a made-up
+    number. Uses the large-cap reference model, as the Testing scores do.
+    """
+    from swing_trade_ml.db.models.user_watchlist import UserWatchlistItem
+    from swing_trade_ml.ml.dataset import load_candles
+    from swing_trade_ml.services import score_history
+    from swing_trade_ml.services.exit_policy import exit_confidence_for
+    from swing_trade_ml.strategies import get_strategy
+
+    try:
+        instruments = list(
+            db.execute(
+                select(Instrument)
+                .where(
+                    Instrument.is_active.is_(True),
+                    Instrument.tradingsymbol.in_(
+                        select(UserWatchlistItem.symbol).where(UserWatchlistItem.removed_at.is_(None))
+                    ),
+                )
+            ).scalars()
+        )
+        if not instruments:
+            return 0
+        by_tier = _reference_strategies(db)
+        if not by_tier:
+            log.info("held_read.tracked_scores.no_model_strategy")
+            return 0
+    except Exception as exc:  # noqa: BLE001
+        log.warning("held_read.tracked_scores.failed", error=str(exc))
+        db.rollback()
+        return 0
+
+    strategy = by_tier.get("large") or next(iter(by_tier.values()))
+    impl = get_strategy(strategy)
+    scores: list[tuple[int, float, str | None]] = []
+    for instrument in instruments:
+        try:
+            df = load_candles(db, instrument.id, "day", limit=impl.min_bars_required() + 50)
+            if df.empty:
+                continue
+            decision = impl.evaluate(df, instrument, db)
+            features = (decision.features if decision else None) or {}
+            raw = features.get("probability")
+            if isinstance(raw, (int, float)):
+                model = features.get("model")
+                scores.append((instrument.id, float(raw), model if isinstance(model, str) else None))
+        except Exception as exc:  # noqa: BLE001 - one stock must not stop the rest
+            log.warning("held_read.tracked_score.failed", symbol=instrument.tradingsymbol, error=str(exc))
+    if not scores:
+        return 0
+    written = score_history.record_stock_scores(db, scores, exit_confidence_for(strategy))
+    try:
+        db.commit()
+    except Exception as exc:  # noqa: BLE001
+        log.warning("held_read.tracked_scores.commit_failed", error=str(exc))
+        db.rollback()
+        return 0
+    return written

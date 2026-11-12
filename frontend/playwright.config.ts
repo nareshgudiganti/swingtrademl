@@ -31,7 +31,8 @@ export default defineConfig({
     // normal dist/ is never overwritten.
     command: `npx vite build --outDir dist-e2e --emptyOutDir && npx vite preview --outDir dist-e2e --port ${PORT} --strictPort`,
     url: `http://localhost:${PORT}`,
-    env: { VITE_API_BASE_URL: '/api/v1' },
+    // The browser tests were written against the Classic look (hidden in the real app), so keep it on here.
+    env: { VITE_API_BASE_URL: '/api/v1', VITE_CLASSIC_LOOK: 'on' },
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,
   },

@@ -4,17 +4,22 @@
 // (see look.ts). On a phone the sidebar becomes a scrolling row at the top.
 
 import type { ReactNode } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Link, NavLink, useLocation } from 'react-router-dom'
 
 import './newlook.css'
+import './newlook-tracker.css'
 import { logOut } from './AccountMenu'
 import StockSearch from './beginner/StockSearch'
-import { useLook } from './look'
+import { api } from '../api/client'
+import { classicLookEnabled, useLook } from './look'
 import { splitLabel } from './menu'
 import { activeNav, navPages, visibleNav, type NavId } from './newMenu'
 import { OfflineBanner } from './PageState'
 import PricesBadge from './PricesBadge'
 import TopBarAlerts from './TopBarAlerts'
+import { needsActionCount } from './trackerRules'
+import { useTrackerTab } from './trackerTab'
 import { TradeMindRoutes, useShell } from './TradeMindApp'
 
 const svg = (children: ReactNode) => (
@@ -28,6 +33,7 @@ const NAV_ICON: Record<NavId, ReactNode> = {
   discover: svg(<><circle cx="11" cy="11" r="7" /><path d="M20 20l-4-4" /></>),
   portfolio: svg(<><rect x="3" y="7" width="18" height="13" rx="2" /><path d="M8 7V5h8v2" /></>),
   shadow: svg(<><circle cx="12" cy="12" r="3" /><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z" /></>),
+  tracker: svg(<><path d="M4 19V9" /><path d="M10 19V5" /><path d="M16 19v-7" /><path d="M22 19H2" /></>),
   watchlist: svg(<path d="M12 3l2.8 5.8 6.2.9-4.5 4.4 1 6.3L12 17.5 6.5 20.4l1-6.3L3 9.7l6.2-.9z" />),
   market: svg(<><path d="M3 17l6-6 4 4 8-8" /><path d="M15 7h6v6" /></>),
   evidence: svg(<><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z" /><path d="M9 12l2 2 4-4" /></>),
@@ -39,7 +45,11 @@ export default function NewLookShell({ ownerConsole }: { ownerConsole: boolean }
   const [, setLook] = useLook()
   const location = useLocation()
   const { canSeeRealAccount, manualTest, seesAll, book, broker, testingOn, showBook, paperButNotPaper, chip } = useShell(ownerConsole)
-  const items = visibleNav(ownerConsole)
+  const [trackerOn] = useTrackerTab()
+  const items = visibleNav(ownerConsole, { trackerOn })
+  // The badge on Groww Tracker: how many followed stocks need a look today. Shares the page's cached query.
+  const tracker = useQuery({ queryKey: ['myWatchlistTracker'], queryFn: api.myWatchlistTracker, enabled: trackerOn, retry: false, staleTime: 60_000 })
+  const trackerBadge = needsActionCount(tracker.data?.items)
   const active = activeNav(location.pathname, ownerConsole)
   const opts = { testingOn, realAccount: canSeeRealAccount, manualTest }
   const activePages = navPages(active, ownerConsole, opts)
@@ -63,6 +73,11 @@ export default function NewLookShell({ ownerConsole }: { ownerConsole: boolean }
                 <Link to={pages[0]!.to} className={`tmn-sec-link ${open ? 'active' : ''}`} data-testid={`nav-${item.id}`}>
                   {NAV_ICON[item.id]}
                   <span>{item.label}</span>
+                  {item.id === 'tracker' && trackerBadge > 0 && (
+                    <span className="tmn-badge" data-testid="tracker-badge" title="Stocks that need a look today">
+                      {trackerBadge}
+                    </span>
+                  )}
                 </Link>
                 {open && pages.length > 1 && (
                   <div className="tmn-pages" data-testid="subnav">
@@ -82,15 +97,20 @@ export default function NewLookShell({ ownerConsole }: { ownerConsole: boolean }
           })}
         </nav>
         <div className="tmn-side-foot">
-          <button
-            type="button"
-            className="tmn-switch"
-            onClick={() => setLook('classic')}
-            title="Go back to the classic dark look. Nothing else changes."
-            data-testid="look-switch"
-          >
-            {svg(<path d="M15 18l-6-6 6-6" />)} Classic look
-          </button>
+          {classicLookEnabled() && (
+            <button
+              type="button"
+              className="tmn-switch"
+              onClick={() => setLook('classic')}
+              title="Go back to the classic dark look. Nothing else changes."
+              data-testid="look-switch"
+            >
+              {svg(<path d="M15 18l-6-6 6-6" />)} Classic look
+            </button>
+          )}
+          <Link to="/trademind/account" className="tmn-switch" data-testid="account-link">
+            Account and plan
+          </Link>
           <button type="button" className="tmn-logout" onClick={logOut} title="Log out of this app">
             Log out
           </button>

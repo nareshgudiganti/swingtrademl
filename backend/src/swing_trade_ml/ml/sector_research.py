@@ -42,7 +42,7 @@ SECTOR_COLUMNS: tuple[str, ...] = (
 RESEARCH_COLUMNS: tuple[str, ...] = (*FEATURE_COLUMNS, *SECTOR_COLUMNS)
 CANDIDATE_HORIZON = {"SX5": 5, "SX10": 10}
 LABEL_KINDS = ("barrier", "endpoint")
-# The label each candidate is defined with in its DRAFT protocol (docs/superpowers/specs/2026-11-05-sx*-DRAFT.md):
+# The label each candidate is defined with in its DRAFT protocol (docs/superpowers/specs/sx*-research-protocol-superseded.md):
 # SX5 = brain/five_day_train.endpoint_target (close 5 bars later >= +2%); SX10 = td-protocol-v1 barrier label
 # (+6% before -3.5% within 10 bars; ten_day.TARGET / STOP / HORIZON_BARS). (label_kind, target, stop)
 PROTOCOL_LABELS: dict[str, tuple[str, float, float | None]] = {

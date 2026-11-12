@@ -26,7 +26,7 @@ def _owner_person(principal: Principal = Depends(require_owner)) -> Principal:
 
 class KeyCreate(BaseModel):
     name: str = Field(min_length=1, max_length=64)
-    scope: Literal["read_status", "read_all"]
+    scope: Literal["read_status", "read_ops", "read_all"]
     expires_in_days: int | None = Field(default=None, ge=1, le=730)
 
 
@@ -80,6 +80,7 @@ def list_keys(db: DbSession) -> dict:
         "keys": [_out(r) for r in service_keys.list_keys(db)],
         "scopes": {
             "read_status": "Health checks only: " + ", ".join(sorted(service_keys.READ_STATUS_PATHS)),
+            "read_ops": "The daily operations digest only: GET /ops/digest.",
             "read_all": "Read-only access to most screens. Never writes, the real account, or admin.",
         },
         "legacy_api_key_enabled": settings.LEGACY_API_KEY_ENABLED,

@@ -35,6 +35,7 @@ from swing_trade_ml.api.v1.endpoints import (
     mutual_funds,
     my_watchlist,
     notifications,
+    ops,
     orders,
     plans,
     portfolio,
@@ -114,6 +115,8 @@ api_router.include_router(model_registry.router, dependencies=protected)
 api_router.include_router(lane_picks.router, dependencies=protected)
 api_router.include_router(lanes.router, dependencies=protected)
 api_router.include_router(jobs.router, dependencies=protected)
+# Read-only daily digest: owner or a read_ops / read_all service key only (endpoints/ops.py).
+api_router.include_router(ops.router, dependencies=protected)
 api_router.include_router(server_watch.router, dependencies=protected)
 api_router.include_router(beginner.router, dependencies=protected)
 # Each person's own watchlist: require_auth opens these few routes to every signed-in person

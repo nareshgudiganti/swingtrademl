@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 from swing_trade_ml.db.models.service_keys import ServiceKey
 
 KEY_PREFIX = "stk_"
-SCOPES = ("read_status", "read_all")
+SCOPES = ("read_status", "read_ops", "read_all")
 #: Update last_used_at at most this often, so a busy checker does not write on every call.
 LAST_USED_EVERY = timedelta(minutes=10)
 
@@ -36,6 +36,9 @@ READ_STATUS_PATHS: frozenset[str] = frozenset(
         "/brain/daily-checks/latest",
     }
 )
+
+#: The daily operations digest (endpoints/ops.py): the ONLY route family a read_ops key may call.
+READ_OPS_PREFIX = "/ops"
 
 #: Areas no service key may read, even with read_all (the owner's money and settings).
 FORBIDDEN_PREFIXES: tuple[str, ...] = (
@@ -58,6 +61,8 @@ def scope_allows(scope: str, method: str, path: str) -> bool:
         return False
     if scope == "read_all":
         return True
+    if scope == "read_ops":
+        return path == READ_OPS_PREFIX or path.startswith(READ_OPS_PREFIX + "/")
     if scope == "read_status":
         return path in READ_STATUS_PATHS
     return False

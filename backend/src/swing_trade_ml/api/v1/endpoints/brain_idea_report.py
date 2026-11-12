@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from swing_trade_ml.api.deps import require_owner
+from swing_trade_ml.api.deps import Principal, get_principal, require_owner
 from swing_trade_ml.core.config import settings
 from swing_trade_ml.services import idea_report
 from swing_trade_ml.services.brain_observatory.db import get_readonly_db
@@ -37,6 +37,7 @@ router = APIRouter(
 @router.get("")
 def idea_report_route(
     db: ReadOnlyDb,
+    principal: Annotated[Principal, Depends(get_principal)],
     start: date | None = Query(None, alias="from"),
     end: date | None = Query(None, alias="to"),
     word: Annotated[list[str] | None, Query()] = None,
@@ -73,4 +74,5 @@ def idea_report_route(
         outcomes=outcome or [],
         current_only=current_only,
         mine_only=mine_only,
+        groww_users=idea_report.groww_user_ids(db, principal) if mine_only else (),
     )

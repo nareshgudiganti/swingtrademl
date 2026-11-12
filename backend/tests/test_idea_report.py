@@ -146,3 +146,63 @@ def test_only_symbols_keeps_just_the_stocks_we_hold_or_sold(unsealed):
     assert {x["symbol"] for x in r.apply_filters(rows)} == {"AAA", "BBB"}
     assert {x["symbol"] for x in r.apply_filters(rows, only_symbols={"AAA"})} == {"AAA"}
     assert r.apply_filters(rows, only_symbols=set()) == []  # nothing held or sold: nothing to show
+
+
+def _watch_user(db_session, name, role="owner"):
+    from swing_trade_ml.db.models.session import User
+
+    u = User(username=name, hashed_password="x", is_active=True, role=role, plan="free")
+    db_session.add(u)
+    db_session.flush()
+    return u
+
+
+def _groww_rows(db_session, user):
+    from datetime import UTC, datetime
+
+    from swing_trade_ml.db.models.user_watchlist import UserWatchlistItem, UserWatchlistSale
+
+    now = datetime.now(UTC)
+    db_session.add_all(
+        [
+            UserWatchlistItem(user_id=user.id, symbol="held1", buy_price=100.0),
+            UserWatchlistItem(user_id=user.id, symbol="WATCHONLY"),
+            UserWatchlistItem(user_id=user.id, symbol="GONE", buy_price=50.0, removed_at=now),
+        ]
+    )
+    db_session.add(
+        UserWatchlistSale(
+            user_id=user.id,
+            symbol="SOLD1",
+            bought_on=date(2026, 11, 1),
+            entry_price=10.0,
+            entry_source="your_price",
+            sell_price=12.0,
+            sold_on=date(2026, 11, 5),
+        )
+    )
+    db_session.flush()
+
+
+def test_held_or_sold_includes_groww_held_and_sold_only_for_given_users(db_session):
+    owner = _watch_user(db_session, "sudeeksha")
+    other = _watch_user(db_session, "someone", role="member")
+    _groww_rows(db_session, owner)
+    _groww_rows(db_session, other)
+    assert r.held_or_sold_symbols(db_session, "paper") == set()
+    got = r.held_or_sold_symbols(db_session, "paper", [owner.id])
+    assert got == {"HELD1", "SOLD1"}  # not watch-only, not removed-unsold
+
+
+def test_groww_user_ids_follow_the_real_account_privacy_rule(db_session):
+    from swing_trade_ml.api.deps import Principal
+
+    owner = _watch_user(db_session, "sudeeksha")
+    plain_owner = _watch_user(db_session, "otherowner")
+    member = _watch_user(db_session, "mem", role="member")
+
+    assert r.groww_user_ids(db_session, Principal(user=owner)) == [owner.id]
+    assert r.groww_user_ids(db_session, Principal(user=plain_owner)) == []
+    assert r.groww_user_ids(db_session, Principal(user=member)) == []
+    assert r.groww_user_ids(db_session, None) == []
+    assert r.groww_user_ids(db_session, Principal(user=None, via_api_key=True)) == [owner.id]

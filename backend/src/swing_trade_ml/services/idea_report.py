@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from swing_trade_ml.core.market_session import is_trading_day
 from swing_trade_ml.services import trial_seal
@@ -276,10 +276,34 @@ def load_observations(db, start: date, end: date, book: str) -> tuple[list[Obs],
     return obs, sorted(latest)
 
 
-def held_or_sold_symbols(db, mode: str) -> set[str]:
-    """Upper-case symbols of every position in this trading mode, open or closed (held now, or sold)."""
+def groww_user_ids(db, principal) -> list[int]:
+    """Whose Groww Tracker counts as "ours": only owner accounts named in REAL_ACCOUNT_USERS.
+
+    The tracker holds a person's own real shares, so it follows the same privacy rule as My Holdings.
+    A signed-in account counts only if it may see the real account; the shared API key (the owner's
+    scripts) counts every REAL_ACCOUNT_USERS owner. Anyone else gets an empty list.
+    """
+    from swing_trade_ml.core.config import settings
+    from swing_trade_ml.db.models.session import User
+
+    if principal is None or not principal.can_see_real_account:
+        return []
+    if principal.user is not None:
+        return [principal.user.id]
+    allowed = {n.strip().lower() for n in settings.REAL_ACCOUNT_USERS.split(",") if n.strip()}
+    if not allowed:
+        return []
+    rows = db.execute(select(User.id).where(User.role == "owner", func.lower(User.username).in_(allowed)))
+    return [int(i) for i in rows.scalars()]
+
+
+def held_or_sold_symbols(db, mode: str, groww_user_ids: Sequence[int] = ()) -> set[str]:
+    """Upper-case symbols we hold or sold: every position in this trading mode (open or closed),
+    plus, for the given users only, Groww Tracker stocks they hold (on the list with a buy price)
+    or sold (Sold records)."""
     from swing_trade_ml.db.models.market import Instrument
     from swing_trade_ml.db.models.trading import Position
+    from swing_trade_ml.db.models.user_watchlist import UserWatchlistItem, UserWatchlistSale
 
     rows = db.execute(
         select(Instrument.tradingsymbol)
@@ -287,7 +311,21 @@ def held_or_sold_symbols(db, mode: str) -> set[str]:
         .where(Position.mode == mode)
         .distinct()
     ).scalars()
-    return {str(sym).upper() for sym in rows}
+    out = {str(sym).upper() for sym in rows}
+    if groww_user_ids:
+        ids = list(groww_user_ids)
+        held = db.execute(
+            select(UserWatchlistItem.symbol).where(
+                UserWatchlistItem.user_id.in_(ids),
+                UserWatchlistItem.removed_at.is_(None),
+                UserWatchlistItem.buy_price.is_not(None),
+            )
+        ).scalars()
+        sold = db.execute(
+            select(UserWatchlistSale.symbol).where(UserWatchlistSale.user_id.in_(ids))
+        ).scalars()
+        out |= {str(sym).upper() for sym in held} | {str(sym).upper() for sym in sold}
+    return out
 
 
 def build(
@@ -303,6 +341,7 @@ def build(
     outcomes: Sequence[str] = (),
     current_only: bool = False,
     mine_only: bool = False,
+    groww_users: Sequence[int] = (),
 ) -> dict:
     obs, sessions = load_observations(db, start, end, book)
     all_rows = build_rows(obs, sessions)
@@ -314,7 +353,7 @@ def build(
         regimes=regimes,
         outcomes=outcomes,
         current_only=current_only,
-        only_symbols=held_or_sold_symbols(db, book) if mine_only else None,
+        only_symbols=held_or_sold_symbols(db, book, groww_users) if mine_only else None,
     )
     sealed_touched = any(r["sealed"] for r in all_rows)
     return {

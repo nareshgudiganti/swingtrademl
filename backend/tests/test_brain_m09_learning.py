@@ -1121,6 +1121,32 @@ def test_api_learning_report_shape_on_empty_db(client):
     assert body["failures"] == [] and body["drift"] == [] and body["drift_lines"] == []
 
 
+def test_api_learning_report_is_reused_until_scoring_changes(client, db_session, monkeypatch):
+    """The report took ~48 s to build on prod: it is built once, then reused while no idea is newly scored."""
+    from swing_trade_ml.api.v1.endpoints import brain as brain_api
+    from swing_trade_ml.services import trial_seal
+
+    brain_api._LEARNING_CACHE.clear()
+    calls = []
+    real = trial_seal.learning_report
+    def counting(db, since=None):
+        calls.append(1)
+        return real(db, since)
+
+    monkeypatch.setattr(trial_seal, "learning_report", counting)
+
+    first = client.get("/api/v1/brain/learning", headers=HEADERS).json()
+    second = client.get("/api/v1/brain/learning", headers=HEADERS).json()
+    assert first == second and len(calls) == 1
+
+    # A weekly learning run being stored changes the fingerprint, so the report is rebuilt.
+    learn_mod.run_learning(db_session)
+    db_session.commit()
+    client.get("/api/v1/brain/learning", headers=HEADERS)
+    assert len(calls) == 2
+    brain_api._LEARNING_CACHE.clear()
+
+
 def test_api_proposals_list_accept_reject_and_errors(client, db_session):
     # A module_mode proposal (not another buy_level one) so accepting
     # `proposal` below cannot sweep `other` up via F5's buy-level dismissal.

@@ -479,15 +479,52 @@ def why(
     }
 
 
+_LEARNING_CACHE: dict = {}
+_LEARNING_CACHE_SECONDS = 600
+
+
+def _learning_fingerprint(db) -> tuple:
+    """Changes whenever an idea is newly scored (or a weekly learning run is stored), so a saved report is
+    reused only while it is still exactly right. One cheap query, no row data."""
+    from sqlalchemy import func, select
+
+    from swing_trade_ml.brain.modules.m09_learn import store
+    from swing_trade_ml.brain.modules.m09_learn.scoring import SCORED_OUTCOMES
+
+    n, last_id, total = db.execute(
+        select(
+            func.count(BrainDecision.id),
+            func.max(BrainDecision.id),
+            func.sum(BrainDecision.outcome_return),
+        )
+        .join(BrainRun, BrainRun.id == BrainDecision.run_id)
+        .where(BrainDecision.outcome.in_(SCORED_OUTCOMES), BrainRun.status == "done")
+    ).one()
+    stored = store.latest_learning_run(db)
+    return (n, str(last_id), float(total) if total is not None else None, str(getattr(stored, "id", None)))
+
+
 @router.get("/learning")
 def learning(db: DbSession, since: date | None = Query(None)) -> dict:
     """The learning loop's report (M09): expected vs actual by confidence
     band, word and week, failure patterns and feature drift. Never changes
-    anything by itself."""
+    anything by itself.
+
+    Building it reads every scored idea (it took ~48 s on prod), so a finished report is kept for up to
+    10 minutes and reused while the fingerprint of the scored ideas is unchanged."""
+    import time
+
     from swing_trade_ml.services import trial_seal
 
+    key = (since, _learning_fingerprint(db))
+    hit = _LEARNING_CACHE.get(key)
+    if hit and time.monotonic() - hit[0] < _LEARNING_CACHE_SECONDS:
+        return hit[1]
     # The blind trial (services/trial_seal.py): ideas decided since it started are counted only.
-    return trial_seal.learning_report(db, since)
+    report = trial_seal.learning_report(db, since)
+    _LEARNING_CACHE.clear()  # one entry is enough; an older fingerprint is never valid again
+    _LEARNING_CACHE[key] = (time.monotonic(), report)
+    return report
 
 
 def _proposal_out(p: BrainProposal) -> dict:

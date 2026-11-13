@@ -9,34 +9,18 @@ from __future__ import annotations
 
 import os
 
-os.environ.setdefault("TRADING_MODE", "paper")
-os.environ.setdefault("ALLOW_LIVE_TRADING", "false")
-# Pinned for the same reason as TRADING_MODE above — risk tests assume the
-# default risk-based sizer, and a real .env switched to fixed_amount (for
-# the live rollout) would otherwise silently change what these tests mean.
-os.environ.setdefault("POSITION_SIZING_MODE", "risk_based")
-os.environ.setdefault("ENABLE_SCHEDULER", "false")
-os.environ.setdefault("TELEGRAM_ENABLED", "false")
-# Tests log errors on purpose; they must not count toward a developer's local Redis error watch.
-os.environ.setdefault("ERROR_WATCH_ENABLED", "false")
-os.environ.setdefault("API_KEY", "test-api-key")
-os.environ.setdefault("JWT_SECRET_KEY", "test-jwt-secret")
-os.environ.setdefault("DB_AUTO_MIGRATE", "false")
-# Per-IP request limits off for the suite (one TestClient IP makes hundreds of
-# calls); test_rate_limit.py switches them on with an in-memory Redis stand-in.
-os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
-# A separate database on the same local Postgres instance docker-compose
-# already runs — never the real swing_trade_ml database, so a test can never
-# read or write real positions/trades/models. Created once by hand (see
-# README's test section); tables are (re)created per test session below.
-os.environ.setdefault(
-    "DATABASE_URL",
-    "postgresql+psycopg://swingtrade:swingtrade_local_pw@localhost:5433/swing_trade_ml_test",
-)
+import _env_safety
 
-import pytest
-from fastapi.testclient import TestClient
-from sqlalchemy.orm import Session
+# Forced, not setdefault: a value already exported in the shell (TRADING_MODE=live,
+# a production DATABASE_URL, ...) must never win. See tests/_env_safety.py. The
+# database is a separate "_test" database on the same local Postgres instance
+# docker-compose already runs — created once by hand (see README's test
+# section); tables are (re)created per test session below. Anything else aborts.
+_env_safety.pin_safe_environment(os.environ)
+
+import pytest  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
+from sqlalchemy.orm import Session  # noqa: E402
 
 
 @pytest.fixture(scope="session")

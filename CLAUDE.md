@@ -2,6 +2,8 @@
 
 Read this first in every session. Then read `docs/architecture/CURRENT-STATE.md`.
 
+@AGENTS.md
+
 ## What this repo is
 
 - **Production** runs from GitHub `main` (latest on origin: `8ea5e63`, “One market clock”). Push to
@@ -85,6 +87,23 @@ Read this first in every session. Then read `docs/architecture/CURRENT-STATE.md`
 - Daily candles are stamped IST midnight (18:30 UTC previous day) → always `.astimezone(IST).date()`.
 - Never use bare `git stash` (stack is shared across worktrees).
 - Owner is not a finance/ML expert: plain English in UI and summaries.
+
+## Which skill when
+
+| Situation | Skill |
+|---|---|
+| Touching sizing, stops, limits, drawdown, order placement, brain sizing | `review-risk` (required before it reaches `main`) |
+| Before saying anything is done/fixed/passing | `superpowers:verification-before-completion` |
+| New feature or bug fix | `superpowers:test-driven-development` |
+| Bug, failing test, odd prod behaviour | `superpowers:systematic-debugging` |
+| New feature or behaviour change (SaaS, new look, Service 1 gaps) | `superpowers:brainstorming`, then `superpowers:writing-plans` |
+| Parallel or in-progress branch work | `superpowers:using-git-worktrees` |
+| Reviewing a diff/PR before merge | `code-review`; `security-review` for auth, billing, public-repo exposure |
+| Cleanup of code you touched | `simplify` |
+| Confirming a change works in the real app / UI renders | `run`, `browser-automation` |
+| Charts (scoreboard, observatory, portfolio rings) | `dataviz` |
+| Tracker/atlas/workbook pages | `artifact-design`, `artifact-capabilities` |
+| Recurring checks (post-deploy health, h05 run) | `schedule`, `loop` |
 
 ## Where things are
 

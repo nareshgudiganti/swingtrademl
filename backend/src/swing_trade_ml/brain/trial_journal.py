@@ -29,14 +29,17 @@ import pandas as pd
 
 from swing_trade_ml.brain.horizon_grid import summarise
 from swing_trade_ml.brain.replay_scoring import HORIZON_BARS, STOP, TARGET, StrictOutcome
+
+# The trial's fixed numbers live in trial_constants (#359) and are re-exported here unchanged.
+from swing_trade_ml.brain.trial_constants import (  # noqa: F401
+    GATE_IDEAS,
+    GATE_MIN_IDEAS,
+    MIN_SESSIONS,
+    TRIAL_START,
+)
 from swing_trade_ml.brain.walk_forward import daily_edge, outcomes_for
 
 IST = ZoneInfo("Asia/Kolkata")
-TRIAL_START = date(2026, 10, 14)  # owner decision 2026-10-13 (docs/brain/EXPOSURE-LEDGER.md)
-MIN_SESSIONS = 15  # fewer sessions than this is "too early"
-GATE_IDEAS = 30  # the M18 gate, shown for reference
-# Forward gate, protocol section 5a (docs/superpowers/specs/2026-10-13-layer2-validation-protocol-DRAFT.md).
-GATE_MIN_IDEAS = GATE_IDEAS
 CLEARLY_WORSE = -0.01  # an average daily gap below every stock beyond this is called out first
 SCORE_LINE = 0.80  # the owner reads scores of 80 and above
 TOP_N = 5  # at most five ideas a day (owner decision 2026-10-09)

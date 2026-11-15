@@ -26,7 +26,8 @@ from __future__ import annotations
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
-from swing_trade_ml.brain.trial_journal import GATE_MIN_IDEAS, MIN_SESSIONS, TRIAL_START
+# From trial_constants, not trial_journal: importing the journal here closed an import cycle (#359).
+from swing_trade_ml.brain.trial_constants import GATE_MIN_IDEAS, MIN_SESSIONS, TRIAL_START
 
 IST = ZoneInfo("Asia/Kolkata")
 SEALED = False

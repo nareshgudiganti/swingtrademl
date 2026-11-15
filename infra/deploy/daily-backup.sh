@@ -11,8 +11,10 @@
 # 3. Deploy copies (release-*/database.sql, ~260 MB each, never removed until now): the dump is
 #    deleted from all but the 5 newest releases. Their rollback.json and previous-sha stay.
 #
-# Writes /root/backups/daily-last.txt: "<ok|failed> <UTC time> local=<file> offsite=<ok|not set up|failed>".
-# Exit 0 = the local copy is good and the off-server copy is ok or not set up yet; 1 = something failed.
+# Writes /root/backups/daily-last.txt: "<ok|failed> <UTC time> local=<file> offsite=<ok|not set up|failed>"
+# (+ " cleanup=failed" when old copies could not be listed, or " stopped=exit-N" after an unexpected stop).
+# Writing it is best effort: if it cannot be written, a WARNING goes to stderr and the exit code is unchanged.
+# Exit 0 = the local copy is good and the off-server copy is ok or not set up yet; non-zero = something failed.
 # Reads the live database only (pg_dumpall). Never touches trading.
 set -euo pipefail
 
@@ -30,7 +32,21 @@ dir="$BACKUP_ROOT/daily-$stamp"
 file="$dir/database.sql.gz"
 record="$BACKUP_ROOT/daily-last.txt"
 mkdir -p "$dir"
-note() { printf '%s %s local=%s offsite=%s\n' "$1" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$file" "$2" >"$record"; }
+recorded=0
+# Best effort (#362): a status record that cannot be written is reported on stderr and never changes
+# the run's result or exit code (the nightly workflow alerts on the exit code).
+write_record() {
+  if ! { printf '%s\n' "$1" >"$record"; } 2>/dev/null; then
+    echo "WARNING: could not write the status record $record (the backup result above stands): $1" >&2
+  fi
+}
+note() {
+  recorded=1
+  write_record "$1 $(date -u +%Y-%m-%dT%H:%M:%SZ) local=$file offsite=$2${3:+ $3}"
+}
+# Any exit that did not write the status record (a command failing under set -e) still leaves one,
+# so a stopped run is never mistaken for "no news", and keeps the exit code that stopped it (#362).
+trap 'rc=$?; [ "$recorded" = 1 ] || write_record "failed $(date -u +%Y-%m-%dT%H:%M:%SZ) local=$file offsite=unknown stopped=exit-$rc"; exit "$rc"' EXIT
 
 echo "Free disk before: $(df -h / | awk 'NR==2 {print $4}')"
 if ! docker exec "$LIVE_CONTAINER" pg_dumpall -U "$DB_USER" | gzip -6 >"$file" \
@@ -41,11 +57,23 @@ if ! docker exec "$LIVE_CONTAINER" pg_dumpall -U "$DB_USER" | gzip -6 >"$file" \
 fi
 echo "Local copy: $file ($(du -h "$file" | cut -f1))"
 
-# Keep the newest KEEP_DAILY daily copies.
-ls -1dt "$BACKUP_ROOT"/daily-*/ 2>/dev/null | tail -n +"$((KEEP_DAILY + 1))" | xargs -r rm -rf
-# Deploy copies: drop the big dump from all but the newest few releases (rollback info stays).
-ls -1dt "$BACKUP_ROOT"/release-*/ 2>/dev/null | tail -n +"$((KEEP_RELEASE_DUMPS + 1))" \
-  | while read -r old; do rm -f "${old}database.sql"; done
+# Folders in BACKUP_ROOT matching $1, newest first, one per line ending in "/".
+# No match is normal and prints nothing (a new server has no release-* folder before its first
+# deploy, #362). A real listing error (e.g. permission denied) makes find, and so this, fail.
+newest_first() {
+  find "$BACKUP_ROOT" -mindepth 1 -maxdepth 1 -type d -name "$1" -printf '%T@ %p/\n' | sort -rn | cut -d' ' -f2-
+}
+cleanup=""
+if daily_dirs=$(newest_first 'daily-*') && release_dirs=$(newest_first 'release-*'); then
+  # Keep the newest KEEP_DAILY daily copies.
+  printf '%s\n' "$daily_dirs" | tail -n +"$((KEEP_DAILY + 1))" | xargs -r -d '\n' rm -rf
+  # Deploy copies: drop the big dump from all but the newest few releases (rollback info stays).
+  printf '%s\n' "$release_dirs" | tail -n +"$((KEEP_RELEASE_DUMPS + 1))" \
+    | while read -r old; do [ -z "$old" ] || rm -f "${old}database.sql"; done
+else
+  cleanup="cleanup=failed"
+  echo "BACKUP CLEAN-UP FAILED: could not list $BACKUP_ROOT, so old copies were not removed (the new local copy is fine)." >&2
+fi
 
 offsite="not set up"
 if command -v rclone >/dev/null 2>&1 && [ -s "$PASSPHRASE_FILE" ] \
@@ -78,6 +106,6 @@ else
 fi
 echo "Free disk after: $(df -h / | awk 'NR==2 {print $4}')"
 
-if [ "$offsite" = failed ]; then note failed "$offsite"; exit 1; fi
+if [ "$offsite" = failed ] || [ -n "$cleanup" ]; then note failed "$offsite" "$cleanup"; exit 1; fi
 note ok "$offsite"
 echo "DAILY BACKUP OK (off-server: $offsite)"

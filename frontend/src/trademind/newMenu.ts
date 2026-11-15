@@ -25,11 +25,9 @@ export const NAV: NavItem[] = [
   {
     id: 'discover',
     label: 'Discover',
-    pages: [
-      { to: '/trademind/opportunities', label: 'Discover' },
-      { to: '/trademind/compare', label: 'Compare', ownerOnly: true },
-    ],
-    also: ['/trademind/stock', '/trademind/ai'],
+    // Owner 2026-11-11: the Compare tab is hidden, so Discover is one page with no tab row. The route still works.
+    pages: [{ to: '/trademind/opportunities', label: 'Discover' }],
+    also: ['/trademind/stock', '/trademind/ai', '/trademind/compare'],
   },
   { id: 'portfolio', label: 'Portfolio', pages: portfolioPages },
   // Owner only while it is an exploration: every ranked stock followed for 15 days, bought or not.

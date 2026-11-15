@@ -1,4 +1,6 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { renderToString } from 'react-dom/server'
+import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
 
 import type { DetailedPosition, Trade } from '../api/types'
@@ -64,7 +66,13 @@ describe('the sell filter in the title', () => {
   })
 
   it('the title is a dropdown, not a fixed label', () => {
-    const html = renderToString(<SellList trades={all} book="Testing" />)
+    const html = renderToString(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter>
+          <SellList trades={all} book="Testing" />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
     expect(html).toContain('data-testid="sell-filter"')
     expect(html).toContain('Sells: all (4)')
     expect(html).toContain('Partial SELL completed (2)')

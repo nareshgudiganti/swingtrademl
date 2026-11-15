@@ -77,11 +77,14 @@ export function DetailPanel({
   p,
   trailOpen,
   onTrail,
+  onClose,
   children,
 }: {
   p: DetailedPosition
   trailOpen: boolean
   onTrail: () => void
+  /** Hides the panel so the table shows the full page. */
+  onClose?: () => void
   /** Buy more / sell controls, supplied by the page. */
   children: ReactNode
 }) {
@@ -95,7 +98,14 @@ export function DetailPanel({
         <div>
           <b className="op-panel-name">{p.name ?? p.symbol}</b> <span className="tm-dim">({p.symbol})</span>
         </div>
-        <LevelTag level={l} />
+        <span className="tm-flex" style={{ gap: '0.5rem', alignItems: 'center' }}>
+          <LevelTag level={l} />
+          {onClose && (
+            <button type="button" className="op-panel-close" onClick={onClose} aria-label="Close panel">
+              ✕
+            </button>
+          )}
+        </span>
       </div>
       <div className="tm-dim">Current return</div>
       <div className={`op-panel-ret ${toneClass(p.unrealized_pnl)}`}>

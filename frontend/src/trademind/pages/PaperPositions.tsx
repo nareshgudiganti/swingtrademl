@@ -69,6 +69,8 @@ export default function PaperPositions() {
   const [filter, setFilter] = useState<Filter>('all')
   const [query, setQuery] = useState('')
   const [trailOpen, setTrailOpen] = useState(false)
+  // The X on the side panel hides it so the table gets the full width (and shows the extra columns).
+  const [panelOpen, setPanelOpen] = useState(true)
   const actCount = rows.filter((p) => levelOf(p).act).length
   const watchCount = rows.filter((p) => levelOf(p).state === 'watch').length
   const visibleRows = rows.filter(
@@ -195,9 +197,9 @@ export default function PaperPositions() {
         </div>
       )}
 
-      {rows.length > 0 && <ActToday rows={rows} onPick={(id) => { setSelectedId(id); setFilter('all') }} />}
+      {rows.length > 0 && <ActToday rows={rows} onPick={(id) => { setSelectedId(id); setFilter('all'); setPanelOpen(true) }} />}
 
-      <div className="op-main">
+      <div className={`op-main ${selected && panelOpen ? '' : 'op-main-wide'}`}>
         <Card title={`Your positions (${rows.length})`}>
           {close.isError && <p className="tm-dim">Could not sell that position.</p>}
           {positionsState === 'empty' && (
@@ -230,8 +232,10 @@ export default function PaperPositions() {
               </div>
               <OpenTable
                 rows={visibleRows}
-                selectedId={selected?.id ?? null}
+                selectedId={selected && panelOpen ? selected.id : null}
+                wide={!panelOpen}
                 onSelect={(id) => {
+                  setPanelOpen(true)
                   setSelectedId(id)
                   setTrailOpen(false)
                   setBuyingId(null)
@@ -241,8 +245,8 @@ export default function PaperPositions() {
             </>
           )}
         </Card>
-        {selected && (
-          <DetailPanel p={selected} trailOpen={trailOpen} onTrail={() => setTrailOpen(!trailOpen)}>
+        {selected && panelOpen && (
+          <DetailPanel p={selected} trailOpen={trailOpen} onTrail={() => setTrailOpen(!trailOpen)} onClose={() => setPanelOpen(false)}>
             <div className="op-actions">
               <button
                 type="button"
@@ -380,7 +384,7 @@ function Stat({
 }
 
 type Filter = 'all' | 'act' | 'watch'
-type OpenKey = 'symbol' | 'qty' | 'entry' | 'price' | 'pnlAbs' | 'pnl' | 'progress' | 'state'
+type OpenKey = 'score' | 'days' | 'symbol' | 'qty' | 'entry' | 'price' | 'pnlAbs' | 'pnl' | 'progress' | 'state'
 
 const STATE_RANK: Record<LevelState, number> = {
   stop: 0,
@@ -393,14 +397,23 @@ const STATE_RANK: Record<LevelState, number> = {
   hold: 7,
 }
 
+/** Today's strength score out of 100, same source as the score trail. */
+function modelScore(p: DetailedPosition): number | null {
+  const v = p.score_from_trail ? (p.score_trail?.[p.score_trail.length - 1]?.score ?? null) : p.last_confidence
+  return v == null ? null : Math.round(v * 100)
+}
+
 function OpenTable({
   rows,
   selectedId,
   onSelect,
+  wide,
 }: {
   rows: DetailedPosition[]
   selectedId: number | null
   onSelect: (id: number) => void
+  /** Side panel closed: show the model score and days columns too. */
+  wide?: boolean
 }) {
   const { sorted, sorter } = useSort<DetailedPosition, OpenKey>(
     rows,
@@ -413,6 +426,8 @@ function OpenTable({
       pnl: (p) => p.unrealized_pnl_pct,
       progress: (p) => p.unrealized_pnl_pct,
       state: (p) => STATE_RANK[levelOf(p).state],
+      score: (p) => modelScore(p) ?? -1,
+      days: (p) => p.day_number ?? p.holding_days,
     },
     { key: 'state', dir: 'asc' },
     { symbol: 'asc', state: 'asc' },
@@ -432,6 +447,8 @@ function OpenTable({
             <SortTh sorter={sorter} k="state" title="What to do today, from where the stock sits between stop, half-profit and target">
               Suggestion
             </SortTh>
+            {wide && <SortTh sorter={sorter} k="score" right title="How strongly the model likes this stock today, out of 100">Model score</SortTh>}
+            {wide && <SortTh sorter={sorter} k="days" right title="Trading days held, out of the 15-day plan">Days</SortTh>}
           </tr>
         </thead>
         <tbody>
@@ -466,6 +483,12 @@ function OpenTable({
               <td>
                 <LevelTag level={levelOf(p)} />
               </td>
+              {wide && <td className="tm-right tm-num">{modelScore(p) ?? '—'}</td>}
+              {wide && (
+                <td className="tm-right tm-num">
+                  {p.day_number ?? p.holding_days} / {p.trade_limit_days ?? 15}
+                </td>
+              )}
             </tr>
           ))}
         </tbody>

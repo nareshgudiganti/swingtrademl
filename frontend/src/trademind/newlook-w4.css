@@ -20,7 +20,8 @@
 .op-main { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 1rem; align-items: start; }
 .op-toolbar { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-bottom: 0.75rem; }
 .op-toolbar .tm-input { max-width: 220px; }
-.op-chip[aria-pressed='true'] { background: #dbe6fc; font-weight: 700; }
+.op-chip[aria-pressed='false'] { background: #fff; color: #2a4fd6; border: 1px solid #c9d6f5; }
+.op-chip[aria-pressed='true'] { background: #2a4fd6; color: #fff; font-weight: 700; }
 .op-row-sel td { background: #eef3ff; }
 
 .op-bar { min-width: 150px; }
@@ -35,6 +36,9 @@
 .op-bar-big .op-bar-ticks { font-size: 0.75rem; }
 
 .op-panel { display: grid; gap: 0.6rem; padding: 1rem; border-radius: 14px; background: #fff; border: 1px solid #e3e7ee; }
+.op-main-wide { grid-template-columns: minmax(0, 1fr); }
+.op-panel-close { border: 0; background: #eef1f6; border-radius: 50%; width: 28px; height: 28px; cursor: pointer; font-size: 0.9rem; line-height: 1; }
+.op-panel-close:hover { background: #dde3ee; }
 .op-panel-head { display: flex; justify-content: space-between; gap: 0.5rem; align-items: center; }
 .op-panel-ret { font-size: 1.8rem; font-weight: 800; }
 .op-panel-ret small { font-size: 0.95rem; font-weight: 600; }

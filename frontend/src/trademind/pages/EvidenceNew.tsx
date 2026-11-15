@@ -14,7 +14,6 @@ import { istToday } from '../pricesAge'
 import {
   evidenceCounts,
   RESULTS_OPEN_TEXT,
-  scorecardLockText,
   SEALED_RESULTS_TEXT,
   SEALED_RESULTS_TITLE,
   STAGES,
@@ -26,9 +25,8 @@ import '../newlook-w3.css'
 
 export default function EvidenceNew({ owner = false }: { owner?: boolean }) {
   const market = useMarketSession()
-  const today = market.data?.today ?? istToday(new Date())
   // Count up to the last finished trading day (the market's own calendar), else today.
-  const asOf = market.data?.last_closed_trading_day ?? today
+  const asOf = market.data?.last_closed_trading_day ?? market.data?.today ?? istToday(new Date())
   const progress = trialProgress(asOf)
 
   return (
@@ -78,36 +76,8 @@ export default function EvidenceNew({ owner = false }: { owner?: boolean }) {
         <RoadToRealMoney owner={owner} />
       </div>
 
-      <section className="tmn-card tmw3-locked" aria-label="Daily scorecard" data-testid="scorecard">
-        <div className="tmn-card-head">
-          <span className="tmn-card-title">
-            Daily scorecard <span className="tmn-small tm-dim">· {scorecardLockText(today)}</span>
-          </span>
-          <span className="tmw3-pill">Locked</span>
-        </div>
-        <div className="tmw3-score-grid" aria-hidden="true">
-          <div>
-            <div className="tmw3-big">—</div>
-            <div className="tmn-small tm-dim">Brain&apos;s picks compared with buying every stock</div>
-          </div>
-          <div>
-            <div className="tmw3-big">—</div>
-            <div className="tmn-small tm-dim">Ideas that made money</div>
-          </div>
-          <div>
-            <div className="tmw3-big">—</div>
-            <div className="tmn-small tm-dim">Average gain and average loss</div>
-          </div>
-          <div>
-            <div className="tmw3-big">—</div>
-            <div className="tmn-small tm-dim">Open ideas today</div>
-          </div>
-        </div>
-        <p className="tmn-small tm-dim">
-          Once it opens: updated every evening from real market prices. Paper and real money are always shown
-          separately, and every number says what it is compared with.
-        </p>
-      </section>
+      {/* The empty "Daily scorecard" placeholder (four dashes) is hidden on purpose: it showed nothing. It comes
+          back when the trial has real results to show. */}
 
       <details className="tmn-more">
         <summary>More detail: the learning report, suggested changes and the word list</summary>

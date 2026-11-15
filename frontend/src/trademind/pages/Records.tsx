@@ -5,6 +5,7 @@ import { api } from '../../api/client'
 import type { Trade, TrackRecordSignal } from '../../api/types'
 import { Card, PageHead, Seg, Tabs, Tag, inr, signed, toneClass } from '../ui'
 import { usePlan } from '../../lib/plan'
+import StockLink from '../StockLink'
 import { EvidencePanelLive } from '../beginner/EvidencePanel'
 import { BrainProgressLive, InsightsLive } from '../beginner/InsightsPanel'
 import { SCORE_HINT, scoreLabel, scoreLabelLong } from '../scoreText'
@@ -248,7 +249,7 @@ function TradeHistory() {
               {rows.map((t) => (
                 <tr key={t.id}>
                   <td title={t.strategy_name ?? ''}>
-                    <strong>{t.symbol}</strong>
+                    <StockLink symbol={t.symbol} withScore={false} />
                     {t.gross_pnl > 0 && t.net_pnl <= 0 && (
                       <span title="Made money before fees and taxes, but they took all of it"> ⚠</span>
                     )}
@@ -314,7 +315,7 @@ function ScanTable({ rows }: { rows: TrackRecordSignal[] }) {
               <Fragment key={r.signal_id}>
               <tr>
                 <td title={r.strategy_name}>
-                  <strong>{r.symbol}</strong>
+                  <StockLink symbol={r.symbol} withScore={false} />
                   {r.name && <div className="tm-dim">{r.name}</div>}
                 </td>
                 <td>
@@ -407,7 +408,7 @@ function Picks() {
                 {buy.data.map((r) => (
                   <tr key={`${r.symbol}-${r.strategy_name}`}>
                     <td title={r.strategy_name}>
-                      <strong>{r.symbol}</strong>
+                      <StockLink symbol={r.symbol} withScore={false} />
                       {r.name && <div className="tm-dim">{r.name}</div>}
                     </td>
                     <td className="tm-right">₹{inr(r.price)}</td>

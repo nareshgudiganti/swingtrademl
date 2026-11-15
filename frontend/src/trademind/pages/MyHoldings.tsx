@@ -12,6 +12,7 @@ import { Card, PageHead, Tabs, Tag, inr, signed, toneClass } from '../ui'
 import StockLink from '../StockLink'
 import { PageState, QueryNotice, StaleNotice } from '../PageState'
 import TaxExportCard from '../TaxExport'
+import RealSoldResults from './RealSoldResults'
 import { actionLabelText } from '../scoreText'
 
 const TABS = ['My holdings', 'Straight from Zerodha', 'Real-money report'] as const
@@ -468,6 +469,7 @@ function HoldingsTab() {
   const afterRealOrder = (o: RealOrder) => {
     queryClient.invalidateQueries({ queryKey: ['realOrdersStatus'] })
     queryClient.invalidateQueries({ queryKey: ['realPositions'] })
+    queryClient.invalidateQueries({ queryKey: ['realTrades'] })
     queryClient.invalidateQueries({ queryKey: ['realReport'] })
     setNotice(
       o.status === 'REJECTED'
@@ -513,6 +515,7 @@ function HoldingsTab() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['realPositions'] })
       queryClient.invalidateQueries({ queryKey: ['trades'] })
+      queryClient.invalidateQueries({ queryKey: ['realTrades'] })
       queryClient.invalidateQueries({ queryKey: ['realReport'] })
       setNotice('Saved as sold. No order was placed.')
     },
@@ -642,6 +645,8 @@ function HoldingsTab() {
           />
         </Card>
       )}
+
+      <RealSoldResults />
 
       {askImport && (
         <Confirm
@@ -793,13 +798,13 @@ function ReportTab() {
             {s.best_stock && (
               <div className="tm-row">
                 <span className="tm-dim">Best stock</span>
-                <span className="tm-strong">{s.best_stock.symbol} {signedRupees(s.best_stock.pnl)}</span>
+                <span className="tm-strong"><StockLink symbol={s.best_stock.symbol} withScore={false} /> {signedRupees(s.best_stock.pnl)}</span>
               </div>
             )}
             {s.worst_stock && (
               <div className="tm-row">
                 <span className="tm-dim">Worst stock</span>
-                <span className="tm-strong">{s.worst_stock.symbol} {signedRupees(s.worst_stock.pnl)}</span>
+                <span className="tm-strong"><StockLink symbol={s.worst_stock.symbol} withScore={false} /> {signedRupees(s.worst_stock.pnl)}</span>
               </div>
             )}
           </div>

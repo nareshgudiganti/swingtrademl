@@ -58,7 +58,8 @@ jobs:
         working-directory: backend
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          # ci-constraints.txt pins the libraries the frozen SX recipe hash includes (see the file).
+          pip install -e ".[dev]" -c ci-constraints.txt
 
       - name: Create extensions
         # conftest.py builds the schema with create_all(), but the models and

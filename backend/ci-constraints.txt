@@ -1,0 +1,14 @@
+# CI-only pins (used by .github/workflows/test.yml as `pip install -c ci-constraints.txt`).
+#
+# These are the exact versions the frozen SX recipe evidence was built with
+# (docs/brain/evidence/sector_prep/final_hashes_v3.json, recipe.library_versions). The recipe sha256 includes
+# them by design (ml/sx_recipe.py TRACKED_LIBRARIES), so a newer numpy/pandas on CI changes the hash and fails
+# tests/test_final_hash_sheet.py. Pinning here keeps CI checking the environment the evidence froze.
+#
+# Does NOT affect the app or the production image (pyproject.toml keeps its minimum-version ranges).
+# Change these only together with a re-frozen recipe and the owner's approval.
+lightgbm==4.7.0
+scikit-learn==1.9.1
+numpy==2.5.4
+pandas==3.1.0
+scipy==1.18.1

@@ -86,6 +86,34 @@ Earlier run (before the approval was recorded), kept for the record:
 - A read-only pre-check showed `learn.py` is the ONLY frozen file differing from `tests/trial_freeze.json`,
   so running the approval script now records exactly that one file.
 
+## CI result (2026-11-16, manual dispatch, NO PR)
+
+Pushed `4961507` to `review/local-work-nov12` only (also carried its unpushed parents `1ca0aa3`, `9278ca8`;
+`main` untouched at `64ac6d3`). Run https://github.com/nareshgudiganti/swingtrademl/actions/runs/43879721454 on
+`496150787d84f75aa11a77169954992a2544ab62`: **FAILED**. frontend success, e2e success, backend failure at
+"Test" (migrations, drift, lint passed): **3 failed, 4590 passed, 50 skipped.**
+- `test_final_hash_sheet.py::test_real_repo_files_reproduce_the_verified_v3_hashes`
+- `test_money_kite_broker.py::test_auto_login_walks_redirects_to_request_token`
+- `test_money_kite_broker.py::test_login_diagnostics_paths`
+
+Root cause (reproduced locally, not caused by this branch's code): `pyproject.toml` pins only minimums, so CI
+installed newer libraries than the local venv: numpy 2.5.5 vs 2.5.4, pandas 3.1.1 vs 3.1.0, pyotp 2.12.0 vs
+2.10.0.
+- Hash sheet: the SX recipe sha256 includes library versions by design. With numpy 2.5.5 / pandas 3.1.1 it
+  is exactly CI's `80e58295…`; with the frozen versions it is the evidence's `fa6b3e97…`.
+- Kite: pyotp 2.12 rejects secrets under 112 bits. The test's dummy `TOTP_SEED` is 16 base32 chars (80 bits).
+  With pyotp 2.12 installed locally: the same 2 tests fail.
+Owner approved both fixes (2026-11-16), committed on the review branch:
+- `backend/tests/test_money_kite_broker.py`: dummy `TOTP_SEED` now 32 base32 chars (160 bits). Test-only.
+- `backend/ci-constraints.txt` (new) + `.github/workflows/test.yml`: CI installs with `-c ci-constraints.txt`,
+  pinning the 5 recipe libraries to the frozen evidence versions. App/production install unchanged;
+  `dependency-audit.yml` deliberately left on newest versions.
+- Local checks: Kite tests 30/30 under pyotp 2.10 AND 2.12; `pip install --dry-run -c ci-constraints.txt`
+  resolves; full suite with pyotp 2.12 on the path: **4612 passed, 0 failed, 31 skipped**, no deselection.
+- Owner to confirm (without revealing it) prod `KITE_TOTP_SECRET` is >= 23 chars, else pyotp 2.12 in a fresh
+  prod build would break auto-login.
+No merge, no deploy.
+
 ## Open findings
 
 1. **RESOLVED 2026-11-16: owner ran the approval script; freeze test green.** (History:) Running `scripts/approve_trial_change.py` was

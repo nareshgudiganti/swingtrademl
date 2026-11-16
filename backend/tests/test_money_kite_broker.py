@@ -19,7 +19,7 @@ from swing_trade_ml.core import config
 from swing_trade_ml.core.enums import OrderStatus, OrderType, ProductType, TransactionType
 from swing_trade_ml.db.models.session import BrokerSession
 
-TOTP_SEED = "JBSWY3DPEHPK3PXP"  # a well-known dummy base32 seed, not a real credential
+TOTP_SEED = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"  # dummy base32 seed (160 bits; pyotp 2.10+ needs >= 112), not real
 
 
 class FakeKite:

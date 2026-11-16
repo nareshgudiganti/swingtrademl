@@ -68,6 +68,7 @@ import type {
   TopPick,
   DetailedPosition,
   StockScoreTrail,
+  BrainScoreTrail,
   EquityPoint,
   FinanceCalculationSummary,
   FinanceCategorySummary,
@@ -755,6 +756,9 @@ export const api = {
   brainChanges: (runId: string) => get<BrainChanges>(`/brain/changes?run_id=${encodeURIComponent(runId)}`),
   brainEpisodes: () => get<BrainEpisode[]>('/brain/episodes'),
   brainTrack: (symbol: string) => get<BrainTrack>(`/brain/track/${encodeURIComponent(symbol)}`),
+  // The brain's own score per day, from the same model as the stock page headline (not the cap-tier daily check).
+  brainScoreTrail: (symbol: string) =>
+    get<BrainScoreTrail>(`/brain/score-trail/${encodeURIComponent(symbol)}`),
   brainWhatIf: (symbol: string, qty: number, price?: number) =>
     post<BrainWhatIf>('/brain/whatif', { symbol, qty, price }),
   marketSession: () => get<MarketSession>('/market/session'),

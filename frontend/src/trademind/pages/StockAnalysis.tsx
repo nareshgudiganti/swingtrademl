@@ -36,6 +36,7 @@ import {
   wordSay,
   wordTone,
   type TrailPoint,
+  type TrailSource,
 } from '../stockParts'
 import { brainSteps, stopOf } from '../brainSteps'
 import { CompanyTab } from '../CompanyTab'
@@ -137,13 +138,18 @@ function StockAnalysisView({ decision: d, run }: { decision: BrainDecision; run:
 
       <BrainFlow decision={d} run={run} full />
       <WhyNoTrade decision={d} />
-      <ScoreMonitor trail={data.trail} today={scoreToday(d, run)} />
+      <ScoreMonitor
+        trail={data.trail}
+        today={scoreToday(d, run)}
+        source={data.trailSource}
+        other={data.dailyTrail.at(-1) ?? null}
+      />
 
       <CaseAnalysis decision={d} run={run} brief={data.brief} />
       <ModelEvidence decision={d} />
 
       <div className="sp-split">
-        <ScoreChart trail={data.trail} />
+        <ScoreChart trail={data.trail} source={data.trailSource} />
         <WhatAISees decision={d} run={run} />
       </div>
 
@@ -192,7 +198,7 @@ function StockAnalysisView({ decision: d, run }: { decision: BrainDecision; run:
 
 // ------------------------------------------------------------- score chart
 
-export function ScoreChart({ trail }: { trail: TrailPoint[] }) {
+export function ScoreChart({ trail, source = 'daily' }: { trail: TrailPoint[]; source?: TrailSource }) {
   // Only the latest unbroken run of one known model is drawn. The brain's buy level belongs to the brain's score,
   // not to this model, so it is deliberately not drawn here.
   const run = latestRun(trail)
@@ -203,7 +209,10 @@ export function ScoreChart({ trail }: { trail: TrailPoint[] }) {
       <div>
         <h2 className="sp-h2">5-day model score, day by day</h2>
         <div className="sp-sub" data-testid="score-chart-model">
-          How strongly the daily check’s model liked this stock each day. Model: {modelLabel(trailModel(trail))}.
+          {source === 'brain'
+            ? 'The brain’s score for this stock each day.'
+            : 'How strongly the daily check’s model liked this stock each day.'}{' '}
+          Model: {modelLabel(trailModel(trail))}.
           {cut && ` Days up to ${cut.date} came from a different model and are left out.`}
         </div>
       </div>

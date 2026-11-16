@@ -374,6 +374,17 @@ def what_if_trade(body: WhatIfIn, db: DbSession) -> dict:
     )
 
 
+@router.get("/score-trail/{symbol}")
+def brain_score_trail(symbol: str, db: DbSession, limit: int = Query(30, ge=1, le=90)) -> dict:
+    """The brain's own score for one stock, one point per Indian day, from the same model as the stock
+    page's headline. Display only. Not the cap-tier daily check (`/ml/score-trail`), which can be a
+    different model for mid- and small-size stocks."""
+    from swing_trade_ml.services.brain_score_trail import brain_trail
+
+    symbol = symbol.strip().upper()
+    return {"symbol": symbol, "score_trail": brain_trail(db, symbol, limit=limit)}
+
+
 @router.get("/track/{symbol}")
 def holding_track(
     symbol: str,

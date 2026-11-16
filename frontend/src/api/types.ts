@@ -230,6 +230,12 @@ export interface StockScoreTrail {
   last_score: number | null
 }
 
+/** The brain's own score for one stock, one point per Indian day (GET /brain/score-trail/{symbol}). */
+export interface BrainScoreTrail {
+  symbol: string
+  score_trail: { date: string; score: number; model_version: string | null }[]
+}
+
 export interface DetailedPosition {
   id: number
   symbol: string

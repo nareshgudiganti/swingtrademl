@@ -114,6 +114,24 @@ Owner approved both fixes (2026-11-16), committed on the review branch:
   prod build would break auto-login.
 No merge, no deploy.
 
+### CI run 2 — https://github.com/nareshgudiganti/swingtrademl/actions/runs/43908194612 (`4e251d1`)
+
+**FAILED: 1 failed, 4592 passed, 50 skipped.** frontend/e2e success; backend Install/migrations/lint success.
+The pins worked (CI installed lightgbm 4.7.0, scikit-learn 1.9.1, numpy 2.5.4, pandas 3.1.0, scipy 1.18.1;
+pyotp 2.12.0) and all 3 run-1 failures are fixed.
+- New failure: `test_selection_lab_evaluate.py::test_a_model_that_knows_nothing_does_not_pass`. Not caused by
+  this branch: a FLAKY TEST. Its "knows nothing" score used built-in `hash((symbol, day))`, which Python
+  randomises per process (PYTHONHASHSEED). Reproduced: fails with PYTHONHASHSEED=7, passes for the other 39 of
+  seeds 0-39 (~1 in 40 runs).
+- Fix (local, UNCOMMITTED, awaiting owner OK to commit/push/re-run): test-only, `_noise()` uses `hashlib`
+  sha256 so the score is the same every run. File passes 15/15 under seeds 7, 0, 1, 2, 3, 99 and default;
+  ruff clean. `selection_lab.py` (the evaluator) untouched.
+- Note for the owner: a pure-noise model passed check r1 in 1 of 40 random draws, i.e. r1 alone has a small
+  chance of passing by luck. That is a property of the evaluation threshold, not of this test; worth knowing
+  when reading selection-lab verdicts.
+- Low-priority backlog: ~14 tests make instrument tokens with `hash(symbol) % N`, also random per run; two
+  symbols could rarely collide. None has failed. Not changed.
+
 ## Open findings
 
 1. **RESOLVED 2026-11-16: owner ran the approval script; freeze test green.** (History:) Running `scripts/approve_trial_change.py` was

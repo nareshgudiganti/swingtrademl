@@ -1,0 +1,3 @@
+# Default to inspection only. Switch explicitly to :workspace for implementation.
+default_permissions = ":read-only"
+approval_policy = "never"

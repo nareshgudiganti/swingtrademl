@@ -70,6 +70,34 @@ jobs:
             -c "CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;" \
             -c "CREATE EXTENSION IF NOT EXISTS pg_trgm;"
 
+      - name: Migrations build the schema from an empty database
+        # The tests below build their schema with create_all(), so a broken or missing Alembic
+        # migration never fails them — it fails the deploy. This builds a second, empty database
+        # with `alembic upgrade head` and checks one head and that every table and column NAME
+        # matches the models (a model column with no migration fails here).
+        working-directory: backend
+        env:
+          PGPASSWORD: swingtrade_local_pw
+          DATABASE_URL: postgresql+psycopg://swingtrade:swingtrade_local_pw@localhost:5433/swing_trade_ml_migrate_test
+        run: |
+          psql -h localhost -p 5433 -U swingtrade -d swing_trade_ml_test \
+            -c "CREATE DATABASE swing_trade_ml_migrate_test;"
+          psql -h localhost -p 5433 -U swingtrade -d swing_trade_ml_migrate_test \
+            -c "CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;" \
+            -c "CREATE EXTENSION IF NOT EXISTS pg_trgm;"
+          python -m alembic upgrade head
+          python scripts/check_migrations.py
+
+      - name: Migration column drift (advisory)
+        # Column TYPES and server defaults only (names are checked above and block the build).
+        # `alembic check` reports pre-existing differences there. Advisory until that backlog is
+        # cleared and baselined, so that new type/default drift can fail the build too.
+        working-directory: backend
+        continue-on-error: true
+        env:
+          DATABASE_URL: postgresql+psycopg://swingtrade:swingtrade_local_pw@localhost:5433/swing_trade_ml_migrate_test
+        run: python -m alembic check 2>&1 | grep -v "^INFO" | cut -c1-300
+
       - name: Lint
         working-directory: backend
         continue-on-error: true   # see header — advisory until the backlog is cleared

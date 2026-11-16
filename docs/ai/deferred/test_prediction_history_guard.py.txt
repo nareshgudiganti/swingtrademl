@@ -1,0 +1,81 @@
+"""Codex audit finding 9: a re-run of a scan must never rewrite a prediction that has already been scored.
+
+`_upsert_prediction` is idempotent per (model, instrument, bar) so a same-day re-run refreshes the row.
+But once the outcome job has scored a row (`evaluated_at` set, with `actual_return` / `was_correct`), that
+row is track-record evidence: overwriting its probability, class or price afterwards would change what the
+scoreboard says the model predicted. An unscored row may still be refreshed.
+"""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime
+
+from swing_trade_ml.db.models.market import Instrument
+from swing_trade_ml.db.models.ml import MLModel, Prediction
+from swing_trade_ml.ml.predict import PredictionResult, _upsert_prediction
+
+TS = datetime(2031, 1, 6, 18, 30, tzinfo=UTC)
+
+
+def _setup(db):
+    model = MLModel(
+        name="pred-guard", version="v1", algorithm="dummy", status="ACTIVE", artifact_path="x",
+        feature_names=["a"], prediction_horizon_days=5,
+    )
+    inst = Instrument(
+        instrument_token=981_001, tradingsymbol="PGUARD", exchange="NSE", is_watchlisted=True, is_active=True
+    )
+    db.add_all([model, inst])
+    db.flush()
+    return model, inst
+
+
+def _result(inst, probability, cls, price, features):
+    return PredictionResult(
+        instrument_id=inst.id, symbol="PGUARD", probability=probability, predicted_class=cls,
+        price=price, ts=TS, features=features,
+    )
+
+
+def _row(db, model, inst) -> Prediction:
+    db.expire_all()
+    return db.query(Prediction).filter_by(model_id=model.id, instrument_id=inst.id, ts=TS).one()
+
+
+def test_an_unscored_prediction_is_refreshed_by_a_rerun(db_session):
+    model, inst = _setup(db_session)
+    _upsert_prediction(db_session, model, _result(inst, 0.40, 0, 100.0, {"a": 1.0}))
+    _upsert_prediction(db_session, model, _result(inst, 0.70, 1, 101.0, {"a": 2.0}))
+    row = _row(db_session, model, inst)
+    assert (row.probability, row.predicted_class, row.price_at_prediction) == (0.70, 1, 101.0)
+    assert row.features == {"a": 2.0}
+    assert db_session.query(Prediction).filter_by(model_id=model.id).count() == 1
+
+
+def test_a_scored_prediction_is_never_rewritten_by_a_rerun(db_session):
+    model, inst = _setup(db_session)
+    _upsert_prediction(db_session, model, _result(inst, 0.40, 0, 100.0, {"a": 1.0}))
+    row = _row(db_session, model, inst)
+    row.actual_return, row.was_correct, row.evaluated_at = 0.03, False, datetime(2031, 1, 14, tzinfo=UTC)
+    db_session.flush()
+
+    _upsert_prediction(db_session, model, _result(inst, 0.95, 1, 250.0, {"a": 9.0}))
+
+    row = _row(db_session, model, inst)
+    assert (row.probability, row.predicted_class, row.price_at_prediction) == (0.40, 0, 100.0)
+    assert row.features == {"a": 1.0}
+    assert (row.actual_return, row.was_correct) == (0.03, False)
+    assert row.evaluated_at is not None
+    assert db_session.query(Prediction).filter_by(model_id=model.id).count() == 1
+
+
+def test_a_scored_prediction_is_left_alone_without_an_error_when_rerun(db_session):
+    """The skipped update must not raise or add a row, so a daily re-run keeps working."""
+    model, inst = _setup(db_session)
+    _upsert_prediction(db_session, model, _result(inst, 0.40, 0, 100.0, {}))
+    row = _row(db_session, model, inst)
+    row.evaluated_at = datetime(2031, 1, 14, tzinfo=UTC)
+    db_session.flush()
+    for _ in range(3):
+        _upsert_prediction(db_session, model, _result(inst, 0.55, 1, 105.0, {}))
+    assert db_session.query(Prediction).filter_by(model_id=model.id).count() == 1

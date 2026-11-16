@@ -54,6 +54,14 @@
       "files": [
         "brain/modules/m07_risk/module.py"
       ]
+    },
+    {
+      "date": "2026-11-16",
+      "commit": "1498b2c",
+      "why": "Owner approved 2026-11-16: M09 learn.py change from 1498b2c, parity-proven by the M09 parity test in 1ca0aa3",
+      "files": [
+        "brain/modules/m09_learn/learn.py"
+      ]
     }
   ],
   "files": {
@@ -102,7 +110,7 @@
     "brain/modules/m09_learn/__init__.py": "f25ab79de04349af",
     "brain/modules/m09_learn/drift.py": "c625a49d8ee307b4",
     "brain/modules/m09_learn/failures.py": "0c1f31768ea10b4c",
-    "brain/modules/m09_learn/learn.py": "07b1b52c8288be1b",
+    "brain/modules/m09_learn/learn.py": "9393455c01622de1",
     "brain/modules/m09_learn/module.py": "6e6f2f619aff1cf9",
     "brain/modules/m09_learn/outcomes.py": "d427a1ac8c113f9a",
     "brain/modules/m09_learn/proposals.py": "25427285a68a6281",

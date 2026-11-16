@@ -42,6 +42,7 @@ from swing_trade_ml.db.models.trading import Order, Position, Signal, Strategy
 from swing_trade_ml.notifications import alert_policy, notifier
 from swing_trade_ml.services import risk
 from swing_trade_ml.services.brain_golive.stage import AUTO_BY, current_stage
+from swing_trade_ml.services.entry_lock import EntryLockBusy, entry_lock
 from swing_trade_ml.services.execution import BLOCKED_BY_RISK_KEY, open_position
 from swing_trade_ml.services.portfolio import portfolio_value_and_cash
 from swing_trade_ml.strategies import brain as brain_strategy
@@ -81,6 +82,12 @@ STATUS_PLAIN = {
 }
 NOTHING_BOUGHT = "Nothing was bought."
 STAGE_UNREADABLE = "Could not confirm the go-live switch just before buying, so nothing was bought."
+
+
+_LOCK_BUSY_NOTE = (
+    "Another entry was being placed at the same moment, so nothing was bought, to keep the account "
+    "limits safe."
+)
 
 
 class ApprovalError(Exception):
@@ -577,45 +584,85 @@ def approve(db: Session, approval_id: int, by: str, note: str = "") -> BrainAppr
         raise ApprovalRefused(f"This idea is already {STATUS_PLAIN.get(a.status, a.status).lower()}.")
     now = _now()
     market_open = _market_open(now)
+    if market_open:
+        # An order can follow, so the fresh cash/risk check, the claim and the order are one critical
+        # section per trading mode (services/entry_lock.py), shared with the scan's buy path.
+        return _approve_and_order(db, a, now, by, note)
     try:
-        ready = _check(db, a, now, automatic=by == AUTO_BY, live=market_open)
+        _check(db, a, now, automatic=by == AUTO_BY, live=False)  # early refusal only; nothing is bought
     except ApprovalExpired as exc:
         _expire(db, a, str(exc))
         raise
     decided = {"decided_by": by, "decided_at": now, "decided_note": note.strip() or None}
-    if not market_open:
-        if not _claim(db, a, "pending", "waiting", **decided):
-            raise ApprovalRefused("This idea was already decided.")
-        a.result_note = (
-            f"Approved while the market is closed, so nothing is bought yet. It is bought when the market "
-            f"opens ({_when(_next_open(now))}), only if every check still passes; otherwise it expires "
-            f"unbought by {_when(valid_until(a.decision_day))}."
-        )
-        db.commit()
-        log.info("brain_golive.approval.waiting", symbol=a.symbol, by=by)
-        return a
-    if not _claim(db, a, "pending", "approved", **decided):
+    if not _claim(db, a, "pending", "waiting", **decided):
         raise ApprovalRefused("This idea was already decided.")
-    return _order(db, a, ready)
+    a.result_note = (
+        f"Approved while the market is closed, so nothing is bought yet. It is bought when the market "
+        f"opens ({_when(_next_open(now))}), only if every check still passes; otherwise it expires "
+        f"unbought by {_when(valid_until(a.decision_day))}."
+    )
+    db.commit()
+    log.info("brain_golive.approval.waiting", symbol=a.symbol, by=by)
+    return a
+
+
+def _approve_and_order(
+    db: Session, a: BrainApproval, now: datetime, by: str, note: str = ""
+) -> BrainApproval:
+    approval_id = a.id
+    db.commit()  # no row lock may be held while waiting for the entry lock
+    try:
+        with entry_lock(current_mode()):
+            # Read again after the wait: another entry may have used the cash or the last slot.
+            a = _get(db, approval_id)
+            db.refresh(a)
+            if a.status != "pending":
+                raise ApprovalRefused(
+                    f"This idea is already {STATUS_PLAIN.get(a.status, a.status).lower()}."
+                )
+            try:
+                ready = _check(db, a, now, automatic=by == AUTO_BY, live=True)
+            except ApprovalExpired as exc:
+                _expire(db, a, str(exc))
+                raise
+            decided = {"decided_by": by, "decided_at": now, "decided_note": note.strip() or None}
+            if not _claim(db, a, "pending", "approved", **decided):
+                raise ApprovalRefused("This idea was already decided.")
+            return _order(db, a, ready)
+    except EntryLockBusy:
+        raise ApprovalRefused(_LOCK_BUSY_NOTE) from None
 
 
 def _execute_one(db: Session, a: BrainApproval, now: datetime, dropped: list[str]) -> bool:
-    """One waiting OK at the open: True when the order was sent."""
+    """One waiting OK at the open: True when the order was sent. The fresh checks, the claim and the order
+    are one critical section per trading mode (services/entry_lock.py)."""
+    approval_id = a.id
+    db.commit()  # no row lock may be held while waiting for the entry lock
     try:
-        ready = _check(db, a, now, automatic=a.decided_by == AUTO_BY, live=True)
-    except ApprovalError as exc:
-        note = str(exc) if "nothing was bought" in str(exc).lower() else f"{exc} {NOTHING_BOUGHT}"
-        if _expire(db, a, note):
-            dropped.append(f"{a.symbol}: {exc}")
+        with entry_lock(current_mode()):
+            a = _get(db, approval_id)
+            db.refresh(a)  # read again after the wait
+            if a.status != "waiting":
+                return False
+            try:
+                ready = _check(db, a, now, automatic=a.decided_by == AUTO_BY, live=True)
+            except ApprovalError as exc:
+                note = str(exc) if "nothing was bought" in str(exc).lower() else f"{exc} {NOTHING_BOUGHT}"
+                if _expire(db, a, note):
+                    dropped.append(f"{a.symbol}: {exc}")
+                return False
+            if not _claim(db, a, "waiting", "approved"):
+                return False
+            try:
+                _order(db, a, ready)
+            except ApprovalError as exc:
+                dropped.append(f"{a.symbol}: {exc}")
+                return False
+            return True
+    except EntryLockBusy:
+        # Stays "waiting" and unbought; it is tried again or expires with the rest at the close.
+        dropped.append(f"{a.symbol}: {_LOCK_BUSY_NOTE}")
         return False
-    if not _claim(db, a, "waiting", "approved"):
-        return False
-    try:
-        _order(db, a, ready)
-    except ApprovalError as exc:
-        dropped.append(f"{a.symbol}: {exc}")
-        return False
-    return True
 
 
 def execute_waiting(db: Session) -> list[BrainApproval]:

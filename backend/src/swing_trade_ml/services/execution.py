@@ -41,6 +41,7 @@ from swing_trade_ml.ml import real_question
 from swing_trade_ml.notifications import alert_policy, notifier
 from swing_trade_ml.services import risk, score_history, sell_labels, system_state
 from swing_trade_ml.services.costs import compute_charges
+from swing_trade_ml.services.entry_lock import EntryLockBusy, entry_lock
 from swing_trade_ml.services.exit_policy import (
     exit_confidence_for,
     exit_policy_for_strategy,
@@ -1194,6 +1195,57 @@ def process_decision(
         return signal
 
     # BUY
+    if is_advisory(strategy):
+        # An advisory or practice idea places no order, so there is no cash or slot to protect and
+        # nothing to serialise (and the sealed trial's practice evidence must not depend on a lock).
+        return _process_buy(db, strategy, instrument, decision, mode, existing_positions)
+
+    # An order can follow, so the whole read-check-write section below is ONE critical section per
+    # trading mode (services/entry_lock.py): a second entry waits, then sees this one's position instead
+    # of the same free cash and the same last slot. Pending work is committed first so no row lock is
+    # held while waiting. If the lock stays busy the entry is rejected, never placed.
+    db.commit()
+    try:
+        with entry_lock(mode):
+            # Anything read before the wait may be stale (the entry we waited for may have just bought
+            # this very stock), so the position list is read again here, straight from the database.
+            fresh_positions = list(
+                db.execute(
+                    select(Position)
+                    .where(
+                        Position.mode == mode,
+                        Position.strategy_id == strategy.id,
+                        Position.instrument_id == instrument.id,
+                        Position.status == PositionStatus.OPEN,
+                    )
+                    .execution_options(populate_existing=True)
+                )
+                .scalars()
+                .all()
+            )
+            return _process_buy(db, strategy, instrument, decision, mode, fresh_positions)
+    except EntryLockBusy:
+        signal = record_signal(db, strategy, instrument, decision, mode)
+        signal.rejection_reason = (
+            "Another entry was being placed at the same moment, so this one was skipped to keep the "
+            "account limits safe. It will be looked at again at the next scan."
+        )
+        db.commit()
+        log.warning("execution.entry.lock_busy", symbol=instrument.tradingsymbol, mode=str(mode))
+        return signal
+
+
+def _process_buy(
+    db: Session,
+    strategy: Strategy,
+    instrument: Instrument,
+    decision,
+    mode: str,
+    existing_positions: list[Position],
+) -> Signal:
+    """The buy section of `process_decision`, unchanged: pyramiding rules, cash read, entry risk check,
+    signal record, advisory handling, and the order. Callers that can place an order run it inside
+    `entry_lock`."""
     existing_exposure = 0.0
     if existing_positions:
         # Pyramiding is opt-in per strategy, and only into a book that is

@@ -38,7 +38,12 @@ def _fake_google(monkeypatch, email: str = OWNER_EMAIL) -> None:
 
 
 def _callback(client) -> tuple[str, str]:
-    state = auth_endpoint._issue_state()
+    # Over https, so the browser-binding cookie (Secure when the site is https) travels back.
+    client.base_url = "https://testserver"
+    login = client.get("/api/v1/auth/google/login", follow_redirects=False)
+    assert login.status_code in (302, 307), login.text
+    assert client.cookies.get(auth_endpoint.GOOGLE_BIND_COOKIE)
+    state = parse_qs(urlparse(login.headers["location"]).query)["state"][0]
     resp = client.get(f"/api/v1/auth/google/callback?code=c&state={state}", follow_redirects=False)
     assert resp.status_code in (302, 307), resp.text
     location = resp.headers["location"]

@@ -1134,7 +1134,8 @@ export type ModuleMode = 'on' | 'shadow' | 'off'
 
 /** What a score really meant on unseen days (display only; `confidence` stays the raw ranking). */
 export interface BrainHonestScore {
-  status: 'measured' | 'calibrated' | 'not_measured' | 'no_score'
+  /** `unverified`: the model that produced the score, or the evidence's own model, could not be confirmed. */
+  status: 'measured' | 'calibrated' | 'not_measured' | 'unverified' | 'no_score'
   honest_chance?: number
   rule?: string
   caveat?: string

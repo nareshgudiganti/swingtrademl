@@ -11,6 +11,7 @@ from swing_trade_ml.brain import contracts as c
 from swing_trade_ml.brain.connectors import connector_status
 from swing_trade_ml.brain.context import BrainContext
 from swing_trade_ml.brain.modules.m02_perception.snapshot import feature_set_version
+from swing_trade_ml.brain.score_evidence import scoring_model_record
 from swing_trade_ml.db.models.market import WatchlistSnapshot
 from swing_trade_ml.services.watchlist_snapshots import watchlist_as_of
 
@@ -23,9 +24,7 @@ def _universe_snapshot_date(db: Session, request: c.RunRequest) -> str | None:
         row = db.execute(select(func.max(WatchlistSnapshot.snapshot_date))).scalar_one_or_none()
         return row.isoformat() if row else None
     row = db.execute(
-        select(func.max(WatchlistSnapshot.snapshot_date)).where(
-            WatchlistSnapshot.snapshot_date <= as_of_day
-        )
+        select(func.max(WatchlistSnapshot.snapshot_date)).where(WatchlistSnapshot.snapshot_date <= as_of_day)
     ).scalar_one_or_none()
     return row.isoformat() if row else None
 
@@ -42,4 +41,7 @@ def build_data_manifest(db: Session, request: c.RunRequest, ctx: BrainContext) -
         "live": request.live,
         "as_of": as_of_day.isoformat(),
         "connectors": connector_status(db, as_of_day),
+        # Which model produced this run's model scores (issue #377), so a stored card keeps quoting that
+        # model's evidence after another one is activated. None when the run scored nothing.
+        "score_model": scoring_model_record(ctx.reader),
     }

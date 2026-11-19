@@ -27,4 +27,13 @@ describe('stopCheckWarning', () => {
   it('falls back to the bot count from an older API', () => {
     expect(stopCheckWarning(false, 4)).toContain('Bot (paper) 4')
   })
+
+  it('lists only the books the server sent (a tester gets the testing book alone)', () => {
+    const text = stopCheckWarning(false, null, { testing: 2 })!
+    expect(text).toContain('Testing (paper) 2')
+    expect(text).not.toContain('Bot')
+    expect(text).not.toContain('My Holdings')
+    expect(stopCheckWarning(false, null, {})).toBeNull()
+    expect(stopCheckWarning(false, null)).toBeNull()
+  })
 })

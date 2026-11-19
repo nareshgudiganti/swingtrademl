@@ -53,8 +53,10 @@ class SystemStatus(BaseModel):
     active_strategies: int
     # The bot's OWN book only (paper while TRADING_MODE=paper). It never includes the
     # manual Testing book or real Zerodha holdings; see open_positions_by_book.
-    open_positions: int
-    # Open positions per book, never summed together: {bot, testing, real}.
+    # None for a caller who may not see the bot book (a tester).
+    open_positions: int | None = None
+    # Open positions per book, never summed together: {bot, testing, real}. Only the books
+    # this caller may see: real for the real-account owner only, testing only for a tester.
     open_positions_by_book: dict[str, int] = {}
     latest_candle_date: date | None
     last_scan_at: datetime | None

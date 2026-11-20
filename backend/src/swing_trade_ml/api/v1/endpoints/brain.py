@@ -78,16 +78,14 @@ class BuyLevelRevert(BaseModel):
     by: str = "owner"
 
 
-def _score_evidence(db) -> dict | None:
-    """The evidence for the model the brain scores with; None when that model was not trained
-    on the +8% / -4% question (then cards show no chance, only that the score is a ranking)."""
-    from swing_trade_ml.brain.reader import FALLBACK_MODEL_NAME
-    from swing_trade_ml.ml.registry import get_active_model
-
-    return score_evidence.evidence_for(get_active_model(db, FALLBACK_MODEL_NAME))
+def _score_evidence(db, run: BrainRun | None, decisions=None) -> score_evidence.Choice:
+    """The evidence for the model that PRODUCED this run's scores (issue #377), resolved from what the
+    run stored, never from the model active now: activating another model leaves old cards unchanged.
+    No evidence (not measured, or the model cannot be confirmed) shows no chance, only a ranking."""
+    return score_evidence.evidence_for(score_evidence.run_model_identity(db, run, decisions))
 
 
-def _honest_score(d: BrainDecision, evidence: dict | None) -> dict | None:
+def _honest_score(d: BrainDecision, evidence: score_evidence.Choice | None) -> dict | None:
     """Display-only: what the idea's score really meant on unseen days. The stored `confidence`
     is untouched, so decisions, the buy level and orders never read this."""
     if d.kind != "idea" or d.confidence is None:
@@ -95,13 +93,17 @@ def _honest_score(d: BrainDecision, evidence: dict | None) -> dict | None:
     if d.score_source == "combined":  # M06 already passes its score through the honesty map
         return {"status": "calibrated", "honest_chance": d.confidence}
     if d.score_source == "model":
-        return score_evidence.present(d.confidence, evidence)
+        if evidence is None:
+            evidence = score_evidence.Choice(None, "unverified_model")
+        return score_evidence.present(
+            d.confidence, evidence.evidence, reason=evidence.status, scored_by=evidence.identity
+        )
     return None
 
 
 def _decision_out(
     d: BrainDecision,
-    evidence: dict | None = None,
+    evidence: score_evidence.Choice | None = None,
     *,
     run: BrainRun | None = None,
     rank: ModelRank | None = None,
@@ -198,7 +200,7 @@ def _run_out(db, run: BrainRun, owner: bool = True) -> dict:
     if not owner:
         # The bot's holdings are the test portfolio's: not part of the stock research a customer sees.
         decisions = [d for d in decisions if d.kind != "holding"]
-    evidence = _score_evidence(db)
+    evidence = _score_evidence(db, run, decisions)
     ranks = model_ranks(decisions)
     return {
         "quality": run.quality,
@@ -298,7 +300,7 @@ def overrule(decision_id: int, payload: OverruleCreate, db: DbSession) -> dict:
         raise HTTPException(404, str(exc)) from exc
     except service.OverruleRefusedError as exc:
         raise HTTPException(409, str(exc)) from exc
-    return _decision_out(d, _score_evidence(db))
+    return _decision_out(d, _score_evidence(db, db.get(BrainRun, d.run_id)))
 
 
 @router.get("/health")
@@ -495,7 +497,9 @@ def why(
         "run_id": run_id,
         "banner": {"mode": run.banner_mode, "headline": run.banner_headline},
         "decision": (
-            _decision_out(decision, _score_evidence(db), run=run, owner=owner, db=db) if decision else None
+            _decision_out(decision, _score_evidence(db, run), run=run, owner=owner, db=db)
+            if decision
+            else None
         ),
         # The step-by-step trace names the risk gate's own answers for the account: owner only.
         "trace": run.trace if owner else [],

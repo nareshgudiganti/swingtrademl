@@ -10,16 +10,26 @@ turns a raw score into two separate things for the idea cards:
   of cases, the period, and how far the hit rate swung between windows.
 
 Nothing here feeds a decision: the stored score, the buy level, orders, sizing and stops all keep
-using the raw score. The map is only valid for a model trained on the question it was measured on
-(`applies_to`); any other model gets no number.
+using the raw score.
+
+The evidence belongs to the one model it was measured on (issue #377). An evidence file records that
+model in `measured_on` (id, name, version, artifact hash, inputs fingerprint, protocol); a score gets
+the number only when the model that PRODUCED it (recorded with its run, see `run_model_identity`) is
+that same model. A model that only shares the target, stop and horizon gets no number, an evidence file
+without `measured_on` is never a match, and a score whose model cannot be confirmed is "unverified".
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
+import re
 from collections import Counter
+from collections.abc import Iterable
+from dataclasses import dataclass
 from itertools import pairwise
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 from sklearn.isotonic import IsotonicRegression
@@ -42,9 +52,11 @@ def _band(p: float) -> int:
     return len(BANDS) - 2
 
 
-def build(rows: list[dict], generated_on: str) -> dict:
+def build(rows: list[dict], generated_on: str, measured_on: dict | None = None) -> dict:
     """`rows`: one per finished stock-day the model scored on unseen days:
-    {"fold": window start, "end": window end, "day", "p": raw score, "hit": 0/1}."""
+    {"fold": window start, "end": window end, "day", "p": raw score, "hit": 0/1}.
+    `measured_on`: the one model the rows came from (`model_identity` keys plus a "protocol" line).
+    Without it the file is still written, but no model will ever be given its numbers."""
     p = np.array([r["p"] for r in rows], dtype=float)
     y = np.array([r["hit"] for r in rows], dtype=float)
     days = np.array([r["day"] for r in rows], dtype="datetime64[D]")
@@ -73,7 +85,7 @@ def build(rows: list[dict], generated_on: str) -> dict:
                 "highest_window": max(rates) if rates else None,
             }
         )
-    return {
+    out = {
         "version": 1,
         "applies_to": APPLIES_TO,
         "rule": RULE,
@@ -92,6 +104,10 @@ def build(rows: list[dict], generated_on: str) -> dict:
         },
         "bands": bands,
     }
+    if measured_on is not None:
+        out["version"] = 2
+        out["measured_on"] = measured_on
+    return out
 
 
 def load(path: Path = EVIDENCE_FILE) -> dict | None:
@@ -108,7 +124,8 @@ def _honesty_map(evidence: dict) -> HonestyMap:
 
 
 def model_matches(model) -> bool:
-    """True only for a model trained on the question the evidence measured."""
+    """True when a model was trained on the question the evidence measured. Necessary, never enough:
+    the evidence must also have been measured on this very model (`choose`)."""
     return (
         model is not None
         and getattr(model, "label_kind", None) == APPLIES_TO["label_kind"]
@@ -118,26 +135,189 @@ def model_matches(model) -> bool:
     )
 
 
-def evidence_for(model) -> dict | None:
-    """The evidence for the model the brain scored with, or None (then no number is shown)."""
-    return load() if model_matches(model) else None
+# --- which model produced a score, and which evidence it may quote ------------------------------
+
+IDENTITY_KEYS = ("model_id", "name", "version")  # must be recorded by the evidence and equal
+CHECKED_IF_RECORDED = ("artifact_sha256", "inputs_fingerprint")  # recorded by the evidence -> must match
+
+
+def model_identity(model) -> dict | None:
+    """What identifies a registered model: row id, name, version, the artifact hash stored at training
+    (`metrics["artifact_sha256"]`; None when not recorded, never invented), a fingerprint of its input
+    list, and the question it was trained on."""
+    if model is None:
+        return None
+    # Read straight from the row: the brain must not import services.model_registry (its isolation test).
+    # The inputs fingerprint is the same formula as model_registry.provenance, so the two always agree.
+    features = list(model.feature_names or [])
+    file_fp = (model.metrics or {}).get("artifact_sha256")
+    return {
+        "model_id": model.id,
+        "name": model.name,
+        "version": model.version,
+        "artifact_sha256": file_fp if isinstance(file_fp, str) else None,
+        "inputs_fingerprint": (
+            hashlib.sha256(json.dumps(features, separators=(",", ":")).encode()).hexdigest()
+            if features
+            else None
+        ),
+        "label_kind": model.label_kind,
+        "horizon_days": model.prediction_horizon_days,
+        "target_return": model.target_return_pct,
+        "stop_return": model.stop_return_pct,
+    }
+
+
+def scoring_model(reader: Any):
+    """The model whose scores a finished run's reader handed out: the as-of model in a replay, the
+    active model it loaded in a live run, or None when it scored nothing (or its file failed).
+    Reads the DatedReader's own fields: brain/reader.py is frozen for the trial."""
+    if getattr(reader, "live", None) is False:
+        return getattr(reader, "asof_model", None)
+    if getattr(reader, "_model_loaded", False):
+        return getattr(reader, "_model", None)
+    return None
+
+
+def scoring_model_record(reader: Any) -> dict | None:
+    """`model_identity` of the run's scoring model, for the run's data manifest. A display record never
+    fails a run: anything unreadable is stored as None, which later shows as "unverified"."""
+    try:
+        return model_identity(scoring_model(reader))
+    except Exception:  # noqa: BLE001
+        return None
+
+
+# The model label the fallback and M08 write into a TRADE idea's reasons (brain/fallbacks.reason).
+_MODEL_REASON = re.compile(r"^The active model \((?P<label>.+)\) scores this stock ")
+
+
+def run_model_identity(db, run, decisions: Iterable[Any] | None = None) -> dict | None:
+    """The model that produced a stored run's model scores, from what the run stored, never from what
+    is active now: the identity recorded in its data manifest (runs since #377), else the one model
+    label its reasons name (looked up by its unique name + version). None when neither says."""
+    if run is None:
+        return None
+    manifest = (run.context or {}).get("data_manifest") or {}
+    if "score_model" in manifest:
+        recorded = manifest["score_model"]
+        return {**recorded, "source": "recorded_with_run"} if isinstance(recorded, dict) else None
+    if decisions is None:
+        from swing_trade_ml.brain.service import decisions_for
+
+        decisions = decisions_for(db, run.id)
+    labels = {
+        m["label"]
+        for d in decisions
+        for r in d.reasons or []
+        if isinstance(r, str) and (m := _MODEL_REASON.match(r))
+    }
+    if len(labels) != 1:
+        return None  # no label (or two, which one run cannot have): unverified
+    name, _, version = labels.pop().rpartition(" ")
+    if not name:
+        return None
+    from sqlalchemy import select
+
+    from swing_trade_ml.db.models.ml import MLModel
+
+    row = db.execute(
+        select(MLModel).where(MLModel.name == name, MLModel.version == version)
+    ).scalar_one_or_none()
+    identity = model_identity(row)
+    return {**identity, "source": "reason_text"} if identity else None
+
+
+@dataclass(frozen=True, slots=True)
+class Choice:
+    """`status`: match | unverified_model | unverified_evidence | other_question | other_model | none."""
+
+    evidence: dict | None
+    status: str
+    identity: dict | None = None
+
+
+def choose(identity: dict | None, evidence: dict | None) -> Choice:
+    """The evidence a score may quote, given the identity of the model that produced it."""
+    if evidence is None:
+        return Choice(None, "none", identity)
+    if identity is None:
+        return Choice(None, "unverified_model", None)
+    if any(identity.get(k) != v for k, v in APPLIES_TO.items()):
+        return Choice(None, "other_question", identity)
+    measured_on = evidence.get("measured_on")
+    if not isinstance(measured_on, dict) or not measured_on.get("protocol"):
+        return Choice(None, "unverified_evidence", identity)  # old file: says nothing of its model
+    if any(measured_on.get(k) is None for k in IDENTITY_KEYS):
+        return Choice(None, "unverified_evidence", identity)
+    if any(identity.get(k) != measured_on[k] for k in IDENTITY_KEYS):
+        return Choice(None, "other_model", identity)
+    for k in CHECKED_IF_RECORDED:
+        if measured_on.get(k) is None:
+            continue  # not recorded when measured (models older than artifact hashes)
+        if identity.get(k) is None:
+            return Choice(None, "unverified_evidence", identity)
+        if identity[k] != measured_on[k]:
+            return Choice(None, "other_model", identity)
+    return Choice(evidence, "match", identity)
+
+
+def evidence_for(identity: dict | None) -> Choice:
+    """The evidence for the model that produced a score, by that model's recorded identity."""
+    return choose(identity, load())
 
 
 def one_in(rate: float) -> str:
     return f"about 1 in {max(1, round(1 / rate))}" if rate > 0 else "almost none"
 
 
-def present(raw: float | None, evidence: dict | None) -> dict:
-    """Display fields for one raw score. Always returns a status so a card never has to guess."""
+_NOTES = {
+    "other_question": (
+        "This model was not trained on the +8% / -4% question, so its score only ranks "
+        "stocks. It is not a chance, and there is no measured hit rate for it."
+    ),
+    "none": "No measured hit rate is on file, so this score only ranks stocks. It is not a chance.",
+    "other_model": (
+        "There is no measured hit rate for the model that produced this score, so its score only "
+        "ranks stocks. It is not a chance."
+    ),
+    "unverified_model": (
+        "We could not confirm which model produced this score, so no measured hit rate is shown. "
+        "The score only ranks stocks; it is not a chance."
+    ),
+    "unverified_evidence": (
+        "The measured hit rate on file cannot be confirmed as measured on the model that produced "
+        "this score, so it is not shown. The score only ranks stocks; it is not a chance."
+    ),
+}
+
+
+def _who(identity: dict | None) -> dict | None:
+    if not identity:
+        return None
+    return {
+        "model_id": identity.get("model_id"),
+        "name": identity.get("name"),
+        "version": identity.get("version"),
+        "artifact_sha256": identity.get("artifact_sha256") or "not recorded",
+    }
+
+
+def present(
+    raw: float | None, evidence: dict | None, *, reason: str | None = None, scored_by: dict | None = None
+) -> dict:
+    """Display fields for one raw score. Always returns a status so a card never has to guess.
+    `reason`: the `Choice.status` that left `evidence` empty; `scored_by`: the scoring model's identity."""
     if raw is None:
         return {"status": "no_score"}
+    extra = {"scored_by": {**_who(scored_by), "source": scored_by.get("source")}} if scored_by else {}
     if evidence is None:
         return {
-            "status": "not_measured",
-            "note": (
-                "This model was not trained on the +8% / -4% question, so its score only ranks "
-                "stocks. It is not a chance, and there is no measured hit rate for it."
-            ),
+            "status": "unverified"
+            if reason in ("unverified_model", "unverified_evidence")
+            else "not_measured",
+            "note": _NOTES.get(reason or "", _NOTES["other_question"]),
+            **extra,
         }
     honesty = _honesty_map(evidence)
     honest = float(honesty.apply(np.array([raw]))[0])
@@ -148,7 +328,11 @@ def present(raw: float | None, evidence: dict | None) -> dict:
         "rule": evidence["rule"],
         "period": {"from": evidence["first_day"], "to": evidence["last_day"]},
         "caveat": CAVEAT,
+        **extra,
     }
+    measured_on = evidence.get("measured_on")
+    if isinstance(measured_on, dict):
+        out["measured_on"] = {**_who(measured_on), "protocol": measured_on.get("protocol")}
     if raw > honesty.max_seen:
         out["note"] = "This score is higher than anything seen in testing, so treat it with care."
     if b is None or b["n"] < MIN_BAND_CASES or b["windows"] < MIN_BAND_WINDOWS:

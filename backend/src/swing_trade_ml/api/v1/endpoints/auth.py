@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import secrets
 import time
 from datetime import UTC, datetime, timedelta
 from urllib.parse import urlencode
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -437,30 +439,74 @@ GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v3/userinfo"
 _STATE_TTL_SECONDS = 600
+#: After the callback the browser has this long to swap its one-time code (login_codes allows 60 s).
+_BIND_AFTER_CALLBACK_SECONDS = 120
 
-#: CSRF state tokens issued by /google/login, consumed once by /google/callback.
+#: Issue #373: a Google sign-in must finish in the browser that started it.
+#: /google/login gives the browser a random secret in this HttpOnly cookie and
+#: remembers only its hash next to the state. /google/callback accepts a state
+#: only from the browser holding that secret (checked before Google is called),
+#: and the one-time login code is bound to the same secret, so neither a
+#: captured state nor a captured login code works from another browser.
+#: SameSite=Lax: Google's redirect back is a top-level GET, which still carries it.
+GOOGLE_BIND_COOKIE = "stml_google_bind"
+
+#: CSRF state tokens issued by /google/login, consumed once by /google/callback,
+#: mapped to (issued at, hash of the browser secret).
 #: An in-memory dict is enough here: this only ever needs to survive the few
 #: seconds between the two, and only the `api` container (the one instance
-#: with a published port a browser can reach) ever serves this flow.
-_oauth_states: dict[str, float] = {}
+#: with a published port a browser can reach, run as a single uvicorn worker)
+#: ever serves this flow. Running more workers would need a shared store.
+_oauth_states: dict[str, tuple[float, str]] = {}
 
 
-def _issue_state() -> str:
+def _hash_secret(secret: str) -> str:
+    return hashlib.sha256(secret.encode("utf-8")).hexdigest()
+
+
+def _issue_state(browser_secret: str) -> str:
     now = time.monotonic()
-    for token, issued_at in list(_oauth_states.items()):
+    for token, (issued_at, _) in list(_oauth_states.items()):
         if now - issued_at > _STATE_TTL_SECONDS:
             del _oauth_states[token]
 
     token = secrets.token_urlsafe(24)
-    _oauth_states[token] = now
+    _oauth_states[token] = (now, _hash_secret(browser_secret))
     return token
 
 
-def _consume_state(token: str) -> bool:
-    issued_at = _oauth_states.pop(token, None)
-    if issued_at is None:
+def _consume_state(token: str, browser_secret: str) -> bool:
+    """True only for a live, unused state issued to the browser holding `browser_secret`.
+    The state is spent either way: one try per login attempt."""
+    entry = _oauth_states.pop(token, None)
+    if entry is None or not browser_secret:
         return False
-    return (time.monotonic() - issued_at) <= _STATE_TTL_SECONDS
+    issued_at, secret_hash = entry
+    if (time.monotonic() - issued_at) > _STATE_TTL_SECONDS:
+        return False
+    return hmac.compare_digest(secret_hash, _hash_secret(browser_secret))
+
+
+def _set_bind_cookie(response: Response, secret: str, max_age: int) -> None:
+    response.set_cookie(
+        GOOGLE_BIND_COOKIE,
+        secret,
+        max_age=max_age,
+        path=f"{settings.API_V1_PREFIX}/auth/google",
+        secure=settings.GOOGLE_REDIRECT_URL.lower().startswith("https://"),
+        httponly=True,
+        samesite="lax",
+    )
+
+
+def _clear_bind_cookie(response: Response) -> None:
+    response.delete_cookie(
+        GOOGLE_BIND_COOKIE,
+        path=f"{settings.API_V1_PREFIX}/auth/google",
+        secure=settings.GOOGLE_REDIRECT_URL.lower().startswith("https://"),
+        httponly=True,
+        samesite="lax",
+    )
 
 
 @router.get("/google/login", dependencies=[Depends(auth_limit)])
@@ -479,27 +525,33 @@ def google_login() -> RedirectResponse:
             "GOOGLE_ALLOWED_EMAILS in .env",
         )
 
+    browser_secret = secrets.token_urlsafe(32)
     params = {
         "client_id": settings.GOOGLE_CLIENT_ID,
         "redirect_uri": settings.GOOGLE_REDIRECT_URL,
         "response_type": "code",
         "scope": "openid email profile",
-        "state": _issue_state(),
+        "state": _issue_state(browser_secret),
         "access_type": "online",
         "prompt": "select_account",
     }
-    return RedirectResponse(f"{GOOGLE_AUTH_URL}?{urlencode(params)}")
+    response = RedirectResponse(f"{GOOGLE_AUTH_URL}?{urlencode(params)}")
+    _set_bind_cookie(response, browser_secret, _STATE_TTL_SECONDS)
+    return response
 
 
 @router.get("/google/callback", response_model=None, dependencies=[Depends(auth_limit)])
-def google_callback(code: str, state: str, db: DbSession) -> HTMLResponse | RedirectResponse:
+def google_callback(
+    code: str, state: str, db: DbSession, request: Request
+) -> HTMLResponse | RedirectResponse:
     """Google redirects the browser here after consent.
 
     Errors render an HTML page (this is loaded by a browser via redirect, the
     same reason /kite/callback does); success redirects on to the SPA with a
     one-time login code in the query string for the app to swap for a session.
     """
-    if not _consume_state(state):
+    browser_secret = request.cookies.get(GOOGLE_BIND_COOKIE) or ""
+    if not _consume_state(state, browser_secret):
         return HTMLResponse(
             _page(
                 "❌", "Google login failed", "Invalid or expired login attempt — please try again.", ok=False
@@ -601,17 +653,23 @@ def google_callback(code: str, state: str, db: DbSession) -> HTMLResponse | Redi
     db.commit()
     db.refresh(user)
 
-    code = login_codes.issue(db, user)
+    code = login_codes.issue(db, user, binding=browser_secret)
     db.commit()
     # A one-time code, not the session token: the address bar ends up in
     # browser history, server logs and Referer headers (spec finding S5).
-    return RedirectResponse(f"{settings.post_login_url()}/?login_code={code}")
+    # It redeems only alongside this browser's cookie (issue #373).
+    response = RedirectResponse(f"{settings.post_login_url()}/?login_code={code}")
+    _set_bind_cookie(response, browser_secret, _BIND_AFTER_CALLBACK_SECONDS)
+    return response
 
 
 @router.post("/google/exchange", response_model=TokenResponse, dependencies=[Depends(auth_limit)])
-def google_exchange(payload: LoginCodeExchange, db: DbSession, request: Request) -> TokenResponse:
-    """Swap the one-time code from the Google redirect for a session. Works once, within 60 seconds."""
-    user = login_codes.redeem(db, payload.code)
+def google_exchange(
+    payload: LoginCodeExchange, db: DbSession, request: Request, response: Response
+) -> TokenResponse:
+    """Swap the one-time code from the Google redirect for a session. Works once, within 60 seconds,
+    and only from the browser that started the sign-in (it must send the sign-in cookie)."""
+    user = login_codes.redeem(db, payload.code, binding=request.cookies.get(GOOGLE_BIND_COOKIE))
     if user is None:
         db.commit()  # keep the code marked used even when the account is disabled
         raise HTTPException(
@@ -633,6 +691,7 @@ def google_exchange(payload: LoginCodeExchange, db: DbSession, request: Request)
         request=request,
     )
     db.commit()
+    _clear_bind_cookie(response)
     return issue_token(user)
 
 

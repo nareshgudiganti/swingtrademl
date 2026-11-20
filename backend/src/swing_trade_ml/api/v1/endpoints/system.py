@@ -12,7 +12,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from swing_trade_ml import __version__
-from swing_trade_ml.api.deps import DbSession, require_auth
+from swing_trade_ml.api.deps import DbSession, Principal, PrincipalDep, require_auth
 from swing_trade_ml.brokers import get_broker, kite_broker
 from swing_trade_ml.core import market_session
 from swing_trade_ml.core.config import settings
@@ -171,7 +171,30 @@ def open_positions_by_book(db: Session) -> dict[str, int]:
     }
 
 
-def _build_status(db: DbSession) -> SystemStatus:
+def visible_books(principal: Principal, books: dict[str, int]) -> dict[str, int]:
+    """The per-book counts this caller may see, by the same rule as `deps.book_for`.
+    The real (My Holdings) count only for the real-account owner and the legacy API key;
+    a tester only the shared testing book (the bot book is the owner's, issue #374)."""
+    if principal.can_see_real_account:
+        return dict(books)
+    if principal.is_tester:
+        return {"testing": books["testing"]}
+    return {k: v for k, v in books.items() if k != "real"}
+
+
+def visible_scan(principal: Principal, scan: dict | None) -> dict | None:
+    """The last scan summary this caller may see. The scan is the bot's, and each `blocked` entry quotes the
+    risk layer's own sentence, which can carry the bot's position count, account value and cash. A caller who
+    may not see the bot book (a tester) keeps which limit fired and how often, without the sentence."""
+    if scan is None or "bot" in visible_books(principal, {"bot": 0, "testing": 0, "real": 0}):
+        return scan
+    redacted = dict(scan)
+    if scan.get("blocked"):
+        redacted["blocked"] = [{**item, "reason": None} for item in scan["blocked"]]
+    return redacted
+
+
+def _build_status(db: DbSession, principal: Principal) -> SystemStatus:
     # Same staleness fix as ready() above — this process's kite_broker is
     # never touched by the worker's periodic check, so verify against the
     # database on every call rather than trusting an old in-memory flag.
@@ -194,7 +217,7 @@ def _build_status(db: DbSession) -> SystemStatus:
         calendar_warning=market_session.calendar_warning(),
     )
 
-    books = open_positions_by_book(db)
+    books = visible_books(principal, open_positions_by_book(db))
     return SystemStatus(
         app=settings.APP_NAME,
         environment=settings.ENVIRONMENT,
@@ -217,28 +240,27 @@ def _build_status(db: DbSession) -> SystemStatus:
             ).scalar_one()
         ),
         active_strategies=int(
-            db.execute(
-                select(func.count(Strategy.id)).where(Strategy.is_active.is_(True))
-            ).scalar_one()
+            db.execute(select(func.count(Strategy.id)).where(Strategy.is_active.is_(True))).scalar_one()
         ),
-        open_positions=books["bot"],
+        open_positions=books.get("bot"),  # absent (null) when the caller may not see the bot book
         open_positions_by_book=books,
         latest_candle_date=latest_candle_date,
         last_scan_at=last_scan_at,
-        last_scan_result=heartbeat.read_last_scan(),
+        last_scan_result=visible_scan(principal, heartbeat.read_last_scan()),
         status_level=status_level,
         status_message=status_message,
     )
 
 
 @router.get("/status", response_model=SystemStatus, dependencies=[Depends(require_auth)])
-def status(db: DbSession) -> SystemStatus:
+def status(db: DbSession, principal: PrincipalDep) -> SystemStatus:
     """Authenticated, unlike /health and /ready above: this reports the
     portfolio's size, the job schedule and whether the broker is connected —
     an inventory of the account, not a liveness signal. The dashboard only
     ever asks for it once logged in (App.tsx gates the query on a token).
+    Built per request for this caller and never cached: the book counts depend on who asks.
     """
-    return _build_status(db)
+    return _build_status(db, principal)
 
 
 @router.get("/market/session", dependencies=[Depends(require_auth)])
@@ -268,7 +290,7 @@ def market_session_now(db: DbSession) -> dict:
 
 
 @router.post("/refresh-data", response_model=SystemStatus, dependencies=[Depends(require_auth)])
-def refresh_data(db: DbSession) -> SystemStatus:
+def refresh_data(db: DbSession, principal: PrincipalDep) -> SystemStatus:
     """The self-service fix for a "market data hasn't updated" warning —
     fires the same ingest + predict jobs the 15:40 IST cron runs, on demand,
     instead of making the user wait for that time or ask someone to check.
@@ -286,4 +308,4 @@ def refresh_data(db: DbSession) -> SystemStatus:
     job_predict_watchlist()
 
     db.expire_all()  # this request's session cached the pre-refresh rows
-    return _build_status(db)
+    return _build_status(db, principal)

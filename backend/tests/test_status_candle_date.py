@@ -1,5 +1,6 @@
 from datetime import UTC, date, datetime
 
+from swing_trade_ml.api.deps import Principal
 from swing_trade_ml.api.v1.endpoints.system import _build_status
 from swing_trade_ml.db.models.market import Candle, Instrument
 
@@ -18,4 +19,5 @@ def test_daily_bar_date_is_read_in_ist_not_utc(db_session):
     )
     db_session.flush()
 
-    assert _build_status(db_session).latest_candle_date == date(2026, 9, 18)
+    owner = Principal(user=None, via_api_key=True)
+    assert _build_status(db_session, owner).latest_candle_date == date(2026, 9, 18)

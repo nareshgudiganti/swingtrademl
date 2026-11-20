@@ -107,10 +107,11 @@ export interface SystemStatus {
   active_models?: string[]
   watchlist_size: number
   active_strategies: number
-  /** The bot's own book only. Never includes Testing or real holdings. */
-  open_positions: number
-  /** Open positions per book, never summed: bot, testing (practice), real (Zerodha holdings). */
-  open_positions_by_book?: { bot: number; testing: number; real: number }
+  /** The bot's own book only. Never includes Testing or real holdings. Null for a tester (not their book). */
+  open_positions: number | null
+  /** Open positions per book, never summed: bot, testing (practice), real (Zerodha holdings).
+   *  Only the books this caller may see: real for the real-account owner, testing alone for a tester. */
+  open_positions_by_book?: { bot?: number; testing?: number; real?: number }
   latest_candle_date: string | null
   last_scan_at: string | null
   last_scan_result: {
@@ -122,7 +123,8 @@ export interface SystemStatus {
     exits: number
     executed: number
     errors: number
-    blocked?: { rule: string; count: number; reason: string }[] | null
+    /** `reason` is null for a tester: it quotes the bot's own positions and cash (issue #374). */
+    blocked?: { rule: string; count: number; reason: string | null }[] | null
   } | null
   status_level: 'ok' | 'warning'
   status_message: string
@@ -1132,7 +1134,8 @@ export type ModuleMode = 'on' | 'shadow' | 'off'
 
 /** What a score really meant on unseen days (display only; `confidence` stays the raw ranking). */
 export interface BrainHonestScore {
-  status: 'measured' | 'calibrated' | 'not_measured' | 'no_score'
+  /** `unverified`: the model that produced the score, or the evidence's own model, could not be confirmed. */
+  status: 'measured' | 'calibrated' | 'not_measured' | 'unverified' | 'no_score'
   honest_chance?: number
   rule?: string
   caveat?: string

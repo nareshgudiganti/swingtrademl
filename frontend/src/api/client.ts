@@ -369,8 +369,14 @@ export const api = {
   // -------------------------------------------------------------- auth --
   login: (username: string, password: string) =>
     post<{ access_token: string }>('/auth/login', { username, password }),
+  // The code only works with the sign-in cookie the server set in this browser
+  // (issue #373); `include` so it is also sent when the API is on another port (local dev).
   exchangeLoginCode: (code: string) =>
-    postPublic<{ access_token: string }>('/auth/google/exchange', { code }),
+    request<{ access_token: string }>(
+      '/auth/google/exchange',
+      { method: 'POST', body: JSON.stringify({ code }), credentials: 'include' },
+      true,
+    ),
   changePassword: (current_password: string, new_password: string) =>
     post<{ access_token: string }>('/auth/password', { current_password, new_password }),
   logoutEverywhere: () => post<{ message: string }>('/auth/logout-all'),

@@ -57,7 +57,10 @@ def test_callback_puts_a_code_not_a_token_in_the_url(client, db_session, monkeyp
     from swing_trade_ml.api.v1.endpoints import auth as auth_ep
 
     monkeypatch.setattr(settings, "GOOGLE_ALLOWED_EMAILS", "g5@example.com")
-    state = auth_ep._issue_state()
+    monkeypatch.setattr(settings, "GOOGLE_CLIENT_ID", "id")
+    monkeypatch.setattr(settings, "GOOGLE_CLIENT_SECRET", "secret")
+    login = client.get("/api/v1/auth/google/login", follow_redirects=False)
+    state = parse_qs(urlparse(login.headers["location"]).query)["state"][0]
 
     class _Resp:
         def __init__(self, data):

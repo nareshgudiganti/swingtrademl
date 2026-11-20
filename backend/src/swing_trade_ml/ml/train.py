@@ -33,7 +33,7 @@ from swing_trade_ml.db.models.ml import MLModel
 from swing_trade_ml.ml.calibrated_model import CalibratedEstimator, reliability_table
 from swing_trade_ml.ml.dataset import apply_embargo, build_training_dataset, chronological_split
 from swing_trade_ml.ml.features import FEATURE_COLUMNS
-from swing_trade_ml.ml.registry import next_version, save_artifact
+from swing_trade_ml.ml.registry import artifact_sha256, next_version, save_artifact
 
 log = get_logger(__name__)
 
@@ -387,6 +387,7 @@ def train_model(
             "calibrated": calibrate,
         },
     )
+    metrics["artifact_sha256"] = artifact_sha256(path)
 
     record = MLModel(
         name=name,

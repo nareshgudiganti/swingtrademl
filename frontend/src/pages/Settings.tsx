@@ -239,7 +239,7 @@ export default function Settings() {
                       identical to a week of quiet markets. */}
                   {topBlocked ? (
                     <div className="stat-sub" style={{ marginTop: 6 }}>
-                      {topBlocked.count} blocked: {topBlocked.reason}
+                      {topBlocked.count} blocked: {topBlocked.reason ?? 'by a safety limit'}
                     </div>
                   ) : null}
                 </>

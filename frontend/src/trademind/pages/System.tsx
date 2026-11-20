@@ -135,7 +135,7 @@ function SystemBody() {
               <div className="tm-stat-label">Stocks watched</div>
             </div>
             <div>
-              <div className="tm-stat-value">{appStatus.data.open_positions}</div>
+              <div className="tm-stat-value">{appStatus.data.open_positions ?? '—'}</div>
               <div className="tm-stat-label">Open positions</div>
             </div>
           </div>

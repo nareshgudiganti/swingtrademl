@@ -71,6 +71,15 @@ describe('the AI’s case', () => {
     expect(evidenceFigures(none).kind).toBe('none')
     expect(renderToString(<ModelEvidence decision={none} />)).toContain('has not been measured')
     expect(evidenceFigures(dec({ honest_score: null })).kind).toBe('none')
+    // #377: the model behind the score could not be confirmed, so no hit rate, even if one came along
+    const unverified = dec({
+      honest_score: {
+        status: 'unverified',
+        note: 'We could not confirm which model produced this score, so no measured hit rate is shown.',
+        track_record: { enough_evidence: true, n: 500, hit_rate: 0.4 },
+      },
+    })
+    expect(evidenceFigures(unverified)).toEqual({ kind: 'none', text: expect.stringContaining('could not confirm') })
     expect(renderToString(<ModelEvidence decision={dec({ kind: 'holding', word: 'HOLD' })} />)).toBe('')
   })
 })

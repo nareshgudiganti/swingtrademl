@@ -215,7 +215,7 @@ export function evidenceFigures(d: BrainDecision): EvidenceFigures {
   const h = d.honest_score
   const tr = h?.track_record
   if (!h || h.status === 'no_score') return { kind: 'none', text: 'No score was stored for this stock, so there is no record to show.' }
-  if (h.status === 'not_measured' || !tr || tr.hit_rate == null || tr.n == null) {
+  if (h.status === 'not_measured' || h.status === 'unverified' || !tr || tr.hit_rate == null || tr.n == null) {
     return {
       kind: 'none',
       text: h.note ?? 'This score has not been measured against the +8% / −4% question yet, so no record is shown.',

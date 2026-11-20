@@ -65,8 +65,22 @@ def _model(db=None, **kw) -> MLModel:
     return m
 
 
-def _run_with(db, decisions: list[dict]) -> str:
-    db.add(BrainRun(id="ev-run", kind="nightly", as_of=AS_OF, book="paper", live=True, started_at=AS_OF))
+def _run_with(db, decisions: list[dict], scored_by: MLModel | None = None) -> str:
+    """A stored run; `scored_by` is the model recorded as producing its scores (issue #377)."""
+    context = (
+        {"data_manifest": {"score_model": score_evidence.model_identity(scored_by)}} if scored_by else None
+    )
+    db.add(
+        BrainRun(
+            id="ev-run",
+            kind="nightly",
+            as_of=AS_OF,
+            book="paper",
+            live=True,
+            started_at=AS_OF,
+            context=context,
+        )
+    )
     db.flush()
     for d in decisions:
         db.add(BrainDecision(run_id="ev-run", reasons=["r"], word="WATCH", **d))
@@ -117,8 +131,10 @@ def test_the_shipped_evidence_file_loads_and_is_conservative():
 def test_every_idea_card_shows_the_honest_score_and_stored_confidence_is_untouched(
     client, db_session, monkeypatch, evidence
 ):
-    monkeypatch.setattr(score_evidence, "load", lambda *_a, **_k: evidence)
-    _model(db_session)
+    m = _model(db_session)
+    ident = score_evidence.model_identity(m)
+    measured = {**evidence, "measured_on": {**ident, "protocol": "test walk-forward"}}
+    monkeypatch.setattr(score_evidence, "load", lambda *_a, **_k: measured)
     raws = [0.35, 0.55, 0.65, 0.9]
     run_id = _run_with(
         db_session,
@@ -126,11 +142,14 @@ def test_every_idea_card_shows_the_honest_score_and_stored_confidence_is_untouch
             {"symbol": f"S{i}", "kind": "idea", "confidence": p, "score_source": "model"}
             for i, p in enumerate(raws)
         ],
+        scored_by=m,
     )
     body = client.get(f"/api/v1/brain/runs/{run_id}", headers=HEADERS).json()
     assert len(body["decisions"]) == len(raws)
     for d in body["decisions"]:
-        expected = score_evidence.present(d["confidence"], evidence)
+        expected = score_evidence.present(
+            d["confidence"], measured, scored_by={**ident, "source": "recorded_with_run"}
+        )
         assert d["honest_score"] == expected  # the shown score IS the calibrated one
         assert d["honest_score"]["honest_chance"] < d["confidence"]  # never the raw model number
     assert sorted(d["confidence"] for d in body["decisions"]) == sorted(raws)  # stored score unchanged
@@ -138,7 +157,7 @@ def test_every_idea_card_shows_the_honest_score_and_stored_confidence_is_untouch
 
 def test_endpoint_model_scores_are_not_presented_as_chances(client, db_session, evidence, monkeypatch):
     monkeypatch.setattr(score_evidence, "load", lambda *_a, **_k: evidence)
-    _model(
+    m = _model(
         db_session,
         label_kind="endpoint",
         prediction_horizon_days=5,
@@ -146,7 +165,9 @@ def test_endpoint_model_scores_are_not_presented_as_chances(client, db_session, 
         stop_return_pct=None,
     )
     run_id = _run_with(
-        db_session, [{"symbol": "S0", "kind": "idea", "confidence": 0.7, "score_source": "model"}]
+        db_session,
+        [{"symbol": "S0", "kind": "idea", "confidence": 0.7, "score_source": "model"}],
+        scored_by=m,
     )
     d = client.get(f"/api/v1/brain/runs/{run_id}", headers=HEADERS).json()["decisions"][0]
     assert d["honest_score"]["status"] == "not_measured"

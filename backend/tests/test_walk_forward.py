@@ -8,6 +8,7 @@ downstream is made on that score.
 
 from __future__ import annotations
 
+import hashlib
 import json
 
 import numpy as np
@@ -152,7 +153,7 @@ def test_fit_and_score_is_deterministic():
     assert first["test_rows"] == len(test)
 
 
-def test_train_model_stores_folds_and_writes_one_version(monkeypatch):
+def test_train_model_stores_folds_and_writes_one_version(monkeypatch, tmp_path):
     """Walk-forward must ride along on one training run, not multiply it."""
     import swing_trade_ml.ml.train as train_module
 
@@ -181,7 +182,9 @@ def test_train_model_stores_folds_and_writes_one_version(monkeypatch):
 
     def fake_save_artifact(name, version, payload):
         artifacts.append(version)
-        return "memory://artifact"
+        path = tmp_path / f"{name}_{version}.joblib"
+        path.write_bytes(b"artifact")
+        return str(path)
 
     monkeypatch.setattr(train_module, "next_version", fake_next_version)
     monkeypatch.setattr(train_module, "save_artifact", fake_save_artifact)
@@ -195,5 +198,6 @@ def test_train_model_stores_folds_and_writes_one_version(monkeypatch):
     folds = record.metrics["walk_forward"]
     assert len(folds) == 3
     assert record.metrics["embargo_days"] == 4
+    assert record.metrics["artifact_sha256"] == hashlib.sha256(b"artifact").hexdigest()
     # Lands in a JSON column — must serialise as-is.
     json.dumps(record.metrics)

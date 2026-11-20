@@ -15,7 +15,7 @@ export const chanceText = (d: BrainDecision): string => {
 export const chanceTitle = (d: BrainDecision): string => {
   const h = d.honest_score
   if (!h) return 'No score for this stock.'
-  if (h.status === 'not_measured') return h.note ?? 'No measured chance for this model.'
+  if (h.status === 'not_measured' || h.status === 'unverified') return h.note ?? 'No measured chance for this model.'
   return `Estimated chance of +8% before −4% within 15 trading days, from how this score did on days the model had not seen. ${h.track_record?.text ?? ''}`.trim()
 }
 
@@ -23,7 +23,7 @@ export const chanceTitle = (d: BrainDecision): string => {
 export function TrackRecord({ decision }: { decision: BrainDecision }) {
   const h = decision.honest_score
   if (!h) return null
-  if (h.status === 'not_measured') return <p className="tm-note">{h.note}</p>
+  if (h.status === 'not_measured' || h.status === 'unverified') return <p className="tm-note">{h.note}</p>
   const tr = h.track_record
   return (
     <div className="tm-note" style={{ marginTop: '0.5rem' }}>

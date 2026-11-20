@@ -70,7 +70,7 @@ function Evidence({ d }: { d: BeginnerDecision }) {
     line = tr?.enough_evidence && tr.text
       ? `Past results: ${withoutScorePercent(tr.text)}${h.caveat ? ` ${h.caveat}` : ''}`
       : `Past results: ${NA} — too few comparable past ideas to quote a hit rate.`
-  } else if (h?.status === 'not_measured') {
+  } else if (h?.status === 'not_measured' || h?.status === 'unverified') {
     line = `Past results: ${NA} — ${h.note ?? "this model's score has not been checked against real results"}`
   } else {
     line = `Past results: ${NA} — there is no measured record for this kind of ${d.kind === 'idea' ? 'idea' : 'holding'}.`

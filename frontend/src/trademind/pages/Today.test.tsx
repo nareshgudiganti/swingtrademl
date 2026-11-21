@@ -8,7 +8,6 @@ import { describe, expect, it } from 'vitest'
 
 import { ApiError } from '../../api/client'
 import type { BrainDecision, BrainRun } from '../../api/types'
-import type { HorizonId } from '../horizons'
 import { BANNED_CLAIMS } from '../beginner/cardText'
 import { finalWord, ideasFrom } from '../live'
 import { ideaCounts } from '../today/TodayIdeas'
@@ -255,71 +254,5 @@ describe('/trademind/dashboard', () => {
     )
     expect(html).toContain('data-focus="picks"')
     expect(html).toContain('id="picks"')
-  })
-})
-
-// Moved here from the removed Dashboard.test.tsx (the unrouted old Swing Picks page): the pick list on Today keeps
-// the same horizon wording, counts and window-only rules, checked on the live page.
-describe('Today pick list: horizon wording, counts and unsupported windows', () => {
-  const idea = (symbol: string, word: string, confidence: number): BrainDecision =>
-    dec(symbol, word, confidence, { id: symbol.length })
-  const picksRun = {
-    ...run,
-    decisions: [idea('AAAPICK', 'TRADE', 0.9), idea('BBBPICK', 'WATCH', 0.7), idea('CCCSKIP', 'AVOID', 0.2)],
-  } as unknown as BrainRun
-
-  function renderPicks(initialHorizon?: HorizonId): string {
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-    client.setQueryData(['brainLatest', 'nightly'], picksRun)
-    return renderToString(
-      <QueryClientProvider client={client}>
-        <MemoryRouter initialEntries={['/trademind/dashboard']}>
-          <Today initialHorizon={initialHorizon} />
-        </MemoryRouter>
-      </QueryClientProvider>,
-    )
-  }
-  /** The all-picks section only (id="picks"), which is what the old Swing Picks page showed. */
-  const picksSection = (html: string) => html.slice(html.indexOf('id="picks"'))
-
-  it('labels 15 days "Experimental, unproven" and lists the 15-day TRADE and WATCH picks, not AVOID', () => {
-    const html = renderPicks()
-    expect(text(html)).toContain('Experimental, unproven')
-    const section = picksSection(html)
-    expect(section).toContain('AAAPICK')
-    expect(section).toContain('BBBPICK')
-    expect(section).not.toContain('CCCSKIP')
-    expect(text(section)).toContain('15 Days (2)')
-  })
-
-  it('counts picks only for the supported horizon, and labels the figures and span as 15-day', () => {
-    const t = text(picksSection(renderPicks()))
-    expect(t).toMatch(/1D: — 5D: — 15D: 2 30D: — 3M: —/)
-    expect(t).toContain("Average of today's 15-day picks")
-    expect(t).toContain('15-day window')
-    expect(t).toContain('Picks are shown for the 15-day window only')
-    expect(t).toContain('up to 15 trading days')
-  })
-
-  it('gives the two horizon lists different names', () => {
-    const html = renderPicks()
-    expect(html).toContain('aria-label="Trading horizon"')
-    expect(html).toContain('aria-label="Trading horizon (list)"')
-  })
-
-  for (const h of ['1d', '5d', '30d', '90d'] as const) {
-    it(`${h}: shows the explanation and no picks, table, filters or pick detail`, () => {
-      const page = renderPicks(h)
-      expect(page).toMatch(new RegExp(`aria-selected="true"[^>]*data-horizon="${h}"`))
-      expect(text(page)).toContain('No supported trading strategy for')
-      expect(page).not.toContain('<table')
-      expect(page).not.toContain('AAAPICK')
-      expect(page).not.toContain('Search stock')
-      expect(page).not.toContain('Trade setup')
-    })
-  }
-
-  it('5d separates the research predictions from a trading plan', () => {
-    expect(text(renderPicks('5d'))).toContain('not a trading plan')
   })
 })

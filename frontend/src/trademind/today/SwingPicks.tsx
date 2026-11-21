@@ -8,7 +8,7 @@
 // never another window's picks.
 // The score is a ranking between ideas, never shown as a chance of winning.
 //
-// `data-feature` attributes name the rows of the oa5 feature list (docs/superpowers/plans/2026-10-23-oa5-today-feature-list.md).
+// `data-feature` attributes name the rows of the oa5 feature list (./featureList.ts), so its test can find them.
 
 import { useMemo, useState } from 'react'
 import { useQueries, useQuery } from '@tanstack/react-query'
@@ -130,7 +130,7 @@ export function HowItWorks() {
 }
 
 /** The TRADE and WATCH picks, in the brain's order. */
-function picksFrom(run: BrainRun): BrainDecision[] {
+export function picksFrom(run: BrainRun): BrainDecision[] {
   return ideasFrom(run).filter((d) => ['TRADE', 'WATCH'].includes(finalWord(d)))
 }
 

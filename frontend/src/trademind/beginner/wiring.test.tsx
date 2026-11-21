@@ -1,4 +1,4 @@
-// fx8 (Beginner Wave 2): the bx blocks appear where they were wired (the unused phone bottom bar was removed), only for the accounts the server answers,
+// fx8 (Beginner Wave 2): the bx blocks appear where they were wired (BottomBar is not wired yet), only for the accounts the server answers,
 // and the brain trial stays a count. Pages are rendered with their data already in the query cache (no network).
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { renderToString } from 'react-dom/server'

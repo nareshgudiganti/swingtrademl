@@ -6,7 +6,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
 
 import type { BrainDecision, BrainRun } from '../api/types'
-import Today from './pages/Today'
+import Dashboard from './pages/Dashboard'
 // The Swing Picks code moved to today/SwingPicks.tsx (oa5).
 import dashboardSource from './today/SwingPicks.tsx?raw'
 import { ResearchExperiment, canStillChange } from './ResearchExperiment'
@@ -170,7 +170,7 @@ describe('Swing Picks: the research section appears only for the owner, on 5 and
     return renderToString(
       <QueryClientProvider client={c}>
         <MemoryRouter initialEntries={['/trademind/dashboard']}>
-          <Today initialHorizon={h} />
+          <Dashboard initialHorizon={h} />
         </MemoryRouter>
       </QueryClientProvider>,
     )

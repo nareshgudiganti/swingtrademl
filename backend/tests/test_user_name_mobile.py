@@ -98,7 +98,9 @@ def test_invalid_names_are_refused(raw):
 def test_single_migration_head_and_parent():
     script = ScriptDirectory.from_config(Config(str(BACKEND / "alembic.ini")))
     heads = script.get_heads()
-    assert heads == ["wlsales01"]  # sold records sit on acctdelete01 (joins servicekeys01 and adminmfa01)
+    assert heads == ["growwsync01"]  # Groww sync tables sit on wlsales01
+    assert script.get_revision("growwsync01").down_revision == "wlsales01"
+    # sold records sit on acctdelete01 (joins servicekeys01 and adminmfa01)
     assert script.get_revision("wlsales01").down_revision == "acctdelete01"
     assert script.get_revision("billing01").down_revision == "authtokens01"
     assert script.get_revision("authtokens01").down_revision == "usernamemob01"

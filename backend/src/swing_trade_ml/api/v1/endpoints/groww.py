@@ -37,6 +37,7 @@ Owner = Annotated[Principal, Depends(require_real_account)]
 REFRESH_EVERY = timedelta(seconds=60)
 NOT_CONFIGURED = "Groww is not connected yet. Add the Groww keys on the server first."
 NO_OWNER = "No owner account was found to update."
+NOT_GROWW_OWNER = "Only the Groww account owner can do this."
 TOO_SOON = "Groww was refreshed less than a minute ago. Try again soon."
 
 
@@ -65,11 +66,13 @@ def status_payload(db: Session) -> dict:
 
 
 def _user_id(db: Session, principal: Principal) -> int:
-    if principal.user is not None:
-        return principal.user.id
-    uid = groww_sync.owner_user_id(db)  # the API key: the owner's own scripts
+    """The one tracker Groww writes go to: the Groww account owner's (groww_sync.owner_user_id),
+    the same one the 15:35 job updates. Another real-account owner may look, not write."""
+    uid = groww_sync.owner_user_id(db)
     if uid is None:
         raise HTTPException(status.HTTP_409_CONFLICT, NO_OWNER)
+    if principal.user is not None and principal.user.id != uid:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, NOT_GROWW_OWNER)
     return uid
 
 

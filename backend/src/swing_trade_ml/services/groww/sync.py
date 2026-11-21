@@ -47,7 +47,9 @@ class SyncAlreadyRunning(Exception):  # noqa: N818 - name fixed by the task inte
 
 def owner_user_id(db: Session) -> int | None:
     """Whose tracker a sync updates when no person is behind the call (the 15:35 job, the API key):
-    the first name in REAL_ACCOUNT_USERS, if that account exists."""
+    the first name in REAL_ACCOUNT_USERS, if that account exists and has the owner role (the same
+    rule as can_see_real_account / idea_report.groww_user_ids). Every Groww write targets this one
+    account, so a manual Refresh and the 15:35 job always update the same tracker."""
     from sqlalchemy import func
 
     from swing_trade_ml.core.config import settings
@@ -56,7 +58,9 @@ def owner_user_id(db: Session) -> int | None:
     names = [n.strip().lower() for n in settings.REAL_ACCOUNT_USERS.split(",") if n.strip()]
     if not names:
         return None
-    return db.scalar(select(User.id).where(func.lower(User.username) == names[0]).limit(1))
+    return db.scalar(
+        select(User.id).where(func.lower(User.username) == names[0], User.role == "owner").limit(1)
+    )
 
 
 def fetch_holdings() -> list[dict]:

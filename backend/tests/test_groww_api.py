@@ -382,3 +382,52 @@ def test_groww_sync_scheduled_weekdays_1535_ist():
     fields = {f.name: str(f) for f in job.trigger.fields}
     assert fields["hour"] == "15" and fields["minute"] == "35" and fields["day_of_week"] == "mon-fri"
     assert str(job.trigger.timezone) == "Asia/Kolkata"
+
+
+# --- one Groww tracker: writes always go to the Groww account owner ------------------------------
+
+
+WRITE_ROUTES = [
+    ("/groww/sync", None),
+    ("/groww/matching/INE000A01011", {"instrument_id": 1}),
+    ("/groww/matching/confirm-all", None),
+    ("/groww/syncs/1/confirm-empty", None),
+]
+
+
+@pytest.mark.parametrize(("path", "body"), WRITE_ROUTES)
+def test_second_real_account_owner_cannot_write(client, db_session, monkeypatch, path, body):
+    monkeypatch.setattr(groww_api.groww_client, "is_configured", lambda: True)
+    monkeypatch.setattr(groww_api.groww_sync, "run_sync", lambda *a, **k: pytest.fail("must not sync"))
+    _as(db_session, OWNER)
+    _, other = _as(db_session, "someoneelse")  # also in REAL_ACCOUNT_USERS, but not first
+    r = client.post(API + path, json=body, headers=other) if body else client.post(API + path, headers=other)
+    assert r.status_code == 403
+    assert r.json()["detail"] == "Only the Groww account owner can do this."
+    # Reading the status is still fine for them.
+    assert client.get(API + "/groww/status", headers=other).status_code == 200
+
+
+def test_writes_target_the_groww_owner_tracker(client, db_session, monkeypatch):
+    monkeypatch.setattr(groww_api.groww_client, "is_configured", lambda: True)
+    owner, hdr = _as(db_session, OWNER)
+    seen = []
+
+    def fake_run(db, *, user_id, trigger):
+        seen.append(user_id)
+        return GrowwSync(status=SYNC_FAILED, holdings_count=None, finished_at=utcnow(), trigger=trigger)
+
+    monkeypatch.setattr(groww_api.groww_sync, "run_sync", fake_run)
+    assert client.post(API + "/groww/sync", headers=hdr).status_code == 200
+    assert client.post(API + "/groww/sync", headers={"X-API-Key": "test-api-key"}).status_code in (200, 429)
+    assert seen and all(uid == owner.id for uid in seen)
+
+
+def test_owner_user_id_requires_owner_role(db_session, monkeypatch):
+    member, _ = _as(db_session, OWNER, "member")
+    assert gsync.owner_user_id(db_session) is None
+    member.role = "owner"
+    db_session.flush()
+    assert gsync.owner_user_id(db_session) == member.id
+    monkeypatch.setattr(settings, "REAL_ACCOUNT_USERS", "")
+    assert gsync.owner_user_id(db_session) is None

@@ -225,22 +225,77 @@ def test_patch_quantity_on_manual_row_still_allowed(client, db_session, stocks):
     assert r.status_code == 200 and r.json()["quantity"] == 4 and r.json()["buy_price"] == 12.5
 
 
-def test_sold_with_quantity_keeps_row_on_list(client, db_session, stocks):
+def _groww_drop(db, item, old: float, new: float):
+    """Groww showed fewer shares (as a sync would record it), an hour ago."""
+    from datetime import UTC, datetime, timedelta
+
+    from swing_trade_ml.db.models.user_watchlist import UserWatchlistItemChange
+
+    db.add(
+        UserWatchlistItemChange(
+            item_id=item.id,
+            field="quantity",
+            old_value=str(old),
+            new_value=str(new),
+            changed_by="groww_sync",
+            changed_at=datetime.now(UTC) - timedelta(hours=1),
+        )
+    )
+    item.quantity = new
+    db.flush()
+
+
+def _sales(db, user):
     from swing_trade_ml.db.models.user_watchlist import UserWatchlistSale
 
+    return db.execute(select(UserWatchlistSale).where(UserWatchlistSale.user_id == user.id)).scalars().all()
+
+
+def test_sold_with_quantity_keeps_row_on_list(client, db_session, stocks):
     owner, me = _as(db_session, "wl-gw-seller", "owner")
     item = _groww_row(db_session, owner, "WLTESTA", groww_isin="INE778A01011")
+    _groww_drop(db_session, item, 10.0, 7.0)
+    zero = client.post(f"{URL}/WLTESTA/sold", json={"sell_price": 110.0, "quantity": 0}, headers=me)
+    assert zero.status_code == 422
     r = client.post(f"{URL}/WLTESTA/sold", json={"sell_price": 110.0, "quantity": 3}, headers=me)
     assert r.status_code == 200, r.text
     assert r.json()["quantity"] == 3
     db_session.refresh(item)
     assert item.removed_at is None  # still on the list; Groww decides when it is gone
-    sales = db_session.execute(
-        select(UserWatchlistSale).where(UserWatchlistSale.user_id == owner.id)
-    ).scalars().all()
-    assert [s.quantity for s in sales] == [3]
-    zero = client.post(f"{URL}/WLTESTA/sold", json={"sell_price": 110.0, "quantity": 0}, headers=me)
-    assert zero.status_code == 422
+    assert [s.quantity for s in _sales(db_session, owner)] == [3]
+
+
+def test_linked_sale_cannot_be_confirmed_twice(client, db_session, stocks):
+    owner, me = _as(db_session, "wl-gw-twice", "owner")
+    item = _groww_row(db_session, owner, "WLTESTA", groww_isin="INE779A01011")
+    _groww_drop(db_session, item, 10.0, 6.0)
+    first = client.post(f"{URL}/WLTESTA/sold", json={"sell_price": 110.0}, headers=me)
+    assert first.status_code == 200, first.text
+    assert first.json()["quantity"] == 4  # omitted: the shares Groww shows as gone
+    for body in ({"sell_price": 110.0}, {"sell_price": 110.0, "quantity": 1}):
+        again = client.post(f"{URL}/WLTESTA/sold", json=body, headers=me)
+        assert again.status_code == 409
+        assert again.json()["detail"] == "There is no unconfirmed sale for this stock."
+    assert [s.quantity for s in _sales(db_session, owner)] == [4]
+
+
+def test_linked_sale_without_a_groww_drop_is_refused(client, db_session, stocks):
+    owner, me = _as(db_session, "wl-gw-nodrop", "owner")
+    _groww_row(db_session, owner, "WLTESTA", groww_isin="INE780A01011")
+    r = client.post(f"{URL}/WLTESTA/sold", json={"sell_price": 110.0, "quantity": 2}, headers=me)
+    assert r.status_code == 409 and r.json()["detail"] == "There is no unconfirmed sale for this stock."
+    assert _sales(db_session, owner) == []
+
+
+def test_linked_sale_over_quantity_refused(client, db_session, stocks):
+    owner, me = _as(db_session, "wl-gw-over", "owner")
+    item = _groww_row(db_session, owner, "WLTESTA", groww_isin="INE781A01011")
+    _groww_drop(db_session, item, 10.0, 7.0)
+    r = client.post(f"{URL}/WLTESTA/sold", json={"sell_price": 110.0, "quantity": 4}, headers=me)
+    assert r.status_code == 409 and r.json()["detail"] == "That is more shares than Groww shows as sold."
+    assert _sales(db_session, owner) == []
+    ok = client.post(f"{URL}/WLTESTA/sold", json={"sell_price": 110.0, "quantity": 3}, headers=me)
+    assert ok.status_code == 200, ok.text
 
 
 def test_sold_manual_row_still_leaves_the_list(client, db_session, stocks):

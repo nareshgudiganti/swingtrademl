@@ -54,6 +54,8 @@ PrincipalNow = Annotated[Principal, Depends(get_principal)]
 
 #: Quantity and buy price of a Groww-linked row come from Groww (spec §6: not hand-editable).
 FROM_GROWW = "This comes from Groww and updates on every sync."
+NO_PENDING_SALE = "There is no unconfirmed sale for this stock."
+TOO_MANY_SOLD = "That is more shares than Groww shows as sold."
 
 
 def _groww_linked(item: UserWatchlistItem) -> bool:
@@ -370,13 +372,22 @@ def mark_sold(symbol: str, body: SoldBody, db: DbSession, me: Me) -> dict:
     "Sold records". Nothing is sold by the app. The entry price is your Groww price, or the close on
     the day you added it.
 
-    A Groww-linked stock is a confirmation of the sale Groww showed: the sale is recorded for the
-    shares sold (sent, else the shares Groww shows as gone) and the stock stays on the list; the
+    A Groww-linked stock is a confirmation of the sale Groww showed: it needs shares Groww shows as
+    gone (409 otherwise, so a retry never records it twice), the sale is recorded for the shares
+    sold (sent, at most the shares gone; else all of them) and the stock stays on the list; the
     next sync decides whether it is still held."""
     sym = _clean(symbol)
     item = _mine(db, me, sym)
     if item is None or item.removed_at is not None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"{sym} is not on your list.")
+    linked = _groww_linked(item)
+    pending = groww_apply.pending_sale_qty(db, item) if linked else None
+    if linked:
+        # Only a drop Groww showed can be confirmed, and only once (a retry finds nothing pending).
+        if pending is None:
+            raise HTTPException(status.HTTP_409_CONFLICT, NO_PENDING_SALE)
+        if body.quantity is not None and body.quantity > pending + 1e-9:
+            raise HTTPException(status.HTTP_409_CONFLICT, TOO_MANY_SOLD)
     today = tracker.today_ist()
     bought_on = tracker.ist_date(item.added_at)
     sold_on = body.sold_on or today
@@ -401,11 +412,10 @@ def mark_sold(symbol: str, body: SoldBody, db: DbSession, me: Me) -> dict:
         entry, source, _ = tracker.pick_entry(bought_on, None, closes)
     if entry is None or source is None:
         raise HTTPException(422, "Add the price you paid first, so the result can be worked out.")
-    linked = _groww_linked(item)
     if body.quantity is not None:
         qty = body.quantity
     elif linked:
-        qty = groww_apply.pending_sale_qty(db, item)  # unknown stays None, never 0
+        qty = pending
     else:
         qty = item.quantity
     sale = UserWatchlistSale(

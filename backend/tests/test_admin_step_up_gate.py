@@ -119,7 +119,7 @@ def test_api_key_refused_on_gated_routes(client, db_session, enforced):
 
 def test_read_only_views_stay_open_to_the_signed_in_owner(client, db_session, enforced):
     _o, hdr = make_user(db_session, "boss_ro", role="owner")
-    for path in ["/admin/switch", "/admin/features", "/admin/plans", "/admin/jobs", "/admin/release-switches"]:
+    for path in ["/admin/switch", "/admin/features", "/admin/plans", "/admin/jobs"]:
         assert call(client, "get", path, None, hdr).status_code == 200, path
 
 

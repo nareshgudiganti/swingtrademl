@@ -20,7 +20,7 @@ live `X-Admin-Mfa` token. The shared API key is refused (no person is behind it)
 | `GET /admin/switch`, `/features`, `/plans` | No | Read-only settings, no personal data. Owner sign-in is still required. |
 | `GET /admin/invites` | No | Read-only list for the Invites screen. Decisions on it are gated. Revisit if the list gains more personal data. |
 | `GET /admin/service-keys` | No | Shows key prefixes and scopes only, never a key. |
-| `GET /admin/jobs`, `/admin/server-health`, `/admin/release-switches` | No | Read-only operational views. |
+| `GET /admin/jobs`, `/admin/server-health` | No | Read-only operational views. |
 | `/admin/mfa/*` | Own checks | Setup and verify are the two-step flow itself. Replacing an active setup needs a live token. |
 | `/admin/console/*` | Own checks | Already needs the token (from the admin users PR). |
 

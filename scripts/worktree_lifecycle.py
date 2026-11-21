@@ -193,10 +193,22 @@ def live_session_paths(hours: int = LIVE_SESSION_HOURS) -> set[str]:
 
 
 def pr_index(root: Path) -> tuple[dict[str, set[tuple[int, str]]], dict[str, int]]:
-    r = subprocess.run(
+    try:
+        r = _gh_pr_list(root)
+    except FileNotFoundError:
+        print("WARNING: GitHub CLI not found; merged-PR (squash) detection disabled", file=sys.stderr)
+        return {}, {}
+    return _parse_prs(r)
+
+
+def _gh_pr_list(root: Path):
+    return subprocess.run(
         ["gh", "pr", "list", "--state", "all", "--limit", "2000", "--json", "number,state,headRefName,headRefOid"],
         cwd=str(root), capture_output=True, text=True, encoding="utf-8", errors="replace", check=False,
     )
+
+
+def _parse_prs(r) -> tuple[dict[str, set[tuple[int, str]]], dict[str, int]]:
     merged: dict[str, set[tuple[int, str]]] = {}
     open_: dict[str, int] = {}
     if r.returncode:
@@ -303,9 +315,10 @@ def collect(root: Path, ctx: Context | None = None) -> list[Worktree]:
     _, porcelain = git(root, "worktree", "list", "--porcelain")
     wts = parse_worktrees(porcelain)
     live, now = live_session_paths(), time.time()
+    qprefix = norm(quarantine_dir(root)) + "/"
     for w in wts:
         inspect(w, ctx, live, now)
-        w.removable = removal_ok(w)
+        w.removable = removal_ok(w) and not norm(w.path).startswith(qprefix)
     in_use = {w.branch for w in wts if w.branch and not w.removable}
     for w in wts:
         w.branch_deletable = bool(w.removable and w.branch and w.branch not in in_use
@@ -403,7 +416,10 @@ def load_manifest(root: Path) -> list[dict]:
 
 def save_manifest(root: Path, entries: list[dict]) -> None:
     quarantine_dir(root).mkdir(parents=True, exist_ok=True)
-    manifest_path(root).write_text(json.dumps(entries, indent=1), encoding="utf-8")
+    target = manifest_path(root)
+    tmp = target.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(entries, indent=1), encoding="utf-8")
+    os.replace(tmp, target)  # atomic: a crash leaves either the old or the new file, never a broken one
 
 
 class QuarantineLock:
@@ -452,8 +468,11 @@ def unlink_links(path: Path, log) -> None:
 
 def merged_pr_branch(root: Path, pr: int) -> str | None:
     """Head branch of PR `pr` ONLY if GitHub says it is merged; otherwise None (open/closed PRs never qualify)."""
-    r = subprocess.run(["gh", "pr", "view", str(pr), "--json", "state,headRefName"],
-                       cwd=str(root), capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)
+    try:
+        r = subprocess.run(["gh", "pr", "view", str(pr), "--json", "state,headRefName"], cwd=str(root),
+                           capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)
+    except FileNotFoundError:
+        return None
     if r.returncode:
         return None
     data = json.loads(r.stdout or "{}")
@@ -550,8 +569,11 @@ def restore(root: Path, name: str, log_path: Path) -> int:
         return 1
     log, fh = _logger(log_path)
     try:
+        src = e["quarantined"]
+        if not Path(src).exists() and e.get("previous_path") and Path(e["previous_path"]).exists():
+            src = e["previous_path"]
         with QuarantineLock(root):
-            rc, out = git(root, "worktree", "move", e["quarantined"], e["original"])
+            rc, out = git(root, "worktree", "move", src, e["original"])
             log(f"=== restore {e['quarantined']} -> {e['original']} rc={rc} {out[-200:]}")
             if rc == 0:
                 save_manifest(root, [x for x in load_manifest(root) if x["quarantined"] != e["quarantined"]])
@@ -601,6 +623,7 @@ def purge(root: Path, apply: bool, older_than_days: int, log_path: Path) -> int:
             # address the old path can no longer reach the folder. Then re-check under the new name.
             staging = unique_dest(quarantine_dir(root), Path(e["quarantined"]).name + "__purging")
             before = e["quarantined"]
+            e["previous_path"] = before  # restore/purge fall back to this if the move never happened
             e["quarantined"] = str(staging).replace("\\", "/")
             save_manifest(root, keep)  # restore record points at the new path BEFORE the move
             rc, out = git(root, "worktree", "move", before, str(staging))

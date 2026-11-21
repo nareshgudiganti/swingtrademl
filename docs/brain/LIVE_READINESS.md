@@ -1,6 +1,6 @@
 # Live trading readiness (Phase 4)
 
-Paper and M18 shadow can run without these. **Real auto orders** need Phase 0 from [ROADMAP_TRACKER.md](../ROADMAP_TRACKER.md).
+Paper and M18 shadow can run without these. **Real auto orders** need Phase 0 from [ROADMAP_TRACKER.md](../archive/ROADMAP_TRACKER.md) (archived).
 
 | Item | Owner | Status |
 |------|-------|--------|

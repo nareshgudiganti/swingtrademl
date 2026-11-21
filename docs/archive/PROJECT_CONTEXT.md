@@ -1,3 +1,5 @@
+> **ARCHIVED 2026-11-21 (stale, written 2026-09-15). Do not rely on it. See docs/README.md; current facts: docs/architecture/CURRENT-STATE.md and docs/architecture/TRADEMIND-SOLUTION-OVERVIEW.md.**
+
 # Project context: Swing Trade ML
 
 Reviewed 2026-09-15 against local commit `dd1f4c4`.

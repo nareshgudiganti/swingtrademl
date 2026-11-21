@@ -132,6 +132,13 @@ pyotp 2.12.0) and all 3 run-1 failures are fixed.
 - Low-priority backlog: ~14 tests make instrument tokens with `hash(symbol) % N`, also random per run; two
   symbols could rarely collide. None has failed. Not changed.
 
+### CI run 3 — https://github.com/nareshgudiganti/swingtrademl/actions/runs/43911914752 (`3c0c1e0`)
+
+**SUCCESS: backend 4593 passed, 0 failed, 50 skipped; frontend success; e2e success.** Branch
+`review/local-work-nov12` at `3c0c1e0573fdf4b24dca722061857f3320bd19b4` is CI-green. NOT merged. Merge into
+`main` (= production deploy) needs the owner's separate approval. Note: `origin/main` moved to `193848b`
+(not by Claude) during this work; check it before merging and update the branch if needed.
+
 ## Open findings
 
 1. **RESOLVED 2026-11-16: owner ran the approval script; freeze test green.** (History:) Running `scripts/approve_trial_change.py` was
@@ -208,3 +215,14 @@ or order execution without explicit approval. Do not commit or push this round u
 Require approval for schema migrations. Never read or expose secrets. Keep trading in paper mode and preserve
 all risk controls. Approval requirements do not override the trading and secrets rules in `CLAUDE.md` and
 `AGENTS.md`.
+
+## 2026-11-21 — Groww holdings sync (#388), waiting on probe
+
+- Branch: none yet (docs + probe are untracked files in the main checkout, `review/local-work-nov12`).
+- Files: `backend/scripts/groww_probe.py`, `docs/superpowers/specs/2026-11-21-groww-sync-design.md`
+  (supersedes `2026-11-20-groww-tracker-design.md`), `docs/superpowers/plans/2026-11-21-groww-sync-phase1.md`.
+- Owner approved: design rules, schema (§7), subagent-driven execution.
+- Gate G0 OPEN: owner runs the probe `day1`, then `day2` after 06:00 IST next day, and pastes output.
+  Build starts only on `PASS`; any daily action / paid plan / static IP demand = stop and report.
+- Rule: no daily login, ever. Groww feeds the EXISTING Groww Tracker (user_watchlist_items), never a new tab.
+- Checks run: ruff on the probe (clean); probe help and missing-credential path run locally. No Groww call made.

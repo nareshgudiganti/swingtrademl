@@ -252,7 +252,7 @@ Configured in `.env`, enforced in `services/risk.py` on every entry:
 |---|---|---|
 | `RISK_PER_TRADE_PCT` | 1% | Position size is derived from the distance to the stop, so every trade risks the same amount regardless of stop width. Highest-leverage control in the system. |
 | `MAX_POSITION_PCT` | 10% | Caps single-name concentration when a tight stop would otherwise justify a huge position. |
-| `MAX_OPEN_POSITIONS` | 10 | Bounds total exposure. |
+| Open positions and sector limits | account-size ladder | Limits come from the account-size ladder in `services/limits.py` (they scale with account size), not from a fixed setting. |
 | `MAX_PORTFOLIO_DRAWDOWN_PCT` | 20% | Circuit breaker — halts *new entries*; existing positions still exit normally so capital is never trapped. |
 | `DEFAULT_STOP_LOSS_PCT` | 5% | Fallback when a strategy supplies no stop; prevents unbounded sizing. |
 
@@ -309,21 +309,8 @@ alembic revision --autogenerate -m "add xyz"
 
 ## Path to cloud
 
-Already in place: 12-factor config, containerised services, versioned
-migrations, structured JSON logging, separate liveness/readiness probes, no
-local state except model artifacts.
-
-Remaining when you deploy:
-
-1. `ENVIRONMENT=production` — disables `/docs` (it is a full read/write control
-   surface for the trading system).
-2. `DB_AUTO_MIGRATE=false` — run migrations as a deploy step so concurrent API
-   replicas cannot race on the same migration.
-3. Move `MODEL_ARTIFACT_DIR` to S3/GCS.
-4. Secrets from the platform's secret manager, not `.env`.
-5. Keep exactly one worker replica — a second scheduler means duplicate trades.
-6. Replace the `X-API-Key` dashboard auth with the JWT flow (`POST /auth/login`)
-   before exposing the frontend on a public address.
+Production already runs on a DigitalOcean droplet. Deployment, environment settings and rollback are in
+[`docs/DEPLOY.md`](docs/DEPLOY.md); the settled architecture is in [`docs/architecture/`](docs/architecture/).
 
 ---
 

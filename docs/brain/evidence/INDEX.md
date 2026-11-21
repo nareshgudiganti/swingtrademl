@@ -1,0 +1,27 @@
+# Evidence and research tools: index
+
+Which code produces which evidence, under which protocol. Built 2026-11-21 from the files in the repository at `40bf4b0`.
+"trial_freeze" means listed in `backend/tests/trial_freeze.json` (changes need `scripts/approve_trial_change.py`). None of
+the tools below are in that list; where they are bound to a signed protocol or tag, that is stated. **unknown** = not found
+in the repository, so not claimed. Run commands from `backend/`.
+
+| Code | Purpose | Protocol / documents | Entry command | Freeze / hash status |
+|---|---|---|---|---|
+| `brain/five_day.py`, `five_day_train.py` | 5-day horizon evaluation and training | `docs/superpowers/specs/2026-10-24-five-day-protocol.md`, `2026-10-26-fd-protocol-v1-prerun-checklist.md`; evidence `fd_v1/` | `python -m swing_trade_ml.brain.five_day` (see `fd_v1/RUN-NOTES.md`) | Git tag `fd-protocol-v1`; must match the tagged version |
+| `brain/ten_day.py` | 10-day evaluation (verdict: FAILED) | `docs/superpowers/specs/2026-10-26-td-protocol-v1-PROPOSAL.md` | unknown (no `__main__`) | Git tag `td-protocol-v1`; kept to reproduce the record |
+| `brain/selection_lab.py`, `selection_lab_run.py`, `selection_lab_start.py` | 15-day selection lab (S0/S1/S2) | `docs/brain/SELECTION-LAB-START.md`, `docs/superpowers/specs/2026-11-04-evidence-plan-amendment-3.md`; evidence `sl_v1/` | `python -m swing_trade_ml.brain.selection_lab_start` (refuses before 2026-12-05) | Git tag `sl-protocol-v1`; Amendment 3 unsigned per `docs/architecture/CURRENT-STATE.md` |
+| `brain/phase_b.py`, `phase_b_finish.py` | Phase B completion runs (B1-B3) | `docs/brain/PHASE-B-FINISH.md`, `docs/superpowers/specs/2026-11-05-phase-b-completion-protocol-FINAL-DRAFT.md`, `phase-b-signature-package-v2.md`; evidence `phase_b/` | `python -m swing_trade_ml.brain.phase_b_finish` (dry run; `--apply` writes) | Tags `phase-b-settings`, `phase-b-completion-v1` |
+| `brain/lanes/h05_*` (12 files) | 5-day evaluation lane of prod models 2, 16, 17 | `docs/superpowers/specs/2026-10-30-h05-protocol-v1-DRAFT.md`, `2026-10-30-h05-readiness-report.md`, `h05-tmcv-and-obv-slope-note.md`; evidence `h05/` | `python -m swing_trade_ml.brain.lanes.h05_cli <command>` | Protocol file still named DRAFT; freeze record unknown from files alone |
+| `brain/bad_market.py` | How ideas behaved in bad markets | `bad_market/PROTOCOL.md` | `python -m swing_trade_ml.brain.bad_market` | Protocol-bound; hash unknown |
+| `brain/pause_check.py` | Would pausing in weak markets have helped | `pause_check/PROTOCOL.md` | none documented (file has a `__main__` block) | Protocol-bound; hash unknown |
+| `brain/wait_check.py` | Did WAIT ideas deserve to wait | `wait_check/PROTOCOL.md` | `python -m swing_trade_ml.brain.wait_check` | Protocol-bound; hash unknown |
+| `brain/ranking_diagnostics.py` | Does the score rank stocks usefully | evidence `ranking_diag/` | none documented (file has a `__main__` block) | unknown (no separate protocol file) |
+| `brain/cost_stress.py` | Results under higher trading costs | `cost_stress/PROTOCOL.md` | `python -m swing_trade_ml.brain.cost_stress --wf-from ... --wf-to ...` | Protocol-bound; hash unknown |
+| `brain/eligibility_report.py` | Weekly training-eligibility report (read-only) | `docs/brain/WEEKLY_ELIGIBILITY_REPORT.md` | `python -m swing_trade_ml.brain.eligibility_report` | Weekly report; not a signed record |
+| `brain/prediction_reliability.py` | When a score can be trusted | `docs/superpowers/specs/2026-11-05-prediction-reliability-rules.md`; evidence `score_reliability.py`, `score_reliability.json` | none documented (file has a `__main__` block) | Rules doc dated 2026-11-05; hash unknown |
+| `brain/trial_journal.py` | Daily record of the paper trial (used by the API) | tests `test_brain_trial_journal*.py` | unknown (library module) | Not in `trial_freeze.json` |
+| Replay tools: `pit_replay.py`, `replay_score.py`, `replay_scoring.py`, `replay_week.py`, `replay_report.py`, `portfolio_sim.py`, `horizon_grid.py`, `module_ablation.py`, `market_mode_history.py`, `ml/asof.py` | Re-run past days as if live (no look-ahead) | `pit_replay/PROTOCOL.md`, `pit_replay_v2/PROTOCOL-DRAFT.md`, `module_ablation/PROTOCOL.md`, `docs/superpowers/specs/2026-10-11-brain-replay-score-design.md`, `2026-10-12-walk-forward-protocol.md` | e.g. `python -m swing_trade_ml.brain.pit_replay --from ... --to ...` | Tag `wf-protocol-v1` for walk-forward; per-tool hashes unknown |
+| `ml/sector_walkforward.py`, `sx_recipe.py`, `sx_verdict.py`, `holdout_registry.py`, `sector_*.py` (SX harness) | Sector challenger (SX5, SX10) research | `docs/brain/SX5-RUN.md`, `docs/superpowers/specs/sx5-research-protocol-FINAL-DRAFT-for-review.md`, `sx10-research-protocol-FINAL-DRAFT-for-review.md`, `sx-hash-convention-and-environment.md`; evidence `sector_prep/` | `backend/scripts/sx5_run.py`, `backend/scripts/final_hash_sheet.py` | Hash-signed (`sector_prep/final_hashes_v4.json`, `v5.json`); protocols unsigned per `CURRENT-STATE.md`; `requirements-research.lock` is sha-bound, never regenerate |
+| `shadow_lanes/` | Shadow lane service, universe, freeze, review (off by flag `LANE_SHADOW_ENABLED`) | `docs/superpowers/specs/2026-10-26-horizon-lanes-design.md`; evidence `lane_universe/` | scheduler job (`lane_job.py`) | `lane_freeze.py` with `tests/test_lane_freeze.py` |
+
+Not covered here: one-off scripts under `backend/scripts/` other than those named above.

@@ -1,4 +1,4 @@
-# Ops digest (DRAFT for owner review, not merged, not deployed)
+# Ops digest (current: the endpoint is live; file name keeps "DRAFT" so existing references still work)
 
 Branch `draft/ops-digest`. Lets Claude (or you) check production each day through one read-only call.
 

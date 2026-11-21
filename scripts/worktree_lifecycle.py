@@ -62,7 +62,7 @@ def regenerable(path: str) -> bool:
 # --------------------------------------------------------------------------- helpers
 def git(cwd: str | Path, *args: str) -> tuple[int, str]:
     r = subprocess.run(
-        ["git", "-c", "status.showUntrackedFiles=all", *args], cwd=str(cwd), capture_output=True, text=True, encoding="utf-8", errors="replace", check=False
+        ["git", "--no-optional-locks", "-c", "status.showUntrackedFiles=all", *args], cwd=str(cwd), capture_output=True, text=True, encoding="utf-8", errors="replace", check=False
     )
     return r.returncode, r.stdout.strip()
 
@@ -459,6 +459,7 @@ def cleanup(root: Path, apply: bool, pr: int | None, log_path: Path) -> int:
     else:
         targets = [w for w in wts if w.removable]
     qdir = quarantine_dir(root)
+    targets = [w for w in targets if not norm(w.path).startswith(norm(qdir) + "/")]
     failures = 0
     log, fh = _logger(log_path)
     try:
@@ -480,16 +481,18 @@ def cleanup(root: Path, apply: bool, pr: int | None, log_path: Path) -> int:
                 continue
             stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
             dest = qdir / f"{Path(w.path).name}__{stamp}"
-            qdir.mkdir(parents=True, exist_ok=True)
+            entry = {"original": w.path, "quarantined": str(dest).replace("\\", "/"), "branch": w.branch,
+                     "head": w.head, "in_main": w.in_main, "merged_prs": w.merged_prs,
+                     "moved_at": dt.datetime.now().isoformat(timespec="seconds")}
+            manifest.append(entry)
+            save_manifest(root, manifest)  # restore record exists BEFORE anything moves
             rc, out = git(root, "worktree", "move", w.path, str(dest))  # keeps every file; reversible
             log(f"  moved to quarantine rc={rc} {out[-200:]}")
             if rc:
+                manifest = [x for x in manifest if x is not entry]
+                save_manifest(root, manifest)
                 failures += 1
                 continue
-            manifest.append({"original": w.path, "quarantined": str(dest).replace("\\", "/"), "branch": w.branch,
-                             "head": w.head, "in_main": w.in_main, "merged_prs": w.merged_prs,
-                             "moved_at": dt.datetime.now().isoformat(timespec="seconds")})
-            save_manifest(root, manifest)
         log(f"=== done: failures={failures}")
     finally:
         fh.close()
@@ -520,6 +523,9 @@ def restore(root: Path, name: str, log_path: Path) -> int:
 
 def purge(root: Path, apply: bool, older_than_days: int, log_path: Path) -> int:
     """Step 2: permanently remove quarantined worktrees older than `older_than_days`, re-checking everything."""
+    if older_than_days < QUARANTINE_DAYS:
+        print(f"REFUSED: quarantine must last at least {QUARANTINE_DAYS} days (got {older_than_days}).", file=sys.stderr)
+        return 1
     ctx = context(root)
     if apply and not ctx.protect_loaded:
         print(f"REFUSED: protection list missing ({protect_file()}); nothing purged.", file=sys.stderr)
@@ -537,6 +543,10 @@ def purge(root: Path, apply: bool, older_than_days: int, log_path: Path) -> int:
         for e in due:
             log(f"- {e['quarantined']} [{e['branch'] or 'detached'} @ {e['head'][:7]}] from {e['original']}")
             if not apply:
+                continue
+            prot = load_protected(root) or set()
+            if e["branch"] in prot or norm(e["original"]) in {norm(x) for x in prot}:
+                log("  KEEP: original path or branch is now protected")
                 continue
             orig = Worktree(path=e["quarantined"], head=e["head"], branch=e["branch"])
             ok, why = recheck(root, orig, ctx, explicit=True)  # quarantine age replaces the recency grace

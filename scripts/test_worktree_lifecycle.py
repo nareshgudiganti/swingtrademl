@@ -164,7 +164,7 @@ def test_git_helper_never_inherits_untracked_files_setting(monkeypatch):
 
     monkeypatch.setattr(wl.subprocess, "run", fake_run)
     wl.git(".", "status", "--porcelain")
-    assert seen["cmd"][:3] == ["git", "-c", "status.showUntrackedFiles=all"]
+    assert seen["cmd"][:4] == ["git", "--no-optional-locks", "-c", "status.showUntrackedFiles=all"]
 
 
 def test_context_does_not_fetch_by_default(monkeypatch, tmp_path):
@@ -299,3 +299,47 @@ def test_report_prints_no_raw_removal_commands(tmp_path):
     md = wl.report([t], tmp_path).read_text(encoding="utf-8")
     assert "git worktree remove" not in md and "update-ref" not in md and "git branch -D" not in md
     assert "cleanup --apply" in md and "purge --apply" in md and "`D:/x/wt`" in md
+
+
+
+# --- Codex round-5 findings -------------------------------------------------------------------------------
+def test_already_quarantined_worktree_is_not_selected_again(tmp_path, monkeypatch):
+    t = _target(path=str(tmp_path / "q" / "wt__20261121-000000"))
+    _stub_ctx(monkeypatch, [t], tmp_path)
+    calls = []
+    monkeypatch.setattr(wl, "git", lambda cwd, *args: calls.append(args) or (0, ""))
+    assert wl.cleanup(tmp_path, apply=True, pr=None, log_path=tmp_path / "log.txt") == 0
+    assert calls == []
+
+
+def test_restore_record_is_saved_before_the_move(tmp_path, monkeypatch):
+    t = _target(path=str(tmp_path / "wt"))
+    _stub_ctx(monkeypatch, [t], tmp_path)
+    monkeypatch.setattr(wl, "recheck", lambda *a, **k: (True, "ok"))
+    seen = {}
+
+    def fake_git(cwd, *args):
+        if args[:2] == ("worktree", "move"):
+            seen["manifest_at_move"] = wl.load_manifest(tmp_path)
+        return 0, ""
+
+    monkeypatch.setattr(wl, "git", fake_git)
+    assert wl.cleanup(tmp_path, apply=True, pr=None, log_path=tmp_path / "log.txt") == 0
+    assert seen["manifest_at_move"][0]["original"] == t.path
+
+
+def test_purge_refuses_below_minimum_age(tmp_path):
+    assert wl.purge(tmp_path, apply=True, older_than_days=0, log_path=tmp_path / "log.txt") == 1
+
+
+def test_purge_keeps_entry_whose_original_path_became_protected(tmp_path, monkeypatch):
+    monkeypatch.setattr(wl, "context", lambda root: wl.Context({}, {}, set(), protect_loaded=True))
+    monkeypatch.setattr(wl, "quarantine_dir", lambda root: tmp_path / "q")
+    monkeypatch.setattr(wl, "load_protected", lambda root: {"D:/orig/wt"})
+    old = (wl.dt.datetime.now() - wl.dt.timedelta(days=30)).isoformat(timespec="seconds")
+    wl.save_manifest(tmp_path, [{"original": "D:/orig/wt", "quarantined": str(tmp_path / "q" / "wt"), "branch": "b",
+                                 "head": "h", "in_main": True, "merged_prs": [], "moved_at": old}])
+    calls = []
+    monkeypatch.setattr(wl, "git", lambda cwd, *args: calls.append(args) or (0, ""))
+    assert wl.purge(tmp_path, apply=True, older_than_days=7, log_path=tmp_path / "log.txt") == 0
+    assert not [c for c in calls if c[:2] == ("worktree", "remove")]

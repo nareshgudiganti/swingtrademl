@@ -71,7 +71,7 @@ confirmed from a document or git history is marked **unverified**. Nothing here 
 
 `ALLOW_SIGNUP`, `ALLOW_REAL_HOLDINGS_ORDERS`, `ALLOW_LIVE_TRADING`, `ALLOW_CUSTOMER_SCREENS` and `ALLOW_MODEL_PROMOTION`
 default to false in `core/config.py` (verified at `40bf4b0`; the last two now exist, registry in
-`core/release_switches.py`). Plans manager and New-look are owner switches (off by default). Billing code exists for a
+`core/release_switches.py`). Plans manager is an owner switch (off by default). The New look is on for everyone and the Classic look is hidden (`CLASSIC_LOOK_IN_CODE=false` in `frontend/src/trademind/look.ts`; owner, 2026-11-11). Billing code exists for a
 sandbox only (`docs/BILLING-SANDBOX.md`); no real payments. Values on the droplet are **not verified on production**.
 See `docs/OPERATIONS-AND-LAUNCH.md`.
 

@@ -158,3 +158,78 @@ def test_failed_removal_returns_nonzero(tmp_path, monkeypatch):
     monkeypatch.setattr(wl, "unlink_links", lambda *a, **k: None)
     monkeypatch.setattr(wl, "git", lambda cwd, *args: (1, "fatal: contains modified files"))
     assert wl.cleanup(tmp_path, apply=True, pr=None, log_path=tmp_path / "log.txt") == 1
+
+
+# --- Codex round-2 findings -------------------------------------------------------------------------------
+def test_git_helper_never_inherits_untracked_files_setting(monkeypatch):
+    seen = {}
+
+    def fake_run(cmd, **kw):
+        seen["cmd"] = cmd
+
+        class R:
+            returncode, stdout = 0, ""
+        return R()
+
+    monkeypatch.setattr(wl.subprocess, "run", fake_run)
+    wl.git(".", "status", "--porcelain")
+    assert seen["cmd"][:3] == ["git", "-c", "status.showUntrackedFiles=all"]
+
+
+def test_context_does_not_fetch_by_default(monkeypatch, tmp_path):
+    calls = []
+    monkeypatch.setattr(wl, "git", lambda cwd, *args: calls.append(args) or (0, ""))
+    monkeypatch.setattr(wl, "pr_index", lambda root: ({}, {}))
+    wl.context(tmp_path)
+    assert ("fetch", "-q", "origin") not in calls
+
+
+def test_pr_mode_requires_tip_equal_to_that_pr(tmp_path, monkeypatch):
+    other = W(branch="feat/reused", in_main=True, merged_pr=202, recent_checkout=True)
+    other.cls, _ = wl.classify(other)
+    monkeypatch.setattr(wl, "context", lambda root: wl.Context({}, {}, set(), protect_loaded=True))
+    monkeypatch.setattr(wl, "collect", lambda *a, **k: [other])
+    monkeypatch.setattr(wl, "merged_pr_branch", lambda root, pr: "feat/reused")
+    calls = []
+    monkeypatch.setattr(wl, "git", lambda cwd, *args: calls.append(args) or (0, ""))
+    assert wl.cleanup(tmp_path, apply=True, pr=101, log_path=tmp_path / "log.txt") == 0
+    assert not [c for c in calls if c[:1] in (("worktree",), ("branch",))]
+
+
+def test_ancestry_error_never_force_deletes_branch(tmp_path, monkeypatch):
+    t = W(in_main=True, merged_pr=None)
+    t.cls, _ = wl.classify(t)
+    t.removable = t.branch_deletable = True
+    monkeypatch.setattr(wl, "context", lambda root: wl.Context({}, {}, set(), protect_loaded=True))
+    monkeypatch.setattr(wl, "collect", lambda *a, **k: [t])
+    monkeypatch.setattr(wl, "recheck", lambda *a, **k: (True, "ok"))
+    monkeypatch.setattr(wl, "unlink_links", lambda *a, **k: None)
+    calls = []
+
+    def fake_git(cwd, *args):
+        calls.append(args)
+        return (128, "fatal: bad revision") if args[:1] == ("merge-base",) else (0, "")
+
+    monkeypatch.setattr(wl, "git", fake_git)
+    assert wl.cleanup(tmp_path, apply=True, pr=None, log_path=tmp_path / "log.txt") == 1
+    assert not [c for c in calls if c[:1] == ("branch",)]
+
+
+def test_recheck_reloads_protection_list(tmp_path, monkeypatch):
+    orig = W(path="D:/x/wt", head="aaa", branch="feat/x", in_main=True)
+    porcelain = "worktree D:/main\nHEAD 1\nbranch refs/heads/main\n\nworktree D:/x/wt\nHEAD aaa\nbranch refs/heads/feat/x\n"
+    monkeypatch.setattr(wl, "git", lambda cwd, *args: (0, porcelain))
+    monkeypatch.setattr(wl, "load_protected", lambda root: {"feat/x"})  # owner protected it after the audit
+    monkeypatch.setattr(wl, "inspect", lambda w, ctx, live, now: setattr(w, "protected", "feat/x" in ctx.protected)
+                        or setattr(w, "cls", "merged-clean"))
+    ok, why = wl.recheck(tmp_path, orig, wl.Context({}, {}, set(), True), explicit=False)
+    assert not ok and "no longer removable" in why
+
+
+def test_report_branch_command_is_copy_paste_safe(tmp_path):
+    t = W(in_main=False, merged_pr=9)
+    t.cls, _ = wl.classify(t)
+    t.removable = t.branch_deletable = True
+    md = wl.report([t], tmp_path).read_text(encoding="utf-8")
+    assert "git branch -D feat/x\n" in md
+    assert "-D  #" not in md

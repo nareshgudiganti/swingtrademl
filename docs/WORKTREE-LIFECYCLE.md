@@ -37,6 +37,11 @@ Further rules:
 - `--pr N` only accepts a PR that GitHub reports as **merged**.
 - `git worktree remove` is **never forced**, so git itself refuses a folder that has changed.
 - `git worktree prune` is never run, because it is repo-wide.
+- The tool is fully read-only by default: it doesn't even `git fetch`. Add `--fetch` to refresh `origin/main` first.
+- git's `status.showUntrackedFiles` setting is overridden, so no untracked file can hide.
+- `--pr N` needs the worktree's tip to equal **that** PR's merged head.
+- The protected list is re-read right before each removal.
+- A branch is force-deleted only when its tip equals a verified merged PR head.
 - Any failed or refused action makes the command exit with code 1.
 - Shared `node_modules` / `.venv` links are unlinked first. Only the link goes, never its target.
 - A branch is deleted only if no other worktree uses it and its tip is in `origin/main` or equals the merged PR head (squash merges). Every action goes to `.claude/worktree-audit/cleanup.log`.

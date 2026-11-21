@@ -55,7 +55,7 @@ def regenerable(path: str) -> bool:
 # --------------------------------------------------------------------------- helpers
 def git(cwd: str | Path, *args: str) -> tuple[int, str]:
     r = subprocess.run(
-        ["git", *args], cwd=str(cwd), capture_output=True, text=True, encoding="utf-8", errors="replace", check=False
+        ["git", "-c", "status.showUntrackedFiles=all", *args], cwd=str(cwd), capture_output=True, text=True, encoding="utf-8", errors="replace", check=False
     )
     return r.returncode, r.stdout.strip()
 
@@ -224,8 +224,12 @@ class Context:
     protect_loaded: bool
 
 
+FETCH = False  # set by --fetch; by default nothing (not even origin/main) is updated
+
+
 def context(root: Path) -> Context:
-    git(root, "fetch", "-q", "origin")
+    if FETCH:
+        git(root, "fetch", "-q", "origin")
     merged_prs, open_prs = pr_index(root)
     loaded = load_protected(root)
     if loaded is None:
@@ -241,7 +245,7 @@ def inspect(w: Worktree, ctx: Context, live: set[str], now: float) -> None:
     w.protected = (w.branch in ctx.protected) or (norm(w.path) in {norm(x) for x in ctx.protected})
     w.live_session = any(s == norm(w.path) or s.startswith(norm(w.path) + "/") for s in live)
     if w.exists:
-        rc, status = git(p, "status", "--porcelain", "--ignored")
+        rc, status = git(p, "status", "--porcelain", "--ignored", "--untracked-files=all")
         if rc:
             w.error = "git status failed"
         else:
@@ -306,6 +310,10 @@ def recheck(root: Path, original: Worktree, ctx: Context, explicit: bool) -> tup
     w = match[0]
     if w.branch != original.branch or w.head != original.head:
         return False, "branch or commit changed since the audit"
+    fresh_protect = load_protected(root)
+    if fresh_protect is None:
+        return False, "protection list missing at re-check"
+    ctx = Context(ctx.merged_prs, ctx.open_prs, fresh_protect, True)
     inspect(w, ctx, live_session_paths(), time.time())
     if not removal_ok(w, explicit_pr=explicit):
         return False, f"no longer removable ({w.cls}: {w.reason})"
@@ -352,8 +360,9 @@ def report(wts: list[Worktree], out: Path) -> Path:
             lines.append(f"# unlink if link: {w.path}/{d}")
         lines.append(f'git worktree remove "{w.path}"')
         if w.branch_deletable:
-            flag = "-d" if w.in_main else "-D  # squash-merged: tip equals merged PR head, re-checked before"
-            lines.append(f"git branch {flag} {w.branch}")
+            if not w.in_main:
+                lines.append(f"# squash-merged: tip equals merged PR #{w.merged_pr} head (re-checked before -D)")
+            lines.append(f"git branch {'-d' if w.in_main else '-D'} {w.branch}")
     lines += ["```", ""]
     md = out / "worktree-audit.md"
     md.write_text("\n".join(lines), encoding="utf-8")
@@ -396,7 +405,7 @@ def cleanup(root: Path, apply: bool, pr: int | None, log_path: Path) -> int:
         if head is None:
             print(f"REFUSED: PR #{pr} is not merged (or could not be read); nothing removed.", file=sys.stderr)
             return 1
-        targets = [w for w in wts if w.branch == head and (w.merged_pr == pr or w.in_main)
+        targets = [w for w in wts if w.branch == head and w.merged_pr == pr
                    and removal_ok(w, explicit_pr=True)]
         in_use = {x.branch for x in wts if x.branch and x not in targets}
         for w in targets:
@@ -428,7 +437,16 @@ def cleanup(root: Path, apply: bool, pr: int | None, log_path: Path) -> int:
                 failures += 1
                 continue
             if w.branch_deletable:
-                in_main = git(root, "merge-base", "--is-ancestor", w.branch, "origin/main")[0] == 0
+                anc_rc = git(root, "merge-base", "--is-ancestor", w.branch, "origin/main")[0]
+                if anc_rc not in (0, 1):
+                    log(f"  SKIP branch: ancestry check failed (rc={anc_rc})")
+                    failures += 1
+                    continue
+                in_main = anc_rc == 0
+                if not in_main and w.merged_pr is None:
+                    log("  SKIP branch: not in origin/main and no verified merged PR")
+                    failures += 1
+                    continue
                 if not in_main and git(root, "rev-parse", w.branch)[1] != w.head:
                     log("  SKIP branch: tip moved since audit")
                     failures += 1
@@ -443,9 +461,10 @@ def cleanup(root: Path, apply: bool, pr: int | None, log_path: Path) -> int:
 
 
 def main() -> int:
-    global PROTECT_FILE
+    global PROTECT_FILE, FETCH
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--protect", default=None, help="path to the protection list (default: next to this script)")
+    ap.add_argument("--fetch", action="store_true", help="git fetch origin first (otherwise fully read-only)")
     sub = ap.add_subparsers(dest="cmd", required=True)
     a = sub.add_parser("audit")
     a.add_argument("--out", default=None)
@@ -455,6 +474,7 @@ def main() -> int:
     args = ap.parse_args()
     if args.protect:
         PROTECT_FILE = Path(args.protect)
+    FETCH = args.fetch
     root = repo_root()
     if args.cmd == "audit":
         out = Path(args.out) if args.out else root / ".claude" / "worktree-audit"

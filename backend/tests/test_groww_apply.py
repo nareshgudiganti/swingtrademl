@@ -468,3 +468,107 @@ def test_apply_error_keeps_stored_sync_and_never_raises(db_session, user, wired,
     db_session.refresh(item)
     assert item.quantity == 4
     assert "secret detail" not in caplog.text
+
+
+# --- fix round 1 ---------------------------------------------------------------------------
+
+
+def test_confirm_empty_rejects_when_a_newer_complete_sync_exists(db_session, user):
+    inst = _inst(db_session, "PIDILITIND")
+    item = _item(db_session, user, "PIDILITIND", quantity=2, buy_price=2500.0)
+    empty = _sync(db_session, [], status=SYNC_EMPTY)
+    newer = _sync(db_session, [("INE318A01026", inst, 2, 2500.0, MATCH_CONFIRMED)])
+    gapply.apply_sync(db_session, newer, user_id=user.id)
+    with pytest.raises(ValueError):
+        gapply.confirm_empty(db_session, user_id=user.id, sync_id=empty.id)
+    db_session.refresh(item)
+    db_session.refresh(empty)
+    assert empty.status == SYNC_EMPTY
+    assert item.held_state == HELD and item.quantity == 2
+
+
+def test_confirm_empty_rejects_when_any_newer_sync_exists(db_session, user):
+    empty = _sync(db_session, [], status=SYNC_EMPTY)
+    db_session.add(GrowwSync(trigger="manual", status="failed", error_code="auth"))
+    db_session.flush()
+    with pytest.raises(ValueError):
+        gapply.confirm_empty(db_session, user_id=user.id, sync_id=empty.id)
+
+
+def _snapshot(db, item):
+    db.refresh(item)
+    return (item.quantity, item.buy_price, item.held_state, item.groww_isin, item.added_at, item.removed_at)
+
+
+def test_same_isin_twice_in_one_sync_is_not_applied(db_session, user):
+    inst = _inst(db_session, "GAIL")
+    item = _item(db_session, user, "GAIL", quantity=10, buy_price=180.0)
+    gapply.apply_sync(
+        db_session, _sync(db_session, [("INE129A01019", inst, 10, 180.0, MATCH_CONFIRMED)]), user_id=user.id
+    )
+    before = _snapshot(db_session, item)
+    history_before = len(_history(db_session, item))
+    rows = [
+        ("INE129A01019", inst, 6, 180.0, MATCH_CONFIRMED),
+        ("INE129A01019", inst, 4, 180.0, MATCH_CONFIRMED),
+    ]
+    for _ in range(2):  # a second identical sync stays a no-op
+        counts = gapply.apply_sync(db_session, _sync(db_session, rows), user_id=user.id)
+        assert counts["needs_matching"] == 2 and counts["not_held"] == 0 and counts["pending_sale"] == 0
+    assert _snapshot(db_session, item) == before
+    assert len(_history(db_session, item)) == history_before
+    assert gapply.pending_sale_qty(db_session, item) is None
+
+
+def test_two_isins_matched_to_one_stock_are_not_applied(db_session, user):
+    inst = _inst(db_session, "IOC")
+    item = _item(db_session, user, "IOC", quantity=5, buy_price=150.0)
+    gapply.apply_sync(
+        db_session, _sync(db_session, [("INE242A01010", inst, 5, 150.0, MATCH_CONFIRMED)]), user_id=user.id
+    )
+    before = _snapshot(db_session, item)
+    history_before = len(_history(db_session, item))
+    rows = [
+        ("INE242A01010", inst, 5, 150.0, MATCH_CONFIRMED),
+        ("INE999X01010", inst, 3, 155.0, MATCH_CONFIRMED),
+    ]
+    for _ in range(2):
+        counts = gapply.apply_sync(db_session, _sync(db_session, rows), user_id=user.id)
+        assert counts["needs_matching"] == 2 and counts["updated"] == 0 and counts["not_held"] == 0
+    assert _snapshot(db_session, item) == before
+    assert len(_history(db_session, item)) == history_before
+
+
+def test_conflicting_rows_never_create_a_new_row(db_session, user):
+    inst = _inst(db_session, "BPCL")
+    rows = [
+        ("INE029A01011", inst, 1, 300.0, MATCH_CONFIRMED),
+        ("INE029A01011", inst, 2, 300.0, MATCH_CONFIRMED),
+    ]
+    gapply.apply_sync(db_session, _sync(db_session, rows), user_id=user.id)
+    assert db_session.query(UserWatchlistItem).filter_by(user_id=user.id, symbol="BPCL").count() == 0
+
+
+def test_isin_rematched_to_another_stock_unlinks_old_row(db_session, user):
+    old = _inst(db_session, "OLDSTOCK")
+    new = _inst(db_session, "NEWSTOCK")
+    item = _item(db_session, user, "OLDSTOCK", quantity=4, buy_price=50.0, note="kept")
+    sync = _sync(db_session, [("INE777Q01011", old, 4, 50.0, MATCH_CONFIRMED)])
+    gapply.apply_sync(db_session, sync, user_id=user.id)
+    db_session.refresh(item)
+    assert item.groww_isin == "INE777Q01011" and item.held_state == HELD
+
+    gapply.confirm_match(db_session, user_id=user.id, isin="INE777Q01011", instrument_id=new.id)
+
+    db_session.refresh(item)
+    assert item.held_state == NOT_HELD and item.groww_isin is None
+    assert item.removed_at is None and item.note == "kept"
+    isin_hist = _history(db_session, item, "groww_isin")
+    assert (isin_hist[-1].old_value, isin_hist[-1].new_value) == ("INE777Q01011", None)
+    moved = db_session.query(UserWatchlistItem).filter_by(user_id=user.id, symbol="NEWSTOCK").one()
+    assert moved.groww_isin == "INE777Q01011" and moved.quantity == 4 and moved.held_state == HELD
+
+    # Re-applying the same sync changes nothing more.
+    count_before = db_session.query(UserWatchlistItemChange).count()
+    gapply.apply_sync(db_session, sync, user_id=user.id)
+    assert db_session.query(UserWatchlistItemChange).count() == count_before

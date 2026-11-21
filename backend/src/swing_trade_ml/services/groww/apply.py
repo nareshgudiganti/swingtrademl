@@ -151,16 +151,25 @@ def apply_sync(db: Session, sync: GrowwSync, *, user_id: int) -> dict:
         if inst_ids
         else {}
     )
-    day = sync_day(sync)
-    seen_isins: set[str] = set()
-
+    # Group by target tracker row. More than one Groww row for one stock (same ISIN twice, or two
+    # ISINs matched to the same stock) is ambiguous: apply none of them, touch nothing for that stock.
+    by_symbol: dict[str, list[GrowwHolding]] = {}
     for h in confirmed:
-        if h.isin in seen_isins:
-            continue
-        seen_isins.add(h.isin)
         symbol = symbols.get(h.instrument_id)
         if symbol is None:
+            counts["needs_matching"] += 1
             continue
+        by_symbol.setdefault(symbol, []).append(h)
+    conflicted_symbols = {sym for sym, rows in by_symbol.items() if len(rows) > 1}
+    conflicted_isins = {h.isin for sym in conflicted_symbols for h in by_symbol[sym]}
+    counts["needs_matching"] += sum(len(by_symbol[sym]) for sym in conflicted_symbols)
+    isin_symbol = {rows[0].isin: sym for sym, rows in by_symbol.items() if sym not in conflicted_symbols}
+    day = sync_day(sync)
+
+    for symbol, rows in by_symbol.items():
+        if symbol in conflicted_symbols:
+            continue
+        h = rows[0]
         item = db.scalar(
             select(UserWatchlistItem).where(
                 UserWatchlistItem.user_id == user_id, UserWatchlistItem.symbol == symbol
@@ -212,21 +221,25 @@ def apply_sync(db: Session, sync: GrowwSync, *, user_id: int) -> dict:
         if old_qty is not None and qty < old_qty - _EPS:
             counts["pending_sale"] += 1
 
-    # Linked rows whose ISIN this sync does not contain at all: confirmed zero.
+    # Linked rows this sync no longer backs: their ISIN is absent, or it now belongs to another stock
+    # (match moved). Both are confirmed zero; a moved ISIN is also unlinked from the old row.
     linked = db.scalars(
         select(UserWatchlistItem).where(
-            UserWatchlistItem.user_id == user_id,
-            UserWatchlistItem.groww_isin.is_not(None),
-            UserWatchlistItem.held_state != NOT_HELD,
+            UserWatchlistItem.user_id == user_id, UserWatchlistItem.groww_isin.is_not(None)
         )
     )
     for item in list(linked):
-        if item.groww_isin in present_isins:
+        if item.symbol in conflicted_symbols or item.groww_isin in conflicted_isins:
+            continue
+        moved = item.groww_isin in isin_symbol and isin_symbol[item.groww_isin] != item.symbol
+        if not moved and item.groww_isin in present_isins:
             continue
         if _mark_not_held(db, item, sid):
             counts["not_held"] += 1
             if pending_sale_qty(db, item) is not None:
                 counts["pending_sale"] += 1
+        if moved:
+            _set_text(db, item, "groww_isin", None, sid)
     db.flush()
     return counts
 
@@ -322,6 +335,10 @@ def confirm_empty(db: Session, *, user_id: int, sync_id: int) -> None:
     sync = db.get(GrowwSync, sync_id)
     if sync is None or sync.status != SYNC_EMPTY:
         raise ValueError("not an unconfirmed empty sync")
+    newer = db.scalar(select(GrowwSync.id).where(GrowwSync.id > sync.id).limit(1))
+    if newer is not None:
+        # A newer sync exists: confirming this old one could wipe holdings Groww has shown since.
+        raise ValueError("a newer Groww sync exists; only the latest empty sync can be confirmed")
     sync.status = SYNC_COMPLETE
     db.flush()
     apply_sync(db, sync, user_id=user_id)

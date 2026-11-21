@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import math
 from datetime import date, timedelta
 
@@ -45,11 +46,16 @@ def foresight(bars):
     return scores
 
 
+def _noise(s, d) -> float:
+    """Stable pseudo-random 0..999. Built-in hash() of a str changes every process (PYTHONHASHSEED), which
+    made the 'knows nothing' score different each run and the test fail by chance about 1 run in 40."""
+    return float(int(hashlib.sha256(f"{s}|{d}".encode()).hexdigest()[:8], 16) % 1000)
+
+
 def guess(bars):
     """A score that does not depend on the future at all."""
     return lambda fold: {
-        s: {d: float(hash((s, d)) % 1000) for d in df["day"] if fold.start <= d <= fold.end}
-        for s, df in bars.items()
+        s: {d: _noise(s, d) for d in df["day"] if fold.start <= d <= fold.end} for s, df in bars.items()
     }
 
 

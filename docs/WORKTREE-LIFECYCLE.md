@@ -14,7 +14,7 @@ Every worktree gets exactly one class:
 
 | Class | Meaning | Can cleanup remove it? |
 |---|---|---|
-| uncommitted | has modified or untracked files | **Never** |
+| uncommitted | has modified or untracked files, **or gitignored files that aren't rebuildable caches** (for example a local `.joblib` model, a `backend/data/` folder or a `.env` copy). Caches such as `node_modules`, `.venv`, `dist`, `__pycache__` don't count. | **Never** |
 | unpushed | has commits that exist on no remote and in no merged PR | **Never** |
 | active | not merged; a live Claude session is in it, it changed in the last 3 days, or it has an open PR | No |
 | abandoned | not merged, but every commit is on GitHub, no open PR, idle over 14 days | No (owner decides) |
@@ -27,13 +27,17 @@ A worktree is removed only if **all** of these hold. They are re-checked immedia
 
 - class is `merged-clean`
 - not locked (`git worktree lock`)
-- not listed in `scripts/worktree-protect.txt`
+- not listed in `scripts/worktree-protect.txt`. If that list is missing, `--apply` refuses to run at all (fail closed).
 - not the main checkout
 - no live Claude session inside it (any Claude Code transcript written in the last 3 hours with its folder as cwd)
 - not created, checked out or committed in the last 3 days. **The only override** is naming its merged PR with `--pr`.
 
 Further rules:
+- The re-check confirms the same path, **branch and commit** as in the audit.
+- `--pr N` only accepts a PR that GitHub reports as **merged**.
 - `git worktree remove` is **never forced**, so git itself refuses a folder that has changed.
+- `git worktree prune` is never run, because it is repo-wide.
+- Any failed or refused action makes the command exit with code 1.
 - Shared `node_modules` / `.venv` links are unlinked first. Only the link goes, never its target.
 - A branch is deleted only if no other worktree uses it and its tip is in `origin/main` or equals the merged PR head (squash merges). Every action goes to `.claude/worktree-audit/cleanup.log`.
 

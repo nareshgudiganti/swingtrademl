@@ -90,3 +90,71 @@ def test_parse_porcelain_marks_first_as_main_and_reads_lock():
     assert [w.is_main for w in wts] == [True, False, False]
     assert wts[1].branch == "feat/a" and wts[1].locked == "keep me"
     assert wts[2].branch is None and wts[2].prunable
+
+
+# --- Codex round-1 findings -------------------------------------------------------------------------------
+def test_ignored_caches_are_regenerable_but_other_ignored_files_are_not():
+    for p in ("frontend/node_modules/", "backend/.venv/", "x/__pycache__/a.pyc", "frontend/dist/", ".ruff_cache/",
+              "backend/swing_trade_ml.egg-info/", "frontend/test-results/", "frontend/dist-e2e/", "frontend/tsconfig.tsbuildinfo"):
+        assert wl.regenerable(p), p
+    for p in ("models/swing_v9.joblib", ".env", "backend/.env", "data/export.csv", "notes.md", "distance.txt"):
+        assert not wl.regenerable(p), p
+
+
+def test_ignored_local_file_makes_worktree_uncommitted():
+    w = W(in_main=True, dirty=1, ignored_local=1)
+    cls, reason = wl.classify(w)
+    assert cls == "uncommitted" and "ignored non-cache" in reason
+
+
+def test_missing_protection_list_loads_as_none(tmp_path):
+    wl.PROTECT_FILE = tmp_path / "nope.txt"
+    try:
+        assert wl.load_protected(tmp_path) is None
+    finally:
+        wl.PROTECT_FILE = None
+
+
+def test_apply_refuses_without_protection_list(tmp_path, monkeypatch):
+    monkeypatch.setattr(wl, "context", lambda root: wl.Context({}, {}, set(), protect_loaded=False))
+    monkeypatch.setattr(wl, "collect", lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not collect")))
+    assert wl.cleanup(tmp_path, apply=True, pr=None, log_path=tmp_path / "log.txt") == 1
+
+
+def test_pr_mode_refuses_unmerged_pr(tmp_path, monkeypatch):
+    monkeypatch.setattr(wl, "context", lambda root: wl.Context({}, {}, set(), protect_loaded=True))
+    monkeypatch.setattr(wl, "collect", lambda *a, **k: [])
+    monkeypatch.setattr(wl, "merged_pr_branch", lambda root, pr: None)
+    assert wl.cleanup(tmp_path, apply=True, pr=5, log_path=tmp_path / "log.txt") == 1
+
+
+def test_dry_run_never_calls_git_worktree_commands(tmp_path, monkeypatch):
+    target = W(in_main=True)
+    target.cls, _ = wl.classify(target)
+    target.removable = True
+    monkeypatch.setattr(wl, "context", lambda root: wl.Context({}, {}, set(), protect_loaded=True))
+    monkeypatch.setattr(wl, "collect", lambda *a, **k: [target])
+    calls = []
+    monkeypatch.setattr(wl, "git", lambda cwd, *args: calls.append(args) or (0, ""))
+    assert wl.cleanup(tmp_path, apply=False, pr=None, log_path=tmp_path / "log.txt") == 0
+    assert not [c for c in calls if c[:1] in (("worktree",), ("branch",))]
+
+
+def test_recheck_rejects_changed_commit(tmp_path, monkeypatch):
+    orig = W(path="D:/x/wt", head="aaa", branch="feat/x", in_main=True)
+    porcelain = "worktree D:/main\nHEAD 1\nbranch refs/heads/main\n\nworktree D:/x/wt\nHEAD bbb\nbranch refs/heads/feat/x\n"
+    monkeypatch.setattr(wl, "git", lambda cwd, *args: (0, porcelain))
+    ok, why = wl.recheck(tmp_path, orig, wl.Context({}, {}, set(), True), explicit=False)
+    assert not ok and "changed" in why
+
+
+def test_failed_removal_returns_nonzero(tmp_path, monkeypatch):
+    target = W(in_main=True)
+    target.cls, _ = wl.classify(target)
+    target.removable = True
+    monkeypatch.setattr(wl, "context", lambda root: wl.Context({}, {}, set(), protect_loaded=True))
+    monkeypatch.setattr(wl, "collect", lambda *a, **k: [target])
+    monkeypatch.setattr(wl, "recheck", lambda *a, **k: (True, "ok"))
+    monkeypatch.setattr(wl, "unlink_links", lambda *a, **k: None)
+    monkeypatch.setattr(wl, "git", lambda cwd, *args: (1, "fatal: contains modified files"))
+    assert wl.cleanup(tmp_path, apply=True, pr=None, log_path=tmp_path / "log.txt") == 1

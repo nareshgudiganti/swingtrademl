@@ -38,6 +38,18 @@ ABANDONED_DAYS = 14
 LIVE_SESSION_HOURS = 3
 CLAUDE_PROJECTS = Path.home() / ".claude" / "projects"
 LINK_DIRS = ("frontend/node_modules", "backend/.venv", "node_modules")
+# Ignored paths that are pure, rebuildable caches. ANY other ignored file (models, .env copies, data, notes)
+# is treated as possible local-only work and blocks removal.
+REGENERABLE_DIRS = {"node_modules", ".venv", "__pycache__", ".pytest_cache", ".ruff_cache", ".mypy_cache", "dist", "dist-e2e",
+                    ".vite", "test-results", "playwright-report", "coverage", "htmlcov", "dev-dist"}
+
+
+def regenerable(path: str) -> bool:
+    """True only for rebuildable caches/build output; anything else ignored may be the only copy of something."""
+    p = path.replace("\\", "/").rstrip("/")
+    if p.endswith((".pyc", ".coverage", ".tsbuildinfo")):
+        return True
+    return any(part in REGENERABLE_DIRS or part.endswith(".egg-info") for part in p.split("/"))
 
 
 # --------------------------------------------------------------------------- helpers
@@ -80,6 +92,7 @@ class Worktree:
     last_activity_days: float | None = None
     live_session: bool = False
     recent_checkout: bool = False  # worktree created/checked out/committed in the last ACTIVE_DAYS (git admin dir)
+    ignored_local: int = 0  # gitignored files that are NOT regenerable caches; they count as uncommitted
     protected: bool = False
     error: str = ""
     cls: str = ""
@@ -120,7 +133,8 @@ def classify(w: Worktree) -> tuple[str, str]:
     if not w.exists or w.prunable or w.error:
         return "unknown", w.error or ("folder missing" if not w.exists else "git marks it prunable")
     if w.dirty:
-        return "uncommitted", f"{w.dirty} uncommitted/untracked file(s)"
+        extra = f" incl. {w.ignored_local} ignored non-cache file(s)" if w.ignored_local else ""
+        return "uncommitted", f"{w.dirty} uncommitted/untracked file(s){extra}"
     merged = w.in_main or w.merged_pr is not None
     if w.unpushed and not merged:
         return "unpushed", f"{w.unpushed} commit(s) exist only on this PC"
@@ -187,64 +201,115 @@ def pr_index(root: Path) -> tuple[dict[str, set[tuple[int, str]]], dict[str, int
     return merged, open_
 
 
-def load_protected(root: Path) -> set[str]:
-    f = root / "scripts" / "worktree-protect.txt"
+PROTECT_FILE: Path | None = None  # set by --protect; default: the copy next to this script
+
+
+def protect_file() -> Path:
+    return PROTECT_FILE or Path(__file__).with_name("worktree-protect.txt")
+
+
+def load_protected(root: Path) -> set[str] | None:
+    """None when the protection list is missing: callers must then refuse to delete anything (fail closed)."""
+    f = protect_file()
     if not f.exists():
-        return set()
+        return None
     return {ln.split("#", 1)[0].strip() for ln in f.read_text(encoding="utf-8").splitlines()} - {""}
 
 
-def collect(root: Path) -> list[Worktree]:
+@dataclass
+class Context:
+    merged_prs: dict[str, set[tuple[int, str]]]
+    open_prs: dict[str, int]
+    protected: set[str]
+    protect_loaded: bool
+
+
+def context(root: Path) -> Context:
     git(root, "fetch", "-q", "origin")
-    _, porcelain = git(root, "worktree", "list", "--porcelain")
-    wts = parse_worktrees(porcelain)
     merged_prs, open_prs = pr_index(root)
-    live = live_session_paths()
-    protected = load_protected(root)
-    now = time.time()
-    for w in wts:
-        p = Path(w.path)
-        w.exists = p.is_dir()
-        w.protected = (w.branch in protected) or (norm(w.path) in {norm(x) for x in protected})
-        w.live_session = any(s == norm(w.path) or s.startswith(norm(w.path) + "/") for s in live)
-        if not w.exists:
-            continue
-        rc, status = git(p, "status", "--porcelain")
+    loaded = load_protected(root)
+    if loaded is None:
+        print(f"WARNING: protection list not found at {protect_file()}; cleanup --apply will refuse to run",
+              file=sys.stderr)
+    return Context(merged_prs, open_prs, loaded or set(), loaded is not None)
+
+
+def inspect(w: Worktree, ctx: Context, live: set[str], now: float) -> None:
+    """Fill the facts for one worktree, then classify it (read-only)."""
+    p = Path(w.path)
+    w.exists = p.is_dir()
+    w.protected = (w.branch in ctx.protected) or (norm(w.path) in {norm(x) for x in ctx.protected})
+    w.live_session = any(s == norm(w.path) or s.startswith(norm(w.path) + "/") for s in live)
+    if w.exists:
+        rc, status = git(p, "status", "--porcelain", "--ignored")
         if rc:
             w.error = "git status failed"
-            continue
-        files = [ln[3:] for ln in status.splitlines() if ln.strip()]
-        w.dirty, w.dirty_sample = len(files), files[:5]
-        w.ahead = int(git(p, "rev-list", "--count", "origin/main..HEAD")[1] or 0)
-        w.unpushed = int(git(p, "rev-list", "--count", "HEAD", "--not", "--remotes")[1] or 0)
-        w.in_main = git(p, "merge-base", "--is-ancestor", "HEAD", "origin/main")[0] == 0
-        if w.branch:
-            for num, oid in merged_prs.get(w.branch, ()):
-                if oid == w.head:
-                    w.merged_pr = num
-            w.open_pr = open_prs.get(w.branch)
-        _, gitdir = git(p, "rev-parse", "--absolute-git-dir")
-        admin = [Path(gitdir) / "HEAD", Path(gitdir) / "logs" / "HEAD"]
-        admin_times = [f.stat().st_mtime for f in admin if f.exists()]
-        w.recent_checkout = bool(admin_times) and (now - max(admin_times)) / 86400 <= ACTIVE_DAYS
-        _, ts = git(p, "log", "-1", "--format=%ct")
-        times = [int(ts)] if ts.isdigit() else []
-        for f in files[:50]:
-            try:
-                times.append(int((p / f.strip('"')).stat().st_mtime))
-            except OSError:
-                pass
-        if times:
-            w.last_commit = dt.datetime.fromtimestamp(int(ts) if ts.isdigit() else times[0]).strftime("%Y-%m-%d")
-            w.last_activity_days = round((now - max(times)) / 86400, 1)
+        else:
+            files: list[str] = []
+            for ln in status.splitlines():
+                if not ln.strip():
+                    continue
+                name = ln[3:].strip().strip('"')
+                if ln.startswith("!!"):
+                    if regenerable(name):
+                        continue
+                    w.ignored_local += 1  # ignored but not a cache: could be the only copy (e.g. a .joblib model)
+                files.append(name)
+            w.dirty, w.dirty_sample = len(files), files[:5]
+            w.ahead = int(git(p, "rev-list", "--count", "origin/main..HEAD")[1] or 0)
+            w.unpushed = int(git(p, "rev-list", "--count", "HEAD", "--not", "--remotes")[1] or 0)
+            w.in_main = git(p, "merge-base", "--is-ancestor", "HEAD", "origin/main")[0] == 0
+            if w.branch:
+                for num, oid in ctx.merged_prs.get(w.branch, ()):
+                    if oid == w.head:
+                        w.merged_pr = num
+                w.open_pr = ctx.open_prs.get(w.branch)
+            _, gitdir = git(p, "rev-parse", "--absolute-git-dir")
+            admin_times = [f.stat().st_mtime for f in (Path(gitdir) / "HEAD", Path(gitdir) / "logs" / "HEAD")
+                           if f.exists()]
+            w.recent_checkout = bool(admin_times) and (now - max(admin_times)) / 86400 <= ACTIVE_DAYS
+            _, ts = git(p, "log", "-1", "--format=%ct")
+            times = [int(ts)] if ts.isdigit() else []
+            for f in files[:50]:
+                try:
+                    times.append(int((p / f).stat().st_mtime))
+                except OSError:
+                    pass
+            if ts.isdigit():
+                w.last_commit = dt.datetime.fromtimestamp(int(ts)).strftime("%Y-%m-%d")
+            if times:
+                w.last_activity_days = round((now - max(times)) / 86400, 1)
+    w.cls, w.reason = classify(w)
+
+
+def collect(root: Path, ctx: Context | None = None) -> list[Worktree]:
+    ctx = ctx or context(root)
+    _, porcelain = git(root, "worktree", "list", "--porcelain")
+    wts = parse_worktrees(porcelain)
+    live, now = live_session_paths(), time.time()
     for w in wts:
-        w.cls, w.reason = classify(w)
+        inspect(w, ctx, live, now)
         w.removable = removal_ok(w)
     in_use = {w.branch for w in wts if w.branch and not w.removable}
     for w in wts:
         w.branch_deletable = bool(w.removable and w.branch and w.branch not in in_use
-                                  and w.branch not in protected and w.branch not in ("main", "master"))
+                                  and w.branch not in ctx.protected and w.branch not in ("main", "master"))
     return wts
+
+
+def recheck(root: Path, original: Worktree, ctx: Context, explicit: bool) -> tuple[bool, str]:
+    """Re-inspect ONE worktree right before acting. Same path, branch and commit, and still removable."""
+    _, porcelain = git(root, "worktree", "list", "--porcelain")
+    match = [w for w in parse_worktrees(porcelain) if norm(w.path) == norm(original.path) and not w.is_main]
+    if not match:
+        return False, "worktree no longer registered"
+    w = match[0]
+    if w.branch != original.branch or w.head != original.head:
+        return False, "branch or commit changed since the audit"
+    inspect(w, ctx, live_session_paths(), time.time())
+    if not removal_ok(w, explicit_pr=explicit):
+        return False, f"no longer removable ({w.cls}: {w.reason})"
+    return True, "ok"
 
 
 # --------------------------------------------------------------------------- report
@@ -308,12 +373,30 @@ def unlink_links(path: Path, log) -> None:
             log(f"  unlinked junction {p}")
 
 
+def merged_pr_branch(root: Path, pr: int) -> str | None:
+    """Head branch of PR `pr` ONLY if GitHub says it is merged; otherwise None (open/closed PRs never qualify)."""
+    r = subprocess.run(["gh", "pr", "view", str(pr), "--json", "state,headRefName"],
+                       cwd=str(root), capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)
+    if r.returncode:
+        return None
+    data = json.loads(r.stdout or "{}")
+    return data.get("headRefName") if data.get("state") == "MERGED" else None
+
+
 def cleanup(root: Path, apply: bool, pr: int | None, log_path: Path) -> int:
-    wts = collect(root)
+    """Returns 0 when every intended action succeeded (or a dry run), 1 when anything failed or was refused."""
+    ctx = context(root)
+    if apply and not ctx.protect_loaded:
+        print(f"REFUSED: protection list missing ({protect_file()}); nothing removed.", file=sys.stderr)
+        return 1
+    wts = collect(root, ctx)
     explicit = pr is not None
     if explicit:
-        head = pr_branch(root, pr)
-        targets = [w for w in wts if (w.merged_pr == pr or (w.branch and w.in_main and w.branch == head))
+        head = merged_pr_branch(root, pr)
+        if head is None:
+            print(f"REFUSED: PR #{pr} is not merged (or could not be read); nothing removed.", file=sys.stderr)
+            return 1
+        targets = [w for w in wts if w.branch == head and (w.merged_pr == pr or w.in_main)
                    and removal_ok(w, explicit_pr=True)]
         in_use = {x.branch for x in wts if x.branch and x not in targets}
         for w in targets:
@@ -321,55 +404,57 @@ def cleanup(root: Path, apply: bool, pr: int | None, log_path: Path) -> int:
                                       and w.branch not in ("main", "master"))
     else:
         targets = [w for w in wts if w.removable]
+    failures = 0
     with log_path.open("a", encoding="utf-8") as fh:
         def log(msg: str) -> None:
             print(msg)
             fh.write(msg + "\n")
 
-        log(f"=== {dt.datetime.now():%Y-%m-%d %H:%M:%S} cleanup {'APPLY' if apply else 'DRY RUN'} pr={pr} targets={len(targets)}")
+        log(f"=== {dt.datetime.now():%Y-%m-%d %H:%M:%S} cleanup {'APPLY' if apply else 'DRY RUN'} "
+            f"pr={pr} targets={len(targets)}")
         for w in targets:
-            log(f"- {w.path} [{w.branch}] {w.reason}")
+            log(f"- {w.path} [{w.branch or 'detached'} @ {w.head[:7]}] {w.reason}")
             if not apply:
                 continue
-            fresh = {x.path: x for x in collect_one(root, w)}
-            again = fresh.get(w.path)
-            if not again or not removal_ok(again, explicit_pr=explicit):
-                log("  SKIP: re-check failed (state changed)")
+            ok, why = recheck(root, w, ctx, explicit)
+            if not ok:
+                log(f"  SKIP: {why}")
+                failures += 1
                 continue
             unlink_links(Path(w.path), log)
-            rc, out = git(root, "worktree", "remove", w.path)
+            rc, out = git(root, "worktree", "remove", w.path)  # never --force
             log(f"  worktree remove rc={rc} {out[-200:]}")
-            if rc == 0 and w.branch_deletable:
-                flag = "-d" if git(root, "merge-base", "--is-ancestor", w.branch, "origin/main")[0] == 0 else "-D"
-                if flag == "-D" and git(root, "rev-parse", w.branch)[1] != w.head:
+            if rc:
+                failures += 1
+                continue
+            if w.branch_deletable:
+                in_main = git(root, "merge-base", "--is-ancestor", w.branch, "origin/main")[0] == 0
+                if not in_main and git(root, "rev-parse", w.branch)[1] != w.head:
                     log("  SKIP branch: tip moved since audit")
+                    failures += 1
                     continue
+                flag = "-d" if in_main else "-D"  # -D only for a squash-merged tip equal to the merged PR head
                 rc2, out2 = git(root, "branch", flag, w.branch)
                 log(f"  branch {flag} rc={rc2} {out2[-200:]}")
-        git(root, "worktree", "prune")
-    return 0
-
-
-def collect_one(root: Path, w: Worktree) -> list[Worktree]:
-    """Re-collect facts for the whole list (cheap enough for a handful of targets, simplest correct path)."""
-    return [x for x in collect(root) if norm(x.path) == norm(w.path)]
-
-
-def pr_branch(root: Path, pr: int) -> str | None:
-    r = subprocess.run(["gh", "pr", "view", str(pr), "--json", "headRefName", "--jq", ".headRefName"],
-                       cwd=str(root), capture_output=True, text=True, check=False)
-    return r.stdout.strip() or None if r.returncode == 0 else None
+                failures += rc2 != 0
+        # Deliberately no `git worktree prune`: it is repo-wide and could drop unrelated registrations.
+        log(f"=== done: failures={failures}")
+    return 1 if failures else 0
 
 
 def main() -> int:
+    global PROTECT_FILE
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--protect", default=None, help="path to the protection list (default: next to this script)")
     sub = ap.add_subparsers(dest="cmd", required=True)
     a = sub.add_parser("audit")
     a.add_argument("--out", default=None)
     c = sub.add_parser("cleanup")
-    c.add_argument("--pr", type=int, default=None, help="only the worktree(s) of this merged PR")
+    c.add_argument("--pr", type=int, default=None, help="only the worktree(s) of this MERGED PR")
     c.add_argument("--apply", action="store_true", help="actually remove (default: dry run)")
     args = ap.parse_args()
+    if args.protect:
+        PROTECT_FILE = Path(args.protect)
     root = repo_root()
     if args.cmd == "audit":
         out = Path(args.out) if args.out else root / ".claude" / "worktree-audit"

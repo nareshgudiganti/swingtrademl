@@ -40,7 +40,7 @@ confirmed from a document or git history is marked **unverified**. Nothing here 
     (#359), daily backup tolerates no release folder (#362), safe test environment and a migration check in CI (`1ca0aa3`).
   - Owner decision recorded in git: the blind trial's results were unsealed on 2026-11-11 (`41c1efa`), so "sealed"
     wording elsewhere in this file describes the earlier state.
-  - Read-only ops digest endpoint (`GET /ops/digest`) merged (`57adb81`); AI roles and review loop in `AGENTS.md`.
+  - Read-only ops digest endpoint (`GET /api/v1/ops/digest`) merged (`57adb81`); AI roles and review loop in `AGENTS.md`.
 - **Also on `main`** (matrix P3 list): Open positions screen, Stock Compare, Company tab, manual real-holdings orders
   (switch off), Plans manager (owner switch off), New-look switch, tv22 reserved slot, 20% stressed cap, explanation layer,
   Observatory, Groww Tracker with edit, beginner features.

@@ -17,7 +17,7 @@ import { useProposals } from '../live'
 import { Card, Tag, inr } from '../ui'
 
 /** A proposal title with any model score written without its % sign ("Raise the buy level to 65"). */
-export function proposalTitle(title: string): string {
+function proposalTitle(title: string): string {
   return withoutScorePercent(title) // the one helper in scoreText also covers "buy level to 65%"
 }
 

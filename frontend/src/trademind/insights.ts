@@ -8,9 +8,9 @@ import type { InsightsBenchmark, InsightsBook } from './beginner/types'
 import { inr } from './ui'
 
 export const NOT_PROVEN = 'Not proven'
-export const PROVEN = 'Proven'
+const PROVEN = 'Proven'
 export const NA = 'Not available'
-export const LEARNING_CLAIM = 'learning_changes'
+const LEARNING_CLAIM = 'learning_changes'
 
 /** Is the brain getting better? Only a frozen test's "Proven" on the learning claim can say yes. */
 export function improvingAnswer(claims: readonly ObsClaim[] | undefined): { word: string; why: string } {

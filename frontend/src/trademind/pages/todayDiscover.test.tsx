@@ -9,8 +9,8 @@ import { describe, expect, it } from 'vitest'
 import type { BrainDecision, BrainRun } from '../../api/types'
 import { BANNED_CLAIMS } from '../beginner/cardText'
 import { finalWord, ideasFrom } from '../live'
-import Home from './Home'
 import Opportunities from './Opportunities'
+import Today from './Today'
 
 let nextId = 1
 const dec = (symbol: string, word: string, confidence: number | null, over: Partial<BrainDecision> = {}): BrainDecision =>
@@ -42,7 +42,7 @@ function render(page: 'today' | 'discover'): string {
   return renderToString(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[page === 'today' ? '/trademind' : '/trademind/opportunities']}>
-        {page === 'today' ? <Home /> : <Opportunities />}
+        {page === 'today' ? <Today /> : <Opportunities />}
       </MemoryRouter>
     </QueryClientProvider>,
   )
@@ -60,7 +60,8 @@ describe.each(['today', 'discover'] as const)('oa12 card on %s', (page) => {
 
   it('uses the one card for every idea it lists', () => {
     expect(cards(html).length).toBeGreaterThan(0)
-    expect(html).not.toContain('<table')
+    // Today also lists every pick in a table (the id="picks" section); only the idea cards above it must be table-free.
+    expect(html.slice(0, html.includes('id="picks"') ? html.indexOf('id="picks"') : undefined)).not.toContain('<table')
   })
 
   it('every card says "Experimental, unproven" and has a model status line', () => {

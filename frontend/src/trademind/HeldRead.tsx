@@ -10,7 +10,7 @@ import { Tag } from './ui'
 
 export type Suggestion = NonNullable<DetailedPosition['suggestion']>
 
-export const SUGGESTION: Record<Suggestion, { label: string; tone: 'red' | 'green' | 'amber' | 'blue'; rank: number }> = {
+const SUGGESTION: Record<Suggestion, { label: string; tone: 'red' | 'green' | 'amber' | 'blue'; rank: number }> = {
   SELL: { label: 'Sell', tone: 'red', rank: 0 },
   SELL_PARTIALLY: { label: 'Sell half', tone: 'green', rank: 1 },
   WATCH: { label: 'Watch', tone: 'amber', rank: 2 },

@@ -13,7 +13,7 @@ export type DiscoverFilter = 'ALL' | IdeaWord
 export const DISCOVER_FILTERS: DiscoverFilter[] = ['ALL', 'TRADE', 'WATCH', 'WAIT', 'AVOID']
 
 /** The short label for each of the brain's first seven steps (brainSteps.ts STEP_TITLES), as a stopping point. */
-export const STOP_LABEL: Record<number, string> = {
+const STOP_LABEL: Record<number, string> = {
   1: 'Data check',
   2: 'Market',
   3: 'Situation',

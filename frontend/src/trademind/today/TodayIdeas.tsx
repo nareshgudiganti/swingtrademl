@@ -19,7 +19,7 @@ import { Card, CheckItem } from '../ui'
 import { holdingsNeedingAttention } from './HoldingsNeedsYou'
 
 const IDEA_WORDS: IdeaWord[] = ['TRADE', 'WATCH', 'WAIT', 'AVOID']
-export const TOP_IDEAS = 5
+const TOP_IDEAS = 5
 
 /** How many of the run's ideas got each word (the owner's overrule wins), the same counts Home showed. */
 export function ideaCounts(run: BrainRun): Record<IdeaWord, number> {

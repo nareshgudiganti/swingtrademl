@@ -9,7 +9,7 @@ import { withoutScorePercent } from '../scoreText'
 const price = (n: number | undefined) => (n == null ? 'Not available' : `₹${inr(n)}`)
 
 /** "16 Oct 2026" in India time, from the run's ISO timestamp. */
-export function viewDate(iso: string): string {
+function viewDate(iso: string): string {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return 'Not available'
   return d.toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', year: 'numeric' })

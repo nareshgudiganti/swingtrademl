@@ -6,7 +6,7 @@ import type { CompareStock } from '../api/types'
 export const MAX_COMPARE = 3
 
 /** "How far back", in the words a person would say. */
-export const PERIOD_WORDS: Record<string, string> = {
+const PERIOD_WORDS: Record<string, string> = {
   '1W': 'last week',
   '1M': 'last month',
   '3M': 'last 3 months',

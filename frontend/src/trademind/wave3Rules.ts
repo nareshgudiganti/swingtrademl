@@ -16,15 +16,15 @@ import { stoppedByRoom } from './today/answerRules'
 // ------------------------------------------------------------------ trial --
 
 /** The forward trial's first session (brain/trial_journal.py TRIAL_START). */
-export const TRIAL_START = '2026-10-14'
+const TRIAL_START = '2026-10-14'
 /** Sessions the trial needs before it can be judged (trial_journal.MIN_SESSIONS). */
-export const TRIAL_SESSIONS = 15
+const TRIAL_SESSIONS = 15
 /** The planned review date: results stay sealed until then (owner plan; the server unseals only on approval). */
-export const RESULTS_OPEN = '2026-11-07'
+const RESULTS_OPEN = '2026-11-07'
 export const RESULTS_OPEN_TEXT = '7 Nov 2026'
 export const TRIAL_START_TEXT = '14 Oct 2026'
 /** Weekday market holidays inside the trial window (NSE). */
-export const TRIAL_HOLIDAYS: readonly string[] = ['2026-10-20', '2026-11-10']
+const TRIAL_HOLIDAYS: readonly string[] = ['2026-10-20', '2026-11-10']
 
 const iso = (d: Date) => d.toISOString().slice(0, 10)
 
@@ -73,7 +73,7 @@ export const SEALED_RESULTS_TEXT =
 export type EvidenceCounts = { checked: number; passedModel: number; stoppedByRoom: number }
 
 /** Did the model like this idea? Only when it reached the safety check: a TRADE, or stopped at the safety step. */
-export function passedModelCheck(d: BrainDecision): boolean {
+function passedModelCheck(d: BrainDecision): boolean {
   if (finalWord(d) === 'TRADE' || d.word === 'TRADE') return true
   return stopOf(d)?.step === 6
 }
@@ -96,7 +96,7 @@ export const STAGES: { id: BrainStageName; label: string; plain: string }[] = [
   { id: 'auto', label: 'Automatic', plain: 'The bot buys on its own, inside the safety limits.' },
 ]
 
-export const STAGE_WORD: Record<BrainStageName, string> = {
+const STAGE_WORD: Record<BrainStageName, string> = {
   shadow: 'PRACTICE STAGE',
   approval: 'YOU APPROVE EACH BUY',
   auto: 'AUTOMATIC',
@@ -190,7 +190,7 @@ const STRATEGY_PLAIN: Record<string, string> = {
 }
 
 /** Why the bot bought it: the strategy that picked it (trades do not store a per-trade reason). */
-export function botWhy(strategy: string | null): string {
+function botWhy(strategy: string | null): string {
   if (!strategy) return 'Bot pick (strategy not recorded)'
   return `Bot pick · ${STRATEGY_PLAIN[strategy] ?? strategy.replace(/_/g, ' ')}`
 }
@@ -218,7 +218,7 @@ export function endedText(reason: string | null, label: string | null, own: bool
 }
 
 /** A brain trade from the trial: its result is sealed like every other trial result. */
-export function isSealedTrade(strategy: string | null, entryAt: string): boolean {
+function isSealedTrade(strategy: string | null, entryAt: string): boolean {
   return strategy === 'brain' && entryAt.slice(0, 10) >= TRIAL_START
 }
 
@@ -293,7 +293,7 @@ export function sortRows(rows: HistoryRow[]): HistoryRow[] {
 }
 
 /** The India date of a timestamp (a bare YYYY-MM-DD is already one). */
-export function istDate(ts: string): string {
+function istDate(ts: string): string {
   if (/^\d{4}-\d{2}-\d{2}$/.test(ts)) return ts
   const d = new Date(ts)
   if (Number.isNaN(d.getTime())) return ts.slice(0, 10)

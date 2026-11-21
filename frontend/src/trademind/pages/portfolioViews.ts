@@ -1,7 +1,7 @@
 // Pure numbers behind the Portfolio charts and the closed-trades scoreboard. Display only: nothing here buys, sells
 // or changes a stop, a size or a limit. Every input is a server row (open position or finished trade).
 
-export const SLICE_COLORS = ['#3f55d6', '#1f9d6b', '#e0a72b', '#d9486a', '#7a4fd6', '#17a2b8', '#e8702a', '#5a6b8c']
+const SLICE_COLORS = ['#3f55d6', '#1f9d6b', '#e0a72b', '#d9486a', '#7a4fd6', '#17a2b8', '#e8702a', '#5a6b8c']
 
 export type Slice = { name: string; value: number; pct: number; color: string }
 

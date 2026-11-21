@@ -8,7 +8,7 @@ import { Link } from 'react-router-dom'
 import { api } from '../api/client'
 import type { CompanyBlock, CompanyView } from '../api/types'
 
-export function useCompany(symbol: string) {
+function useCompany(symbol: string) {
   return useQuery({ queryKey: ['company', symbol], queryFn: () => api.company(symbol), retry: false })
 }
 

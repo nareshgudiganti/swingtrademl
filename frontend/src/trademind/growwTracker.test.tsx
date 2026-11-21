@@ -5,10 +5,12 @@ import { renderToString } from 'react-dom/server'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { WatchTracker, WatchTrackerItem } from '../api/types'
+import { api } from '../api/client'
+import type { GrowwStatus, WatchTracker, WatchTrackerItem } from '../api/types'
 import { LOOK_KEY } from './look'
 import { TRACKER_TAB_KEY, readTrackerTab, writeTrackerTab } from './trackerTab'
-import { EditableRow } from './pages/GrowwTracker'
+import { Detail, EditableRow } from './pages/GrowwTracker'
+import { GROWW_MATCH_KEY, confirmMatch } from './GrowwMatchingPanel'
 import TradeMindApp from './TradeMindApp'
 
 const store = new Map<string, string>()
@@ -46,11 +48,12 @@ const DATA: WatchTracker = {
   ],
 }
 
-function render(path: string, data: WatchTracker | undefined) {
+function render(path: string, data: WatchTracker | undefined, extra?: (c: QueryClient) => void) {
   store.set(LOOK_KEY, 'new')
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   client.setQueryData(['plan'], { can_see_real_account: false, unrestricted: false, features: [] })
   if (data) client.setQueryData(['myWatchlistTracker'], data)
+  extra?.(client)
   return renderToString(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[path]}>
@@ -205,5 +208,103 @@ describe('Groww Tracker page', () => {
     })
     expect(readTrackerTab()).toBe(true)
     expect(() => writeTrackerTab(true)).not.toThrow()
+  })
+
+  describe('Groww sync', () => {
+    // The test just above leaves a throwing localStorage behind; put the working one back.
+    beforeEach(() => {
+      vi.stubGlobal('localStorage', {
+        getItem: (k: string) => store.get(k) ?? null,
+        setItem: (k: string, v: string) => void store.set(k, v),
+        removeItem: (k: string) => void store.delete(k),
+        clear: () => store.clear(),
+      })
+    })
+    const GROWW_FAILED: GrowwStatus = {
+      configured: true,
+      last_success_at: '2026-11-21T10:05:00Z', // 15:35 IST
+      last_status: 'failed',
+      last_attempt_at: '2026-11-21T11:00:00Z',
+      last_sync_id: 7,
+    }
+    const withGroww = (groww?: GrowwStatus, items = DATA.items): WatchTracker => ({ ...DATA, items, ...(groww ? { groww } : {}) })
+
+    it('shows last successful sync time when the latest sync failed', () => {
+      const html = render('/trademind/groww-tracker', withGroww(GROWW_FAILED))
+      expect(html).toContain('data-testid="groww-strip"')
+      expect(html).toContain('Groww synced 21 Nov, 15:35 IST')
+      expect(html).toContain('prices from 7 Nov close')
+      expect(html).toContain('showing holdings from 21 Nov, 15:35 IST')
+      expect(html).toContain('>Refresh<')
+      expect(html).not.toMatch(/NaN|undefined|null/)
+    })
+
+    it('needs-matching panel lists unmatched rows and confirm posts instrument_id', async () => {
+      const html = render('/trademind/groww-tracker', withGroww({ ...GROWW_FAILED, last_status: 'complete' }), (c) =>
+        c.setQueryData(GROWW_MATCH_KEY, {
+          items: [
+            { isin: 'INE000A01011', trading_symbol: 'ACMEIND', quantity: 5, average_price: 120.5, match_state: 'needs_matching', suggested_symbol: null },
+            { isin: 'INE000B01022', trading_symbol: 'BETACO', quantity: 2, average_price: 80, match_state: 'suggested', suggested_symbol: 'BETA' },
+          ],
+        }),
+      )
+      expect(html).toContain('data-testid="groww-matching"')
+      expect(html).toContain('INE000A01011')
+      expect(html).toContain('ACMEIND')
+      expect(html).toContain('Suggested: BETA')
+      expect(html).toContain('Confirm all suggestions')
+      const spy = vi.spyOn(api, 'growwMatch').mockResolvedValue({})
+      await confirmMatch('INE000A01011', 42)
+      expect(spy).toHaveBeenCalledWith('INE000A01011', 42)
+      spy.mockRestore()
+    })
+
+    it('quantity and price inputs are read-only on Groww rows', () => {
+      const groww = rowHtml({ source: 'groww' })
+      expect(groww).toContain('from Groww')
+      expect(groww).not.toContain('aria-label="Price you paid in Groww for KEI"')
+      expect(groww).not.toContain('aria-label="Shares of KEI"')
+      expect(groww).toContain('₹4,210')
+      expect(groww).toContain('aria-label="Bought on for KEI"')
+      const manual = rowHtml({ source: 'manual' })
+      expect(manual).toContain('aria-label="Shares of KEI"')
+      expect(manual).not.toContain('from Groww')
+    })
+
+    it('confirm sale prefills the pending quantity', () => {
+      const k = { ...DATA.items[0]!, source: 'groww' as const, pending_sale_qty: 4 }
+      const html = renderToString(
+        <QueryClientProvider client={new QueryClient()}>
+          <Detail k={k} horizon={15} editing={false} onEditing={() => {}} onRemoved={() => {}} startSelling />
+        </QueryClientProvider>,
+      )
+      expect(html).toMatch(/aria-label="Shares sold for KEI"[^>]*value="4"|value="4"[^>]*aria-label="Shares sold for KEI"/)
+      // the row says why
+      const rows = render('/trademind/groww-tracker', withGroww(GROWW_FAILED, [k]))
+      expect(rows).toContain('Groww shows 4 fewer shares')
+      expect(rows).toContain('Confirm sale')
+    })
+
+    it('not held rows are labelled and excluded from the held total', () => {
+      const gone = item('GONE', 'ok', { source: 'groww', held_state: 'not_held', invested: 99900, profit_amount: 100 })
+      const html = render('/trademind/groww-tracker', withGroww(GROWW_FAILED, [DATA.items[0]!, gone]))
+      expect(html).toContain('Not held')
+      expect(html).toContain('₹42,100')
+      expect(html).not.toContain('₹1,42,000')
+    })
+
+    it('non-owner sees no Groww strip', () => {
+      const html = render('/trademind/groww-tracker', withGroww(undefined))
+      expect(html).not.toContain('data-testid="groww-strip"')
+      expect(html).not.toContain('data-testid="groww-matching"')
+      expect(html).not.toContain('Refresh')
+      expect(html).toContain('data-testid="tracker-table"')
+    })
+
+    it('an empty sync asks the owner to confirm', () => {
+      const html = render('/trademind/groww-tracker', withGroww({ ...GROWW_FAILED, last_status: 'empty_unconfirmed' }))
+      expect(html).toContain('Groww returned no holdings')
+      expect(html).toContain('>Confirm<')
+    })
   })
 })

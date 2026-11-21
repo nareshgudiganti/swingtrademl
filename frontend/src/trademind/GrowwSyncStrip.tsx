@@ -1,0 +1,87 @@
+// Owner only: when Groww last synced, a Refresh button, and the banner for a sync that came back empty.
+// The server sends `groww` only to the owner; without it nothing is drawn. Display and bookkeeping only.
+
+import { useState } from 'react'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+
+import { api } from '../api/client'
+import type { GrowwStatus } from '../api/types'
+import { GROWW_MATCH_KEY } from './GrowwMatchingPanel'
+import { fmtDayMonth, fmtIstStamp } from './trackerRules'
+
+const TRACKER_KEY = ['myWatchlistTracker']
+
+export function GrowwSyncStrip({ groww, priceDate }: { groww: GrowwStatus; priceDate: string | null }) {
+  const client = useQueryClient()
+  const [done, setDone] = useState<string | null>(null)
+  const [failed, setFailed] = useState<string | null>(null)
+  const reload = () => {
+    void client.invalidateQueries({ queryKey: TRACKER_KEY })
+    void client.invalidateQueries({ queryKey: GROWW_MATCH_KEY })
+  }
+  const sync = useMutation({
+    mutationFn: api.growwSync,
+    onMutate: () => {
+      setDone(null)
+      setFailed(null)
+    },
+    onSuccess: (r) => {
+      if (r.status === 'failed') setFailed('Groww did not answer')
+      else setDone(`Done. ${r.holdings_count} ${r.holdings_count === 1 ? 'holding' : 'holdings'} from Groww.`)
+      reload()
+    },
+    onError: (e) => {
+      setFailed((e as Error).message.replace(/[.]$/, '') || 'Groww did not answer')
+      reload()
+    },
+  })
+  const confirmEmpty = useMutation({
+    mutationFn: (id: number) => api.growwConfirmEmpty(id),
+    onSuccess: reload,
+    onError: (e) => setFailed((e as Error).message),
+  })
+
+  const synced = fmtIstStamp(groww.last_success_at)
+  const priced = fmtDayMonth(priceDate)
+  const lastBad = groww.last_status === 'failed' || groww.last_status === 'partial'
+  const showFail = failed !== null || lastBad
+  const empty = groww.last_status === 'empty_unconfirmed' && groww.last_sync_id != null
+
+  return (
+    <section className="gt-gsync" data-testid="groww-strip" aria-label="Groww sync">
+      <div className="gt-gsync-row">
+        <span>
+          {!groww.configured
+            ? 'Groww sync is not set up yet.'
+            : synced
+              ? `Groww synced ${synced}${priced ? ` · prices from ${priced} close` : ''}`
+              : 'Groww has not synced yet.'}
+        </span>
+        {groww.configured && (
+          <button type="button" className="gt-ghost" disabled={sync.isPending} onClick={() => sync.mutate()} data-testid="groww-refresh">
+            {sync.isPending ? 'Refreshing…' : 'Refresh'}
+          </button>
+        )}
+        {done && (
+          <span className="tm-pos tmn-small" role="status">
+            {done}
+          </span>
+        )}
+      </div>
+      {showFail && (
+        <p className="tm-neg tmn-small" role="alert" data-testid="groww-fail">
+          {failed ?? 'The last refresh did not finish'} —{' '}
+          {synced ? `showing holdings from ${synced}.` : 'no holdings have come from Groww yet.'}
+        </p>
+      )}
+      {empty && (
+        <div className="gt-gsync-empty" data-testid="groww-empty-banner">
+          <span>Groww returned no holdings — do you hold nothing?</span>
+          <button type="button" className="gt-ghost" disabled={confirmEmpty.isPending} onClick={() => confirmEmpty.mutate(groww.last_sync_id as number)}>
+            Confirm
+          </button>
+        </div>
+      )}
+    </section>
+  )
+}

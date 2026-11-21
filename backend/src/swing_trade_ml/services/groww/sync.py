@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import re
+import uuid
 from typing import Any
 
 from sqlalchemy import select
@@ -109,24 +110,32 @@ def match_rows(db: Session, rows: list[dict]) -> list[tuple[dict, int | None, st
     return out
 
 
-def _acquire_lock():
-    """Returns the Redis client holding the lock, or None. A down Redis never blocks a sync."""
+_RELEASE_LUA = (
+    "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end"
+)
+
+
+def _acquire_lock() -> tuple[Any, str] | None:
+    """Returns (redis client, our token) when we hold the lock, else None (Redis down: no lock)."""
+    token = uuid.uuid4().hex
     try:
         redis_client = _get_redis()
-        got = redis_client.set(LOCK_KEY, "1", nx=True, ex=LOCK_SECONDS)
+        got = redis_client.set(LOCK_KEY, token, nx=True, ex=LOCK_SECONDS)
     except Exception:  # noqa: BLE001 - a down Redis must not block syncs
         logger.warning("groww sync lock unavailable; syncing without it")
         return None
     if not got:
         raise SyncAlreadyRunning
-    return redis_client
+    return redis_client, token
 
 
-def _release_lock(redis_client) -> None:
-    if redis_client is None:
+def _release_lock(lock: tuple[Any, str] | None) -> None:
+    """Delete the lock only if it is still ours (it may have expired and been re-taken)."""
+    if lock is None:
         return
+    redis_client, token = lock
     try:
-        redis_client.delete(LOCK_KEY)
+        redis_client.eval(_RELEASE_LUA, 1, LOCK_KEY, token)
     except Exception:  # noqa: BLE001
         logger.warning("groww sync lock could not be released")
 
@@ -151,26 +160,38 @@ def _store_rows(db: Session, sync: GrowwSync, rows: list[Any]) -> None:
 
 def run_sync(db: Session, *, user_id: int, trigger: str) -> GrowwSync:
     """Fetch, classify, match and record one sync. Never raises except SyncAlreadyRunning."""
-    redis_client = _acquire_lock()
+    lock = _acquire_lock()
     try:
-        sync = GrowwSync(started_at=utcnow(), trigger=trigger, status=SYNC_FAILED)
-        db.add(sync)
-        db.flush()
+        started = utcnow()
         try:
             rows = fetch_holdings()
+            error = None if isinstance(rows, list) else "unavailable"
         except GrowwAuthError:
-            sync.error_code = "auth"
+            rows, error = None, "auth"
         except GrowwUnavailable:
-            sync.error_code = "unavailable"
+            rows, error = None, "unavailable"
         except Exception:  # recorded, never raised to the caller
             logger.exception("groww sync failed unexpectedly")
-            sync.error_code = "unexpected"
-        else:
-            sync.status = classify(rows)
-            sync.holdings_count = len(rows)
-            _store_rows(db, sync, rows)
-        sync.finished_at = utcnow()
+            rows, error = None, "unexpected"
+        if error is None:
+            try:
+                sync = GrowwSync(started_at=started, trigger=trigger, status=classify(rows))
+                sync.holdings_count = len(rows)
+                db.add(sync)
+                db.flush()
+                _store_rows(db, sync, rows)
+                sync.finished_at = utcnow()
+                db.commit()
+                return sync
+            except Exception:
+                logger.exception("groww sync could not be stored")
+                db.rollback()
+                error = "store"
+        sync = GrowwSync(
+            started_at=started, finished_at=utcnow(), trigger=trigger, status=SYNC_FAILED, error_code=error
+        )
+        db.add(sync)
         db.commit()
         return sync
     finally:
-        _release_lock(redis_client)
+        _release_lock(lock)

@@ -33,9 +33,12 @@ class FakeRedis:
         self.store[key] = value
         return True
 
-    def delete(self, key):
-        self.deleted.append(key)
-        self.store.pop(key, None)
+    def eval(self, script, numkeys, key, token):
+        if self.store.get(key) == token:
+            self.deleted.append(key)
+            del self.store[key]
+            return 1
+        return 0
 
 
 @pytest.fixture(autouse=True)
@@ -184,3 +187,32 @@ def test_redis_down_proceeds_without_lock(db_session, monkeypatch):
     monkeypatch.setattr(gsync, "_get_redis", _raises(ConnectionError("down")))
     monkeypatch.setattr(gsync, "fetch_holdings", lambda: [])
     assert gsync.run_sync(db_session, user_id=1, trigger="manual").status == SYNC_EMPTY
+
+
+def test_release_does_not_delete_a_lock_taken_by_another_run(db_session, monkeypatch, fake_redis):
+    def fetch():
+        fake_redis.store["groww:sync_lock"] = "someone-else"  # our lock expired, another run took it
+        return []
+
+    monkeypatch.setattr(gsync, "fetch_holdings", fetch)
+    gsync.run_sync(db_session, user_id=1, trigger="manual")
+    assert fake_redis.store["groww:sync_lock"] == "someone-else"
+    assert fake_redis.deleted == []
+
+
+def test_non_list_fetch_result_is_failed_unavailable(db_session, monkeypatch):
+    monkeypatch.setattr(gsync, "fetch_holdings", lambda: None)
+    sync = gsync.run_sync(db_session, user_id=1, trigger="manual")
+    assert sync.status == SYNC_FAILED and sync.error_code == "unavailable"
+
+
+def test_store_error_records_failed_sync_with_store_code(db_session, monkeypatch):
+    def boom(*args, **kwargs):
+        raise RuntimeError("insert failed with details")
+
+    monkeypatch.setattr(gsync, "fetch_holdings", lambda: [_row()])
+    monkeypatch.setattr(gsync, "_store_rows", boom)
+    sync = gsync.run_sync(db_session, user_id=1, trigger="manual")
+    assert sync.status == SYNC_FAILED and sync.error_code == "store"
+    assert db_session.query(GrowwSync).count() == 1
+    assert db_session.query(GrowwHolding).count() == 0

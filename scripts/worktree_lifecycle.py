@@ -411,6 +411,7 @@ class QuarantineLock:
 
     def __init__(self, root: Path):
         self.path = quarantine_dir(root) / ".lock"
+        self.acquired = False
 
     def __enter__(self):
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -420,10 +421,13 @@ class QuarantineLock:
             raise SystemExit(f"REFUSED: another run holds {self.path} (delete it only if no run is active)") from None
         os.write(fd, str(os.getpid()).encode())
         os.close(fd)
+        self.acquired = True
         return self
 
     def __exit__(self, *exc):
-        self.path.unlink(missing_ok=True)
+        if self.acquired:  # a refused run must never delete the lock held by another run
+            self.path.unlink(missing_ok=True)
+            self.acquired = False
 
 
 def unique_dest(qdir: Path, name: str) -> Path:
@@ -566,19 +570,19 @@ def purge(root: Path, apply: bool, older_than_days: int, log_path: Path) -> int:
         print(f"REFUSED: protection list missing ({protect_file()}); nothing purged.", file=sys.stderr)
         return 1
     now = dt.datetime.now()
-    manifest = load_manifest(root)
-    due = [e for e in manifest
-           if (now - dt.datetime.fromisoformat(e["moved_at"])).total_seconds() >= older_than_days * 86400]
     failures = 0
     log, fh = _logger(log_path)
     lock = None
     try:
-        log(f"=== {now:%Y-%m-%d %H:%M:%S} purge {'APPLY' if apply else 'DRY RUN'} older_than={older_than_days}d "
-            f"due={len(due)} of {len(manifest)}")
-        keep = list(manifest)
         lock = QuarantineLock(root) if apply else None
         if lock:
             lock.__enter__()
+        manifest = load_manifest(root)  # read under the lock: no stale snapshot can be written back
+        due = [e for e in manifest
+               if (now - dt.datetime.fromisoformat(e["moved_at"])).total_seconds() >= older_than_days * 86400]
+        log(f"=== {now:%Y-%m-%d %H:%M:%S} purge {'APPLY' if apply else 'DRY RUN'} older_than={older_than_days}d "
+            f"due={len(due)} of {len(manifest)}")
+        keep = list(manifest)
         for e in due:
             log(f"- {e['quarantined']} [{e['branch'] or 'detached'} @ {e['head'][:7]}] from {e['original']}")
             if not apply:
@@ -596,13 +600,16 @@ def purge(root: Path, apply: bool, older_than_days: int, log_path: Path) -> int:
             # Rename first: on Windows this fails while any process has a file open inside, and writers that
             # address the old path can no longer reach the folder. Then re-check under the new name.
             staging = unique_dest(quarantine_dir(root), Path(e["quarantined"]).name + "__purging")
-            rc, out = git(root, "worktree", "move", e["quarantined"], str(staging))
+            before = e["quarantined"]
+            e["quarantined"] = str(staging).replace("\\", "/")
+            save_manifest(root, keep)  # restore record points at the new path BEFORE the move
+            rc, out = git(root, "worktree", "move", before, str(staging))
             if rc:
+                e["quarantined"] = before
+                save_manifest(root, keep)
                 log(f"  SKIP: could not stage for purge (in use?) rc={rc} {out[-200:]}")
                 failures += 1
                 continue
-            e["quarantined"] = str(staging).replace("\\", "/")
-            save_manifest(root, keep)
             ok, why = recheck(root, Worktree(path=e["quarantined"], head=e["head"], branch=e["branch"]), ctx,
                               explicit=True)
             if not ok:

@@ -383,3 +383,41 @@ def test_branch_kept_when_worktree_listing_fails(tmp_path, monkeypatch):
     e = {"branch": "feat/x", "head": "h", "merged_prs": [5]}
     assert wl.delete_branch_if_safe(tmp_path, e, lambda m: None) == 1
     assert not [c for c in calls if c[:1] == ("update-ref",)]
+
+
+
+# --- Codex round-7 findings -------------------------------------------------------------------------------
+def test_refused_run_does_not_delete_the_holders_lock(tmp_path, monkeypatch):
+    monkeypatch.setattr(wl, "quarantine_dir", lambda root: tmp_path / "q")
+    holder = wl.QuarantineLock(tmp_path).__enter__()
+    t = _target(path=str(tmp_path / "wt"))
+    monkeypatch.setattr(wl, "context", lambda root: wl.Context({}, {}, set(), protect_loaded=True))
+    monkeypatch.setattr(wl, "collect", lambda *a, **k: [t])
+    try:
+        wl.cleanup(tmp_path, apply=True, pr=None, log_path=tmp_path / "log.txt")
+    except SystemExit:
+        pass
+    assert (tmp_path / "q" / ".lock").exists(), "the first run's lock must survive"
+    holder.__exit__(None, None, None)
+
+
+def test_purge_records_staging_path_before_moving(tmp_path, monkeypatch):
+    monkeypatch.setattr(wl, "context", lambda root: wl.Context({}, {}, set(), protect_loaded=True))
+    monkeypatch.setattr(wl, "quarantine_dir", lambda root: tmp_path / "q")
+    monkeypatch.setattr(wl, "load_protected", lambda root: set())
+    monkeypatch.setattr(wl, "recheck", lambda *a, **k: (True, "ok"))
+    old = (wl.dt.datetime.now() - wl.dt.timedelta(days=30)).isoformat(timespec="seconds")
+    wl.save_manifest(tmp_path, [{"original": "D:/o/wt", "quarantined": str(tmp_path / "q" / "wt"), "branch": None,
+                                 "head": "h", "in_main": True, "merged_prs": [], "moved_at": old}])
+    seen = {}
+
+    def fake_git(cwd, *args):
+        if args[:2] == ("worktree", "move"):
+            seen["at_move"] = wl.load_manifest(tmp_path)[0]["quarantined"]
+            return 1, "in use"
+        return 0, ""
+
+    monkeypatch.setattr(wl, "git", fake_git)
+    assert wl.purge(tmp_path, apply=True, older_than_days=7, log_path=tmp_path / "log.txt") == 1
+    assert "__purging" in seen["at_move"]
+    assert wl.load_manifest(tmp_path)[0]["quarantined"] == str(tmp_path / "q" / "wt")  # reverted after failure

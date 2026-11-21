@@ -10,7 +10,9 @@ import type { GrowwStatus, WatchTracker, WatchTrackerItem } from '../api/types'
 import { LOOK_KEY } from './look'
 import { TRACKER_TAB_KEY, readTrackerTab, writeTrackerTab } from './trackerTab'
 import { Detail, EditableRow } from './pages/GrowwTracker'
-import { GROWW_MATCH_KEY, confirmMatch } from './GrowwMatchingPanel'
+import { GROWW_MATCH_KEY, pickStock } from './GrowwMatchingPanel'
+import { confirmEmptySync, runRefresh } from './GrowwSyncStrip'
+import { filterItems, needsActionCount, saleBody, symbolsIn } from './trackerRules'
 import TradeMindApp from './TradeMindApp'
 
 const store = new Map<string, string>()
@@ -253,10 +255,45 @@ describe('Groww Tracker page', () => {
       expect(html).toContain('ACMEIND')
       expect(html).toContain('Suggested: BETA')
       expect(html).toContain('Confirm all suggestions')
+    })
+
+    it('choosing a search hit posts that hit\'s instrument id, not its symbol', async () => {
       const spy = vi.spyOn(api, 'growwMatch').mockResolvedValue({})
-      await confirmMatch('INE000A01011', 42)
+      const hit = { id: 42, tradingsymbol: 'ACMEIND', name: 'Acme Industries' }
+      await pickStock('INE000A01011', hit)
       expect(spy).toHaveBeenCalledWith('INE000A01011', 42)
       spy.mockRestore()
+    })
+
+    it('Refresh: done, failed, already refreshing (neutral) and rate limited', async () => {
+      const ok = await runRefresh(async () => ({ status: 'complete', holdings_count: 3, finished_at: 'x' }))
+      expect(ok).toEqual({ kind: 'done', text: 'Done. 3 holdings from Groww.' })
+      const failed = await runRefresh(async () => ({ status: 'failed', holdings_count: 0, finished_at: 'x' }))
+      expect(failed.kind).toBe('failed')
+      const busy = await runRefresh(async () => {
+        throw new Error('already refreshing')
+      })
+      expect(busy.kind).toBe('busy')
+      expect(busy.text).not.toMatch(/fail|did not/i)
+      const limited = await runRefresh(async () => {
+        throw new Error('Too many requests. Try again in a minute.')
+      })
+      expect(limited).toEqual({ kind: 'failed', text: 'Too many requests. Try again in a minute' })
+    })
+
+    it('Confirm on the empty banner posts the sync id, and does nothing without one', async () => {
+      const spy = vi.spyOn(api, 'growwConfirmEmpty').mockResolvedValue({})
+      await confirmEmptySync({ last_sync_id: 7 })
+      expect(spy).toHaveBeenCalledWith(7)
+      spy.mockClear()
+      await confirmEmptySync({ last_sync_id: null })
+      expect(spy).not.toHaveBeenCalled()
+      spy.mockRestore()
+    })
+
+    it('the sale request carries the prefilled quantity, and none when the box is empty', () => {
+      expect(saleBody('120.5', '2026-11-21', '4')).toEqual({ sell_price: 120.5, sold_on: '2026-11-21', quantity: 4 })
+      expect(saleBody('120.5', '2026-11-21', '')).toEqual({ sell_price: 120.5, sold_on: '2026-11-21' })
     })
 
     it('quantity and price inputs are read-only on Groww rows', () => {
@@ -289,8 +326,32 @@ describe('Groww Tracker page', () => {
       const gone = item('GONE', 'ok', { source: 'groww', held_state: 'not_held', invested: 99900, profit_amount: 100 })
       const html = render('/trademind/groww-tracker', withGroww(GROWW_FAILED, [DATA.items[0]!, gone]))
       expect(html).toContain('Not held')
-      expect(html).toContain('₹42,100')
-      expect(html).not.toContain('₹1,42,000')
+      const summary = html.slice(html.indexOf('data-testid="tracker-summary"'), html.indexOf('</section>', html.indexOf('data-testid="tracker-summary"')))
+      expect(summary).toContain('₹42,100')
+      expect(summary).not.toContain('₹1,42,000')
+      expect(summary).not.toContain('₹99,900')
+    })
+
+    it('the Counts note counts held stocks only', () => {
+      const gone = item('GONE', 'ok', { source: 'groww', held_state: 'not_held' })
+      const noShares = DATA.items[2]! // held, but no shares or price
+      const html = render('/trademind/groww-tracker', withGroww(GROWW_FAILED, [DATA.items[0]!, noShares, gone])).replace(/<!-- -->/g, '')
+      expect(html).toContain('Counts 1 of 2 stocks.')
+      expect(html).not.toContain('Counts 1 of 3 stocks.')
+    })
+
+    it('not held rows stay listed but raise no warnings or counts', () => {
+      const gone = item('GONE', 'stop', { source: 'groww', held_state: 'not_held', return_pct: -9 })
+      const items = [DATA.items[0]!, gone]
+      expect(needsActionCount(items)).toBe(1) // only KEI (target)
+      expect(symbolsIn(items, 'stop')).toEqual([])
+      expect(filterItems(items, 'act').map((i) => i.symbol)).toEqual(['KEI'])
+      expect(filterItems(items, 'all')).toHaveLength(2)
+      const html = render('/trademind/groww-tracker', withGroww(GROWW_FAILED, items))
+      expect(html).toContain('data-symbol="GONE"')
+      expect(html).toContain('Not held')
+      expect(html).toMatch(/Near stop-loss<\/h3><div class="gt-big num">0</)
+      expect(html).not.toContain('Near stop-loss</span>')
     })
 
     it('non-owner sees no Groww strip', () => {

@@ -10,8 +10,8 @@ import type { GrowwMatchItem, Instrument } from '../api/types'
 export const GROWW_MATCH_KEY = ['growwMatching']
 const TRACKER_KEY = ['myWatchlistTracker']
 
-/** Tie one Groww holding (by ISIN) to a stock the app knows. Exported for tests. */
-export const confirmMatch = (isin: string, instrumentId: number) => api.growwMatch(isin, instrumentId)
+/** Tie one Groww holding (by ISIN) to the chosen search hit: the request carries the hit's instrument id. */
+export const pickStock = (isin: string, hit: Pick<Instrument, 'id'>) => api.growwMatch(isin, hit.id)
 
 function Picker({ isin, onDone, onError }: { isin: string; onDone: () => void; onError: (m: string) => void }) {
   const [q, setQ] = useState('')
@@ -22,7 +22,7 @@ function Picker({ isin, onDone, onError }: { isin: string; onDone: () => void; o
     staleTime: 60_000,
   })
   const pick = useMutation({
-    mutationFn: (i: Instrument) => confirmMatch(isin, i.id),
+    mutationFn: (i: Instrument) => pickStock(isin, i),
     onSuccess: onDone,
     onError: (e) => onError((e as Error).message),
   })

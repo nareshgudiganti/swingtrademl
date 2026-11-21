@@ -40,6 +40,7 @@ export const FILTERS: { id: TrackerFilter; label: string }[] = [
 
 export function matchesFilter(item: WatchTrackerItem, filter: TrackerFilter): boolean {
   if (filter === 'all') return true
+  if (isNotHeld(item)) return false // not owned any more: no warnings
   if (filter === 'act') return item.state !== 'ok'
   return item.state === filter
 }
@@ -50,19 +51,21 @@ export function filterItems(items: WatchTrackerItem[], filter: TrackerFilter): W
 
 /** How many stocks need action (anything but "on track"). Drives the menu badge. */
 export function needsActionCount(items: readonly WatchTrackerItem[] | undefined): number {
-  return (items ?? []).filter((i) => i.state !== 'ok').length
+  return (items ?? []).filter((i) => !isNotHeld(i) && i.state !== 'ok').length
 }
 
 export function symbolsIn(items: WatchTrackerItem[], state: TrackerState): string[] {
-  return items.filter((i) => i.state === state).map((i) => i.symbol)
+  return items.filter((i) => !isNotHeld(i) && i.state === state).map((i) => i.symbol)
 }
 
 const URGENCY: Record<TrackerState, number> = { stop: 0, target: 1, time: 2, weak: 3, ok: 4 }
+// A stock Groww no longer lists sorts last: it is not owned, so nothing about it is urgent.
+const urgency = (i: WatchTrackerItem): number => (isNotHeld(i) ? 5 : URGENCY[i.state])
 
 /** Stocks that need action first (stop, target, time, weak), then by most days done, then by symbol. */
 export function sortItems(items: WatchTrackerItem[]): WatchTrackerItem[] {
   return [...items].sort(
-    (a, b) => URGENCY[a.state] - URGENCY[b.state] || b.days_done - a.days_done || a.symbol.localeCompare(b.symbol),
+    (a, b) => urgency(a) - urgency(b) || b.days_done - a.days_done || a.symbol.localeCompare(b.symbol),
   )
 }
 
@@ -129,6 +132,7 @@ export function pips(daysDone: number, horizon: number): { filled: boolean; late
 
 /** Plain-English "what to do", by the server's status. */
 export function whatToDo(item: WatchTrackerItem, horizon: number): string {
+  if (isNotHeld(item)) return `Groww no longer lists ${item.symbol}, so it is not counted as held and has no warnings. If you did sell it, record the sale to keep the result.`
   const ret = fmtPct(item.return_pct)
   const left = Math.max(0, horizon - item.days_done)
   switch (item.state) {
@@ -237,6 +241,12 @@ export function buildPatch(item: WatchTrackerItem, form: EditForm, today: string
   if (form.note.trim() !== orig.note.trim()) patch.note = form.note.trim() === '' ? null : form.note.trim()
 
   return { patch, errors, changed: Object.keys(patch).length > 0 }
+}
+
+/** The sell request for the Sold form: quantity is sent only when typed (or when Groww shows fewer shares). */
+export function saleBody(sellPrice: string, soldOn: string, qtyText: string): { sell_price: number; sold_on: string; quantity?: number } {
+  const q = Number(qtyText)
+  return { sell_price: Number(sellPrice), sold_on: soldOn, ...(qtyText.trim() !== '' ? { quantity: q } : {}) }
 }
 
 /** Groww no longer lists this stock. */

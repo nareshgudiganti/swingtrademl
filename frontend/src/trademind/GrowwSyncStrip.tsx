@@ -5,11 +5,31 @@ import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 
 import { api } from '../api/client'
-import type { GrowwStatus } from '../api/types'
+import type { GrowwStatus, GrowwSyncResult } from '../api/types'
 import { GROWW_MATCH_KEY } from './GrowwMatchingPanel'
 import { fmtDayMonth, fmtIstStamp } from './trackerRules'
 
 const TRACKER_KEY = ['myWatchlistTracker']
+
+export type RefreshOutcome = { kind: 'done' | 'failed' | 'busy'; text: string }
+
+/** Turn the result of a Refresh into what the owner reads. "Already refreshing" is neutral, not a failure. */
+export async function runRefresh(sync: () => Promise<GrowwSyncResult>): Promise<RefreshOutcome> {
+  try {
+    const r = await sync()
+    if (r.status === 'failed') return { kind: 'failed', text: 'Groww did not answer' }
+    return { kind: 'done', text: `Done. ${r.holdings_count} ${r.holdings_count === 1 ? 'holding' : 'holdings'} from Groww.` }
+  } catch (e) {
+    const msg = (e as Error).message ?? ''
+    if (/already refreshing/i.test(msg)) return { kind: 'busy', text: 'Already refreshing. Give it a moment.' }
+    return { kind: 'failed', text: msg.replace(/[.]$/, '') || 'Groww did not answer' }
+  }
+}
+
+/** Confirm that an empty Groww answer is true. Does nothing without a sync id. */
+export function confirmEmptySync(groww: Pick<GrowwStatus, 'last_sync_id'>) {
+  return groww.last_sync_id == null ? Promise.resolve(null) : api.growwConfirmEmpty(groww.last_sync_id)
+}
 
 export function GrowwSyncStrip({ groww, priceDate }: { groww: GrowwStatus; priceDate: string | null }) {
   const client = useQueryClient()
@@ -19,24 +39,23 @@ export function GrowwSyncStrip({ groww, priceDate }: { groww: GrowwStatus; price
     void client.invalidateQueries({ queryKey: TRACKER_KEY })
     void client.invalidateQueries({ queryKey: GROWW_MATCH_KEY })
   }
+  const [busy, setBusy] = useState<string | null>(null)
   const sync = useMutation({
-    mutationFn: api.growwSync,
+    mutationFn: () => runRefresh(api.growwSync),
     onMutate: () => {
       setDone(null)
       setFailed(null)
+      setBusy(null)
     },
-    onSuccess: (r) => {
-      if (r.status === 'failed') setFailed('Groww did not answer')
-      else setDone(`Done. ${r.holdings_count} ${r.holdings_count === 1 ? 'holding' : 'holdings'} from Groww.`)
-      reload()
-    },
-    onError: (e) => {
-      setFailed((e as Error).message.replace(/[.]$/, '') || 'Groww did not answer')
+    onSuccess: (o) => {
+      if (o.kind === 'done') setDone(o.text)
+      else if (o.kind === 'busy') setBusy(o.text)
+      else setFailed(o.text)
       reload()
     },
   })
   const confirmEmpty = useMutation({
-    mutationFn: (id: number) => api.growwConfirmEmpty(id),
+    mutationFn: () => confirmEmptySync(groww),
     onSuccess: reload,
     onError: (e) => setFailed((e as Error).message),
   })
@@ -62,6 +81,11 @@ export function GrowwSyncStrip({ groww, priceDate }: { groww: GrowwStatus; price
             {sync.isPending ? 'Refreshing…' : 'Refresh'}
           </button>
         )}
+        {busy && (
+          <span className="tm-dim tmn-small" role="status" data-testid="groww-busy">
+            {busy}
+          </span>
+        )}
         {done && (
           <span className="tm-pos tmn-small" role="status">
             {done}
@@ -77,7 +101,7 @@ export function GrowwSyncStrip({ groww, priceDate }: { groww: GrowwStatus; price
       {empty && (
         <div className="gt-gsync-empty" data-testid="groww-empty-banner">
           <span>Groww returned no holdings — do you hold nothing?</span>
-          <button type="button" className="gt-ghost" disabled={confirmEmpty.isPending} onClick={() => confirmEmpty.mutate(groww.last_sync_id as number)}>
+          <button type="button" className="gt-ghost" disabled={confirmEmpty.isPending} onClick={() => confirmEmpty.mutate()}>
             Confirm
           </button>
         </div>

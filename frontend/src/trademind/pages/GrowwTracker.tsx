@@ -35,6 +35,7 @@ import {
   formFromItem,
   isGrowwRow,
   isNotHeld,
+  saleBody,
   needsActionCount,
   pips,
   portfolioSummary,
@@ -298,10 +299,12 @@ export default function GrowwTracker() {
                         onPick={() => {
                           setPicked(k.symbol)
                           setPanelOpen(true)
+                          setSellSym(null)
                         }}
                         onEdit={() => {
                           setPicked(k.symbol)
                           setPanelOpen(true)
+                          setSellSym(null)
                           setEditSym(k.symbol)
                         }}
                         onConfirmSale={() => {
@@ -343,7 +346,7 @@ export default function GrowwTracker() {
           )}
           {!soldView && (
           <p className="tm-dim tmn-small">
-            {needsActionCount(all)} of {all.length} need a look today. The plan for each stock: +8% target, −4% stop, sell
+            {needsActionCount(all)} of {heldCount} need a look today. The plan for each stock: +8% target, −4% stop, sell
             half at +5%, and be out within {horizon} trading days.
           </p>
           )}
@@ -353,7 +356,8 @@ export default function GrowwTracker() {
   )
 }
 
-function StateChip({ state }: { state: TrackerState }) {
+function StateChip({ state, held = true }: { state: TrackerState; held?: boolean }) {
+  if (!held) return <span className="gt-state">—</span>
   return <span className={`gt-state s-${state}`}>{STATE_LABEL[state]}</span>
 }
 
@@ -442,7 +446,7 @@ function MarketCells({ k }: { k: WatchTrackerItem }) {
         <Spark scores={k.scores} />
       </div>
       <div>
-        <StateChip state={k.state} />
+        <StateChip state={k.state} held={!isNotHeld(k)} />
       </div>
     </>
   )
@@ -821,11 +825,7 @@ export function Detail({
   const qtyNum = Number(sellQty)
   const qtyOk = sellQty.trim() === '' ? !growwLinked : Number.isFinite(qtyNum) && qtyNum > 0
   const sell = useMutation({
-    mutationFn: () => api.myWatchlistSold(k.symbol, {
-        sell_price: Number(sellPrice),
-        sold_on: soldOn,
-        ...(sellQty.trim() !== '' ? { quantity: qtyNum } : {}),
-      }),
+    mutationFn: () => api.myWatchlistSold(k.symbol, saleBody(sellPrice, soldOn, sellQty)),
     onSuccess: onRemoved,
     onError: (e) => setError((e as Error).message),
   })
@@ -839,7 +839,7 @@ export function Detail({
       <div className="gt-dh">
         <h2>{k.symbol}</h2>
         {k.name && <span className="dim">{k.name}</span>}
-        <StateChip state={k.state} />
+        <StateChip state={k.state} held={!isNotHeld(k)} />
         {k.note && <span className="dim">{k.note}</span>}
         {onClose && (
           <button type="button" className="gt-close" onClick={onClose} aria-label="Close this panel" title="Close this panel" data-testid="tracker-detail-close">

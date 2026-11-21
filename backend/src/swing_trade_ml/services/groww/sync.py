@@ -1,7 +1,7 @@
 """Groww holdings sync: fetch, check completeness, match stocks, record the result.
 
-Display/tracking only. This step records what Groww returned; it does not touch the tracker
-(`apply_sync` does, in a later step) and never places or changes any order.
+Display/tracking only. This step records what Groww returned, then (complete syncs only) hands
+it to `apply.apply_sync` to update the Groww Tracker. It never places or changes any order.
 """
 
 from __future__ import annotations
@@ -28,6 +28,7 @@ from swing_trade_ml.db.models.groww import (
     StockAlias,
 )
 from swing_trade_ml.db.models.market import Instrument
+from swing_trade_ml.services.groww import apply as groww_apply
 from swing_trade_ml.services.groww import client as groww_client
 from swing_trade_ml.services.groww.client import GrowwAuthError, GrowwUnavailable
 
@@ -158,6 +159,21 @@ def _store_rows(db: Session, sync: GrowwSync, rows: list[Any]) -> None:
         )
 
 
+def _apply_safely(db: Session, sync: GrowwSync, user_id: int) -> None:
+    """Apply a stored complete sync. A failure undoes the apply only; the stored sync stays."""
+    try:
+        with db.begin_nested():
+            groww_apply.apply_sync(db, sync, user_id=user_id)
+    except Exception as exc:  # noqa: BLE001 - never raised; no exception text (may hold data)
+        logger.error("groww sync %s could not be applied to the tracker (%s)", sync.id, type(exc).__name__)
+        return
+    try:
+        db.commit()
+    except Exception as exc:  # noqa: BLE001
+        logger.error("groww sync %s apply could not be saved (%s)", sync.id, type(exc).__name__)
+        db.rollback()
+
+
 def run_sync(db: Session, *, user_id: int, trigger: str) -> GrowwSync:
     """Fetch, classify, match and record one sync. Never raises except SyncAlreadyRunning."""
     lock = _acquire_lock()
@@ -175,18 +191,28 @@ def run_sync(db: Session, *, user_id: int, trigger: str) -> GrowwSync:
             rows, error = None, "unexpected"
         if error is None:
             try:
-                sync = GrowwSync(started_at=started, trigger=trigger, status=classify(rows))
-                sync.holdings_count = len(rows)
-                db.add(sync)
-                db.flush()
-                _store_rows(db, sync, rows)
-                sync.finished_at = utcnow()
-                db.commit()
-                return sync
+                # Savepoint: a store failure undoes only this sync's rows, then a failed sync is logged.
+                with db.begin_nested():
+                    sync = GrowwSync(started_at=started, trigger=trigger, status=classify(rows))
+                    sync.holdings_count = len(rows)
+                    db.add(sync)
+                    db.flush()
+                    _store_rows(db, sync, rows)
+                    sync.finished_at = utcnow()
             except Exception:
                 logger.exception("groww sync could not be stored")
-                db.rollback()
                 error = "store"
+            else:
+                try:
+                    db.commit()
+                except Exception:
+                    logger.exception("groww sync could not be saved")
+                    db.rollback()
+                    error = "store"
+                else:
+                    if sync.status == SYNC_COMPLETE:
+                        _apply_safely(db, sync, user_id)
+                    return sync
         sync = GrowwSync(
             started_at=started, finished_at=utcnow(), trigger=trigger, status=SYNC_FAILED, error_code=error
         )

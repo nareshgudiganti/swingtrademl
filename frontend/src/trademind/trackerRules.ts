@@ -40,6 +40,7 @@ export const FILTERS: { id: TrackerFilter; label: string }[] = [
 
 export function matchesFilter(item: WatchTrackerItem, filter: TrackerFilter): boolean {
   if (filter === 'all') return true
+  if (isNotHeld(item)) return false // not owned any more: no warnings
   if (filter === 'act') return item.state !== 'ok'
   return item.state === filter
 }
@@ -50,19 +51,21 @@ export function filterItems(items: WatchTrackerItem[], filter: TrackerFilter): W
 
 /** How many stocks need action (anything but "on track"). Drives the menu badge. */
 export function needsActionCount(items: readonly WatchTrackerItem[] | undefined): number {
-  return (items ?? []).filter((i) => i.state !== 'ok').length
+  return (items ?? []).filter((i) => !isNotHeld(i) && i.state !== 'ok').length
 }
 
 export function symbolsIn(items: WatchTrackerItem[], state: TrackerState): string[] {
-  return items.filter((i) => i.state === state).map((i) => i.symbol)
+  return items.filter((i) => !isNotHeld(i) && i.state === state).map((i) => i.symbol)
 }
 
 const URGENCY: Record<TrackerState, number> = { stop: 0, target: 1, time: 2, weak: 3, ok: 4 }
+// A stock Groww no longer lists sorts last: it is not owned, so nothing about it is urgent.
+const urgency = (i: WatchTrackerItem): number => (isNotHeld(i) ? 5 : URGENCY[i.state])
 
 /** Stocks that need action first (stop, target, time, weak), then by most days done, then by symbol. */
 export function sortItems(items: WatchTrackerItem[]): WatchTrackerItem[] {
   return [...items].sort(
-    (a, b) => URGENCY[a.state] - URGENCY[b.state] || b.days_done - a.days_done || a.symbol.localeCompare(b.symbol),
+    (a, b) => urgency(a) - urgency(b) || b.days_done - a.days_done || a.symbol.localeCompare(b.symbol),
   )
 }
 
@@ -129,6 +132,7 @@ export function pips(daysDone: number, horizon: number): { filled: boolean; late
 
 /** Plain-English "what to do", by the server's status. */
 export function whatToDo(item: WatchTrackerItem, horizon: number): string {
+  if (isNotHeld(item)) return `Groww no longer lists ${item.symbol}, so it is not counted as held and has no warnings. If you did sell it, record the sale to keep the result.`
   const ret = fmtPct(item.return_pct)
   const left = Math.max(0, horizon - item.days_done)
   switch (item.state) {
@@ -239,6 +243,37 @@ export function buildPatch(item: WatchTrackerItem, form: EditForm, today: string
   return { patch, errors, changed: Object.keys(patch).length > 0 }
 }
 
+/** The sell request for the Sold form: quantity is sent only when typed (or when Groww shows fewer shares). */
+export function saleBody(sellPrice: string, soldOn: string, qtyText: string): { sell_price: number; sold_on: string; quantity?: number } {
+  const q = Number(qtyText)
+  return { sell_price: Number(sellPrice), sold_on: soldOn, ...(qtyText.trim() !== '' ? { quantity: q } : {}) }
+}
+
+/** Groww no longer lists this stock. */
+export const isNotHeld = (i: WatchTrackerItem): boolean => i.held_state === 'not_held'
+/** Quantity and price come from Groww on every sync, so they cannot be typed in. */
+export const isGrowwRow = (i: WatchTrackerItem): boolean => i.source === 'groww'
+
+const IST_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+/** "21 Nov, 15:35 IST" from an ISO time; null when missing or not a time. */
+export function fmtIstStamp(iso: string | null | undefined): string | null {
+  if (!iso) return null
+  const t = new Date(iso).getTime()
+  if (!Number.isFinite(t)) return null
+  const d = new Date(t + 5.5 * 3600 * 1000)
+  const hh = String(d.getUTCHours()).padStart(2, '0')
+  const mm = String(d.getUTCMinutes()).padStart(2, '0')
+  return `${d.getUTCDate()} ${IST_MONTHS[d.getUTCMonth()]}, ${hh}:${mm} IST`
+}
+
+/** "7 Nov" from a YYYY-MM-DD date; null when missing. */
+export function fmtDayMonth(ymd: string | null | undefined): string | null {
+  const m = /^\d{4}-(\d{2})-(\d{2})$/.exec(ymd ?? '')
+  if (!m) return null
+  const month = IST_MONTHS[Number(m[1]) - 1]
+  return month ? `${Number(m[2])} ${month}` : null
+}
+
 export function entryNote(item: WatchTrackerItem): string {
   if (item.entry_source === 'your_price') return 'Your Groww price'
   if (item.entry_source === 'added_close') return 'Close on the day you added it'
@@ -266,6 +301,7 @@ export function portfolioSummary(items: readonly WatchTrackerItem[]): PortfolioS
   let yesterday = 0
   let counted = 0
   for (const i of items) {
+    if (isNotHeld(i)) continue // Groww says it is not held any more: not part of what you hold
     if (!isNum(i.invested) || !isNum(i.profit_amount)) continue
     counted += 1
     invested += i.invested

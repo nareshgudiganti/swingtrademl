@@ -707,7 +707,12 @@ export interface WatchTrackerItem {
   score_first: number | null
   scores: { date: string; score: number }[]
   closes: { date: string; close: number }[]
-  state: TrackerState
+  state: TrackerState  /** Where the quantity and price come from. Older servers omit these four fields. */
+  source?: 'manual' | 'groww'
+  held_state?: 'unknown' | 'held' | 'not_held'
+  groww_synced_at?: string | null
+  /** Groww shows this many fewer shares than we have: the sale to confirm. */
+  pending_sale_qty?: number | null
 }
 
 /** One sold stock in the Groww Tracker's "Sold records" (GET /me/watchlist/sold). */
@@ -728,10 +733,38 @@ export interface SoldRecord {
   result: 'win' | 'loss' | 'flat' | null
 }
 
+export type GrowwSyncStatus = 'complete' | 'partial' | 'failed' | 'empty_unconfirmed'
+
+/** Owner only. The server leaves it out for everyone else. */
+export interface GrowwStatus {
+  configured: boolean
+  last_success_at: string | null
+  last_status: GrowwSyncStatus | null
+  last_attempt_at: string | null
+  /** The sync to confirm when it came back empty. */
+  last_sync_id?: number | null
+}
+
+export interface GrowwSyncResult {
+  status: GrowwSyncStatus
+  holdings_count: number
+  finished_at: string
+}
+
+export interface GrowwMatchItem {
+  isin: string
+  trading_symbol: string
+  quantity: number
+  average_price: number
+  match_state: 'suggested' | 'needs_matching'
+  suggested_symbol: string | null
+}
+
 export interface WatchTracker {
   as_of: string | null
   horizon_days: number
   items: WatchTrackerItem[]
+  groww?: GrowwStatus
 }
 
 export interface WatchlistHit {

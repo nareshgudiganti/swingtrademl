@@ -33,6 +33,9 @@ import {
   fmtMoney,
   fmtRupees,
   formFromItem,
+  isGrowwRow,
+  isNotHeld,
+  saleBody,
   needsActionCount,
   pips,
   portfolioSummary,
@@ -48,6 +51,8 @@ import {
   type TrackerFilter,
 } from '../trackerRules'
 import { useTrackerTab } from '../trackerTab'
+import { GrowwMatchingPanel } from '../GrowwMatchingPanel'
+import { GrowwSyncStrip } from '../GrowwSyncStrip'
 import { AddStock } from './WatchlistNew'
 import '../newlook-w2.css'
 import '../newlook-tracker.css'
@@ -104,6 +109,8 @@ export default function GrowwTracker() {
   const soldQ = useQuery({ queryKey: SOLD_KEY, queryFn: api.myWatchlistSoldList, retry: false, staleTime: 30_000 })
   // The stock whose Edit form is open (one at a time). Opening it also picks the stock.
   const [editSym, setEditSym] = useState<string | null>(null)
+  // Set when the person taps Confirm sale on a row: the panel opens with the sell form already open.
+  const [sellSym, setSellSym] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -128,6 +135,7 @@ export default function GrowwTracker() {
   const { sorted: all, sorter } = useSort<WatchTrackerItem, TrackerSortKey>(base, TRACKER_SORT, { key: null }, TRACKER_FIRST_DIR)
   const shown = filterItems(all, filter)
   const summary = useMemo(() => portfolioSummary(all), [all])
+  const heldCount = all.filter((i) => !isNotHeld(i)).length
   const soldView = view === 'sold'
   const soldItems = soldQ.data?.items ?? []
   const selected = all.find((i) => i.symbol === picked) ?? shown[0] ?? all[0] ?? null
@@ -170,6 +178,8 @@ export default function GrowwTracker() {
       ) : (
         <>
           <QueryNotice q={q} what="your Groww tracker" />
+          {data.groww && <GrowwSyncStrip groww={data.groww} priceDate={data.as_of} />}
+          {data.groww?.configured && <GrowwMatchingPanel />}
           {!soldView && summary && (
             <section className="gt-sum" aria-label="Your Groww stocks in total" data-testid="tracker-summary">
               <div>
@@ -188,9 +198,9 @@ export default function GrowwTracker() {
                   {fmtMoney(summary.totalReturn)} <small>({fmtPct(summary.totalReturnPct, 2)})</small>
                 </div>
               </div>
-              {summary.counted < all.length && (
+              {summary.counted < heldCount && (
                 <p className="tm-dim tmn-small gt-sum-note">
-                  Counts {summary.counted} of {all.length} stocks. Add shares and the price paid to the others to include them.
+                  Counts {summary.counted} of {heldCount} stocks. Add shares and the price paid to the others to include them.
                 </p>
               )}
             </section>
@@ -289,11 +299,19 @@ export default function GrowwTracker() {
                         onPick={() => {
                           setPicked(k.symbol)
                           setPanelOpen(true)
+                          setSellSym(null)
                         }}
                         onEdit={() => {
                           setPicked(k.symbol)
                           setPanelOpen(true)
+                          setSellSym(null)
                           setEditSym(k.symbol)
+                        }}
+                        onConfirmSale={() => {
+                          setPicked(k.symbol)
+                          setPanelOpen(true)
+                          setEditSym(null)
+                          setSellSym(k.symbol)
                         }}
                       />
                     ),
@@ -303,8 +321,9 @@ export default function GrowwTracker() {
               {selected && panelOpen && (
                 <aside className="gt-side">
                 <Detail
-                  key={selected.symbol}
+                  key={`${selected.symbol}-${sellSym === selected.symbol ? 'sell' : 'view'}`}
                   k={selected}
+                  startSelling={sellSym === selected.symbol}
                   horizon={horizon}
                   editing={editSym === selected.symbol}
                   onEditing={(open) => setEditSym(open ? selected.symbol : null)}
@@ -315,6 +334,7 @@ export default function GrowwTracker() {
                   onRemoved={() => {
                     setPicked(null)
                     setEditSym(null)
+                    setSellSym(null)
                     refresh()
                   }}
                 />
@@ -326,7 +346,7 @@ export default function GrowwTracker() {
           )}
           {!soldView && (
           <p className="tm-dim tmn-small">
-            {needsActionCount(all)} of {all.length} need a look today. The plan for each stock: +8% target, −4% stop, sell
+            {needsActionCount(all)} of {heldCount} need a look today. The plan for each stock: +8% target, −4% stop, sell
             half at +5%, and be out within {horizon} trading days.
           </p>
           )}
@@ -336,7 +356,8 @@ export default function GrowwTracker() {
   )
 }
 
-function StateChip({ state }: { state: TrackerState }) {
+function StateChip({ state, held = true }: { state: TrackerState; held?: boolean }) {
+  if (!held) return <span className="gt-state">—</span>
   return <span className={`gt-state s-${state}`}>{STATE_LABEL[state]}</span>
 }
 
@@ -425,14 +446,62 @@ function MarketCells({ k }: { k: WatchTrackerItem }) {
         <Spark scores={k.scores} />
       </div>
       <div>
-        <StateChip state={k.state} />
+        <StateChip state={k.state} held={!isNotHeld(k)} />
       </div>
     </>
   )
 }
 
 // A div, not a button, so the Edit button inside it is valid HTML; Enter and Space still pick the row.
-function Row({ k, horizon, selected, onPick, onEdit }: { k: WatchTrackerItem; horizon: number; selected: boolean; onPick: () => void; onEdit: () => void }) {
+function GrowwBadges({ k, onConfirmSale }: { k: WatchTrackerItem; onConfirmSale?: () => void }) {
+  const fewer = k.pending_sale_qty != null && k.pending_sale_qty > 0 ? k.pending_sale_qty : null
+  return (
+    <>
+      {isGrowwRow(k) && (
+        <span className="gt-badge" title="Shares and price come from Groww and update on every sync.">
+          from Groww
+        </span>
+      )}
+      {isNotHeld(k) && (
+        <span className="gt-badge gt-badge-warn" title="Groww does not list this stock any more.">
+          Not held
+        </span>
+      )}
+      {fewer != null && (
+        <span className="gt-badge gt-badge-warn">
+          {`Groww shows ${fewer.toLocaleString('en-IN')} fewer ${fewer === 1 ? 'share' : 'shares'} —`}{' '}
+          <button
+            type="button"
+            className="gt-link"
+            data-testid={`confirm-sale-${k.symbol}`}
+            onClick={(e) => {
+              e.stopPropagation()
+              onConfirmSale?.()
+            }}
+          >
+            Confirm sale
+          </button>
+        </span>
+      )}
+    </>
+  )
+}
+
+function Row({
+  k,
+  horizon,
+  selected,
+  onPick,
+  onEdit,
+  onConfirmSale,
+}: {
+  k: WatchTrackerItem
+  horizon: number
+  selected: boolean
+  onPick: () => void
+  onEdit: () => void
+  onConfirmSale?: () => void
+}) {
   return (
     <div
       role="button"
@@ -451,6 +520,7 @@ function Row({ k, horizon, selected, onPick, onEdit }: { k: WatchTrackerItem; ho
       <div>
         <div className="gt-sym">{k.symbol}</div>
         <div className="gt-sub">{k.name ?? ''}</div>
+        <GrowwBadges k={k} onConfirmSale={onConfirmSale} />
         {k.note && <div className="gt-sub gt-notetext">{k.note}</div>}
       </div>
       <DayCell k={k} horizon={horizon} />
@@ -502,6 +572,7 @@ export function EditableRow({
   const [serverError, setServerError] = useState<string | null>(null)
   const [tried, setTried] = useState(initial !== undefined)
   const today = todayIst()
+  const fromGroww = isGrowwRow(k)
   const { patch, errors, changed } = buildPatch(k, form, today)
   const update = useMutation({
     mutationFn: () => api.myWatchlistUpdate(k.symbol, patch),
@@ -538,6 +609,7 @@ export function EditableRow({
         <div>
           <div className="gt-sym">{k.symbol}</div>
           <div className="gt-sub">{k.name ?? ''}</div>
+          <GrowwBadges k={k} />
           <input
             type="text"
             className="gt-cell gt-cell-note"
@@ -552,6 +624,11 @@ export function EditableRow({
         <div>
           <input type="date" className="gt-cell" value={form.boughtOn} max={today} onChange={set('boughtOn')} aria-label={`Bought on for ${k.symbol}`} />
         </div>
+        {fromGroww ? (
+          <div className="num" title="From Groww. It updates on every sync.">
+            {fmtPrice(k.buy_price)}
+          </div>
+        ) : (
         <div>
           <input
             type="text"
@@ -563,6 +640,12 @@ export function EditableRow({
             aria-label={`Price you paid in Groww for ${k.symbol}`}
           />
         </div>
+        )}
+        {fromGroww ? (
+          <div className="num" title="From Groww. It updates on every sync.">
+            {k.quantity != null ? k.quantity.toLocaleString('en-IN') : '—'}
+          </div>
+        ) : (
         <div>
           <input
             type="text"
@@ -574,6 +657,7 @@ export function EditableRow({
             aria-label={`Shares of ${k.symbol}`}
           />
         </div>
+        )}
         <MarketCells k={k} />
         <div className="gt-editbtns">
           <button type="submit" className="tmn-w2-primary" disabled={update.isPending}>
@@ -706,13 +790,14 @@ function ReturnChart({ closes, entry }: { closes: { close: number }[]; entry: nu
 
 // ------------------------------------------------------------------ detail --
 
-function Detail({
+export function Detail({
   k,
   horizon,
   editing,
   onEditing,
   onRemoved,
   onClose,
+  startSelling = false,
 }: {
   k: WatchTrackerItem
   horizon: number
@@ -720,8 +805,10 @@ function Detail({
   onEditing: (open: boolean) => void
   onRemoved: () => void
   onClose?: () => void
+  /** Open with the sell form showing (from Confirm sale on a row). */
+  startSelling?: boolean
 }) {
-  const [mode, setMode] = useState<'none' | 'sold'>('none')
+  const [mode, setMode] = useState<'none' | 'sold'>(startSelling ? 'sold' : 'none')
   const [error, setError] = useState<string | null>(null)
 
   const remove = useMutation({
@@ -732,8 +819,13 @@ function Detail({
   // The price starts at today's price as a suggestion; the person should type what Groww really paid out.
   const [sellPrice, setSellPrice] = useState(k.last_price != null ? String(k.last_price) : '')
   const [soldOn, setSoldOn] = useState(todayIst())
+  // A sale Groww already shows starts with the missing shares filled in; a Groww row can be sold in part.
+  const growwLinked = isGrowwRow(k)
+  const [sellQty, setSellQty] = useState(k.pending_sale_qty != null ? String(k.pending_sale_qty) : '')
+  const qtyNum = Number(sellQty)
+  const qtyOk = sellQty.trim() === '' ? !growwLinked : Number.isFinite(qtyNum) && qtyNum > 0
   const sell = useMutation({
-    mutationFn: () => api.myWatchlistSold(k.symbol, { sell_price: Number(sellPrice), sold_on: soldOn }),
+    mutationFn: () => api.myWatchlistSold(k.symbol, saleBody(sellPrice, soldOn, sellQty)),
     onSuccess: onRemoved,
     onError: (e) => setError((e as Error).message),
   })
@@ -747,7 +839,7 @@ function Detail({
       <div className="gt-dh">
         <h2>{k.symbol}</h2>
         {k.name && <span className="dim">{k.name}</span>}
-        <StateChip state={k.state} />
+        <StateChip state={k.state} held={!isNotHeld(k)} />
         {k.note && <span className="dim">{k.note}</span>}
         {onClose && (
           <button type="button" className="gt-close" onClick={onClose} aria-label="Close this panel" title="Close this panel" data-testid="tracker-detail-close">
@@ -856,6 +948,18 @@ function Detail({
               aria-label={`Sell price for ${k.symbol}`}
             />
           </label>
+          {(growwLinked || k.pending_sale_qty != null) && (
+            <label>
+              Shares sold
+              <input
+                className="gt-cell"
+                inputMode="decimal"
+                value={sellQty}
+                onChange={(e) => setSellQty(e.target.value)}
+                aria-label={`Shares sold for ${k.symbol}`}
+              />
+            </label>
+          )}
           <label>
             Sold on
             <input
@@ -867,7 +971,7 @@ function Detail({
               aria-label={`Sell date for ${k.symbol}`}
             />
           </label>
-          <button type="button" className="gt-ghost sold-yes" disabled={!priceOk || sell.isPending} onClick={() => sell.mutate()}>
+          <button type="button" className="gt-ghost sold-yes" disabled={!priceOk || !qtyOk || sell.isPending} onClick={() => sell.mutate()}>
             Save sale
           </button>
           <button type="button" className="gt-ghost" onClick={() => setMode('none')}>

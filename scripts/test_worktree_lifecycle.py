@@ -94,10 +94,11 @@ def test_parse_porcelain_marks_first_as_main_and_reads_lock():
 
 # --- Codex round-1 findings -------------------------------------------------------------------------------
 def test_ignored_caches_are_regenerable_but_other_ignored_files_are_not():
-    for p in ("frontend/node_modules/", "backend/.venv/", "x/__pycache__/a.pyc", "frontend/dist/", ".ruff_cache/",
-              "backend/swing_trade_ml.egg-info/", "frontend/test-results/", "frontend/dist-e2e/", "frontend/tsconfig.tsbuildinfo"):
+    for p in ("frontend/node_modules/", "backend/.venv/", "x/__pycache__/a.pyc", ".ruff_cache/",
+              "backend/swing_trade_ml.egg-info/", "frontend/tsconfig.tsbuildinfo"):
         assert wl.regenerable(p), p
-    for p in ("models/swing_v9.joblib", ".env", "backend/.env", "data/export.csv", "notes.md", "distance.txt"):
+    for p in ("models/swing_v9.joblib", ".env", "backend/.env", "data/export.csv", "notes.md", "distance.txt",
+              "frontend/dist/research-export.csv", "frontend/coverage/", "frontend/test-results/x.txt"):
         assert not wl.regenerable(p), p
 
 
@@ -231,5 +232,26 @@ def test_report_branch_command_is_copy_paste_safe(tmp_path):
     t.cls, _ = wl.classify(t)
     t.removable = t.branch_deletable = True
     md = wl.report([t], tmp_path).read_text(encoding="utf-8")
-    assert "git branch -D feat/x\n" in md
-    assert "-D  #" not in md
+    assert "git update-ref -d 'refs/heads/feat/x' abc\n" in md
+    assert "git branch -D" not in md
+
+
+# --- Codex round-3 findings -------------------------------------------------------------------------------
+def test_shell_quote_is_literal_for_dollar_names():
+    assert wl.shell_quote("refs/heads/feat/$name") == "'refs/heads/feat/$name'"
+    assert wl.shell_quote("it's") == "'it''s'"
+
+
+def test_branch_delete_is_atomic_against_audited_commit(tmp_path, monkeypatch):
+    t = W(in_main=True, head="abc123")
+    t.cls, _ = wl.classify(t)
+    t.removable = t.branch_deletable = True
+    monkeypatch.setattr(wl, "context", lambda root: wl.Context({}, {}, set(), protect_loaded=True))
+    monkeypatch.setattr(wl, "collect", lambda *a, **k: [t])
+    monkeypatch.setattr(wl, "recheck", lambda *a, **k: (True, "ok"))
+    monkeypatch.setattr(wl, "unlink_links", lambda *a, **k: None)
+    calls = []
+    monkeypatch.setattr(wl, "git", lambda cwd, *args: calls.append(args) or (0, ""))
+    assert wl.cleanup(tmp_path, apply=True, pr=None, log_path=tmp_path / "log.txt") == 0
+    assert ("update-ref", "-d", "refs/heads/feat/x", "abc123") in calls
+    assert not [c for c in calls if c[:1] == ("branch",)]

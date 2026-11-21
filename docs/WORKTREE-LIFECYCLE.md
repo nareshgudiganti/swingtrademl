@@ -14,7 +14,7 @@ Every worktree gets exactly one class:
 
 | Class | Meaning | Can cleanup remove it? |
 |---|---|---|
-| uncommitted | has modified or untracked files, **or gitignored files that aren't rebuildable caches** (for example a local `.joblib` model, a `backend/data/` folder or a `.env` copy). Caches such as `node_modules`, `.venv`, `dist`, `__pycache__` don't count. | **Never** |
+| uncommitted | has modified or untracked files, **or gitignored files that aren't rebuildable caches** (for example a local `.joblib` model, a `backend/data/` folder or a `.env` copy). Only true caches don't count: `node_modules`, `.venv`, `__pycache__`, the pytest, ruff and mypy caches, `*.pyc`, `*.egg-info`, `*.tsbuildinfo`. Build-output folders such as `dist` or `coverage` **do** count, because they can hold hand-made files. Tracked files marked `--assume-unchanged` or skip-worktree also count, because they can hide local edits. | **Never** |
 | unpushed | has commits that exist on no remote and in no merged PR | **Never** |
 | active | not merged; a live Claude session is in it, it changed in the last 3 days, or it has an open PR | No |
 | abandoned | not merged, but every commit is on GitHub, no open PR, idle over 14 days | No (owner decides) |
@@ -41,7 +41,8 @@ Further rules:
 - git's `status.showUntrackedFiles` setting is overridden, so no untracked file can hide.
 - `--pr N` needs the worktree's tip to equal **that** PR's merged head.
 - The protected list is re-read right before each removal.
-- A branch is force-deleted only when its tip equals a verified merged PR head.
+- A branch is deleted with `git update-ref -d refs/heads/<branch> <audited-commit>`. That is atomic: it deletes only if the branch still points at the audited commit. For a commit not in `origin/main`, the commit must also be a verified merged PR head.
+- Commands in the report are single-quoted, so they're safe to paste into bash or PowerShell.
 - Any failed or refused action makes the command exit with code 1.
 - Shared `node_modules` / `.venv` links are unlinked first. Only the link goes, never its target.
 - A branch is deleted only if no other worktree uses it and its tip is in `origin/main` or equals the merged PR head (squash merges). Every action goes to `.claude/worktree-audit/cleanup.log`.

@@ -40,14 +40,18 @@ CLAUDE_PROJECTS = Path.home() / ".claude" / "projects"
 LINK_DIRS = ("frontend/node_modules", "backend/.venv", "node_modules")
 # Ignored paths that are pure, rebuildable caches. ANY other ignored file (models, .env copies, data, notes)
 # is treated as possible local-only work and blocks removal.
-REGENERABLE_DIRS = {"node_modules", ".venv", "__pycache__", ".pytest_cache", ".ruff_cache", ".mypy_cache", "dist", "dist-e2e",
-                    ".vite", "test-results", "playwright-report", "coverage", "htmlcov", "dev-dist"}
+REGENERABLE_DIRS = {"node_modules", ".venv", "__pycache__", ".pytest_cache", ".ruff_cache", ".mypy_cache"}
+
+
+def shell_quote(text: str) -> str:
+    """Single-quote for copy-paste into bash or PowerShell (both treat single quotes literally)."""
+    return "'" + text.replace("'", "''") + "'"
 
 
 def regenerable(path: str) -> bool:
     """True only for rebuildable caches/build output; anything else ignored may be the only copy of something."""
     p = path.replace("\\", "/").rstrip("/")
-    if p.endswith((".pyc", ".coverage", ".tsbuildinfo")):
+    if p.endswith((".pyc", ".tsbuildinfo")):
         return True
     return any(part in REGENERABLE_DIRS or part.endswith(".egg-info") for part in p.split("/"))
 
@@ -93,6 +97,7 @@ class Worktree:
     live_session: bool = False
     recent_checkout: bool = False  # worktree created/checked out/committed in the last ACTIVE_DAYS (git admin dir)
     ignored_local: int = 0  # gitignored files that are NOT regenerable caches; they count as uncommitted
+    hidden_by_index_flags: int = 0  # tracked files marked assume-unchanged/skip-worktree: may hide local edits
     protected: bool = False
     error: str = ""
     cls: str = ""
@@ -259,6 +264,10 @@ def inspect(w: Worktree, ctx: Context, live: set[str], now: float) -> None:
                         continue
                     w.ignored_local += 1  # ignored but not a cache: could be the only copy (e.g. a .joblib model)
                 files.append(name)
+            _, flagged = git(p, "ls-files", "-v")
+            hidden = [ln[2:] for ln in flagged.splitlines() if ln[:1].islower() or ln[:1] == "S"]
+            w.hidden_by_index_flags = len(hidden)
+            files += [f"(assume-unchanged/skip-worktree) {h}" for h in hidden]
             w.dirty, w.dirty_sample = len(files), files[:5]
             w.ahead = int(git(p, "rev-list", "--count", "origin/main..HEAD")[1] or 0)
             w.unpushed = int(git(p, "rev-list", "--count", "HEAD", "--not", "--remotes")[1] or 0)
@@ -358,11 +367,11 @@ def report(wts: list[Worktree], out: Path) -> Path:
     for w in rem:
         for d in LINK_DIRS:
             lines.append(f"# unlink if link: {w.path}/{d}")
-        lines.append(f'git worktree remove "{w.path}"')
+        lines.append(f"git worktree remove {shell_quote(w.path)}")
         if w.branch_deletable:
             if not w.in_main:
                 lines.append(f"# squash-merged: tip equals merged PR #{w.merged_pr} head (re-checked before -D)")
-            lines.append(f"git branch {'-d' if w.in_main else '-D'} {w.branch}")
+            lines.append(f"git update-ref -d {shell_quote('refs/heads/' + w.branch)} {w.head}")
     lines += ["```", ""]
     md = out / "worktree-audit.md"
     md.write_text("\n".join(lines), encoding="utf-8")
@@ -447,13 +456,9 @@ def cleanup(root: Path, apply: bool, pr: int | None, log_path: Path) -> int:
                     log("  SKIP branch: not in origin/main and no verified merged PR")
                     failures += 1
                     continue
-                if not in_main and git(root, "rev-parse", w.branch)[1] != w.head:
-                    log("  SKIP branch: tip moved since audit")
-                    failures += 1
-                    continue
-                flag = "-d" if in_main else "-D"  # -D only for a squash-merged tip equal to the merged PR head
-                rc2, out2 = git(root, "branch", flag, w.branch)
-                log(f"  branch {flag} rc={rc2} {out2[-200:]}")
+                # update-ref -d <ref> <old> deletes ONLY if the ref still points at the audited commit (atomic).
+                rc2, out2 = git(root, "update-ref", "-d", f"refs/heads/{w.branch}", w.head)
+                log(f"  branch delete (expected {w.head[:7]}) rc={rc2} {out2[-200:]}")
                 failures += rc2 != 0
         # Deliberately no `git worktree prune`: it is repo-wide and could drop unrelated registrations.
         log(f"=== done: failures={failures}")

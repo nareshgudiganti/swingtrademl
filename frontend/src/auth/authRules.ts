@@ -19,7 +19,7 @@ export type PublicView =
   | 'forgot'
   | 'reset'
 
-export const PUBLIC_PATHS: Record<Exclude<PublicView, 'landing'>, string> = {
+const PUBLIC_PATHS: Record<Exclude<PublicView, 'landing'>, string> = {
   signin: '/signin',
   invite: '/invite',
   signup: '/signup',
@@ -61,7 +61,7 @@ export function readInviteLink(search: string): { code: string; email: string } 
 
 /** The password rule in plain words (server: 15 or more characters, no symbol rules, not a very common one). */
 export const PASSWORD_MIN = 15
-export const PASSWORD_HINT = `Please use a password of at least ${PASSWORD_MIN} characters. A few random words with spaces works well.`
+const PASSWORD_HINT = `Please use a password of at least ${PASSWORD_MIN} characters. A few random words with spaces works well.`
 export const PASSWORD_PLACEHOLDER = `At least ${PASSWORD_MIN} characters`
 
 /** The first problem with a new password, or null. The server has the final say (it also refuses very common ones). */

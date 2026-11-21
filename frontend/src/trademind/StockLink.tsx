@@ -9,7 +9,7 @@ import { useLatestRun } from './live'
 import { scorePoints } from './scoreText'
 
 /** Today's model score (0-100) by symbol, from the brain's latest run. An idea's score wins over a holding's. */
-export function useScoreBySymbol(): Map<string, number> {
+function useScoreBySymbol(): Map<string, number> {
   const run = useLatestRun().data
   return useMemo(() => {
     const out = new Map<string, number>()
@@ -23,7 +23,7 @@ export function useScoreBySymbol(): Map<string, number> {
   }, [run])
 }
 
-export const stockPath = (symbol: string) => `/trademind/stock/${encodeURIComponent(symbol)}`
+const stockPath = (symbol: string) => `/trademind/stock/${encodeURIComponent(symbol)}`
 
 export default function StockLink({
   symbol,

@@ -52,8 +52,8 @@ import { AddStock } from './WatchlistNew'
 import '../newlook-w2.css'
 import '../newlook-tracker.css'
 
-export const TRACKER_KEY = ['myWatchlistTracker']
-export const SOLD_KEY = ['myWatchlistSold']
+const TRACKER_KEY = ['myWatchlistTracker']
+const SOLD_KEY = ['myWatchlistSold']
 
 type TrackerSortKey = 'symbol' | 'day' | 'bought' | 'paid' | 'shares' | 'since' | 'today' | 'score' | 'range' | 'trend' | 'status'
 

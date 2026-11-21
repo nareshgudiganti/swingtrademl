@@ -60,7 +60,7 @@ export type IdeaChange = {
 }
 
 /** A move this many places or more counts as a big move in the Today summary. */
-export const BIG_MOVE = 10
+const BIG_MOVE = 10
 
 function rankOf(side: BrainChangeSide | null): { rank: number; of: number } | null {
   return side && side.rank != null && side.rank_of != null ? { rank: side.rank, of: side.rank_of } : null

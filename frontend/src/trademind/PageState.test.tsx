@@ -1,9 +1,13 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { renderToString } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 
 import { ApiError } from '../api/client'
 import { PageState, QueryNotice, QueryState, StaleNotice } from './PageState'
 import type { QueryLike } from './stateRules'
+// Imported at the top, not inside the test: ui.tsx pulls in the chart library, and loading it inside the test body
+// counted against the 5 second test timeout (it took 6 s on a busy machine). Import time is not a test timeout.
+import { BrainGate } from './ui'
 
 const q = (over: Partial<QueryLike> & { refetch?: () => unknown }) => ({
   data: undefined,
@@ -66,9 +70,7 @@ describe('StaleNotice / QueryNotice', () => {
 })
 
 describe('BrainGate keeps a loaded run when the network drops', () => {
-  it('shows the page with a stale notice instead of "Could not reach the brain"', async () => {
-    const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query')
-    const { BrainGate } = await import('./ui')
+  it('shows the page with a stale notice instead of "Could not reach the brain"', () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     const key = ['brainLatest', 'nightly']
     client.setQueryData(key, { started_at: '2026-10-19T10:00:00Z', banner: { mode: 'NORMAL', headline: null }, decisions: [] })

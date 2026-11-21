@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { checkAllowlist, computeParity } from './classic-parity.mjs'
 
@@ -158,6 +158,38 @@ describe('checkAllowlist', () => {
   })
 })
 
+describe('computeParity speed', () => {
+  it('reads each source file once, however many pages import it (the scan was slow under load)', () => {
+    const root = tree({
+      'trademind/Home.tsx': `import { shared } from './shared'
+export const x = api.home
+`,
+      'trademind/shared.ts': `export const shared = api.shared
+`,
+      'pages/A.tsx': `import { shared } from '../trademind/shared'
+export const a = api.onlyA
+`,
+      'pages/B.tsx': `import { shared } from '../trademind/shared'
+export const b = api.onlyB
+`,
+    })
+    const read = vi.spyOn(fs, 'readFileSync')
+    try {
+      const rows = computeParity(root)
+      const mine = read.mock.calls.filter(([f]) => String(f).startsWith(root))
+      const perFile = new Map()
+      for (const [f] of mine) perFile.set(String(f), (perFile.get(String(f)) ?? 0) + 1)
+      // pages are read once for the scan plus once more for the line count; shared files only once
+      expect(perFile.get(path.join(root, 'trademind', 'shared.ts'))).toBe(1)
+      expect(perFile.get(path.join(root, 'trademind', 'Home.tsx'))).toBe(1)
+      expect(rows.find((r) => r.page === 'A').gaps).toEqual(['onlyA'])
+      expect(rows.find((r) => r.page === 'B').gaps).toEqual(['onlyB'])
+    } finally {
+      read.mockRestore()
+    }
+  })
+})
+
 describe('the real tree', () => {
   it('has no unexplained classic-only call (new gaps must be added to the allow-list on purpose)', () => {
     const here = path.dirname(fileURLToPath(import.meta.url))
@@ -166,5 +198,6 @@ describe('the real tree', () => {
     expect(parity.length).toBeGreaterThan(10)
     const r = checkAllowlist(parity, allow, { strict: false })
     expect(r.unexplained).toEqual([])
-  })
+    // A real scan of the whole source tree: give it room on a busy machine instead of the 5 second default.
+  }, 30_000)
 })

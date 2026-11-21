@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 from alembic.operations import Operations
 from alembic.runtime.migration import MigrationContext
-from sqlalchemy import inspect, select
+from sqlalchemy import inspect, select, text
 
 from swing_trade_ml.api.deps import SELF_SERVICE_ROUTES
 from swing_trade_ml.api.v1.endpoints.my_watchlist import MAX_ITEMS
@@ -174,6 +174,8 @@ def test_migration_downgrade_then_upgrade(db_session):
     assert migration.down_revision == "a1e7r3s5t2u3"
 
     conn = db_session.connection()  # inside the test's transaction: rolled back afterwards
+    # Later tables (Groww sync history) reference the list; drop them first, as a real downgrade would.
+    conn.execute(text("DROP TABLE IF EXISTS user_watchlist_item_changes"))
     migration.op = Operations(MigrationContext.configure(conn))
     migration.downgrade()
     assert "user_watchlist_items" not in inspect(conn).get_table_names()

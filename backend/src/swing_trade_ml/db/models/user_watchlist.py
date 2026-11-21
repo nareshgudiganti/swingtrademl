@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, Float, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import Date, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from swing_trade_ml.db.base import Base, TimestampMixin, utcnow
@@ -31,6 +31,11 @@ class UserWatchlistItem(Base, TimestampMixin):
     buy_price: Mapped[float | None] = mapped_column(Float)
     # How many shares the person bought. Display only (invested / profit in rupees).
     quantity: Mapped[float | None] = mapped_column(Float)
+    # Groww sync link (manual rows keep the defaults and behave exactly as before).
+    source: Mapped[str] = mapped_column(String(16), default="manual", server_default="manual")
+    groww_isin: Mapped[str | None] = mapped_column(String(16))
+    held_state: Mapped[str] = mapped_column(String(16), default="unknown", server_default="unknown")
+    groww_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     __table_args__ = (UniqueConstraint("user_id", "symbol", name="uq_user_watchlist_items_user_symbol"),)
 
@@ -55,3 +60,21 @@ class UserWatchlistSale(Base, TimestampMixin):
     quantity: Mapped[float | None] = mapped_column(Float)
     sell_price: Mapped[float] = mapped_column(Float)
     sold_on: Mapped[date] = mapped_column(Date)
+
+
+class UserWatchlistItemChange(Base):
+    """Append-only history of values a sync (or the person) overwrote on a list item."""
+
+    __tablename__ = "user_watchlist_item_changes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    item_id: Mapped[int] = mapped_column(
+        ForeignKey("user_watchlist_items.id", ondelete="CASCADE"), index=True
+    )
+    field: Mapped[str] = mapped_column(String(32))
+    # Stringified numbers or dates; null when there was no value.
+    old_value: Mapped[str | None] = mapped_column(Text)
+    new_value: Mapped[str | None] = mapped_column(Text)
+    changed_by: Mapped[str] = mapped_column(String(16))  # groww_sync | user
+    sync_id: Mapped[int | None] = mapped_column(ForeignKey("groww_syncs.id", ondelete="SET NULL"))
+    changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

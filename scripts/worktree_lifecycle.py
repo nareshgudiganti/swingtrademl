@@ -3,7 +3,9 @@
 
 Usage (run from anywhere inside the repo):
     python scripts/worktree_lifecycle.py audit [--out DIR]          # read-only report (Markdown + JSON)
-    python scripts/worktree_lifecycle.py cleanup [--pr N] [--apply]  # dry run unless --apply
+    python scripts/worktree_lifecycle.py cleanup [--pr N] [--apply]  # quarantine; dry run unless --apply
+    python scripts/worktree_lifecycle.py restore <name>              # undo a quarantine move
+    python scripts/worktree_lifecycle.py purge [--apply]             # remove quarantined (>= 7 days), re-checked
 
 Classes (one per worktree, first match wins):
     unknown         path missing, prunable, or git could not read it
@@ -14,7 +16,8 @@ Classes (one per worktree, first match wins):
     abandoned       not merged, clean, every commit is on a remote, no open PR, inactive for a while
     unknown         anything else
 
-Cleanup removes a worktree ONLY when, re-checked just before acting: class is merged-clean, it is not
+Cleanup MOVES a worktree into a quarantine folder (git worktree move; nothing is deleted, `restore` undoes it)
+ONLY when, re-checked just before acting: class is merged-clean, it is not
 locked, not protected (scripts/worktree-protect.txt), not the main checkout, and no live session is in it.
 A branch is deleted only when no worktree uses it any more and its tip is in origin/main or equals the
 merged PR head. `git worktree remove` is never forced. Shared node_modules / .venv links are unlinked
@@ -91,6 +94,7 @@ class Worktree:
     unpushed: int = 0
     in_main: bool = False
     merged_pr: int | None = None
+    merged_prs: list[int] = field(default_factory=list)
     open_pr: int | None = None
     last_commit: str = ""
     last_activity_days: float | None = None
@@ -273,9 +277,8 @@ def inspect(w: Worktree, ctx: Context, live: set[str], now: float) -> None:
             w.unpushed = int(git(p, "rev-list", "--count", "HEAD", "--not", "--remotes")[1] or 0)
             w.in_main = git(p, "merge-base", "--is-ancestor", "HEAD", "origin/main")[0] == 0
             if w.branch:
-                for num, oid in ctx.merged_prs.get(w.branch, ()):
-                    if oid == w.head:
-                        w.merged_pr = num
+                w.merged_prs = sorted(num for num, oid in ctx.merged_prs.get(w.branch, ()) if oid == w.head)
+                w.merged_pr = w.merged_prs[0] if w.merged_prs else None
                 w.open_pr = ctx.open_prs.get(w.branch)
             _, gitdir = git(p, "rev-parse", "--absolute-git-dir")
             admin_times = [f.stat().st_mtime for f in (Path(gitdir) / "HEAD", Path(gitdir) / "logs" / "HEAD")
@@ -363,23 +366,46 @@ def report(wts: list[Worktree], out: Path) -> Path:
             lines.append(f"| `{w.path}` | `{w.branch or 'detached ' + w.head[:7]}` | {w.ahead} | {w.unpushed} | {w.dirty} | "
                          f"{'' if w.last_activity_days is None else w.last_activity_days} | {lp} | {w.reason} |")
         lines.append("")
-    lines += ["## Exact commands a cleanup would run (dry run)", "", "```"]
+    lines += ["## What a cleanup would do (dry run)", "",
+              "Raw git removal commands are deliberately NOT printed: they would skip the safety re-checks.",
+              "Step 1 MOVES each worktree below into a quarantine folder (nothing deleted; `restore` undoes it):", "",
+              "```", "python scripts/worktree_lifecycle.py cleanup            # dry run",
+              "python scripts/worktree_lifecycle.py cleanup --apply    # quarantine", "```", "",
+              f"Step 2, at least {QUARANTINE_DAYS} days later, permanently removes them after re-checking everything:", "",
+              "```", "python scripts/worktree_lifecycle.py purge --apply", "```", "",
+              "| Would be quarantined | Branch | Commit | Branch deleted at purge? |", "|---|---|---|---|"]
     for w in rem:
-        for d in LINK_DIRS:
-            lines.append(f"# unlink if link: {w.path}/{d}")
-        lines.append(f"git worktree remove {shell_quote(w.path)}")
-        if w.branch_deletable:
-            if not w.in_main:
-                lines.append(f"# squash-merged: tip equals merged PR #{w.merged_pr} head (re-checked before -D)")
-            lines.append(f"git update-ref -d {shell_quote('refs/heads/' + w.branch)} {w.head}")
-    lines += ["```", ""]
+        lines.append(f"| `{w.path}` | `{w.branch or 'detached'}` | `{w.head[:7]}` | {'yes' if w.branch_deletable else 'no'} |")
+    lines.append("")
     md = out / "worktree-audit.md"
     md.write_text("\n".join(lines), encoding="utf-8")
     (out / "worktree-audit.json").write_text(json.dumps([asdict(w) for w in wts], indent=1), encoding="utf-8")
     return md
 
 
-# --------------------------------------------------------------------------- cleanup
+# --------------------------------------------------------------------------- cleanup (quarantine, restore, purge)
+QUARANTINE_DAYS = 7
+
+
+def quarantine_dir(root: Path) -> Path:
+    """Same drive as the repo (git worktree move cannot cross drives)."""
+    return root.parent / "worktree-quarantine"
+
+
+def manifest_path(root: Path) -> Path:
+    return quarantine_dir(root) / "manifest.json"
+
+
+def load_manifest(root: Path) -> list[dict]:
+    f = manifest_path(root)
+    return json.loads(f.read_text(encoding="utf-8")) if f.exists() else []
+
+
+def save_manifest(root: Path, entries: list[dict]) -> None:
+    quarantine_dir(root).mkdir(parents=True, exist_ok=True)
+    manifest_path(root).write_text(json.dumps(entries, indent=1), encoding="utf-8")
+
+
 def unlink_links(path: Path, log) -> None:
     for d in LINK_DIRS:
         p = path / d
@@ -401,68 +427,163 @@ def merged_pr_branch(root: Path, pr: int) -> str | None:
     return data.get("headRefName") if data.get("state") == "MERGED" else None
 
 
+def _logger(log_path: Path):
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    fh = log_path.open("a", encoding="utf-8")
+
+    def log(msg: str) -> None:
+        print(msg)
+        fh.write(msg + "\n")
+        fh.flush()
+
+    return log, fh
+
+
 def cleanup(root: Path, apply: bool, pr: int | None, log_path: Path) -> int:
-    """Returns 0 when every intended action succeeded (or a dry run), 1 when anything failed or was refused."""
+    """Step 1: MOVE eligible worktrees into quarantine (nothing is deleted; `restore` undoes it).
+
+    Returns 0 when every intended action succeeded (or a dry run), 1 when anything failed or was refused.
+    """
     ctx = context(root)
     if apply and not ctx.protect_loaded:
-        print(f"REFUSED: protection list missing ({protect_file()}); nothing removed.", file=sys.stderr)
+        print(f"REFUSED: protection list missing ({protect_file()}); nothing moved.", file=sys.stderr)
         return 1
     wts = collect(root, ctx)
     explicit = pr is not None
     if explicit:
         head = merged_pr_branch(root, pr)
         if head is None:
-            print(f"REFUSED: PR #{pr} is not merged (or could not be read); nothing removed.", file=sys.stderr)
+            print(f"REFUSED: PR #{pr} is not merged (or could not be read); nothing moved.", file=sys.stderr)
             return 1
-        targets = [w for w in wts if w.branch == head and w.merged_pr == pr
-                   and removal_ok(w, explicit_pr=True)]
-        in_use = {x.branch for x in wts if x.branch and x not in targets}
-        for w in targets:
-            w.branch_deletable = bool(w.branch and w.branch not in in_use and not w.protected
-                                      and w.branch not in ("main", "master"))
+        targets = [w for w in wts if w.branch == head and pr in w.merged_prs and removal_ok(w, explicit_pr=True)]
     else:
         targets = [w for w in wts if w.removable]
+    qdir = quarantine_dir(root)
     failures = 0
-    with log_path.open("a", encoding="utf-8") as fh:
-        def log(msg: str) -> None:
-            print(msg)
-            fh.write(msg + "\n")
-
-        log(f"=== {dt.datetime.now():%Y-%m-%d %H:%M:%S} cleanup {'APPLY' if apply else 'DRY RUN'} "
-            f"pr={pr} targets={len(targets)}")
+    log, fh = _logger(log_path)
+    try:
+        log(f"=== {dt.datetime.now():%Y-%m-%d %H:%M:%S} cleanup {'APPLY (quarantine)' if apply else 'DRY RUN'} "
+            f"pr={pr} targets={len(targets)} quarantine={qdir}")
+        manifest = load_manifest(root)
         for w in targets:
             log(f"- {w.path} [{w.branch or 'detached'} @ {w.head[:7]}] {w.reason}")
             if not apply:
+                continue
+            if Path(w.path).drive.lower() != qdir.drive.lower():
+                log("  SKIP: worktree is on a different drive than the quarantine folder")
+                failures += 1
                 continue
             ok, why = recheck(root, w, ctx, explicit)
             if not ok:
                 log(f"  SKIP: {why}")
                 failures += 1
                 continue
-            unlink_links(Path(w.path), log)
-            rc, out = git(root, "worktree", "remove", w.path)  # never --force
+            stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
+            dest = qdir / f"{Path(w.path).name}__{stamp}"
+            qdir.mkdir(parents=True, exist_ok=True)
+            rc, out = git(root, "worktree", "move", w.path, str(dest))  # keeps every file; reversible
+            log(f"  moved to quarantine rc={rc} {out[-200:]}")
+            if rc:
+                failures += 1
+                continue
+            manifest.append({"original": w.path, "quarantined": str(dest).replace("\\", "/"), "branch": w.branch,
+                             "head": w.head, "in_main": w.in_main, "merged_prs": w.merged_prs,
+                             "moved_at": dt.datetime.now().isoformat(timespec="seconds")})
+            save_manifest(root, manifest)
+        log(f"=== done: failures={failures}")
+    finally:
+        fh.close()
+    return 1 if failures else 0
+
+
+def restore(root: Path, name: str, log_path: Path) -> int:
+    """Move a quarantined worktree back to its original path."""
+    manifest = load_manifest(root)
+    hits = [e for e in manifest if Path(e["quarantined"]).name == name or norm(e["original"]) == norm(name)]
+    if len(hits) != 1:
+        print(f"REFUSED: expected exactly one quarantine entry for {name!r}, found {len(hits)}", file=sys.stderr)
+        return 1
+    e = hits[0]
+    if Path(e["original"]).exists():
+        print(f"REFUSED: {e['original']} already exists", file=sys.stderr)
+        return 1
+    log, fh = _logger(log_path)
+    try:
+        rc, out = git(root, "worktree", "move", e["quarantined"], e["original"])
+        log(f"=== restore {e['quarantined']} -> {e['original']} rc={rc} {out[-200:]}")
+        if rc == 0:
+            save_manifest(root, [x for x in manifest if x is not e])
+    finally:
+        fh.close()
+    return 1 if rc else 0
+
+
+def purge(root: Path, apply: bool, older_than_days: int, log_path: Path) -> int:
+    """Step 2: permanently remove quarantined worktrees older than `older_than_days`, re-checking everything."""
+    ctx = context(root)
+    if apply and not ctx.protect_loaded:
+        print(f"REFUSED: protection list missing ({protect_file()}); nothing purged.", file=sys.stderr)
+        return 1
+    now = dt.datetime.now()
+    manifest = load_manifest(root)
+    due = [e for e in manifest
+           if (now - dt.datetime.fromisoformat(e["moved_at"])).total_seconds() >= older_than_days * 86400]
+    failures = 0
+    log, fh = _logger(log_path)
+    try:
+        log(f"=== {now:%Y-%m-%d %H:%M:%S} purge {'APPLY' if apply else 'DRY RUN'} older_than={older_than_days}d "
+            f"due={len(due)} of {len(manifest)}")
+        keep = list(manifest)
+        for e in due:
+            log(f"- {e['quarantined']} [{e['branch'] or 'detached'} @ {e['head'][:7]}] from {e['original']}")
+            if not apply:
+                continue
+            orig = Worktree(path=e["quarantined"], head=e["head"], branch=e["branch"])
+            ok, why = recheck(root, orig, ctx, explicit=True)  # quarantine age replaces the recency grace
+            if not ok:
+                log(f"  SKIP: {why}")
+                failures += 1
+                continue
+            unlink_links(Path(e["quarantined"]), log)
+            rc, out = git(root, "worktree", "remove", e["quarantined"])  # never --force
             log(f"  worktree remove rc={rc} {out[-200:]}")
             if rc:
                 failures += 1
                 continue
-            if w.branch_deletable:
-                anc_rc = git(root, "merge-base", "--is-ancestor", w.branch, "origin/main")[0]
-                if anc_rc not in (0, 1):
-                    log(f"  SKIP branch: ancestry check failed (rc={anc_rc})")
-                    failures += 1
-                    continue
-                in_main = anc_rc == 0
-                if not in_main and w.merged_pr is None:
-                    log("  SKIP branch: not in origin/main and no verified merged PR")
-                    failures += 1
-                    continue
-                # update-ref -d <ref> <old> deletes ONLY if the ref still points at the audited commit (atomic).
-                rc2, out2 = git(root, "update-ref", "-d", f"refs/heads/{w.branch}", w.head)
-                log(f"  branch delete (expected {w.head[:7]}) rc={rc2} {out2[-200:]}")
-                failures += rc2 != 0
-        # Deliberately no `git worktree prune`: it is repo-wide and could drop unrelated registrations.
+            keep = [x for x in keep if x is not e]
+            save_manifest(root, keep)
+            failures += delete_branch_if_safe(root, e, log)
         log(f"=== done: failures={failures}")
+    finally:
+        fh.close()
     return 1 if failures else 0
+
+
+def delete_branch_if_safe(root: Path, e: dict, log) -> int:
+    """Delete the branch ref only if no registered worktree (locked or not) still uses it, it is protected by
+    nothing, and it is merged (in origin/main, or its tip equals a merged PR head). Atomic against the audited
+    commit. Returns 1 on a refused/failed delete, 0 otherwise (including 'nothing to do')."""
+    b = e["branch"]
+    if not b or b in ("main", "master"):
+        return 0
+    protected = load_protected(root)
+    if protected is None or b in protected:
+        log(f"  KEEP branch {b}: protected or protection list missing")
+        return 0
+    _, porcelain = git(root, "worktree", "list", "--porcelain")
+    if any(w.branch == b for w in parse_worktrees(porcelain)):
+        log(f"  KEEP branch {b}: still checked out in another worktree")
+        return 0
+    anc_rc = git(root, "merge-base", "--is-ancestor", e["head"], "origin/main")[0]
+    if anc_rc not in (0, 1):
+        log(f"  SKIP branch: ancestry check failed (rc={anc_rc})")
+        return 1
+    if anc_rc == 1 and not e.get("merged_prs"):
+        log("  SKIP branch: not in origin/main and no verified merged PR")
+        return 1
+    rc, out = git(root, "update-ref", "-d", f"refs/heads/{b}", e["head"])  # deletes only if still at that commit
+    log(f"  branch {b} delete (expected {e['head'][:7]}) rc={rc} {out[-200:]}")
+    return 1 if rc else 0
 
 
 def main() -> int:
@@ -473,22 +594,29 @@ def main() -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
     a = sub.add_parser("audit")
     a.add_argument("--out", default=None)
-    c = sub.add_parser("cleanup")
+    c = sub.add_parser("cleanup", help="move eligible worktrees into quarantine (dry run unless --apply)")
     c.add_argument("--pr", type=int, default=None, help="only the worktree(s) of this MERGED PR")
-    c.add_argument("--apply", action="store_true", help="actually remove (default: dry run)")
+    c.add_argument("--apply", action="store_true")
+    r = sub.add_parser("restore", help="move a quarantined worktree back")
+    r.add_argument("name", help="quarantine folder name or original path")
+    p = sub.add_parser("purge", help="permanently remove quarantined worktrees (dry run unless --apply)")
+    p.add_argument("--older-than-days", type=int, default=QUARANTINE_DAYS)
+    p.add_argument("--apply", action="store_true")
     args = ap.parse_args()
     if args.protect:
         PROTECT_FILE = Path(args.protect)
     FETCH = args.fetch
     root = repo_root()
+    log_path = root / ".claude" / "worktree-audit" / "cleanup.log"
     if args.cmd == "audit":
         out = Path(args.out) if args.out else root / ".claude" / "worktree-audit"
-        md = report(collect(root), out)
-        print(f"report: {md}")
+        print(f"report: {report(collect(root), out)}")
         return 0
-    log_dir = root / ".claude" / "worktree-audit"
-    log_dir.mkdir(parents=True, exist_ok=True)
-    return cleanup(root, args.apply, args.pr, log_dir / "cleanup.log")
+    if args.cmd == "cleanup":
+        return cleanup(root, args.apply, args.pr, log_path)
+    if args.cmd == "restore":
+        return restore(root, args.name, log_path)
+    return purge(root, args.apply, args.older_than_days, log_path)
 
 
 if __name__ == "__main__":

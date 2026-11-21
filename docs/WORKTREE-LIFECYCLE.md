@@ -21,44 +21,51 @@ Every worktree gets exactly one class:
 | unknown | folder missing, prunable, or unreadable | No |
 | merged-clean | clean, and its tip is in `origin/main` or equals the head of a merged PR | Yes, if the checks below pass |
 
-## 2. Safety checks before any removal
+## 2. Two steps: quarantine first, delete later
 
-A worktree is removed only if **all** of these hold. They are re-checked immediately before acting:
+1. **`cleanup --apply` deletes nothing.** It *moves* each eligible worktree into `../worktree-quarantine/` (`git worktree move`, so every file is kept). It records the move in `manifest.json`. `restore <name>` moves it straight back.
+2. **`purge --apply`** permanently removes quarantined worktrees only once they have been there at least 7 days (`--older-than-days`). It re-checks everything first, then deletes the branch.
+
+So a file that appears at the last second, a mistaken eligibility, or a change of mind can always be undone during the quarantine week.
+
+## 3. Safety checks (re-checked immediately before each move and again before each purge)
 
 - class is `merged-clean`
 - not locked (`git worktree lock`)
-- not listed in `scripts/worktree-protect.txt`. If that list is missing, `--apply` refuses to run at all (fail closed).
+- not listed in `scripts/worktree-protect.txt`. The list is re-read before every action; if it is missing, `--apply` refuses to run at all (fail closed).
 - not the main checkout
 - no live Claude session inside it (any Claude Code transcript written in the last 3 hours with its folder as cwd)
-- not created, checked out or committed in the last 3 days. **The only override** is naming its merged PR with `--pr`.
+- not created, checked out or committed in the last 3 days. Naming its merged PR with `--pr` is the only override for the move; quarantine age is the grace period for the purge.
+- the same path, **branch and commit** as when it was audited or quarantined
 
 Further rules:
-- The re-check confirms the same path, **branch and commit** as in the audit.
-- `--pr N` only accepts a PR that GitHub reports as **merged**.
-- `git worktree remove` is **never forced**, so git itself refuses a folder that has changed.
-- `git worktree prune` is never run, because it is repo-wide.
-- The tool is fully read-only by default: it doesn't even `git fetch`. Add `--fetch` to refresh `origin/main` first.
-- git's `status.showUntrackedFiles` setting is overridden, so no untracked file can hide.
-- `--pr N` needs the worktree's tip to equal **that** PR's merged head.
-- The protected list is re-read right before each removal.
-- A branch is deleted with `git update-ref -d refs/heads/<branch> <audited-commit>`. That is atomic: it deletes only if the branch still points at the audited commit. For a commit not in `origin/main`, the commit must also be a verified merged PR head.
-- Commands in the report are single-quoted, so they're safe to paste into bash or PowerShell.
-- Any failed or refused action makes the command exit with code 1.
-- Shared `node_modules` / `.venv` links are unlinked first. Only the link goes, never its target.
-- A branch is deleted only if no other worktree uses it and its tip is in `origin/main` or equals the merged PR head (squash merges). Every action goes to `.claude/worktree-audit/cleanup.log`.
+- "Clean" includes gitignored files that aren't true caches, and files marked assume-unchanged or skip-worktree. git's `status.showUntrackedFiles` setting is overridden, so no untracked file can hide.
+- `--pr N` only accepts a PR that GitHub reports as **merged**, and the worktree's tip must equal that PR's merged head. If several merged PRs share the branch and tip, any of them qualifies.
+- `git worktree remove` (purge only) is **never forced**. Shared `node_modules` / `.venv` links are unlinked first; only the link goes, never its target.
+- A branch is deleted (purge only) when all of these hold:
+  - no registered worktree, locked or not, still uses it
+  - it isn't protected
+  - it is in `origin/main`, or its tip is a verified merged PR head
+  - it still points at the audited commit. The delete uses an atomic `git update-ref -d <ref> <commit>`.
+- `git worktree prune` is never run, because it is repo-wide. The tool doesn't `git fetch` unless `--fetch` is given.
+- The report never prints raw git removal commands, only the guarded script steps.
+- Any failed or refused action makes the command exit with code 1. Every action goes to `.claude/worktree-audit/cleanup.log`.
 
-## 3. Cleanup after a PR merges
+## 4. After a PR merges
 
 ```
 python scripts/worktree_lifecycle.py cleanup --pr 406            # dry run: shows exactly what would happen
-python scripts/worktree_lifecycle.py cleanup --pr 406 --apply    # removes that PR's worktree + branch
+python scripts/worktree_lifecycle.py cleanup --pr 406 --apply    # moves that PR's worktree into quarantine
+python scripts/worktree_lifecycle.py restore <folder-name>       # undo, if needed
+python scripts/worktree_lifecycle.py purge                       # dry run of the weekly purge
+python scripts/worktree_lifecycle.py purge --apply               # removes quarantined worktrees >= 7 days old
 ```
 
-**Automation (proposed, needs owner OK before it is switched on):** when a PR is marked done after the owner merges it (the `update-tickets` step), Claude runs `cleanup --pr <N>` as a dry run, shows the result, then `--apply`. That removes only that PR's own folder and branch, and only if nothing local-only is left.
+**Automation (proposed, needs owner OK before it is switched on):** when a PR is marked done after the owner merges it (the `update-tickets` step), Claude runs `cleanup --pr <N>` as a dry run, then `--apply` (quarantine only). The weekly purge stays a separate, explicit step.
 
 Bulk cleanup (`cleanup --apply` without `--pr`) runs only after the owner has approved the exact dry-run report.
 
-## 4. Protecting work
+## 5. Protecting work
 
 1. Add the branch or path to `scripts/worktree-protect.txt`.
 2. Lock it: `git worktree lock --reason "<why>" <path>`.

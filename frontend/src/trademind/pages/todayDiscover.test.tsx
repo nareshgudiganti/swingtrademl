@@ -52,7 +52,11 @@ const text = (html: string) =>
   html.replace(/<!-- -->/g, '').replace(/<[^>]+>/g, ' ').replace(/&#x27;|&apos;/g, "'").replace(/\s+/g, ' ')
 
 /** The HTML of each card, split on the card marker. */
-const cards = (html: string) => html.split('data-card="idea"').slice(1)
+const cards = (html: string) => {
+  // Today also lists every pick in a table (id="picks"); cut it off so the last card does not swallow the table.
+  const end = html.indexOf('id="picks"')
+  return (end === -1 ? html : html.slice(0, end)).split('data-card="idea"').slice(1)
+}
 const symbols = (html: string) => [...html.matchAll(/data-card="idea" data-symbol="([^"]+)"/g)].map((m) => m[1])
 
 describe.each(['today', 'discover'] as const)('oa12 card on %s', (page) => {

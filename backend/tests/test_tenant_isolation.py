@@ -602,3 +602,64 @@ def test_a_revoked_or_unknown_key_is_refused(client, db_session, owner_book):
     assert (
         client.get(f"{API}/portfolio/positions", headers={"X-API-Key": "stk_" + "0" * 40}).status_code == 401
     )
+
+
+# --------------------------------------------- 6. a brain run's raw trace (owner-only by design)
+
+
+@pytest.fixture()
+def brain_run(db_session, monkeypatch):
+    """A finished brain run whose trace holds a risk-gate answer for the owner's account."""
+    monkeypatch.setattr(settings, "BRAIN_ENABLED", True)  # the brain's routes answer only while it is on
+    from swing_trade_ml.db.models.brain import BrainRun
+
+    run = BrainRun(
+        id="iso-trace-run",
+        kind="nightly",
+        as_of=datetime.now(UTC),
+        book="paper",
+        live=True,
+        status="done",
+        trace=[{"module": "m07_risk", "says": "ISO-RISK-GATE-ANSWER for the owner's account"}],
+    )
+    db_session.add(run)
+    db_session.flush()
+    return run
+
+
+TRACE_SECRET = "ISO-RISK-GATE-ANSWER"
+
+
+@pytest.mark.parametrize("plans_on", [False, True])
+@pytest.mark.parametrize("who", ["a", "t"])
+def test_a_member_or_tester_cannot_read_a_runs_raw_trace(
+    client, db_session, people, brain_run, who, plans_on
+):
+    """Intended rule (core/plans.py brain_route_access, brain.py run_trace): the trace is owner-only."""
+    set_plans_enabled(db_session, plans_on)
+    r = client.get(f"{API}/brain/runs/{brain_run.id}/trace", headers=people[who])
+    assert r.status_code == 403, (who, plans_on, r.status_code)
+    assert TRACE_SECRET not in r.text
+
+
+@pytest.mark.parametrize("plans_on", [False, True])
+def test_a_pro_member_cannot_read_a_runs_raw_trace(client, db_session, brain_run, plans_on):
+    set_plans_enabled(db_session, plans_on)
+    _, h = make_user(db_session, "iso-trace-pro", plan="pro")
+    r = client.get(f"{API}/brain/runs/{brain_run.id}/trace", headers=h)
+    assert r.status_code == 403 and TRACE_SECRET not in r.text
+
+
+def test_the_owner_and_the_shared_key_can_read_the_trace(client, db_session, people, brain_run):
+    for h in (people["o"], LEGACY_KEY):
+        r = client.get(f"{API}/brain/runs/{brain_run.id}/trace", headers=h)
+        assert r.status_code == 200 and TRACE_SECRET in r.text
+
+
+def test_service_keys_and_anonymous_callers_and_the_trace(client, db_session, brain_run):
+    url = f"{API}/brain/runs/{brain_run.id}/trace"
+    for scope in ("read_status", "read_ops"):
+        assert client.get(url, headers=_key(db_session, scope)).status_code == 403, scope
+    assert client.get(url).status_code in (401, 403)
+    # read_all is the owner's read-only automation key: it may read it, by design (scope_allows).
+    assert client.get(url, headers=_key(db_session, "read_all")).status_code == 200

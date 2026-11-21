@@ -406,6 +406,35 @@ def save_manifest(root: Path, entries: list[dict]) -> None:
     manifest_path(root).write_text(json.dumps(entries, indent=1), encoding="utf-8")
 
 
+class QuarantineLock:
+    """Exclusive lock file so two cleanup/restore/purge runs never edit the manifest at the same time."""
+
+    def __init__(self, root: Path):
+        self.path = quarantine_dir(root) / ".lock"
+
+    def __enter__(self):
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:
+            raise SystemExit(f"REFUSED: another run holds {self.path} (delete it only if no run is active)") from None
+        os.write(fd, str(os.getpid()).encode())
+        os.close(fd)
+        return self
+
+    def __exit__(self, *exc):
+        self.path.unlink(missing_ok=True)
+
+
+def unique_dest(qdir: Path, name: str) -> Path:
+    stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
+    for i in range(1000):
+        dest = qdir / (f"{name}__{stamp}" + (f"_{i}" if i else ""))
+        if not dest.exists():
+            return dest
+    raise SystemExit("REFUSED: could not find a free quarantine folder name")
+
+
 def unlink_links(path: Path, log) -> None:
     for d in LINK_DIRS:
         p = path / d
@@ -462,9 +491,13 @@ def cleanup(root: Path, apply: bool, pr: int | None, log_path: Path) -> int:
     targets = [w for w in targets if not norm(w.path).startswith(norm(qdir) + "/")]
     failures = 0
     log, fh = _logger(log_path)
+    lock = None
     try:
         log(f"=== {dt.datetime.now():%Y-%m-%d %H:%M:%S} cleanup {'APPLY (quarantine)' if apply else 'DRY RUN'} "
             f"pr={pr} targets={len(targets)} quarantine={qdir}")
+        lock = QuarantineLock(root) if apply else None
+        if lock:
+            lock.__enter__()
         manifest = load_manifest(root)
         for w in targets:
             log(f"- {w.path} [{w.branch or 'detached'} @ {w.head[:7]}] {w.reason}")
@@ -479,8 +512,7 @@ def cleanup(root: Path, apply: bool, pr: int | None, log_path: Path) -> int:
                 log(f"  SKIP: {why}")
                 failures += 1
                 continue
-            stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
-            dest = qdir / f"{Path(w.path).name}__{stamp}"
+            dest = unique_dest(qdir, Path(w.path).name)
             entry = {"original": w.path, "quarantined": str(dest).replace("\\", "/"), "branch": w.branch,
                      "head": w.head, "in_main": w.in_main, "merged_prs": w.merged_prs,
                      "moved_at": dt.datetime.now().isoformat(timespec="seconds")}
@@ -495,6 +527,8 @@ def cleanup(root: Path, apply: bool, pr: int | None, log_path: Path) -> int:
                 continue
         log(f"=== done: failures={failures}")
     finally:
+        if lock:
+            lock.__exit__(None, None, None)
         fh.close()
     return 1 if failures else 0
 
@@ -512,10 +546,11 @@ def restore(root: Path, name: str, log_path: Path) -> int:
         return 1
     log, fh = _logger(log_path)
     try:
-        rc, out = git(root, "worktree", "move", e["quarantined"], e["original"])
-        log(f"=== restore {e['quarantined']} -> {e['original']} rc={rc} {out[-200:]}")
-        if rc == 0:
-            save_manifest(root, [x for x in manifest if x is not e])
+        with QuarantineLock(root):
+            rc, out = git(root, "worktree", "move", e["quarantined"], e["original"])
+            log(f"=== restore {e['quarantined']} -> {e['original']} rc={rc} {out[-200:]}")
+            if rc == 0:
+                save_manifest(root, [x for x in load_manifest(root) if x["quarantined"] != e["quarantined"]])
     finally:
         fh.close()
     return 1 if rc else 0
@@ -536,10 +571,14 @@ def purge(root: Path, apply: bool, older_than_days: int, log_path: Path) -> int:
            if (now - dt.datetime.fromisoformat(e["moved_at"])).total_seconds() >= older_than_days * 86400]
     failures = 0
     log, fh = _logger(log_path)
+    lock = None
     try:
         log(f"=== {now:%Y-%m-%d %H:%M:%S} purge {'APPLY' if apply else 'DRY RUN'} older_than={older_than_days}d "
             f"due={len(due)} of {len(manifest)}")
         keep = list(manifest)
+        lock = QuarantineLock(root) if apply else None
+        if lock:
+            lock.__enter__()
         for e in due:
             log(f"- {e['quarantined']} [{e['branch'] or 'detached'} @ {e['head'][:7]}] from {e['original']}")
             if not apply:
@@ -554,6 +593,22 @@ def purge(root: Path, apply: bool, older_than_days: int, log_path: Path) -> int:
                 log(f"  SKIP: {why}")
                 failures += 1
                 continue
+            # Rename first: on Windows this fails while any process has a file open inside, and writers that
+            # address the old path can no longer reach the folder. Then re-check under the new name.
+            staging = unique_dest(quarantine_dir(root), Path(e["quarantined"]).name + "__purging")
+            rc, out = git(root, "worktree", "move", e["quarantined"], str(staging))
+            if rc:
+                log(f"  SKIP: could not stage for purge (in use?) rc={rc} {out[-200:]}")
+                failures += 1
+                continue
+            e["quarantined"] = str(staging).replace("\\", "/")
+            save_manifest(root, keep)
+            ok, why = recheck(root, Worktree(path=e["quarantined"], head=e["head"], branch=e["branch"]), ctx,
+                              explicit=True)
+            if not ok:
+                log(f"  SKIP after staging: {why} (left at {e['quarantined']})")
+                failures += 1
+                continue
             unlink_links(Path(e["quarantined"]), log)
             rc, out = git(root, "worktree", "remove", e["quarantined"])  # never --force
             log(f"  worktree remove rc={rc} {out[-200:]}")
@@ -565,6 +620,8 @@ def purge(root: Path, apply: bool, older_than_days: int, log_path: Path) -> int:
             failures += delete_branch_if_safe(root, e, log)
         log(f"=== done: failures={failures}")
     finally:
+        if lock:
+            lock.__exit__(None, None, None)
         fh.close()
     return 1 if failures else 0
 
@@ -580,7 +637,10 @@ def delete_branch_if_safe(root: Path, e: dict, log) -> int:
     if protected is None or b in protected:
         log(f"  KEEP branch {b}: protected or protection list missing")
         return 0
-    _, porcelain = git(root, "worktree", "list", "--porcelain")
+    list_rc, porcelain = git(root, "worktree", "list", "--porcelain")
+    if list_rc or not porcelain.strip():
+        log(f"  KEEP branch {b}: could not list worktrees (rc={list_rc})")
+        return 1
     if any(w.branch == b for w in parse_worktrees(porcelain)):
         log(f"  KEEP branch {b}: still checked out in another worktree")
         return 0

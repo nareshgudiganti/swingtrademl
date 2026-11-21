@@ -343,3 +343,43 @@ def test_purge_keeps_entry_whose_original_path_became_protected(tmp_path, monkey
     monkeypatch.setattr(wl, "git", lambda cwd, *args: calls.append(args) or (0, ""))
     assert wl.purge(tmp_path, apply=True, older_than_days=7, log_path=tmp_path / "log.txt") == 0
     assert not [c for c in calls if c[:2] == ("worktree", "remove")]
+
+
+
+# --- Codex round-6 findings -------------------------------------------------------------------------------
+def test_unique_dest_never_reuses_an_existing_folder(tmp_path):
+    a = wl.unique_dest(tmp_path, "wt")
+    a.mkdir()
+    b = wl.unique_dest(tmp_path, "wt")
+    assert a != b and not b.exists()
+
+
+def test_second_concurrent_run_is_refused_by_the_lock(tmp_path, monkeypatch):
+    monkeypatch.setattr(wl, "quarantine_dir", lambda root: tmp_path / "q")
+    with wl.QuarantineLock(tmp_path):
+        try:
+            with wl.QuarantineLock(tmp_path):
+                raise AssertionError("second lock must not be granted")
+        except SystemExit as e:
+            assert "REFUSED" in str(e)
+    assert not (tmp_path / "q" / ".lock").exists()
+
+
+def test_lock_released_even_if_cleanup_crashes(tmp_path, monkeypatch):
+    t = _target(path=str(tmp_path / "wt"))
+    _stub_ctx(monkeypatch, [t], tmp_path)
+    monkeypatch.setattr(wl, "recheck", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
+    try:
+        wl.cleanup(tmp_path, apply=True, pr=None, log_path=tmp_path / "log.txt")
+    except RuntimeError:
+        pass
+    assert not (tmp_path / "q" / ".lock").exists()
+
+
+def test_branch_kept_when_worktree_listing_fails(tmp_path, monkeypatch):
+    monkeypatch.setattr(wl, "load_protected", lambda root: set())
+    calls = []
+    monkeypatch.setattr(wl, "git", lambda cwd, *args: calls.append(args) or (128, ""))
+    e = {"branch": "feat/x", "head": "h", "merged_prs": [5]}
+    assert wl.delete_branch_if_safe(tmp_path, e, lambda m: None) == 1
+    assert not [c for c in calls if c[:1] == ("update-ref",)]

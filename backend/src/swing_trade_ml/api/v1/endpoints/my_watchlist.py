@@ -14,7 +14,7 @@ trading, sizing, exits, limits or the brain reads it.
 from __future__ import annotations
 
 import re
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -23,12 +23,14 @@ from sqlalchemy import case, func, select
 
 from swing_trade_ml.api.deps import SELF_SERVICE_NEEDS_PERSON, DbSession, Principal, get_principal
 from swing_trade_ml.db.base import utcnow
+from swing_trade_ml.db.models.groww import SOURCE_GROWW
 from swing_trade_ml.db.models.market import Candle, Instrument
 from swing_trade_ml.db.models.session import User
 from swing_trade_ml.db.models.trading import StockScore
 from swing_trade_ml.db.models.user_watchlist import UserWatchlistItem, UserWatchlistSale
 from swing_trade_ml.services import score_history
 from swing_trade_ml.services import watchlist_tracker as tracker
+from swing_trade_ml.services.groww import apply as groww_apply
 
 router = APIRouter(prefix="/me/watchlist", tags=["my-watchlist"])
 
@@ -48,6 +50,14 @@ def _me(principal: Annotated[Principal, Depends(get_principal)]) -> User:
 
 
 Me = Annotated[User, Depends(_me)]
+PrincipalNow = Annotated[Principal, Depends(get_principal)]
+
+#: Quantity and buy price of a Groww-linked row come from Groww (spec §6: not hand-editable).
+FROM_GROWW = "This comes from Groww and updates on every sync."
+
+
+def _groww_linked(item: UserWatchlistItem) -> bool:
+    return item.source == SOURCE_GROWW or item.groww_isin is not None
 
 
 class WatchlistItemOut(BaseModel):
@@ -82,6 +92,8 @@ class SoldBody(BaseModel):
     sell_price: float = Field(gt=0)
     #: IST calendar date it was sold. Omitted means today.
     sold_on: date | None = None
+    #: Shares sold. Omitted: all of them (manual rows) or the shares Groww shows as gone (linked rows).
+    quantity: float | None = Field(default=None, gt=0, le=1e9)
 
 
 class InstrumentHit(BaseModel):
@@ -226,6 +238,8 @@ def update_stock(symbol: str, body: WatchlistPatch, db: DbSession, me: Me) -> Wa
     item = _mine(db, me, sym)
     if item is None or item.removed_at is not None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"{sym} is not on your list.")
+    if _groww_linked(item) and ({"buy_price", "quantity"} & body.model_fields_set):
+        raise HTTPException(status.HTTP_409_CONFLICT, FROM_GROWW)
     if "buy_price" in body.model_fields_set:
         item.buy_price = body.buy_price
     if "quantity" in body.model_fields_set:
@@ -244,8 +258,26 @@ def update_stock(symbol: str, body: WatchlistPatch, db: DbSession, me: Me) -> Wa
     return _out(item, _names(db, [sym]).get(sym))
 
 
+def _iso(value: datetime | None) -> str | None:
+    """Timezone-aware ISO time (the screen converts to IST); a naive value is taken as UTC."""
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=UTC)
+    return value.isoformat()
+
+
+def _with_groww(out: dict, db: DbSession, principal: Principal) -> dict:
+    """Add the Groww connection status, for the real-account owner only (key omitted otherwise)."""
+    if principal.can_see_real_account:
+        from swing_trade_ml.api.v1.endpoints.groww import status_payload
+
+        out["groww"] = status_payload(db)
+    return out
+
+
 @router.get("/tracker")
-def my_tracker(db: DbSession, me: Me) -> dict:
+def my_tracker(db: DbSession, me: Me, principal: PrincipalNow) -> dict:
     """Read-only tracker over the caller's ACTIVE stocks (newest first). Display only."""
     rows = list(
         db.execute(
@@ -255,7 +287,8 @@ def my_tracker(db: DbSession, me: Me) -> dict:
         ).scalars()
     )
     if not rows:
-        return {"as_of": None, "horizon_days": tracker.HORIZON_DAYS, "items": []}
+        empty = {"as_of": None, "horizon_days": tracker.HORIZON_DAYS, "items": []}
+        return _with_groww(empty, db, principal)
     inst = {
         t: (i, n)
         for i, t, n in db.execute(
@@ -289,25 +322,29 @@ def my_tracker(db: DbSession, me: Me) -> dict:
     items = []
     for r in rows:
         iid, name = inst.get(r.symbol, (None, None))
-        items.append(
-            tracker.build_item(
-                symbol=r.symbol,
-                name=name,
-                added_at=r.added_at,
-                note=r.note,
-                buy_price=r.buy_price,
-                quantity=r.quantity,
-                candles=candles.get(iid, []),
-                scores=scores.get(iid, []),
-                today=tracker.today_ist(),
-            )
+        item = tracker.build_item(
+            symbol=r.symbol,
+            name=name,
+            added_at=r.added_at,
+            note=r.note,
+            buy_price=r.buy_price,
+            quantity=r.quantity,
+            candles=candles.get(iid, []),
+            scores=scores.get(iid, []),
+            today=tracker.today_ist(),
         )
+        item["source"] = r.source
+        item["held_state"] = r.held_state
+        item["groww_synced_at"] = _iso(r.groww_synced_at)
+        item["pending_sale_qty"] = groww_apply.pending_sale_qty(db, r) if _groww_linked(r) else None
+        items.append(item)
     last_dates = [c[-1][0] for c in candles.values() if c]
-    return {
+    out = {
         "as_of": max(last_dates).isoformat() if last_dates else None,
         "horizon_days": tracker.HORIZON_DAYS,
         "items": items,
     }
+    return _with_groww(out, db, principal)
 
 
 def _sale_out(db: DbSession, sales: list[UserWatchlistSale]) -> list[dict]:
@@ -331,7 +368,11 @@ def _sale_out(db: DbSession, sales: list[UserWatchlistSale]) -> list[dict]:
 def mark_sold(symbol: str, body: SoldBody, db: DbSession, me: Me) -> dict:
     """Record that you sold this stock in Groww: it leaves the tracker and its result is kept under
     "Sold records". Nothing is sold by the app. The entry price is your Groww price, or the close on
-    the day you added it."""
+    the day you added it.
+
+    A Groww-linked stock is a confirmation of the sale Groww showed: the sale is recorded for the
+    shares sold (sent, else the shares Groww shows as gone) and the stock stays on the list; the
+    next sync decides whether it is still held."""
     sym = _clean(symbol)
     item = _mine(db, me, sym)
     if item is None or item.removed_at is not None:
@@ -360,18 +401,26 @@ def mark_sold(symbol: str, body: SoldBody, db: DbSession, me: Me) -> dict:
         entry, source, _ = tracker.pick_entry(bought_on, None, closes)
     if entry is None or source is None:
         raise HTTPException(422, "Add the price you paid first, so the result can be worked out.")
+    linked = _groww_linked(item)
+    if body.quantity is not None:
+        qty = body.quantity
+    elif linked:
+        qty = groww_apply.pending_sale_qty(db, item)  # unknown stays None, never 0
+    else:
+        qty = item.quantity
     sale = UserWatchlistSale(
         user_id=me.id,
         symbol=sym,
         bought_on=bought_on,
         entry_price=float(entry),
         entry_source=source,
-        quantity=item.quantity,
+        quantity=qty,
         sell_price=body.sell_price,
         sold_on=sold_on,
     )
     db.add(sale)
-    item.removed_at = utcnow()
+    if not linked:
+        item.removed_at = utcnow()
     db.commit()
     db.refresh(sale)
     return _sale_out(db, [sale])[0]

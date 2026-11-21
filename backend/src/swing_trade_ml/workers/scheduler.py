@@ -126,6 +126,7 @@ def start_scheduler() -> None:
     )
 
     # --- after the close ----------------------------------------------------
+    add_groww_job(scheduler)
     # Ingest at 15:40 so the day's final candle is settled, then scan at the
     # configured time (15:45 by default) against complete data.
     scheduler.add_job(
@@ -269,6 +270,18 @@ def start_scheduler() -> None:
         "scheduler.started",
         jobs=[j.id for j in scheduler.get_jobs()],
         timezone="Asia/Kolkata",
+    )
+
+
+def add_groww_job(target: BackgroundScheduler) -> None:
+    """Groww holdings sync at 15:35 IST weekdays, just before daily_ingest (15:40) so the stocks
+    it finds held get their candles the same evening. Display only; skips itself when Groww is
+    not configured."""
+    target.add_job(
+        jobs.job_groww_sync,
+        CronTrigger(day_of_week=WEEKDAYS, hour=15, minute=35, timezone=IST),
+        id="groww_sync",
+        replace_existing=True,
     )
 
 

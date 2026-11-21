@@ -182,3 +182,73 @@ def test_migration_downgrade_then_upgrade(db_session):
     migration.upgrade()
     cols = {c["name"] for c in inspect(conn).get_columns("user_watchlist_items")}
     assert {"id", "user_id", "symbol", "added_at", "removed_at", "note"} <= cols
+
+
+# --- Groww-linked rows (Groww holdings sync) -------------------------------------------------------
+
+
+def _groww_row(db, user, symbol, **kw):
+    from swing_trade_ml.db.models.groww import HELD, SOURCE_GROWW
+
+    kw.setdefault("source", SOURCE_GROWW)
+    kw.setdefault("held_state", HELD)
+    item = UserWatchlistItem(user_id=user.id, symbol=symbol, buy_price=100.0, quantity=10, **kw)
+    db.add(item)
+    db.flush()
+    return item
+
+
+def test_patch_quantity_on_linked_row_refused(client, db_session, stocks):
+    owner, me = _as(db_session, "wl-gw-owner", "owner")
+    linked = _groww_row(db_session, owner, "WLTESTA")
+    # A manual row the person later linked by ISIN is protected too.
+    isin_only = _groww_row(db_session, owner, "WLTESTB", source="manual", groww_isin="INE777A01011")
+    msg = "This comes from Groww and updates on every sync."
+    for sym in ("WLTESTA", "WLTESTB"):
+        for body in ({"quantity": 3}, {"buy_price": 50.0}, {"quantity": 3, "note": "x"}):
+            r = client.patch(f"{URL}/{sym}", json=body, headers=me)
+            assert r.status_code == 409, r.text
+            assert r.json()["detail"] == msg
+    db_session.refresh(linked)
+    db_session.refresh(isin_only)
+    assert linked.quantity == 10 and linked.buy_price == 100.0 and linked.note is None
+    assert isin_only.quantity == 10
+    # The note is still the person's own.
+    r = client.patch(f"{URL}/WLTESTA", json={"note": "long term"}, headers=me)
+    assert r.status_code == 200 and r.json()["note"] == "long term"
+
+
+def test_patch_quantity_on_manual_row_still_allowed(client, db_session, stocks):
+    _, me = _as(db_session, "wl-manual", "member")
+    client.post(URL, json={"symbol": "WLTESTA"}, headers=me)
+    r = client.patch(f"{URL}/WLTESTA", json={"quantity": 4, "buy_price": 12.5}, headers=me)
+    assert r.status_code == 200 and r.json()["quantity"] == 4 and r.json()["buy_price"] == 12.5
+
+
+def test_sold_with_quantity_keeps_row_on_list(client, db_session, stocks):
+    from swing_trade_ml.db.models.user_watchlist import UserWatchlistSale
+
+    owner, me = _as(db_session, "wl-gw-seller", "owner")
+    item = _groww_row(db_session, owner, "WLTESTA", groww_isin="INE778A01011")
+    r = client.post(f"{URL}/WLTESTA/sold", json={"sell_price": 110.0, "quantity": 3}, headers=me)
+    assert r.status_code == 200, r.text
+    assert r.json()["quantity"] == 3
+    db_session.refresh(item)
+    assert item.removed_at is None  # still on the list; Groww decides when it is gone
+    sales = db_session.execute(
+        select(UserWatchlistSale).where(UserWatchlistSale.user_id == owner.id)
+    ).scalars().all()
+    assert [s.quantity for s in sales] == [3]
+    zero = client.post(f"{URL}/WLTESTA/sold", json={"sell_price": 110.0, "quantity": 0}, headers=me)
+    assert zero.status_code == 422
+
+
+def test_sold_manual_row_still_leaves_the_list(client, db_session, stocks):
+    _, me = _as(db_session, "wl-manual-seller", "member")
+    client.post(URL, json={"symbol": "WLTESTA"}, headers=me)
+    client.patch(f"{URL}/WLTESTA", json={"quantity": 4, "buy_price": 12.5}, headers=me)
+    r = client.post(f"{URL}/WLTESTA/sold", json={"sell_price": 13.0}, headers=me)
+    assert r.status_code == 200, r.text
+    assert r.json()["quantity"] == 4
+    items = client.get(URL, headers=me).json()["items"]
+    assert items[0]["removed_at"] is not None

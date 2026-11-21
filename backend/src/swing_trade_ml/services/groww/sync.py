@@ -45,6 +45,20 @@ class SyncAlreadyRunning(Exception):  # noqa: N818 - name fixed by the task inte
     """Another Groww sync holds the lock."""
 
 
+def owner_user_id(db: Session) -> int | None:
+    """Whose tracker a sync updates when no person is behind the call (the 15:35 job, the API key):
+    the first name in REAL_ACCOUNT_USERS, if that account exists."""
+    from sqlalchemy import func
+
+    from swing_trade_ml.core.config import settings
+    from swing_trade_ml.db.models.session import User
+
+    names = [n.strip().lower() for n in settings.REAL_ACCOUNT_USERS.split(",") if n.strip()]
+    if not names:
+        return None
+    return db.scalar(select(User.id).where(func.lower(User.username) == names[0]).limit(1))
+
+
 def fetch_holdings() -> list[dict]:
     return groww_client.fetch_holdings()
 

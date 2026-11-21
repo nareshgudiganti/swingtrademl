@@ -1,3 +1,5 @@
+> **ARCHIVED 2026-11-21 (superseded by the completion matrix). Do not rely on it. Current status: docs/brain/PROJECT_COMPLETION_MATRIX.md and docs/architecture/CURRENT-STATE.md.**
+
 # Roadmap and tracker: from "ML signals" to "an expert swing trader that runs itself"
 
 Written 2026-09-21. Supersedes the status tables in

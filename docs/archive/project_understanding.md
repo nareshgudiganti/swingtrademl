@@ -1,3 +1,5 @@
+> **ARCHIVED 2026-11-21 (stale limits and features). Do not rely on it. See docs/README.md; current facts: docs/architecture/CURRENT-STATE.md and docs/architecture/TRADEMIND-SOLUTION-OVERVIEW.md.**
+
 # Swing Trade ML — Project Understanding
 
 A working reference for the whole system: what to install, how to start it, how

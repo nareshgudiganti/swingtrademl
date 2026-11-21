@@ -1,3 +1,6 @@
+# ARCHIVED 2026-11-21. Production runs on a DigitalOcean droplet via docker-compose.prod.yml and the
+# deploy workflow, NOT on Render. Kept for history only. See docs/DEPLOY.md.
+
 # Render Blueprint — deploys api, worker, and frontend from the same images
 # used locally (docker-compose.yml). See https://render.com/docs/blueprint-spec
 #

@@ -1,9 +1,11 @@
-# Current state: 2026-11-10
+# Current state: 2026-11-21
 
-Written from `origin/main` `9deb26a` (2026-11-10). The authoritative project status is
-`docs/brain/PROJECT_COMPLETION_MATRIX.md` (status updates dated 2026-11-09 and 2026-11-10). This file is a short
-summary that points at it; if the two disagree, the matrix wins. Anything not confirmed from a document or git history
-is marked **unverified**.
+Refreshed 2026-11-21 from `origin/main` `40bf4b0` (merge of PR #384, dated 2026-11-20); the previous version was written
+at `9deb26a` (2026-11-10). The authoritative project status is `docs/brain/PROJECT_COMPLETION_MATRIX.md`; its latest
+status update is dated 2026-11-10, so the matrix has **not** been updated for the changes listed under "Since 2026-11-10"
+below. This file is a short summary that points at the matrix; if the two disagree, the matrix wins. Anything not
+confirmed from a document or git history is marked **unverified**. Nothing here was checked on production
+(**not verified on production**).
 
 ## What is on `main` and deployed
 
@@ -24,20 +26,36 @@ is marked **unverified**.
   5-day report), daily-check watch with a simulate input, the December readiness check
   (`docs/brain/DECEMBER-READINESS-CHECK.md`), a tv27 proposal marked NOT FOR MERGE, and small frontend dependency bumps.
   Whether each of these has finished deploying to the droplet is **unverified** (check Actions, "Deploy to production").
+- **Since 2026-11-10** (from `git log 9deb26a..40bf4b0` and file checks; whether each one has deployed to the droplet is
+  **not verified on production**):
+  - Customer account work, all behind owner switches: release-switch registry, verified-email sign-in and password rules,
+    email service and one-time tokens, sandbox billing code (Razorpay and a fake provider, migration `billing01`),
+    Free/Pro plan table, account deletion with a grace period, admin two-step sign-in, scoped read-only service keys,
+    invite-only sign-up, and an isolated staging environment (`docs/STAGING-SETUP.md`).
+  - Screens: Open positions (with progress bars), Idea reports, Groww Tracker (sortable, side panel, Sold records,
+    real model score), one word per stock everywhere, New look is the only look unless switched back on.
+  - Safety fixes: brain approvals get an entry lock and manual `POST /orders` was removed (`4961507`), Google sign-in is
+    bound to the starting browser (#373), private position counts are protected in status replies (#374), score evidence
+    is tied to the model that made the score (#377), model files are published atomically (#383), replay import cycle fixed
+    (#359), daily backup tolerates no release folder (#362), safe test environment and a migration check in CI (`1ca0aa3`).
+  - Owner decision recorded in git: the blind trial's results were unsealed on 2026-11-11 (`41c1efa`), so "sealed"
+    wording elsewhere in this file describes the earlier state.
+  - Read-only ops digest endpoint (`GET /api/v1/ops/digest`) merged (`57adb81`); AI roles and review loop in `AGENTS.md`.
 - **Also on `main`** (matrix P3 list): Open positions screen, Stock Compare, Company tab, manual real-holdings orders
   (switch off), Plans manager (owner switch off), New-look switch, tv22 reserved slot, 20% stressed cap, explanation layer,
   Observatory, Groww Tracker with edit, beginner features.
 
 ## Trial seal and freeze
 
-- The blind brain trial is sealed: frozen files change only through `scripts/approve_trial_change.py`. Reports keep the
+- Frozen files (list in `backend/tests/trial_freeze.json`) change only through `scripts/approve_trial_change.py`. The
+  blind-trial results were unsealed on 2026-11-11 (`41c1efa`); the sentence below predates that. Reports keep the
   brain slot out of the "Bot results" while sealed (`pr/brain-seal-weekly-report`; its merge status is **unverified**).
 - Development freeze: feature development ends 2026-11-30 (matrix objective), testing-first after. Held until after the
   freeze: Telegram SELL-log changes, the m09 speed fix, 10D, unapproved lanes, worktree cleanup.
 
 ## Experiments and signatures
 
-| Item | State on 2026-11-10 (source: matrix) |
+| Item | State on 2026-11-10 (source: matrix; not re-checked 2026-11-21) |
 |---|---|
 | Phase B protocol | **Signed 2026-11-09** (merge `fee8d98`, PR #172); annotated tag `phase-b-completion-v1` points at it. Gates G1-G14 passed on branch `phase-b-run`. |
 | Phase B runs B1, B2, B3 | **B1 not run yet** (ledger has 0 candidate rows). All three due by **2026-12-04**. |
@@ -51,9 +69,10 @@ is marked **unverified**.
 
 ## Release controls (all off, per code defaults)
 
-`ALLOW_SIGNUP`, `ALLOW_REAL_HOLDINGS_ORDERS`, `ALLOW_LIVE_TRADING` default to false in `core/config.py`. Plans manager and
-New-look are owner switches (off). The names `ALLOW_CUSTOMER_SCREENS` and `ALLOW_MODEL_PROMOTION` were **not found** in the
-code on `9deb26a`: treat them as planned, not existing (unverified meaning). Payments and billing are not built.
+`ALLOW_SIGNUP`, `ALLOW_REAL_HOLDINGS_ORDERS`, `ALLOW_LIVE_TRADING`, `ALLOW_CUSTOMER_SCREENS` and `ALLOW_MODEL_PROMOTION`
+default to false in `core/config.py` (verified at `40bf4b0`; the last two now exist, registry in
+`core/release_switches.py`). Plans manager is an owner switch (off by default). The New look is on for everyone and the Classic look is hidden (`CLASSIC_LOOK_IN_CODE=false` in `frontend/src/trademind/look.ts`; owner, 2026-11-11). Billing code exists for a
+sandbox only (`docs/BILLING-SANDBOX.md`); no real payments. Values on the droplet are **not verified on production**.
 See `docs/OPERATIONS-AND-LAUNCH.md`.
 
 ## Known issues (still true, verified against matrix unless noted)
@@ -61,8 +80,7 @@ See `docs/OPERATIONS-AND-LAUNCH.md`.
 - **`obv_slope` train/serve mismatch** for 5D models 2/16/17 (prod serves it differently from training since 2026-10-05).
   Inside the sealed trial, NOT fixed; decision after the trial. Note: the older entry in this file that said an `obv_slope`
   train/serve fix shipped in `fcaef35` conflicts with the matrix; the matrix is the later source.
-- **Seal-leak test fix `783c3dd`**: the matrix says it was needed on main; it is in the release that has since merged
-  (whether it is on `main` is **unverified**; confirm with `git branch -r --contains 783c3dd`).
+- **Seal-leak test fix `783c3dd`** is now on `main` (verified: it is an ancestor of `40bf4b0`).
 - **`/brain/learning` page can time out** (m09 speed fix is blocked by the trial freeze; trading and evidence unaffected).
 - **Telegram SELL alert log** not merged (on hold; touches order path).
 - **Off-site (Google Drive) database backup not set up**, droplet disk filling, Telegram token a single point of failure,
@@ -84,8 +102,9 @@ See `docs/OPERATIONS-AND-LAUNCH.md`.
 
 ## Doc pointers
 
+- Doc map and precedence rule: `docs/README.md`; archived old docs: `docs/archive/README.md`
 - Matrix (authoritative): `docs/brain/PROJECT_COMPLETION_MATRIX.md`; December: `docs/brain/DECEMBER-RUNBOOK.md`,
   `docs/brain/DECEMBER-READINESS-CHECK.md`
 - Operations and launch: `docs/OPERATIONS-AND-LAUNCH.md`
 - Solution vision: `docs/architecture/TRADEMIND-SOLUTION-OVERVIEW.md`; gaps: `docs/architecture/architecture-gaps.md`
-- Roadmap: `docs/brain/ROADMAP.md`, `docs/ROADMAP_TRACKER.md`; testing: `docs/brain/TESTING.md`
+- Roadmap: `docs/brain/ROADMAP.md` (old `ROADMAP_TRACKER.md` is archived in `docs/archive/`); testing: `docs/brain/TESTING.md`

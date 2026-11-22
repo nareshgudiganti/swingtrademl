@@ -404,8 +404,8 @@ def test_second_real_account_owner_cannot_write(client, db_session, monkeypatch,
     r = client.post(API + path, json=body, headers=other) if body else client.post(API + path, headers=other)
     assert r.status_code == 403
     assert r.json()["detail"] == "Only the Groww account owner can do this."
-    # Reading the status is still fine for them.
-    assert client.get(API + "/groww/status", headers=other).status_code == 200
+    # Owner decision D2: reading is refused as well.
+    assert client.get(API + "/groww/status", headers=other).status_code == 403
 
 
 def test_writes_target_the_groww_owner_tracker(client, db_session, monkeypatch):
@@ -462,3 +462,93 @@ def test_a_held_stock_is_in_no_scan_or_watchlist_universe(db_session):
     watchlist_snapshots.record_watchlist_snapshot(db_session, on=day)
     snap = db_session.query(WatchlistSnapshot.symbol).filter_by(snapshot_date=day).all()
     assert "GWUNIVERSE" not in {s for (s,) in snap}
+
+
+# --- #388 backend: who is calling is checked before the connection state is revealed ---
+
+
+def test_a_second_owner_gets_403_before_503_or_429(client, db_session, monkeypatch):
+    _as(db_session, OWNER)
+    _, other = _as(db_session, "someoneelse")
+    monkeypatch.setattr(groww_api.groww_sync, "run_sync", lambda *a, **k: pytest.fail("must not sync"))
+    monkeypatch.setattr(groww_api.groww_client, "is_configured", lambda: False)
+    assert client.post(API + "/groww/sync", headers=other).status_code == 403  # not 503
+    monkeypatch.setattr(groww_api.groww_client, "is_configured", lambda: True)
+    _sync(db_session, status=SYNC_FAILED, started=utcnow() - timedelta(seconds=5))
+    assert client.post(API + "/groww/sync", headers=other).status_code == 403  # not 429
+
+
+def test_the_groww_owner_still_sees_503_then_429(client, db_session, monkeypatch):
+    _, hdr = _as(db_session, OWNER)
+    monkeypatch.setattr(groww_api.groww_client, "is_configured", lambda: False)
+    assert client.post(API + "/groww/sync", headers=hdr).status_code == 503
+    monkeypatch.setattr(groww_api.groww_client, "is_configured", lambda: True)
+    _sync(db_session, status=SYNC_FAILED, started=utcnow() - timedelta(seconds=5))
+    monkeypatch.setattr(groww_api.groww_sync, "run_sync", lambda *a, **k: pytest.fail("must not sync"))
+    assert client.post(API + "/groww/sync", headers=hdr).status_code == 429
+
+
+# --- #388 owner decision D2: only the Groww account owner reaches any /groww route or the groww key --
+
+ALL_ROUTES = [
+    ("get", "/groww/status", None),
+    ("get", "/groww/matching", None),
+    ("post", "/groww/sync", None),
+    ("post", "/groww/matching/confirm-all", None),
+    ("post", "/groww/matching/INE000A01011", {"instrument_id": 1}),
+    ("post", "/groww/syncs/1/confirm-empty", None),
+]
+
+
+def _call(client, method, path, body, headers):
+    kwargs = {"headers": headers}
+    if body is not None:
+        kwargs["json"] = body
+    return getattr(client, method)(API + path, **kwargs)
+
+
+@pytest.mark.parametrize(("method", "path", "body"), ALL_ROUTES)
+def test_a_second_owner_is_refused_on_every_route_before_any_other_answer(
+    client, db_session, monkeypatch, method, path, body
+):
+    _as(db_session, OWNER)
+    _, other = _as(db_session, "someoneelse")
+    monkeypatch.setattr(groww_api.groww_client, "is_configured", lambda: False)  # would be 503
+    _sync(db_session, status=SYNC_FAILED, started=utcnow() - timedelta(seconds=5))  # would be 429
+    r = _call(client, method, path, body, other)
+    assert r.status_code == 403, r.text
+    assert r.json()["detail"] == "Only the Groww account owner can do this."
+
+
+def test_a_second_owner_gets_no_groww_key_on_the_tracker(client, db_session, monkeypatch):
+    monkeypatch.setattr(groww_api.groww_client, "is_configured", lambda: True)
+    _as(db_session, OWNER)
+    _, other = _as(db_session, "someoneelse")
+    _sync(db_session, status=SYNC_COMPLETE)
+    assert "groww" not in client.get(API + "/me/watchlist/tracker", headers=other).json()
+
+
+@pytest.mark.parametrize(("method", "path", "body"), ALL_ROUTES)
+def test_with_no_groww_owner_account_a_signed_in_person_is_refused(client, db_session, method, path, body):
+    _, someone = _as(db_session, "someoneelse")  # real-account name, but no Groww owner account exists
+    assert gsync.owner_user_id(db_session) is None
+    assert _call(client, method, path, body, someone).status_code == 403
+
+
+def test_with_no_groww_owner_account_a_signed_in_person_gets_no_groww_key(client, db_session):
+    _, someone = _as(db_session, "someoneelse")
+    assert gsync.owner_user_id(db_session) is None
+    assert "groww" not in client.get(API + "/me/watchlist/tracker", headers=someone).json()
+
+
+def test_anonymous_is_still_401_and_the_shared_key_is_unchanged(client, db_session):
+    _as(db_session, OWNER)
+    assert client.get(API + "/groww/status").status_code == 401
+    assert client.get(API + "/groww/status", headers={"X-API-Key": "test-api-key"}).status_code == 200
+    assert client.get(API + "/groww/matching", headers={"X-API-Key": "test-api-key"}).status_code == 200
+
+
+def test_the_groww_owner_reads_status_and_gets_the_groww_key(client, db_session):
+    _, hdr = _as(db_session, OWNER)
+    assert client.get(API + "/groww/status", headers=hdr).status_code == 200
+    assert "groww" in client.get(API + "/me/watchlist/tracker", headers=hdr).json()

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -572,3 +572,114 @@ def test_isin_rematched_to_another_stock_unlinks_old_row(db_session, user):
     count_before = db_session.query(UserWatchlistItemChange).count()
     gapply.apply_sync(db_session, sync, user_id=user.id)
     assert db_session.query(UserWatchlistItemChange).count() == count_before
+
+
+# --- #388 backend: confirming part of a drop keeps asking for the rest ---------------
+
+
+def _step(db, user, isin, inst, qty):
+    """One complete sync that shows `qty` shares of `inst`, applied to the owner's tracker."""
+    gapply.apply_sync(db, _sync(db, [(isin, inst, qty, 100.0, MATCH_CONFIRMED)]), user_id=user.id)
+
+
+def _sale(db, user, symbol, quantity, when):
+    db.add(
+        UserWatchlistSale(
+            user_id=user.id, symbol=symbol, bought_on=ORIGINAL_ADDED.date(), entry_price=100.0,
+            entry_source="your_price", quantity=quantity, sell_price=110.0,
+            sold_on=datetime(2026, 11, 22).date(), created_at=when,
+        )
+    )
+    db.flush()
+
+
+def test_confirming_part_of_a_drop_leaves_the_rest_to_confirm(db_session, user):
+    inst = _inst(db_session, "PARTSALE")
+    item = _item(db_session, user, "PARTSALE", quantity=10, buy_price=100.0)
+    _step(db_session, user, "INE0PS001011", inst, 10)
+    _step(db_session, user, "INE0PS001011", inst, 4)
+    assert gapply.pending_sale_qty(db_session, item) == 6
+    _sale(db_session, user, "PARTSALE", 4, datetime.now(UTC) + timedelta(seconds=1))
+    assert gapply.pending_sale_qty(db_session, item) == 2
+    _sale(db_session, user, "PARTSALE", 2, datetime.now(UTC) + timedelta(seconds=2))
+    assert gapply.pending_sale_qty(db_session, item) is None
+
+
+def test_a_sale_larger_than_the_drop_never_leaves_a_negative_pending(db_session, user):
+    inst = _inst(db_session, "BIGSALE")
+    item = _item(db_session, user, "BIGSALE", quantity=10, buy_price=100.0)
+    _step(db_session, user, "INE0BS001011", inst, 10)
+    _step(db_session, user, "INE0BS001011", inst, 8)
+    _sale(db_session, user, "BIGSALE", 5, datetime.now(UTC))  # after the drop, before the next sync
+    assert gapply.pending_sale_qty(db_session, item) is None
+    _step(db_session, user, "INE0BS001011", inst, 7)
+    assert gapply.pending_sale_qty(db_session, item) == 1
+
+
+def test_a_sale_with_no_quantity_clears_everything_before_it(db_session, user):
+    inst = _inst(db_session, "NOQTY")
+    item = _item(db_session, user, "NOQTY", quantity=10, buy_price=100.0)
+    _step(db_session, user, "INE0NQ001011", inst, 10)
+    _step(db_session, user, "INE0NQ001011", inst, 3)
+    _sale(db_session, user, "NOQTY", None, datetime.now(UTC) + timedelta(seconds=1))
+    assert gapply.pending_sale_qty(db_session, item) is None
+
+
+# --- #388 owner decision D1: a stock removed or sold by hand and held again restarts its buy date --
+
+REBUY_START = datetime(2026, 12, 2, 4, 0, tzinfo=UTC)
+REBUY_DAY = datetime(2026, 12, 2, tzinfo=IST)
+
+
+def _held_again(db, user, symbol, isin, inst, qty=3, avg=130.0, started=REBUY_START):
+    sync = _sync(db, [(isin, inst, qty, avg, MATCH_CONFIRMED)], started=started)
+    gapply.apply_sync(db, sync, user_id=user.id)
+
+
+def test_a_removed_row_held_again_restarts_the_buy_date_with_history(db_session, user):
+    inst = _inst(db_session, "REBUYONE")
+    removed = datetime(2026, 11, 1, tzinfo=UTC)
+    item = _item(db_session, user, "REBUYONE", removed_at=removed, quantity=1, buy_price=50.0, note="mine")
+    _held_again(db_session, user, "REBUYONE", "INE0RB001011", inst)
+    db_session.refresh(item)
+    assert item.removed_at is None and item.held_state == HELD
+    assert item.added_at == REBUY_DAY
+    assert item.note == "mine"
+    (moved,) = _history(db_session, item, "added_at")
+    assert (moved.old_value, moved.new_value) == (ORIGINAL_ADDED.isoformat(), REBUY_DAY.isoformat())
+
+
+def test_a_row_sold_by_hand_and_held_again_restarts_the_buy_date(db_session, user):
+    inst = _inst(db_session, "REBUYTWO")
+    item = _item(db_session, user, "REBUYTWO", quantity=2, buy_price=50.0)
+    item.removed_at = datetime(2026, 11, 20, tzinfo=UTC)  # what the Sold button does to a hand-entered row
+    db_session.flush()
+    _held_again(db_session, user, "REBUYTWO", "INE0RB002011", inst)
+    db_session.refresh(item)
+    assert item.added_at == REBUY_DAY and item.removed_at is None
+
+
+def test_the_restart_happens_once_and_a_repeated_or_topped_up_sync_never_moves_it(db_session, user):
+    inst = _inst(db_session, "REBUYTHREE")
+    gone = datetime(2026, 11, 1, tzinfo=UTC)
+    item = _item(db_session, user, "REBUYTHREE", removed_at=gone, quantity=1, buy_price=50.0)
+    _held_again(db_session, user, "REBUYTHREE", "INE0RB003011", inst, qty=3)
+    isin = "INE0RB003011"
+    _held_again(db_session, user, "REBUYTHREE", isin, inst, qty=3, started=REBUY_START.replace(day=3))
+    later = REBUY_START.replace(day=4)
+    _held_again(db_session, user, "REBUYTHREE", isin, inst, qty=9, avg=140.0, started=later)
+    db_session.refresh(item)
+    assert item.added_at == REBUY_DAY and item.quantity == 9
+    assert len(_history(db_session, item, "added_at")) == 1
+
+
+def test_confirming_a_sale_of_a_listed_linked_row_never_moves_the_buy_date(db_session, user):
+    inst = _inst(db_session, "KEEPDATE")
+    item = _item(db_session, user, "KEEPDATE", quantity=10, buy_price=100.0)
+    _step(db_session, user, "INE0KD001011", inst, 10)
+    _step(db_session, user, "INE0KD001011", inst, 4)
+    _sale(db_session, user, "KEEPDATE", 6, datetime.now(UTC) + timedelta(seconds=1))
+    _step(db_session, user, "INE0KD001011", inst, 4)
+    db_session.refresh(item)
+    assert item.added_at == ORIGINAL_ADDED and item.removed_at is None
+    assert _history(db_session, item, "added_at") == []

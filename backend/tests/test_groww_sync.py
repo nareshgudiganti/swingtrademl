@@ -240,3 +240,28 @@ def test_failure_logs_carry_no_exception_text(db_session, monkeypatch, caplog):
         sync = gsync.run_sync(db_session, user_id=1, trigger="manual")
     assert sync.error_code == "store"
     assert "leak-holding-456" not in caplog.text
+
+
+# --- #388 backend: a malformed number makes the sync partial -----------------------------
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf")])
+@pytest.mark.parametrize("field", ["quantity", "average_price"])
+def test_a_non_finite_number_makes_the_sync_partial_and_is_never_stored(db_session, monkeypatch, bad, field):
+    row = _row()
+    row[field] = bad
+    monkeypatch.setattr(gsync, "fetch_holdings", lambda: [_row(isin="INE0OK000011", symbol="OKCO-EQ"), row])
+    sync = gsync.run_sync(db_session, user_id=1, trigger="manual")
+    assert sync.status == "partial"
+    stored = db_session.query(GrowwHolding).filter_by(sync_id=sync.id).all()
+    assert len(stored) == 2
+    bad_row = next(r for r in stored if r.isin == row["isin"])
+    assert getattr(bad_row, "quantity" if field == "quantity" else "average_price") is None
+
+
+def test_a_non_finite_extra_value_does_not_fail_the_store(db_session, monkeypatch):
+    monkeypatch.setattr(gsync, "fetch_holdings", lambda: [_row(pledge_quantity=float("nan"), locked=2)])
+    sync = gsync.run_sync(db_session, user_id=1, trigger="manual")
+    assert sync.status == "complete" and sync.error_code is None
+    (held,) = db_session.query(GrowwHolding).filter_by(sync_id=sync.id).all()
+    assert held.extra == {"pledge_quantity": None, "locked": 2}

@@ -270,10 +270,10 @@ def _iso(value: datetime | None) -> str | None:
 
 
 def _with_groww(out: dict, db: DbSession, principal: Principal) -> dict:
-    """Add the Groww connection status, for the real-account owner only (key omitted otherwise)."""
-    if principal.can_see_real_account:
-        from swing_trade_ml.api.v1.endpoints.groww import status_payload
+    """Add the Groww connection status, for the Groww account owner only (key omitted for anyone else)."""
+    from swing_trade_ml.api.v1.endpoints.groww import is_groww_owner, status_payload
 
+    if principal.can_see_real_account and is_groww_owner(db, principal):
         out["groww"] = status_payload(db)
     return out
 

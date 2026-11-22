@@ -204,8 +204,9 @@ def run_sync(db: Session, *, user_id: int, trigger: str) -> GrowwSync:
             rows, error = None, "auth"
         except GrowwUnavailable:
             rows, error = None, "unavailable"
-        except Exception:  # recorded, never raised to the caller
-            logger.exception("groww sync failed unexpectedly")
+        except Exception as exc:  # noqa: BLE001 - recorded, never raised to the caller
+            # The kind only: an error message can hold holdings data or a credential.
+            logger.error("groww sync failed unexpectedly (%s)", type(exc).__name__)
             rows, error = None, "unexpected"
         if error is None:
             try:
@@ -217,14 +218,14 @@ def run_sync(db: Session, *, user_id: int, trigger: str) -> GrowwSync:
                     db.flush()
                     _store_rows(db, sync, rows)
                     sync.finished_at = utcnow()
-            except Exception:
-                logger.exception("groww sync could not be stored")
+            except Exception as exc:  # noqa: BLE001
+                logger.error("groww sync could not be stored (%s)", type(exc).__name__)
                 error = "store"
             else:
                 try:
                     db.commit()
-                except Exception:
-                    logger.exception("groww sync could not be saved")
+                except Exception as exc:  # noqa: BLE001
+                    logger.error("groww sync could not be saved (%s)", type(exc).__name__)
                     db.rollback()
                     error = "store"
                 else:

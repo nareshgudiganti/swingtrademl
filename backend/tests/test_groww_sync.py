@@ -216,3 +216,27 @@ def test_store_error_records_failed_sync_with_store_code(db_session, monkeypatch
     assert sync.status == SYNC_FAILED and sync.error_code == "store"
     assert db_session.query(GrowwSync).count() == 1
     assert db_session.query(GrowwHolding).count() == 0
+
+
+# --- #388 backend review: no exception text (it can hold holdings or secrets) in the logs ---------------
+
+
+def test_failure_logs_carry_no_exception_text(db_session, monkeypatch, caplog):
+    import logging
+
+    monkeypatch.setattr(gsync, "fetch_holdings", _raises(RuntimeError("leak-token-123 in fetch")))
+    with caplog.at_level(logging.DEBUG):
+        sync = gsync.run_sync(db_session, user_id=1, trigger="manual")
+    assert sync.status == SYNC_FAILED and sync.error_code == "unexpected"
+    assert "leak-token-123" not in caplog.text
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("leak-holding-456 in store")
+
+    monkeypatch.setattr(gsync, "fetch_holdings", lambda: [_row()])
+    monkeypatch.setattr(gsync, "_store_rows", boom)
+    caplog.clear()
+    with caplog.at_level(logging.DEBUG):
+        sync = gsync.run_sync(db_session, user_id=1, trigger="manual")
+    assert sync.error_code == "store"
+    assert "leak-holding-456" not in caplog.text

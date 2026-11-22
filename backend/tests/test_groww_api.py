@@ -431,3 +431,34 @@ def test_owner_user_id_requires_owner_role(db_session, monkeypatch):
     assert gsync.owner_user_id(db_session) == member.id
     monkeypatch.setattr(settings, "REAL_ACCOUNT_USERS", "")
     assert gsync.owner_user_id(db_session) is None
+
+
+# --- #388 backend review: a held stock enters no scan, strategy or brain universe --------------------------
+
+
+def test_a_held_stock_is_in_no_scan_or_watchlist_universe(db_session):
+    from datetime import date
+
+    from sqlalchemy import update
+
+    from swing_trade_ml.db.models.market import WatchlistSnapshot
+    from swing_trade_ml.db.models.trading import Strategy
+    from swing_trade_ml.services import engine, watchlist_snapshots
+
+    owner, _ = _as(db_session, OWNER)
+    held = _inst(db_session, "GWUNIVERSE")
+    held.is_watchlisted = False
+    held.is_active = True
+    db_session.add(
+        UserWatchlistItem(user_id=owner.id, symbol="GWUNIVERSE", source=SOURCE_GROWW, held_state=HELD)
+    )
+    db_session.execute(update(Strategy).values(is_active=False))
+    scanned = Strategy(name="gw-universe", strategy_type="ml_swing", mode="paper", is_active=True, symbols=[])
+    db_session.add(scanned)
+    db_session.flush()
+
+    assert "GWUNIVERSE" not in {i.tradingsymbol for i in engine.eligible_instruments(db_session, scanned)}
+    day = date(2031, 1, 6)
+    watchlist_snapshots.record_watchlist_snapshot(db_session, on=day)
+    snap = db_session.query(WatchlistSnapshot.symbol).filter_by(snapshot_date=day).all()
+    assert "GWUNIVERSE" not in {s for (s,) in snap}

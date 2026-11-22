@@ -7,6 +7,7 @@ response bodies are never logged.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import uuid
 from datetime import datetime, timedelta
@@ -20,6 +21,7 @@ from swing_trade_ml.core.market_session import IST
 logger = logging.getLogger(__name__)
 
 BASE_URL = "https://api.groww.in"
+ALLOWED_HOST = "api.groww.in"
 ALLOWED_PATHS = frozenset({"/v1/token/api/access", "/v1/holdings/user"})
 _TOKEN_KEY = "groww:access_token"
 _TIMEOUT = 10.0
@@ -35,6 +37,14 @@ class GrowwUnavailable(Exception):  # noqa: N818 - name fixed by the task interf
 
 def is_configured() -> bool:
     return bool(settings.GROWW_TOTP_TOKEN and settings.GROWW_TOTP_SECRET)
+
+
+def _token_key() -> str:
+    """The cache key is bound to the credentials, so a token minted under one set (a test's, or an earlier
+    key) is never served under another, even in a shared Redis. Only a hash is used, never a credential."""
+    material = f"{settings.GROWW_TOTP_TOKEN}:{settings.GROWW_TOTP_SECRET}"
+    digest = hashlib.sha256(material.encode()).hexdigest()
+    return f"{_TOKEN_KEY}:{digest[:16]}"
 
 
 def _get_redis():
@@ -72,7 +82,7 @@ def _holdings_request(access_token: str) -> httpx.Request:
 
 
 def _send(request: httpx.Request) -> httpx.Response:
-    if request.url.path not in ALLOWED_PATHS:  # defence in depth
+    if request.url.host != ALLOWED_HOST or request.url.path not in ALLOWED_PATHS:  # defence in depth
         raise GrowwUnavailable("blocked path")
     try:
         with httpx.Client(transport=_transport(), timeout=_TIMEOUT) as http:
@@ -112,7 +122,7 @@ def get_access_token(*, force: bool = False) -> str:
     try:
         redis_client = _get_redis()
         if not force:
-            cached = redis_client.get(_TOKEN_KEY)
+            cached = redis_client.get(_token_key())
             if cached:
                 return cached.decode() if isinstance(cached, bytes) else cached
     except Exception:  # noqa: BLE001 - a cache failure must never block a sync
@@ -121,7 +131,7 @@ def get_access_token(*, force: bool = False) -> str:
     token = _mint_token()
     if redis_client is not None:
         try:
-            redis_client.set(_TOKEN_KEY, token, ex=_seconds_until_next_6am_ist())
+            redis_client.set(_token_key(), token, ex=_seconds_until_next_6am_ist())
         except Exception:  # noqa: BLE001 - a cache failure must never block a sync
             logger.warning("groww token could not be cached")
     return token

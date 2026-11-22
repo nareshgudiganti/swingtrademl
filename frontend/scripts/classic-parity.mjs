@@ -46,14 +46,31 @@ function resolveLocal(file, spec) {
   return candidates.find((c) => fs.existsSync(c) && fs.statSync(c).isFile() && SOURCE.test(c)) ?? null
 }
 
-function callsOf(file, srcDir) {
+// Reading and scanning a file is the slow part (about a thousand reads for ~265 files when every page re-reads each
+// module it imports), so each file is read and scanned once per computeParity run and the result reused.
+function analyse(f, cache) {
+  const key = path.resolve(f) // a relative and an absolute path to one file share one entry
+  let hit = cache.get(key)
+  if (!hit) {
+    const code = stripComments(fs.readFileSync(f, 'utf8'))
+    hit = {
+      code,
+      calls: [...code.matchAll(CALL)].map((m) => m[1]),
+      dynamic: DYNAMIC.filter(([, re]) => re.test(code)).map(([name]) => name),
+    }
+    cache.set(key, hit)
+  }
+  return hit
+}
+
+function callsOf(file, srcDir, cache = new Map()) {
   const calls = new Set()
   const dynamic = []
   const scan = (f, label) => {
-    const code = stripComments(fs.readFileSync(f, 'utf8'))
-    for (const m of code.matchAll(CALL)) calls.add(m[1])
-    for (const [name, re] of DYNAMIC) if (re.test(code)) dynamic.push(`${label}: ${name}`)
-    return code
+    const hit = analyse(f, cache)
+    for (const c of hit.calls) calls.add(c)
+    for (const name of hit.dynamic) dynamic.push(`${label}: ${name}`)
+    return hit.code
   }
   const own = scan(file, path.basename(file))
   const apiDir = path.join(srcDir, 'api') + path.sep
@@ -69,8 +86,9 @@ function callsOf(file, srcDir) {
 export function computeParity(srcDir) {
   const pagesDir = path.join(srcDir, 'pages')
   const trademind = new Set()
+  const cache = new Map()
   for (const f of walk(path.join(srcDir, 'trademind')).filter((f) => /\.tsx?$/.test(f))) {
-    for (const c of callsOf(f, srcDir).calls) trademind.add(c)
+    for (const c of callsOf(f, srcDir, cache).calls) trademind.add(c)
   }
   return fs
     .readdirSync(pagesDir)
@@ -78,7 +96,7 @@ export function computeParity(srcDir) {
     .sort()
     .map((f) => {
       const file = path.join(pagesDir, f)
-      const { calls: found, dynamic } = callsOf(file, srcDir)
+      const { calls: found, dynamic } = callsOf(file, srcDir, cache)
       const calls = [...found].sort()
       return {
         page: f.replace(/\.tsx$/, ''),

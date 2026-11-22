@@ -13,7 +13,7 @@ import { TRACKER_TAB_KEY, readTrackerTab, writeTrackerTab } from './trackerTab'
 import { Detail, EditableRow } from './pages/GrowwTracker'
 import { GROWW_MATCH_KEY, acceptSuggestion, pickStock } from './GrowwMatchingPanel'
 import { confirmEmptySync, refusalText, runRefresh } from './GrowwSyncStrip'
-import { filterItems, fmtIstStamp, fmtNowPrice, needsActionCount, saleBody, symbolsIn } from './trackerRules'
+import { filterItems, fmtIstStamp, fmtNowPrice, isGrowwRow, needsActionCount, saleBody, symbolsIn } from './trackerRules'
 import TradeMindApp from './TradeMindApp'
 
 const store = new Map<string, string>()
@@ -374,6 +374,45 @@ describe('Groww Tracker page', () => {
     it('a Refresh answer may carry no finish time (contract: finished_at is nullable)', async () => {
       const r = await runRefresh(async () => ({ status: 'complete', holdings_count: 1, finished_at: null }))
       expect(r).toEqual({ kind: 'done', text: 'Done. 1 holding from Groww.' })
+    })
+
+    it('a failed refresh has no holdings count and no finish time, and reads as a failure', async () => {
+      const failed = await runRefresh(async () => ({ status: 'failed', holdings_count: null, finished_at: null }))
+      expect(failed).toEqual({ kind: 'failed', text: 'Groww did not answer' })
+      // a count that is missing on a refresh that did not fail never prints the word null
+      const odd = await runRefresh(async () => ({ status: 'partial', holdings_count: null, finished_at: null }))
+      expect(odd).toEqual({ kind: 'done', text: 'Done.' })
+    })
+
+    describe('a hand-entered row that a sync linked', () => {
+      // The server keeps source "manual" on such a row; held_state says Groww has seen it.
+      it.each(['held', 'not_held'] as const)('held_state %s: badge, read-only shares and price, sale may be partial', (held_state) => {
+        const row = rowHtml({ source: 'manual', held_state })
+        expect(row).toContain('from Groww')
+        expect(row).not.toContain('aria-label="Price you paid in Groww for KEI"')
+        expect(row).not.toContain('aria-label="Shares of KEI"')
+        const k = { ...DATA.items[0]!, source: 'manual' as const, held_state }
+        const sale = renderToString(
+          <QueryClientProvider client={new QueryClient()}>
+            <Detail k={k} horizon={15} editing={false} onEditing={() => {}} onRemoved={() => {}} startSelling />
+          </QueryClientProvider>,
+        )
+        expect(sale).toContain('aria-label="Shares sold for KEI"')
+        expect(isGrowwRow(k)).toBe(true)
+      })
+      it.each([undefined, 'unknown'] as const)('held_state %s: still a plain hand-entered row', (held_state) => {
+        const over = held_state === undefined ? { source: 'manual' as const } : { source: 'manual' as const, held_state }
+        const row = rowHtml(over)
+        expect(row).not.toContain('from Groww')
+        expect(row).toContain('aria-label="Shares of KEI"')
+        expect(isGrowwRow({ ...DATA.items[0]!, ...over })).toBe(false)
+      })
+      it('the table row carries the badge too', () => {
+        const linked = item('LINKED', 'ok', { source: 'manual', held_state: 'held' })
+        const html = render('/trademind/groww-tracker', withGroww(GROWW_FAILED, [linked]))
+        const row = html.slice(html.indexOf('data-symbol="LINKED"'))
+        expect(row).toContain('from Groww')
+      })
     })
 
     const SUGGESTED: GrowwMatchItem = {

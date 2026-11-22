@@ -747,8 +747,10 @@ export interface GrowwStatus {
 
 export interface GrowwSyncResult {
   status: GrowwSyncStatus
-  holdings_count: number
-  finished_at: string
+  /** How many holdings Groww returned; null when the refresh failed before it had a count. */
+  holdings_count: number | null
+  /** When the refresh finished; null while it has not (the server may answer before it is stamped). */
+  finished_at: string | null
 }
 
 export interface GrowwMatchItem {
@@ -758,6 +760,8 @@ export interface GrowwMatchItem {
   average_price: number
   match_state: 'suggested' | 'needs_matching'
   suggested_symbol: string | null
+  /** The stock the suggestion points at: what a one-tap "Use ..." posts. Null without a suggestion. */
+  suggested_instrument_id: number | null
 }
 
 export interface WatchTracker {

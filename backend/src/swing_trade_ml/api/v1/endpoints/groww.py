@@ -29,8 +29,6 @@ from swing_trade_ml.services.groww import apply as groww_apply
 from swing_trade_ml.services.groww import client as groww_client
 from swing_trade_ml.services.groww import sync as groww_sync
 
-router = APIRouter(prefix="/groww", tags=["groww"], dependencies=[Depends(require_real_account)])
-
 Owner = Annotated[Principal, Depends(require_real_account)]
 
 #: Refresh at most once a minute (spec §6 Connection).
@@ -48,6 +46,29 @@ def iso(value: datetime | None) -> str | None:
     if value.tzinfo is None:
         value = value.replace(tzinfo=UTC)
     return value.isoformat()
+
+
+def is_groww_owner(db: Session, principal: Principal) -> bool:
+    """True for the Groww account owner (groww_sync.owner_user_id) and for the legacy shared API key, which
+    is the owner's by design. Any other person, a second real-account owner included, is not; with no Groww
+    owner account found, no signed-in person is."""
+    if principal.user is None:
+        return True
+    return principal.user.id == groww_sync.owner_user_id(db)
+
+
+def require_groww_owner(db: DbSession, principal: Owner) -> None:
+    """One check for every /groww route, reads included. It runs before any handler, so a refusal never
+    depends on (or reveals) the connection state: no 409, 429 or 503 comes first."""
+    if not is_groww_owner(db, principal):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, NOT_GROWW_OWNER)
+
+
+router = APIRouter(
+    prefix="/groww",
+    tags=["groww"],
+    dependencies=[Depends(require_real_account), Depends(require_groww_owner)],
+)
 
 
 def status_payload(db: Session) -> dict:

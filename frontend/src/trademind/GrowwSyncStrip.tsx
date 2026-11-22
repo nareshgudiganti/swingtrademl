@@ -7,7 +7,9 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api/client'
 import type { GrowwStatus, GrowwSyncResult } from '../api/types'
 import { GROWW_MATCH_KEY } from './GrowwMatchingPanel'
-import { fmtDayMonth, fmtIstStamp } from './trackerRules'
+import { fmtDayMonth, fmtIstStamp, refusalText } from './trackerRules'
+
+export { refusalText }
 
 const TRACKER_KEY = ['myWatchlistTracker']
 
@@ -18,11 +20,12 @@ export async function runRefresh(sync: () => Promise<GrowwSyncResult>): Promise<
   try {
     const r = await sync()
     if (r.status === 'failed') return { kind: 'failed', text: 'Groww did not answer' }
+    if (r.holdings_count == null) return { kind: 'done', text: 'Done.' }
     return { kind: 'done', text: `Done. ${r.holdings_count} ${r.holdings_count === 1 ? 'holding' : 'holdings'} from Groww.` }
   } catch (e) {
-    const msg = (e as Error).message ?? ''
+    const msg = e instanceof Error ? e.message : ''
     if (/already refreshing/i.test(msg)) return { kind: 'busy', text: 'Already refreshing. Give it a moment.' }
-    return { kind: 'failed', text: msg.replace(/[.]$/, '') || 'Groww did not answer' }
+    return { kind: 'failed', text: refusalText(e) }
   }
 }
 
@@ -57,7 +60,7 @@ export function GrowwSyncStrip({ groww, priceDate }: { groww: GrowwStatus; price
   const confirmEmpty = useMutation({
     mutationFn: () => confirmEmptySync(groww),
     onSuccess: reload,
-    onError: (e) => setFailed((e as Error).message),
+    onError: (e) => setFailed(refusalText(e)),
   })
 
   const synced = fmtIstStamp(groww.last_success_at)

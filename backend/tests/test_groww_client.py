@@ -100,7 +100,9 @@ def test_token_cached_until_6am_ist(monkeypatch, fake_redis):
     if target <= now:
         target = target + timedelta(days=1)
     expected = (target - now).total_seconds()
-    assert abs(fake_redis.ttls["groww:access_token"] - expected) < 5
+    (key,) = fake_redis.ttls
+    assert key.startswith("groww:access_token:")
+    assert abs(fake_redis.ttls[key] - expected) < 5
 
 
 def test_logs_never_contain_token(monkeypatch, fake_redis, caplog):
@@ -114,3 +116,79 @@ def test_logs_never_contain_token(monkeypatch, fake_redis, caplog):
         client.fetch_holdings()
     assert FAKE_TOKEN not in caplog.text
     assert "api-key-xyz" not in caplog.text
+
+
+# --- #388 backend review: only token + holdings, redirects included; no cache shared across credentials ---
+
+
+def test_a_redirect_is_never_followed_to_another_path(monkeypatch, fake_redis):
+    seen = []
+
+    def handler(request):
+        seen.append((request.url.host, request.url.path))
+        if request.url.path == "/v1/token/api/access":
+            return httpx.Response(200, json={"token": FAKE_TOKEN})
+        return httpx.Response(302, headers={"Location": "https://api.groww.in/v1/order/create"})
+
+    _install(monkeypatch, handler)
+    with pytest.raises(client.GrowwUnavailable):
+        client.fetch_holdings()
+    assert {path for _, path in seen} <= client.ALLOWED_PATHS
+
+
+def test_a_redirect_to_another_host_is_never_followed(monkeypatch, fake_redis):
+    seen = []
+
+    def handler(request):
+        seen.append(request.url.host)
+        if request.url.path == "/v1/token/api/access":
+            return httpx.Response(200, json={"token": FAKE_TOKEN})
+        return httpx.Response(307, headers={"Location": "https://elsewhere.example/v1/holdings/user"})
+
+    _install(monkeypatch, handler)
+    with pytest.raises(client.GrowwUnavailable):
+        client.fetch_holdings()
+    assert set(seen) == {"api.groww.in"}
+
+
+def test_send_refuses_a_path_outside_the_two_calls(monkeypatch, fake_redis):
+    reached = []
+    _install(monkeypatch, lambda request: reached.append(request) or httpx.Response(200, json={}))
+    with pytest.raises(client.GrowwUnavailable):
+        client._send(httpx.Request("GET", client.BASE_URL + "/v1/order/list"))
+    assert reached == []
+
+
+def test_send_refuses_another_host_even_on_an_allowed_path(monkeypatch, fake_redis):
+    reached = []
+    _install(monkeypatch, lambda request: reached.append(request) or httpx.Response(200, json={}))
+    with pytest.raises(client.GrowwUnavailable):
+        client._send(httpx.Request("GET", "https://elsewhere.example/v1/holdings/user"))
+    assert reached == []
+
+
+def test_a_cached_token_is_never_served_to_other_credentials(monkeypatch, fake_redis):
+    """A token minted under one set of credentials (a test's, or an earlier key) must not be reused
+    under another, even when both share one Redis."""
+    minted = []
+
+    def handler(request):
+        minted.append(request.headers["Authorization"])
+        return httpx.Response(200, json={"token": f"{FAKE_TOKEN}-{len(minted)}"})
+
+    _install(monkeypatch, handler)
+    first = client.get_access_token()
+    monkeypatch.setattr(settings, "GROWW_TOTP_TOKEN", "a-different-api-key")
+    second = client.get_access_token()
+    assert len(minted) == 2 and first != second
+    monkeypatch.setattr(settings, "GROWW_TOTP_TOKEN", "api-key-xyz")
+    assert client.get_access_token() == first  # its own cached token is still found
+    assert len(minted) == 2
+
+
+def test_the_cache_key_never_contains_the_credentials(monkeypatch, fake_redis):
+    _install(monkeypatch, lambda request: httpx.Response(200, json={"token": FAKE_TOKEN}))
+    client.get_access_token()
+    assert fake_redis.store and all(
+        "api-key-xyz" not in key and SECRET not in key for key in fake_redis.store
+    )

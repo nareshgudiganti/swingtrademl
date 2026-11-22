@@ -6,12 +6,20 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api } from '../api/client'
 import type { GrowwMatchItem, Instrument } from '../api/types'
+import { refusalText } from './trackerRules'
 
 export const GROWW_MATCH_KEY = ['growwMatching']
 const TRACKER_KEY = ['myWatchlistTracker']
 
 /** Tie one Groww holding (by ISIN) to the chosen search hit: the request carries the hit's instrument id. */
 export const pickStock = (isin: string, hit: Pick<Instrument, 'id'>) => api.growwMatch(isin, hit.id)
+
+/** Accept the stock Groww's name was matched to: posts the suggested instrument id. A row with no suggestion
+ *  (or one the server could not point at a stock) posts nothing. */
+export const acceptSuggestion = (row: GrowwMatchItem) =>
+  row.match_state === 'suggested' && row.suggested_instrument_id != null
+    ? api.growwMatch(row.isin, row.suggested_instrument_id)
+    : Promise.resolve(null)
 
 function Picker({ isin, onDone, onError }: { isin: string; onDone: () => void; onError: (m: string) => void }) {
   const [q, setQ] = useState('')
@@ -24,7 +32,7 @@ function Picker({ isin, onDone, onError }: { isin: string; onDone: () => void; o
   const pick = useMutation({
     mutationFn: (i: Instrument) => pickStock(isin, i),
     onSuccess: onDone,
-    onError: (e) => onError((e as Error).message),
+    onError: (e) => onError(refusalText(e)),
   })
   return (
     <div className="gt-gpick">
@@ -55,8 +63,16 @@ export function GrowwMatchingPanel() {
     void client.invalidateQueries({ queryKey: GROWW_MATCH_KEY })
     void client.invalidateQueries({ queryKey: TRACKER_KEY })
   }
-  const all = useMutation({ mutationFn: api.growwConfirmAll, onSuccess: reload, onError: (e) => setError((e as Error).message) })
+  const all = useMutation({ mutationFn: api.growwConfirmAll, onSuccess: reload, onError: (e) => setError(refusalText(e)) })
+  const accept = useMutation({ mutationFn: acceptSuggestion, onSuccess: reload, onError: (e) => setError(refusalText(e)) })
   const items: GrowwMatchItem[] = q.data?.items ?? []
+  if (q.isError && items.length === 0) {
+    return (
+      <p className="tm-neg tmn-small" role="alert" data-testid="groww-matching-error">
+        The Groww holdings that need matching could not be loaded: {refusalText(q.error)}.
+      </p>
+    )
+  }
   if (items.length === 0) return null
   const hasSuggestions = items.some((i) => i.match_state === 'suggested')
   return (
@@ -79,7 +95,14 @@ export function GrowwMatchingPanel() {
               {i.match_state === 'suggested' && i.suggested_symbol ? ` · Suggested: ${i.suggested_symbol}` : ''}
             </div>
           </div>
-          <Picker isin={i.isin} onDone={reload} onError={setError} />
+          <div className="gt-gpick">
+            {i.match_state === 'suggested' && i.suggested_symbol && i.suggested_instrument_id != null && (
+              <button type="button" className="tmn-w2-primary" disabled={accept.isPending} onClick={() => accept.mutate(i)}>
+                Use {i.suggested_symbol}
+              </button>
+            )}
+            <Picker isin={i.isin} onDone={reload} onError={setError} />
+          </div>
         </div>
       ))}
       {error && (

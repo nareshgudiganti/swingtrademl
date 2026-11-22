@@ -1,18 +1,19 @@
 // Groww Tracker page: renders from the server's numbers (no recomputed status), shows dashes for missing numbers,
 // and the menu item can be switched off per browser.
+import { readFileSync } from 'node:fs'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { renderToString } from 'react-dom/server'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { api } from '../api/client'
-import type { GrowwStatus, WatchTracker, WatchTrackerItem } from '../api/types'
+import { ApiError, api } from '../api/client'
+import type { GrowwMatchItem, GrowwStatus, WatchTracker, WatchTrackerItem } from '../api/types'
 import { LOOK_KEY } from './look'
 import { TRACKER_TAB_KEY, readTrackerTab, writeTrackerTab } from './trackerTab'
 import { Detail, EditableRow } from './pages/GrowwTracker'
-import { GROWW_MATCH_KEY, pickStock } from './GrowwMatchingPanel'
-import { confirmEmptySync, runRefresh } from './GrowwSyncStrip'
-import { filterItems, needsActionCount, saleBody, symbolsIn } from './trackerRules'
+import { GROWW_MATCH_KEY, acceptSuggestion, pickStock } from './GrowwMatchingPanel'
+import { confirmEmptySync, refusalText, runRefresh } from './GrowwSyncStrip'
+import { filterItems, fmtIstStamp, fmtNowPrice, isGrowwRow, needsActionCount, saleBody, symbolsIn } from './trackerRules'
 import TradeMindApp from './TradeMindApp'
 
 const store = new Map<string, string>()
@@ -366,6 +367,163 @@ describe('Groww Tracker page', () => {
       const html = render('/trademind/groww-tracker', withGroww({ ...GROWW_FAILED, last_status: 'empty_unconfirmed' }))
       expect(html).toContain('Groww returned no holdings')
       expect(html).toContain('>Confirm<')
+    })
+
+    // ---- #388 finishing: the two contract mismatches, then the gaps found against spec section 6 ----
+
+    it('a Refresh answer may carry no finish time (contract: finished_at is nullable)', async () => {
+      const r = await runRefresh(async () => ({ status: 'complete', holdings_count: 1, finished_at: null }))
+      expect(r).toEqual({ kind: 'done', text: 'Done. 1 holding from Groww.' })
+    })
+
+    it('a failed refresh has no holdings count and no finish time, and reads as a failure', async () => {
+      const failed = await runRefresh(async () => ({ status: 'failed', holdings_count: null, finished_at: null }))
+      expect(failed).toEqual({ kind: 'failed', text: 'Groww did not answer' })
+      // a count that is missing on a refresh that did not fail never prints the word null
+      const odd = await runRefresh(async () => ({ status: 'partial', holdings_count: null, finished_at: null }))
+      expect(odd).toEqual({ kind: 'done', text: 'Done.' })
+    })
+
+    describe('a hand-entered row that a sync linked', () => {
+      // The server keeps source "manual" on such a row; held_state says Groww has seen it.
+      it.each(['held', 'not_held'] as const)('held_state %s: badge, read-only shares and price, sale may be partial', (held_state) => {
+        const row = rowHtml({ source: 'manual', held_state })
+        expect(row).toContain('from Groww')
+        expect(row).not.toContain('aria-label="Price you paid in Groww for KEI"')
+        expect(row).not.toContain('aria-label="Shares of KEI"')
+        const k = { ...DATA.items[0]!, source: 'manual' as const, held_state }
+        const sale = renderToString(
+          <QueryClientProvider client={new QueryClient()}>
+            <Detail k={k} horizon={15} editing={false} onEditing={() => {}} onRemoved={() => {}} startSelling />
+          </QueryClientProvider>,
+        )
+        expect(sale).toContain('aria-label="Shares sold for KEI"')
+        expect(isGrowwRow(k)).toBe(true)
+      })
+      it.each([undefined, 'unknown'] as const)('held_state %s: still a plain hand-entered row', (held_state) => {
+        const over = held_state === undefined ? { source: 'manual' as const } : { source: 'manual' as const, held_state }
+        const row = rowHtml(over)
+        expect(row).not.toContain('from Groww')
+        expect(row).toContain('aria-label="Shares of KEI"')
+        expect(isGrowwRow({ ...DATA.items[0]!, ...over })).toBe(false)
+      })
+      it('the table row carries the badge too', () => {
+        const linked = item('LINKED', 'ok', { source: 'manual', held_state: 'held' })
+        const html = render('/trademind/groww-tracker', withGroww(GROWW_FAILED, [linked]))
+        const row = html.slice(html.indexOf('data-symbol="LINKED"'))
+        expect(row).toContain('from Groww')
+      })
+    })
+
+    const SUGGESTED: GrowwMatchItem = {
+      isin: 'INE000B01022',
+      trading_symbol: 'BETACO',
+      quantity: 2,
+      average_price: 80,
+      match_state: 'suggested',
+      suggested_symbol: 'BETA',
+      suggested_instrument_id: 22,
+    }
+    const UNMATCHED: GrowwMatchItem = {
+      isin: 'INE000A01011',
+      trading_symbol: 'ACMEIND',
+      quantity: 5,
+      average_price: 120.5,
+      match_state: 'needs_matching',
+      suggested_symbol: null,
+      suggested_instrument_id: null,
+    }
+
+    it('a suggested row is accepted with its suggested instrument id, and a row without one posts nothing', async () => {
+      const spy = vi.spyOn(api, 'growwMatch').mockResolvedValue({})
+      await acceptSuggestion(SUGGESTED)
+      expect(spy).toHaveBeenCalledWith('INE000B01022', 22)
+      spy.mockClear()
+      await acceptSuggestion(UNMATCHED)
+      await acceptSuggestion({ ...SUGGESTED, suggested_instrument_id: null })
+      expect(spy).not.toHaveBeenCalled()
+      spy.mockRestore()
+    })
+
+    it('matching: "Use BETA" on a row with a suggestion, only the search box on a row without one', () => {
+      const html = render('/trademind/groww-tracker', withGroww({ ...GROWW_FAILED, last_status: 'complete' }), (c) =>
+        c.setQueryData(GROWW_MATCH_KEY, { items: [UNMATCHED, SUGGESTED] }),
+      )
+      expect(html.replace(/<!-- -->/g, '').match(/>Use BETA</g)).toHaveLength(1)
+      expect(html).not.toContain('Use ACMEIND')
+      expect(html).toContain('aria-label="Find the stock for INE000A01011"') // the search box is on both rows
+      expect(html).toContain('aria-label="Find the stock for INE000B01022"')
+    })
+
+    it('matching that could not be loaded says so, instead of showing nothing', () => {
+      const html = render('/trademind/groww-tracker', withGroww({ ...GROWW_FAILED, last_status: 'complete' }), (c) => {
+        // a server render would otherwise show an errored query as "loading" (it retries on mount)
+        c.setDefaultOptions({ queries: { retry: false, retryOnMount: false } })
+        const query = c.getQueryCache().build(c, { queryKey: GROWW_MATCH_KEY, queryFn: api.growwMatching })
+        query.setState({ ...query.state, status: 'error', error: new ApiError('Conflict', 409), fetchStatus: 'idle' })
+      })
+      expect(html).toContain('data-testid="groww-matching-error"')
+      expect(html).toContain('Groww is busy or has no account to update right now')
+    })
+
+    it('every refusal reads as a plain sentence, whatever the server wrote', () => {
+      const server: [number, string][] = [
+        [403, "This is a private account. You don't have access."],
+        [409, 'No owner account was found to update.'],
+        [429, 'Groww was refreshed less than a minute ago. Try again soon.'],
+        [503, 'Groww is not connected yet. Add the Groww keys on the server first.'],
+      ]
+      for (const [status, text] of server) expect(refusalText(new ApiError(text, status))).toBe(text.replace(/[.]$/, ''))
+      // a bare HTTP phrase or a server error never reaches the owner
+      expect(refusalText(new ApiError('Forbidden', 403))).toBe("This is a private account. You don't have access")
+      expect(refusalText(new ApiError('Conflict', 409))).toBe('Groww is busy or has no account to update right now')
+      expect(refusalText(new ApiError('Too Many Requests', 429))).toBe('Groww was refreshed less than a minute ago. Try again soon')
+      expect(refusalText(new ApiError('Service Unavailable', 503))).toBe('Groww is not connected yet. Add the Groww keys on the server first')
+      expect(refusalText(new ApiError('Internal Server Error', 500))).toBe('Groww did not answer')
+      expect(refusalText(new TypeError('Failed to fetch'))).toBe('Groww did not answer')
+    })
+
+    it('a Refresh that is refused shows that plain sentence', async () => {
+      const out = await runRefresh(async () => {
+        throw new ApiError('Service Unavailable', 503)
+      })
+      expect(out).toEqual({ kind: 'failed', text: 'Groww is not connected yet. Add the Groww keys on the server first' })
+    })
+
+    it('a held stock with no price shows "no price yet", never a zero', () => {
+      expect(fmtNowPrice(null)).toBe('no price yet')
+      expect(fmtNowPrice(0)).toBe('no price yet')
+      expect(fmtNowPrice(4512)).toBe('₹4,512')
+      for (const last_price of [null, 0]) {
+        const k = item('NOPRICE', 'ok', { source: 'groww', held_state: 'held', last_price, return_pct: null, today_pct: null })
+        const html = render('/trademind/groww-tracker', withGroww(GROWW_FAILED, [k])).replace(/<!-- -->/g, '')
+        expect(html).toContain('→ no price yet')
+        expect(html).not.toContain('→ ₹0')
+      }
+    })
+
+    it('a partial refresh keeps the last good holdings in view, with their time', () => {
+      const html = render('/trademind/groww-tracker', withGroww({ ...GROWW_FAILED, last_status: 'partial' }))
+      expect(html).toContain('data-testid="groww-fail"')
+      expect(html).toContain('showing holdings from 21 Nov, 15:35 IST')
+    })
+
+    it('times are India time, and a late-evening UTC time lands on the next India day', () => {
+      expect(fmtIstStamp('2026-11-21T10:05:00Z')).toBe('21 Nov, 15:35 IST')
+      expect(fmtIstStamp('2026-11-21T20:00:00Z')).toBe('22 Nov, 01:30 IST')
+      expect(fmtIstStamp(null)).toBeNull()
+    })
+
+    it('on a phone the strip and the matching rows wrap and only the table scrolls, inside itself', () => {
+      const css = readFileSync(new URL('./newlook-tracker.css', import.meta.url), 'utf8')
+      const rule = (selector: string) => {
+        const at = css.indexOf(selector)
+        return at < 0 ? '' : css.slice(at, css.indexOf('}', at))
+      }
+      expect(rule('.tm-new .gt-gsync-row')).toContain('flex-wrap: wrap')
+      expect(rule('.tm-new .gt-gmatch-row')).toContain('flex-wrap: wrap')
+      expect(rule('.tm-new .gt-gpick')).toContain('flex-wrap: wrap')
+      expect(rule('.tm-new .gt-tbl')).toContain('overflow-x: auto')
     })
   })
 })

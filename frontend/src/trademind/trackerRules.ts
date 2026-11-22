@@ -2,7 +2,27 @@
 // "what to do" sentence. The status of each stock (stop / target / time / weak / ok) comes from the server and is
 // never recomputed here. Every number can be null: show a dash, never NaN.
 
+import { ApiError } from '../api/client'
 import type { SoldRecord, TrackerState, WatchTrackerItem } from '../api/types'
+
+// A bare HTTP phrase ("Forbidden", "Internal Server Error") is not a sentence the owner can use.
+const BARE_HTTP_PHRASE =
+  /^(bad request|unauthorized|forbidden|not found|conflict|too many requests|internal server error|bad gateway|service unavailable|gateway timeout)$/i
+
+/** What the owner reads when a Groww call is refused or breaks: the server's own plain sentence when it wrote one,
+ *  otherwise a plain sentence for the status (403, 409, 429, 503), otherwise "Groww did not answer". */
+export function refusalText(e: unknown): string {
+  const msg = e instanceof Error ? e.message.trim() : ''
+  const status = e instanceof ApiError ? e.status : null
+  const serverError = status != null && status >= 500 && status !== 503
+  const usable = msg !== '' && !BARE_HTTP_PHRASE.test(msg) && !serverError && !(e instanceof TypeError)
+  if (usable) return msg.replace(/[.]$/, '')
+  if (status === 403) return "This is a private account. You don't have access"
+  if (status === 409) return 'Groww is busy or has no account to update right now'
+  if (status === 429) return 'Groww was refreshed less than a minute ago. Try again soon'
+  if (status === 503) return 'Groww is not connected yet. Add the Groww keys on the server first'
+  return 'Groww did not answer'
+}
 
 export const STOP_PCT = -4
 export const HALF_PCT = 5
@@ -83,6 +103,11 @@ export function fmtPct(x: number | null | undefined, digits = 1): string {
 export function fmtPrice(x: number | null | undefined): string {
   if (!isNum(x)) return '—'
   return `₹${x.toLocaleString('en-IN', { maximumFractionDigits: x >= 1000 ? 0 : 2 })}`
+}
+
+/** The price now, or "no price yet": a stock with no price (or a zero) never shows a made-up value of 0. */
+export function fmtNowPrice(x: number | null | undefined): string {
+  return isNum(x) && x > 0 ? fmtPrice(x) : 'no price yet'
 }
 
 export function signClass(x: number | null | undefined): 'pos' | 'neg' | 'dim' {
@@ -251,8 +276,11 @@ export function saleBody(sellPrice: string, soldOn: string, qtyText: string): { 
 
 /** Groww no longer lists this stock. */
 export const isNotHeld = (i: WatchTrackerItem): boolean => i.held_state === 'not_held'
-/** Quantity and price come from Groww on every sync, so they cannot be typed in. */
-export const isGrowwRow = (i: WatchTrackerItem): boolean => i.source === 'groww'
+/** Quantity and price come from Groww on every sync, so they cannot be typed in. A row is linked to Groww when it
+ *  was added from Groww, or when a sync has seen it (held or not held): a hand-entered row that a sync linked keeps
+ *  source "manual", and the server refuses an edit of its shares or price. Missing or "unknown" stays hand-entered. */
+export const isGrowwRow = (i: WatchTrackerItem): boolean =>
+  i.source === 'groww' || i.held_state === 'held' || i.held_state === 'not_held'
 
 const IST_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 /** "21 Nov, 15:35 IST" from an ISO time; null when missing or not a time. */

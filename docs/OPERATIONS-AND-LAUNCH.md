@@ -60,19 +60,19 @@ server settings; never write the key into a file. Public check: `GET https://swi
 
 ## Part B: Deploy and rollback
 
-Full steps are in `docs/DEPLOY.md`. In short: **a merge to `main` is the deploy.** The workflow re-runs all tests and only
-releases if they pass; a red run means nothing was deployed.
+Full steps are in `docs/DEPLOY.md`. In short: **merging to `main` does not deploy.** The owner starts every release by hand (Actions, Deploy to production, Run
+workflow, branch `main`). The workflow re-runs all tests and only releases if they pass; a red run means nothing was deployed.
 
 - **Deploy window rule:** a deploy restarts the worker, so on weekdays between **09:00 and 16:30 IST** the workflow
-  **refuses** to deploy (`.github/workflows/deploy.yml`). Merge outside that time, or open the refused run and "Re-run all
-  jobs" after 16:30. For an emergency only, run the workflow by hand with the "force" box ticked. Do not deploy around
-  15:40-15:50 (the scan). Note: `docs/DEPLOY.md` still says deploying during market hours is fine; the workflow rule
-  above is the newer behaviour and wins.
+  **refuses** to deploy (`.github/workflows/deploy.yml`). Start the deploy outside that time, as a NEW run (never "Re-run all
+  jobs" on an old run: it redeploys that run's old commit, not the current `main`). For an emergency only, tick the "force"
+  box. Do not deploy around 15:40-15:50 (the scan).
 - **Database migrations:** run the "Restore drill" workflow with `upgrade_check` on the branch first
   (`docs/QUALITY-CHECKS.md`, qa5). Do not deploy if it fails.
-- **Rollback:** revert the bad commit and push the revert through the same pipeline (`git revert <sha>`, then merge). Never
-  force-push `main`. The tag `v1` (`64fcb05`) is a reference, not a rollback button. The deploy script itself rolls back to
-  the previous images if the release step fails.
+- **Rollback:** revert the bad commit (`git revert <sha>`), merge the revert, then the owner starts a NEW Deploy to production run on `main`. Merging the revert alone does not change production. Never
+  force-push `main`. The tag `v1` (`64fcb05`) is a reference, not a rollback button. If the release step fails after the worker was
+  stopped, the deploy script tries to restore the previous images; it does not undo migrations, and if that restore also
+  fails the worker stays stopped. Check the run, not only your inbox: a failed deploy sends no Telegram message.
 - **Backups and restore:** `docs/DEPLOY.md` ("Database backups and restoring") and `docs/BACKUP-OFFSITE.md`. A plain replay
   of the dump is not a correct restore; use the Timescale procedure or `infra/deploy/restore-drill.sh`.
 - **Watch the result:** wait for "Deploy to production" to finish green, then check `/health`; the smoke job does this for you.

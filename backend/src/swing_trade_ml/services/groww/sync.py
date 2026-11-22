@@ -7,6 +7,7 @@ it to `apply.apply_sync` to update the Groww Tracker. It never places or changes
 from __future__ import annotations
 
 import logging
+import math
 import re
 import uuid
 from typing import Any
@@ -76,9 +77,22 @@ def clean_symbol(raw: str) -> str:
 
 
 def _num(value: Any) -> float | None:
+    """A finite number, else None: NaN and infinity are malformed, never stored or applied."""
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
-    return float(value)
+    number = float(value)
+    return number if math.isfinite(number) else None
+
+
+def _clean_extra(value: Any) -> Any:
+    """Groww's own extra fields as stored JSON: a non-finite number becomes null (JSON cannot hold it)."""
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
+    if isinstance(value, dict):
+        return {k: _clean_extra(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_clean_extra(v) for v in value]
+    return value
 
 
 def _text(value: Any) -> str | None:
@@ -162,7 +176,7 @@ def _release_lock(lock: tuple[Any, str] | None) -> None:
 def _store_rows(db: Session, sync: GrowwSync, rows: list[Any]) -> None:
     dict_rows = [r if isinstance(r, dict) else {} for r in rows]
     for row, instrument_id, state in match_rows(db, dict_rows):
-        extra = {k: v for k, v in row.items() if k not in _KNOWN}
+        extra = {k: _clean_extra(v) for k, v in row.items() if k not in _KNOWN}
         db.add(
             GrowwHolding(
                 sync_id=sync.id,
@@ -204,8 +218,9 @@ def run_sync(db: Session, *, user_id: int, trigger: str) -> GrowwSync:
             rows, error = None, "auth"
         except GrowwUnavailable:
             rows, error = None, "unavailable"
-        except Exception:  # recorded, never raised to the caller
-            logger.exception("groww sync failed unexpectedly")
+        except Exception as exc:  # noqa: BLE001 - recorded, never raised to the caller
+            # The kind only: an error message can hold holdings data or a credential.
+            logger.error("groww sync failed unexpectedly (%s)", type(exc).__name__)
             rows, error = None, "unexpected"
         if error is None:
             try:
@@ -217,14 +232,14 @@ def run_sync(db: Session, *, user_id: int, trigger: str) -> GrowwSync:
                     db.flush()
                     _store_rows(db, sync, rows)
                     sync.finished_at = utcnow()
-            except Exception:
-                logger.exception("groww sync could not be stored")
+            except Exception as exc:  # noqa: BLE001
+                logger.error("groww sync could not be stored (%s)", type(exc).__name__)
                 error = "store"
             else:
                 try:
                     db.commit()
-                except Exception:
-                    logger.exception("groww sync could not be saved")
+                except Exception as exc:  # noqa: BLE001
+                    logger.error("groww sync could not be saved (%s)", type(exc).__name__)
                     db.rollback()
                     error = "store"
                 else:

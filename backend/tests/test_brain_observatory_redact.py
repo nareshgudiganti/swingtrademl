@@ -93,15 +93,13 @@ def test_a_password_shorter_than_the_redaction_minimum_is_not_a_failure(monkeypa
     assert _database_password_redacted(url) is None
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="known gap: redact._secret_values lists the URL-encoded password, not the decoded one",
-)
-def test_a_password_with_special_characters_is_redacted_in_its_decoded_form(monkeypatch):
-    # Decoded, the password is Syn@th3tic-pw.
+def test_a_password_with_special_characters_is_redacted_in_both_forms(monkeypatch):
+    # Decoded, the password is Syn@th3tic-pw: the form a driver uses and an error message can contain.
     url = "postgresql+psycopg://synthuser:Syn%40th3tic-pw@localhost:5433/synth_test"
     _use_url(monkeypatch, url)
     assert _database_password_redacted(url) is True
+    # The encoded form (as written in the URL) stays redacted too.
+    assert "Syn%40th3tic-pw" not in redact_text("could not connect with Syn%40th3tic-pw")
 
 
 def test_a_database_url_without_a_password_is_handled(monkeypatch):

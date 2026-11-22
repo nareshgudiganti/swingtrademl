@@ -117,4 +117,4 @@ Read this first in every session. Then read `docs/architecture/CURRENT-STATE.md`
 | Brain build notes, lessons | `docs/brain/BUILD_NOTES.md` (brain worktree) |
 | M18 go-live guide | `docs/brain/GO_LIVE.md` (brain worktree) |
 | Brain build book (spec) | `docs/superpowers/specs/2026-09-29-trademind-brain-build-book.html` |
-| v1 status | `docs/ROADMAP_TRACKER.md`, deploy: `docs/DEPLOY.md` |
+| v1 status | `docs/brain/PROJECT_COMPLETION_MATRIX.md` (old tracker archived), deploy: `docs/DEPLOY.md`; doc map: `docs/README.md` |

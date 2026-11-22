@@ -68,10 +68,6 @@ def slot_key(horizon: int, tier: str) -> str:
     return f"{horizon}d-{tier}"
 
 
-def all_slot_keys() -> list[str]:
-    return [slot_key(h, t) for h in HORIZONS for t in TIERS]
-
-
 def slot_for(name: str | None, horizon: int | None) -> str | None:
     """The slot a model belongs to, or None (Unassigned). Strict: exact verified name and a known horizon."""
     if horizon not in HORIZONS or not name:

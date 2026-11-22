@@ -749,7 +749,7 @@ export function Meter({ pct, color }: { pct: number; color: string }) {
 
 /** A steady colour pair per symbol, so each stock keeps the same badge colour everywhere. */
 const LOGO_HUES = [220, 262, 330, 12, 32, 152, 178, 196]
-export function logoGradient(symbol: string): string {
+function logoGradient(symbol: string): string {
   let h = 0
   for (const c of symbol) h = (h * 31 + c.charCodeAt(0)) % 997
   const hue = LOGO_HUES[h % LOGO_HUES.length]!

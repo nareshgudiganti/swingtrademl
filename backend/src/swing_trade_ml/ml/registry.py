@@ -105,10 +105,17 @@ def load_model_artifact(model: MLModel) -> dict[str, Any]:
     if not model.artifact_path:
         raise ArtifactMismatchError(f"{who}: no model file is recorded")
     path = Path(model.artifact_path)
-    if not path.is_file():
+    try:
+        is_file = path.is_file()
+        expected = (model.metrics or {}).get("artifact_sha256")
+        hash_differs = is_file and isinstance(expected, str) and artifact_sha256(path) != expected
+    except OSError as exc:  # permission denied, disk error: a refusal, never a crash; no path in the message
+        raise ArtifactMismatchError(
+            f"{who}: model file could not be read ({path.name}, {type(exc).__name__})"
+        ) from exc
+    if not is_file:
         raise ArtifactMismatchError(f"{who}: model file is missing ({path.name})")
-    expected = (model.metrics or {}).get("artifact_sha256")
-    if isinstance(expected, str) and artifact_sha256(path) != expected:
+    if hash_differs:
         raise ArtifactMismatchError(f"{who}: model file hash does not match the recorded hash")
     try:
         bundle = load_artifact(str(path))

@@ -8,7 +8,7 @@ import { api } from '../../api/client'
 import { CapFlag, useSymbolCaps } from '../cap'
 import { Card, inr } from '../ui'
 
-export const MANUAL_TEST_LINE = 'Practice money only. This is your own test, not a brain pick.'
+const MANUAL_TEST_LINE = 'Practice money only. This is your own test, not a brain pick.'
 
 export default function ManualTest() {
   const queryClient = useQueryClient()

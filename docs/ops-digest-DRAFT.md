@@ -1,4 +1,4 @@
-# Ops digest (DRAFT for owner review, not merged, not deployed)
+# Ops digest (current: the endpoint is live; file name keeps "DRAFT" so existing references still work)
 
 Branch `draft/ops-digest`. Lets Claude (or you) check production each day through one read-only call.
 
@@ -39,9 +39,9 @@ The existing `read_all` scope can read it too (it already reads most screens).
 I did not add `READ_ALL_API_KEY`: an env-var key would be a second long-lived secret outside the audit,
 expiry and revoke trail. Say so if you still want one.
 
-## Enable on prod (after you approve and merge)
+## Enable on prod
 
-1. Merge `draft/ops-digest` to `main` (deploys; no migration needed, `scope` is a plain text column).
+1. Already merged to `main` in `57adb81` (no migration was needed, `scope` is a plain text column). Nothing to do here.
 2. Signed in as owner, open the admin service-keys screen (or `POST /api/v1/admin/service-keys`, which needs
    the admin step-up code) and create a key: `{"name": "claude-daily", "scope": "read_ops", "expires_in_days": 90}`.
 3. Copy the `stk_...` key when shown (it is shown once). Keep it in your password manager, not in the repo.

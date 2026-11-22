@@ -41,7 +41,6 @@ from swing_trade_ml.api.v1.endpoints import (
     plans,
     portfolio,
     real_report,
-    release_switches,
     risk,
     safety,
     server_watch,
@@ -71,8 +70,6 @@ api_router.include_router(invites.admin)
 # the app learns what to show), and /admin/* checks for the owner itself.
 api_router.include_router(plans.router)
 api_router.include_router(plans.admin)
-# Owner-only, read-only list of the release switches (checks require_owner itself).
-api_router.include_router(release_switches.admin)
 api_router.include_router(service_keys.admin)
 # Pro billing: 404 unless BILLING_ENABLED; each route checks its own caller (see endpoints/billing.py).
 api_router.include_router(billing.router)

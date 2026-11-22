@@ -1,0 +1,7 @@
+# Worktrees/branches the lifecycle cleanup must NEVER remove (#407).
+# One branch name or absolute worktree path per line. `#` starts a comment.
+# Also lock them: git worktree lock --reason "..." <path>
+main
+review/local-work-nov12            # owner's main-checkout working branch
+feature/groww-sync                 # #388 phase 1: 12 commits only on this PC (backup: worktree-backups/2026-11-21)
+fix/5d-plan-honest-levels          # 5-day plan fix: 28 uncommitted files (backup: worktree-backups/2026-11-21)

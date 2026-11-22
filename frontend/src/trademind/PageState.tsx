@@ -26,7 +26,7 @@ function subscribeOnline(cb: () => void) {
 }
 
 /** True while the browser says it is online; updates on the online/offline events. */
-export function useOnline(): boolean {
+function useOnline(): boolean {
   return useSyncExternalStore(subscribeOnline, browserOnline, () => true)
 }
 

@@ -124,25 +124,6 @@ def sync_nav_snapshot(db: Session, raw_text: str | None = None) -> int:
     return appended
 
 
-def backfill_scheme_history(db: Session, scheme_id: int, nav_rows: list[dict[str, Any]]) -> int:
-    """One-time historical load for a newly-tracked scheme. nav_rows is the
-    already-parsed [{date, nav}, ...] list for that one scheme (from
-    whichever historical AMFI endpoint the API layer fetched — see the
-    endpoint layer for the actual HTTP call, kept out of this pure function
-    so it stays testable without network access)."""
-    added = 0
-    for row in nav_rows:
-        existing = db.execute(
-            select(MutualFundNav).where(MutualFundNav.scheme_id == scheme_id, MutualFundNav.date == row["date"])
-        ).scalar_one_or_none()
-        if existing is not None:
-            continue
-        db.add(MutualFundNav(scheme_id=scheme_id, date=row["date"], nav=row["nav"]))
-        added += 1
-    db.commit()
-    return added
-
-
 def holding_value(holding: MutualFundHolding, latest_nav: float) -> dict[str, float]:
     """Current value and returns for one lot, computed fresh — never
     persisted, matching services/finance/loans.py's convention."""

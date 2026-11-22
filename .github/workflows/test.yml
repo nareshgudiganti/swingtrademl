@@ -134,6 +134,13 @@ jobs:
       - name: Typecheck
         working-directory: frontend
         run: npm run typecheck
+
+      # Non-blocking for now (1 known error on 2026-11-21). Remove continue-on-error
+      # once `npm run lint` is clean, so it becomes a hard gate.
+      - name: Lint
+        working-directory: frontend
+        continue-on-error: true
+        run: npm run lint
       - name: Unit tests
         working-directory: frontend
         run: npm test

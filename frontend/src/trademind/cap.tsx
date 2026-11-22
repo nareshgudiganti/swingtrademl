@@ -18,7 +18,7 @@ const HINT: Record<CapTier, string> = {
 }
 
 /** Same rule as backend strategies/tier.py: the model name says the size. */
-export function capTierFromModel(modelName: unknown): CapTier | null {
+function capTierFromModel(modelName: unknown): CapTier | null {
   if (typeof modelName !== 'string' || modelName === '') return null
   if (modelName.endsWith('_smallcap')) return 'smallcap'
   if (modelName.endsWith('_midcap')) return 'midcap'

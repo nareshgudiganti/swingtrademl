@@ -28,7 +28,7 @@ import { BrainGate, inr, Tag } from '../ui'
 import { MARKET_LABEL, MARKET_PLAIN, MARKET_TONE } from '../vocab'
 
 /** The new Today shows the top 3 ideas (owner brief: short, answer first); Discover lists every one. */
-export const TOP_IDEAS_NEW = 3
+const TOP_IDEAS_NEW = 3
 
 export default function TodayNew({ owner = false }: { owner?: boolean }) {
   const today = new Intl.DateTimeFormat('en-IN', {

@@ -5,7 +5,7 @@ export const STOP_PCT = -4
 export const HALF_PCT = 5
 export const TARGET_PCT = 8
 /** "Near" means within this many percentage points of a line. */
-export const NEAR_PTS = 1
+const NEAR_PTS = 1
 
 export type LevelState = 'stop' | 'near_stop' | 'target' | 'near_target' | 'half' | 'near_half' | 'watch' | 'hold'
 

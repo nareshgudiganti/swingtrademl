@@ -38,7 +38,7 @@ export const FILTERS: { id: TrackerFilter; label: string }[] = [
   { id: 'weak', label: 'Score falling' },
 ]
 
-export function matchesFilter(item: WatchTrackerItem, filter: TrackerFilter): boolean {
+function matchesFilter(item: WatchTrackerItem, filter: TrackerFilter): boolean {
   if (filter === 'all') return true
   if (isNotHeld(item)) return false // not owned any more: no warnings
   if (filter === 'act') return item.state !== 'ok'
@@ -187,7 +187,7 @@ export function fmtBoughtOn(iso: string | null | undefined): string {
 }
 
 /** The server refuses a buy date further back than this. */
-export const MAX_BACKDATE_DAYS = 120
+const MAX_BACKDATE_DAYS = 120
 
 const addDaysIso = (iso: string, days: number): string => {
   const d = new Date(`${iso}T00:00:00Z`)

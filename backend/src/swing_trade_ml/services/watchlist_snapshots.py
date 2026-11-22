@@ -62,7 +62,3 @@ def watchlist_as_of(db: Session, as_of: date) -> tuple[str, ...]:
         .order_by(WatchlistSnapshot.symbol)
     ).scalars()
     return tuple(rows)
-
-
-def latest_snapshot_date(db: Session) -> date | None:
-    return db.execute(select(func.max(WatchlistSnapshot.snapshot_date))).scalar_one_or_none()

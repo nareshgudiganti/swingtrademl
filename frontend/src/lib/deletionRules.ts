@@ -81,7 +81,7 @@ export function deletionErrorText(status: number, message: string): string {
 }
 
 /** The two email-link pages (they work signed in or signed out, and the one-time token must reach them). */
-export const DELETION_LINK_PATHS = { confirm: '/confirm-deletion', keep: '/cancel-deletion' } as const
+const DELETION_LINK_PATHS = { confirm: '/confirm-deletion', keep: '/cancel-deletion' } as const
 
 export function deletionLinkKind(pathname: string): 'confirm' | 'keep' | null {
   const path = pathname.replace(/\/+$/, '')

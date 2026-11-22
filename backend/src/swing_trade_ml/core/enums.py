@@ -69,16 +69,6 @@ class ExitReason(StrEnum):
     SCALE_OUT = "SCALE_OUT"
 
 
-class CandleInterval(StrEnum):
-    MINUTE = "minute"
-    MIN_3 = "3minute"
-    MIN_5 = "5minute"
-    MIN_15 = "15minute"
-    MIN_30 = "30minute"
-    MIN_60 = "60minute"
-    DAY = "day"
-
-
 class ModelStatus(StrEnum):
     TRAINING = "TRAINING"
     TRAINED = "TRAINED"

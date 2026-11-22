@@ -85,7 +85,7 @@ def test_service_key_cannot_write_or_reach_owner_areas(client, db_session):
     h = key_header(raw)
     assert client.put("/api/v1/brain/stage", json={"stage": "auto"}, headers=h).status_code == 403
     assert client.get("/api/v1/admin/service-keys", headers=h).status_code == 403
-    assert client.get("/api/v1/admin/release-switches", headers=h).status_code == 403
+    assert client.get("/api/v1/admin/console/release-switches", headers=h).status_code == 403
     assert client.get("/api/v1/finance/transactions", headers=h).status_code == 403
     assert client.post("/api/v1/safety/kill-switch", headers=h).status_code in (403, 404, 405)
 

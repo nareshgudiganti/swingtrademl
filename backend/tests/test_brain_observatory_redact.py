@@ -5,7 +5,10 @@ from __future__ import annotations
 import os
 from urllib.parse import urlsplit
 
+import pytest
+
 from swing_trade_ml.core.config import settings
+from swing_trade_ml.services.brain_observatory import redact as redact_mod
 from swing_trade_ml.services.brain_observatory.redact import FREE_TEXT_KEYS, redact_response, redact_text
 
 JWT = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJvd25lciJ9.c2lnbmF0dXJlLXZhbHVlLWhlcmU"
@@ -33,11 +36,46 @@ def test_each_secret_kind_in_free_text_is_replaced(monkeypatch):
     assert "postgresql://[redacted]@db:5432/x" in out
 
 
+def _password_redacted(password: str) -> bool:
+    """True when the password is on the redaction list AND is removed from free text.
+
+    The list is checked directly because the generic long-token mask also hides a long alphanumeric
+    password, which would let a regression in the password-specific redaction pass unnoticed.
+    Returns a bool so a failing assertion never prints the password.
+    """
+    listed = password in redact_mod._secret_values()
+    hidden = password not in redact_text(f"could not connect with {password}")
+    return listed and hidden
+
+
 def test_the_test_database_password_is_redacted():
     # Password of whichever test role is in use (shared or an isolated per-developer one).
     password = urlsplit(os.environ["DATABASE_URL"]).password
-    assert password and len(password) >= 4
-    assert password not in redact_text(f"could not connect with {password}")
+    if not password:
+        pytest.skip("this test database URL has no password, so there is nothing to redact")
+    ok = _password_redacted(password)
+    assert ok, "the test database password is not redacted"
+
+
+# A short password, and a 42-character one that the generic long-token mask would also hide.
+@pytest.mark.parametrize("password", ["Syn7hetic-pw", "Ab1" * 14])
+def test_a_database_password_is_redacted_and_the_check_can_fail(monkeypatch, password):
+    url = f"postgresql+psycopg://synthuser:{password}@localhost:5433/synth_test"
+    monkeypatch.setenv("DATABASE_URL", url)
+    monkeypatch.setattr(settings, "DATABASE_URL", url, raising=False)
+    assert _password_redacted(password), "redaction missed a database password"
+    # The same check must fail when the password-specific redaction is removed (in memory only).
+    real = redact_mod._secret_values
+    monkeypatch.setattr(redact_mod, "_secret_values", lambda: [v for v in real() if password not in v])
+    assert not _password_redacted(password), "the check did not notice the redaction being removed"
+
+
+def test_a_database_url_without_a_password_is_handled(monkeypatch):
+    url = "postgresql+psycopg://synthuser@localhost:5433/synth_test"
+    monkeypatch.setenv("DATABASE_URL", url)
+    monkeypatch.setattr(settings, "DATABASE_URL", url, raising=False)
+    assert urlsplit(url).password is None
+    assert redact_text("plain text, no secrets") == "plain text, no secrets"
 
 
 def test_text_without_secrets_is_byte_identical():

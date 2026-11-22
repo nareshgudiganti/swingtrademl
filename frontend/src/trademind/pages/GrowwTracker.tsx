@@ -27,6 +27,7 @@ import {
   entryNote,
   filterItems,
   fmtBoughtOn,
+  fmtNowPrice,
   fmtPct,
   fmtPrice,
   buildPatch,
@@ -429,7 +430,7 @@ function MarketCells({ k }: { k: WatchTrackerItem }) {
       <div className={`num ${signClass(k.return_pct)}`}>
         <b>{fmtPct(k.return_pct)}</b>
         <div className="gt-sub">
-          {fmtPrice(k.entry_price)} → {fmtPrice(k.last_price)}
+          {fmtPrice(k.entry_price)} → {fmtNowPrice(k.last_price)}
         </div>
       </div>
       <div className={`num ${signClass(k.today_pct)}`}>{fmtPct(k.today_pct, 2)}</div>

@@ -2,7 +2,7 @@
 
 ## 2026-11-22: fix/reload-deep-link (ready for Codex review)
 
-- **Branch:** `fix/reload-deep-link`, from main `531846c`. Local commit only: not pushed, no PR, not deployed.
+- **Branch:** `fix/reload-deep-link`, from main `531846c`. PR to main opened 2026-11-22. Not merged, not deployed.
 - **Bug:** for the owner, opening or refreshing any `/trademind/...` address landed on Today. `App.tsx` redirected
   on `!canTradeMind`, which is always true until the account status arrives.
 - **Fix:** `frontend/src/App.tsx` runs the existing "owner status not loaded yet" wait before that redirect.
@@ -14,7 +14,7 @@
   a local API on 531846c. Backend tests not run (no backend change).
 - **Review focus:** owner with brain off, status error, plan preview or failed plan request; members unchanged.
   The first two and members are tested. Preview and a failed plan request are NOT tested.
-- **Next:** Codex review, then owner approval before push or merge (main deploys).
+- **Next:** Codex review, then owner approval before merge (main deploys).
 
 ## Current task
 

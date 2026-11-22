@@ -227,7 +227,7 @@ client-set.
 | Model + feature storage | **Disk** (`MODEL_ARTIFACT_DIR`) + `feature_snapshots` table |
 | Docker / CI / droplet | **Yes** — see [`../DEPLOY.md`](../DEPLOY.md) |
 | S3 / object store for data lake | **Not used** |
-| GitHub CI/CD | **Yes** — push `main` deploys swingtrademl.com |
+| GitHub CI/CD | **Yes** — the owner starts Deploy to production by hand; merging or pushing `main` does not deploy swingtrademl.com |
 
 ---
 

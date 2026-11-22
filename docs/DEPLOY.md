@@ -5,8 +5,15 @@ Written for: whoever is releasing this bot — including Claude in a future sess
 Production is the DigitalOcean droplet behind <https://swingtrademl.com>. **Pushing
 or merging to `main` does not deploy.** The owner starts every release by hand:
 Actions, Deploy to production, Run workflow, branch `main`.
-`.github/workflows/deploy.yml` re-runs the whole test suite and only releases to
-the droplet if it passes, so a red commit cannot reach production.
+`.github/workflows/deploy.yml` re-runs the whole test suite (`test.yml`: backend,
+frontend and browser tests) and only releases to the droplet if it passes, so a red
+commit cannot reach production. It releases the tip of `main` at the moment the run
+starts. Started from any other branch it runs the tests and deploys nothing.
+
+If the "Run workflow" button is missing or `gh workflow run` is refused, the workflow
+is switched off in GitHub (Actions, Deploy to production, Enable workflow); only the
+owner decides that. While it is off, nothing deploys, and merging still changes nothing
+on the server.
 
 Prod configuration (`.env`) lives on the droplet at `/root/app/.env` and is *not*
 in this repo. Nothing here can change it, and SSH from a dev machine is blocked —
@@ -42,6 +49,12 @@ so any fix that has to change prod behaviour must be a **code** change.
    backend/.venv/Scripts/python.exe -m ruff check <changed files>
    ```
 
+   The deploy's own gate (`test.yml`) is wider than these three: it also runs
+   `npm test`, the browser tests (`npm run e2e:typecheck`, `npm run e2e`), the
+   migrations-from-empty check (`backend/scripts/check_migrations.py`) and the
+   money-code coverage floor. Ruff and `npm run lint` are advisory there. A branch
+   can pass the three above and still fail the deploy.
+
    - The backend suite needs the Docker Postgres on port 5433. If it is down,
      DB tests hang for ~264s and then fail confusingly. A port check is not a
      liveness check — actually connect.
@@ -49,8 +62,8 @@ so any fix that has to change prod behaviour must be a **code** change.
      drop and recreate the schema of **`swing_trade_ml_test` only**.
    - `npm run lint` currently fails for lack of an eslint config. That is
      pre-existing; `typecheck` and `build` are the real gates.
-   - Ruff has known pre-existing findings. Compare against `main` (stash and
-     re-run) and only fix the ones you added.
+   - Ruff has known pre-existing findings. Compare against `origin/main` (run the same
+     command in a clean worktree of it, never a bare `git stash`) and only fix the ones you added.
 
 4. **Rebase onto `origin/main` again before pushing.** It moves often.
 
@@ -66,9 +79,15 @@ so any fix that has to change prod behaviour must be a **code** change.
    git push origin fix/<short-name>          # then a PR the owner merges
    ```
 
+   `main` is protected (pull request, review and the backend and frontend checks), so a
+   direct `git push origin HEAD:main` is not the route: use a pull request. The pull
+   request checks and the deploy's tests are not the same set, so a merge can succeed
+   and the deploy still fail in its tests.
+
    When the owner is ready to release, the owner runs Deploy to production on
    `main` (Actions page, or `gh workflow run deploy.yml --ref main`).
-   It releases everything merged since the last deploy.
+   It releases everything merged since the last deploy, and every merged commit must
+   pass the tests together, so someone else's red commit blocks your deploy.
 
 6. **Watch the release, don't assume it.**
 
@@ -76,9 +95,17 @@ so any fix that has to change prod behaviour must be a **code** change.
    curl -s "https://api.github.com/repos/nareshgudiganti/swingtrademl/actions/runs?per_page=5"
    ```
 
-   Wait for `Deploy to production` on your SHA to reach
-   `completed / success`. `script_stop: true` means a failed release step fails
-   the run rather than half-applying.
+   After the owner starts Deploy to production on `main` (a new run), wait for that run to reach
+   `completed / success`. Merging alone starts no run, so if none appears, nothing was deployed.
+
+   A red run does **not** always mean "nothing changed". `infra/deploy/release.sh` builds the
+   new images, stops the worker, saves a database dump, runs the migrations, then starts the
+   api, frontend and worker and waits up to 3 minutes for a fresh worker heartbeat. If a step
+   fails after the worker was stopped, the script tries to put the previous images back and
+   start them, but it cannot undo migrations ("Database remains migrated"), and if putting the
+   old images back also fails the **worker stays stopped**. A
+   failure before the worker was stopped (tests, window, build) leaves the running site
+   as it was. The deploy run itself sends no Telegram message; see step 7.
 
 7. **Confirm prod is actually serving it.**
 
@@ -90,8 +117,11 @@ so any fix that has to change prod behaviour must be a **code** change.
 
    `/status` does not expose the released commit, so a green deploy run plus a
    healthy `/health` is the available evidence. The deploy's `smoke` job does
-   these checks automatically from outside (and messages Telegram on failure):
-   see `docs/QUALITY-CHECKS.md`, "After-deploy smoke test (qa2)". Where the change is
+   these checks automatically from outside, but it runs only after the deploy job
+   succeeded, and only the smoke job messages Telegram (when its checks fail). If the
+   deploy job itself failed, nothing is sent: open the run. The backstop is `uptime.yml`,
+   which is scheduled every 10 minutes (GitHub can run it later), checks the site and the scheduler, and messages Telegram
+   (see `docs/QUALITY-CHECKS.md`, "After-deploy smoke test (qa2)"). Where the change is
    behavioural, name the observation that will confirm it and when it happens —
    for a scan change, that is the next 15:45 IST run.
 
@@ -100,19 +130,20 @@ so any fix that has to change prod behaviour must be a **code** change.
 
 ## Timing
 
-The scan that trades runs at **15:45 IST, Mon–Fri**. Deploying during market
-hours is fine — the scheduler runs inside the app and restarts with it — but a
-deploy landing between 15:40 and 15:50 can interrupt the ingest → predict →
-scan → fills chain for that day. Prefer outside that window.
+The scan that trades runs at **15:45 IST, Mon–Fri**. A deploy restarts the worker,
+so `deploy.yml` **refuses** to deploy on weekdays between **09:00 and 16:30 IST**
+unless the run is started with "force" ticked (emergency fixes only). Start the
+deploy as a NEW run after 16:30 IST, never by re-running an old run: a re-run
+redeploys that run's old commit, not the current `main`.
 
 ## When the push is blocked
 
-Claude Code's auto mode classifies a push to `main` as a production deploy and
-blocks it unless the operator has granted permission. Claude **cannot grant
+A push or merge to `main` no longer deploys, but Claude Code's auto mode still
+classifies a push to `main` as a production change and blocks it unless the operator has granted permission. Claude **cannot grant
 itself that permission** — writing the permission file is itself blocked as
 self-modification, by design.
 
-So either the operator merges/pushes, or they add the rules in
+So either the operator merges/pushes (and then starts the deploy by hand), or they add the rules in
 `.claude/settings.local.json` themselves (gitignored — never commit deploy
 permissions to this public repo). See the "Letting Claude deploy" section of
 whatever onboarding note the operator keeps; the rules needed are
@@ -121,22 +152,37 @@ whatever onboarding note the operator keeps; the rules needed are
 
 ## Rollback
 
-Revert the commit, get the revert onto `main`, then run Deploy to production by
-hand. It is the same pipeline, and it re-runs the tests on the way back:
+Revert the commit on a branch, merge the revert by pull request, then the owner starts a
+NEW Deploy to production run on `main`. It is the same pipeline, and it re-runs the tests
+on the way back, so a red test also blocks a rollback:
 
 ```bash
-git revert <bad-sha>
-git push origin HEAD:main            # or merge a PR; neither deploys
-gh workflow run deploy.yml --ref main # the owner starts the deploy
+git fetch origin
+git switch -c revert/<short-name> origin/main
+git revert <bad-sha>                  # for a merge commit: git revert -m 1 <merge-sha>
+git push origin revert/<short-name>   # then a pull request; main is protected
+gh workflow run deploy.yml --ref main # the owner, after the revert is merged
 ```
+
+- Never start the rollback by re-running the old good run: a re-run redeploys that run's
+  own commit, which silently drops everything merged since.
+- Weekdays 09:00 to 16:30 IST the run is refused unless "force" is ticked; tick it for an
+  emergency rollback.
+- A revert changes code only. Migrations that already ran stay applied (`release.sh` never
+  downgrades), so check that the older code works on the newer schema first.
+- Merging the revert does not change production. Until the new run succeeds, production is
+  still running the bad commit.
 
 Do not force-push `main`. It would skip the tested path and can silently drop
 whatever else landed since.
 
 ## Database backups and restoring
 
-Every deploy saves `pg_dumpall` output to `/root/backups/release-<time>-<sha>/database.sql`
-on the droplet (same server, so it does not survive losing the droplet).
+Every deploy that gets as far as stopping the worker saves `pg_dumpall` output to
+`/root/backups/release-<time>-<first 12 characters of the sha>/database.sql` on the droplet
+(`release.sh` writes it after the build and before the migrations; same server, so it does
+not survive losing the droplet). The nightly backup job keeps that dump for only the 5
+newest releases; older release folders keep `rollback.json` and `previous-sha` only.
 
 **A plain replay of that file is not a correct restore.** Found in the first restore drill
 (2026-10-14): the rows all come back, but `candles` comes back as a plain table instead of a

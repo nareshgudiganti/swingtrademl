@@ -34,7 +34,7 @@ def test_each_secret_kind_in_free_text_is_replaced(monkeypatch):
 
 
 def test_the_test_database_password_is_redacted():
-    # The password of whichever test database role is in use (the shared one or an isolated per-developer role).
+    # Password of whichever test role is in use (shared or an isolated per-developer one).
     password = urlsplit(os.environ["DATABASE_URL"]).password
     assert password and len(password) >= 4
     assert password not in redact_text(f"could not connect with {password}")

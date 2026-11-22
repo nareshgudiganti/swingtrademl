@@ -590,28 +590,73 @@ def test_everyone_but_the_groww_owner_is_refused_on_every_route(lab, plans_on, r
     assert anonymous.status_code == 401
 
 
-def test_a_second_real_account_owner_may_look_but_never_write(lab):
+WAITS_FOR_D2 = (
+    "Waits for Developer-1's D2 change (owner decision, GROWW-388-CONTRACT.md): only the Groww account owner may "
+    "use ANY /groww route, reads included, before 409, 429 and 503, and only they get the groww key."
+)
+
+
+def test_a_second_owners_groww_writes_are_refused_and_change_nothing(lab):
     confirm_baseline(lab)
-    for route in READS:
-        assert call(lab, route, lab.second_h).status_code == 200, route
     age_syncs(lab.db)  # so a one-minute limit cannot answer before the owner check
     for route in WRITES:
-        r = call(lab, route, lab.second_h)
-        assert r.status_code == 403, route
+        assert call(lab, route, lab.second_h).status_code == 403, route
     assert db_row(lab, ALPHA).quantity == 10  # nothing moved
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "FINDING (P3): POST /groww/sync checks 'not configured' (503) and 'under 60 s' (429) BEFORE it checks who "
-        "is calling, so a second real-account owner (or any non-Groww-owner real-account caller) learns the "
-        "connection state from 429/503 instead of getting 403. The contract says 403 for them."
-    ),
-)
-def test_a_second_owners_refresh_is_refused_with_403_even_right_after_a_sync(lab):
+@pytest.mark.xfail(strict=True, reason=WAITS_FOR_D2)
+def test_d2_a_second_owner_gets_403_on_every_groww_route_reads_included(lab):
     confirm_baseline(lab)
-    assert call(lab, WRITES[0], lab.second_h).status_code == 403  # no age_syncs: a sync just ran
+    age_syncs(lab.db)
+    for route in GROWW_ROUTES:
+        r = call(lab, route, lab.second_h)
+        assert r.status_code == 403, f"{route[0]} {route[1]} -> {r.status_code}"
+
+
+@pytest.mark.xfail(strict=True, reason=WAITS_FOR_D2)
+def test_d2_a_second_owner_is_refused_before_409_429_and_503(lab, monkeypatch):
+    confirm_baseline(lab)
+    # 429: a sync just ran (no age_syncs).
+    assert call(lab, WRITES[0], lab.second_h).status_code == 403
+    # 409: another refresh holds the lock.
+    age_syncs(lab.db)
+    lab.groww.redis.store["groww:sync_lock"] = "someone-else"
+    assert call(lab, WRITES[0], lab.second_h).status_code == 403
+    lab.groww.redis.store.pop("groww:sync_lock")
+    # 503: not configured.
+    monkeypatch.setattr(settings, "GROWW_TOTP_TOKEN", "")
+    assert call(lab, WRITES[0], lab.second_h).status_code == 403
+    # 409 on confirm-empty (not an empty sync) and 404 on an unknown stock also come after the owner check.
+    assert call(lab, ("post", "/groww/syncs/1/confirm-empty", None), lab.second_h).status_code == 403
+    assert call(lab, ("post", f"/groww/matching/{ISIN[ALPHA]}", {"instrument_id": 987_654_321}), lab.second_h).status_code == 403
+
+
+@pytest.mark.xfail(strict=True, reason=WAITS_FOR_D2)
+def test_d2_a_second_owners_tracker_has_no_groww_key(lab):
+    confirm_baseline(lab)
+    body = tracker(lab, lab.second_h)
+    assert "groww" not in body and body["items"] == []
+
+
+@pytest.mark.xfail(strict=True, reason=WAITS_FOR_D2)
+def test_d2_with_no_groww_owner_account_found_nobody_signed_in_gets_access(lab, monkeypatch):
+    # The first name in REAL_ACCOUNT_USERS has no account: there is no Groww owner. The two real owners
+    # that do exist are signed-in people, so they get nothing: 403 on every route, no key in the tracker.
+    monkeypatch.setattr(settings, "REAL_ACCOUNT_USERS", f"gwi-nobody, {OWNER}, {OWNER2}")
+    for headers in (lab.h, lab.second_h):
+        for route in GROWW_ROUTES:
+            r = call(lab, route, headers)
+            assert r.status_code == 403, f"{route[0]} {route[1]} -> {r.status_code}"
+        assert "groww" not in tracker(lab, headers)
+
+
+def test_d2_the_legacy_shared_key_is_unchanged_even_with_no_groww_owner_account(lab, monkeypatch):
+    shared = {"X-API-Key": SHARED_KEY}
+    monkeypatch.setattr(settings, "REAL_ACCOUNT_USERS", "gwi-nobody")
+    for route in READS:
+        assert call(lab, route, shared).status_code == 200, route
+    r = refresh(lab, [holding(ALPHA, 1, 1.0)], headers=shared)
+    assert r.status_code == 409  # no owner account to update, as before
 
 
 def test_no_groww_key_or_row_reaches_another_persons_tracker(lab):
@@ -639,9 +684,8 @@ def test_no_groww_key_or_row_reaches_another_persons_tracker(lab):
     # A service key is not a person: the tracker refuses it.
     for scope in ("read_status", "read_ops", "read_all"):
         assert lab.c.get(API + "/me/watchlist/tracker", headers=key(db, scope)).status_code == 403
-    # The second owner sees the connection status, never the Groww owner's rows.
-    body = tracker(lab, lab.second_h)
-    assert "groww" in body and body["items"] == []
+    # The second owner never sees the Groww owner's rows (and, since D2, no groww key: see the D2 tests).
+    assert tracker(lab, lab.second_h)["items"] == []
 
 
 def test_the_groww_owner_alone_gets_the_groww_status_in_the_tracker(lab):
@@ -821,22 +865,93 @@ def test_a_whole_journey_builds_exactly_the_two_allowed_requests(lab):
 # ================================================================== found while testing: strict expected failures
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "FINDING (P3, needs the lead's call): a hand-entered stock that was SOLD (so removed) and later bought "
-        "again in Groww is brought back by the next sync with its OLD buy date, so the Day count does not restart. "
-        "The re-buy rule (buy date = sync day) applies only after a confirmed 'not held', not to a removed row."
-    ),
+# ================================================================== D1: a re-bought stock restarts its buy date
+
+WAITS_FOR_D1 = (
+    "Waits for Developer-1's D1 change (owner decision, GROWW-388-CONTRACT.md): a stock the owner removed or "
+    "marked sold by hand, that Groww later shows as held again, restarts its buy date at that sync's IST day."
 )
-def test_a_stock_sold_by_hand_and_bought_again_gets_a_new_buy_date(lab):
+
+
+def assert_restarted(lab, symbol: str, old_day) -> None:
+    """The buy date and Day count are the sync day's, the old value is in the history, the note is kept."""
+    row = db_row(lab, symbol)
+    assert row.removed_at is None
+    assert tracker_rules.ist_date(row.added_at) == today()
+    item = rows_of(lab)[symbol]
+    assert item["bought_on"] == today().isoformat() and item["day_number"] == 1
+    moves = [(o, n, by) for f, o, n, by in history(lab, symbol) if f == "added_at"]
+    assert len(moves) == 1, moves
+    old, new, by = moves[0]
+    assert by == "groww_sync"
+    assert tracker_rules.ist_date(datetime.fromisoformat(old)) == old_day
+    assert tracker_rules.ist_date(datetime.fromisoformat(new)) == today()
+    assert row.note == "my note"
+
+
+@pytest.mark.xfail(strict=True, reason=WAITS_FOR_D1)
+def test_d1_a_linked_stock_removed_by_hand_and_held_again_restarts_its_buy_date(lab):
+    confirm_baseline(lab)
+    assert lab.c.delete(API + f"/me/watchlist/{ALPHA}", headers=lab.h).status_code == 200
+    assert db_row(lab, ALPHA).removed_at is not None
+    assert refresh(lab).json()["status"] == "complete"  # Groww still shows it held
+    assert_restarted(lab, ALPHA, OLD_BUY_DAY.date())
+
+
+@pytest.mark.xfail(strict=True, reason=WAITS_FOR_D1)
+def test_d1_a_hand_entered_stock_marked_sold_by_hand_then_bought_in_groww_restarts_its_buy_date(lab):
     r = lab.c.post(API + f"/me/watchlist/{ALPHA}/sold", json={"sell_price": 60.0}, headers=lab.h)
     assert r.status_code == 200 and db_row(lab, ALPHA).removed_at is not None
     refresh(lab, [holding(ALPHA, 3, 130.0)])
     assert lab.c.post(API + "/groww/matching/confirm-all", headers=lab.h).json() == {"confirmed": 1}
-    row = db_row(lab, ALPHA)
-    assert row.removed_at is None and row.quantity == 3
-    assert tracker_rules.ist_date(row.added_at) == today()
+    assert db_row(lab, ALPHA).quantity == 3
+    assert_restarted(lab, ALPHA, OLD_BUY_DAY.date())
+
+
+@pytest.mark.xfail(strict=True, reason=WAITS_FOR_D1)
+def test_d1_a_hand_entered_stock_removed_by_hand_then_bought_in_groww_restarts_its_buy_date(lab):
+    assert lab.c.delete(API + f"/me/watchlist/{ALPHA}", headers=lab.h).status_code == 200
+    refresh(lab, [holding(ALPHA, 3, 130.0)])
+    assert lab.c.post(API + "/groww/matching/confirm-all", headers=lab.h).json() == {"confirmed": 1}
+    assert_restarted(lab, ALPHA, OLD_BUY_DAY.date())
+
+
+def _no_buy_date_move(lab, symbol: str) -> None:
+    row = db_row(lab, symbol)
+    assert row.added_at == OLD_BUY_DAY and row.note == "my note" and row.removed_at is None
+    assert not [1 for f, *_ in history(lab, symbol) if f == "added_at"]
+    assert rows_of(lab)[symbol]["bought_on"] == OLD_BUY_DAY.date().isoformat()
+
+
+def test_d1_a_top_up_never_moves_the_buy_date(lab):
+    confirm_baseline(lab)
+    refresh(lab, [holding(ALPHA, 15, 110.0), holding(BRAVO, 4, 200.0), holding(CHARLIE, 7, 300.0)])
+    assert rows_of(lab)[ALPHA]["quantity"] == 15
+    _no_buy_date_move(lab, ALPHA)
+
+
+def test_d1_a_repeated_sync_never_moves_the_buy_date(lab):
+    confirm_baseline(lab)
+    for _ in range(3):
+        assert refresh(lab).json()["status"] == "complete"
+    _no_buy_date_move(lab, ALPHA)
+
+
+def test_d1_an_ordinary_sync_of_a_listed_row_never_moves_the_buy_date(lab):
+    confirm_baseline(lab)
+    refresh(lab, [holding(ALPHA, 10, 100.5), holding(BRAVO, 5, 210.0), holding(CHARLIE, 7, 300.0)])
+    refresh(lab, [holding(ALPHA, 8, 100.5), holding(BRAVO, 5, 210.0)])  # a partial sale and a stock gone
+    assert rows_of(lab)[ALPHA]["quantity"] == 8
+    _no_buy_date_move(lab, ALPHA)
+
+
+def test_d1_a_partial_hand_sale_of_a_linked_row_that_stays_listed_never_moves_the_buy_date(lab):
+    confirm_baseline(lab)
+    refresh(lab, [holding(ALPHA, 6, 100.5), holding(BRAVO, 4, 200.0), holding(CHARLIE, 7, 300.0)])
+    r = lab.c.post(API + f"/me/watchlist/{ALPHA}/sold", json={"sell_price": 120.0, "quantity": 4}, headers=lab.h)
+    assert r.status_code == 200 and db_row(lab, ALPHA).removed_at is None
+    refresh(lab)
+    _no_buy_date_move(lab, ALPHA)
 
 
 @pytest.mark.xfail(

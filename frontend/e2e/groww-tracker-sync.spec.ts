@@ -248,11 +248,8 @@ test.describe('Groww Tracker sync: the owner', () => {
     await expect(page.getByTestId('tracker-table')).toHaveCount(0)
   })
 
-  // FINDING (P2): the screen decides "from Groww" from source === 'groww' only. A hand-entered row that the first
-  // sync linked has source 'manual', so it gets no "from Groww" badge and an Edit form with live Shares and Price
-  // inputs; saving them is refused by the server (409). held_state tells the screen the row is linked.
+  // A hand-entered row that the first sync linked has source 'manual'; held_state tells the screen it is Groww's now.
   test('a hand-entered row that Groww now owns shows no editable shares or price', async ({ page }) => {
-    test.fail(true, 'FINDING P2: a linked hand-entered row (source manual, held_state held) is edited as if it were hand-entered')
     await growwWorld(page, 'owner')
     await openPage(page, PATH)
     await page.getByTestId('edit-ALPHA').click()
@@ -280,6 +277,18 @@ for (const role of ['member', 'tester'] as const) {
     })
   })
 }
+
+test.describe('Groww Tracker sync: a second owner (the server sends no groww key)', () => {
+  test('sees no strip, no matching panel and never calls a /groww route', async ({ page }) => {
+    const world = await growwWorld(page, 'owner', { status: null, items: [row('DELTA')], matching: [] })
+    await openPage(page, PATH)
+    await expect(page.getByTestId('tracker-table')).toContainText('DELTA')
+    await expect(page.getByTestId('groww-strip')).toHaveCount(0)
+    await expect(page.getByTestId('groww-matching')).toHaveCount(0)
+    await expect(page.getByTestId('groww-refresh')).toHaveCount(0)
+    expect(world.calls.filter((c) => c.path.startsWith('/groww'))).toEqual([])
+  })
+})
 
 test.describe('Groww Tracker sync: a 360 px phone', () => {
   test.use({ viewport: { width: 360, height: 740 } })

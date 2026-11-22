@@ -19,9 +19,8 @@ export { expect }
 /**
  * Open a TradeMind page the way a person does: load the app, wait for the menu, then move inside the app.
  *
- * Why not page.goto(path) straight away: on a fresh load the owner's account status arrives a moment after the
- * plan, and until then the app sends every /trademind/... address back to Today (see the "known issues" note in
- * docs/QUALITY-CHECKS.md). In-app moves keep the address, which is what a person clicking around gets.
+ * This covers clicking around inside the app. It cannot catch a bug in a fresh load (bookmark, refresh) of a
+ * page: for that use page.goto(path), as deep-link.spec.ts does.
  */
 export async function openPage(page: Page, path: string) {
   await page.goto('/trademind')

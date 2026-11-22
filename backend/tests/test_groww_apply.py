@@ -623,3 +623,63 @@ def test_a_sale_with_no_quantity_clears_everything_before_it(db_session, user):
     _step(db_session, user, "INE0NQ001011", inst, 3)
     _sale(db_session, user, "NOQTY", None, datetime.now(UTC) + timedelta(seconds=1))
     assert gapply.pending_sale_qty(db_session, item) is None
+
+
+# --- #388 owner decision D1: a stock removed or sold by hand and held again restarts its buy date --
+
+REBUY_START = datetime(2026, 12, 2, 4, 0, tzinfo=UTC)
+REBUY_DAY = datetime(2026, 12, 2, tzinfo=IST)
+
+
+def _held_again(db, user, symbol, isin, inst, qty=3, avg=130.0, started=REBUY_START):
+    sync = _sync(db, [(isin, inst, qty, avg, MATCH_CONFIRMED)], started=started)
+    gapply.apply_sync(db, sync, user_id=user.id)
+
+
+def test_a_removed_row_held_again_restarts_the_buy_date_with_history(db_session, user):
+    inst = _inst(db_session, "REBUYONE")
+    removed = datetime(2026, 11, 1, tzinfo=UTC)
+    item = _item(db_session, user, "REBUYONE", removed_at=removed, quantity=1, buy_price=50.0, note="mine")
+    _held_again(db_session, user, "REBUYONE", "INE0RB001011", inst)
+    db_session.refresh(item)
+    assert item.removed_at is None and item.held_state == HELD
+    assert item.added_at == REBUY_DAY
+    assert item.note == "mine"
+    (moved,) = _history(db_session, item, "added_at")
+    assert (moved.old_value, moved.new_value) == (ORIGINAL_ADDED.isoformat(), REBUY_DAY.isoformat())
+
+
+def test_a_row_sold_by_hand_and_held_again_restarts_the_buy_date(db_session, user):
+    inst = _inst(db_session, "REBUYTWO")
+    item = _item(db_session, user, "REBUYTWO", quantity=2, buy_price=50.0)
+    item.removed_at = datetime(2026, 11, 20, tzinfo=UTC)  # what the Sold button does to a hand-entered row
+    db_session.flush()
+    _held_again(db_session, user, "REBUYTWO", "INE0RB002011", inst)
+    db_session.refresh(item)
+    assert item.added_at == REBUY_DAY and item.removed_at is None
+
+
+def test_the_restart_happens_once_and_a_repeated_or_topped_up_sync_never_moves_it(db_session, user):
+    inst = _inst(db_session, "REBUYTHREE")
+    gone = datetime(2026, 11, 1, tzinfo=UTC)
+    item = _item(db_session, user, "REBUYTHREE", removed_at=gone, quantity=1, buy_price=50.0)
+    _held_again(db_session, user, "REBUYTHREE", "INE0RB003011", inst, qty=3)
+    isin = "INE0RB003011"
+    _held_again(db_session, user, "REBUYTHREE", isin, inst, qty=3, started=REBUY_START.replace(day=3))
+    later = REBUY_START.replace(day=4)
+    _held_again(db_session, user, "REBUYTHREE", isin, inst, qty=9, avg=140.0, started=later)
+    db_session.refresh(item)
+    assert item.added_at == REBUY_DAY and item.quantity == 9
+    assert len(_history(db_session, item, "added_at")) == 1
+
+
+def test_confirming_a_sale_of_a_listed_linked_row_never_moves_the_buy_date(db_session, user):
+    inst = _inst(db_session, "KEEPDATE")
+    item = _item(db_session, user, "KEEPDATE", quantity=10, buy_price=100.0)
+    _step(db_session, user, "INE0KD001011", inst, 10)
+    _step(db_session, user, "INE0KD001011", inst, 4)
+    _sale(db_session, user, "KEEPDATE", 6, datetime.now(UTC) + timedelta(seconds=1))
+    _step(db_session, user, "INE0KD001011", inst, 4)
+    db_session.refresh(item)
+    assert item.added_at == ORIGINAL_ADDED and item.removed_at is None
+    assert _history(db_session, item, "added_at") == []

@@ -29,8 +29,6 @@ from swing_trade_ml.services.groww import apply as groww_apply
 from swing_trade_ml.services.groww import client as groww_client
 from swing_trade_ml.services.groww import sync as groww_sync
 
-router = APIRouter(prefix="/groww", tags=["groww"], dependencies=[Depends(require_real_account)])
-
 Owner = Annotated[Principal, Depends(require_real_account)]
 
 #: Refresh at most once a minute (spec §6 Connection).
@@ -48,6 +46,29 @@ def iso(value: datetime | None) -> str | None:
     if value.tzinfo is None:
         value = value.replace(tzinfo=UTC)
     return value.isoformat()
+
+
+def is_groww_owner(db: Session, principal: Principal) -> bool:
+    """True for the Groww account owner (groww_sync.owner_user_id) and for the legacy shared API key, which
+    is the owner's by design. Any other person, a second real-account owner included, is not; with no Groww
+    owner account found, no signed-in person is."""
+    if principal.user is None:
+        return True
+    return principal.user.id == groww_sync.owner_user_id(db)
+
+
+def require_groww_owner(db: DbSession, principal: Owner) -> None:
+    """One check for every /groww route, reads included. It runs before any handler, so a refusal never
+    depends on (or reveals) the connection state: no 409, 429 or 503 comes first."""
+    if not is_groww_owner(db, principal):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, NOT_GROWW_OWNER)
+
+
+router = APIRouter(
+    prefix="/groww",
+    tags=["groww"],
+    dependencies=[Depends(require_real_account), Depends(require_groww_owner)],
+)
 
 
 def status_payload(db: Session) -> dict:
@@ -80,17 +101,9 @@ class MatchBody(BaseModel):
     instrument_id: int
 
 
-def _refuse_other_owner(db: Session, principal: Principal) -> None:
-    """Who is calling is checked first: another real-account owner learns nothing about the connection."""
-    uid = groww_sync.owner_user_id(db)
-    if uid is not None and principal.user is not None and principal.user.id != uid:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, NOT_GROWW_OWNER)
-
-
 @router.post("/sync")
 def refresh(db: DbSession, principal: Owner) -> dict:
     """Refresh now: fetch Groww holdings and, if the result is complete, update the tracker."""
-    _refuse_other_owner(db, principal)
     if not groww_client.is_configured():
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, NOT_CONFIGURED)
     last_started = db.scalar(select(GrowwSync.started_at).order_by(GrowwSync.id.desc()).limit(1))

@@ -5,8 +5,8 @@ sizing, exits or the brain reads these rows. Rules (spec §6 "Applying to the tr
 
 - Only a `complete` sync is applied, and only its `confirmed` rows change anything.
 - Every overwritten field writes one `UserWatchlistItemChange` (changed_by="groww_sync") first.
-- Buy date (`added_at`) and note never change, except a re-buy after "not held" (and a new
-  row), which gets the sync day as its buy date.
+- Buy date (`added_at`) and note never change, except a re-buy after "not held" or of a row the
+  owner removed or sold by hand (and a new row), which gets the sync day as its buy date.
 - A stock linked to Groww that the sync no longer holds stays on the list, marked not held.
   Rows never linked to Groww are never marked not held.
 - Values are written only when they differ, so repeating the same sync writes no history.
@@ -205,10 +205,12 @@ def apply_sync(db: Session, sync: GrowwSync, *, user_id: int) -> dict:
             continue
 
         changed = False
-        if item.removed_at is not None:
+        was_removed = item.removed_at is not None
+        if was_removed:
             changed |= _set_dt(db, item, "removed_at", None, sid)
-        if item.held_state == NOT_HELD:
-            # Re-buy after a confirmed zero: a new holding, so the Day count restarts.
+        if item.held_state == NOT_HELD or was_removed:
+            # Re-buy after a confirmed zero, or a row the owner removed or sold by hand: a new holding,
+            # so the buy date and Day count restart (the old date stays in the change history).
             changed |= _set_dt(db, item, "added_at", day, sid)
         changed |= _set_text(db, item, "groww_isin", h.isin, sid)
         old_qty = item.quantity

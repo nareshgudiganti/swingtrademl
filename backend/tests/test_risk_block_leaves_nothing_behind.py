@@ -3,17 +3,18 @@
 Every other test of the entry gate checks the verdict (`risk.check_entry` says no, with a rule).
 None proved what the refusal does NOT do once it goes through the real buy path. This file does,
 for the block reasons listed in CASES (halt, position limit, drawdown, sector cap, deployable
-capital, cash reserve, stop-loss cooldown, liquidity), through `execution.process_decision` with
-the paper broker:
+capital, cash reserve, stop-loss cooldown, liquidity, exchange avoid list, share price, cap tier),
+through `execution.process_decision` with the paper broker:
 
 - the broker is never asked to place an order;
 - no Order, Trade or Position row is written;
 - the paper account's cash is exactly what it was;
 - the refusal is recorded: one Signal carrying the rejection reason, and one RiskEvent for the rule;
-- and that record is COMMITTED: a commit happens after both rows exist, so it survives the request.
+- and that record is COMMITTED: at the last real commit the Signal, its stored rejection reason and the
+  RiskEvent all exist, so it survives the request. A reason assigned after the last commit fails this.
 
-Refusals NOT covered here: an instrument already held (ALREADY_OPEN), the exchange avoid list
-(AVOID), and the small-company and market-condition ceilings beyond DEPLOYABLE.
+Refusals NOT covered here: an instrument already held (ALREADY_OPEN), and the small-company budget and
+market-condition ceilings beyond DEPLOYABLE.
 
 Tests only: no source, frozen file or limit changes. A failing case here is a finding to report, not
 something to patch in this file.
@@ -23,12 +24,14 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
+from zoneinfo import ZoneInfo
 
 import pytest
 from sqlalchemy import event, func, select
 
 from swing_trade_ml.brokers.paper import paper_broker
 from swing_trade_ml.core.enums import ExitReason, SignalType
+from swing_trade_ml.db.models.feeds import TradingRestriction
 from swing_trade_ml.db.models.market import Candle, Instrument, Quote
 from swing_trade_ml.db.models.safety import RiskEvent
 from swing_trade_ml.db.models.trading import (
@@ -102,6 +105,17 @@ def _count(db, model) -> int:
     return db.execute(select(func.count()).select_from(model)).scalar_one()
 
 
+def _reasons(db) -> int:
+    """How many Signal rows carry a non-empty rejection reason right now."""
+    stored = Signal.rejection_reason.isnot(None) & (Signal.rejection_reason != "")
+    return db.execute(select(func.count()).select_from(Signal).where(stored)).scalar_one()
+
+
+def _state(db) -> tuple[int, int, int]:
+    """(Signal rows, RiskEvent rows, Signal rows with a stored rejection reason)."""
+    return _count(db, Signal), _count(db, RiskEvent), _reasons(db)
+
+
 class _SpyBroker:
     """The paper broker's identity, with `place_order` recording any call. A refused buy never reaches it."""
 
@@ -120,15 +134,16 @@ def book(db_session, monkeypatch):
     """The buy path with the money inputs pinned: `cash` is what the entry gate sees as spendable.
 
     The test session shares one outer transaction, so a row read back in it looks saved even if the code
-    never committed it. `book.commits` therefore records, at every real `commit()`, how many Signal and
-    RiskEvent rows existed at that moment: the proof that the refusal record was committed.
+    never committed it. `book.commits` therefore records, at every real `commit()`, how many Signal rows,
+    RiskEvent rows and Signal rows with a stored rejection reason existed at that moment: the proof that
+    the refusal record, reason included, was committed. `book.price` is the buy price the case uses.
     """
     spy = _SpyBroker()
-    commits: list[tuple[int, int]] = []
+    commits: list[tuple[int, int, int]] = []
 
     def _on_commit(session) -> None:
         session.flush()
-        commits.append((_count(session, Signal), _count(session, RiskEvent)))
+        commits.append(_state(session))
 
     event.listen(db_session, "before_commit", _on_commit)
     monkeypatch.setattr(execution, "get_broker", lambda: spy)
@@ -140,7 +155,9 @@ def book(db_session, monkeypatch):
         "current_deployable",
         lambda db: deployable.DeployableCapital(regime="strong", fraction=1.0, context_available=True),
     )
-    yield SimpleNamespace(db=db_session, spy=spy, money=state, monkeypatch=monkeypatch, commits=commits)
+    yield SimpleNamespace(
+        db=db_session, spy=spy, money=state, monkeypatch=monkeypatch, commits=commits, price=1600.0
+    )
     event.remove(db_session, "before_commit", _on_commit)
 
 
@@ -220,6 +237,29 @@ def _liquidity(book, strategy, inst):
     book.db.flush()
 
 
+def _avoid(book, strategy, inst):
+    # The exchange put this stock on its extra-watch list today (services/avoid.py). The gate reads that
+    # table by symbol and IST date, before any limit, so no account figure needs changing.
+    today = datetime.now(ZoneInfo("Asia/Kolkata")).date()
+    book.db.add(TradingRestriction(symbol=inst.tradingsymbol, kind="ASM", stage="Stage I", as_of=today))
+    book.db.flush()
+
+
+def _share_price(book, strategy, inst):
+    # The smallest rung of the limits ladder (10,000) skips shares above 2,500 (limits.max_share_price_inr).
+    book.money.total = 10_000.0
+    book.money.cash = 10_000.0
+    book.price = 3_000.0
+
+
+def _cap_tier(book, strategy, inst):
+    # The smallest rung allows large companies only; this strategy buys with a small-company model. The share
+    # price stays under that rung's 2,500 ceiling, so the tier check, not the price check, is what refuses.
+    book.money.total = 10_000.0
+    book.money.cash = 10_000.0
+    strategy.params = {"model_name": "swing_classifier_smallcap"}
+
+
 CASES = [
     pytest.param(_halt, ("HALTED",), "HDFCBANK", id="halt"),
     pytest.param(_position_limit, ("POSITION_LIMIT",), "HDFCBANK", id="position-limit"),
@@ -229,6 +269,9 @@ CASES = [
     pytest.param(_cash, ("CASH_FLOOR", "MIN_POSITION", "CASH"), "HDFCBANK", id="cash"),
     pytest.param(_cooldown, ("COOLDOWN",), "HDFCBANK", id="stop-loss-cooldown"),
     pytest.param(_liquidity, ("LIQUIDITY",), "HDFCBANK", id="liquidity"),
+    pytest.param(_avoid, ("AVOID",), "HDFCBANK", id="exchange-avoid-list"),
+    pytest.param(_share_price, ("SHARE_PRICE",), "HDFCBANK", id="share-price"),
+    pytest.param(_cap_tier, ("CAP_TIER",), "HDFCBANK", id="cap-tier"),
 ]
 
 
@@ -254,27 +297,49 @@ def test_control_an_unblocked_buy_does_reach_the_broker(book):
     assert len(book.spy.placed) == 1
 
 
-@pytest.mark.parametrize(("arrange", "rules", "symbol"), CASES)
-def test_a_buy_the_risk_gate_refuses_leaves_nothing_behind(book, arrange, rules, symbol):
+def _attempt_buy(book, arrange, symbol):
+    """Arrange one refusal, snapshot the books, send one BUY through the real buy path.
+
+    Returns (signal, before) where `before` holds the counts and cash taken just before the call."""
     db = book.db
     strategy = _strategy(db)
     inst = _instrument(db, symbol, price=1600.0)
     arrange(book, strategy, inst)
     db.commit()
 
-    cash_before = paper_broker.get_available_cash(db)
-    orders, trades, positions = (_count(db, m) for m in (Order, Trade, Position))
-    signals, events = _count(db, Signal), _count(db, RiskEvent)
-
+    before = SimpleNamespace(
+        cash=paper_broker.get_available_cash(db),
+        orders=_count(db, Order),
+        trades=_count(db, Trade),
+        positions=_count(db, Position),
+        state=_state(db),
+    )
     decision = SignalDecision(
         signal=SignalType.BUY,
-        price=1600.0,
+        price=book.price,
         confidence=0.7,
-        stop_loss=1550.0,
-        take_profit=1700.0,
+        stop_loss=book.price - 50.0,
+        take_profit=book.price + 100.0,
         reason="244",
     )
-    signal = execution.process_decision(db, strategy, inst, decision)
+    return execution.process_decision(db, strategy, inst, decision), before
+
+
+def _assert_refusal_committed(book, before) -> None:
+    """At the last real commit the Signal, its stored rejection reason and the RiskEvent all existed."""
+    signals, events, reasons = before.state
+    assert book.commits, "the refusal path never committed, so its record would be lost with the request"
+    assert book.commits[-1] == (signals + 1, events + 1, reasons + 1), (
+        "the last commit missed part of the refusal record (signal, rejection reason or risk event)"
+    )
+
+
+@pytest.mark.parametrize(("arrange", "rules", "symbol"), CASES)
+def test_a_buy_the_risk_gate_refuses_leaves_nothing_behind(book, arrange, rules, symbol):
+    db = book.db
+    signal, before = _attempt_buy(book, arrange, symbol)
+    cash_before, (orders, trades, positions) = before.cash, (before.orders, before.trades, before.positions)
+    signals, events, _ = before.state
 
     # Nothing was bought.
     assert book.spy.placed == [], "the broker was never asked to place an order"
@@ -292,6 +357,50 @@ def test_a_buy_the_risk_gate_refuses_leaves_nothing_behind(book, arrange, rules,
     assert new_events[0].rule in rules
     assert new_events[0].reason == stored.rejection_reason, "signal and risk event give the same reason"
 
-    # ... and it was committed, not just flushed: a real commit happened after both rows existed.
-    assert book.commits, "the refusal path never committed, so its record would be lost with the request"
-    assert book.commits[-1] == (signals + 1, events + 1), "the last commit missed a refusal record"
+    # ... and it was committed, not just flushed: at the last real commit all of it already existed.
+    _assert_refusal_committed(book, before)
+
+
+class _ReasonAfterTheLastCommit:
+    """Stands in for the Signal the buy path holds, but keeps a rejection reason aside until `release()`:
+    the shape of a defect where the reason is assigned after the last commit."""
+
+    def __init__(self, signal) -> None:
+        object.__setattr__(self, "_signal", signal)
+        object.__setattr__(self, "_held", None)
+
+    def __getattr__(self, name):
+        return getattr(self._signal, name)
+
+    def __setattr__(self, name, value) -> None:
+        if name == "rejection_reason":
+            object.__setattr__(self, "_held", value)
+        else:
+            setattr(self._signal, name, value)
+
+    def release(self) -> None:
+        self._signal.rejection_reason = self._held
+
+
+def test_the_commit_check_fails_when_the_reason_is_stored_after_the_last_commit(book, monkeypatch):
+    """Proof that the commit-time check can fail. A temporary patch of `execution.record_signal` hands the buy
+    path a Signal whose rejection reason lands only after every commit. Everything is still true once the call
+    returns (the row, the reason, the risk event), so only the commit-time check can see it."""
+    real = execution.record_signal
+    wrapped: list[_ReasonAfterTheLastCommit] = []
+
+    def late_reason(*args, **kwargs):
+        proxy = _ReasonAfterTheLastCommit(real(*args, **kwargs))
+        wrapped.append(proxy)
+        return proxy
+
+    monkeypatch.setattr(execution, "record_signal", late_reason)
+
+    signal, before = _attempt_buy(book, _halt, "HDFCBANK")
+    wrapped[0].release()
+    book.db.flush()
+
+    assert book.db.get(Signal, signal.id).rejection_reason, "after the call the reason is on the row"
+    assert _state(book.db)[:2] == (before.state[0] + 1, before.state[1] + 1), "the rows exist after the call"
+    with pytest.raises(AssertionError, match="missed part of the refusal record"):
+        _assert_refusal_committed(book, before)

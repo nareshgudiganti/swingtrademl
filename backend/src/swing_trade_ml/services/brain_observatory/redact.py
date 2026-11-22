@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import os
 import re
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 
 from swing_trade_ml.core.config import settings
 
@@ -73,8 +73,11 @@ def _secret_values() -> list[str]:
                 values.add(value)
             if name == "DATABASE_URL" and value:
                 password = urlsplit(value).password
-                if password and len(password) >= 4:
-                    values.add(password)
+                # The encoded form (as written in the URL) and the decoded one a database driver uses and an
+                # error message can quote: both are redacted.
+                for form in (password, unquote(password) if password else None):
+                    if form and len(form) >= 4:
+                        values.add(form)
     return sorted(values, key=len, reverse=True)
 
 

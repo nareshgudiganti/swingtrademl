@@ -386,11 +386,13 @@ export default function App() {
   }
 
   if (location.pathname.startsWith('/trademind')) {
-    if (!canTradeMind) {
-      return <Navigate to={plan && !seesAll ? '/home' : '/dashboard'} replace />
-    }
+    // The owner's canTradeMind is false until the status arrives, so wait first: redirecting here loses the
+    // address on every refresh.
     if (isOwner && !status) {
       return planLoading || !plan ? <Loading /> : waiting
+    }
+    if (!canTradeMind) {
+      return <Navigate to={plan && !seesAll ? '/home' : '/dashboard'} replace />
     }
     return <TradeMindApp ownerConsole={isOwner} />
   }

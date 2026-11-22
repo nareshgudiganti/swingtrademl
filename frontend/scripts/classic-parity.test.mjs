@@ -188,6 +188,40 @@ export const b = api.onlyB
       read.mockRestore()
     }
   })
+
+  it('reads a shared file once also when the source folder is given as a relative path', () => {
+    const root = fs.mkdtempSync(path.join(process.cwd(), 'parity-rel-')) // under cwd, so a relative path exists
+    try {
+      for (const [rel, text] of Object.entries({
+        'trademind/Home.tsx': `export const x = api.home
+`,
+        'trademind/shared.ts': `export const shared = api.shared
+`,
+        'pages/A.tsx': `import { shared } from '../trademind/shared'
+export const a = api.onlyA
+`,
+        'pages/B.tsx': `import { shared } from '../trademind/shared'
+export const b = api.onlyB
+`,
+      })) {
+        fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true })
+        fs.writeFileSync(path.join(root, rel), text)
+      }
+      const read = vi.spyOn(fs, 'readFileSync')
+      try {
+        const rows = computeParity(path.relative(process.cwd(), root))
+        const shared = path.join(root, 'trademind', 'shared.ts')
+        const reads = read.mock.calls.filter(([f]) => path.resolve(String(f)) === shared)
+        expect(reads).toHaveLength(1)
+        expect(rows.find((r) => r.page === 'A').gaps).toEqual(['onlyA'])
+        expect(rows.find((r) => r.page === 'B').gaps).toEqual(['onlyB'])
+      } finally {
+        read.mockRestore()
+      }
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
 })
 
 describe('the real tree', () => {

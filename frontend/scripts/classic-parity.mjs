@@ -49,7 +49,8 @@ function resolveLocal(file, spec) {
 // Reading and scanning a file is the slow part (about a thousand reads for ~265 files when every page re-reads each
 // module it imports), so each file is read and scanned once per computeParity run and the result reused.
 function analyse(f, cache) {
-  let hit = cache.get(f)
+  const key = path.resolve(f) // a relative and an absolute path to one file share one entry
+  let hit = cache.get(key)
   if (!hit) {
     const code = stripComments(fs.readFileSync(f, 'utf8'))
     hit = {
@@ -57,7 +58,7 @@ function analyse(f, cache) {
       calls: [...code.matchAll(CALL)].map((m) => m[1]),
       dynamic: DYNAMIC.filter(([, re]) => re.test(code)).map(([name]) => name),
     }
-    cache.set(f, hit)
+    cache.set(key, hit)
   }
   return hit
 }

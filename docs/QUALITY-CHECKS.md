@@ -213,10 +213,9 @@ and what to do if it goes red.
   fixture). If the screen now calls a new endpoint, add it to `mockApi.ts` with a fixture. Do not
   add a new axe problem to the allowlist to make CI green; fix it, or ask the owner first.
   Nothing (traces, screenshots, reports) is uploaded from CI: the repo is public.
-- **Known issue found while writing these tests (not fixed here, app behaviour):** for the owner,
-  loading a `/trademind/...` address directly (bookmark, refresh) lands on Today instead of that
-  page, because the app decides before the account status has arrived. The tests therefore load
-  Today first and then move inside the app (`openPage` in `e2e/support/test.ts`).
+- **Two ways to open a page in these tests:** `openPage` (`e2e/support/test.ts`) loads Today and
+  moves inside the app, like clicking. It cannot see fresh-load bugs (bookmark, refresh), so
+  `e2e/deep-link.spec.ts` loads addresses directly with a slow account status.
 
 ## Money-code coverage floor (qa8): `backend/scripts/check_money_coverage.py`
 

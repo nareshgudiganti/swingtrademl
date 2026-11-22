@@ -2,12 +2,18 @@
 
 Every other test of the entry gate checks the verdict (`risk.check_entry` says no, with a rule).
 None proved what the refusal does NOT do once it goes through the real buy path. This file does,
-for each real block reason, through `execution.process_decision` with the paper broker:
+for the block reasons listed in CASES (halt, position limit, drawdown, sector cap, deployable
+capital, cash reserve, stop-loss cooldown, liquidity), through `execution.process_decision` with
+the paper broker:
 
 - the broker is never asked to place an order;
 - no Order, Trade or Position row is written;
 - the paper account's cash is exactly what it was;
-- the refusal is recorded: one Signal carrying the rejection reason, and one RiskEvent for the rule.
+- the refusal is recorded: one Signal carrying the rejection reason, and one RiskEvent for the rule;
+- and that record is COMMITTED: a commit happens after both rows exist, so it survives the request.
+
+Refusals NOT covered here: an instrument already held (ALREADY_OPEN), the exchange avoid list
+(AVOID), and the small-company and market-condition ceilings beyond DEPLOYABLE.
 
 Tests only: no source, frozen file or limit changes. A failing case here is a finding to report, not
 something to patch in this file.
@@ -19,11 +25,11 @@ from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import event, func, select
 
 from swing_trade_ml.brokers.paper import paper_broker
-from swing_trade_ml.core.enums import SignalType
-from swing_trade_ml.db.models.market import Instrument, Quote
+from swing_trade_ml.core.enums import ExitReason, SignalType
+from swing_trade_ml.db.models.market import Candle, Instrument, Quote
 from swing_trade_ml.db.models.safety import RiskEvent
 from swing_trade_ml.db.models.trading import (
     Order,
@@ -111,8 +117,20 @@ class _SpyBroker:
 
 @pytest.fixture()
 def book(db_session, monkeypatch):
-    """The buy path with the money inputs pinned: `cash` is what the entry gate sees as spendable."""
+    """The buy path with the money inputs pinned: `cash` is what the entry gate sees as spendable.
+
+    The test session shares one outer transaction, so a row read back in it looks saved even if the code
+    never committed it. `book.commits` therefore records, at every real `commit()`, how many Signal and
+    RiskEvent rows existed at that moment: the proof that the refusal record was committed.
+    """
     spy = _SpyBroker()
+    commits: list[tuple[int, int]] = []
+
+    def _on_commit(session) -> None:
+        session.flush()
+        commits.append((_count(session, Signal), _count(session, RiskEvent)))
+
+    event.listen(db_session, "before_commit", _on_commit)
     monkeypatch.setattr(execution, "get_broker", lambda: spy)
     monkeypatch.setattr(execution.notifier, "send_sync", lambda *a, **kw: None)
     state = SimpleNamespace(total=ACCOUNT, cash=ACCOUNT)
@@ -122,7 +140,8 @@ def book(db_session, monkeypatch):
         "current_deployable",
         lambda db: deployable.DeployableCapital(regime="strong", fraction=1.0, context_available=True),
     )
-    return SimpleNamespace(db=db_session, spy=spy, money=state, monkeypatch=monkeypatch)
+    yield SimpleNamespace(db=db_session, spy=spy, money=state, monkeypatch=monkeypatch, commits=commits)
+    event.remove(db_session, "before_commit", _on_commit)
 
 
 # Each case builds the situation, then names the rule the entry gate must refuse with.
@@ -162,6 +181,45 @@ def _cash(book, strategy, inst):
     book.money.cash = 105_000.0  # inside the reserve kept aside at this account size
 
 
+def _cooldown(book, strategy, inst):
+    # This strategy was stopped out of this stock yesterday; the default cooldown is several days.
+    book.db.add(
+        Position(
+            strategy_id=strategy.id,
+            instrument_id=inst.id,
+            mode="paper",
+            status="CLOSED",
+            quantity=10,
+            entry_price=1700.0,
+            entry_at=datetime.now(UTC) - timedelta(days=3),
+            current_price=1600.0,
+            exit_price=1600.0,
+            exit_at=datetime.now(UTC) - timedelta(days=1),
+            exit_reason=ExitReason.STOP_LOSS_HIT,
+        )
+    )
+    book.db.flush()
+
+
+def _liquidity(book, strategy, inst):
+    # Twenty days of thin trading: about 1.6 lakh a day, so 2% of it is far below the minimum position.
+    today = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+    book.db.add_all(
+        Candle(
+            instrument_id=inst.id,
+            interval="day",
+            ts=today - timedelta(days=n),
+            open=1600.0,
+            high=1610.0,
+            low=1590.0,
+            close=1600.0,
+            volume=100,
+        )
+        for n in range(1, 21)
+    )
+    book.db.flush()
+
+
 CASES = [
     pytest.param(_halt, ("HALTED",), "HDFCBANK", id="halt"),
     pytest.param(_position_limit, ("POSITION_LIMIT",), "HDFCBANK", id="position-limit"),
@@ -169,6 +227,8 @@ CASES = [
     pytest.param(_sector_cap, ("SECTOR_CAP",), "HDFCBANK", id="sector-cap"),
     pytest.param(_deployable, ("DEPLOYABLE",), "HDFCBANK", id="deployable"),
     pytest.param(_cash, ("CASH_FLOOR", "MIN_POSITION", "CASH"), "HDFCBANK", id="cash"),
+    pytest.param(_cooldown, ("COOLDOWN",), "HDFCBANK", id="stop-loss-cooldown"),
+    pytest.param(_liquidity, ("LIQUIDITY",), "HDFCBANK", id="liquidity"),
 ]
 
 
@@ -231,3 +291,7 @@ def test_a_buy_the_risk_gate_refuses_leaves_nothing_behind(book, arrange, rules,
     assert _count(db, RiskEvent) == events + 1
     assert new_events[0].rule in rules
     assert new_events[0].reason == stored.rejection_reason, "signal and risk event give the same reason"
+
+    # ... and it was committed, not just flushed: a real commit happened after both rows existed.
+    assert book.commits, "the refusal path never committed, so its record would be lost with the request"
+    assert book.commits[-1] == (signals + 1, events + 1), "the last commit missed a refusal record"

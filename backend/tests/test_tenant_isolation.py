@@ -56,10 +56,22 @@ def _switches_on(monkeypatch):
     # The only real-account user is "sudeeksha"; none of the accounts below is that person.
     monkeypatch.setattr(settings, "REAL_ACCOUNT_USERS", "sudeeksha")
     billing.set_provider(FakeProvider())
-    set_sender_for_tests(LogEmailSender())
-    yield
+    sender = LogEmailSender()
+    set_sender_for_tests(sender)
+    yield sender
     billing.set_provider(None)
     set_sender_for_tests(None)
+
+
+@pytest.fixture()
+def mail(_switches_on) -> LogEmailSender:
+    """The log mail sender in use: what would have been emailed, in order."""
+    return _switches_on
+
+
+def _link_token(mail: LogEmailSender, path: str) -> str:
+    link = next(w for w in mail.outbox[-1].text.split() if f"/{path}?token=" in w)
+    return link.split("token=")[1]
 
 
 def make_user(db, name: str, *, role: str = "member", plan: str = "free") -> tuple[User, dict[str, str]]:
@@ -218,6 +230,49 @@ def test_no_machine_credential_reaches_a_persons_watchlist(client, db_session, p
     assert client.request(method, url, **body).status_code in (401, 403)  # no credential at all
 
 
+@pytest.mark.parametrize("who", ["o", "t"])
+def test_the_owner_and_the_tester_see_only_their_own_list_tracker_and_sold(
+    client, db_session, people, stocks, who
+):
+    """The owner and the tester each have a list of their own: no one else's rows leak in or theirs out."""
+    a, b, me = people["a"], people["b"], people[who]
+    client.post(f"{API}/me/watchlist", json={"symbol": "ISOALPHA", "note": "alice secret"}, headers=a)
+    client.patch(f"{API}/me/watchlist/ISOALPHA", json={"buy_price": 123.45, "quantity": 7}, headers=a)
+    client.post(f"{API}/me/watchlist/ISOALPHA/sold", json={"sell_price": 130}, headers=a)
+    client.post(f"{API}/me/watchlist", json={"symbol": "ISOBETA", "note": "bob secret"}, headers=b)
+    assert client.post(f"{API}/me/watchlist", json={"symbol": "ISOSHARED"}, headers=me).status_code == 201
+
+    for path in ("/me/watchlist", "/me/watchlist/tracker", "/me/watchlist/sold"):
+        text = client.get(f"{API}{path}", headers=me).text
+        for secret in ("ISOALPHA", "ISOBETA", "alice secret", "bob secret", "123.45"):
+            assert secret not in text, (who, path, secret)
+    assert "ISOSHARED" in client.get(f"{API}/me/watchlist", headers=me).text
+    # and what they added is on nobody else's list
+    assert "ISOSHARED" not in client.get(f"{API}/me/watchlist", headers=a).text
+    assert "ISOSHARED" not in client.get(f"{API}/me/watchlist", headers=b).text
+
+
+def test_a_person_reads_and_changes_their_own_rows(client, db_session, people, stocks):
+    """The positive control: the person whose list it is can add, change, mark sold and remove."""
+    a = people["a"]
+    assert client.post(f"{API}/me/watchlist", json={"symbol": "ISOALPHA"}, headers=a).status_code == 201
+    r = client.patch(
+        f"{API}/me/watchlist/ISOALPHA", json={"buy_price": 50, "quantity": 3, "note": "mine"}, headers=a
+    )
+    assert r.status_code == 200
+    listed = client.get(f"{API}/me/watchlist", headers=a).json()["items"]
+    row = next(i for i in listed if i["symbol"] == "ISOALPHA")
+    assert (row["buy_price"], row["quantity"], row["note"]) == (50, 3, "mine")
+    sold = client.post(f"{API}/me/watchlist/ISOALPHA/sold", json={"sell_price": 55}, headers=a)
+    assert sold.status_code == 200
+    assert len(client.get(f"{API}/me/watchlist/sold", headers=a).json()["items"]) == 1
+
+    assert client.post(f"{API}/me/watchlist", json={"symbol": "ISOBETA"}, headers=a).status_code == 201
+    assert client.delete(f"{API}/me/watchlist/ISOBETA", headers=a).status_code in (200, 204)
+    items = client.get(f"{API}/me/watchlist", headers=a).json()["items"]
+    assert not [i for i in items if i["symbol"] == "ISOBETA" and i["removed_at"] is None]
+
+
 # ---------------------------------------------------------------- 2. plan and billing
 
 
@@ -289,6 +344,21 @@ def test_the_plan_catalogue_does_not_carry_anyones_data(client, db_session, peop
     )
 
 
+def test_the_owner_grants_a_plan_and_only_that_member_changes(client, db_session, people):
+    """The positive control for plans: the owner may grant, and the grant reaches that member alone."""
+    alice, bob, o = people["alice"], people["bob"], people["o"]
+    r = client.post(f"{API}/admin/users/{bob.id}/grants", json={"reason": "isolation test grant"}, headers=o)
+    assert r.status_code == 201, r.text
+    assert client.get(f"{API}/admin/users/{bob.id}/grants", headers=o).status_code == 200
+
+    bobs = client.get(f"{API}/billing/me", headers=people["b"]).json()
+    alices = client.get(f"{API}/billing/me", headers=people["a"]).json()
+    # The grant lifts him; his stored plan is as it was.
+    assert bobs["plan"] == "pro" and bobs["stored_plan"] == "free"
+    assert alices["plan"] == "free" and alices["stored_plan"] == "free"
+    assert client.get(f"{API}/admin/users/{alice.id}/grants", headers=o).json() == []
+
+
 # ------------------------------------------------------ 3. account deletion and export
 
 
@@ -335,6 +405,49 @@ def test_a_guessed_or_foreign_deletion_token_deletes_nobody(client, db_session, 
             assert client.post(f"{API}{path}", json={"token": token}).status_code == 400
     db_session.expire_all()
     assert db_session.get(User, people["alice"].id).is_active is True
+
+
+def test_a_valid_deletion_link_affects_only_that_person(client, db_session, people, stocks, mail):
+    """The positive control: alice's own emailed links end (and restore) alice's access and nobody else's."""
+    a, b = people["a"], people["b"]
+    client.post(f"{API}/me/watchlist", json={"symbol": "ISOBETA"}, headers=b)
+    assert client.post(f"{API}/account/deletion/request", json={"password": PW}, headers=a).status_code == 200
+    assert mail.outbox[-1].to == "iso-alice@example.com"
+
+    confirm = client.post(
+        f"{API}/account/deletion/confirm", json={"token": _link_token(mail, "confirm-deletion")}
+    )
+    assert confirm.status_code == 200, confirm.text
+    assert client.get(f"{API}/auth/me", headers=a).status_code == 401  # alice's session is over
+    assert client.post(f"{API}/auth/login", json={"username": "iso-alice", "password": PW}).status_code == 401
+
+    # Bob is untouched: still signed in, his list and his status unchanged, and nothing was mailed to him.
+    assert client.get(f"{API}/auth/me", headers=b).status_code == 200
+    assert "ISOBETA" in client.get(f"{API}/me/watchlist", headers=b).text
+    assert client.get(f"{API}/account/deletion", headers=b).json()["status"] is None
+    assert all(m.to != "iso-bob@example.com" for m in mail.outbox)
+
+    # Alice's own cancel link brings her back, and only her.
+    cancel = client.post(
+        f"{API}/account/deletion/cancel", json={"token": _link_token(mail, "cancel-deletion")}
+    )
+    assert cancel.status_code == 200, cancel.text
+    assert client.post(f"{API}/auth/login", json={"username": "iso-alice", "password": PW}).status_code == 200
+    assert client.get(f"{API}/auth/me", headers=b).status_code == 200
+
+
+@pytest.mark.parametrize("who", ["o", "t"])
+def test_the_owner_and_tester_exports_hold_only_their_own_data(client, db_session, people, stocks, who):
+    a, b, me = people["a"], people["b"], people[who]
+    client.post(f"{API}/me/watchlist", json={"symbol": "ISOALPHA", "note": "alice-only note"}, headers=a)
+    client.post(f"{API}/me/watchlist", json={"symbol": "ISOBETA", "note": "bob-only note"}, headers=b)
+    client.post(f"{API}/me/watchlist", json={"symbol": "ISOSHARED", "note": "my own note"}, headers=me)
+
+    mine = client.get(f"{API}/account/export", headers=me)
+    assert mine.status_code == 200, (who, mine.status_code)
+    assert "ISOSHARED" in mine.text and "my own note" in mine.text
+    for secret in ("ISOALPHA", "alice-only note", "iso-alice", "ISOBETA", "bob-only note", "iso-bob"):
+        assert secret not in mine.text, (who, secret)
 
 
 @pytest.mark.parametrize(
@@ -508,6 +621,34 @@ def test_an_owner_who_is_not_the_named_user_cannot_reach_real_holdings(
     assert client.get(f"{API}/me/plan", headers=o).json()["can_see_real_account"] is False
 
 
+def test_the_named_real_account_owner_reads_the_real_book(client, db_session, owner_book, monkeypatch):
+    """The positive control: the one person named for the real account does reach it, and a different owner
+    (the `people` owner in the tests above) still does not."""
+    _, h = make_user(db_session, "iso-realowner", role="owner")
+    monkeypatch.setattr(settings, "REAL_ACCOUNT_USERS", "iso-realowner")
+    assert client.get(f"{API}/me/plan", headers=h).json()["can_see_real_account"] is True
+    positions = client.get(f"{API}/portfolio/positions?mode=live", headers=h)
+    assert positions.status_code == 200
+    assert any(p["strategy_id"] == owner_book["real"].id for p in positions.json())
+    for path in ("/real-report/tax", "/real-report/tax.csv"):
+        assert client.get(f"{API}{path}", headers=h).status_code == 200, path
+
+    _, other = make_user(db_session, "iso-otherowner", role="owner")
+    assert client.get(f"{API}/me/plan", headers=other).json()["can_see_real_account"] is False
+    for path in ("/real-report/tax", "/real-report/tax.csv"):
+        assert client.get(f"{API}{path}", headers=other).status_code == 403, path
+
+
+def test_the_owner_and_shared_key_read_the_private_strategies(client, db_session, owner_book, people):
+    for h in (people["o"], LEGACY_KEY):
+        listed = client.get(f"{API}/strategies", headers=h)
+        assert listed.status_code == 200
+        for name in ("real_trading", "tester_paper", "iso_house_book"):
+            assert name in listed.text, name
+        for key in ("real", "manual", "house"):
+            assert client.get(f"{API}/strategies/{owner_book[key].id}", headers=h).status_code == 200, key
+
+
 @pytest.mark.parametrize("prefix", TESTER_PRIVATE_PREFIXES)
 def test_private_prefixes_are_closed_to_members_and_testers(client, db_session, people, prefix):
     set_plans_enabled(db_session, True)
@@ -548,6 +689,19 @@ def test_a_status_key_reaches_only_its_listed_gets(client, db_session, owner_boo
         ("DELETE", "/me/watchlist/X"),
     ):
         assert client.request(method, f"{API}{path}", headers=h).status_code == 403, (method, path)
+
+
+def test_each_key_scope_reads_exactly_what_it_names(client, db_session, owner_book):
+    """The positive control for keys: each scope's own routes answer 200 (not merely 'not refused'), and the
+    refusals above are not an outage in disguise."""
+    status_key = _key(db_session, "read_status")
+    for path in ("/status", "/market/session", "/risk/limits"):
+        assert client.get(f"{API}{path}", headers=status_key).status_code == 200, path
+    ops = client.get(f"{API}/ops/digest", headers=_key(db_session, "read_ops"))
+    assert ops.status_code == 200
+    house = client.get(f"{API}/portfolio/positions", headers=_key(db_session, "read_all"))
+    assert house.status_code == 200
+    assert "ISOREAL" not in house.text and "ISOMANUAL" not in house.text
 
 
 def test_an_ops_key_reaches_only_ops(client, db_session, owner_book):

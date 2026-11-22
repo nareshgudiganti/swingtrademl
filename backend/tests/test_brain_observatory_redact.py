@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import os
+from urllib.parse import urlsplit
+
 from swing_trade_ml.core.config import settings
 from swing_trade_ml.services.brain_observatory.redact import FREE_TEXT_KEYS, redact_response, redact_text
 
@@ -31,7 +34,10 @@ def test_each_secret_kind_in_free_text_is_replaced(monkeypatch):
 
 
 def test_the_test_database_password_is_redacted():
-    assert "swingtrade_local_pw" not in redact_text("could not connect with swingtrade_local_pw")
+    # The password of whichever test database role is in use (the shared one or an isolated per-developer role).
+    password = urlsplit(os.environ["DATABASE_URL"]).password
+    assert password and len(password) >= 4
+    assert password not in redact_text(f"could not connect with {password}")
 
 
 def test_text_without_secrets_is_byte_identical():

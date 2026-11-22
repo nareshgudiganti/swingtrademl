@@ -1,8 +1,7 @@
 name: Deploy to production
 
+# MANUAL ONLY. Merging or pushing to main does not deploy (owner decision, 2026-11-22).
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
     inputs:
       force:
@@ -109,6 +108,6 @@ jobs:
         run: |
           if [ -z "$TOKEN" ] || [ -z "$CHAT" ]; then echo "::warning::No Telegram secrets; cannot message."; exit 0; fi
           when=$(TZ=Asia/Kolkata date '+%d %b %H:%M IST')
-          text=$(printf '🔴 TradeMind deploy %s finished, but the after-deploy check FAILED (%s)\n%s\nOpen GitHub, Actions, Deploy to production for details. To undo: revert the commit and push.' "${SHA:0:7}" "$when" "${PROBLEMS:-the smoke test did not finish}")
+          text=$(printf '🔴 TradeMind deploy %s finished, but the after-deploy check FAILED (%s)\n%s\nOpen GitHub, Actions, Deploy to production for details. To undo: revert the commit on main, then run Deploy to production again.' "${SHA:0:7}" "$when" "${PROBLEMS:-the smoke test did not finish}")
           curl -s -m 20 -o /dev/null -w 'telegram %{http_code}\n' "https://api.telegram.org/bot${TOKEN}/sendMessage" \
             --data-urlencode "chat_id=${CHAT}" --data-urlencode "text=${text}"

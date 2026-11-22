@@ -2,8 +2,9 @@
 
 Written for: whoever is releasing this bot — including Claude in a future session.
 
-Production is the DigitalOcean droplet behind <https://swingtrademl.com>. There
-is no manual deploy step: **pushing to `main` is the deploy.**
+Production is the DigitalOcean droplet behind <https://swingtrademl.com>. **Pushing
+or merging to `main` does not deploy.** The owner starts every release by hand:
+Actions, Deploy to production, Run workflow, branch `main`.
 `.github/workflows/deploy.yml` re-runs the whole test suite and only releases to
 the droplet if it passes, so a red commit cannot reach production.
 
@@ -59,13 +60,15 @@ so any fix that has to change prod behaviour must be a **code** change.
 
    Then re-run the suite — a clean rebase is not a passing one.
 
-5. **Push, and let CI deploy.**
+5. **Get it onto `main`, then the owner starts the deploy.**
 
    ```bash
-   git push origin fix/<short-name>:main      # fast-forward = deploy
+   git push origin fix/<short-name>          # then a PR the owner merges
    ```
 
-   Or open a PR and merge it. Same result; the PR just gives a review surface.
+   When the owner is ready to release, the owner runs Deploy to production on
+   `main` (Actions page, or `gh workflow run deploy.yml --ref main`).
+   It releases everything merged since the last deploy.
 
 6. **Watch the release, don't assume it.**
 
@@ -118,12 +121,13 @@ whatever onboarding note the operator keeps; the rules needed are
 
 ## Rollback
 
-Revert the commit and push that — it is the same pipeline, and it re-runs the
-tests on the way back:
+Revert the commit, get the revert onto `main`, then run Deploy to production by
+hand. It is the same pipeline, and it re-runs the tests on the way back:
 
 ```bash
 git revert <bad-sha>
-git push origin HEAD:main
+git push origin HEAD:main            # or merge a PR; neither deploys
+gh workflow run deploy.yml --ref main # the owner starts the deploy
 ```
 
 Do not force-push `main`. It would skip the tested path and can silently drop

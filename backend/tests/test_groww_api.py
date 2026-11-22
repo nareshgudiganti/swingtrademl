@@ -462,3 +462,27 @@ def test_a_held_stock_is_in_no_scan_or_watchlist_universe(db_session):
     watchlist_snapshots.record_watchlist_snapshot(db_session, on=day)
     snap = db_session.query(WatchlistSnapshot.symbol).filter_by(snapshot_date=day).all()
     assert "GWUNIVERSE" not in {s for (s,) in snap}
+
+
+# --- #388 backend: who is calling is checked before the connection state is revealed ---
+
+
+def test_a_second_owner_gets_403_before_503_or_429(client, db_session, monkeypatch):
+    _as(db_session, OWNER)
+    _, other = _as(db_session, "someoneelse")
+    monkeypatch.setattr(groww_api.groww_sync, "run_sync", lambda *a, **k: pytest.fail("must not sync"))
+    monkeypatch.setattr(groww_api.groww_client, "is_configured", lambda: False)
+    assert client.post(API + "/groww/sync", headers=other).status_code == 403  # not 503
+    monkeypatch.setattr(groww_api.groww_client, "is_configured", lambda: True)
+    _sync(db_session, status=SYNC_FAILED, started=utcnow() - timedelta(seconds=5))
+    assert client.post(API + "/groww/sync", headers=other).status_code == 403  # not 429
+
+
+def test_the_groww_owner_still_sees_503_then_429(client, db_session, monkeypatch):
+    _, hdr = _as(db_session, OWNER)
+    monkeypatch.setattr(groww_api.groww_client, "is_configured", lambda: False)
+    assert client.post(API + "/groww/sync", headers=hdr).status_code == 503
+    monkeypatch.setattr(groww_api.groww_client, "is_configured", lambda: True)
+    _sync(db_session, status=SYNC_FAILED, started=utcnow() - timedelta(seconds=5))
+    monkeypatch.setattr(groww_api.groww_sync, "run_sync", lambda *a, **k: pytest.fail("must not sync"))
+    assert client.post(API + "/groww/sync", headers=hdr).status_code == 429

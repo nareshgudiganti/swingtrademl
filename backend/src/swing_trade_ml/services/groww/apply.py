@@ -19,7 +19,7 @@ from __future__ import annotations
 from datetime import datetime, time
 from typing import Any
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from swing_trade_ml.core.market_session import IST
@@ -354,25 +354,37 @@ def _parse(value: str | None) -> float | None:
 
 
 def pending_sale_qty(db: Session, item: UserWatchlistItem) -> float | None:
-    """Shares Groww shows as gone since the last confirmed sale; None when there are none."""
-    last_sale = db.scalar(
-        select(func.max(UserWatchlistSale.created_at)).where(
-            UserWatchlistSale.user_id == item.user_id, UserWatchlistSale.symbol == item.symbol
+    """Shares Groww shows as gone that no confirmed sale has covered yet; None when there are none.
+
+    Read in time order: each drop Groww showed adds to the pending shares, and each confirmed sale takes
+    its shares off (a sale with no quantity clears everything before it). Confirming only part of a drop
+    therefore leaves the rest to confirm, and a sale never takes the count below zero. A drop and a sale
+    at the same moment count the drop first, as before."""
+    events: list[tuple[datetime, int, float]] = []  # (when, 0 = drop / 1 = sale, shares; inf = all)
+    for old_s, new_s, at in db.execute(
+        select(
+            UserWatchlistItemChange.old_value,
+            UserWatchlistItemChange.new_value,
+            UserWatchlistItemChange.changed_at,
+        ).where(
+            UserWatchlistItemChange.item_id == item.id,
+            UserWatchlistItemChange.field == "quantity",
+            UserWatchlistItemChange.changed_by == CHANGED_BY,
         )
-    )
-    q = select(UserWatchlistItemChange.old_value, UserWatchlistItemChange.new_value).where(
-        UserWatchlistItemChange.item_id == item.id,
-        UserWatchlistItemChange.field == "quantity",
-        UserWatchlistItemChange.changed_by == CHANGED_BY,
-    )
-    if last_sale is not None:
-        q = q.where(UserWatchlistItemChange.changed_at > last_sale)
-    total = 0.0
-    for old_s, new_s in db.execute(q).all():
+    ).all():
         old, new = _parse(old_s), _parse(new_s)
         if old is not None and new is not None and new < old:
-            total += old - new
-    return total if total > _EPS else None
+            events.append((at, 0, old - new))
+    for qty, at in db.execute(
+        select(UserWatchlistSale.quantity, UserWatchlistSale.created_at).where(
+            UserWatchlistSale.user_id == item.user_id, UserWatchlistSale.symbol == item.symbol
+        )
+    ).all():
+        events.append((at, 1, float("inf") if qty is None else float(qty)))
+    pending = 0.0
+    for _, kind, shares in sorted(events, key=lambda e: (e[0], e[1])):
+        pending = pending + shares if kind == 0 else max(0.0, pending - shares)
+    return pending if pending > _EPS else None
 
 
 def groww_held_symbols(db: Session) -> list[str]:

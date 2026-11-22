@@ -80,9 +80,17 @@ class MatchBody(BaseModel):
     instrument_id: int
 
 
+def _refuse_other_owner(db: Session, principal: Principal) -> None:
+    """Who is calling is checked first: another real-account owner learns nothing about the connection."""
+    uid = groww_sync.owner_user_id(db)
+    if uid is not None and principal.user is not None and principal.user.id != uid:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, NOT_GROWW_OWNER)
+
+
 @router.post("/sync")
 def refresh(db: DbSession, principal: Owner) -> dict:
     """Refresh now: fetch Groww holdings and, if the result is complete, update the tracker."""
+    _refuse_other_owner(db, principal)
     if not groww_client.is_configured():
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, NOT_CONFIGURED)
     last_started = db.scalar(select(GrowwSync.started_at).order_by(GrowwSync.id.desc()).limit(1))

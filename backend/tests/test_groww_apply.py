@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -572,3 +572,54 @@ def test_isin_rematched_to_another_stock_unlinks_old_row(db_session, user):
     count_before = db_session.query(UserWatchlistItemChange).count()
     gapply.apply_sync(db_session, sync, user_id=user.id)
     assert db_session.query(UserWatchlistItemChange).count() == count_before
+
+
+# --- #388 backend: confirming part of a drop keeps asking for the rest ---------------
+
+
+def _step(db, user, isin, inst, qty):
+    """One complete sync that shows `qty` shares of `inst`, applied to the owner's tracker."""
+    gapply.apply_sync(db, _sync(db, [(isin, inst, qty, 100.0, MATCH_CONFIRMED)]), user_id=user.id)
+
+
+def _sale(db, user, symbol, quantity, when):
+    db.add(
+        UserWatchlistSale(
+            user_id=user.id, symbol=symbol, bought_on=ORIGINAL_ADDED.date(), entry_price=100.0,
+            entry_source="your_price", quantity=quantity, sell_price=110.0,
+            sold_on=datetime(2026, 11, 22).date(), created_at=when,
+        )
+    )
+    db.flush()
+
+
+def test_confirming_part_of_a_drop_leaves_the_rest_to_confirm(db_session, user):
+    inst = _inst(db_session, "PARTSALE")
+    item = _item(db_session, user, "PARTSALE", quantity=10, buy_price=100.0)
+    _step(db_session, user, "INE0PS001011", inst, 10)
+    _step(db_session, user, "INE0PS001011", inst, 4)
+    assert gapply.pending_sale_qty(db_session, item) == 6
+    _sale(db_session, user, "PARTSALE", 4, datetime.now(UTC) + timedelta(seconds=1))
+    assert gapply.pending_sale_qty(db_session, item) == 2
+    _sale(db_session, user, "PARTSALE", 2, datetime.now(UTC) + timedelta(seconds=2))
+    assert gapply.pending_sale_qty(db_session, item) is None
+
+
+def test_a_sale_larger_than_the_drop_never_leaves_a_negative_pending(db_session, user):
+    inst = _inst(db_session, "BIGSALE")
+    item = _item(db_session, user, "BIGSALE", quantity=10, buy_price=100.0)
+    _step(db_session, user, "INE0BS001011", inst, 10)
+    _step(db_session, user, "INE0BS001011", inst, 8)
+    _sale(db_session, user, "BIGSALE", 5, datetime.now(UTC))  # after the drop, before the next sync
+    assert gapply.pending_sale_qty(db_session, item) is None
+    _step(db_session, user, "INE0BS001011", inst, 7)
+    assert gapply.pending_sale_qty(db_session, item) == 1
+
+
+def test_a_sale_with_no_quantity_clears_everything_before_it(db_session, user):
+    inst = _inst(db_session, "NOQTY")
+    item = _item(db_session, user, "NOQTY", quantity=10, buy_price=100.0)
+    _step(db_session, user, "INE0NQ001011", inst, 10)
+    _step(db_session, user, "INE0NQ001011", inst, 3)
+    _sale(db_session, user, "NOQTY", None, datetime.now(UTC) + timedelta(seconds=1))
+    assert gapply.pending_sale_qty(db_session, item) is None

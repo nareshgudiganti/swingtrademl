@@ -1,5 +1,21 @@
 # TradeMind AI Task Handoff
 
+## 2026-11-22: fix/reload-deep-link (ready for Codex review)
+
+- **Branch:** `fix/reload-deep-link`, from main `531846c`. Local commit only: not pushed, no PR, not deployed.
+- **Bug:** for the owner, opening or refreshing any `/trademind/...` address landed on Today. `App.tsx` redirected
+  on `!canTradeMind`, which is always true until the account status arrives.
+- **Fix:** `frontend/src/App.tsx` runs the existing "owner status not loaded yet" wait before that redirect.
+  No backend, trading or permission change.
+- **Files:** `frontend/src/App.tsx`, `frontend/e2e/deep-link.spec.ts` (new), `frontend/e2e/support/test.ts` (comment),
+  `docs/QUALITY-CHECKS.md` (known-issue note removed).
+- **Tests run:** new spec 4 failed before and 8/8 pass after; e2e 169 passed (no retries); vitest 1111 passed; both
+  typechecks, eslint on App.tsx and build clean. 27 addresses also checked by hand-written browser script against
+  a local API on 531846c. Backend tests not run (no backend change).
+- **Review focus:** owner with brain off, status error, plan preview or failed plan request; members unchanged.
+  The first two and members are tested. Preview and a failed plan request are NOT tested.
+- **Next:** Codex review, then owner approval before push or merge (main deploys).
+
 ## Current task
 
 Codex audit remediation, round 2. Owner decisions on 2026-11-16:

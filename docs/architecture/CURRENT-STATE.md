@@ -9,8 +9,9 @@ confirmed from a document or git history is marked **unverified**. Nothing here 
 
 ## What is on `main` and deployed
 
-- **Production** runs from `main` on the DigitalOcean droplet (swingtrademl.com). Every merge to `main` deploys, after the
-  tests pass and outside the deploy window (see `docs/DEPLOY.md` and `docs/OPERATIONS-AND-LAUNCH.md`).
+- **Production** runs from `main` on the DigitalOcean droplet (swingtrademl.com). Merging to `main` does not deploy: the owner starts
+  Deploy to production by hand (since 2026-11-22). It releases only if the tests pass and refuses weekdays 09:00-16:30 IST unless
+  forced (see `docs/DEPLOY.md` and `docs/OPERATIONS-AND-LAUNCH.md`).
   Rollback tag `v1` = `64fcb05` is a frozen reference only.
 - **Paper only.** Matrix, read-only prod checks 2026-11-07 and owner check on the droplet 2026-11-09: `TRADING_MODE=paper`,
   `ALLOW_LIVE_TRADING=false`, `ALLOW_REAL_HOLDINGS_ORDERS=false`, `BRAIN_ENABLED=true`; `TESTING_NO_LIMITS` and

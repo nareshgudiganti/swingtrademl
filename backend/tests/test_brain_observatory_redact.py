@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 
 import pytest
 
@@ -36,38 +36,72 @@ def test_each_secret_kind_in_free_text_is_replaced(monkeypatch):
     assert "postgresql://[redacted]@db:5432/x" in out
 
 
-def _password_redacted(password: str) -> bool:
-    """True when the password is on the redaction list AND is removed from free text.
+MIN_LISTED = 4  # the redactor only puts passwords of at least this length on its redaction list
 
-    The list is checked directly because the generic long-token mask also hides a long alphanumeric
+
+def _database_password_redacted(url: str) -> bool | None:
+    """Whether the DECODED password of `url` is on the redaction list AND removed from free text.
+
+    None when there is nothing to check: no password, or one shorter than the redactor lists.
+    The credential a database driver actually uses is the percent-decoded one, so that is what is checked.
+    The list is read directly because the generic long-token mask also hides a long alphanumeric
     password, which would let a regression in the password-specific redaction pass unnoticed.
-    Returns a bool so a failing assertion never prints the password.
+    Everything secret stays inside this function and only a bool leaves it, so a failing assertion in a
+    test (and `pytest --showlocals`) can never print the password.
     """
-    listed = password in redact_mod._secret_values()
-    hidden = password not in redact_text(f"could not connect with {password}")
+    raw = urlsplit(url).password
+    if not raw:
+        return None
+    decoded = unquote(raw)
+    if len(decoded) < MIN_LISTED:
+        return None
+    listed = decoded in redact_mod._secret_values()
+    hidden = decoded not in redact_text(f"could not connect with {decoded}")
     return listed and hidden
 
 
 def test_the_test_database_password_is_redacted():
-    # Password of whichever test role is in use (shared or an isolated per-developer one).
-    password = urlsplit(os.environ["DATABASE_URL"]).password
-    if not password:
-        pytest.skip("this test database URL has no password, so there is nothing to redact")
-    ok = _password_redacted(password)
-    assert ok, "the test database password is not redacted"
+    # Whichever test role is in use (shared or an isolated per-developer one). The URL goes straight into the
+    # helper, so no password sits in this test's locals.
+    result = _database_password_redacted(os.environ["DATABASE_URL"])
+    if result is None:
+        pytest.skip("this test database URL has no password the redactor lists, nothing to check")
+    assert result, "the test database password is not redacted"
+
+
+def _use_url(monkeypatch, url: str) -> None:
+    monkeypatch.setenv("DATABASE_URL", url)
+    monkeypatch.setattr(settings, "DATABASE_URL", url, raising=False)
 
 
 # A short password, and a 42-character one that the generic long-token mask would also hide.
 @pytest.mark.parametrize("password", ["Syn7hetic-pw", "Ab1" * 14])
 def test_a_database_password_is_redacted_and_the_check_can_fail(monkeypatch, password):
     url = f"postgresql+psycopg://synthuser:{password}@localhost:5433/synth_test"
-    monkeypatch.setenv("DATABASE_URL", url)
-    monkeypatch.setattr(settings, "DATABASE_URL", url, raising=False)
-    assert _password_redacted(password), "redaction missed a database password"
+    _use_url(monkeypatch, url)
+    assert _database_password_redacted(url) is True, "redaction missed a database password"
     # The same check must fail when the password-specific redaction is removed (in memory only).
     real = redact_mod._secret_values
     monkeypatch.setattr(redact_mod, "_secret_values", lambda: [v for v in real() if password not in v])
-    assert not _password_redacted(password), "the check did not notice the redaction being removed"
+    assert _database_password_redacted(url) is False, "the check did not notice the redaction being removed"
+
+
+def test_a_password_shorter_than_the_redaction_minimum_is_not_a_failure(monkeypatch):
+    url = "postgresql+psycopg://synthuser:abc@localhost:5433/synth_test"  # 3 characters
+    _use_url(monkeypatch, url)
+    assert len("abc") < MIN_LISTED
+    assert _database_password_redacted(url) is None
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="known gap: redact._secret_values lists the URL-encoded password, not the decoded one",
+)
+def test_a_password_with_special_characters_is_redacted_in_its_decoded_form(monkeypatch):
+    # Decoded, the password is Syn@th3tic-pw.
+    url = "postgresql+psycopg://synthuser:Syn%40th3tic-pw@localhost:5433/synth_test"
+    _use_url(monkeypatch, url)
+    assert _database_password_redacted(url) is True
 
 
 def test_a_database_url_without_a_password_is_handled(monkeypatch):

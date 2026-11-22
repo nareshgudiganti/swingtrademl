@@ -747,7 +747,8 @@ export interface GrowwStatus {
 
 export interface GrowwSyncResult {
   status: GrowwSyncStatus
-  holdings_count: number
+  /** How many holdings Groww returned; null when the refresh failed before it had a count. */
+  holdings_count: number | null
   /** When the refresh finished; null while it has not (the server may answer before it is stamped). */
   finished_at: string | null
 }

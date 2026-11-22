@@ -20,6 +20,7 @@ export async function runRefresh(sync: () => Promise<GrowwSyncResult>): Promise<
   try {
     const r = await sync()
     if (r.status === 'failed') return { kind: 'failed', text: 'Groww did not answer' }
+    if (r.holdings_count == null) return { kind: 'done', text: 'Done.' }
     return { kind: 'done', text: `Done. ${r.holdings_count} ${r.holdings_count === 1 ? 'holding' : 'holdings'} from Groww.` }
   } catch (e) {
     const msg = e instanceof Error ? e.message : ''

@@ -276,8 +276,11 @@ export function saleBody(sellPrice: string, soldOn: string, qtyText: string): { 
 
 /** Groww no longer lists this stock. */
 export const isNotHeld = (i: WatchTrackerItem): boolean => i.held_state === 'not_held'
-/** Quantity and price come from Groww on every sync, so they cannot be typed in. */
-export const isGrowwRow = (i: WatchTrackerItem): boolean => i.source === 'groww'
+/** Quantity and price come from Groww on every sync, so they cannot be typed in. A row is linked to Groww when it
+ *  was added from Groww, or when a sync has seen it (held or not held): a hand-entered row that a sync linked keeps
+ *  source "manual", and the server refuses an edit of its shares or price. Missing or "unknown" stays hand-entered. */
+export const isGrowwRow = (i: WatchTrackerItem): boolean =>
+  i.source === 'groww' || i.held_state === 'held' || i.held_state === 'not_held'
 
 const IST_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 /** "21 Nov, 15:35 IST" from an ISO time; null when missing or not a time. */

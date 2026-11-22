@@ -1,5 +1,18 @@
 # TradeMind AI Task Handoff
 
+## 2026-11-22: fix/brain-gate-loop (ready for Codex review)
+
+- **Branch:** `fix/brain-gate-loop`, from main `c2f6954`. Not merged, not deployed.
+- **Bug:** with no brain run (404 from /brain/runs/latest) a refetch read as a first load, so BrainGate dropped the
+  page. Admin > System looped (about 14 requests a second); Go-live blanked on each background refetch.
+- **Fix:** `useBrainStatus` in `frontend/src/trademind/live.ts` remembers the 404 until the next answer.
+  No backend, trading or permission change.
+- **Test:** `frontend/e2e/brain-no-run.spec.ts` (2 failed before, 6/6 after); e2e 175, vitest 1113, typechecks,
+  eslint on live.ts and build pass; 23 screens swept against a local API with no run. Backend tests not run locally.
+- **Review focus:** the state set during render; offline during a refetch after a 404 now keeps "no run yet"
+  instead of showing offline (not tested).
+- **Next:** Codex review, then owner approval before merge (main deploys).
+
 ## 2026-11-22: fix/reload-deep-link (ready for Codex review)
 
 - **Branch:** `fix/reload-deep-link`, from main `531846c`. PR to main opened 2026-11-22. Not merged, not deployed.

@@ -66,12 +66,19 @@ export function useBrainStatus(): 'live' | 'no-run' | 'off' | 'loading' | 'error
   // to tell "brain on but no run yet" from "brain switched off".
   const health = useQuery({ queryKey: ['brainHealth'], queryFn: api.brainHealth, retry: false })
 
+  // While a query with no data refetches, react-query clears its error and reports 'pending'. Remember a 404
+  // until the next answer: if it read as 'loading', BrainGate would drop the page, and a page with its own
+  // latest-run query would refetch on every mount, forever.
+  const latestIs404 = latest.error instanceof ApiError && latest.error.status === 404
+  const [lastWas404, setLastWas404] = useState(false)
+  if (!latest.isPending && lastWas404 !== latestIs404) setLastWas404(latestIs404)
+  const latestSaysNoRun = latestIs404 || (latest.isPending && lastWas404)
+
   // A run that loaded before stays 'live' even when a later refetch fails (slow or no network): the screen
   // keeps showing it with a "showing data from …" notice instead of going blank (BrainGate adds the notice).
   if (latest.isSuccess || latest.data !== undefined) return 'live'
 
-  const latestIs404 = latest.error instanceof ApiError && latest.error.status === 404
-  if (!latestIs404) {
+  if (!latestSaysNoRun) {
     if (latest.isError) return 'error'
     return 'loading'
   }

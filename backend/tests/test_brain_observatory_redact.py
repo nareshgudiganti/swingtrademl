@@ -37,18 +37,10 @@ def test_each_secret_kind_in_free_text_is_replaced(monkeypatch):
 
 
 MIN_LISTED = 4  # the redactor only puts passwords of at least this length on its redaction list
+UNCHECKABLE = "unable to check"  # the answer when the URL cannot be parsed or the check itself failed
 
 
-def _database_password_redacted(url: str) -> bool | None:
-    """Whether the DECODED password of `url` is on the redaction list AND removed from free text.
-
-    None when there is nothing to check: no password, or one shorter than the redactor lists.
-    The credential a database driver actually uses is the percent-decoded one, so that is what is checked.
-    The list is read directly because the generic long-token mask also hides a long alphanumeric
-    password, which would let a regression in the password-specific redaction pass unnoticed.
-    Everything secret stays inside this function and only a bool leaves it, so a failing assertion in a
-    test (and `pytest --showlocals`) can never print the password.
-    """
+def _check_database_password(url: str) -> bool | None:
     raw = urlsplit(url).password
     if not raw:
         return None
@@ -56,8 +48,27 @@ def _database_password_redacted(url: str) -> bool | None:
     if len(decoded) < MIN_LISTED:
         return None
     listed = decoded in redact_mod._secret_values()
-    hidden = decoded not in redact_text(f"could not connect with {decoded}")
+    # Judged on the bare value, not on a sentence around it: a password that equals a word of the sentence or
+    # of the mask ("[redacted]") would otherwise look unredacted. Redaction must change the value itself.
+    hidden = redact_text(decoded) != decoded
     return listed and hidden
+
+
+def _database_password_redacted(url: str) -> bool | str | None:
+    """Whether the DECODED password of `url` is on the redaction list AND removed from free text.
+
+    None when there is nothing to check: no password, or one shorter than the redactor lists.
+    The credential a database driver actually uses is the percent-decoded one, so that is what is checked.
+    The list is read directly because the generic long-token mask also hides a long alphanumeric
+    password, which would let a regression in the password-specific redaction pass unnoticed.
+    Only a bool, None or the fixed UNCHECKABLE text ever leaves this function, and it never raises: a parse
+    failure or any other error is answered, not propagated, because a propagating exception would carry
+    this frame (the URL, the raw and the decoded password) into the traceback and `pytest --showlocals`.
+    """
+    try:
+        return _check_database_password(url)
+    except Exception:  # noqa: BLE001 - nothing secret may travel with an exception
+        return UNCHECKABLE
 
 
 def test_the_test_database_password_is_redacted():
@@ -66,7 +77,8 @@ def test_the_test_database_password_is_redacted():
     result = _database_password_redacted(os.environ["DATABASE_URL"])
     if result is None:
         pytest.skip("this test database URL has no password the redactor lists, nothing to check")
-    assert result, "the test database password is not redacted"
+    assert result != UNCHECKABLE, "the test database URL could not be checked"
+    assert result is True, "the test database password is not redacted"
 
 
 def _use_url(monkeypatch, url: str) -> None:
@@ -100,6 +112,35 @@ def test_a_password_with_special_characters_is_redacted_in_both_forms(monkeypatc
     assert _database_password_redacted(url) is True
     # The encoded form (as written in the URL) stays redacted too.
     assert "Syn%40th3tic-pw" not in redact_text("could not connect with Syn%40th3tic-pw")
+
+
+@pytest.mark.parametrize("password", ["redacted", "connect", "with"])
+def test_a_password_that_is_a_word_of_the_replacement_text_is_not_a_false_failure(monkeypatch, password):
+    """The check must not be fooled by the mask `[redacted]` or by the words of its own sample sentence."""
+    url = f"postgresql+psycopg://synthuser:{password}@localhost:5433/synth_test"
+    _use_url(monkeypatch, url)
+    assert _database_password_redacted(url) is True
+
+
+def test_a_url_that_cannot_be_parsed_is_reported_without_raising_or_exposing_it(monkeypatch):
+    """urlsplit raises on this URL (invalid IPv6 host). An exception would put the URL, with its password,
+    into the traceback and into `pytest --showlocals`, so the helper must answer instead of raising."""
+    url = "postgresql+psycopg://synthuser:Syn7hetic-pw@[::1/synth_test"
+    _use_url(monkeypatch, url)
+    with pytest.raises(ValueError):
+        urlsplit(url)  # the premise: this really is unparseable
+    result = _database_password_redacted(url)
+    assert result == UNCHECKABLE
+    assert "Syn7hetic-pw" not in repr(result)
+
+
+def test_a_failure_inside_the_check_is_reported_without_raising(monkeypatch):
+    def boom():
+        raise RuntimeError("synthetic failure carrying Syn7hetic-pw")
+
+    monkeypatch.setattr(redact_mod, "_secret_values", boom)
+    url = "postgresql+psycopg://synthuser:Syn7hetic-pw@localhost:5433/synth_test"
+    assert _database_password_redacted(url) == UNCHECKABLE
 
 
 def test_a_database_url_without_a_password_is_handled(monkeypatch):

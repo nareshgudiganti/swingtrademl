@@ -300,3 +300,75 @@ def test_the_activate_endpoint_turns_a_corrupt_file_into_a_400_not_a_server_erro
     with pytest.raises(HTTPException) as exc:
         ml_ep.activate(m.id, db=db_session)
     assert exc.value.status_code == 400
+
+
+# ------------------------------------------------------------------ a file that cannot be read (I/O error)
+
+
+class _Row:
+    """A plain stand-in for an ml_models row: load_model_artifact only reads these five attributes."""
+
+    def __init__(self, path, *, sha="0" * 64):
+        self.name, self.version = "h1_ioerr", "v1"
+        self.artifact_path = str(path)
+        self.metrics = {"artifact_sha256": sha}
+        self.feature_names = FEATURES
+
+
+def _denied(*args, **kwargs):
+    raise PermissionError(13, "access denied", "C:/private/secret-folder/models/h1_ioerr_v1.joblib")
+
+
+def test_an_io_error_while_hashing_is_refused_as_unreadable_not_raised(tmp_path, monkeypatch):
+    path = tmp_path / "h1_ioerr_v1.joblib"
+    path.write_bytes(b"x")
+    monkeypatch.setattr(registry, "artifact_sha256", _denied)
+    with pytest.raises(registry.ArtifactMismatchError, match="could not be read") as exc:
+        registry.load_model_artifact(_Row(path))
+    message = str(exc.value)
+    assert "h1_ioerr_v1.joblib" in message  # the file name only
+    assert str(tmp_path) not in message and "secret-folder" not in message and "access denied" not in message
+
+
+def test_an_io_error_while_checking_the_file_is_refused_as_unreadable_not_raised(tmp_path, monkeypatch):
+    path = tmp_path / "h1_ioerr_v1.joblib"
+    path.write_bytes(b"x")
+    with monkeypatch.context() as scoped:
+        scoped.setattr(type(path), "is_file", _denied)
+        with pytest.raises(registry.ArtifactMismatchError, match="could not be read") as exc:
+            registry.load_model_artifact(_Row(path))
+    assert "secret-folder" not in str(exc.value) and str(tmp_path) not in str(exc.value)
+
+
+def test_activation_with_an_unreadable_file_keeps_the_incumbent_and_writes_nothing(
+    db_session, model_dir, monkeypatch
+):
+    current = _published(db_session, "h1_ioerr_act", status=ModelStatus.ACTIVE)
+    candidate = _published(db_session, "h1_ioerr_act")
+    monkeypatch.setattr(registry, "artifact_sha256", _denied)
+    with pytest.raises(registry.ArtifactMismatchError, match="could not be read"):
+        registry.activate_model(db_session, candidate.id)
+    db_session.refresh(current)
+    db_session.refresh(candidate)
+    assert current.status == ModelStatus.ACTIVE and candidate.status == ModelStatus.TRAINED
+    assert candidate.activated_at is None
+
+
+def test_the_activate_endpoint_turns_an_unreadable_file_into_a_400_and_writes_nothing(
+    db_session, model_dir, monkeypatch
+):
+    from fastapi import HTTPException
+
+    from swing_trade_ml.api.v1.endpoints import ml as ml_ep
+
+    current = _published(db_session, "h1_ioerr_api", status=ModelStatus.ACTIVE)
+    candidate = _published(db_session, "h1_ioerr_api")
+    monkeypatch.setattr(ml_ep, "promotion_refusal", lambda: None)
+    monkeypatch.setattr(registry, "artifact_sha256", _denied)
+    with pytest.raises(HTTPException) as exc:
+        ml_ep.activate(candidate.id, db=db_session)
+    assert exc.value.status_code == 400
+    assert "could not be read" in exc.value.detail and "secret-folder" not in exc.value.detail
+    db_session.refresh(current)
+    db_session.refresh(candidate)
+    assert current.status == ModelStatus.ACTIVE and candidate.status == ModelStatus.TRAINED

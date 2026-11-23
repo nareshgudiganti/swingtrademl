@@ -269,6 +269,7 @@ def append_to_ledger(
         with db.begin_nested():
             models: dict[tuple[str, str], MLModel | None] = {}
             scored_securities: set[int] = set()
+            scan_session = max(sessions.values())
             for (instrument_id, name), (score, model_version) in latest.items():
                 instrument = db.get(Instrument, instrument_id)
                 if instrument is None:
@@ -299,6 +300,23 @@ def append_to_ledger(
                     scan_key=f"v1:{sessions[instrument_id].isoformat()}",
                 )
                 written += 1 if result.created else 0
+                if sessions[instrument_id] < scan_session:
+                    # Its newest candle is older than this scan's session: the score above belongs to that
+                    # older session, and THIS session gets an explicit `stale` gap (never a copied score).
+                    stale = ledger.append_score(
+                        db,
+                        security_id=security_id,
+                        session_date=scan_session,
+                        source="v1_scan",
+                        score=None,
+                        status="stale",
+                        horizon_days=None if model is None else model.prediction_horizon_days,
+                        model_name=name,
+                        model_version=version,
+                        scan_key=f"v1:{scan_session.isoformat()}",
+                        note=f"newest candle is {sessions[instrument_id].isoformat()}",
+                    )
+                    written += 1 if stale.created else 0
             written += _append_missing(db, sessions, latest, universe, models, scored_securities)
     except Exception as exc:  # noqa: BLE001 - never break a scan over a history feature
         log.warning("score_history.ledger_append_failed", error=str(exc))

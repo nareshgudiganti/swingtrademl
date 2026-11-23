@@ -222,3 +222,111 @@ def history(
         if kept is None or (row.revision < kept.revision if view == "first" else row.revision > kept.revision):
             best[key] = row
     return sorted(best.values(), key=lambda r: (r.session_date, r.id))
+
+
+def session_state(
+    db: Session,
+    security_ids: Iterable[int],
+    session_date: date,
+    *,
+    horizon_days: int | None = None,
+    source: str | None = None,
+) -> dict[int, ScoreLedger | None]:
+    """For each security, the newest revision recorded for one session, or None when nothing was recorded.
+
+    A row with status `missing` or `stale` is an explicit gap (the stock was in the scan and no fresh score came
+    out); None means the stock was not in any scan that session. Never read either as a score of 0."""
+    ids = sorted(set(security_ids))
+    query = select(ScoreLedger).where(
+        ScoreLedger.security_id.in_(ids), ScoreLedger.session_date == session_date
+    )
+    if horizon_days is not None:
+        query = query.where(ScoreLedger.horizon_days == horizon_days)
+    if source is not None:
+        query = query.where(ScoreLedger.source == source)
+    best: dict[int, ScoreLedger] = {}
+    for row in db.scalars(query.order_by(ScoreLedger.id)):
+        kept = best.get(row.security_id)
+        # a scored row outranks a gap row for the same stock and session; within a kind, the newest revision wins
+        rank = (row.status == LEDGER_SCORED, row.revision, row.id)
+        if kept is None or rank > (kept.status == LEDGER_SCORED, kept.revision, kept.id):
+            best[row.security_id] = row
+    return {i: best.get(i) for i in ids}
+
+
+def append_from_brain_run(db: Session, run_id: str) -> int:
+    """Record one finished brain run's decisions in the ledger (source `brain`), with the run id as provenance.
+
+    The brain stores no model identity on a decision, so `model_name`/`model_version` stay empty (null, never
+    guessed) and the decision's `score_source` goes in the note. A decision with no confidence is a `missing` row.
+    A re-run of the same run is a no-op. On-demand `why` runs are not scans and are skipped. Returns rows written."""
+    from swing_trade_ml.core.market_session import IST
+    from swing_trade_ml.db.models.brain import BrainDecision, BrainRun
+    from swing_trade_ml.db.models.market import Instrument
+    from swing_trade_ml.services.identity import writer
+
+    run = db.get(BrainRun, run_id)
+    if run is None or run.kind == "why":
+        return 0
+    session_date = run.as_of.astimezone(IST).date()
+    written = 0
+    for decision in db.scalars(select(BrainDecision).where(BrainDecision.run_id == run_id)):
+        instrument = db.scalar(
+            select(Instrument).where(Instrument.exchange == "NSE", Instrument.tradingsymbol == decision.symbol)
+        )
+        if instrument is None:
+            continue
+        try:
+            with db.begin_nested():
+                security_id = writer.ensure_for_instrument(db, instrument)
+        except writer.IdentityConflictError:
+            continue
+        note = f"brain {decision.kind}; score_source={decision.score_source or 'unknown'}"
+        common = {
+            "security_id": security_id,
+            "session_date": session_date,
+            "source": "brain",
+            "horizon_days": decision.horizon_days,
+            "scan_key": f"brain:{run.kind}:{session_date.isoformat()}:{run.book}",
+            "run_ref": run_id,
+        }
+        if decision.confidence is None:
+            result = append_score(db, score=None, status=LEDGER_MISSING, note="brain gave no score; " + note, **common)
+        else:
+            result = append_score(db, score=decision.confidence, note=note, **common)
+        written += 1 if result.created else 0
+    return written
+
+
+def backfill_from_stock_scores(db: Session, *, since: date | None = None) -> int:
+    """Copy the old one-row-a-day `stock_score_history` into the ledger as source `backfill` (#389 S5).
+
+    The old table is never changed. Model name and version are copied exactly as stored (empty when the old row
+    had none: never guessed); the horizon is unknown (None). Idempotent. Returns rows written."""
+    from swing_trade_ml.db.models.market import Instrument
+    from swing_trade_ml.db.models.trading import StockScore
+    from swing_trade_ml.services.identity import writer
+
+    query = select(StockScore, Instrument).join(Instrument, Instrument.id == StockScore.instrument_id)
+    if since is not None:
+        query = query.where(StockScore.as_of >= since)
+    written = 0
+    for score_row, instrument in db.execute(query.order_by(StockScore.as_of, StockScore.id)):
+        try:
+            with db.begin_nested():
+                security_id = writer.ensure_for_instrument(db, instrument)
+        except writer.IdentityConflictError:
+            continue
+        stored = score_row.model_version or ""
+        result = append_score(
+            db,
+            security_id=security_id,
+            session_date=score_row.as_of,
+            source="backfill",
+            score=score_row.score,
+            model_name=score_row.model_name or "",
+            model_version=stored.split(":", 1)[1][:64] if ":" in stored else "",
+            note="backfilled from stock_score_history",
+        )
+        written += 1 if result.created else 0
+    return written

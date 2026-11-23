@@ -68,7 +68,35 @@ the model is unknown), `source` (`v1_scan`, `prediction`, `brain`, `catch_up`, `
 `stale`, `late`, `no_score`), `scan_key`, `revision`, `supersedes_id`, `input_cutoff`, `scored_at`, `run_ref`
 (brain run id or prediction id when known, else `None`), `note` (the reason for a gap).
 
-Writers (`ledger.append_score`, `append_missing`, `writer.*`) are not part of this contract. Readers never call them.
+```python
+ledger.session_state(db, security_ids, session_date, *, horizon_days=None, source=None)
+    -> dict[int, ScoreLedger | None]
+```
+
+One call answers "what happened to each of these stocks in that session's scan". A `scored` row outranks a gap row
+for the same stock and session; otherwise the newest revision wins. `None` means the stock was in no scan that
+session. A row with `status` `missing` (the stock was in the scan and no score came out) or `stale` (its newest
+candle is older than the scan's session; the row has no score and `note` names that candle date) is an explicit
+gap. Never read a gap or `None` as 0. A stale stock's own score stays filed under its own older session.
+
+Provenance on a row: `model_id`, `model_name`, `model_version` are set when the scan knew the model and are
+empty or `None` when it did not (the brain stores no model identity, so brain rows leave them empty); `run_ref` is
+the brain run id for `source = "brain"` rows; `horizon_days` is the model's horizon when known, else `None`.
+
+## 2b. Adapters for consumers that hold another key
+
+```python
+from swing_trade_ml.services.identity import consumers
+
+consumers.security_for_instrument(db, instrument_id) -> int | None      # Discover, Portfolio positions
+consumers.security_for_symbol(db, symbol, *, on=None, exchange="NSE") -> int | None
+    # watchlist and Groww Tracker rows, fills, trades: pass the day the row refers to (date or datetime)
+```
+
+Both are read-only and return `None` on doubt. A row written under an old symbol resolves through a rename when
+`on` is a date the old symbol was valid; today's date would not match it.
+
+Writers (`ledger.append_score`, `append_missing`, `append_from_brain_run`, `backfill_from_stock_scores`, `writer.*`) are not part of this contract. Readers never call them.
 
 ## 3. What is NOT promised
 

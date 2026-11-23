@@ -608,3 +608,37 @@ def test_the_groww_owner_reads_status_and_gets_the_groww_key(client, db_session)
     _, hdr = _as(db_session, OWNER)
     assert client.get(API + "/groww/status", headers=hdr).status_code == 200
     assert "groww" in client.get(API + "/me/watchlist/tracker", headers=hdr).json()
+
+
+# --- #388 follow-up: the tracker reads sales and history once for all linked rows ---
+
+
+def test_the_tracker_reads_sales_and_history_once_for_all_linked_rows(client, db_session):
+    from sqlalchemy import event
+
+    owner, hdr = _as(db_session, OWNER)
+    for n in range(4):
+        _inst(db_session, f"GWBULK{n}")
+        db_session.add(
+            UserWatchlistItem(
+                user_id=owner.id, symbol=f"GWBULK{n}", source=SOURCE_GROWW, groww_isin=f"INE0GB00{n}011",
+                held_state=HELD, quantity=5, buy_price=10.0,
+            )
+        )
+    db_session.flush()
+    seen: list[str] = []
+
+    def count(conn, cursor, statement, parameters, context, executemany):
+        low = statement.lower()
+        if "user_watchlist_sales" in low or "user_watchlist_item_changes" in low:
+            seen.append(low)
+
+    engine = db_session.get_bind()
+    event.listen(engine, "before_cursor_execute", count)
+    try:
+        body = client.get(API + "/me/watchlist/tracker", headers=hdr).json()
+    finally:
+        event.remove(engine, "before_cursor_execute", count)
+    assert len(body["items"]) == 4
+    assert len([s for s in seen if "user_watchlist_sales" in s]) <= 1
+    assert len([s for s in seen if "user_watchlist_item_changes" in s]) <= 1

@@ -265,3 +265,30 @@ def test_a_non_finite_extra_value_does_not_fail_the_store(db_session, monkeypatc
     assert sync.status == "complete" and sync.error_code is None
     (held,) = db_session.query(GrowwHolding).filter_by(sync_id=sync.id).all()
     assert held.extra == {"pledge_quantity": None, "locked": 2}
+
+
+# --- #388 follow-ups: a negative number is malformed; zero is a real value ---------------------------------
+
+
+@pytest.mark.parametrize("field", ["quantity", "average_price"])
+def test_a_negative_number_makes_the_sync_partial_and_is_never_stored(db_session, monkeypatch, field):
+    bad = _row()
+    bad[field] = -3
+    monkeypatch.setattr(gsync, "fetch_holdings", lambda: [_row(isin="INE0OK000012", symbol="OKCO-EQ"), bad])
+    sync = gsync.run_sync(db_session, user_id=1, trigger="manual")
+    assert sync.status == "partial"
+    stored = {r.isin: r for r in db_session.query(GrowwHolding).filter_by(sync_id=sync.id)}
+    assert getattr(stored[bad["isin"]], field) is None
+
+
+def test_a_zero_quantity_or_zero_price_is_valid(db_session, monkeypatch):
+    """Zero shares is a confirmed zero; a zero average price is real (gifted or bonus shares): owner call."""
+    rows = [
+        _row(isin="INE0Z0000011", symbol="ZEROQ-EQ", qty=0),
+        _row(isin="INE0Z0000022", symbol="ZEROP-EQ", avg=0),
+    ]
+    monkeypatch.setattr(gsync, "fetch_holdings", lambda: rows)
+    sync = gsync.run_sync(db_session, user_id=1, trigger="manual")
+    assert sync.status == "complete"
+    stored = {r.isin: r for r in db_session.query(GrowwHolding).filter_by(sync_id=sync.id)}
+    assert stored["INE0Z0000011"].quantity == 0 and stored["INE0Z0000022"].average_price == 0

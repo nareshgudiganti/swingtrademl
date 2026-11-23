@@ -791,3 +791,44 @@ def test_a_confirmation_never_marks_an_unrelated_linked_row_not_held(db_session,
     gapply.confirm_match(db_session, user_id=user.id, isin="INE888I01088", instrument_id=target.id)
     db_session.refresh(linked)
     assert _frozen(linked) == before and other.id and sync.id
+
+
+# --- #388 follow-ups: removed stocks stop getting prices; pending sales are read in bulk ---
+
+
+def test_held_symbols_for_prices_leave_out_rows_the_owner_removed(db_session, user):
+    _item(db_session, user, "PRICEKEEP", quantity=1, buy_price=1.0, held_state=HELD, source=SOURCE_GROWW)
+    _item(
+        db_session, user, "PRICEGONE", quantity=1, buy_price=1.0, held_state=HELD, source=SOURCE_GROWW,
+        removed_at=datetime(2026, 11, 20, tzinfo=UTC),
+    )
+    symbols = gapply.groww_held_symbols(db_session)
+    assert "PRICEKEEP" in symbols and "PRICEGONE" not in symbols
+
+
+def _drop(db, item, old, new, when):
+    db.add(
+        UserWatchlistItemChange(
+            item_id=item.id, field="quantity", old_value=str(float(old)), new_value=str(float(new)),
+            changed_by="groww_sync", changed_at=when,
+        )
+    )
+    db.flush()
+
+
+def test_pending_sales_in_bulk_equal_the_row_by_row_answer(db_session, user):
+    start = datetime.now(UTC)
+    items = []
+    for n, symbol in enumerate(("BULKA", "BULKB", "BULKC", "BULKD"), start=1):
+        item = _item(db_session, user, symbol, quantity=10 - n, buy_price=100.0, source=SOURCE_GROWW)
+        if n >= 2:
+            _drop(db_session, item, 10, 10 - n, start)  # Groww showed n shares gone
+        if n == 3:
+            _sale(db_session, user, symbol, 1, start + timedelta(seconds=1))  # one of them confirmed
+        if n == 4:
+            _sale(db_session, user, symbol, None, start + timedelta(seconds=1))  # all confirmed
+        items.append(item)
+    bulk = gapply.pending_sale_qty_for(db_session, items)
+    assert bulk == {i.id: gapply.pending_sale_qty(db_session, i) for i in items}
+    assert [bulk[i.id] for i in items] == [None, 2, 2, None]
+    assert gapply.pending_sale_qty_for(db_session, []) == {}

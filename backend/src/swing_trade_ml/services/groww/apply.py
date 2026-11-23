@@ -16,10 +16,11 @@ None of these functions commit; the caller does (run_sync commits after applying
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime, time
 from typing import Any
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, or_, select, tuple_
 from sqlalchemy.orm import Session
 
 from swing_trade_ml.core.market_session import IST
@@ -379,46 +380,69 @@ def _parse(value: str | None) -> float | None:
         return None
 
 
-def pending_sale_qty(db: Session, item: UserWatchlistItem) -> float | None:
-    """Shares Groww shows as gone that no confirmed sale has covered yet; None when there are none.
+def pending_sale_qty_for(db: Session, items: Sequence[UserWatchlistItem]) -> dict[int, float | None]:
+    """`pending_sale_qty` for many rows at once: ONE query for their quantity history and ONE for their sales,
+    however many rows there are. The answer for each row is the same as asking row by row.
 
+    Shares Groww shows as gone that no confirmed sale has covered yet; None when there are none.
     Read in time order: each drop Groww showed adds to the pending shares, and each confirmed sale takes
     its shares off (a sale with no quantity clears everything before it). Confirming only part of a drop
     therefore leaves the rest to confirm, and a sale never takes the count below zero. A drop and a sale
     at the same moment count the drop first, as before."""
-    events: list[tuple[datetime, int, float]] = []  # (when, 0 = drop / 1 = sale, shares; inf = all)
-    for old_s, new_s, at in db.execute(
+    if not items:
+        return {}
+    # (when, 0 = drop / 1 = sale, shares; inf = all), per row
+    events: dict[int, list[tuple[datetime, int, float]]] = {item.id: [] for item in items}
+    for item_id, old_s, new_s, at in db.execute(
         select(
+            UserWatchlistItemChange.item_id,
             UserWatchlistItemChange.old_value,
             UserWatchlistItemChange.new_value,
             UserWatchlistItemChange.changed_at,
         ).where(
-            UserWatchlistItemChange.item_id == item.id,
+            UserWatchlistItemChange.item_id.in_(list(events)),
             UserWatchlistItemChange.field == "quantity",
             UserWatchlistItemChange.changed_by == CHANGED_BY,
         )
     ).all():
         old, new = _parse(old_s), _parse(new_s)
         if old is not None and new is not None and new < old:
-            events.append((at, 0, old - new))
-    for qty, at in db.execute(
-        select(UserWatchlistSale.quantity, UserWatchlistSale.created_at).where(
-            UserWatchlistSale.user_id == item.user_id, UserWatchlistSale.symbol == item.symbol
-        )
+            events[item_id].append((at, 0, old - new))
+    owners: dict[tuple[int, str], list[int]] = {}
+    for item in items:
+        owners.setdefault((item.user_id, item.symbol), []).append(item.id)
+    for user_id, symbol, qty, at in db.execute(
+        select(
+            UserWatchlistSale.user_id,
+            UserWatchlistSale.symbol,
+            UserWatchlistSale.quantity,
+            UserWatchlistSale.created_at,
+        ).where(tuple_(UserWatchlistSale.user_id, UserWatchlistSale.symbol).in_(list(owners)))
     ).all():
-        events.append((at, 1, float("inf") if qty is None else float(qty)))
-    pending = 0.0
-    for _, kind, shares in sorted(events, key=lambda e: (e[0], e[1])):
-        pending = pending + shares if kind == 0 else max(0.0, pending - shares)
-    return pending if pending > _EPS else None
+        for item_id in owners.get((user_id, symbol), ()):
+            events[item_id].append((at, 1, float("inf") if qty is None else float(qty)))
+    out: dict[int, float | None] = {}
+    for item_id, found in events.items():
+        pending = 0.0
+        for _, kind, shares in sorted(found, key=lambda e: (e[0], e[1])):
+            pending = pending + shares if kind == 0 else max(0.0, pending - shares)
+        out[item_id] = pending if pending > _EPS else None
+    return out
+
+
+def pending_sale_qty(db: Session, item: UserWatchlistItem) -> float | None:
+    """Shares Groww shows as gone that no confirmed sale has covered yet (see `pending_sale_qty_for`)."""
+    return pending_sale_qty_for(db, [item])[item.id]
 
 
 def groww_held_symbols(db: Session) -> list[str]:
-    """Symbols Groww currently shows as held (any user), for the daily price collection."""
+    """Symbols Groww currently shows as held (any user), for the daily price collection. A stock the owner
+    removed from the tracker is left out, so it stops getting daily candles (a later sync that shows it held
+    brings the row, and its prices, back)."""
     return list(
         db.scalars(
             select(UserWatchlistItem.symbol)
-            .where(UserWatchlistItem.held_state == HELD)
+            .where(UserWatchlistItem.held_state == HELD, UserWatchlistItem.removed_at.is_(None))
             .distinct()
             .order_by(UserWatchlistItem.symbol)
         )

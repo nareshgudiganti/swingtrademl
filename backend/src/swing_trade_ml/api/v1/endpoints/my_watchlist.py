@@ -322,6 +322,8 @@ def my_tracker(db: DbSession, me: Me, principal: PrincipalNow) -> dict:
         for iid, rows in by_stock.items()
     }
     items = []
+    # Pending sales for every linked row: one read of the sales and one of the history, not one per row.
+    pending = groww_apply.pending_sale_qty_for(db, [r for r in rows if _groww_linked(r)])
     for r in rows:
         iid, name = inst.get(r.symbol, (None, None))
         item = tracker.build_item(
@@ -338,7 +340,7 @@ def my_tracker(db: DbSession, me: Me, principal: PrincipalNow) -> dict:
         item["source"] = r.source
         item["held_state"] = r.held_state
         item["groww_synced_at"] = _iso(r.groww_synced_at)
-        item["pending_sale_qty"] = groww_apply.pending_sale_qty(db, r) if _groww_linked(r) else None
+        item["pending_sale_qty"] = pending.get(r.id) if _groww_linked(r) else None
         items.append(item)
     last_dates = [c[-1][0] for c in candles.values() if c]
     out = {

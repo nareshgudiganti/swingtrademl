@@ -84,6 +84,13 @@ def _num(value: Any) -> float | None:
     return number if math.isfinite(number) else None
 
 
+def _non_negative(value: Any) -> float | None:
+    """A finite number that is not below zero, else None. Zero is valid: no shares left, or a real zero cost
+    (gifted or bonus shares); a negative quantity or price is never real, so the row is malformed."""
+    number = _num(value)
+    return number if number is not None and number >= 0 else None
+
+
 def _clean_extra(value: Any) -> Any:
     """Groww's own extra fields as stored JSON: a non-finite number becomes null (JSON cannot hold it)."""
     if isinstance(value, float) and not math.isfinite(value):
@@ -104,8 +111,8 @@ def _row_ok(row: Any) -> bool:
         isinstance(row, dict)
         and _text(row.get("isin")) is not None
         and _text(row.get("trading_symbol")) is not None
-        and _num(row.get("quantity")) is not None
-        and _num(row.get("average_price")) is not None
+        and _non_negative(row.get("quantity")) is not None
+        and _non_negative(row.get("average_price")) is not None
     )
 
 
@@ -182,8 +189,8 @@ def _store_rows(db: Session, sync: GrowwSync, rows: list[Any]) -> None:
                 sync_id=sync.id,
                 isin=_text(row.get("isin")) or "",
                 trading_symbol=_text(row.get("trading_symbol")),
-                quantity=_num(row.get("quantity")),
-                average_price=_num(row.get("average_price")),
+                quantity=_non_negative(row.get("quantity")),
+                average_price=_non_negative(row.get("average_price")),
                 extra=extra or None,
                 instrument_id=instrument_id,
                 match_state=state,

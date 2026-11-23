@@ -95,6 +95,13 @@ def _patch_run(monkeypatch, model, calls):
     monkeypatch.setattr(S, "record_day", record_day)
 
 
+def _live_and_dormant() -> tuple[list[str], list[str]]:
+    """The slots the daily job runs now, and the dormant ones it skips (the registry flag, not names)."""
+    from swing_trade_ml.services.lane_slots import is_dormant
+
+    return [k for k in S.SLOTS if not is_dormant(k)], [k for k in S.SLOTS if is_dormant(k)]
+
+
 def test_run_daily_refuses_a_fold_and_records_nothing(monkeypatch):
     calls: list[str] = []
     _patch_run(monkeypatch, m("sl1_S1_20230701"), calls)
@@ -107,7 +114,11 @@ def test_run_daily_records_a_final_model(monkeypatch):
     calls: list[str] = []
     _patch_run(monkeypatch, m("sl1_S1_lane_20261205", "final"), calls)
     out = lane_job.run_daily(None)
-    assert sorted(calls) == sorted(S.SLOTS)
+    live, dormant = _live_and_dormant()
+    assert dormant  # the table has dormant slots, so the next lines prove something
+    assert sorted(calls) == sorted(live)
+    assert not set(calls) & set(dormant)  # a dormant slot is NOT called until a model is chosen
+    assert set(out["slots"]) == set(live)
     assert set(out["slots"].values()) == {"recorded"}
 
 
@@ -116,7 +127,7 @@ def test_one_slot_refusal_does_not_stop_the_others(monkeypatch):
     final = m("sl1_S1_lane_20261205", "final")
     fold = m("sl1_S1_20230701")
     _patch_run(monkeypatch, final, calls)
-    keys = list(S.SLOTS)
+    keys = _live_and_dormant()[0]
     monkeypatch.setattr(lane_job, "lane_model_for", lambda db, k: fold if k == keys[0] else final)
     out = lane_job.run_daily(None)
     assert out["slots"][keys[0]].startswith("not_recorded")

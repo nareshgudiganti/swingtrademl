@@ -175,3 +175,32 @@ def test_discover_the_watchlist_and_a_report_row_resolve_one_security(db_session
     from_watchlist = resolve(db_session, symbol=watch_symbol)
     from_report = resolve(db_session, symbol="cross389")
     assert from_discover is not None and from_discover == from_watchlist == from_report
+
+
+def test_a_freshly_seeded_stock_resolves_for_dates_before_it_was_seeded(db_session):
+    """The first symbol row is open-ended: the sync date says nothing about when the stock started trading."""
+    inst = _instrument(db_session, "EARLY389")
+    writer.ensure_for_instrument(db_session, inst)
+    sid = resolve(db_session, symbol="EARLY389")
+    assert sid is not None
+    assert resolve(db_session, symbol="EARLY389", on_date=date(2019, 3, 4)) == sid
+    assert resolve(db_session, symbol="EARLY389", on_date=date(2026, 11, 20)) == sid
+    first = db_session.scalar(select(SecuritySymbol).where(SecuritySymbol.security_id == sid))
+    assert first.valid_from == writer.EARLIEST and first.valid_to is None
+
+
+def test_a_real_rename_seen_later_starts_the_new_symbol_today_and_keeps_the_old_one_for_before(db_session):
+    from datetime import datetime
+
+    from swing_trade_ml.core.market_session import IST
+
+    inst = _instrument(db_session, "BEFORE389", token=389_551)
+    writer.ensure_for_instrument(db_session, inst)
+    sid = resolve(db_session, symbol="BEFORE389")
+    inst.tradingsymbol = "AFTER389"
+    db_session.flush()
+    writer.ensure_for_instrument(db_session, inst)
+    today = datetime.now(IST).date()
+    assert resolve(db_session, symbol="AFTER389", on_date=today) == sid
+    assert resolve(db_session, symbol="BEFORE389", on_date=date(2019, 3, 4)) == sid
+    assert resolve(db_session, symbol="AFTER389", on_date=date(2019, 3, 4)) is None

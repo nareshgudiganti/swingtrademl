@@ -8,7 +8,7 @@ idempotent: calling it twice changes nothing the second time. None of them commi
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -139,7 +139,8 @@ def ensure_for_instrument(db: Session, instrument: Instrument) -> int:
     token = str(instrument.instrument_token)
     found = resolve(db, token=token)
     if found is not None:
-        set_symbol(db, found, instrument.tradingsymbol, _since(instrument), exchange=instrument.exchange)
+        start = _start(db, found, instrument)
+        set_symbol(db, found, instrument.tradingsymbol, start, exchange=instrument.exchange)
         return found
     found = resolve(db, symbol=instrument.tradingsymbol, exchange=instrument.exchange)
     if found is not None:
@@ -155,13 +156,21 @@ def ensure_for_instrument(db: Session, instrument: Instrument) -> int:
     if found is None:
         found = create_security(db, name=instrument.name)
     add_alias(db, found, PROVIDER_KITE_TOKEN, token)
-    set_symbol(db, found, instrument.tradingsymbol, _since(instrument), exchange=instrument.exchange)
+    start = _start(db, found, instrument)
+    set_symbol(db, found, instrument.tradingsymbol, start, exchange=instrument.exchange)
     return found
 
 
-def _since(instrument: Instrument) -> date:
-    created = instrument.created_at
-    return created.astimezone(IST).date() if created is not None else EARLIEST
+def _start(db: Session, security_id: int, instrument: Instrument) -> date:
+    """When the symbol being set starts. The FIRST symbol row of a security is open-ended (EARLIEST): the day
+    the sync saw the stock says nothing about when it began trading under that symbol. A later change (a
+    rename seen now) starts today, in IST, and the old symbol runs up to the day before."""
+    has_rows = db.scalar(
+        select(SecuritySymbol.id)
+        .where(SecuritySymbol.security_id == security_id, SecuritySymbol.exchange == instrument.exchange)
+        .limit(1)
+    )
+    return EARLIEST if has_rows is None else datetime.now(IST).date()
 
 
 def backfill_instruments(db: Session, *, exchange: str = "NSE", limit: int | None = None) -> dict[str, int]:

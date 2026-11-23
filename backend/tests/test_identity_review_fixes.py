@@ -199,7 +199,9 @@ def test_a_stale_stock_is_filed_under_its_own_session_not_the_newest_one(db_sess
     _at(monkeypatch, datetime(2026, 11, 20, 15, 50, tzinfo=IST))
     score_history.record_stock_scores(db_session, [(fresh.id, 0.8, MODEL), (stale.id, 0.7, MODEL)], 0.4)
     assert [r.session_date for r in _rows(db_session, resolve(db_session, symbol="FRESH389"))] == [FRIDAY]
-    assert [r.session_date for r in _rows(db_session, resolve(db_session, symbol="STALE389"))] == [THURSDAY]
+    stale_rows = _rows(db_session, resolve(db_session, symbol="STALE389"))
+    assert [r.session_date for r in stale_rows if r.status == "scored"] == [THURSDAY]
+    assert [(r.session_date, r.status, r.score) for r in stale_rows if r.status == "stale"] == [(FRIDAY, "stale", None)]
     old = {r.instrument_id: r.as_of for r in db_session.scalars(select(StockScore).where(StockScore.instrument_id.in_([fresh.id, stale.id])))}
     assert old == {fresh.id: FRIDAY, stale.id: THURSDAY}
 

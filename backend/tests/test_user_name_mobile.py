@@ -98,8 +98,9 @@ def test_invalid_names_are_refused(raw):
 def test_single_migration_head_and_parent():
     script = ScriptDirectory.from_config(Config(str(BACKEND / "alembic.ini")))
     heads = script.get_heads()
-    assert heads == ["horizon01"]  # the horizon records sit on identity01 (#387)
-    assert script.get_revision("horizon01").down_revision == "identity01"
+    assert heads == ["simulation01"]  # the simulation tables sit on horizon01 (#321)
+    assert script.get_revision("simulation01").down_revision == "horizon01"
+    assert script.get_revision("horizon01").down_revision == "identity01"  # the horizon records (#387)
     assert script.get_revision("identity01").down_revision == "wlsales01"
     # sold records sit on acctdelete01, which joins servicekeys01 and adminmfa01
     assert script.get_revision("wlsales01").down_revision == "acctdelete01"

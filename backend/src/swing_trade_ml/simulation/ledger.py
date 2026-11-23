@@ -33,7 +33,10 @@ Properties the tests pin:
 - two portfolios may hold the same stock (each account is its own world).
 
 Nothing here touches a database, places an order or reads the clock. Persisting the ledger needs a table (owner
-approval, later). A stock is a plain symbol string until the identity interface (services/identity) is wired in.
+approval, later), and that table is in `simulation/store.py`.
+A stock is its permanent `security_id` (services/identity) everywhere in this module: prices, liquidity, cap tiers,
+the avoid list, positions, picks, fills, exits and blocks are all keyed by it. The symbol travels with each record
+for DISPLAY only; nothing is looked up, matched or compared by symbol.
 """
 
 from __future__ import annotations
@@ -80,36 +83,37 @@ class Candidate:
     """A pick decided at the close of a session. `block_reason` is set by the policy when it holds the pick back
     (for example a Brain safety check); the ledger records it as a block and buys nothing."""
 
-    symbol: str
+    security_id: int  # the permanent stock id (services/identity): the only key the ledger uses
+    symbol: str  # display only
     score: float
     sector: str | None = None  # an unmapped stock counts as its own sector
     block_reason: str | None = None
-    security_id: int | None = None  # the permanent stock id (services/identity), when the pick came from one
     record_id: int | None = None  # the horizon record the pick was read from
 
 
-Bars = Mapping[str, Mapping[str, Bar]]  # symbol -> session -> bar
+Bars = Mapping[int, Mapping[str, Bar]]  # security_id -> session -> bar
 Decisions = Mapping[str, Sequence[Candidate]]  # session -> picks decided at that session's close
 MarketModes = Mapping[str, str]  # session -> the mode decided at that session's close (governs the next open)
-Liquidity = Mapping[str, Mapping[str, float]]  # symbol -> session -> average daily traded value (rupees)
-CapTiers = Mapping[str, str]  # symbol -> "large" | "midcap" | "smallcap"
-Avoid = Mapping[str, Mapping[str, str]]  # session -> {symbol: reason to stay out}
+Liquidity = Mapping[int, Mapping[str, float]]  # security_id -> session -> average daily traded value (rupees)
+CapTiers = Mapping[int, str]  # security_id -> "large" | "midcap" | "smallcap"
+Avoid = Mapping[str, Mapping[int, str]]  # session -> {security_id: reason to stay out}
 
 
 @dataclass(frozen=True, slots=True)
 class FillRecord:
-    symbol: str
+    security_id: int
+    symbol: str  # display only
     qty: int
     price: float  # per share, slippage included
     charges: float
     cost: float  # cash out: price * qty + charges
-    security_id: int | None = None
-    record_id: int | None = None
+    record_id: int | None = None  # the horizon record the buy was decided from
 
 
 @dataclass(frozen=True, slots=True)
 class ExitRecord:
-    symbol: str
+    security_id: int
+    symbol: str  # display only
     qty: int
     price: float  # the level or open the shares were sold at, before slippage
     reason: str  # stop | half_out | target | horizon
@@ -117,19 +121,21 @@ class ExitRecord:
     stale: bool = (
         False  # sold at the last known close because the stock had no bar for its whole holding window
     )
+    record_id: int | None = None  # the horizon record the position was bought from
 
 
 @dataclass(frozen=True, slots=True)
 class BlockRecord:
-    symbol: str
+    security_id: int
+    symbol: str  # display only
     reason: str
-    security_id: int | None = None
     record_id: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class PositionMark:
-    symbol: str
+    security_id: int
+    symbol: str  # display only
     qty: int
     mark: float  # last close
     value: float
@@ -185,7 +191,9 @@ class PortfolioLedger:
 
 @dataclass(slots=True)
 class _Position:
-    symbol: str
+    security_id: int
+    symbol: str  # display only
+    record_id: int | None
     key: str  # sector bucket
     tier: str | None
     qty: int
@@ -207,11 +215,17 @@ def _sell(price: float, qty: int) -> float:
     return gross - (brokerage + taxes)
 
 
-def _equity(cash: float, positions: Mapping[str, _Position]) -> float:
+def _exit(
+    pos: _Position, qty: int, price: float, reason: str, proceeds: float, *, stale: bool = False
+) -> ExitRecord:
+    return ExitRecord(pos.security_id, pos.symbol, qty, price, reason, proceeds, stale, pos.record_id)
+
+
+def _equity(cash: float, positions: Mapping[int, _Position]) -> float:
     return cash + sum(p.qty * p.last_close for p in positions.values())
 
 
-def _exposure(positions: Mapping[str, _Position]) -> dict[str, float]:
+def _exposure(positions: Mapping[int, _Position]) -> dict[str, float]:
     out: dict[str, float] = {}
     for p in positions.values():
         out[p.key] = out.get(p.key, 0.0) + p.qty * p.last_close
@@ -251,7 +265,7 @@ def run_portfolio(
     `sessions` are ISO dates in order. The portfolio starts `spec.start_offset` sessions into the list. Picks in
     `decisions[s]` were decided at the close of session s and are bought at the open of s+1, in the market mode in
     `market_modes[s]` (None = every session NORMAL, listed as not applied; a session missing from a given mapping
-    counts as NO_NEW_TRADES). `liquidity[symbol][s]`, `cap_tiers[symbol]` and `avoid[s][symbol]` are point-in-time
+    counts as NO_NEW_TRADES). `liquidity[security_id][s]`, `cap_tiers[security_id]` and `avoid[s][security_id]` are point-in-time
     inputs as of the decision session."""
     from swing_trade_ml.brain.portfolio_sim import entry_budget
     from swing_trade_ml.services.costs import apply_slippage, compute_charges
@@ -260,8 +274,8 @@ def run_portfolio(
     rules = rules or TradingRules.from_app()
     dates = _calendar(sessions)
     cash = float(spec.balance_inr)
-    positions: dict[str, _Position] = {}
-    last_stop: dict[str, date] = {}
+    positions: dict[int, _Position] = {}
+    last_stop: dict[int, date] = {}
     pending: Sequence[Candidate] = ()
     decided_on = ""
     equity = cash
@@ -286,12 +300,12 @@ def run_portfolio(
         buys_allowed = min(buys_allowed, rules.max_new_per_day)
 
         def _blk(c: Candidate, why: str) -> BlockRecord:
-            return BlockRecord(c.symbol, why, c.security_id, c.record_id)
+            return BlockRecord(c.security_id, c.symbol, why, c.record_id)
 
-        # 1. Buy yesterday's picks at today's open (best score first, then symbol, so the order is fixed).
+        # 1. Buy yesterday's picks at today's open (best score first, then stock id, so the order is fixed).
         considered = 0
-        for cand in sorted(pending, key=lambda c: (-c.score, c.symbol)):
-            symbol = cand.symbol
+        for cand in sorted(pending, key=lambda c: (-c.score, c.security_id)):
+            sid = cand.security_id
             if cand.block_reason:
                 blocks.append(_blk(cand, f"held_back: {cand.block_reason}"))
                 continue
@@ -307,15 +321,15 @@ def run_portfolio(
             if halted:
                 blocks.append(_blk(cand, "drawdown_halt"))
                 continue
-            if symbol in positions:
+            if sid in positions:
                 blocks.append(_blk(cand, "already_held"))
                 continue
-            stopped_on = last_stop.get(symbol)
+            stopped_on = last_stop.get(sid)
             if stopped_on is not None and (dates[index] - stopped_on).days <= rules.stop_cooldown_days:
                 blocks.append(_blk(cand, "stop_cooldown"))
                 continue
             if avoid is not None:
-                why = avoid.get(decided_on, {}).get(symbol)
+                why = avoid.get(decided_on, {}).get(sid)
                 if why:
                     blocks.append(_blk(cand, f"avoid: {why}"))
                     continue
@@ -324,14 +338,14 @@ def run_portfolio(
             if len(positions) >= limits.max_positions:
                 blocks.append(_blk(cand, "no_free_slot"))
                 continue
-            bar = bars.get(symbol, {}).get(day)
+            bar = bars.get(sid, {}).get(day)
             if bar is None:
                 blocks.append(_blk(cand, "no_price"))
                 continue
             tier: str | None = None
             small_room = math.inf
             if cap_tiers is not None:
-                tier = cap_tiers.get(symbol)
+                tier = cap_tiers.get(sid)
                 if tier is None:
                     blocks.append(_blk(cand, "cap_tier_unknown"))
                     continue
@@ -347,7 +361,7 @@ def run_portfolio(
             if limits.max_share_price_inr is not None and float(bar.open) > limits.max_share_price_inr:
                 blocks.append(_blk(cand, "price_above_ladder_limit"))
                 continue
-            key = cand.sector or symbol
+            key = cand.sector or f"security:{sid}"
             exposure = _exposure(positions)
             if limits.sector_rule == "one_per_sector" and key in exposure:
                 blocks.append(_blk(cand, "sector_cap"))
@@ -359,7 +373,7 @@ def run_portfolio(
                     continue
             liquidity_room = math.inf
             if liquidity is not None and limits.max_adv_pct is not None:
-                adv = liquidity.get(symbol, {}).get(decided_on)
+                adv = liquidity.get(sid, {}).get(decided_on)
                 if adv is None:
                     blocks.append(_blk(cand, "liquidity_unknown"))
                     continue
@@ -392,8 +406,10 @@ def run_portfolio(
                 blocks.append(_blk(cand, "insufficient_cash"))
                 continue
             cash -= cost
-            positions[symbol] = _Position(
-                symbol=symbol,
+            positions[sid] = _Position(
+                security_id=sid,
+                symbol=cand.symbol,
+                record_id=cand.record_id,
                 key=key,
                 tier=tier,
                 qty=qty,
@@ -403,25 +419,23 @@ def run_portfolio(
                 target_px=fill * (1 + rules.target),
                 last_close=fill,
             )
-            fills.append(
-                FillRecord(symbol, qty, fill, brokerage + taxes, cost, cand.security_id, cand.record_id)
-            )
+            fills.append(FillRecord(sid, cand.symbol, qty, fill, brokerage + taxes, cost, cand.record_id))
 
         # 2. Walk every open position through today's bar: stop, then half-out, then target, then the horizon.
-        stale: set[str] = set()
-        for symbol in list(positions):
-            pos = positions[symbol]
-            bar = bars.get(symbol, {}).get(day)
+        stale: set[int] = set()
+        for sid in list(positions):
+            pos = positions[sid]
+            bar = bars.get(sid, {}).get(day)
             if bar is None:
                 if index - pos.entry_index + 1 >= rules.horizon_sessions:
                     # Held its whole window without a bar today: sold at the last known close, flagged stale. No
                     # price is invented, and the position does not stay open forever at a stale mark.
                     got = _sell(pos.last_close, pos.qty)
                     cash += got
-                    exits.append(ExitRecord(symbol, pos.qty, pos.last_close, "horizon", got, stale=True))
-                    del positions[symbol]
+                    exits.append(_exit(pos, pos.qty, pos.last_close, "horizon", got, stale=True))
+                    del positions[sid]
                 else:
-                    stale.add(symbol)
+                    stale.add(sid)
                 continue
             o, h, lo, c = float(bar.open), float(bar.high), float(bar.low), float(bar.close)
             pos.last_close = c
@@ -430,8 +444,8 @@ def run_portfolio(
                 price = o if o <= pos.stop_px else pos.stop_px
                 got = _sell(price, pos.qty)
                 cash += got
-                exits.append(ExitRecord(symbol, pos.qty, price, "stop", got))
-                last_stop[symbol] = dates[index]
+                exits.append(_exit(pos, pos.qty, price, "stop", got))
+                last_stop[sid] = dates[index]
                 pos.qty, sold_out = 0, True
             else:
                 if pos.half_px is not None and not pos.half_done and pos.qty >= 2 and h >= pos.half_px:
@@ -439,22 +453,22 @@ def run_portfolio(
                     price = o if o >= pos.half_px else pos.half_px
                     got = _sell(price, half)
                     cash += got
-                    exits.append(ExitRecord(symbol, half, price, "half_out", got))
+                    exits.append(_exit(pos, half, price, "half_out", got))
                     pos.qty -= half
                     pos.half_done = True
                 if h >= pos.target_px:
                     price = o if o >= pos.target_px else pos.target_px
                     got = _sell(price, pos.qty)
                     cash += got
-                    exits.append(ExitRecord(symbol, pos.qty, price, "target", got))
+                    exits.append(_exit(pos, pos.qty, price, "target", got))
                     pos.qty, sold_out = 0, True
                 elif index - pos.entry_index + 1 >= rules.horizon_sessions:
                     got = _sell(c, pos.qty)
                     cash += got
-                    exits.append(ExitRecord(symbol, pos.qty, c, "horizon", got))
+                    exits.append(_exit(pos, pos.qty, c, "horizon", got))
                     pos.qty, sold_out = 0, True
             if sold_out:
-                del positions[symbol]
+                del positions[sid]
 
         # 3. Mark at the close and record the day.
         equity = _equity(cash, positions)
@@ -462,7 +476,15 @@ def run_portfolio(
         if cash < -CASH_TOLERANCE:
             raise LedgerInvariantError(f"{spec.persona_key} {day}: cash went negative ({cash})")
         marks = tuple(
-            PositionMark(p.symbol, p.qty, p.last_close, p.qty * p.last_close, p.half_done, p.symbol in stale)
+            PositionMark(
+                p.security_id,
+                p.symbol,
+                p.qty,
+                p.last_close,
+                p.qty * p.last_close,
+                p.half_done,
+                p.security_id in stale,
+            )
             for p in positions.values()
         )
         records.append(

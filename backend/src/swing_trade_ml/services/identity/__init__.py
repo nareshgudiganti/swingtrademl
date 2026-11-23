@@ -17,8 +17,8 @@ Rules (the contract, in plain words):
 * `resolve` never writes. It is safe to call from any read path.
 
 The store behind it is replaceable (`use_store`) so tests need no database: `memory.InMemoryStore` is a
-complete fake. Until the database store ships (S1) the default store knows nothing, so every call returns
-None.
+complete fake. Given a real session it reads the database; given None it knows nothing (every call returns
+None).
 """
 
 from __future__ import annotations
@@ -92,6 +92,10 @@ _override: IdentityStore | None = None
 def _store_for(db: Any) -> IdentityStore:
     if _override is not None:
         return _override
+    if db is not None and hasattr(db, "execute"):  # a real session: read the database
+        from swing_trade_ml.services.identity.db import DbStore
+
+        return DbStore(db)
     return NullStore()
 
 

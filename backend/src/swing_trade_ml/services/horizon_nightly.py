@@ -29,14 +29,15 @@ from typing import Any
 
 from apscheduler.triggers.cron import CronTrigger
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from swing_trade_ml.brain.horizons import ModelOutput, run_horizon
+from swing_trade_ml.brain.horizons import NO_DECISION_TEXT, ModelOutput, run_horizon
 from swing_trade_ml.core.config import REPO_ROOT
+from swing_trade_ml.core.enums import ModelStatus
 from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.core.market_session import IST, last_closed_trading_day, next_trading_day
-from swing_trade_ml.db.models.market import Instrument
+from swing_trade_ml.db.models.market import Candle, Instrument
 from swing_trade_ml.db.models.ml import MLModel, Prediction
 from swing_trade_ml.services import horizon_records
 from swing_trade_ml.services.identity import resolve, writer
@@ -76,6 +77,8 @@ class DaySummary:
     linked: int = 0  # stocks given a security_id by this pass (identity writer, idempotent)
     refused: int = 0  # identity conflict (the symbol is another company's): the stock is skipped
     unresolved: int = 0  # still no security_id after linking
+    no_data: int = 0  # explicit no-data records: a followed stock an active model did not score (final pass only)
+    zero_records: bool = False  # the pass wrote nothing and found nothing: a quiet failure, flagged
     skipped: dict[str, int] = field(default_factory=dict)
 
     def as_dict(self) -> dict[str, Any]:
@@ -88,6 +91,8 @@ class DaySummary:
             "linked": self.linked,
             "refused": self.refused,
             "unresolved": self.unresolved,
+            "no_data": self.no_data,
+            "zero_records": self.zero_records,
             "skipped": dict(self.skipped),
         }
 
@@ -181,15 +186,79 @@ def _link(db: Session, instrument: Instrument, summary: DaySummary) -> bool:
     return True
 
 
-def record_day(db: Session, session: date, *, policies: Any = None) -> DaySummary:
-    """Write the records of every 5-session prediction made on one market session. Safe to run again. Does not commit."""
+def _no_data_reason(last_candle: date | None, session: date) -> str:
+    if last_candle is not None and last_candle < session:
+        return f"stale candle {last_candle}"
+    return "no fresh prediction for this session"
+
+
+def _write_no_data(db: Session, session: date, summary: DaySummary, scored: set[tuple[int, int]], linked: dict[int, bool]) -> None:
+    """For every ACTIVE 5-session model and every followed stock it did not score on this session, write an explicit
+    "no data" record (NO_DECISION, no score), so a gap is a row the simulation can see and not an absence. Only the
+    final pass of the day does this: a record written early would be first in line (revision 1) and hide a prediction
+    that arrives later."""
+    models = list(
+        db.scalars(
+            select(MLModel).where(MLModel.prediction_horizon_days == HORIZON, MLModel.status == ModelStatus.ACTIVE)
+        )
+    )
+    followed = list(
+        db.scalars(
+            select(Instrument).where(
+                Instrument.is_watchlisted.is_(True), Instrument.is_active.is_(True), Instrument.instrument_type == "EQ"
+            )
+        )
+    )
+    if not models or not followed:
+        return
+    last = dict(
+        db.execute(
+            select(Candle.instrument_id, func.max(Candle.ts))
+            .where(Candle.interval == "day", Candle.instrument_id.in_([i.id for i in followed]))
+            .group_by(Candle.instrument_id)
+        ).all()
+    )
+    for instrument in followed:
+        for model in models:
+            if (model.id, instrument.id) in scored:
+                continue
+            if instrument.id not in linked:
+                linked[instrument.id] = _link(db, instrument, summary)
+            if not linked[instrument.id]:
+                continue
+            security_id = resolve(db, token=str(instrument.instrument_token))
+            last_ts = last.get(instrument.id)
+            reason = _no_data_reason(None if last_ts is None else last_ts.astimezone(IST).date(), session)
+            record = replace(
+                run_horizon(HORIZON, [], session, sessions_from(session), symbol=instrument.tradingsymbol),
+                reason=f"{NO_DECISION_TEXT}: {reason}",
+                model_name=model.name,
+                model_version=model.version,
+            )
+            result = horizon_records.save_record(
+                db, record, security_id=security_id, model_id=model.id, scan_key=f"h5:{session}", run_ref="no-data"
+            )
+            if result.created:
+                summary.no_data += 1
+            else:
+                summary.unchanged += 1
+
+
+def record_day(db: Session, session: date, *, policies: Any = None, finalize: bool = False) -> DaySummary:
+    """Write the records of every 5-session prediction made on one market session, by ACTIVE models only. Safe to run
+    again. Does not commit. `finalize=True` (the day's last pass) also writes the explicit no-data records."""
     summary = DaySummary(session)
     start, end = _day_bounds(session)
     rows = db.execute(
         select(Prediction, MLModel, Instrument)
         .join(MLModel, MLModel.id == Prediction.model_id)
         .join(Instrument, Instrument.id == Prediction.instrument_id)
-        .where(Prediction.ts >= start, Prediction.ts < end, MLModel.prediction_horizon_days == HORIZON)
+        .where(
+            Prediction.ts >= start,
+            Prediction.ts < end,
+            MLModel.prediction_horizon_days == HORIZON,
+            MLModel.status == ModelStatus.ACTIVE,
+        )
         .order_by(Prediction.model_id, Prediction.instrument_id, Prediction.ts)
     ).all()
     latest: dict[tuple[int, int], tuple[Prediction, MLModel, Instrument]] = {}
@@ -209,7 +278,17 @@ def record_day(db: Session, session: date, *, policies: Any = None) -> DaySummar
             summary.recorded += 1
         else:
             summary.unchanged += 1
+    if finalize:
+        _write_no_data(db, session, summary, set(latest), linked)
+    if summary.predictions == 0 and summary.no_data == 0 and summary.unchanged == 0:
+        summary.zero_records = True
+        log.warning("horizon5.zero_records", session=str(session))
     return summary
+
+
+def _is_final_pass(now: datetime | None) -> bool:
+    current = (now or datetime.now(UTC)).astimezone(IST)
+    return current.hour >= int(SCHEDULE["hour"].split(",")[-1])
 
 
 def job_horizon_nightly(now: datetime | None = None) -> dict[str, Any] | None:
@@ -219,7 +298,8 @@ def job_horizon_nightly(now: datetime | None = None) -> dict[str, Any] | None:
     try:
         session = last_closed_trading_day(now or datetime.now(UTC))
         with session_scope() as db:
-            result = record_day(db, session).as_dict()
+            # The last pass of the day (21:30 IST) also writes the explicit no-data records.
+            result = record_day(db, session, finalize=_is_final_pass(now)).as_dict()
         log.info("horizon5.nightly", **result)
         return result
     except Exception as exc:  # noqa: BLE001

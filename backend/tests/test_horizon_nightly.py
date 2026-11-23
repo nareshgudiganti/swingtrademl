@@ -51,12 +51,14 @@ def stock(db, symbol: str, *, known: bool = True, name: str | None = None) -> In
     return inst
 
 
-def model(db, name: str, horizon: int, role: str | None = "final", version: str = "v1") -> MLModel:
+def model(
+    db, name: str, horizon: int, role: str | None = "final", version: str = "v1", status: str = "ACTIVE"
+) -> MLModel:
     row = MLModel(
         name=name,
         version=version,
         algorithm="lightgbm",
-        status="TRAINED",
+        status=status,
         prediction_horizon_days=horizon,
         label_kind="endpoint",
         model_role=role,
@@ -287,6 +289,107 @@ def test_a_conflicting_instrument_is_skipped_and_counted_and_the_others_are_stil
     assert row.security_id == sid(db_session, fine) and row.security_id != holder_id
     again = hn.record_day(db_session, SESSION)  # the conflict stays refused; nothing else changes
     assert (again.recorded, again.refused, again.unchanged) == (0, 1, 1) and len(rows(db_session)) == 1
+
+
+# ------------------------------------------------------------------------- missing data stays explicit (#451 review)
+
+
+def watched(db, symbol: str, **kw) -> Instrument:
+    inst = stock(db, symbol, **kw)
+    inst.is_watchlisted = True
+    db.flush()
+    return inst
+
+
+def test_a_followed_stock_with_no_fresh_prediction_gets_an_explicit_no_data_record(db_session):
+    seen, unseen = watched(db_session, "HN387P1"), watched(db_session, "HN387P2")
+    m5 = model(db_session, "fd5_p", 5)
+    predict(db_session, m5, seen)
+    out = hn.record_day(db_session, SESSION, finalize=True)
+    assert (out.recorded, out.no_data) == (1, 1)  # one prediction record, one explicit no-data record
+    by_stock = {r.security_id: r for r in rows(db_session)}
+    gap = by_stock[sid(db_session, unseen)]
+    assert gap.decision == "NO_DECISION" and gap.score is None and gap.input_close is None
+    assert "no fresh prediction for this session" in gap.reason
+    assert (gap.model_id, gap.model_name, gap.model_version) == (m5.id, "fd5_p", "v1")
+    assert gap.session_date == SESSION and gap.horizon_days == 5 and gap.research_only is False
+    assert by_stock[sid(db_session, seen)].decision == "TRADE"
+    again = hn.record_day(db_session, SESSION, finalize=True)
+    assert (again.recorded, again.no_data, again.unchanged) == (0, 0, 2) and len(rows(db_session)) == 2
+
+
+def test_a_stale_candle_says_so_in_the_no_data_record(db_session):
+    from swing_trade_ml.db.models.market import Candle
+
+    unseen = watched(db_session, "HN387Q")
+    m5 = model(db_session, "fd5_q", 5)
+    db_session.add(
+        Candle(instrument_id=unseen.id, interval="day", ts=datetime(2026, 11, 17, tzinfo=IST), open=1, high=1, low=1, close=1)
+    )
+    db_session.flush()
+    hn.record_day(db_session, SESSION, finalize=True)
+    (gap,) = rows(db_session)
+    assert "stale candle 2026-11-17" in gap.reason and gap.model_id == m5.id
+
+
+def test_no_data_records_are_written_only_when_the_pass_is_final(db_session):
+    """A late prediction must not find a no-data record already first in line, so earlier passes write none."""
+    unseen = watched(db_session, "HN387R0")
+    model(db_session, "fd5_r0", 5)
+    out = hn.record_day(db_session, SESSION)
+    assert (out.no_data, rows(db_session)) == (0, [])
+    assert sid(db_session, unseen)
+
+
+def test_a_stock_that_is_not_followed_gets_no_no_data_record(db_session):
+    stock(db_session, "HN387S")  # known, not on the watchlist
+    model(db_session, "fd5_s", 5)
+    assert hn.record_day(db_session, SESSION, finalize=True).no_data == 0 and rows(db_session) == []
+
+
+def test_only_active_five_day_models_are_recorded(db_session):
+    inst = watched(db_session, "HN387T")
+    trained = model(db_session, "fd5_trained", 5, status="TRAINED")
+    archived = model(db_session, "fd5_archived", 5, status="ARCHIVED")
+    predict(db_session, trained, inst)
+    predict(db_session, archived, inst)
+    out = hn.record_day(db_session, SESSION, finalize=True)
+    assert (out.predictions, out.recorded, out.no_data) == (0, 0, 0) and rows(db_session) == []
+
+
+def test_a_day_with_no_records_is_flagged(db_session):
+    watched(db_session, "HN387U")
+    out = hn.record_day(db_session, SESSION, finalize=True)  # no active 5D model at all
+    assert out.zero_records is True and out.as_dict()["zero_records"] is True
+    ok = hn.record_day(db_session, SESSION)
+    assert ok.zero_records is True  # a pass that wrote nothing and found nothing is flagged whether or not it is final
+
+
+def test_a_day_with_records_is_not_flagged(db_session):
+    inst = watched(db_session, "HN387V")
+    predict(db_session, model(db_session, "fd5_v", 5), inst)
+    assert hn.record_day(db_session, SESSION).zero_records is False
+
+
+def test_a_record_for_a_session_before_a_rename_is_found_by_the_symbol_of_that_session(db_session):
+    from dataclasses import replace
+
+    inst = stock(db_session, "HN387W", name="Wheat Industries Limited")
+    security = sid(db_session, inst)
+    rename_day = date(2026, 11, 25)
+    inst.tradingsymbol = "HN387W2"  # renamed by the exchange; same token, same company
+    db_session.flush()
+    writer.set_symbol(db_session, security, "HN387W2", rename_day)
+    m5 = model(db_session, "fd5_w", 5)
+    before = replace(
+        hn.run_horizon(5, [hn.model_output(m5, predict(db_session, m5, inst), inst, SESSION)], SESSION, hn.sessions_from(SESSION), symbol="HN387W"),
+    )
+    saved = hr.save_for_symbol(db_session, before, model_id=m5.id)  # the old symbol, on a session before the rename
+    assert saved.created and rows(db_session)[0].security_id == security
+    after = replace(before, symbol="HN387W2", input_session=rename_day)
+    assert hr.save_for_symbol(db_session, after, model_id=m5.id).created
+    with pytest.raises(hr.UnknownSecurityError):  # the NEW symbol did not exist yet on the earlier session
+        hr.save_for_symbol(db_session, replace(before, symbol="HN387W2"), model_id=m5.id)
 
 
 # ------------------------------------------------------------------------- the off switch

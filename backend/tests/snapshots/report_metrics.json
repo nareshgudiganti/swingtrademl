@@ -1,0 +1,411 @@
+{
+ "observatory_paper": {
+  "avg_holding_days": 3.5,
+  "avg_loss": -89.205,
+  "avg_return_pct": -0.011200000000000005,
+  "avg_win": 51.769999999999996,
+  "cash": 999925.13,
+  "current_drawdown_pct": 0.0,
+  "day_pnl": 0.0,
+  "day_pnl_pct": 0.0,
+  "expectancy": -18.7175,
+  "holdings_value": 0.0,
+  "largest_loss": -118.06,
+  "largest_win": 81.74,
+  "losing_trades": 2,
+  "max_drawdown_pct": 0.0,
+  "measured_since": "2026-01-01",
+  "mode": "paper",
+  "money_added": 0,
+  "money_in": 1000000.0,
+  "open_positions": 0,
+  "profit_factor": 0.5803486351661902,
+  "realized_pnl": -74.87,
+  "sharpe_ratio": 0.0,
+  "sortino_ratio": 0.0,
+  "starting_capital": 1000000.0,
+  "time_weighted_return_pct": 0.0,
+  "top_movers": [],
+  "total_charges": 74.87,
+  "total_pnl": -74.87,
+  "total_return_pct": -7.486999999994914e-05,
+  "total_trades": 4,
+  "total_value": 999925.13,
+  "unrealized_pnl": 0,
+  "win_rate": 0.5,
+  "winning_trades": 2
+ },
+ "portfolio_performance_stats": {
+  "avg_holding_days": 3.5,
+  "avg_loss": -89.205,
+  "avg_return_pct": -0.011200000000000005,
+  "avg_win": 51.769999999999996,
+  "cash": 999925.13,
+  "current_drawdown_pct": 0.0,
+  "day_pnl": 0.0,
+  "day_pnl_pct": 0.0,
+  "expectancy": -18.7175,
+  "holdings_value": 0.0,
+  "largest_loss": -118.06,
+  "largest_win": 81.74,
+  "losing_trades": 2,
+  "max_drawdown_pct": 0.0,
+  "measured_since": null,
+  "mode": "paper",
+  "money_added": 0,
+  "money_in": 1000000.0,
+  "open_positions": 0,
+  "profit_factor": 0.5803486351661902,
+  "realized_pnl": -74.87,
+  "sharpe_ratio": 0.0,
+  "sortino_ratio": 0.0,
+  "starting_capital": 1000000.0,
+  "time_weighted_return_pct": 0.0,
+  "top_movers": [],
+  "total_charges": 74.87,
+  "total_pnl": -74.87,
+  "total_return_pct": -7.486999999994914e-05,
+  "total_trades": 4,
+  "total_value": 999925.13,
+  "unrealized_pnl": 0,
+  "win_rate": 0.5,
+  "winning_trades": 2
+ },
+ "portfolio_strategy_stats": {
+  "net_pnl": -74.87,
+  "profit_factor": 0.5803486351661902,
+  "trades": 4,
+  "win_rate": 0.5
+ },
+ "portfolio_summary_endpoint": {
+  "avg_holding_days": 3.5,
+  "avg_loss": -89.205,
+  "avg_return_pct": -0.011200000000000005,
+  "avg_win": 51.769999999999996,
+  "cash": 999925.13,
+  "current_drawdown_pct": 0.0,
+  "day_pnl": 0.0,
+  "day_pnl_pct": 0.0,
+  "expectancy": -18.7175,
+  "holdings_value": 0.0,
+  "largest_loss": -118.06,
+  "largest_win": 81.74,
+  "losing_trades": 2,
+  "max_drawdown_pct": 0.0,
+  "measured_since": null,
+  "mode": "paper",
+  "money_added": 0,
+  "money_in": 1000000.0,
+  "open_positions": 0,
+  "profit_factor": 0.5803486351661902,
+  "realized_pnl": -74.87,
+  "sharpe_ratio": 0.0,
+  "sortino_ratio": 0.0,
+  "starting_capital": 1000000.0,
+  "time_weighted_return_pct": 0.0,
+  "top_movers": [],
+  "total_charges": 74.87,
+  "total_pnl": -74.87,
+  "total_return_pct": -7.486999999994914e-05,
+  "total_trades": 4,
+  "total_value": 999925.13,
+  "unrealized_pnl": 0,
+  "win_rate": 0.5,
+  "winning_trades": 2
+ },
+ "portfolio_trades_endpoint": [
+  {
+   "charges": 18.06,
+   "gross_pnl": -100.0,
+   "holding_days": 4,
+   "is_win": false,
+   "net_pnl": -118.06,
+   "quantity": 20,
+   "return_pct": -0.11810000000000001,
+   "symbol": "LOSEB"
+  },
+  {
+   "charges": 18.2,
+   "gross_pnl": 40.0,
+   "holding_days": 1,
+   "is_win": true,
+   "net_pnl": 21.8,
+   "quantity": 10,
+   "return_pct": 0.0218,
+   "symbol": "PARTD"
+  },
+  {
+   "charges": 20.35,
+   "gross_pnl": -40.0,
+   "holding_days": 6,
+   "is_win": false,
+   "net_pnl": -60.35,
+   "quantity": 20,
+   "return_pct": -0.0302,
+   "symbol": "PARTD"
+  },
+  {
+   "charges": 18.26,
+   "gross_pnl": 100.0,
+   "holding_days": 3,
+   "is_win": true,
+   "net_pnl": 81.74,
+   "quantity": 10,
+   "return_pct": 0.0817,
+   "symbol": "WINA"
+  }
+ ],
+ "real_report": {
+  "by_stock": [
+   {
+    "bought_qty": 20,
+    "bought_value": 1000.0,
+    "last_price": null,
+    "open_avg_price": null,
+    "open_pnl": null,
+    "open_qty": 0,
+    "realized_pnl": -118.06,
+    "sold_qty": 20,
+    "sold_value": 900.0,
+    "symbol": "LOSEB"
+   },
+   {
+    "bought_qty": 30,
+    "bought_value": 3000.0,
+    "last_price": null,
+    "open_avg_price": null,
+    "open_pnl": null,
+    "open_qty": 0,
+    "realized_pnl": -38.55,
+    "sold_qty": 30,
+    "sold_value": 3000.0,
+    "symbol": "PARTD"
+   },
+   {
+    "bought_qty": 10,
+    "bought_value": 1000.0,
+    "last_price": null,
+    "open_avg_price": null,
+    "open_pnl": null,
+    "open_qty": 0,
+    "realized_pnl": 81.74,
+    "sold_qty": 10,
+    "sold_value": 1100.0,
+    "symbol": "WINA"
+   }
+  ],
+  "closed": [
+   {
+    "buy_date": "2026-11-03 05:00:00+00:00",
+    "buy_price": 100.0,
+    "buy_value": 2000.0,
+    "charges": 20.35,
+    "gross_pnl": -40.0,
+    "holding_days": 6,
+    "net_pnl": -60.35,
+    "pnl_pct": -3.02,
+    "quantity": 20,
+    "sell_date": "2026-11-09 05:00:00+00:00",
+    "sell_price": 98.0,
+    "sell_value": 1960.0,
+    "symbol": "PARTD"
+   },
+   {
+    "buy_date": "2026-11-02 05:00:00+00:00",
+    "buy_price": 50.0,
+    "buy_value": 1000.0,
+    "charges": 18.06,
+    "gross_pnl": -100.0,
+    "holding_days": 4,
+    "net_pnl": -118.06,
+    "pnl_pct": -11.81,
+    "quantity": 20,
+    "sell_date": "2026-11-06 05:00:00+00:00",
+    "sell_price": 45.0,
+    "sell_value": 900.0,
+    "symbol": "LOSEB"
+   },
+   {
+    "buy_date": "2026-11-02 05:00:00+00:00",
+    "buy_price": 100.0,
+    "buy_value": 1000.0,
+    "charges": 18.26,
+    "gross_pnl": 100.0,
+    "holding_days": 3,
+    "net_pnl": 81.74,
+    "pnl_pct": 8.17,
+    "quantity": 10,
+    "sell_date": "2026-11-05 05:00:00+00:00",
+    "sell_price": 110.0,
+    "sell_value": 1100.0,
+    "symbol": "WINA"
+   },
+   {
+    "buy_date": "2026-11-03 05:00:00+00:00",
+    "buy_price": 100.0,
+    "buy_value": 1000.0,
+    "charges": 18.2,
+    "gross_pnl": 40.0,
+    "holding_days": 1,
+    "net_pnl": 21.8,
+    "pnl_pct": 2.18,
+    "quantity": 10,
+    "sell_date": "2026-11-04 05:00:00+00:00",
+    "sell_price": 104.0,
+    "sell_value": 1040.0,
+    "symbol": "PARTD"
+   }
+  ],
+  "fills": [
+   {
+    "executed_at": "2026-11-09 05:00:00+00:00",
+    "price": 98.0,
+    "quantity": 20,
+    "side": "SELL",
+    "source": "api",
+    "symbol": "PARTD",
+    "value": 1960.0
+   },
+   {
+    "executed_at": "2026-11-06 05:00:00+00:00",
+    "price": 45.0,
+    "quantity": 20,
+    "side": "SELL",
+    "source": "api",
+    "symbol": "LOSEB",
+    "value": 900.0
+   },
+   {
+    "executed_at": "2026-11-05 05:00:00+00:00",
+    "price": 110.0,
+    "quantity": 10,
+    "side": "SELL",
+    "source": "api",
+    "symbol": "WINA",
+    "value": 1100.0
+   },
+   {
+    "executed_at": "2026-11-04 05:00:00+00:00",
+    "price": 104.0,
+    "quantity": 10,
+    "side": "SELL",
+    "source": "api",
+    "symbol": "PARTD",
+    "value": 1040.0
+   },
+   {
+    "executed_at": "2026-11-03 05:00:00+00:00",
+    "price": 100.0,
+    "quantity": 30,
+    "side": "BUY",
+    "source": "api",
+    "symbol": "PARTD",
+    "value": 3000.0
+   },
+   {
+    "executed_at": "2026-11-02 05:00:00+00:00",
+    "price": 50.0,
+    "quantity": 20,
+    "side": "BUY",
+    "source": "api",
+    "symbol": "LOSEB",
+    "value": 1000.0
+   },
+   {
+    "executed_at": "2026-11-02 05:00:00+00:00",
+    "price": 100.0,
+    "quantity": 10,
+    "side": "BUY",
+    "source": "api",
+    "symbol": "WINA",
+    "value": 1000.0
+   }
+  ],
+  "period": {
+   "end": null,
+   "start": null
+  },
+  "records": {
+   "first_at": "2026-11-02 05:00:00+00:00",
+   "last_at": "2026-11-09 05:00:00+00:00",
+   "total_fills": 7
+  },
+  "summary": {
+   "average_holding_days": 3.5,
+   "best_stock": {
+    "pnl": 81.74,
+    "symbol": "WINA"
+   },
+   "bought_value": 5000.0,
+   "buy_count": 3,
+   "charges": 74.87,
+   "gross_pnl": 0.0,
+   "losing_sales": 2,
+   "open_invested": null,
+   "open_pnl": null,
+   "open_value": null,
+   "realized_pnl": -74.87,
+   "sell_count": 4,
+   "sold_value": 5000.0,
+   "winning_sales": 2,
+   "worst_stock": {
+    "pnl": -118.06,
+    "symbol": "LOSEB"
+   }
+  },
+  "unmatched_sales": []
+ },
+ "weekly_bot_book": {
+  "avg_sell_return_pct": -1.12,
+  "buys": {
+   "by_strategy": {},
+   "orders": 0,
+   "stocks": 0
+  },
+  "by_cap_group": {
+   "large": {
+    "avg_return_pct": -1.12,
+    "net_pnl": -74.87,
+    "sells": 4,
+    "wins": 2
+   }
+  },
+  "data_status": "activity recorded",
+  "events": [],
+  "positions": {
+   "closed_in_week": 4,
+   "invested": 0,
+   "open": 0,
+   "partially_sold_in_week": 0
+  },
+  "realized_pnl": {
+   "charges": 74.87,
+   "gross": 0.0,
+   "net": -74.87,
+   "wins": 2
+  },
+  "reconciliation": {
+   "exit_reasons_add_up": true,
+   "note": "BUYs are counted from completed BUY orders, SELLs from completed SELL orders and checked against the trade rows.",
+   "sell_orders_equal_trade_rows": false,
+   "unclassified_exits": 0
+  },
+  "sells": {
+   "by_strategy": {
+    "ml_swing_main": 4
+   },
+   "exit_reasons": {
+    "TARGET": 4
+   },
+   "full": 4,
+   "orders": 0,
+   "partial": 0,
+   "trade_rows": 4
+  },
+  "unrealized_pnl": {
+   "amount": 0,
+   "note": "open positions at their last stored price, before the cost of selling them",
+   "pct_of_invested": null
+  }
+ }
+}

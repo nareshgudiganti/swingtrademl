@@ -952,3 +952,85 @@ def test_a_holding_with_a_not_a_number_quantity_makes_the_sync_partial(lab):
     )
     lab.groww.mode, lab.groww.raw_body = "raw", body.encode()
     assert refresh(lab).json()["status"] == "partial"
+
+
+# ================================================================== follow-ups for the backend developer (strict xfails)
+# Each is a P3 found in review. Remove the marker when the change lands; a pass with the marker still on fails
+# the run, so a fix is never missed.
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "FOLLOW-UP (P3): a holdings row with a NEGATIVE quantity passes the completeness check and is applied as a "
+        "confirmed zero (the linked row is marked not held). A negative number is malformed: the sync should be "
+        "partial and change nothing."
+    ),
+)
+def test_a_negative_quantity_makes_the_sync_partial_and_changes_nothing(lab):
+    confirm_baseline(lab)
+    r = refresh(lab, [holding(ALPHA, -3, 100.5), holding(BRAVO, 4, 200.0), holding(CHARLIE, 7, 300.0)])
+    assert r.json()["status"] == "partial"
+    assert rows_of(lab)[ALPHA]["held_state"] == "held" and rows_of(lab)[ALPHA]["quantity"] == 10
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "FOLLOW-UP (P3): a holdings row with a zero or negative AVERAGE PRICE passes the completeness check and is "
+        "written to the tracker as the buy price. (Owner call for zero: gifted or bonus shares can have a real zero "
+        "cost; a negative price is never real.)"
+    ),
+)
+@pytest.mark.parametrize("price", [0.0, -5.0])
+def test_a_zero_or_negative_average_price_makes_the_sync_partial(lab, price):
+    confirm_baseline(lab)
+    r = refresh(lab, [holding(ALPHA, 10, price), holding(BRAVO, 4, 200.0), holding(CHARLIE, 7, 300.0)])
+    assert r.json()["status"] == "partial"
+    assert rows_of(lab)[ALPHA]["buy_price"] == 100.5
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "FOLLOW-UP (P3): the tracker asks the database for each linked row's sales and quantity history one row at a "
+        "time (pending_sale_qty), so a list of N linked rows costs N sale queries and N history queries on every "
+        "load. One batched read of each is enough."
+    ),
+)
+def test_the_tracker_reads_sales_and_history_once_for_all_linked_rows(lab):
+    confirm_baseline(lab)  # ALPHA, BRAVO and CHARLIE are linked
+    seen: list[str] = []
+
+    def count(conn, cursor, statement, parameters, context, executemany):
+        low = statement.lower()
+        if "user_watchlist_sales" in low or "user_watchlist_item_changes" in low:
+            seen.append(low)
+
+    from sqlalchemy import event
+
+    engine = lab.db.get_bind()
+    event.listen(engine, "before_cursor_execute", count)
+    try:
+        tracker(lab)
+    finally:
+        event.remove(engine, "before_cursor_execute", count)
+    sales = [s for s in seen if "user_watchlist_sales" in s]
+    changes = [s for s in seen if "user_watchlist_item_changes" in s]
+    assert len(sales) <= 1 and len(changes) <= 1, (len(sales), len(changes))
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "FOLLOW-UP (P3): groww_held_symbols ignores removed_at, so a stock the owner removed from the tracker keeps "
+        "getting daily candles while Groww still shows it held (until the next sync brings the row back)."
+    ),
+)
+def test_held_symbols_for_prices_leave_out_rows_the_owner_removed(lab):
+    from swing_trade_ml.services.groww import apply as groww_apply
+
+    confirm_baseline(lab)
+    assert BRAVO in groww_apply.groww_held_symbols(lab.db)
+    assert lab.c.delete(API + f"/me/watchlist/{BRAVO}", headers=lab.h).status_code == 200
+    assert BRAVO not in groww_apply.groww_held_symbols(lab.db)

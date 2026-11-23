@@ -26,7 +26,7 @@ My Holdings, real orders, the real report and real-book totals refuse every acco
    because the cached old app doesn't know how to swap the new one-time `login_code`.
 
 ## Deploy
-7. (LOCK) Owner merges to `main` (push to main = deploy).
+7. (LOCK) Owner merges to `main`, then starts a NEW Deploy to production run on `main` (merging does not deploy; never re-run an old run).
 8. Watch: `GET /health` ok; `GET /api/v1/status` (API key) shows `environment: production`, `trading_mode: paper`.
 9. Owner signs in (password and Google). Google lands on the app with no `token=` in the address bar.
 10. Vijay buys and closes one practice position in his testing book. Works.
@@ -56,7 +56,7 @@ Other owner commands: `docker compose exec api swingtrade unlock-user --username
 `docker compose exec api swingtrade create-user` now requires `--role`.
 
 ## Rollback
-- **Rollback target:** reverting the merge on `main` deploys origin/main **`4f3cc19`** (One TradeMind Phase 2). That build does
+- **Rollback target:** reverting the merge on `main` and then running Deploy to production by hand removes the P0 changes: the code is then One TradeMind Phase 2 (`4f3cc19` when this was written) plus anything merged after the P0 merge. That build does
   **not** contain `require_real_account` (commit `9a95a8b`): on it, the real account is protected only by
   plans, and with plans **off** every signed-in account sees everything, including My Holdings.
 - 🔒 (LOCK) **Before reverting**, close the real account to everyone but the owner, one of:
@@ -68,7 +68,7 @@ Other owner commands: `docker compose exec api swingtrade unlock-user --username
     secondary account (this needs the new CLI, so run it **before** the revert; old code still honours
     `is_active`). Re-enable them after roll-forward.
   Check one non-owner gets 403 on `/api/v1/portfolio/summary?book=real` before going on.
-- 🔒 (LOCK) **Code:** revert the merge on `main` (push = deploy of `4f3cc19`). Rehearsed: the old code boots
+- 🔒 (LOCK) **Code:** revert the merge on `main`, merge the revert, then the owner starts a NEW Deploy to production run (that removes the P0 changes; never re-run an old run; use `git revert -m 1` for the merge commit). Rehearsed: the old code boots
   on the new schema (its migration step fails on the unknown revision, then it falls back to
   `create_all`) and logins work. See the evidence below.
 - **Roles after rollback:** old code reads only `is_superuser`, which mirrors `role`. A tester stays

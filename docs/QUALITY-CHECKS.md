@@ -66,7 +66,7 @@ and what to do if it goes red.
 
 ## After-deploy smoke test (qa2): `smoke` job in `.github/workflows/deploy.yml` + `infra/deploy/smoke.py`
 
-- **When:** right after every successful deploy to production (push to `main`).
+- **When:** right after every successful deploy to production (a manual run of Deploy to production on `main`; merging alone does not deploy).
 - **What:** from outside the server, as a visitor would, with GET requests only (it never logs in,
   scans or places an order, and never prints response bodies):
   - `/api/v1/health` and `/api/v1/ready` answer 200;
@@ -82,8 +82,10 @@ and what to do if it goes red.
 - **Secrets:** `API_KEY` (repository secret) for the status, brain-stage and risk-limit checks;
   without it those are skipped with a warning and only the public checks run.
   `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` for the alert (the same ones `uptime.yml` uses).
-- **If it fails:** a Telegram message names what failed. Open Actions, Deploy to production, the
-  `smoke` job. If the site is broken, revert the commit and push (see `docs/DEPLOY.md`, Rollback).
+- **If it fails:** a Telegram message names what failed (only when the smoke job itself fails; if the
+  deploy job failed first, the smoke job does not run and no message is sent). Open Actions, Deploy to production, the
+  `smoke` job. If the site is broken, revert the commit on `main`, merge the revert, then the owner starts a NEW
+  Deploy to production run (see `docs/DEPLOY.md`, Rollback). Reverting and merging alone changes nothing on the server.
   If it says the bot is NOT in paper mode, check `TRADING_MODE` / `ALLOW_LIVE_TRADING` in the
   server's `.env` immediately.
 - **Run by hand:** `python3 infra/deploy/smoke.py` (public checks only without `API_KEY` set).

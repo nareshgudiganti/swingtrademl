@@ -30,7 +30,7 @@ Nothing in this file has been run yet. No server exists, nothing was deployed, n
 | A planned "staging copy" | `docs/superpowers/specs/2026-09-29-*-blueprint*.html`, `docs/superpowers/research/2026-09-13-digitalocean-migration-plan.md` line 291 | Plans and mentions only. Nothing built. |
 | `docker-compose.yml` | repo root | Local laptop stack (project `swing-trade-ml`, ports 5433/6379/8000/5173 published on all interfaces). Not a staging file. |
 | `docker-compose.prod.yml` | repo root | Production override. |
-| `.github/workflows/deploy.yml` | | Deploys **production** on every push to `main`. No staging job. |
+| `.github/workflows/deploy.yml` | | Deploys **production**, only when the owner starts it by hand (merging or pushing to `main` does not deploy). No staging job. |
 | `infra/deploy/release.sh`, `smoke.py`, `verify.py` | | Production only (`/root/app`, `swingtrademl.com`, container names `stml-*`). |
 
 What did **not** exist before this change: a second database, second secrets, a second host, a
@@ -347,8 +347,8 @@ Set-up (OWNER, GitHub, Settings):
    tip of that branch is tested then deployed), leave "Run the full test suite" ticked.
 
 Heads-up: GitHub lists a workflow in the Actions screen only when its file is on the default branch
-(`main`). Merging this change to `main` also triggers one normal production deploy, because every push
-to `main` does; it only adds files, no runtime code changes. Or deploy by hand with section 10 until then.
+(`main`). Merging this change to `main` does not deploy production (production deploys only when the owner starts it by hand);
+it only adds files, no runtime code changes. Or deploy by hand with section 10 until then.
 For the very first demo prefer the by-hand route (section 10, `release-staging.sh`): it needs no GitHub secrets, no Environment and no dispatch, and a failure is visible on the server straight away. GitHub only allows `workflow_dispatch` for a workflow file that exists on the default branch, so use the workflow after the file is on `main`.
 
 The app secrets (section 6) are **not** in GitHub; they stay in the server `.env`.

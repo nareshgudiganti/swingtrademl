@@ -79,10 +79,11 @@ so any fix that has to change prod behaviour must be a **code** change.
    git push origin fix/<short-name>          # then a PR the owner merges
    ```
 
-   `main` is protected (pull request, review and the backend and frontend checks), so a
-   direct `git push origin HEAD:main` is not the route: use a pull request. The pull
-   request checks and the deploy's tests are not the same set, so a merge can succeed
-   and the deploy still fail in its tests.
+   `main` takes pull requests only (required checks: backend, frontend, e2e and gitleaks; admins
+   are bound by the rule; no approval is required), so a direct `git push origin HEAD:main` is refused:
+   use a pull request. These settings live in GitHub, not in the repo, so the owner confirms them.
+   A merged commit has passed those checks, but the deploy tests the tip of `main` again, so it can
+   still fail there.
 
    When the owner is ready to release, the owner runs Deploy to production on
    `main` (Actions page, or `gh workflow run deploy.yml --ref main`).

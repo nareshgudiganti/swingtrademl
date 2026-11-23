@@ -116,8 +116,11 @@ def test_nothing_reads_horizon_records_outside_its_own_service_and_the_nightly_w
     """Records of all three horizons live in one table; the service is the only door, and only the nightly writer calls it.
     A new caller must be added here on purpose, and must use `product_records`, which leaves 10D and 15D out."""
     importers = _importers(("swing_trade_ml.services.horizon_records",))
-    # The only caller is the 5-session nightly job (disabled by default); it writes 5D records and reads none back.
-    assert importers == {"services/horizon_nightly.py"}, f"new readers of horizon records: {sorted(importers)}"
+    # The nightly 5-session job (disabled by default) writes 5D records; the research simulation reads 5D records
+    # through the service (admin-only, never a customer route). Nothing else may call it.
+    allowed = {"services/horizon_nightly.py", "simulation/source.py"}
+    assert importers <= allowed, f"new readers of horizon records: {sorted(importers - allowed)}"
+    assert "services/horizon_nightly.py" in importers
     table_importers = _importers(("swing_trade_ml.db.models.horizon",)) - {"services/horizon_records.py"}
     assert table_importers <= {"db/models/__init__.py"}, sorted(table_importers)
 

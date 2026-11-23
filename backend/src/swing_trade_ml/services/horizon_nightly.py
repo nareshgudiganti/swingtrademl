@@ -40,7 +40,6 @@ from swing_trade_ml.db.models.market import Instrument
 from swing_trade_ml.db.models.ml import MLModel, Prediction
 from swing_trade_ml.services import horizon_records
 from swing_trade_ml.services.identity import resolve, writer
-from swing_trade_ml.services.model_registry import role_of
 
 log = get_logger(__name__)
 
@@ -106,13 +105,19 @@ def _day_bounds(session: date) -> tuple[datetime, datetime]:
     return start, start + timedelta(days=1)
 
 
+def _role(model: MLModel) -> str:
+    """The role stored on the model row ("fold", "final", "prod"), else "unmarked". Read straight from the row: the model
+    registry (research notes) is not a reader for anything that decides, and a test keeps services away from it."""
+    return model.model_role if model.model_role in ("fold", "final", "prod") else "unmarked"
+
+
 def model_output(model: MLModel, prediction: Prediction, instrument: Instrument, session: date) -> ModelOutput:
     """One stored prediction as the workflow's input. The model's own horizon and role travel with it."""
     return ModelOutput(
         model_name=model.name,
         model_version=model.version,
         forecast_horizon_sessions=model.prediction_horizon_days,
-        role=role_of(model)["role"],
+        role=_role(model),
         symbol=instrument.tradingsymbol,
         input_session=session,
         input_close=prediction.price_at_prediction,

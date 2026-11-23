@@ -24,7 +24,9 @@ from swing_trade_ml.db.models.identity import ScoreLedger, Security
 from swing_trade_ml.services import horizon_nightly, horizon_records, score_history
 from swing_trade_ml.services.identity import consumers, resolve, writer
 from swing_trade_ml.simulation import ledger as sim_ledger
-from swing_trade_ml.simulation import source, store
+from swing_trade_ml.simulation import runner, source, store
+from test_p0_end_to_end import MODEL_5D, SESSIONS, world  # noqa: F401 - `world` is a fixture
+from test_simulation_runner import stored  # noqa: F401 - fixture: the world's prices as stored candles
 
 SRC = Path(__file__).resolve().parents[1] / "src" / "swing_trade_ml"
 IDENTITY_PACKAGE = "services/identity/"
@@ -35,6 +37,7 @@ KEYED_MODULES = {
     "services/horizon_records.py",
     "services/score_history.py",
     "simulation/ledger.py",
+    "simulation/runner.py",
     "simulation/source.py",
     "simulation/store.py",
 }
@@ -266,3 +269,22 @@ def test_the_nightly_job_links_a_new_stock_through_the_writer_and_skips_a_confli
     assert horizon_nightly._link(db_session, clash, summary) is False
     assert summary.refused == 1
     assert resolve(db_session, token=clash.instrument_token) is None, "nothing was linked by guessing"
+
+
+def test_the_simulation_runner_resolves_through_the_identity_api_creates_no_stock_and_passes_the_session(stored, monkeypatch):  # noqa: F811
+    db = stored["db"]
+    before = _securities(db)
+    seen = {}
+    real = source.bars_from_candles
+
+    def spy(session, security_ids, sessions):
+        seen["db"], seen["ids"], seen["sessions"] = session, list(security_ids), list(sessions)
+        return real(session, security_ids, sessions)
+
+    monkeypatch.setattr(source, "bars_from_candles", spy)
+    report = runner.run_and_persist(db, run_key="xmod-runner", sessions=SESSIONS, models=[MODEL_5D])
+    assert report.fills > 0
+    assert seen["db"] is db and seen["sessions"] == list(SESSIONS)
+    known = {row for row in db.scalars(select(Security.id))}
+    assert seen["ids"] and set(seen["ids"]) <= known, "the runner asked for a stock the identity layer does not know"
+    assert _securities(db) == before, "the runner created or changed a stock"

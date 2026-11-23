@@ -15,8 +15,9 @@ Rules it keeps:
 - every pick carries its `security_id` and the `record_id` it came from, and so does every fill and block the ledger
   makes from it, so a result can be traced back to the stock and the record.
 
-The symbol a pick is traded under is the stock's symbol on that session's date, resolved through the identity tables
-(`securities`, `security_symbols`), so a renamed stock still reaches its own prices.
+The ledger keys everything by `security_id`. The symbol on each pick is the stock's symbol on that session's date, asked
+of `services/identity` and used for display only; `rekey_by_security` turns symbol-keyed price series into id-keyed ones
+through the same service, and refuses a symbol it cannot resolve.
 
 Momentum has no record source yet (it needs its own verified ranking inputs): its picks are passed in by the caller,
 and are empty if not given. That is still synthetic.
@@ -47,22 +48,41 @@ def horizon_of(rules: TradingRules) -> int:
 
 
 def symbol_on(db: Any, security_id: int, on: date, exchange: str = "NSE") -> str | None:
-    """The stock's symbol on `on`, from the identity tables (a rename is followed), or None."""
-    from sqlalchemy import select
+    """The stock's symbol on `on`, asked of the identity service (a rename is followed). For DISPLAY only: no pick,
+    price or position is ever matched by it."""
+    from swing_trade_ml.services import identity
 
-    from swing_trade_ml.db.models.identity import SecuritySymbol
+    ref = identity.get_ref(db, security_id, exchange=exchange, on_date=on)
+    return ref.symbol if ref is not None else None
 
-    return db.scalar(
-        select(SecuritySymbol.symbol)
-        .where(
-            SecuritySymbol.security_id == security_id,
-            SecuritySymbol.exchange == exchange,
-            SecuritySymbol.valid_from <= on,
-            (SecuritySymbol.valid_to.is_(None)) | (SecuritySymbol.valid_to >= on),
-        )
-        .order_by(SecuritySymbol.valid_from.desc())
-        .limit(1)
-    )
+
+class UnknownStockError(ValueError):
+    """A symbol could not be resolved to exactly one security on that date. Nothing is guessed."""
+
+
+def security_ids_for(db: Any, symbols: Sequence[str], on: date, exchange: str = "NSE") -> dict[str, int]:
+    """symbol -> `security_id` on `on`, resolved through the identity service. Raises `UnknownStockError` for any symbol the
+    identity tables do not know (or know ambiguously): a price series for an unknown stock is never accepted."""
+    from swing_trade_ml.services import identity
+
+    out: dict[str, int] = {}
+    for symbol in symbols:
+        sid = identity.resolve(db, symbol=symbol, exchange=exchange, on_date=on)
+        if sid is None:
+            raise UnknownStockError(f"{symbol!r} is not a known stock on {on}")
+        out[symbol] = sid
+    return out
+
+
+def rekey_by_security(
+    db: Any, by_symbol: Mapping[str, Any], on: date, exchange: str = "NSE"
+) -> dict[int, Any]:
+    """A mapping keyed by symbol (prices, traded value, cap tiers) -> the same values keyed by `security_id`, the key
+    the ledger uses. Two symbols that resolve to one security are refused rather than merged."""
+    ids = security_ids_for(db, list(by_symbol), on, exchange)
+    if len(set(ids.values())) != len(ids):
+        raise UnknownStockError("two symbols resolve to the same security")
+    return {ids[symbol]: value for symbol, value in by_symbol.items()}
 
 
 def _security_ids(db: Any) -> list[int]:
@@ -111,6 +131,18 @@ def read_records(
     return rows
 
 
+def records_by_id(db: Any, security_ids: Sequence[int]) -> dict[int, Any]:
+    """record id -> the horizon record row, for the given stocks, every revision, read through the horizon records
+    service. Used to trace a stored fill back to the record it was decided from."""
+    from swing_trade_ml.services import horizon_records
+
+    out: dict[int, Any] = {}
+    for security_id in sorted(set(security_ids)):
+        for row in horizon_records.records_for(db, security_id, view="all"):
+            out[row.id] = row
+    return out
+
+
 def decisions_from_horizon_records(
     db: Any,
     rules: TradingRules,
@@ -138,11 +170,11 @@ def decisions_from_horizon_records(
         held_back = None if row.decision == TRADE else f"brain check: {row.decision}"
         out.setdefault(row.session_date.isoformat(), []).append(
             Candidate(
+                security_id=row.security_id,
                 symbol=symbol,
                 score=float(row.score) if row.score is not None else 0.0,
                 sector=(sectors or {}).get(row.security_id),
                 block_reason=held_back,
-                security_id=row.security_id,
                 record_id=row.id,
             )
         )

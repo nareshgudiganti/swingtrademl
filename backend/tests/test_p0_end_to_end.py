@@ -117,12 +117,23 @@ def world(db_session):
         for record in long_only.values():
             hr.save_for_symbol(db_session, record, scan_key=f"p0e2e:{day}", run_ref=f"run-{day}-long")
     db_session.flush()
-    bars = {symbol: dict(zip(SESSIONS, _bars(i), strict=True)) for i, symbol in enumerate(secs.values())}
-    bars["P0ONLY"] = dict(zip(SESSIONS, _bars(9), strict=True))
-    return {"secs": secs, "only_long": only_long, "bars": bars, "db": db_session}
+    by_symbol = {symbol: dict(zip(SESSIONS, _bars(i), strict=True)) for i, symbol in enumerate(secs.values())}
+    by_symbol["P0ONLY"] = dict(zip(SESSIONS, _bars(9), strict=True))
+    # prices are keyed by symbol only here, where they are invented; the ledger gets them keyed by security_id,
+    # resolved through the identity service
+    bars = source.rekey_by_security(db_session, by_symbol, ALL_DAYS[0])
+    ids = source.security_ids_for(db_session, list(by_symbol), ALL_DAYS[0])
+    return {
+        "secs": secs,
+        "only_long": only_long,
+        "bars": bars,
+        "by_symbol": by_symbol,
+        "ids": ids,
+        "db": db_session,
+    }
 
 
-def _momentum(bars) -> dict[str, list[Candidate]]:
+def _momentum(bars, ids) -> dict[str, list[Candidate]]:
     """Synthetic: the two best 3-session returns among the six, using only bars up to the decision session."""
     symbols = [s for s in bars if s != "P0ONLY"]
     picks: dict[str, list[Candidate]] = {}
@@ -130,7 +141,7 @@ def _momentum(bars) -> dict[str, list[Candidate]]:
         ranked = sorted(
             symbols, key=lambda s: -(bars[s][SESSIONS[i]].close / bars[s][SESSIONS[i - 3]].close - 1)
         )
-        picks[SESSIONS[i]] = [Candidate(s, 0.5, f"sec-{s}") for s in ranked[:2]]
+        picks[SESSIONS[i]] = [Candidate(ids[s], s, 0.5, f"sec-{s}") for s in ranked[:2]]
     return picks
 
 
@@ -138,7 +149,9 @@ def _momentum(bars) -> dict[str, list[Candidate]]:
 def run(world):
     rules = TradingRules.plan_5d()
     db = world["db"]
-    decisions = source.decisions_by_policy(db, rules, momentum=_momentum(world["bars"]), sessions=SESSIONS)
+    decisions = source.decisions_by_policy(
+        db, rules, momentum=_momentum(world["by_symbol"], world["ids"]), sessions=SESSIONS
+    )
     specs = build_matrix()
     ledgers = run_cohort(specs, SESSIONS, world["bars"], decisions, rules)
     return {**world, "rules": rules, "decisions": decisions, "specs": specs, "ledgers": ledgers}
@@ -340,3 +353,17 @@ def test_a_later_revision_of_a_record_never_changes_what_a_past_session_picked(r
     assert [c.record_id for c in after] == [c.record_id for c in before] and first.id in {
         c.record_id for c in after
     }  # ... and ignored
+
+
+def test_every_link_in_the_ledger_is_a_security_id_and_an_unknown_symbol_is_refused(run):
+    ids, secs, db = run["ids"], run["secs"], run["db"]
+    assert set(run["bars"]) == set(ids.values()) and all(isinstance(k, int) for k in run["bars"])
+    for ledger in run["ledgers"].values():
+        for record in ledger.records:
+            for item in (*record.fills, *record.exits, *record.blocks, *record.positions):
+                assert isinstance(item.security_id, int) and item.security_id in run["bars"]
+                assert (
+                    secs.get(item.security_id, "P0ONLY") == item.symbol
+                )  # the symbol is only the display name
+    with pytest.raises(source.UnknownStockError):
+        source.rekey_by_security(db, {"NOSUCHSTOCK": {}}, ALL_DAYS[0])

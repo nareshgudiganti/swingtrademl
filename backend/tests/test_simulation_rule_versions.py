@@ -36,8 +36,16 @@ def spec(balance=1_000_000, key="syn-001", policy=Policy.MODEL_ONLY, counts=True
     return PortfolioSpec(key, policy, "setup-01", balance, 0, counts)
 
 
-def series(**by_symbol: list[Bar]) -> dict[str, dict[str, Bar]]:
-    return {sym: dict(zip(SESSIONS, rows, strict=False)) for sym, rows in by_symbol.items()}
+_IDS: dict[str, int] = {}
+
+
+def sid(symbol: str) -> int:
+    """A stable synthetic security_id per test symbol: the ledger is keyed by id, symbols are for display."""
+    return _IDS.setdefault(symbol, 1000 + len(_IDS))
+
+
+def series(**by_symbol: list[Bar]) -> dict[int, dict[str, Bar]]:
+    return {sid(sym): dict(zip(SESSIONS, rows, strict=False)) for sym, rows in by_symbol.items()}
 
 
 def flat(price: float, n: int) -> list[Bar]:
@@ -45,7 +53,7 @@ def flat(price: float, n: int) -> list[Bar]:
 
 
 def buy_first(symbol: str = "AAA") -> dict[str, list[Candidate]]:
-    return {SESSIONS[0]: [Candidate(symbol, 0.9, f"sector-{symbol}")]}
+    return {SESSIONS[0]: [Candidate(sid(symbol), symbol, 0.9, f"sector-{symbol}")]}
 
 
 # ------------------------------------------------------------------ the two rules, and their refusals
@@ -173,7 +181,7 @@ def test_the_5_day_rule_never_makes_a_half_out_exit():
         c = o * (1 + rng.uniform(-0.03, 0.03))
         rows.append(Bar(o, max(o, c) * 1.015, min(o, c) * 0.99, c))
         last = c
-    decisions = {SESSIONS[d]: [Candidate("AAA", 0.9, "s")] for d in range(24)}
+    decisions = {SESSIONS[d]: [Candidate(sid("AAA"), "AAA", 0.9, "s")] for d in range(24)}
     ledger = run_portfolio(spec(), SESSIONS[:25], series(AAA=rows), decisions, PLAN_5D)
     reasons = {e.reason for r in ledger.records for e in r.exits}
     assert ledger.exit_count > 0 and "half_out" not in reasons
@@ -247,7 +255,7 @@ def test_an_empty_comparison_raises_rather_than_guessing_a_rule():
 @pytest.mark.parametrize("balance", [10_000, 25_000])
 def test_the_two_smallest_balances_still_never_trade_under_either_rule(balance, rules):
     bars = series(AAA=flat(100.0, 8))
-    decisions = {SESSIONS[d]: [Candidate("AAA", 0.9, "s")] for d in range(7)}
+    decisions = {SESSIONS[d]: [Candidate(sid("AAA"), "AAA", 0.9, "s")] for d in range(7)}
     ledger = run_portfolio(spec(balance=balance), SESSIONS[:8], bars, decisions, rules)
     assert ledger.fill_count == 0 and ledger.exit_count == 0
     assert {b.reason for r in ledger.records for b in r.blocks} == {"below_minimum_position"}

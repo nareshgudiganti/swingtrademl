@@ -834,3 +834,95 @@ def test_service_keys_and_anonymous_callers_and_the_trace(client, db_session, br
     assert client.get(url).status_code in (401, 403)
     # read_all is the owner's read-only automation key: it may read it, by design (scope_allows).
     assert client.get(url, headers=_key(db_session, "read_all")).status_code == 200
+
+
+# ------------------------------------------- 6. gaps found when the module was checked against #414
+
+
+def test_nobody_can_drive_another_persons_subscription_through_the_simulator(client, db_session, people):
+    """/billing/fake/simulate takes a subscription id: a foreign id is refused for members and testers, and
+    the owner's subscription row is never touched by someone else's call."""
+    a, b, t = people["a"], people["b"], people["t"]
+    sub_id = client.post(f"{API}/billing/checkout", headers=a).json()["subscription_id"]
+    before = client.get(f"{API}/billing/me", headers=a).json()["subscription"]
+    for h in (b, t):
+        body = {"event": "cancelled", "subscription_id": sub_id}
+        r = client.post(f"{API}/billing/fake/simulate", json=body, headers=h)
+        assert r.status_code in (403, 404), r.status_code
+        assert sub_id not in r.text
+    after = client.get(f"{API}/billing/me", headers=a).json()["subscription"]
+    assert after["status"] == before["status"] and not after["cancelled_at"]
+    # Without an id the call acts on the caller's own subscription, and Bob has none.
+    own = client.post(f"{API}/billing/fake/simulate", json={"event": "cancelled"}, headers=b)
+    assert own.status_code == 404
+    assert client.get(f"{API}/billing/me", headers=a).json()["subscription"]["status"] == before["status"]
+
+
+def test_a_service_key_principal_is_never_counted_as_a_real_account_user(db_session, people):
+    from swing_trade_ml.api.deps import Principal
+    from swing_trade_ml.services import idea_report
+
+    for scope in ("read_status", "read_ops", "read_all"):
+        assert idea_report.groww_user_ids(db_session, Principal(user=None, service_scope=scope)) == []
+
+
+@pytest.fixture()
+def live_track(db_session, monkeypatch):
+    monkeypatch.setattr(settings, "BRAIN_ENABLED", True)  # the brain's routes answer only while it is on
+    from datetime import date
+
+    from swing_trade_ml.db.models.brain import BrainTrack
+
+    for book, symbol in (("live", "ISOREAL"), ("paper", "ISOHOUSE")):
+        db_session.add(
+            BrainTrack(
+                book=book, symbol=symbol, opened_on=date(2026, 11, 2), day=date(2026, 11, 3), day_n=1,
+                ret=0.01, status="ok", reason="ISO-TRACK-REASON", stop=95.0, band=[],
+            )
+        )
+    db_session.flush()
+
+
+@pytest.mark.parametrize("who", ["pro", "t"])
+def test_members_and_testers_cannot_read_the_live_book_track(client, db_session, people, live_track, who):
+    """/brain/track/{symbol}?book=live is the day-by-day track of the owner's real holdings."""
+    set_plans_enabled(db_session, True)
+    if who == "pro":
+        _, h = make_user(db_session, "iso-trk-pro", plan="pro")
+    else:
+        h = people["t"]
+    r = client.get(f"{API}/brain/track/ISOREAL?book=live", headers=h)
+    assert r.status_code == 403 and "ISO-TRACK-REASON" not in r.text
+    # The brain's own paper book stays readable for a plan member (the positive control).
+    if who == "pro":
+        ok = client.get(f"{API}/brain/track/ISOHOUSE?book=paper", headers=h)
+        assert ok.status_code == 200 and "ISO-TRACK-REASON" in ok.text
+
+
+def test_the_shared_key_and_service_keys_cannot_read_the_live_book_track(client, db_session, live_track):
+    for headers in (LEGACY_KEY, _key(db_session, "read_all"), _key(db_session, "read_status")):
+        r = client.get(f"{API}/brain/track/ISOREAL?book=live", headers=headers)
+        assert r.status_code == 403 and "ISO-TRACK-REASON" not in r.text
+
+
+def test_the_named_real_account_owner_reads_the_live_book_track(client, db_session, live_track, monkeypatch):
+    _, h = make_user(db_session, "iso-trk-realowner", role="owner")
+    monkeypatch.setattr(settings, "REAL_ACCOUNT_USERS", "iso-trk-realowner")
+    r = client.get(f"{API}/brain/track/ISOREAL?book=live", headers=h)
+    assert r.status_code == 200 and r.json()["points"]
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "REAL DEFECT (#414): /brain/track/{symbol}?book=live lets ANY signed-in owner read the day-by-day "
+        "track of the real holdings (brain.py holding_track checks is_owner, not "
+        "can_see_real_account). Every other real-account route refuses an owner who is not in "
+        "REAL_ACCOUNT_USERS. Not fixed here."
+    ),
+)
+def test_an_owner_who_is_not_the_named_user_cannot_read_the_live_book_track(
+    client, db_session, people, live_track
+):
+    r = client.get(f"{API}/brain/track/ISOREAL?book=live", headers=people["o"])
+    assert r.status_code == 403 and "ISO-TRACK-REASON" not in r.text

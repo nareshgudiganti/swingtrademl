@@ -35,7 +35,7 @@ from swing_trade_ml.simulation.cohorts import build_matrix
 from swing_trade_ml.simulation.identity import Policy
 from swing_trade_ml.simulation.ledger import BlockRecord, ExitRecord, compare_by_policy, run_cohort
 from swing_trade_ml.simulation.rules import MixedRuleVersions, TradingRules
-from test_p0_end_to_end import ALL_DAYS, SESSIONS, _momentum, world  # noqa: F401 - `world` is a fixture
+from test_p0_end_to_end import ALL_DAYS, MODEL_5D, MODEL_15D, SESSIONS, _momentum, world  # noqa: F401 - `world` is a fixture
 
 SRC = Path(swing_trade_ml.__file__).parent
 SIM_MODELS = (SimRun, SimPortfolio, SimNotApplied, SimDay, SimFill, SimExit, SimBlock, SimMark)
@@ -52,7 +52,7 @@ def sim(world):  # noqa: F811
     rules = TradingRules.plan_5d()
     db = world["db"]
     decisions = source.decisions_by_policy(
-        db, rules, momentum=_momentum(world["by_symbol"], world["ids"]), sessions=SESSIONS
+        db, rules, models=[MODEL_5D], momentum=_momentum(world["by_symbol"], world["ids"]), sessions=SESSIONS
     )
     specs = [
         s
@@ -139,7 +139,7 @@ def test_a_refused_replay_leaves_even_its_new_rows_unwritten(sim):
 def test_a_later_replay_that_carries_on_only_adds_the_new_days(sim):
     db, specs, rules = sim["db"], sim["specs"], sim["rules"]
     decisions = source.decisions_by_policy(
-        db, rules, momentum=_momentum(sim["by_symbol"], sim["ids"]), sessions=SESSIONS
+        db, rules, models=[MODEL_5D], momentum=_momentum(sim["by_symbol"], sim["ids"]), sessions=SESSIONS
     )
     short = run_cohort(specs, SESSIONS[:10], sim["bars"], decisions, rules)
     store.persist_run(db, RUN, short, rules)
@@ -292,7 +292,7 @@ def test_every_fill_traces_stock_to_horizon_record_to_policy_and_rule_version(si
 def test_a_research_run_is_stamped_research_only_and_never_mixes_with_5d(sim):
     db, specs = sim["db"], sim["specs"]
     rules15 = TradingRules.plan_15d()
-    decisions = source.decisions_by_policy(db, rules15, sessions=SESSIONS)
+    decisions = source.decisions_by_policy(db, rules15, models=[MODEL_15D], sessions=SESSIONS)
     ledgers15 = run_cohort(specs, SESSIONS, sim["bars"], decisions, rules15)
     store.persist_run(db, "run-15d", ledgers15, rules15)
     run = db.scalar(select(SimRun).where(SimRun.run_key == "run-15d"))

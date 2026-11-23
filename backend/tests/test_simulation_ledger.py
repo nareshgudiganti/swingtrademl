@@ -32,8 +32,16 @@ def flat(price: float, n: int) -> list[Bar]:
     return [Bar(price, price, price, price) for _ in range(n)]
 
 
-def series(**by_symbol: list[Bar]) -> dict[str, dict[str, Bar]]:
-    return {sym: dict(zip(SESSIONS, rows, strict=False)) for sym, rows in by_symbol.items()}
+_IDS: dict[str, int] = {}
+
+
+def sid(symbol: str) -> int:
+    """A stable synthetic security_id per test symbol: the ledger is keyed by id, symbols are for display."""
+    return _IDS.setdefault(symbol, 1000 + len(_IDS))
+
+
+def series(**by_symbol: list[Bar]) -> dict[int, dict[str, Bar]]:
+    return {sid(sym): dict(zip(SESSIONS, rows, strict=False)) for sym, rows in by_symbol.items()}
 
 
 def buy_on_day(index: int, *cands: Candidate) -> dict[str, list[Candidate]]:
@@ -42,7 +50,7 @@ def buy_on_day(index: int, *cands: Candidate) -> dict[str, list[Candidate]]:
 
 
 def pick(symbol: str, score: float = 0.9, sector: str | None = None, block: str | None = None) -> Candidate:
-    return Candidate(symbol, score, sector or f"sector-{symbol}", block)
+    return Candidate(sid(symbol), symbol, score, sector or f"sector-{symbol}", block)
 
 
 # ------------------------------------------------------------------ the rules come from the app, never looser
@@ -222,7 +230,7 @@ def test_the_daily_buy_cap_and_a_held_back_pick_are_recorded_as_blocks():
 
 def test_a_pick_with_no_price_that_day_is_blocked_and_a_held_stock_without_a_bar_is_marked_stale():
     bars = series(AAA=[Bar(100, 100, 100, 100)] * 4)
-    bars["AAA"].pop(SESSIONS[2])  # no bar on day 2
+    bars[sid("AAA")].pop(SESSIONS[2])  # no bar on day 2
     ledger = run_portfolio(
         spec(), SESSIONS[:4], bars, {**buy_on_day(0, pick("AAA")), **buy_on_day(1, pick("ZZZ"))}, RULES
     )
@@ -308,7 +316,9 @@ def test_a_pick_is_never_bought_before_the_open_of_the_session_after_it_was_deci
         decided = {c.symbol for c in previous}
         for fill in record.fills:
             assert fill.symbol in decided, (record.session, fill.symbol)
-            assert fill.price == pytest.approx(apply_slippage(bars[fill.symbol][record.session].open, "BUY"))
+            assert fill.price == pytest.approx(
+                apply_slippage(bars[fill.security_id][record.session].open, "BUY")
+            )
 
 
 def test_the_record_of_a_session_never_depends_on_later_prices_or_later_picks():

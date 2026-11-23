@@ -39,6 +39,8 @@ from swing_trade_ml.simulation.rules import MixedRuleVersions, TradingRules
 ALL_DAYS = tuple(d for i in range(60) if (d := date(2026, 12, 1) + timedelta(days=i)).weekday() < 5)
 SESSIONS = tuple(d.isoformat() for d in ALL_DAYS[:16])
 RECORDED = ALL_DAYS[:12]  # sessions that have records; the last four only trade out
+MODEL_5D = "synthetic_h5"  # the model that wrote the world's 5D records (every run names its model)
+MODEL_15D = "synthetic_h15"
 SCORES = {0: 0.90, 1: 0.88, 2: 0.86, 3: 0.84, 4: 0.70, 5: 0.30}  # TRADE, TRADE, TRADE, TRADE, WATCH, WAIT
 _tokens = iter(range(420_000, 420_900))
 
@@ -117,12 +119,23 @@ def world(db_session):
         for record in long_only.values():
             hr.save_for_symbol(db_session, record, scan_key=f"p0e2e:{day}", run_ref=f"run-{day}-long")
     db_session.flush()
-    bars = {symbol: dict(zip(SESSIONS, _bars(i), strict=True)) for i, symbol in enumerate(secs.values())}
-    bars["P0ONLY"] = dict(zip(SESSIONS, _bars(9), strict=True))
-    return {"secs": secs, "only_long": only_long, "bars": bars, "db": db_session}
+    by_symbol = {symbol: dict(zip(SESSIONS, _bars(i), strict=True)) for i, symbol in enumerate(secs.values())}
+    by_symbol["P0ONLY"] = dict(zip(SESSIONS, _bars(9), strict=True))
+    # prices are keyed by symbol only here, where they are invented; the ledger gets them keyed by security_id,
+    # resolved through the identity service
+    bars = source.rekey_by_security(db_session, by_symbol, ALL_DAYS[0])
+    ids = source.security_ids_for(db_session, list(by_symbol), ALL_DAYS[0])
+    return {
+        "secs": secs,
+        "only_long": only_long,
+        "bars": bars,
+        "by_symbol": by_symbol,
+        "ids": ids,
+        "db": db_session,
+    }
 
 
-def _momentum(bars) -> dict[str, list[Candidate]]:
+def _momentum(bars, ids) -> dict[str, list[Candidate]]:
     """Synthetic: the two best 3-session returns among the six, using only bars up to the decision session."""
     symbols = [s for s in bars if s != "P0ONLY"]
     picks: dict[str, list[Candidate]] = {}
@@ -130,7 +143,7 @@ def _momentum(bars) -> dict[str, list[Candidate]]:
         ranked = sorted(
             symbols, key=lambda s: -(bars[s][SESSIONS[i]].close / bars[s][SESSIONS[i - 3]].close - 1)
         )
-        picks[SESSIONS[i]] = [Candidate(s, 0.5, f"sec-{s}") for s in ranked[:2]]
+        picks[SESSIONS[i]] = [Candidate(ids[s], s, 0.5, f"sec-{s}") for s in ranked[:2]]
     return picks
 
 
@@ -138,7 +151,9 @@ def _momentum(bars) -> dict[str, list[Candidate]]:
 def run(world):
     rules = TradingRules.plan_5d()
     db = world["db"]
-    decisions = source.decisions_by_policy(db, rules, momentum=_momentum(world["bars"]), sessions=SESSIONS)
+    decisions = source.decisions_by_policy(
+        db, rules, models=[MODEL_5D], momentum=_momentum(world["by_symbol"], world["ids"]), sessions=SESSIONS
+    )
     specs = build_matrix()
     ledgers = run_cohort(specs, SESSIONS, world["bars"], decisions, rules)
     return {**world, "rules": rules, "decisions": decisions, "specs": specs, "ledgers": ledgers}
@@ -251,7 +266,7 @@ def test_no_10d_or_15d_record_reaches_a_5d_portfolio(run):
                 assert item.symbol != "P0ONLY" and item.security_id != only_long
                 if item.record_id is not None:
                     assert db.get(HorizonRecordRow, item.record_id).horizon_days == 5
-    seen = source.read_records(db, run["rules"])
+    seen = source.read_records(db, run["rules"], models=[MODEL_5D])
     assert seen and {r.horizon_days for r in seen} == {5} and not any(r.research_only for r in seen)
 
 
@@ -259,10 +274,10 @@ def test_a_research_rule_reads_its_own_horizon_and_the_ledger_says_research_only
     db, secs = run["db"], run["secs"]
     rules15 = TradingRules.plan_15d()
     assert rules15.research_only is True
-    decisions = source.decisions_by_policy(db, rules15, sessions=SESSIONS)
+    decisions = source.decisions_by_policy(db, rules15, models=[MODEL_15D], sessions=SESSIONS)
     symbols = {c.symbol for picks in decisions[Policy.MODEL_ONLY].values() for c in picks}
     assert "P0ONLY" in symbols  # the 15D rule sees the stock that has only long-horizon records
-    assert {r.horizon_days for r in source.read_records(db, rules15)} == {15}
+    assert {r.horizon_days for r in source.read_records(db, rules15, models=[MODEL_15D])} == {15}
     spec = next(s for s in build_matrix() if s.balance_inr == 1_000_000 and s.policy is Policy.MODEL_ONLY)
     ledger = run_portfolio(spec, SESSIONS, run["bars"], decisions[Policy.MODEL_ONLY], rules15)
     assert ledger.research_only and all(r.research_only for r in ledger.records)
@@ -280,21 +295,24 @@ def test_the_adapter_refuses_a_row_that_does_not_belong_to_the_rule_even_if_the_
 
     good = {
         "id": 1,
+        "security_id": 1,
         "session_date": date(2026, 12, 1),
         "horizon_days": 5,
         "research_only": False,
         "research_config_version": "hz-rules-v1",
+        "model_name": MODEL_5D,
+        "model_version": "v5.1",
     }
     rules = TradingRules.plan_5d()
     monkeypatch.setattr(source, "_security_ids", lambda db: [1])
     monkeypatch.setattr(hr, "records_for", lambda db, sid, **kw: [SimpleNamespace(**good)])
-    assert source.read_records(None, rules)
+    assert source.read_records(None, rules, models=[MODEL_5D])
     for bad in ({"horizon_days": 10}, {"research_only": True}, {"research_config_version": "hz-rules-v2"}):
         monkeypatch.setattr(
             hr, "records_for", lambda db, sid, bad=bad, **kw: [SimpleNamespace(**{**good, **bad})]
         )
         with pytest.raises(source.HorizonSourceError):
-            source.read_records(None, rules)
+            source.read_records(None, rules, models=[MODEL_5D])
 
 
 def test_nothing_looks_ahead(run):
@@ -323,7 +341,9 @@ def test_a_later_revision_of_a_record_never_changes_what_a_past_session_picked(r
     db, rules = run["db"], run["rules"]
     sid = next(iter(run["secs"]))
     day = RECORDED[2]
-    before = source.decisions_from_horizon_records(db, rules, Policy.MODEL_ONLY)[day.isoformat()]
+    before = source.decisions_from_horizon_records(db, rules, Policy.MODEL_ONLY, models=[MODEL_5D])[
+        day.isoformat()
+    ]
     first = db.scalar(
         select(HorizonRecordRow).where(
             HorizonRecordRow.security_id == sid,
@@ -336,7 +356,23 @@ def test_a_later_revision_of_a_record_never_changes_what_a_past_session_picked(r
     )
     saved = hr.save_for_symbol(db, results[5], scan_key="rerun")
     assert saved.created and saved.revision == 2  # the re-run is kept as revision 2 ...
-    after = source.decisions_from_horizon_records(db, rules, Policy.MODEL_ONLY)[day.isoformat()]
+    after = source.decisions_from_horizon_records(db, rules, Policy.MODEL_ONLY, models=[MODEL_5D])[
+        day.isoformat()
+    ]
     assert [c.record_id for c in after] == [c.record_id for c in before] and first.id in {
         c.record_id for c in after
     }  # ... and ignored
+
+
+def test_every_link_in_the_ledger_is_a_security_id_and_an_unknown_symbol_is_refused(run):
+    ids, secs, db = run["ids"], run["secs"], run["db"]
+    assert set(run["bars"]) == set(ids.values()) and all(isinstance(k, int) for k in run["bars"])
+    for ledger in run["ledgers"].values():
+        for record in ledger.records:
+            for item in (*record.fills, *record.exits, *record.blocks, *record.positions):
+                assert isinstance(item.security_id, int) and item.security_id in run["bars"]
+                assert (
+                    secs.get(item.security_id, "P0ONLY") == item.symbol
+                )  # the symbol is only the display name
+    with pytest.raises(source.UnknownStockError):
+        source.rekey_by_security(db, {"NOSUCHSTOCK": {}}, ALL_DAYS[0])

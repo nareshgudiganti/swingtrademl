@@ -63,6 +63,16 @@ from swing_trade_ml.db.models.registry import ModelResearchSlot
 from swing_trade_ml.db.models.safety import RiskEvent, SystemState
 from swing_trade_ml.db.models.service_keys import ServiceKey
 from swing_trade_ml.db.models.session import BrokerSession, PlanSettings, SubscriptionPlan, User
+from swing_trade_ml.db.models.simulation import (
+    SimBlock,
+    SimDay,
+    SimExit,
+    SimFill,
+    SimMark,
+    SimNotApplied,
+    SimPortfolio,
+    SimRun,
+)
 from swing_trade_ml.db.models.trading import (
     CapitalDeposit,
     Order,
@@ -151,6 +161,14 @@ __all__ = [
     "SecuritySymbol",
     "ServiceKey",
     "Signal",
+    "SimBlock",
+    "SimDay",
+    "SimExit",
+    "SimFill",
+    "SimMark",
+    "SimNotApplied",
+    "SimPortfolio",
+    "SimRun",
     "Strategy",
     "SubscriptionPlan",
     "SystemState",

@@ -256,6 +256,15 @@ def horizon_report(db: DbSession) -> dict[str, Any]:
     return hr.build(db)
 
 
+@router.get("/outcome-ledger")
+def outcome_ledger_view(db: DbSession, run_no: int | None = Query(default=None, ge=1)) -> dict[str, Any]:
+    """The 5-day lane's forward outcome ledger, one row per recorded pick (read-only).
+    See shadow_lanes/outcome_ledger.py for the row grain and field names."""
+    from swing_trade_ml.shadow_lanes import outcome_ledger
+
+    return outcome_ledger.build(db, run_no)
+
+
 @router.get("/{slot_key}/picks")
 def lane_picks(
     slot_key: str, db: DbSession, limit: int = Query(default=100, ge=1, le=1000)

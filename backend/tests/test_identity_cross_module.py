@@ -21,7 +21,7 @@ from sqlalchemy import select
 from identity_fixtures import FRIDAY, THURSDAY, seed_renamed_stock, seed_stale_stock
 from swing_trade_ml.brain.horizons import ModelOutput, run_horizon
 from swing_trade_ml.db.models.identity import ScoreLedger, Security
-from swing_trade_ml.services import horizon_records, score_history
+from swing_trade_ml.services import horizon_nightly, horizon_records, score_history
 from swing_trade_ml.services.identity import consumers, resolve, writer
 from swing_trade_ml.simulation import ledger as sim_ledger
 from swing_trade_ml.simulation import source, store
@@ -31,6 +31,7 @@ IDENTITY_PACKAGE = "services/identity/"
 
 # Modules that key by stock today. A new one must be added HERE, with a behavioural check below: that is the review hook.
 KEYED_MODULES = {
+    "services/horizon_nightly.py",
     "services/horizon_records.py",
     "services/score_history.py",
     "simulation/ledger.py",
@@ -39,12 +40,12 @@ KEYED_MODULES = {
 }
 # Only these may use the identity WRITER (create or change a stock). score_history seeds a security for a stock the
 # first time it is scored; everything else only reads. The admin command lives inside the identity package.
-WRITER_USERS = {"services/score_history.py"}
+# horizon_nightly links a followed stock that has no security yet through the writer's own idempotent path (and skips it on
+# an identity conflict); it never builds a stock row itself.
+WRITER_USERS = {"services/score_history.py", "services/horizon_nightly.py"}
 # Only these may read the identity tables directly instead of through the read API. KNOWN: the simulation source lists
 # every security id to read horizon records for them; it should ask the read API instead.
 DIRECT_TABLE_READERS = {"db/models/__init__.py", "simulation/source.py"}
-# Symbol lookups that do not yet pass the session. KNOWN violation, pinned by the strict xfail below.
-NO_DATE_LOOKUPS = {("services/horizon_records.py", "save_for_symbol")}
 
 
 def _files():
@@ -132,19 +133,6 @@ def _symbol_lookups_without_a_date() -> set[tuple[str, str]]:
 
 
 def test_every_symbol_lookup_passes_the_session_it_belongs_to():
-    assert _symbol_lookups_without_a_date() - NO_DATE_LOOKUPS == set()
-
-
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "KNOWN (found by this check): services/horizon_records.py save_for_symbol resolves the symbol WITHOUT the record's "
-        "session (`resolve(db, symbol=record.symbol)`), so it reads the symbol as of TODAY. A record for a session before "
-        "a rename, written under the old symbol, is refused as an unknown stock. Fix: pass on_date=record.input_session, "
-        "then empty NO_DATE_LOOKUPS and remove this marker."
-    ),
-)
-def test_no_symbol_lookup_is_missing_its_session():
     assert _symbol_lookups_without_a_date() == set()
 
 
@@ -178,7 +166,6 @@ def test_horizon_records_never_create_a_stock_and_use_the_resolved_id(db_session
     assert [r.security_id for r in rows] == [renamed.security_id]
 
 
-@pytest.mark.xfail(strict=True, reason="KNOWN: save_for_symbol resolves today's symbol, not the record's session (see above)")
 def test_a_horizon_record_for_a_session_before_a_rename_is_kept_under_the_same_stock(db_session):
     renamed = seed_renamed_stock(db_session)
     saved = horizon_records.save_for_symbol(db_session, _horizon_record(renamed.old_symbol, renamed.last_old_day))
@@ -257,3 +244,25 @@ def test_reading_never_creates_a_stock(db_session):
         consumers.security_for_instrument(db_session, 99_999_999)
     assert _securities(db_session) == before
     assert writer.create_security  # the writer is the one place a stock is made
+
+
+def test_the_nightly_job_links_a_new_stock_through_the_writer_and_skips_a_conflict(db_session):
+    from identity_fixtures import instrument
+
+    summary = horizon_nightly.DaySummary(FRIDAY)
+    known = seed_renamed_stock(db_session)
+    assert horizon_nightly._link(db_session, known.instrument, summary) is True
+    assert (summary.resolved, summary.linked) == (1, 0), "a known stock is resolved, not made again"
+
+    fresh = instrument(db_session, "NIGHTFX1", name="Night Fixture One Ltd")
+    before = _securities(db_session)
+    assert horizon_nightly._link(db_session, fresh, summary) is True
+    assert summary.linked == 1 and _securities(db_session) == before + 1
+    assert resolve(db_session, token=fresh.instrument_token) is not None
+
+    owner = writer.create_security(db_session, name="The Original Company Ltd")
+    writer.set_symbol(db_session, owner, "NIGHTCLASH", date(2000, 1, 1))
+    clash = instrument(db_session, "NIGHTCLASH", name="A Different Holdings Ltd")
+    assert horizon_nightly._link(db_session, clash, summary) is False
+    assert summary.refused == 1
+    assert resolve(db_session, token=clash.instrument_token) is None, "nothing was linked by guessing"

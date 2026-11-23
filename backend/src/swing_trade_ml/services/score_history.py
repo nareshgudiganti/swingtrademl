@@ -24,12 +24,14 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.core.market_session import IST
+from swing_trade_ml.db.models.market import Candle, Instrument
+from swing_trade_ml.db.models.ml import MLModel
 from swing_trade_ml.db.models.trading import PositionScore, StockScore
 from swing_trade_ml.ml import real_question
 
@@ -184,7 +186,9 @@ def record_stock_scores(
     scores = [t for t in scores if model_name_of(t[2]) not in EXCLUDED_TRAIL_MODELS]
     if not scores:
         return 0
-    today = today or datetime.now(IST).date()
+    # The market session of the candles that were scored, never the clock day of the call (#389): a scan run
+    # after midnight for Friday's candle is Friday's. A caller that knows the session passes it.
+    today = today or scored_session(db, {i for i, _, _ in scores})
     try:
         with db.begin_nested():
             latest: dict[tuple[int, str], tuple[float, str | None]] = {
@@ -216,10 +220,68 @@ def record_stock_scores(
                     )
                 else:
                     row.score, row.band, row.model_version = score, band, version
-        return len(latest)
     except Exception as exc:  # noqa: BLE001 - never break a scan over a display feature
         log.warning("score_history.stock_record_failed", error=str(exc))
         return 0
+    append_to_ledger(db, today, latest)
+    return len(latest)
+
+
+def scored_session(db: Session, instrument_ids: set[int]) -> date:
+    """The market session being scored: the IST date of the newest daily candle among these stocks, never
+    later than today. With no candle at all it falls back to today's IST date, as it always did."""
+    clock = datetime.now(IST).date()
+    try:
+        newest = db.execute(
+            select(func.max(Candle.ts)).where(
+                Candle.interval == "day", Candle.instrument_id.in_(instrument_ids)
+            )
+        ).scalar_one_or_none()
+    except Exception as exc:  # noqa: BLE001 - a display feature must not break a scan
+        log.warning("score_history.session_lookup_failed", error=str(exc))
+        return clock
+    return clock if newest is None else min(newest.astimezone(IST).date(), clock)
+
+
+def append_to_ledger(
+    db: Session, session_date: date, latest: dict[tuple[int, str], tuple[float, str | None]]
+) -> int:
+    """Also record each score in the append-only ledger (#389 S2): one row per stock, session, horizon, model
+    and version, a changed re-run kept as a numbered revision. Never raises and never changes the old table:
+    any failure is logged and rolled back inside its own savepoint. Returns rows written."""
+    from swing_trade_ml.services.identity import ledger, writer
+
+    written = 0
+    try:
+        with db.begin_nested():
+            models: dict[tuple[str, str], MLModel | None] = {}
+            for (instrument_id, name), (score, model_version) in latest.items():
+                instrument = db.get(Instrument, instrument_id)
+                if instrument is None:
+                    continue
+                version = (model_version or "").split(":", 1)[1][:64] if ":" in (model_version or "") else ""
+                if (name, version) not in models:
+                    models[(name, version)] = db.scalar(
+                        select(MLModel).where(MLModel.name == name, MLModel.version == version)
+                    )
+                model = models[(name, version)]
+                result = ledger.append_score(
+                    db,
+                    security_id=writer.ensure_for_instrument(db, instrument),
+                    session_date=session_date,
+                    source="v1_scan",
+                    score=score,
+                    horizon_days=None if model is None else model.prediction_horizon_days,
+                    model_name=name,
+                    model_version=version,
+                    model_id=None if model is None else model.id,
+                    scan_key=f"v1:{session_date.isoformat()}",
+                )
+                written += 1 if result.created else 0
+    except Exception as exc:  # noqa: BLE001 - never break a scan over a history feature
+        log.warning("score_history.ledger_append_failed", error=str(exc))
+        return 0
+    return written
 
 
 def one_model_rows(rows: list[StockScore]) -> list[StockScore]:

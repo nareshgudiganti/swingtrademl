@@ -44,6 +44,7 @@ from swing_trade_ml.db.models.finance import (
     FinanceRecurringBillPayment,
     FinanceTransaction,
 )
+from swing_trade_ml.db.models.identity import ScoreLedger, Security, SecurityAlias, SecuritySymbol
 from swing_trade_ml.db.models.invites import InviteRequest
 from swing_trade_ml.db.models.lane_shadow import LaneOutcome, LanePick
 from swing_trade_ml.db.models.lanes import H05Event, H05GroupDay, H05Run, H05Signal
@@ -142,6 +143,10 @@ __all__ = [
     "Prediction",
     "Quote",
     "RiskEvent",
+    "ScoreLedger",
+    "Security",
+    "SecurityAlias",
+    "SecuritySymbol",
     "ServiceKey",
     "Signal",
     "Strategy",

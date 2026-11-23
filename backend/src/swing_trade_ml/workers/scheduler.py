@@ -271,6 +271,9 @@ def start_scheduler() -> None:
     # so this removes nothing unless a module was switched off in this process. The horizon nightly job is not
     # named by any module (it is off by default), so the registry leaves it alone.
     modules.apply_to_scheduler(scheduler)
+    # ...and make every remaining job of an optional module re-read the shared state before each run, so a
+    # module switched off later (by the API process) is skipped without a restart. Nothing is deleted.
+    modules.guard_scheduler_jobs(scheduler)
 
     # Observe only: records each job's last run for Admin > Jobs (workers/job_runs.py). Never raises.
     job_runs.attach(scheduler)

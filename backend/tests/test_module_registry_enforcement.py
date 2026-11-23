@@ -143,7 +143,7 @@ def test_the_scheduler_applies_the_registry_before_it_starts():
 
 def test_the_registry_says_what_it_enforces_and_where():
     assert modules.ENFORCEMENT["routes"].startswith("enforced")
-    assert "scheduler start" in modules.ENFORCEMENT["jobs"] and "this process" in modules.ENFORCEMENT["jobs"]
+    assert "every run" in modules.ENFORCEMENT["jobs"] and "database" in modules.ENFORCEMENT["scope"]
     s = ModuleSwitches()
     s.set_enabled("brain", False, by="owner", reason="test")
     assert s.events[-1]["scope"] == modules.ENFORCEMENT["scope"]

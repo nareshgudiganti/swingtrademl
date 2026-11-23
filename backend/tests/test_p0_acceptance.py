@@ -17,8 +17,11 @@ with the test.
 
 from __future__ import annotations
 
+import json
+import os
 import random
 from datetime import date, datetime, timedelta
+from pathlib import Path
 
 import pytest
 from sqlalchemy import func, select, text
@@ -26,7 +29,16 @@ from sqlalchemy.exc import DBAPIError
 
 from swing_trade_ml.brain.horizons import run_horizon
 from swing_trade_ml.core.market_session import IST, is_trading_day
-from swing_trade_ml.db.models import SimBlock, SimExit, SimFill, SimNotApplied, SimPortfolio, SimRun
+from swing_trade_ml.db.models import (
+    SimBlock,
+    SimDay,
+    SimExit,
+    SimFill,
+    SimMark,
+    SimNotApplied,
+    SimPortfolio,
+    SimRun,
+)
 from swing_trade_ml.db.models.horizon import HorizonRecordRow
 from swing_trade_ml.db.models.market import Candle, Instrument
 from swing_trade_ml.db.models.ml import MLModel, Prediction
@@ -492,3 +504,206 @@ def test_no_job_is_enabled_and_the_h05_lane_is_untouched(world, monkeypatch):
 
     _nightly(world)
     assert db.scalar(select(func.count()).select_from(H05Run)) == 0 and db.scalar(select(func.count()).select_from(H05Signal)) == 0
+
+
+# ------------------------------------------------------------------------------- 6. the reports reconcile with the ledger
+#
+# Only the reports that already exist are used (the runner report, `store.performance_by_policy`, `store.trace_fills`)
+# and the stored rows they are built from. Every mismatch is collected with its portfolio key, so a failure names it.
+
+MONEY = 0.01  # one paisa
+
+
+def _per_portfolio(db):
+    """portfolio -> its stored days, fills, exits and marks, from the tables (the ledger as persisted)."""
+    portfolios = {p.id: p for p in db.scalars(select(SimPortfolio))}
+    days: dict[int, list] = {pid: [] for pid in portfolios}
+    for d in db.scalars(select(SimDay).order_by(SimDay.session_date)):
+        days[d.portfolio_id].append(d)
+    fills, exits, marks = ({pid: [] for pid in portfolios} for _ in range(3))
+    for row in db.scalars(select(SimFill)):
+        fills[row.portfolio_id].append(row)
+    for row in db.scalars(select(SimExit)):
+        exits[row.portfolio_id].append(row)
+    for row in db.scalars(select(SimMark)):
+        marks[row.portfolio_id].append(row)
+    return portfolios, days, fills, exits, marks
+
+
+def _reconciliation_problems(db) -> list[str]:
+    """Every way the stored days, fills, exits and marks fail to add up, each naming its portfolio key."""
+    portfolios, days, fills, exits, marks = _per_portfolio(db)
+    problems: list[str] = []
+
+    def bad(portfolio, what: str) -> None:
+        problems.append(f"{portfolio.persona_key} ({portfolio.policy}, {portfolio.balance_inr}): {what}")
+
+    for pid, p in portfolios.items():
+        start = float(p.balance_inr)
+        stored_days = days[pid]
+        if not stored_days:
+            bad(p, "has no stored days")
+            continue
+        value_by_day: dict = {}
+        for m in marks[pid]:
+            value_by_day[m.session_date] = value_by_day.get(m.session_date, 0.0) + m.value
+        for d in stored_days:  # cash + market value of the open positions = the stored equity, every day
+            if abs(d.cash + value_by_day.get(d.session_date, 0.0) - d.equity) > MONEY:
+                bad(p, f"{d.session_date}: cash {d.cash} + positions {value_by_day.get(d.session_date, 0.0)} != equity {d.equity}")
+        for d in stored_days:  # cash = starting cash - buys (with costs) + sales (after costs), to date
+            spent = sum(f.cost for f in fills[pid] if f.session_date <= d.session_date)
+            got = sum(e.proceeds for e in exits[pid] if e.session_date <= d.session_date)
+            if abs(start - spent + got - d.cash) > MONEY:
+                bad(p, f"{d.session_date}: start {start} - buys {spent} + sales {got} != cash {d.cash}")
+        if not fills[pid]:  # a zero-trade account is present, every day, with equity = cash
+            if exits[pid] or marks[pid]:
+                bad(p, "no fills but it has exits or open positions")
+            if any(abs(d.equity - d.cash) > MONEY or abs(d.cash - start) > MONEY for d in stored_days):
+                bad(p, "a zero-trade account moved or its equity differs from its cash")
+        last = stored_days[-1]
+        if marks[pid] and {m.session_date for m in marks[pid]} - {d.session_date for d in stored_days}:
+            bad(p, "a position is marked on a session with no stored day")
+        if last.session_date != DAYS[-1]:
+            bad(p, f"stops on {last.session_date}, not the last session")
+    return problems
+
+
+def test_the_reports_reconcile_with_the_ledger_for_every_portfolio_and_policy(simulated):
+    db, report = simulated["db"], simulated["report"]
+    portfolios, days, fills, _exits, _marks = _per_portfolio(db)
+    assert len(portfolios) == 100
+    problems = _reconciliation_problems(db)
+    assert not problems, f"{len(problems)} reconciliation mismatches:\n" + "\n".join(problems[:25])
+
+    # the runner's report agrees with the rows
+    assert report.fills == db.scalar(select(func.count()).select_from(SimFill)) == sum(len(v) for v in fills.values())
+    assert report.blocks == db.scalar(select(func.count()).select_from(SimBlock))
+    no_trade = sum(1 for pid in portfolios if not fills[pid])
+    assert report.zero_trade_portfolios == no_trade
+    assert (report.portfolios, report.compared, report.validation) == (len(portfolios), 99, 1)
+    # trace_fills is the same fills, one row each
+    traced = store.trace_fills(db, RUN_KEY)
+    assert len(traced) == report.fills
+    by_policy_fills: dict[str, int] = {}
+    for f in db.scalars(select(SimFill)):
+        by_policy_fills[f.policy] = by_policy_fills.get(f.policy, 0) + 1
+        assert f.policy == portfolios[f.portfolio_id].policy, f"fill {f.id} carries another policy than its portfolio"
+    assert {t.policy for t in traced} == set(by_policy_fills)
+    assert {p: sum(1 for t in traced if t.policy == p) for p in by_policy_fills} == by_policy_fills
+
+    # per policy: the validation portfolio is in no total, and the totals are the portfolios' own numbers
+    perf = store.performance_by_policy(db, RUN_KEY)
+    compared = [(pid, p) for pid, p in portfolios.items() if p.counts_in_comparison]
+    validation = [p for p in portfolios.values() if not p.counts_in_comparison]
+    assert len(validation) == 1 and len(compared) == 99
+    assert sum(int(row["portfolios"]) for row in perf.values()) == 99
+    for policy in ("momentum", "model_only", "brain_filtered"):
+        mine = [(pid, p) for pid, p in compared if p.policy == policy]
+        assert int(perf[policy]["portfolios"]) == len(mine) == 33, policy
+        assert int(perf[policy]["zero_trade_portfolios"]) == sum(1 for pid, _ in mine if not fills[pid]), policy
+        returns = [days[pid][-1].equity / p.balance_inr - 1 for pid, p in mine]
+        assert abs(perf[policy]["mean_return"] - sum(returns) / len(returns)) < 1e-9, policy
+    only = validation[0]
+    assert only.persona_key not in {p.persona_key for _, p in compared}  # in no policy denominator
+
+
+def test_a_ledger_that_does_not_add_up_fails_and_names_its_portfolio(simulated):
+    db = simulated["db"]
+    assert _reconciliation_problems(db) == []
+    portfolios = {p.id: p.persona_key for p in db.scalars(select(SimPortfolio))}
+    day = db.scalars(select(SimDay).order_by(SimDay.id)).first()
+    day.equity += 5.0  # an equity that is not its cash plus its positions
+    fill = db.scalars(select(SimFill).order_by(SimFill.id)).first()
+    fill.cost += 7.0  # a buy that cost more than the cash that left
+    db.flush()
+    problems = _reconciliation_problems(db)
+    assert any(portfolios[day.portfolio_id] in p and "equity" in p for p in problems)
+    assert any(portfolios[fill.portfolio_id] in p and "cash" in p for p in problems)
+
+
+# ------------------------------------------------------------------------------- 7. the demonstration evidence file
+#
+# Written only when P0_DEMO_OUT names a file (never in the repo, never in CI): the input, the output, three traces from a
+# fill back to its prediction, the blocked reasons, and the row counts before and after a rerun, as JSON.
+
+
+@pytest.mark.skipif(not os.environ.get("P0_DEMO_OUT"), reason="set P0_DEMO_OUT to write the demonstration evidence file")
+def test_write_the_demonstration_evidence_file(world):
+    db = world["db"]
+    summaries = _nightly(world)
+    first = _run(world)
+    models = world["models"]
+    model_rows = {m.id: m for m in models.values()}
+    symbol_of = {i.id: s for s, i in world["instruments"].items()}
+
+    def prediction_view(p: Prediction) -> dict:
+        m = model_rows[p.model_id]
+        return {
+            "prediction_id": p.id, "symbol": symbol_of[p.instrument_id], "session": p.ts.astimezone(IST).date().isoformat(),
+            "model": m.name, "version": m.version, "horizon_sessions": m.prediction_horizon_days,
+            "probability": p.probability, "price_at_prediction": p.price_at_prediction,
+        }
+
+    predictions = [prediction_view(p) for p in db.scalars(select(Prediction).order_by(Prediction.id))]
+    records = _five_rows(db)
+
+    def record_view(r: HorizonRecordRow) -> dict:
+        return {
+            "record_id": r.id, "security_id": r.security_id, "symbol_on_session": source.symbol_on(db, r.security_id, r.session_date),
+            "session": r.session_date.isoformat(), "horizon_sessions": r.horizon_days, "model": r.model_name, "version": r.model_version,
+            "revision": r.revision, "decision": r.decision, "score": r.score, "due_session": r.evaluation_due_session,
+            "run_ref": r.run_ref, "scan_key": r.scan_key, "research_only": r.research_only, "rule": r.research_config_version,
+        }
+
+    perf = store.performance_by_policy(db, RUN_KEY)
+    fills_by_policy = dict(db.execute(select(SimFill.policy, func.count()).group_by(SimFill.policy)).all())
+    exits_by_policy = dict(db.execute(select(SimExit.policy, func.count()).group_by(SimExit.policy)).all())
+    block_counts = dict(db.execute(select(SimBlock.reason, func.count()).group_by(SimBlock.reason).order_by(func.count().desc())).all())
+    traces, seen = [], set()
+    for t in store.trace_fills(db, RUN_KEY):
+        if t.policy == "momentum" or t.security_id in seen:
+            continue
+        seen.add(t.security_id)
+        record = db.get(HorizonRecordRow, t.horizon_record_id)
+        pred = db.get(Prediction, int(record.run_ref.split(":")[1]))
+        traces.append({"fill": {"portfolio": t.persona_key, "policy": t.policy, "session": t.session_date, "symbol": t.symbol, "qty": t.qty, "price": t.price},
+                       "record": record_view(record), "prediction": prediction_view(pred)})
+        if len(traces) == 3:
+            break
+    before = {"simulation": _sim_counts(db), "horizon_records": len(_five_rows(db))}
+    again = _run(world)
+    nightly_again = _nightly(world)
+    after = {"simulation": _sim_counts(db), "horizon_records": len(_five_rows(db))}
+    out = {
+        "summary": {
+            "what_this_is": "One synthetic run: invented stocks, prices and scores; real code from prediction rows to stored simulation results",
+            "stocks": len(world["instruments"]), "sessions": len(DAYS), "models": len(models),
+            "predictions_5d": sum(1 for p in predictions if p["horizon_sessions"] == 5), "predictions_10d_15d": sum(1 for p in predictions if p["horizon_sessions"] != 5),
+            "records_written": len(records), "from_predictions": sum(1 for r in records if r.run_ref.startswith("prediction:")),
+            "explicit_no_data_records": sum(1 for r in records if r.run_ref == "no-data"), "research_records_in_product_run": sum(1 for r in records if r.research_only),
+            "portfolios": first.portfolios, "compared": first.compared, "validation": first.validation,
+            "fills": first.fills, "blocked_picks": first.blocks, "zero_trade_portfolios": first.zero_trade_portfolios,
+            "rerun_adds_rows": again.rows_created, "momentum": "no verified ranking source yet: its 33 portfolios hold cash",
+        },
+        "input": {
+            "stocks": [{"symbol": s, "token": i.instrument_token, "model_score": SCORES.get(s), "candles": len(world["bars_by_symbol"][s]),
+                        "note": {"OLDCO": f"renamed NEWCO from {DAYS[RENAME_AT]}", "STALECO": f"no candles after {DAYS[STALE_AFTER]}",
+                                 "ITC": "not in the identity tables at the start", LONG_ONLY: "only 10- and 15-session models score it"}.get(s, "")}
+                       for s, i in world["instruments"].items()],
+            "models": [{"name": m.name, "version": m.version, "horizon_sessions": m.prediction_horizon_days, "role": m.model_role} for m in models.values()],
+            "sessions": [d.isoformat() for d in DAYS],
+            "prediction_rows": predictions,
+        },
+        "output": {
+            "nightly_summaries": [s.as_dict() for s in summaries],
+            "records": [record_view(r) for r in records],
+            "per_policy": {p: {**row, "fills": fills_by_policy.get(p, 0), "exits": exits_by_policy.get(p, 0)} for p, row in perf.items()},
+            "example_traces": traces,
+            "blocked_reasons": block_counts,
+            "rerun": {"before": before, "after": after, "nightly_rows_added": sum(s.recorded + s.no_data for s in nightly_again), "unchanged": before == after},
+        },
+    }
+    assert before == after and again.rows_created == 0 and len(traces) == 3
+    path = Path(os.environ["P0_DEMO_OUT"])
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(out, indent=2, default=str), encoding="utf8")

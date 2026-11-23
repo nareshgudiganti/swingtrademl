@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 
 from swing_trade_ml.api.deps import require_auth
+from swing_trade_ml.api.module_capability import require_module_capability
 from swing_trade_ml.api.v1.endpoints import (
     account_auth,
     account_deletion,
@@ -104,7 +105,7 @@ def optional(module_id: str) -> list:
     """`protected`, then the module registry's guard (core/modules.py): sign-in is checked first, then, only
     while the module is switched off, its routes answer "switched off". Switched on (the default) nothing
     changes."""
-    return [*protected, Depends(require_module(module_id))]
+    return [*protected, Depends(require_module(module_id)), Depends(require_module_capability(module_id))]
 
 
 api_router.include_router(finance.router, dependencies=optional("finance"))

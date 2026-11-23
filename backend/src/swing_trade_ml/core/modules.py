@@ -134,6 +134,8 @@ REGISTRY: tuple[Module, ...] = (
         # brain_run_queue (runs requests already accepted); the stage, rollback and approval routes (safety).
         jobs=("brain_nightly", "brain_learn", "brain_daily_check"),
         always_on=("/brain/stage", "/brain/approvals"),
+        # A plan reaches the brain's consumer views only with the TradeMind feature (core/plans.py).
+        capabilities=("trademind",),
         packages=("swing_trade_ml.brain",),
     ),
     Module(

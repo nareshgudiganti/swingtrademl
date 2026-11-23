@@ -33,12 +33,20 @@ def flat(price: float, n: int) -> list[Bar]:
     return [Bar(price, price, price, price) for _ in range(n)]
 
 
-def series(**by_symbol: list[Bar]) -> dict[str, dict[str, Bar]]:
-    return {sym: dict(zip(SESSIONS, rows, strict=False)) for sym, rows in by_symbol.items()}
+_IDS: dict[str, int] = {}
+
+
+def sid(symbol: str) -> int:
+    """A stable synthetic security_id per test symbol: the ledger is keyed by id, symbols are for display."""
+    return _IDS.setdefault(symbol, 1000 + len(_IDS))
+
+
+def series(**by_symbol: list[Bar]) -> dict[int, dict[str, Bar]]:
+    return {sid(sym): dict(zip(SESSIONS, rows, strict=False)) for sym, rows in by_symbol.items()}
 
 
 def pick(symbol: str, score: float = 0.9, block: str | None = None) -> Candidate:
-    return Candidate(symbol, score, f"sector-{symbol}", block)
+    return Candidate(sid(symbol), symbol, score, f"sector-{symbol}", block)
 
 
 def on(index: int, *cands: Candidate) -> dict[str, list[Candidate]]:
@@ -144,9 +152,9 @@ def test_sessions_that_are_not_iso_dates_are_refused():
 def test_liquidity_caps_the_position_and_blocks_a_thin_stock_and_an_unknown_one():
     bars = series(THIN=flat(100.0, 3), MID=flat(100.0, 3), DEEP=flat(100.0, 3), BLANK=flat(100.0, 3))
     adv = {
-        "THIN": {SESSIONS[0]: 1_000_000.0},  # 2% of 1M = 20,000, below the minimum position
-        "MID": {SESSIONS[0]: 3_000_000.0},  # 2% = 60,000: the position is cut to that
-        "DEEP": {SESSIONS[0]: 50_000_000.0},  # plenty: the normal 100,000
+        sid("THIN"): {SESSIONS[0]: 1_000_000.0},  # 2% of 1M = 20,000, below the minimum position
+        sid("MID"): {SESSIONS[0]: 3_000_000.0},  # 2% = 60,000: the position is cut to that
+        sid("DEEP"): {SESSIONS[0]: 50_000_000.0},  # plenty: the normal 100,000
     }
     picks = [pick("THIN", 0.9), pick("MID", 0.8), pick("DEEP", 0.7), pick("BLANK", 0.6)]
     ledger = run_portfolio(spec(balance=1_200_000), SESSIONS[:3], bars, on(0, *picks), RULES, liquidity=adv)
@@ -160,7 +168,7 @@ def test_liquidity_caps_the_position_and_blocks_a_thin_stock_and_an_unknown_one(
 
 def test_cap_tier_blocks_a_tier_the_rung_does_not_allow_and_an_unknown_tier():
     bars = series(BIG=flat(100.0, 3), MIDCO=flat(100.0, 3), TINY=flat(100.0, 3), NOIDEA=flat(100.0, 3))
-    tiers = {"BIG": "large", "MIDCO": "midcap", "TINY": "smallcap"}
+    tiers = {sid("BIG"): "large", sid("MIDCO"): "midcap", sid("TINY"): "smallcap"}
     picks = [pick("BIG", 0.9), pick("MIDCO", 0.8), pick("TINY", 0.7), pick("NOIDEA", 0.6)]
     ledger = run_portfolio(spec(balance=120_000), SESSIONS[:3], bars, on(0, *picks), RULES, cap_tiers=tiers)
     day = ledger.records[1]
@@ -170,7 +178,7 @@ def test_cap_tier_blocks_a_tier_the_rung_does_not_allow_and_an_unknown_tier():
 
 def test_the_small_company_budget_stops_the_third_small_position_on_the_ten_lakh_rung():
     bars = series(**{n: flat(100.0, 3) for n in names(3)})
-    tiers = dict.fromkeys(names(3), "smallcap")
+    tiers = dict.fromkeys(map(sid, names(3)), "smallcap")
     picks = [pick(n, 0.9 - i * 0.1) for i, n in enumerate(names(3))]
     ledger = run_portfolio(spec(balance=1_200_000), SESSIONS[:3], bars, on(0, *picks), RULES, cap_tiers=tiers)
     assert len(ledger.records[1].fills) == 2  # 20% of the account in small companies = two 10% positions
@@ -179,7 +187,7 @@ def test_the_small_company_budget_stops_the_third_small_position_on_the_ten_lakh
 
 def test_the_avoid_list_blocks_a_stock_with_its_plain_reason():
     bars = series(AAA=flat(100.0, 3), BBB=flat(100.0, 3))
-    avoid = {SESSIONS[0]: {"AAA": "results due in 2 days"}}
+    avoid = {SESSIONS[0]: {sid("AAA"): "results due in 2 days"}}
     ledger = run_portfolio(
         spec(), SESSIONS[:3], bars, on(0, pick("AAA"), pick("BBB", 0.5)), RULES, avoid=avoid
     )

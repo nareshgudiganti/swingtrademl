@@ -69,7 +69,9 @@ def test_it_chains_after_identity_and_is_the_only_head():
     assert (migration.revision, migration.down_revision) == ("horizon01", "identity01")
     config = Config(str(BACKEND / "alembic.ini"))
     config.set_main_option("script_location", str(BACKEND / "alembic"))
-    assert ScriptDirectory.from_config(config).get_heads() == ["horizon01"]
+    script = ScriptDirectory.from_config(config)
+    (head,) = script.get_heads()  # still exactly one head; later migrations may sit on top of horizon01
+    assert "horizon01" in {r.revision for r in script.iterate_revisions(head, "base")}
 
 
 def test_upgrade_from_empty_adds_one_table_and_three_nullable_signal_columns(schema):

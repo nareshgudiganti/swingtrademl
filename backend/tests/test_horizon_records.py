@@ -173,7 +173,9 @@ def test_the_database_refuses_update_delete_and_truncate(db_session):
         "TRUNCATE horizon_records",
     ):
         nested = db_session.begin_nested()
-        with pytest.raises(DBAPIError, match="append-only"):
+        # TRUNCATE is refused either by the trigger or, once simulation rows reference the table (sim_fills), by the
+        # database's own foreign-key rule; both leave the record in place.
+        with pytest.raises(DBAPIError, match=r"append-only|cannot truncate"):
             db_session.execute(text(statement))
         nested.rollback()
     assert _rows(db_session, sid)[0].score == 0.9

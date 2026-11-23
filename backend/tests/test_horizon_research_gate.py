@@ -115,7 +115,9 @@ def test_nothing_reads_horizon_records_yet_outside_its_own_service():
     """Records of all three horizons live in one table; the service is the only door, and nothing calls it yet.
     A new caller must be added here on purpose, and must use `product_records`, which leaves 10D and 15D out."""
     importers = _importers(("swing_trade_ml.services.horizon_records",))
-    assert importers == set(), f"new readers of horizon records: {sorted(importers)}"
+    # research simulation reads 5D records through the service; it is admin-only and never a customer route
+    allowed = {"simulation/source.py"}
+    assert importers <= allowed, f"new readers of horizon records: {sorted(importers - allowed)}"
     table_importers = _importers(("swing_trade_ml.db.models.horizon",)) - {"services/horizon_records.py"}
     assert table_importers <= {"db/models/__init__.py"}, sorted(table_importers)
 

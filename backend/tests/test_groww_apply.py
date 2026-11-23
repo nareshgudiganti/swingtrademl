@@ -683,3 +683,97 @@ def test_confirming_a_sale_of_a_listed_linked_row_never_moves_the_buy_date(db_se
     db_session.refresh(item)
     assert item.added_at == ORIGINAL_ADDED and item.removed_at is None
     assert _history(db_session, item, "added_at") == []
+
+
+# --- a confirmation applies only what it confirmed, and never to a row changed after that sync ----------
+
+
+def _after(sync):
+    return sync.finished_at + timedelta(hours=3)
+
+
+def _frozen(item):
+    return (item.removed_at, item.quantity, item.buy_price, item.added_at, item.held_state, item.groww_isin)
+
+
+def test_confirm_match_does_not_bring_back_a_row_removed_after_the_sync(db_session, user):
+    kept = _inst(db_session, "RESURRECTA")
+    other = _inst(db_session, "CONFIRMB")
+    sync = _sync(
+        db_session,
+        [
+            ("INE111A01011", kept, 5, 100.0, MATCH_CONFIRMED),
+            ("INE222B01022", None, 3, 200.0, MATCH_NEEDS),
+        ],
+    )
+    item = _item(
+        db_session, user, "RESURRECTA", quantity=9, buy_price=90.0, groww_isin="INE111A01011",
+        held_state=HELD, removed_at=_after(sync),
+    )
+    before, changes = _frozen(item), len(_history(db_session, item))
+    gapply.confirm_match(db_session, user_id=user.id, isin="INE222B01022", instrument_id=other.id)
+    db_session.refresh(item)
+    assert _frozen(item) == before
+    assert len(_history(db_session, item)) == changes
+    confirmed = db_session.query(UserWatchlistItem).filter_by(user_id=user.id, symbol="CONFIRMB").one()
+    assert confirmed.quantity == 3
+
+
+def test_confirm_all_suggested_does_not_bring_back_a_row_removed_after_the_sync(db_session, user):
+    kept = _inst(db_session, "RESURRECTC")
+    a = _inst(db_session, "SUGGESTD")
+    sync = _sync(
+        db_session,
+        [
+            ("INE333C01033", kept, 5, 100.0, MATCH_CONFIRMED),
+            ("INE444D01044", a, 2, 50.0, MATCH_SUGGESTED),
+        ],
+    )
+    item = _item(
+        db_session, user, "RESURRECTC", quantity=9, buy_price=90.0, groww_isin="INE333C01033",
+        held_state=HELD, removed_at=_after(sync),
+    )
+    before = _frozen(item)
+    assert gapply.confirm_all_suggested(db_session, user_id=user.id) == 1
+    db_session.refresh(item)
+    assert _frozen(item) == before
+    new = db_session.query(UserWatchlistItem).filter_by(user_id=user.id, symbol="SUGGESTD").one()
+    assert new.quantity == 2
+
+
+def test_a_confirmed_stock_removed_after_the_sync_stays_removed(db_session, user):
+    inst = _inst(db_session, "REMOVEDE")
+    sync = _sync(db_session, [("INE555E01055", None, 4, 70.0, MATCH_NEEDS)])
+    item = _item(db_session, user, "REMOVEDE", quantity=1, buy_price=60.0, removed_at=_after(sync))
+    before = _frozen(item)
+    gapply.confirm_match(db_session, user_id=user.id, isin="INE555E01055", instrument_id=inst.id)
+    db_session.refresh(item)
+    assert _frozen(item) == before
+
+
+def test_a_stock_removed_before_the_sync_restarts_when_its_match_is_confirmed(db_session, user):
+    inst = _inst(db_session, "REMOVEDF")
+    sync = _sync(db_session, [("INE666F01066", None, 4, 70.0, MATCH_NEEDS)])
+    item = _item(
+        db_session,
+        user,
+        "REMOVEDF",
+        quantity=1,
+        buy_price=60.0,
+        removed_at=sync.finished_at - timedelta(days=2),
+    )
+    gapply.confirm_match(db_session, user_id=user.id, isin="INE666F01066", instrument_id=inst.id)
+    db_session.refresh(item)
+    assert item.removed_at is None and item.quantity == 4 and item.added_at == SYNC_DAY
+
+
+def test_confirm_empty_does_not_touch_a_row_removed_after_the_sync(db_session, user):
+    sync = _sync(db_session, [], status=SYNC_EMPTY)
+    item = _item(
+        db_session, user, "REMOVEDG", quantity=2, buy_price=10.0, groww_isin="INE777G01077",
+        held_state=HELD, source=SOURCE_GROWW, removed_at=_after(sync),
+    )
+    before = _frozen(item)
+    gapply.confirm_empty(db_session, user_id=user.id, sync_id=sync.id)
+    db_session.refresh(item)
+    assert _frozen(item) == before

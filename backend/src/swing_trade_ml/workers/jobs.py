@@ -499,7 +499,8 @@ def job_groww_sync() -> None:
     except groww_sync.SyncAlreadyRunning:
         log.info("job.groww_sync.skipped", reason="already_running")
     except Exception as exc:  # noqa: BLE001
-        _report_error("groww_sync", exc)
+        # Only the kind of failure goes out: the text of a Groww error can carry account details.
+        _report_error("groww_sync", Exception(type(exc).__name__))
 
 
 def _blocked_entries(db, since: datetime) -> list[dict[str, Any]]:

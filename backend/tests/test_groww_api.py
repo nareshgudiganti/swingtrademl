@@ -23,6 +23,7 @@ from swing_trade_ml.db.models.groww import (
     SYNC_COMPLETE,
     SYNC_EMPTY,
     SYNC_FAILED,
+    SYNC_PARTIAL,
     GrowwHolding,
     GrowwSync,
 )
@@ -368,6 +369,58 @@ def test_job_groww_sync_skips_when_not_configured_or_no_owner(db_session, monkey
     monkeypatch.setattr(settings, "REAL_ACCOUNT_USERS", "gw-nobody-here")
     jobs.job_groww_sync()
     assert seen == []
+
+def test_job_groww_sync_failure_report_carries_only_the_error_kind(db_session, monkeypatch):
+    _use_test_session(monkeypatch, db_session)
+    _as(db_session, OWNER)
+    monkeypatch.setattr(jobs.groww_client, "is_configured", lambda: True)
+
+    def boom(db, *, user_id, trigger):
+        raise ValueError("SECRET-ACCOUNT-DETAIL 1234")
+
+    monkeypatch.setattr(jobs.groww_sync, "run_sync", boom)
+    reported = []
+    monkeypatch.setattr(jobs, "_report_error", lambda ctx, exc: reported.append((ctx, str(exc))))
+    jobs.job_groww_sync()
+    assert reported == [("groww_sync", "ValueError")]
+
+
+def test_matching_leaves_out_rows_without_an_isin_and_counts_them(client, db_session):
+    _, hdr = _as(db_session, OWNER)
+    a = _inst(db_session, "GWNOISINA")
+    sync = _sync(db_session, status=SYNC_PARTIAL, count=3)
+    db_session.add_all(
+        [
+            GrowwHolding(
+                sync_id=sync.id,
+                isin="INE910A01011",
+                trading_symbol="HALF",
+                quantity=None,
+                average_price=None,
+                instrument_id=a.id,
+                match_state=MATCH_SUGGESTED,
+            ),
+            GrowwHolding(
+                sync_id=sync.id, isin="", trading_symbol="BLANK", quantity=1, average_price=2.0,
+                instrument_id=None, match_state=MATCH_NEEDS,
+            ),
+            GrowwHolding(
+                sync_id=sync.id, isin="   ", trading_symbol="SPACES", quantity=1, average_price=2.0,
+                instrument_id=None, match_state=MATCH_NEEDS,
+            ),
+        ]
+    )
+    db_session.flush()
+    body = client.get(API + "/groww/matching", headers=hdr).json()
+    assert [i["isin"] for i in body["items"]] == ["INE910A01011"]
+    assert body["items"][0]["quantity"] is None and body["items"][0]["average_price"] is None
+    assert body["without_isin"] == 2
+
+
+def test_matching_with_no_sync_says_zero_without_isin(client, db_session):
+    _, hdr = _as(db_session, OWNER)
+    body = client.get(API + "/groww/matching", headers=hdr).json()
+    assert body["items"] == [] and body["without_isin"] == 0
 
 
 def test_groww_sync_scheduled_weekdays_1535_ist():

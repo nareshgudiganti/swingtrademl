@@ -88,7 +88,7 @@ def status_payload(db: Session) -> dict:
 
 def _user_id(db: Session, principal: Principal) -> int:
     """The one tracker Groww writes go to: the Groww account owner's (groww_sync.owner_user_id),
-    the same one the 15:35 job updates. Another real-account owner may look, not write."""
+    the same one the 15:35 job updates. Nobody else may use any Groww route, reads included (D2)."""
     uid = groww_sync.owner_user_id(db)
     if uid is None:
         raise HTTPException(status.HTTP_409_CONFLICT, NO_OWNER)
@@ -139,14 +139,16 @@ def matching(db: DbSession) -> dict:
         .limit(1)
     )
     if latest is None:
-        return {"items": []}
-    rows = list(
+        return {"items": [], "without_isin": 0}
+    all_rows = list(
         db.scalars(
             select(GrowwHolding)
             .where(GrowwHolding.sync_id == latest.id, GrowwHolding.match_state != MATCH_CONFIRMED)
             .order_by(GrowwHolding.trading_symbol, GrowwHolding.id)
         )
     )
+    # A row with no ISIN cannot be matched (the match is saved by ISIN): it is left out and counted.
+    rows = [r for r in all_rows if (r.isin or "").strip()]
     ids = {r.instrument_id for r in rows if r.instrument_id is not None}
     symbols = (
         dict(db.execute(select(Instrument.id, Instrument.tradingsymbol).where(Instrument.id.in_(ids))).all())
@@ -165,7 +167,8 @@ def matching(db: DbSession) -> dict:
                 "suggested_instrument_id": r.instrument_id if r.instrument_id in symbols else None,
             }
             for r in rows
-        ]
+        ],
+        "without_isin": len(all_rows) - len(rows),
     }
 
 

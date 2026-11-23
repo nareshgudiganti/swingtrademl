@@ -9,6 +9,7 @@ from swing_trade_ml.api.v1.endpoints import (
     account_auth,
     account_deletion,
     admin_console,
+    admin_modules,
     auth,
     backtest,
     beginner,
@@ -71,6 +72,7 @@ api_router.include_router(invites.admin)
 api_router.include_router(plans.router)
 api_router.include_router(plans.admin)
 api_router.include_router(service_keys.admin)
+api_router.include_router(admin_modules.admin)
 # Pro billing: 404 unless BILLING_ENABLED; each route checks its own caller (see endpoints/billing.py).
 api_router.include_router(billing.router)
 api_router.include_router(billing.admin)

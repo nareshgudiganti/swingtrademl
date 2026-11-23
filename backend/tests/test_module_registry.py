@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
@@ -205,10 +206,11 @@ def test_the_guard_does_nothing_while_on_and_says_switched_off_while_off(monkeyp
     s = small()
     monkeypatch.setattr(modules, "switches", s)
     guard = require_module("b")
-    assert guard() is None
+    request = SimpleNamespace(url=SimpleNamespace(path="/api/v1/anything"))
+    assert guard(request) is None
     change(s, "b", False)
     with pytest.raises(HTTPException) as refused:
-        guard()
+        guard(request)
     assert refused.value.status_code == 403 and "switched off" in refused.value.detail
 
 
@@ -231,8 +233,11 @@ def test_every_declared_route_prefix_exists_in_the_app():
 
 
 def test_every_declared_job_id_exists_in_the_scheduler():
-    source = (Path(modules.__file__).parent.parent / "workers" / "scheduler.py").read_text(encoding="utf8")
-    ids = set(re.findall(r'id="([a-z_]+)"', source))
+    root = Path(modules.__file__).parent.parent
+    # the lanes register their own daily jobs from their own files (read as text, never imported)
+    files = ["workers/scheduler.py", "shadow_lanes/lane_job.py", "brain/lanes/h05_job.py"]
+    source = "\n".join((root / f).read_text(encoding="utf8") for f in files)
+    ids = set(re.findall(r'id="([a-z_]+)"', source)) | set(re.findall(r'JOB_ID = "([a-z_0-9]+)"', source))
     missing = [(m.id, job) for m in REGISTRY for job in m.jobs if job not in ids]
     assert missing == []
 

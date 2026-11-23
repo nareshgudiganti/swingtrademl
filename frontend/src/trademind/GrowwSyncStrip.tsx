@@ -13,13 +13,18 @@ export { refusalText }
 
 const TRACKER_KEY = ['myWatchlistTracker']
 
-export type RefreshOutcome = { kind: 'done' | 'failed' | 'busy'; text: string }
+/** `busy` and `confirm` are neutral notes (not a success, not a failure); `confirm` = the owner has something to OK. */
+export type RefreshOutcome = { kind: 'done' | 'failed' | 'busy' | 'confirm'; text: string }
 
 /** Turn the result of a Refresh into what the owner reads. "Already refreshing" is neutral, not a failure. */
 export async function runRefresh(sync: () => Promise<GrowwSyncResult>): Promise<RefreshOutcome> {
   try {
     const r = await sync()
     if (r.status === 'failed') return { kind: 'failed', text: 'Groww did not answer' }
+    // An empty answer is held back until the owner says "I hold nothing": nothing has been applied yet.
+    if (r.status === 'empty_unconfirmed') {
+      return { kind: 'confirm', text: 'Groww returned no holdings. It needs your confirmation before anything changes.' }
+    }
     if (r.holdings_count == null) return { kind: 'done', text: 'Done.' }
     return { kind: 'done', text: `Done. ${r.holdings_count} ${r.holdings_count === 1 ? 'holding' : 'holdings'} from Groww.` }
   } catch (e) {
@@ -52,7 +57,7 @@ export function GrowwSyncStrip({ groww, priceDate }: { groww: GrowwStatus; price
     },
     onSuccess: (o) => {
       if (o.kind === 'done') setDone(o.text)
-      else if (o.kind === 'busy') setBusy(o.text)
+      else if (o.kind === 'busy' || o.kind === 'confirm') setBusy(o.text)
       else setFailed(o.text)
       reload()
     },

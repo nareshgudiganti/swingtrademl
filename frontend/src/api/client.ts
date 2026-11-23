@@ -94,7 +94,7 @@ import type {
   WatchlistHit,
   SoldRecord,
   WatchTracker,
-  GrowwMatchItem,
+  GrowwMatching,
   GrowwStatus,
   GrowwSyncResult,
   KiteLoginResponse,
@@ -613,7 +613,7 @@ export const api = {
   // ------------------------------------------------ Groww holdings sync (owner only) --
   growwSync: () => post<GrowwSyncResult>('/groww/sync'),
   growwStatus: () => get<GrowwStatus>('/groww/status'),
-  growwMatching: () => get<{ items: GrowwMatchItem[] }>('/groww/matching'),
+  growwMatching: () => get<GrowwMatching>('/groww/matching'),
   growwMatch: (isin: string, instrumentId: number) =>
     post<unknown>(`/groww/matching/${encodeURIComponent(isin)}`, { instrument_id: instrumentId }),
   growwConfirmAll: () => post<unknown>('/groww/matching/confirm-all'),

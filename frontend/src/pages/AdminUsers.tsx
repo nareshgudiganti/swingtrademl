@@ -4,6 +4,7 @@ import { BASE_URL, getToken } from '../api/client'
 import { Empty, ErrorBox, Loading } from '../components/Loading'
 import { formatDate } from '../lib/format'
 import { useIsOwner } from '../lib/plan'
+import AdminModules from './AdminModules'
 
 // Admin only: people, Free/Pro, gifts, the change log and the release switches.
 // The second-step token is kept in memory only (gone on refresh, ends after 15 minutes).
@@ -26,7 +27,7 @@ export type AdminUserRow = {
 }
 type AuditRow = { id: number; ts: string; actor: string; action: string; target_id: string | null }
 type Switch = { key: string; label: string; enabled: boolean }
-type Tab = 'users' | 'audit' | 'switches'
+type Tab = 'users' | 'audit' | 'switches' | 'modules'
 
 class AdminError extends Error {
   code: string | null
@@ -376,6 +377,10 @@ export default function AdminUsers() {
   const [error, setError] = useState<unknown>(null)
   const [tab, setTab] = useState<Tab>('users')
   const expired = useCallback(() => setToken(''), [])
+  const moduleCall = useCallback(
+    <T,>(path: string, init?: RequestInit) => adminCall<T>(path, init, token),
+    [token],
+  )
 
   useEffect(() => {
     if (!isOwner) return
@@ -402,15 +407,16 @@ export default function AdminUsers() {
     <div>
       <h1>Admin</h1>
       <div role="tablist" style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
-        {(['users', 'audit', 'switches'] as Tab[]).map((t) => (
+        {(['users', 'audit', 'switches', 'modules'] as Tab[]).map((t) => (
           <button key={t} role="tab" aria-selected={tab === t} className={tab === t ? 'btn' : 'btn-link'} onClick={() => setTab(t)}>
-            {t === 'users' ? 'People' : t === 'audit' ? 'Change log' : 'Release switches'}
+            {t === 'users' ? 'People' : t === 'audit' ? 'Change log' : t === 'switches' ? 'Release switches' : 'Parts of the app'}
           </button>
         ))}
       </div>
       {tab === 'users' && <Users token={token} onExpired={expired} />}
       {tab === 'audit' && <Audit token={token} onExpired={expired} />}
       {tab === 'switches' && <Switches token={token} onExpired={expired} />}
+      {tab === 'modules' && <AdminModules call={moduleCall} onExpired={expired} />}
     </div>
   )
 }

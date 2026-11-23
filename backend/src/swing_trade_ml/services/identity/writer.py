@@ -22,6 +22,7 @@ from swing_trade_ml.services.identity import (
     normalize_isin,
     normalize_symbol,
     resolve,
+    same_company,
 )
 
 EARLIEST = date(2000, 1, 1)
@@ -141,6 +142,16 @@ def ensure_for_instrument(db: Session, instrument: Instrument) -> int:
         set_symbol(db, found, instrument.tradingsymbol, _since(instrument), exchange=instrument.exchange)
         return found
     found = resolve(db, symbol=instrument.tradingsymbol, exchange=instrument.exchange)
+    if found is not None:
+        holder = db.get(Security, found)
+        if holder is not None and not same_company(
+            name_a=holder.name, name_b=instrument.name, isin_a=holder.isin
+        ):
+            # This symbol's history is another company's, as far as the names show: not linked by guessing.
+            raise IdentityConflictError(
+                f"{instrument.exchange}:{instrument.tradingsymbol} belongs to security {found}, "
+                "and this instrument's name does not match: left for review"
+            )
     if found is None:
         found = create_security(db, name=instrument.name)
     add_alias(db, found, PROVIDER_KITE_TOKEN, token)

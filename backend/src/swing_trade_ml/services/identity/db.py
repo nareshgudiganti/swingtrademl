@@ -39,6 +39,16 @@ class DbStore:
             .limit(1)
         )
 
+    def has_symbol_history(self, exchange: str, symbol: str) -> bool:
+        return (
+            self.db.scalar(
+                select(SecuritySymbol.id)
+                .where(SecuritySymbol.exchange == exchange, SecuritySymbol.symbol == symbol)
+                .limit(1)
+            )
+            is not None
+        )
+
     def id_by_instrument(self, exchange: str, symbol: str) -> int | None:
         """The security of the current `instruments` row, found through that row's Kite token alias."""
         token = self.db.scalar(

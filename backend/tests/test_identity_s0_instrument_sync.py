@@ -55,6 +55,7 @@ def _rows(db, *symbols: str) -> dict[str, list[Instrument]]:
 
 
 def _stored(db, symbol: str, token: int, **kw) -> Instrument:
+    kw.setdefault("name", f"{symbol} name")  # a re-issued token is only applied to the same company
     row = Instrument(instrument_token=token, tradingsymbol=symbol, exchange="NSE", is_active=True, **kw)
     db.add(row)
     db.flush()

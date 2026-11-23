@@ -20,6 +20,7 @@ heads-up). Ordinary one-day jitter does neither.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any
@@ -175,6 +176,7 @@ def record_stock_scores(
     scores: list[tuple[int, float, str | None]],
     exit_confidence: float,
     today: date | None = None,
+    universe: Iterable[int] | None = None,
 ) -> int:
     """Store today's score for each (instrument_id, score, model_version).
 
@@ -184,21 +186,25 @@ def record_stock_scores(
     rolled back inside a savepoint. Returns rows written.
     """
     scores = [t for t in scores if model_name_of(t[2]) not in EXCLUDED_TRAIL_MODELS]
+    universe = None if universe is None else list(universe)
     if not scores:
+        if universe:  # nothing was scored, but the stocks it was meant to cover are gaps, not absences
+            append_to_ledger(db, stock_sessions(db, set(universe), today), {}, universe)
         return 0
-    # The market session of the candles that were scored, never the clock day of the call (#389): a scan run
-    # after midnight for Friday's candle is Friday's. A caller that knows the session passes it.
-    today = today or scored_session(db, {i for i, _, _ in scores})
+    # Each stock is filed under the market session of ITS OWN newest candle, never the clock day of the call
+    # (#389): a scan run after midnight for Friday's candle is Friday's, and a stock whose newest candle is
+    # Thursday's stays Thursday's. A caller that knows the session passes it for every stock.
+    sessions = stock_sessions(db, {i for i, _, _ in scores}, today)
     try:
         with db.begin_nested():
             latest: dict[tuple[int, str], tuple[float, str | None]] = {
                 (i, model_name_of(m)): (s, m) for i, s, m in scores
             }
             existing = {
-                (r.instrument_id, r.model_name): r
+                (r.instrument_id, r.model_name, r.as_of): r
                 for r in db.execute(
                     select(StockScore).where(
-                        StockScore.as_of == today,
+                        StockScore.as_of.in_(set(sessions.values())),
                         StockScore.instrument_id.in_({i for i, _ in latest}),
                     )
                 ).scalars()
@@ -206,12 +212,12 @@ def record_stock_scores(
             for (instrument_id, name), (score, model_version) in latest.items():
                 version = model_version[:64] if model_version else None
                 band = score_band(score, exit_confidence)
-                row = existing.get((instrument_id, name))
+                row = existing.get((instrument_id, name, sessions[instrument_id]))
                 if row is None:
                     db.add(
                         StockScore(
                             instrument_id=instrument_id,
-                            as_of=today,
+                            as_of=sessions[instrument_id],
                             score=score,
                             band=band,
                             model_version=version,
@@ -223,28 +229,35 @@ def record_stock_scores(
     except Exception as exc:  # noqa: BLE001 - never break a scan over a display feature
         log.warning("score_history.stock_record_failed", error=str(exc))
         return 0
-    append_to_ledger(db, today, latest)
+    append_to_ledger(db, sessions, latest, universe)
     return len(latest)
 
 
-def scored_session(db: Session, instrument_ids: set[int]) -> date:
-    """The market session being scored: the IST date of the newest daily candle among these stocks, never
-    later than today. With no candle at all it falls back to today's IST date, as it always did."""
+def stock_sessions(db: Session, instrument_ids: set[int], today: date | None = None) -> dict[int, date]:
+    """instrument id -> the market session it is scored for: the IST date of that stock's own newest daily
+    candle, never later than today. A caller-supplied `today` is used for every stock. A stock with no
+    candle (or a failed lookup) is filed under today's IST date, as it always was."""
     clock = datetime.now(IST).date()
+    if today is not None:
+        return dict.fromkeys(instrument_ids, today)
+    found: dict[int, date] = {}
     try:
-        newest = db.execute(
-            select(func.max(Candle.ts)).where(
-                Candle.interval == "day", Candle.instrument_id.in_(instrument_ids)
-            )
-        ).scalar_one_or_none()
+        for instrument_id, newest in db.execute(
+            select(Candle.instrument_id, func.max(Candle.ts))
+            .where(Candle.interval == "day", Candle.instrument_id.in_(instrument_ids))
+            .group_by(Candle.instrument_id)
+        ):
+            found[instrument_id] = min(newest.astimezone(IST).date(), clock)
     except Exception as exc:  # noqa: BLE001 - a display feature must not break a scan
         log.warning("score_history.session_lookup_failed", error=str(exc))
-        return clock
-    return clock if newest is None else min(newest.astimezone(IST).date(), clock)
+    return {i: found.get(i, clock) for i in instrument_ids}
 
 
 def append_to_ledger(
-    db: Session, session_date: date, latest: dict[tuple[int, str], tuple[float, str | None]]
+    db: Session,
+    sessions: dict[int, date],
+    latest: dict[tuple[int, str], tuple[float, str | None]],
+    universe: Iterable[int] | None = None,
 ) -> int:
     """Also record each score in the append-only ledger (#389 S2): one row per stock, session, horizon, model
     and version, a changed re-run kept as a numbered revision. Never raises and never changes the old table:
@@ -255,6 +268,7 @@ def append_to_ledger(
     try:
         with db.begin_nested():
             models: dict[tuple[str, str], MLModel | None] = {}
+            scored_securities: set[int] = set()
             for (instrument_id, name), (score, model_version) in latest.items():
                 instrument = db.get(Instrument, instrument_id)
                 if instrument is None:
@@ -265,23 +279,77 @@ def append_to_ledger(
                         select(MLModel).where(MLModel.name == name, MLModel.version == version)
                     )
                 model = models[(name, version)]
+                try:
+                    with db.begin_nested():
+                        security_id = writer.ensure_for_instrument(db, instrument)
+                except writer.IdentityConflictError as exc:
+                    log.warning("score_history.ledger_identity_conflict", error=str(exc))
+                    continue  # left for review; the rest of the scan is recorded
+                scored_securities.add(security_id)
                 result = ledger.append_score(
                     db,
-                    security_id=writer.ensure_for_instrument(db, instrument),
-                    session_date=session_date,
+                    security_id=security_id,
+                    session_date=sessions[instrument_id],
                     source="v1_scan",
                     score=score,
                     horizon_days=None if model is None else model.prediction_horizon_days,
                     model_name=name,
                     model_version=version,
                     model_id=None if model is None else model.id,
-                    scan_key=f"v1:{session_date.isoformat()}",
+                    scan_key=f"v1:{sessions[instrument_id].isoformat()}",
                 )
                 written += 1 if result.created else 0
+            written += _append_missing(db, sessions, latest, universe, models, scored_securities)
     except Exception as exc:  # noqa: BLE001 - never break a scan over a history feature
         log.warning("score_history.ledger_append_failed", error=str(exc))
         return 0
     return written
+
+
+def _append_missing(
+    db: Session,
+    sessions: dict[int, date],
+    latest: dict[tuple[int, str], tuple[float, str | None]],
+    universe: Iterable[int] | None,
+    models: dict[tuple[str, str], MLModel | None],
+    scored_securities: set[int],
+) -> int:
+    """A `missing` ledger row for every stock the scan was meant to cover and did not score (never a 0).
+
+    Filed under the scan's own session (the newest among the stocks it did score, else among the universe),
+    for the model the scan used when it used exactly one. Stocks whose identity cannot be settled are left
+    for review."""
+    from swing_trade_ml.services.identity import ledger, writer
+
+    if not universe:
+        return 0
+    ids = sorted(set(universe))
+    scan_sessions = list(sessions.values()) or list(stock_sessions(db, set(ids)).values())
+    session_date = max(scan_sessions)
+    identities = set()
+    for (_, model_name), (_, model_version) in latest.items():
+        text = model_version or ""
+        identities.add((model_name, text.split(":", 1)[1][:64] if ":" in text else ""))
+    name, version = next(iter(identities)) if len(identities) == 1 else ("", "")
+    model = models.get((name, version))
+    in_universe: set[int] = set()
+    for instrument in db.scalars(select(Instrument).where(Instrument.id.in_(ids))):
+        try:
+            with db.begin_nested():
+                in_universe.add(writer.ensure_for_instrument(db, instrument))
+        except writer.IdentityConflictError as exc:
+            log.warning("score_history.ledger_identity_conflict", error=str(exc))
+    return ledger.append_missing_for_universe(
+        db,
+        session_date=session_date,
+        universe_security_ids=in_universe,
+        scored_security_ids=scored_securities,
+        source="v1_scan",
+        horizon_days=None if model is None else model.prediction_horizon_days,
+        model_name=name,
+        model_version=version,
+        scan_key=f"v1:{session_date.isoformat()}",
+    )
 
 
 def one_model_rows(rows: list[StockScore]) -> list[StockScore]:

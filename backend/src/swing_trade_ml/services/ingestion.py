@@ -21,6 +21,7 @@ from swing_trade_ml.core.enums import PositionStatus
 from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.db.models.market import Candle, CandleArrival, CandleCorrection, Instrument, Quote
 from swing_trade_ml.services.feature_snapshots import invalidate_snapshots_for_candle_corrections
+from swing_trade_ml.services.identity import same_company
 from swing_trade_ml.db.models.trading import Position
 
 log = get_logger(__name__)
@@ -65,8 +66,10 @@ def _apply_reissued_tokens(db: Session, batch: list[dict]) -> tuple[list[dict], 
 
     * token known, symbol known, SAME row, or token known only: the ordinary upsert handles it (a rename by
       token works as it always did);
-    * symbol known with a DIFFERENT token and the new token is free: the new token is written onto the stock's
-      existing row, so one instrument stays per symbol and its candles, positions and scores stay attached;
+    * symbol known with a DIFFERENT token and the new token is free, and the stored row is the SAME company
+      (the same normalised name; a missing name cannot be compared): the new token is written onto the
+      stock's existing row, so one instrument stays per symbol and its candles, positions and scores stay
+      attached; a different or unverifiable company is skipped with a warning (the symbol may be reused);
     * token and symbol belong to DIFFERENT stored rows: ambiguous, so nothing is moved and the row is skipped
       with a warning (never guessed, never raises).
     """
@@ -96,6 +99,15 @@ def _apply_reissued_tokens(db: Session, batch: list[dict]) -> tuple[list[dict], 
         stored = by_symbol.get((r["exchange"], r["tradingsymbol"]))
         if stored is None or (holder is not None and holder.id == stored.id):
             keep.append(r)
+            continue
+        if not same_company(name_a=stored.name, name_b=r.get("name")):
+            # A symbol can be handed to a different company. Its token is not moved onto the old company's
+            # row (that would give the new company the old one's candles and scores): skipped, for review.
+            log.warning(
+                "ingestion.instruments.symbol_reused_or_unverified",
+                symbol=r["tradingsymbol"],
+                token=r["instrument_token"],
+            )
             continue
         if holder is not None:  # the new token and the symbol are held by two different stored stocks
             log.warning(

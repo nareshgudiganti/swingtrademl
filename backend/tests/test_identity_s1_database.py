@@ -22,6 +22,7 @@ def _instrument(db, symbol: str, *, exchange: str = "NSE", token: int | None = N
     row = Instrument(
         instrument_token=token or next(_tokens),
         tradingsymbol=symbol,
+        name=f"{symbol} Ltd",  # the same name under a new token is the same company
         exchange=exchange,
         instrument_type="EQ",
         segment=exchange,

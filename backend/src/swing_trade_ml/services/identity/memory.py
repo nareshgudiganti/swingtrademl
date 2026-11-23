@@ -76,6 +76,11 @@ class InMemoryStore:
                     return security.id
         return None
 
+    def has_symbol_history(self, exchange: str, symbol: str) -> bool:
+        return any(
+            ex == exchange and sym == symbol for s in self._securities.values() for ex, sym, _, _ in s.symbols
+        )
+
     def id_by_instrument(self, exchange: str, symbol: str) -> int | None:
         return self._instruments.get((exchange, symbol))
 

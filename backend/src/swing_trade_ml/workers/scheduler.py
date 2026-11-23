@@ -14,6 +14,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
+from swing_trade_ml.core import modules
 from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.workers import job_runs, jobs
@@ -261,6 +262,10 @@ def start_scheduler() -> None:
     # Shared shadow lanes (10D / 15D, disabled by default): the daily job exists only when the owner has set
     # LANE_SHADOW_ENABLED. It never picks a model by itself and never trades.
     add_lane_job(scheduler)
+
+    # Leave out the jobs of any module that is switched off (core/modules.py). Every module is on by default,
+    # so this removes nothing unless a module was switched off in this process.
+    modules.apply_to_scheduler(scheduler)
 
     # Observe only: records each job's last run for Admin > Jobs (workers/job_runs.py). Never raises.
     job_runs.attach(scheduler)

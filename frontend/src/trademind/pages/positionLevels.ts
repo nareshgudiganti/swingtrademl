@@ -29,9 +29,9 @@ export function levelFor(retPct: number, watch = false): Level {
   if (retPct <= STOP_PCT)
     return { state: 'stop', tag: 'Stop reached', title: 'Stop reached', advice: 'It hit your −4% stop. Consider selling now.', tone: 'red', act: true }
   if (retPct >= TARGET_PCT)
-    return { state: 'target', tag: 'Target reached', title: 'Target reached', advice: 'It hit the +8% target. Consider booking profit.', tone: 'green', act: true }
+    return { state: 'target', tag: 'Target reached', title: 'Target reached', advice: "It hit the +8% target of the app's 15-day plan. Consider booking profit.", tone: 'green', act: true }
   if (retPct >= TARGET_PCT - NEAR_PTS)
-    return { state: 'near_target', tag: 'Near target', title: 'Near target', advice: `${pts(TARGET_PCT - retPct)}% from your +8% target. Consider booking profit at the target.`, tone: 'green', act: true }
+    return { state: 'near_target', tag: 'Near target', title: 'Near target', advice: `${pts(TARGET_PCT - retPct)}% from your +8% target (15-day plan). Consider booking profit at the target.`, tone: 'green', act: true }
   if (retPct >= HALF_PCT)
     return { state: 'half', tag: 'Sell half', title: 'Half-profit reached', advice: 'At or above +5%. Review selling half of your position.', tone: 'amber', act: true }
   if (retPct <= STOP_PCT + NEAR_PTS)

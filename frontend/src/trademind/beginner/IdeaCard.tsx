@@ -5,7 +5,7 @@ import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 
 import type { HoldingWord } from '../../api/types'
-import { chanceText, chanceTitle } from '../honest'
+import { chanceScale, chanceText, chanceTitle } from '../honest'
 import { HORIZONS } from '../horizons'
 import { SCORE_HINT, scoreLabelLong } from '../scoreText'
 import type { Action } from '../types'
@@ -148,7 +148,7 @@ export default function IdeaCard({
         )}
         <div className="bx-small">{SCORE_HINT}</div>
         {isCalibrated(d) && (
-          <div className="bx-small" title={chanceTitle(d)}>{`Estimated chance, measured on past days: ${chanceText(d)}`}</div>
+          <div className="bx-small" title={chanceTitle(d)}>{`Estimated chance, measured on past days: ${chanceText(d)}${chanceScale(d) ? `; ${chanceScale(d)}` : ''}`}</div>
         )}
       </div>
 

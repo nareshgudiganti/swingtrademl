@@ -326,8 +326,8 @@ export default function GrowwTracker() {
           )}
           {!soldView && (
           <p className="tm-dim tmn-small">
-            {needsActionCount(all)} of {all.length} need a look today. The plan for each stock: +8% target, −4% stop, sell
-            half at +5%, and be out within {horizon} trading days.
+            {needsActionCount(all)} of {all.length} need a look today. The app's 15-day plan, used here as a yardstick for each stock: +8% target, −4% stop, sell
+            half at +5%, and be out within {horizon} trading days. Nothing is bought or sold.
           </p>
           )}
         </>

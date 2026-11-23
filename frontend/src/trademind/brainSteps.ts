@@ -54,7 +54,7 @@ const LIMITS_OFF = /switched off for testing/i
 export const NOT_RECORDED = 'Not recorded for this stock yet: the brain saves every step from 7 Nov.'
 
 const WORD_PLAIN: Record<string, string> = {
-  TRADE: `Buy it, with the usual plan (+8% target, −4% stop, out within 15 trading days). ${SCORE_VS_PLAN_SHORT}`,
+  TRADE: `Buy it, with the Brain's 15-day plan (+8% target, −4% stop, out within 15 trading days). ${SCORE_VS_PLAN_SHORT}`,
   WATCH: 'Not a BUY today. Keep an eye on it.',
   WAIT: 'Nothing to do today.',
   AVOID: 'Stay away for now.',

@@ -46,7 +46,9 @@ export const pnlClass = (value: number): string =>
  *  one model per company size; the name says which. Unknown names stay as-is. */
 export function modelLabel(nameVersion: string): string {
   const [full = '', version] = nameVersion.split(':')
-  // "_barrier" models ask the question the bot actually trades: +8% before −4%.
+  // "_barrier" models estimate the chance of the target coming before the stop. The name does not say which target,
+  // stop or window (training takes the horizon separately), and no model is proven, so the label claims neither
+  // a number, a window nor a result.
   const barrier = full.endsWith('_barrier')
   const name = barrier ? full.slice(0, -'_barrier'.length) : full
   const size = name.endsWith('_smallcap')
@@ -56,6 +58,6 @@ export function modelLabel(nameVersion: string): string {
     : name === 'swing_classifier'
     ? 'Large companies'
     : full
-  const label = barrier && size !== full ? `${size} (+8% before −4% in 15 days model)` : size
+  const label = barrier && size !== full ? `${size} (trial model: estimates the chance of target before stop)` : size
   return version ? `${label} · ${version}` : label
 }

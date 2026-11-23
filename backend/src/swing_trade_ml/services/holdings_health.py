@@ -15,7 +15,7 @@ Every number comes from the code that already enforces it, never from here:
   the single-stock cap shrinks as the account grows, and a strategy's own
   `capital_allocation` override wins, exactly as on the entry path);
 * stop-loss distance      -> settings.ML_STOP_RETURN_PCT (the agreed -4%);
-* how long a trade runs   -> settings.ML_PREDICTION_HORIZON_DAYS (15 trading days).
+* how long a trade runs   -> settings.ML_PREDICTION_HORIZON_DAYS (the app's 15-day plan).
   v1's own time stop is 30 *calendar* days, which is about the same length —
   that is correct and is not reported as a fault;
 * results day             -> the `upcoming_events` table the morning feed fills
@@ -169,7 +169,8 @@ def check(
                     "past_plan",
                     (h.symbol,),
                     f"{h.symbol} is on day {h.day} of a {plan_days}-day plan.",
-                    f"Trades are meant to be finished within {plan_days} trading days. The bot's own safety "
+                    f"Trades in the app's {plan_days}-day plan are meant to be finished within {plan_days} "
+                    "trading days. The bot's own safety "
                     "sell happens after 30 calendar days, which is about the same length, so this is a "
                     "reminder to review it, not a fault.",
                 )
@@ -368,7 +369,8 @@ def health_for_book(db: Session, book: str) -> dict[str, Any]:
         ),
         f"At most {_pct(limits.max_position_pct)} of the account in one stock",
         f"Stop-loss {_pct(settings.ML_STOP_RETURN_PCT)} below the price paid",
-        f"Every trade finished within {PLAN_TRADING_DAYS} trading days",
+        f"Every trade finished within {PLAN_TRADING_DAYS} trading days "
+        f"(the app's {PLAN_TRADING_DAYS}-day plan)",
     ]
     if results_checked:
         rules.append("No company results day before the trade ends")

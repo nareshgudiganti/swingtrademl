@@ -12,11 +12,23 @@ export const chanceText = (d: BrainDecision): string => {
   return p == null ? '—' : `~${p}%`
 }
 
+/** What an estimated chance is a chance of, in plain English, as short visible text: a phone has no tooltip, so
+ *  the scale cannot live only in `chanceTitle`. Read from the rule the server sent (h.rule); the 15-day text is the
+ *  fallback when it sent none. Empty when there is no measured chance, so none of it ever shows without one. */
+const FALLBACK_SCALE = 'aims for +8% target before the −4% stop, within 15 trading days (15-day trial)'
+
+export const chanceScale = (d: BrainDecision): string => {
+  if (chancePercent(d) == null) return ''
+  const rule = d.honest_score?.rule
+  // the server writes "-4%" with a hyphen; the screen writes a real minus
+  return rule ? `aims for ${rule.replace(/-(?=\d)/g, '−')} (trial)` : FALLBACK_SCALE
+}
+
 export const chanceTitle = (d: BrainDecision): string => {
   const h = d.honest_score
   if (!h) return 'No score for this stock.'
   if (h.status === 'not_measured' || h.status === 'unverified') return h.note ?? 'No measured chance for this model.'
-  return `Estimated chance of +8% before −4% within 15 trading days, from how this score did on days the model had not seen. ${h.track_record?.text ?? ''}`.trim()
+  return `The Brain's 15-day trial estimate: chance of +8% before −4% within 15 trading days, from how this score did on days the model had not seen. ${h.track_record?.text ?? ''}`.trim()
 }
 
 /** Plain-English track record under an idea: how often similar ideas really worked. */

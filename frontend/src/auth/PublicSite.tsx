@@ -177,7 +177,7 @@ function Landing({ options }: { options: AuthOptions | null }) {
               </span>
               <span>
                 <b>Safety net</b>
-                <span className="na-fine">−4% stop, +8% target</span>
+                <span className="na-fine">−4% stop, +8% target in our 15-day test portfolio</span>
               </span>
             </div>
             <div className="na-t">
@@ -269,7 +269,7 @@ function Promises() {
             <span>
               <b>Safety net built in</b>
               <br />
-              −4% stop, +8% target, out within 15 trading days.
+              In our 15-day test portfolio: −4% stop, +8% target, out within 15 trading days.
             </span>
           </div>
           <div className="na-pt">

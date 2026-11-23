@@ -443,7 +443,7 @@ function OpenTable({
             <SortTh sorter={sorter} k="price" right>Current</SortTh>
             <SortTh sorter={sorter} k="pnlAbs" right>P&amp;L (₹)</SortTh>
             <SortTh sorter={sorter} k="pnl" right>P&amp;L %</SortTh>
-            <SortTh sorter={sorter} k="progress">Progress (−4% to +8%)</SortTh>
+            <SortTh sorter={sorter} k="progress" title="Where the stock sits on the app's 15-day plan scale, from the stop to the target">Progress (−4% to +8%, app 15-day scale)</SortTh>
             <SortTh sorter={sorter} k="state" title="What to do today, from where the stock sits between stop, half-profit and target">
               Suggestion
             </SortTh>

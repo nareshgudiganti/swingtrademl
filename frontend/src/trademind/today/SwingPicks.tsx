@@ -20,7 +20,7 @@ import { formatDateTime } from '../../lib/format'
 import { usePlan } from '../../lib/plan'
 import { EXPERIMENTAL } from '../beginner/cardText'
 import { withoutScorePercent } from '../scoreText'
-import { chancePercent, chanceText, chanceTitle } from '../honest'
+import { chancePercent, chanceScale, chanceText, chanceTitle } from '../honest'
 import { HorizonSelector, HorizonUnavailable } from '../HorizonSelector'
 import { HORIZONS, horizonById, type HorizonId } from '../horizons'
 import { finalWord, ideasFrom, stockSituations } from '../live'
@@ -307,6 +307,12 @@ export function SwingPicksList({ run, win, onWin }: { run: BrainRun; win: Horizo
                       </td>
                       <td className="tm-right tm-num" title={chanceTitle(d)}>
                         {chanceText(d)}
+                        {chanceScale(d) && (
+                          <>
+                            <br />
+                            <small className="tm-dim">{chanceScale(d)}</small>
+                          </>
+                        )}
                       </td>
                       <td>
                         <span className="tm-dash-badge">{d.horizon_days}D</span>{' '}
@@ -547,7 +553,7 @@ function PickDetail({
           </div>
         </Card>
 
-        <Card title="Why this pick?" sub={`Estimated chance ${chanceText(d)} of reaching the target first. ${EXPERIMENTAL}.`}>
+        <Card title="Why this pick?" sub={`Estimated chance ${chanceText(d)} of reaching the target first${chanceScale(d) ? `; ${chanceScale(d)}` : ''}. ${EXPERIMENTAL}.`}>
           {d.reasons.length === 0 && <p className="tm-dim">The brain gave no reasons for this one.</p>}
           {d.reasons.map((r, i) => (
             <CheckItem key={i} tone={wordTone(word)}>

@@ -26,7 +26,7 @@ const MOOD_NAME: Record<string, string> = {
   NO_NEW_TRADES: 'No-new-trades market',
 }
 const OUTCOME_NAME: Record<string, string> = {
-  target: 'Hit +8% first',
+  target: 'Hit +8% first (15-day trial)',
   stop: 'Hit −4% first',
   timeout: 'Ended without either',
   open: 'Still running',
@@ -211,7 +211,7 @@ export default function IdeaReports() {
             <p className="tm-dim" data-testid="report-sealed">
               Results are hidden while the test is running (from {d.seal.from ? day(d.seal.from) : 'its start'}), so the
               test stays fair. You can see how many stocks, the score, and the days done and left. “What happened” and
-              the +8% / −4% results unlock when the test is reviewed.
+              the 15-day trial's +8% / −4% results unlock when the test is reviewed.
             </p>
           )}
           <div className="ir-stats" data-testid="report-summary">
@@ -241,7 +241,7 @@ export default function IdeaReports() {
               <div
                 className="ir-bar"
                 role="img"
-                aria-label={`Hit +8% first ${share(res.target)}%, hit −4% first ${share(res.stop)}%, neither ${share(res.timeout)}%`}
+                aria-label={`15-day trial: hit +8% first ${share(res.target)}%, hit −4% first ${share(res.stop)}%, neither ${share(res.timeout)}%`}
               >
                 {res.target > 0 && (
                   <span className="ir-bar-win" style={{ flexGrow: res.target }}>
@@ -261,7 +261,7 @@ export default function IdeaReports() {
               </div>
               <div className="ir-legend">
                 <span>
-                  <i className="ir-bar-win" /> Hit +8% first · {res.target}
+                  <i className="ir-bar-win" /> Hit +8% first (15-day trial) · {res.target}
                 </span>
                 <span>
                   <i className="ir-bar-loss" /> Hit −4% first · {res.stop}

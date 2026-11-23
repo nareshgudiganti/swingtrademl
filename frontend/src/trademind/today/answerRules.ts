@@ -63,5 +63,5 @@ export function safetySummary(s: { owner: boolean; paused?: boolean | null; ddPc
     }
     return { tone: 'ok', text: `Safety net on. The account is ${dd.toFixed(1)}% below its peak — new buys stop at ${s.haltPct.toFixed(0)}%.` }
   }
-  return { tone: 'ok', text: 'Safety net on: every trade has a −4% stop, a +8% target and a 15-trading-day limit.' }
+  return { tone: 'ok', text: "Safety net on: every trade in the Brain's 15-day trial has a −4% stop, a +8% target and a 15-trading-day limit." }
 }

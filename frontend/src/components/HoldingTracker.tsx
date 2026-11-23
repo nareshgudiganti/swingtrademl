@@ -6,7 +6,7 @@ const STATUS_PLAIN: Record<string, string> = {
   drift: 'Drifting',
   breakdown: 'Breaking down',
   'stop hit': 'Stop hit',
-  'past horizon': 'Past 15 days',
+  'past horizon': "Past the Brain's 15-day plan",
   'no data': 'No new prices',
 }
 
@@ -46,7 +46,7 @@ export function HoldingTracker({ symbol }: { symbol: string }) {
       <div className="between">
         <strong>{STATUS_PLAIN[last.status] ?? last.status}</strong>
         <span className="stat-sub">
-          {last.day_n <= 15 ? `day ${last.day_n} of up to 15` : `day ${last.day_n}`} · {(last.ret * 100).toFixed(1)}%
+          {last.day_n <= 15 ? `day ${last.day_n} of up to 15 (the Brain's 15-day plan)` : `day ${last.day_n}`} · {(last.ret * 100).toFixed(1)}%
         </span>
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label={`${symbol} against similar trades`}>

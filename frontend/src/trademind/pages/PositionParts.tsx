@@ -34,7 +34,7 @@ export function PositionBar({ pct, big }: { pct: number; big?: boolean }) {
         <span style={{ left: mark(STOP_PCT) }}>−4%{big && <em>Stop</em>}</span>
         <span style={{ left: mark(0) }}>0%{big && <em>Entry</em>}</span>
         <span style={{ left: mark(HALF_PCT) }}>+5%{big && <em>Half sell</em>}</span>
-        <span style={{ left: mark(TARGET_PCT) }}>+8%{big && <em>Target</em>}</span>
+        <span style={{ left: mark(TARGET_PCT) }}>+8%{big && <em>Target · 15-day plan</em>}</span>
       </div>
     </div>
   )
@@ -129,7 +129,7 @@ export function DetailPanel({
           <dt>Half-profit</dt>
           <dd className="tm-pos">₹{inr(half)} (+5%)</dd>
           <dt>Target</dt>
-          <dd className="tm-pos">₹{inr(target)} (+8%)</dd>
+          <dd className="tm-pos">₹{inr(target)} (+8%, 15-day plan)</dd>
         </dl>
       </div>
       <p className={`op-suggest op-tone-${l.tone}`}>

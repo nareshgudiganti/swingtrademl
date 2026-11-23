@@ -174,10 +174,10 @@ def test_a_stale_stock_has_an_explicit_stale_row_in_the_scan_session(db_session,
     _at(monkeypatch, datetime(2026, 11, 20, 15, 50, tzinfo=IST))
     score_history.record_stock_scores(db_session, [(fresh.id, 0.8, MODEL), (stale.id, 0.7, MODEL)], 0.4)
     sid_stale = resolve(db_session, symbol="STALE390")
-    state = ledger.session_state(db_session, [sid_stale], FRIDAY)[sid_stale]
+    state = ledger.session_state(db_session, [sid_stale], FRIDAY, horizon_days=None)[sid_stale]
     assert state is not None and state.status == "stale" and state.score is None
     assert "2026-11-19" in state.note
-    assert ledger.session_state(db_session, [sid_stale], THURSDAY)[sid_stale].status == "scored"
+    assert ledger.session_state(db_session, [sid_stale], THURSDAY, horizon_days=None)[sid_stale].status == "scored"
     # run again: no second stale row
     score_history.record_stock_scores(db_session, [(fresh.id, 0.8, MODEL), (stale.id, 0.7, MODEL)], 0.4)
     assert len([r for r in _rows(db_session, sid_stale) if r.status == "stale"]) == 1
@@ -190,7 +190,7 @@ def test_session_state_tells_scored_missing_and_not_in_the_scan_apart(db_session
     _at(monkeypatch, datetime(2026, 11, 20, 15, 50, tzinfo=IST))
     score_history.record_stock_scores(db_session, [(a.id, 0.8, MODEL)], 0.4, universe=[a.id, b.id])
     ids = {x: writer.ensure_for_instrument(db_session, inst) for x, inst in zip("ABC", (a, b, c), strict=True)}
-    state = ledger.session_state(db_session, ids.values(), FRIDAY)
+    state = ledger.session_state(db_session, ids.values(), FRIDAY, horizon_days=None)
     assert state[ids["A"]].status == "scored"
     assert state[ids["B"]].status == "missing" and state[ids["B"]].score is None
     assert state[ids["C"]] is None, "not in the scan at all: absent, not a score"
@@ -200,7 +200,7 @@ def test_a_scored_row_outranks_a_gap_for_the_same_stock_and_session(db_session):
     sid = writer.ensure_for_instrument(db_session, _instrument(db_session, "RANKUP390"))
     ledger.append_missing(db_session, security_id=sid, session_date=FRIDAY, source="v1_scan", reason="no candle")
     ledger.append_score(db_session, security_id=sid, session_date=FRIDAY, source="v1_scan", score=0.6)
-    assert ledger.session_state(db_session, [sid], FRIDAY)[sid].status == "scored"
+    assert ledger.session_state(db_session, [sid], FRIDAY, horizon_days=None)[sid].status == "scored"
 
 
 def test_v1_rows_carry_the_model_id_version_and_horizon_when_known_and_null_when_not(db_session):
@@ -234,7 +234,9 @@ def test_a_brain_run_is_recorded_with_its_run_id_and_no_guessed_model(db_session
     assert ledger.append_from_brain_run(db_session, "iso390-run") == 2
     (ra,) = _rows(db_session, resolve(db_session, symbol="BRN390A"))
     (rb,) = _rows(db_session, resolve(db_session, symbol="BRN390B"))
-    assert (ra.source, ra.run_ref, ra.horizon_days, ra.score, ra.session_date) == ("brain", "iso390-run", 15, 0.71, FRIDAY)
+    # horizon is None, not the decision's 15: the brain stamps a frozen default of 15 on a score that may come from a
+    # 5-session model (#385), and the evidence ledger must not carry that label until it is fixed
+    assert (ra.source, ra.run_ref, ra.horizon_days, ra.score, ra.session_date) == ("brain", "iso390-run", None, 0.71, FRIDAY)
     assert (ra.model_id, ra.model_name, ra.model_version) == (None, "", ""), "the brain stores no model identity: null, not guessed"
     assert "score_source=combined" in ra.note
     assert (rb.status, rb.score, rb.run_ref) == ("missing", None, "iso390-run")
@@ -304,3 +306,31 @@ def test_a_retried_scan_records_one_v1_signal(db_session):
         execution.record_signal(db_session, strategy, inst, decision, "paper")
     count = len(list(db_session.scalars(select(Signal).where(Signal.strategy_id == strategy.id, Signal.instrument_id == inst.id))))
     assert count == 1, f"{count} signals recorded for one scan retried once"
+
+
+def test_a_fifteen_day_score_never_hides_a_five_day_gap_for_the_same_stock(db_session):
+    sid = writer.ensure_for_instrument(db_session, _instrument(db_session, "HOR390"))
+    ledger.append_missing(db_session, security_id=sid, session_date=FRIDAY, source="v1_scan", reason="5d model had no score", horizon_days=5)
+    ledger.append_score(db_session, security_id=sid, session_date=FRIDAY, source="v1_scan", score=0.7, horizon_days=15)
+    assert ledger.session_state(db_session, [sid], FRIDAY, horizon_days=5)[sid].status == "missing"
+    assert ledger.session_state(db_session, [sid], FRIDAY, horizon_days=15)[sid].status == "scored"
+    assert ledger.session_state(db_session, [sid], FRIDAY, horizon_days=10)[sid] is None
+    assert ledger.session_state(db_session, [sid], FRIDAY, horizon_days=None)[sid] is None, "None means rows with no known horizon"
+
+
+def test_two_models_can_be_told_apart_by_name(db_session):
+    sid = writer.ensure_for_instrument(db_session, _instrument(db_session, "MDL390"))
+    ledger.append_score(db_session, security_id=sid, session_date=FRIDAY, source="v1_scan", score=0.6, horizon_days=5, model_name="a", model_version="v1")
+    ledger.append_missing(db_session, security_id=sid, session_date=FRIDAY, source="v1_scan", reason="b had none", horizon_days=5, model_name="b", model_version="v1")
+    assert ledger.session_state(db_session, [sid], FRIDAY, horizon_days=5, model_name="a")[sid].status == "scored"
+    assert ledger.session_state(db_session, [sid], FRIDAY, horizon_days=5, model_name="b")[sid].status == "missing"
+
+
+def test_a_token_and_a_symbol_that_name_different_stocks_give_none_not_the_token(db_session):
+    a = _instrument(db_session, "CONFA390", token=390_501)
+    writer.ensure_for_instrument(db_session, a)
+    other = writer.create_security(db_session, name="Someone else")
+    writer.set_symbol(db_session, other, "CONFB390", date(2000, 1, 1))
+    a.tradingsymbol = "CONFB390"  # this instrument's token says stock A, its symbol now says someone else's
+    db_session.flush()
+    assert consumers.security_for_instrument(db_session, a.id) is None

@@ -69,11 +69,13 @@ the model is unknown), `source` (`v1_scan`, `prediction`, `brain`, `catch_up`, `
 (brain run id or prediction id when known, else `None`), `note` (the reason for a gap).
 
 ```python
-ledger.session_state(db, security_ids, session_date, *, horizon_days=None, source=None)
+ledger.session_state(db, security_ids, session_date, *, horizon_days, source=None, model_name=None)
     -> dict[int, ScoreLedger | None]
 ```
 
-One call answers "what happened to each of these stocks in that session's scan". A `scored` row outranks a gap row
+One call answers "what happened to each of these stocks in that session's scan, for ONE horizon". `horizon_days`
+is required (5, 10, 15, or `None` for rows whose horizon is not known), so a 15-day score can never hide a 5-day gap;
+pass `model_name` to tell two models of the same horizon apart. A `scored` row outranks a gap row
 for the same stock and session; otherwise the newest revision wins. `None` means the stock was in no scan that
 session. A row with `status` `missing` (the stock was in the scan and no score came out) or `stale` (its newest
 candle is older than the scan's session; the row has no score and `note` names that candle date) is an explicit
@@ -82,6 +84,12 @@ gap. Never read a gap or `None` as 0. A stale stock's own score stays filed unde
 Provenance on a row: `model_id`, `model_name`, `model_version` are set when the scan knew the model and are
 empty or `None` when it did not (the brain stores no model identity, so brain rows leave them empty); `run_ref` is
 the brain run id for `source = "brain"` rows; `horizon_days` is the model's horizon when known, else `None`.
+Brain rows always have `horizon_days = None`: the brain stamps a frozen default of 15 on its scores even when the
+model behind them is a 5-session one (#385), so the ledger does not carry that label until it is fixed.
+
+Backfilled rows (`source = "backfill"`, copied from the old `stock_score_history`) may be dated a day late: the old
+`as_of` was the clock day of the scan, not the market session. The data is not changed; read those dates with that
+in mind and prefer `v1_scan` rows, which are filed under the session of the scored candle.
 
 ## 2b. Adapters for consumers that hold another key
 

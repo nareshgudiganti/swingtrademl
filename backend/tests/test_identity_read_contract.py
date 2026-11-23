@@ -72,8 +72,10 @@ def test_the_ledger_statuses_and_sources_are_pinned():
 
 def test_session_state_and_the_consumer_adapters_are_pinned():
     p = _params(ledger.session_state)
-    assert list(p) == ["db", "security_ids", "session_date", "horizon_days", "source"]
-    assert p["horizon_days"] == ("KEYWORD_ONLY", None) and p["source"] == ("KEYWORD_ONLY", None)
+    assert list(p) == ["db", "security_ids", "session_date", "horizon_days", "source", "model_name"]
+    assert p["horizon_days"][0] == "KEYWORD_ONLY"
+    assert p["horizon_days"][1] is inspect.Parameter.empty  # required: no default
+    assert p["source"] == ("KEYWORD_ONLY", None) and p["model_name"] == ("KEYWORD_ONLY", None)
     assert list(_params(consumers.security_for_instrument)) == ["db", "instrument_id"]
     p = _params(consumers.security_for_symbol)
     assert list(p) == ["db", "symbol", "on", "exchange"]

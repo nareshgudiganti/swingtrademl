@@ -27,7 +27,8 @@ def security_for_instrument(db: Session, instrument_id: int) -> int | None:
     if row is None:
         return None
     token, symbol, exchange = row
-    return resolve(db, token=token, symbol=symbol, exchange=exchange) or resolve(db, token=token)
+    # Token and symbol must agree: if they name different securities the answer is None, never the token's.
+    return resolve(db, token=token, symbol=symbol, exchange=exchange)
 
 
 def security_for_symbol(

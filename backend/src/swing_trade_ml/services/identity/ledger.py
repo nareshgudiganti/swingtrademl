@@ -229,8 +229,9 @@ def session_state(
     security_ids: Iterable[int],
     session_date: date,
     *,
-    horizon_days: int | None = None,
+    horizon_days: int | None,
     source: str | None = None,
+    model_name: str | None = None,
 ) -> dict[int, ScoreLedger | None]:
     """For each security, the newest revision recorded for one session, or None when nothing was recorded.
 
@@ -240,10 +241,15 @@ def session_state(
     query = select(ScoreLedger).where(
         ScoreLedger.security_id.in_(ids), ScoreLedger.session_date == session_date
     )
-    if horizon_days is not None:
-        query = query.where(ScoreLedger.horizon_days == horizon_days)
+    # The horizon is required: one row per stock would let a 15-day score hide a 5-day gap. `None` asks for the rows
+    # whose horizon is not known; pass a model name to tell two models of one horizon apart.
+    query = query.where(
+        ScoreLedger.horizon_days.is_(None) if horizon_days is None else ScoreLedger.horizon_days == horizon_days
+    )
     if source is not None:
         query = query.where(ScoreLedger.source == source)
+    if model_name is not None:
+        query = query.where(ScoreLedger.model_name == model_name)
     best: dict[int, ScoreLedger] = {}
     for row in db.scalars(query.order_by(ScoreLedger.id)):
         kept = best.get(row.security_id)
@@ -286,7 +292,9 @@ def append_from_brain_run(db: Session, run_id: str) -> int:
             "security_id": security_id,
             "session_date": session_date,
             "source": "brain",
-            "horizon_days": decision.horizon_days,
+            # None, not decision.horizon_days: the brain stamps a frozen default of 15 on a score that may come from a
+            # 5-session model (#385). Until that is fixed the evidence ledger must not carry the label.
+            "horizon_days": None,
             "scan_key": f"brain:{run.kind}:{session_date.isoformat()}:{run.book}",
             "run_ref": run_id,
         }

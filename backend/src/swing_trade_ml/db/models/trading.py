@@ -142,6 +142,11 @@ class Signal(Base, TimestampMixin):
     # horizon_days is copied from the model/strategy at generation time so
     # scoring stays correct even after the active model later changes.
     horizon_days: Mapped[int | None] = mapped_column(Integer)
+    # Which model and run made this signal (#387). Nullable on purpose: rows written before these columns existed
+    # stay NULL (unknown) and are never filled in by guess; a writer that knows them sets them.
+    model_id: Mapped[int | None] = mapped_column(Integer)
+    model_version: Mapped[str | None] = mapped_column(String(64))
+    run_id: Mapped[str | None] = mapped_column(String(64))
     outcome: Mapped[str | None] = mapped_column(String(24), index=True)
     outcome_pct: Mapped[float | None] = mapped_column(Float)
     outcome_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

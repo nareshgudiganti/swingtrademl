@@ -36,11 +36,18 @@ OLD_CANDIDATES = {
 }
 
 
+# The two 5-session slots, added from the research config (core/research_config.py, hz-rules-v1).
+FIVE_SLOTS = {"5d-large-v1": (5, "large"), "5d-midcap-v1": (5, "mid")}
+FIVE_RULE = {5: {"target": 0.02, "stop": 0.04, "half_out": None}}
+FIVE_PREFIXES = (("fd5l_", 5, "large"), ("fd5m_", 5, "midcap"))
+FIVE_CANDIDATES = {"5d-large-v1": ("F5L",), "5d-midcap-v1": ("F5M",)}
+
+
 def test_existing_slots_resolve_exactly_as_before():
-    assert dict(lane_service.SLOTS) == OLD_SLOTS
-    assert dict(lane_service.RULES) == OLD_RULES
-    assert ls.prefix_table() == OLD_PREFIXES
-    assert dict(lane_freeze.SLOT_CANDIDATES) == OLD_CANDIDATES
+    assert dict(lane_service.SLOTS) == {**OLD_SLOTS, **FIVE_SLOTS}
+    assert dict(lane_service.RULES) == {**OLD_RULES, **FIVE_RULE}
+    assert ls.prefix_table() == OLD_PREFIXES + FIVE_PREFIXES
+    assert dict(lane_freeze.SLOT_CANDIDATES) == {**OLD_CANDIDATES, **FIVE_CANDIDATES}
     assert lane_service.slot_parts("15d-midcap") == (15, "mid")
 
 
@@ -117,12 +124,12 @@ def test_role_gate_still_refuses_a_fold_a_lookalike_and_an_unmarked_model():
 # ---- a new slot is one entry
 def _synthetic(**over):
     base = {
-        "key": "5d-large",
+        "key": "5d-smallcap",
         "horizon": 5,
-        "tier": "large",
-        "universe_group": "large",
+        "tier": "smallcap",
+        "universe_group": "small5",
         "target": 0.02,
-        "stop": 0.01,
+        "stop": 0.04,
         "half_out": None,
         "prefixes": ("fd5_",),
         "protocol": "fd-protocol-synthetic",
@@ -136,27 +143,27 @@ def _synthetic(**over):
 def synthetic_slot():
     ls.register(_synthetic())
     try:
-        yield "5d-large"
+        yield "5d-smallcap"
     finally:
-        ls.unregister("5d-large")
+        ls.unregister("5d-smallcap")
 
 
 def test_one_entry_adds_a_slot_everywhere_and_removal_restores_the_old_state(synthetic_slot):
-    assert lane_service.SLOTS["5d-large"] == (5, "large")
-    assert lane_service.RULES[5] == {"target": 0.02, "stop": 0.01, "half_out": None}
-    assert lane_service.slot_parts("5d-large") == (5, "large")
-    assert mr.slot_for("fd5_lane_20261205", 5) == "5d-large"
+    assert lane_service.SLOTS["5d-smallcap"] == (5, "small5")
+    assert lane_service.RULES[5] == {"target": 0.02, "stop": 0.04, "half_out": None}
+    assert lane_service.slot_parts("5d-smallcap") == (5, "small5")
+    assert mr.slot_for("fd5_lane_20261205", 5) == "5d-smallcap"
     assert mr.slot_for("fd5_lane_20261205", 10) is None  # the family is valid for one horizon only
-    assert lane_freeze.SLOT_CANDIDATES["5d-large"] == ("F5",)
+    assert lane_freeze.SLOT_CANDIDATES["5d-smallcap"] == ("F5",)
     assert ls.fold_name_pattern().match("fd5_20260101")
     assert not ls.fold_name_pattern().match("fd5_lane_20261205")
     # the role gate applies to the new slot exactly as to the old ones
     with pytest.raises(lane_service.LaneError):
         lane_job.require_eligible_role(
-            SimpleNamespace(id=9, name="fd5_20260101", model_role=None), "5d-large"
+            SimpleNamespace(id=9, name="fd5_20260101", model_role=None), "5d-smallcap"
         )
     lane_job.require_eligible_role(
-        SimpleNamespace(id=9, name="fd5_lane_20261205", model_role="final"), "5d-large"
+        SimpleNamespace(id=9, name="fd5_lane_20261205", model_role="final"), "5d-smallcap"
     )
     # a new slot enables nothing by itself
     assert frozenset() == lane_job.PROD_ALLOWED_SLOTS
@@ -164,11 +171,11 @@ def test_one_entry_adds_a_slot_everywhere_and_removal_restores_the_old_state(syn
 
 def test_removing_the_synthetic_slot_restores_everything():
     ls.register(_synthetic())
-    ls.unregister("5d-large")
-    assert dict(lane_service.SLOTS) == OLD_SLOTS
-    assert dict(lane_service.RULES) == OLD_RULES
-    assert ls.prefix_table() == OLD_PREFIXES
-    assert dict(lane_freeze.SLOT_CANDIDATES) == OLD_CANDIDATES
+    ls.unregister("5d-smallcap")
+    assert dict(lane_service.SLOTS) == {**OLD_SLOTS, **FIVE_SLOTS}
+    assert dict(lane_service.RULES) == {**OLD_RULES, **FIVE_RULE}
+    assert ls.prefix_table() == OLD_PREFIXES + FIVE_PREFIXES
+    assert dict(lane_freeze.SLOT_CANDIDATES) == {**OLD_CANDIDATES, **FIVE_CANDIDATES}
 
 
 def test_a_midcap_10d_slot_is_also_just_an_entry():
@@ -191,7 +198,7 @@ def test_a_midcap_10d_slot_is_also_just_an_entry():
     finally:
         ls.unregister("10d-midcap")
     assert "10d-midcap" not in lane_service.SLOTS
-    assert dict(lane_service.RULES) == OLD_RULES
+    assert dict(lane_service.RULES) == {**OLD_RULES, **FIVE_RULE}
 
 
 @pytest.mark.parametrize(
@@ -239,4 +246,4 @@ def test_group_symbols_follows_the_table():
             lane_universe.group_symbols(universe, "small5")
         assert lane_universe.group_symbols({**universe, "small5": ["Z"]}, "small5") == ["Z"]
     finally:
-        ls.unregister("5d-large")
+        ls.unregister("5d-smallcap")

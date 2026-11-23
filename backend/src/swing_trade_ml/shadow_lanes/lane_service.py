@@ -36,6 +36,7 @@ from swing_trade_ml.db.models.market import Candle, Instrument
 from swing_trade_ml.db.models.ml import MLModel
 from swing_trade_ml.services import lane_slots
 from swing_trade_ml.services.costs import apply_slippage
+from swing_trade_ml.services.lane_slots import research_slot_of
 from swing_trade_ml.services.model_registry import slot_for
 
 log = get_logger(__name__)
@@ -220,7 +221,7 @@ def record_day(
     horizon, group = slot_parts(slot_key)
     if set(cap_groups) - {group}:
         raise LaneError(f"slot {slot_key} takes only the {group!r} cap group")
-    if model.id is None or slot_for(model.name, model.prediction_horizon_days) != slot_key:
+    if model.id is None or slot_for(model.name, model.prediction_horizon_days) != research_slot_of(slot_key):
         raise LaneError(f"model {model.name!r} is not registered for slot {slot_key}")
     moment = now or datetime.now(UTC)
     if signal_day > last_closed_trading_day(moment):

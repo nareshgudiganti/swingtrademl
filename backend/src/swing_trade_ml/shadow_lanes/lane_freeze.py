@@ -185,9 +185,10 @@ def freeze(
         )
     name = model_name(candidate, cutoff)
     model = (trainer or default_trainer)(db, candidate, cutoff, universe, name)
+    from swing_trade_ml.services.lane_slots import research_slot_of
     from swing_trade_ml.services.model_registry import slot_for
 
-    if slot_for(model.name, model.prediction_horizon_days) != slot_key:
+    if slot_for(model.name, model.prediction_horizon_days) != research_slot_of(slot_key):
         raise FreezeRefusedError(f"trained model {model.name!r} is not registered for slot {slot_key}")
     stamp = (now or datetime.now()).isoformat(timespec="seconds")
     _mark_final(db, model, slot_key, candidate, report_path, stamp)

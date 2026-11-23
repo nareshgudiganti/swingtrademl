@@ -126,6 +126,8 @@ def _empty_history(note: str | None = None) -> dict:
 
 def history_for(slot_key: str, root: Path = EVIDENCE) -> dict:
     out = _empty_history()
+    if SLOTS.get(slot_key, (0, ""))[0] == 5:
+        return out  # no 5-session history test is stored here; never show a 10- or 15-day test as a 5-day one
     if slot_key == "10d-large":
         files = sorted((root / "td_v1").glob("ten_day_*.json")) if (root / "td_v1").is_dir() else []
         rep = _load(files[-1]) if files else None
@@ -217,6 +219,8 @@ def forward_view(rows: list, horizon: int, cap_group: str) -> tuple[dict, int, i
 def build_lanes(db) -> dict[str, Any]:
     lanes = []
     for slot_key, (horizon, group) in SLOTS.items():
+        if not lane_job.slot_in_use(db, slot_key):
+            continue
         rows = _rows(db, slot_key)
         forward, sessions, completed = forward_view(rows, horizon, group)
         model = db.get(MLModel, rows[-1][0].model_id) if rows else None

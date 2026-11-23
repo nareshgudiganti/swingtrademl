@@ -240,12 +240,10 @@ def apply_sync(db: Session, sync: GrowwSync, *, user_id: int, only_isins: set[st
         if old_qty is not None and qty < old_qty - _EPS:
             counts["pending_sale"] += 1
 
-    if only_isins is not None:
-        db.flush()
-        return counts
-
     # Linked rows this sync no longer backs: their ISIN is absent, or it now belongs to another stock
     # (match moved). Both are confirmed zero; a moved ISIN is also unlinked from the old row.
+    # A confirmation (`only_isins`) looks only at the rows linked to the ISINs just confirmed: an ISIN
+    # that moved to another stock frees its old row, and nothing else is marked not held.
     linked = db.scalars(
         select(UserWatchlistItem).where(
             UserWatchlistItem.user_id == user_id, UserWatchlistItem.groww_isin.is_not(None)
@@ -253,6 +251,8 @@ def apply_sync(db: Session, sync: GrowwSync, *, user_id: int, only_isins: set[st
     )
     for item in list(linked):
         if item.symbol in conflicted_symbols or item.groww_isin in conflicted_isins:
+            continue
+        if only_isins is not None and item.groww_isin not in only_isins:
             continue
         if _changed_after(item, sync):
             continue

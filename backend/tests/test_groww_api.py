@@ -380,9 +380,12 @@ def test_job_groww_sync_failure_report_carries_only_the_error_kind(db_session, m
 
     monkeypatch.setattr(jobs.groww_sync, "run_sync", boom)
     reported = []
-    monkeypatch.setattr(jobs, "_report_error", lambda ctx, exc: reported.append((ctx, str(exc))))
+    monkeypatch.setattr(
+        jobs, "_report_error", lambda ctx, exc: reported.append((ctx, str(exc), type(exc).__name__))
+    )
     jobs.job_groww_sync()
-    assert reported == [("groww_sync", "ValueError")]
+    # the text is gone, the kind stays (the Admin jobs page shows the class name)
+    assert reported == [("groww_sync", "ValueError", "ValueError")]
 
 
 def test_matching_leaves_out_rows_without_an_isin_and_counts_them(client, db_session):

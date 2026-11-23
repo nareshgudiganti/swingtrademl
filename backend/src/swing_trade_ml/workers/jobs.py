@@ -480,6 +480,13 @@ def _ingest_groww_held(db, already: set[str]) -> None:
             db.rollback()
 
 
+def _kind_only(exc: BaseException) -> Exception:
+    """A stand-in for `exc` that keeps its class name and drops its text, so a failure report (log, alert and
+    the Admin jobs page, which shows the class name) says what kind of failure it was and nothing else."""
+    kind = type(exc).__name__
+    return type(kind, (Exception,), {})(kind)
+
+
 def job_groww_sync() -> None:
     """15:35 IST weekdays: read the owner's Groww holdings into the Groww Tracker.
 
@@ -500,7 +507,7 @@ def job_groww_sync() -> None:
         log.info("job.groww_sync.skipped", reason="already_running")
     except Exception as exc:  # noqa: BLE001
         # Only the kind of failure goes out: the text of a Groww error can carry account details.
-        _report_error("groww_sync", Exception(type(exc).__name__))
+        _report_error("groww_sync", _kind_only(exc))
 
 
 def _blocked_entries(db, since: datetime) -> list[dict[str, Any]]:

@@ -777,3 +777,17 @@ def test_confirm_empty_does_not_touch_a_row_removed_after_the_sync(db_session, u
     gapply.confirm_empty(db_session, user_id=user.id, sync_id=sync.id)
     db_session.refresh(item)
     assert _frozen(item) == before
+
+
+def test_a_confirmation_never_marks_an_unrelated_linked_row_not_held(db_session, user):
+    other = _inst(db_session, "UNRELATEDH")
+    target = _inst(db_session, "CONFIRMI")
+    sync = _sync(db_session, [("INE888I01088", None, 2, 30.0, MATCH_NEEDS)])
+    linked = _item(
+        db_session, user, "UNRELATEDH", quantity=6, buy_price=40.0, groww_isin="INE999H01099",
+        held_state=HELD, source=SOURCE_GROWW,
+    )
+    before = _frozen(linked)
+    gapply.confirm_match(db_session, user_id=user.id, isin="INE888I01088", instrument_id=target.id)
+    db_session.refresh(linked)
+    assert _frozen(linked) == before and other.id and sync.id

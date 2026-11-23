@@ -1,8 +1,12 @@
 """Groww holdings sync: Refresh, status, and the owner's stock-matching screen.
 
-Owner only (require_real_account) on every route: the Groww Tracker holds the owner's own real
-shares, so it follows the same privacy rule as My Holdings. Display/tracking only: nothing here
-places or changes an order, and nothing in trading, sizing, exits or the brain reads it.
+Only the Groww account owner (the first name in REAL_ACCOUNT_USERS, with the owner role) may use any
+route here, reads included (`require_groww_owner`, owner decision D2): the Groww Tracker holds that person's
+own real shares. Everyone else, a second real-account owner included, gets 403 before any other answer, and
+when no such account exists a signed-in person is refused too. The legacy shared API key is the owner's by
+design.
+Display/tracking only: nothing here places or changes an order, and nothing in trading, sizing, exits or the
+brain reads it.
 """
 
 from __future__ import annotations

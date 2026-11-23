@@ -100,7 +100,8 @@ def test_single_migration_head_and_parent():
     heads = script.get_heads()
     assert heads == ["identity01"]  # the identity tables sit on wlsales01 (#389)
     assert script.get_revision("identity01").down_revision == "wlsales01"
-    assert script.get_revision("wlsales01").down_revision == "acctdelete01"  # joins servicekeys01 and adminmfa01
+    # sold records sit on acctdelete01, which joins servicekeys01 and adminmfa01
+    assert script.get_revision("wlsales01").down_revision == "acctdelete01"
     assert script.get_revision("billing01").down_revision == "authtokens01"
     assert script.get_revision("authtokens01").down_revision == "usernamemob01"
     assert script.get_revision("usernamemob01").down_revision == "mergeheads01"

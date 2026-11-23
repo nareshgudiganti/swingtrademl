@@ -371,11 +371,11 @@ def _latest_nightly(db: Session):
 
 def _run_is_current(run, today: date) -> bool:
     """A run counts as "today's" view only if it was made on the latest expected trading day
-    (system._expected_latest_trading_day: the previous trading day, all day) or later — i.e.
+    (market_session.expected_latest_trading_day: the previous trading day, all day) or later — i.e.
     yesterday's nightly before today's 15:50 run, or today's once it has run. Older is stale."""
-    from swing_trade_ml.api.v1.endpoints.system import _expected_latest_trading_day
+    from swing_trade_ml.core.market_session import expected_latest_trading_day
 
-    expected = _expected_latest_trading_day(datetime.combine(today, time(12, 0), tzinfo=IST))
+    expected = expected_latest_trading_day(datetime.combine(today, time(12, 0), tzinfo=IST))
     return run.as_of.astimezone(IST).date() >= expected
 
 

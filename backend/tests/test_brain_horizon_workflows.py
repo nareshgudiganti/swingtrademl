@@ -1,3 +1,4 @@
+# ruff: noqa: E501 (long lines in test code)
 """Three isolated Brain workflows (5D, 10D, 15D): model/horizon match, per-horizon policy, separate history.
 
 Synthetic data only: no database, no broker, no clock.
@@ -8,6 +9,7 @@ from __future__ import annotations
 import ast
 from dataclasses import replace
 from datetime import date, timedelta
+from functools import partial
 from pathlib import Path
 
 import pytest
@@ -18,9 +20,18 @@ from swing_trade_ml.brain.horizons import (
     HorizonStore,
     ModelOutput,
     evaluate_record,
-    run_all_horizons,
-    run_horizon,
 )
+from swing_trade_ml.brain.horizons import (
+    run_all_horizons as _run_all_horizons,
+)
+from swing_trade_ml.brain.horizons import (
+    run_horizon as _run_horizon,
+)
+
+# These tests exercise all three workflows as a RESEARCH caller. The default caller gets no decision word for the
+# research-only horizons (10D, 15D): see test_horizon_research_caller.py.
+run_horizon = partial(_run_horizon, research_caller=True)
+run_all_horizons = partial(_run_all_horizons, research_caller=True)
 
 SIGNAL = date(2026, 1, 2)
 HOLIDAY = date(2026, 1, 8)
@@ -479,7 +490,8 @@ def test_policies_match_the_pinned_lane_and_h05_rules():
 
 def test_package_imports_no_database_broker_or_order_code():
     pkg = Path(__file__).resolve().parents[1] / "src" / "swing_trade_ml" / "brain" / "horizons"
-    allowed = ("swing_trade_ml.brain.horizons",)
+    # the research config is pure: it imports nothing from the app
+    allowed = ("swing_trade_ml.brain.horizons", "swing_trade_ml.core.research_config")
     for path in pkg.glob("*.py"):
         tree = ast.parse(path.read_text(encoding="utf-8"))
         for node in ast.walk(tree):

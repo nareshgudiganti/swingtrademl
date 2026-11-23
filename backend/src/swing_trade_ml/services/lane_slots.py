@@ -9,13 +9,16 @@ model for a new horizon or cap group is one entry here, not new infrastructure.
 Adding a slot does NOT enable it: a lane still needs LANE_SHADOW_ENABLED, an owner-chosen model in
 LANE_SHADOW_MODELS, and a model whose role is "final" (see model_registry.role_of). Nothing here validates a model.
 
-This module imports nothing from the app, so every other module can use it.
+This module imports only `core.research_config` (pure, itself importing nothing from the app), so every other module
+can use it.
 """
 
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+
+from swing_trade_ml.core import research_config
 
 HORIZONS = (15, 10, 5)
 TIERS = ("large", "midcap", "smallcap")
@@ -35,10 +38,29 @@ class LaneSlot:
     candidates: tuple[
         str, ...
     ] = ()  # the history-test candidates whose pass may feed this slot (lane_freeze)
+    # True = the slot exists in the table (names, rules) but the daily job and the owner's lane list ignore it until the
+    # owner chooses a model for it (LANE_SHADOW_MODELS) or it already has picks. Nothing appears or runs by itself.
+    dormant: bool = False
+
+    @property
+    def research_slot(self) -> str:
+        """The model registry's research-slot key this lane slot belongs to ("5d-large-v1" -> "5d-large")."""
+        return slot_key(self.horizon, self.tier)
 
 
 def slot_key(horizon: int, tier: str) -> str:
     return f"{horizon}d-{tier}"
+
+
+def is_dormant(key: str) -> bool:
+    slot = _SLOTS.get(key)
+    return bool(slot is not None and slot.dormant)
+
+
+def research_slot_of(key: str) -> str:
+    """The registry research slot a lane slot key stands for. An unknown key stands for itself."""
+    slot = _SLOTS.get(key)
+    return slot.research_slot if slot is not None else key
 
 
 # ---------------------------------------------------------------- the table
@@ -79,6 +101,26 @@ _INITIAL: tuple[LaneSlot, ...] = (
     ),
 )
 
+# 5-session slots, built from the ACTIVE research-config version (core/research_config.py), never typed here a second
+# time. Registering a slot enables nothing: a lane still needs LANE_SHADOW_ENABLED, an owner-chosen model, role "final".
+_FIVE = research_config.rule_for(5)
+_FIVE_SLOTS: tuple[LaneSlot, ...] = tuple(
+    LaneSlot(
+        f"{slot_key(5, tier)}-v1",  # not the bare "5d-large": that name is the owner report's h05 row (horizon_report.py)
+        5,
+        tier,
+        group,
+        target=_FIVE.target_pct,
+        stop=_FIVE.stop_pct,
+        half_out=_FIVE.half_out_pct,
+        prefixes=(prefix,),
+        protocol="fd-protocol-v1",
+        candidates=(candidate,),
+        dormant=True,
+    )
+    for tier, group, prefix, candidate in (("large", "large", "fd5l_", "F5L"), ("midcap", "mid", "fd5m_", "F5M"))
+)
+
 _SLOTS: dict[str, LaneSlot] = {}
 #: Live views over the table, mutated in place by register/unregister so importers keep one object.
 SLOTS_VIEW: dict[str, tuple[int, str]] = {}  # slot key -> (horizon, universe group)
@@ -95,8 +137,9 @@ def _check(slot: LaneSlot) -> None:
         raise SlotConfigError(f"horizon {slot.horizon} is not one of {HORIZONS}")
     if slot.tier not in TIERS:
         raise SlotConfigError(f"cap tier {slot.tier!r} is not one of {TIERS}")
-    if slot.key != slot_key(slot.horizon, slot.tier):
-        raise SlotConfigError(f"slot key {slot.key!r} must be {slot_key(slot.horizon, slot.tier)!r}")
+    base = slot_key(slot.horizon, slot.tier)
+    if slot.key != base and not re.fullmatch(re.escape(base) + r"-v\d+", slot.key):
+        raise SlotConfigError(f"slot key {slot.key!r} must be {base!r} or {base + '-v1'!r} (a numbered variant)")
     if slot.key in _SLOTS:
         raise SlotConfigError(f"slot {slot.key!r} already exists")
     if not slot.prefixes or any(not p.endswith("_") or len(p) < 3 for p in slot.prefixes):
@@ -153,5 +196,5 @@ def fold_name_pattern() -> re.Pattern[str]:
     return re.compile(r"^(?:" + "|".join(re.escape(p) for p in prefixes) + r")\d{8}$")
 
 
-for _slot in _INITIAL:
+for _slot in (*_INITIAL, *_FIVE_SLOTS):
     register(_slot)

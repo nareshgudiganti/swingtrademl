@@ -12,7 +12,9 @@ from dataclasses import dataclass
 from datetime import date
 from math import isfinite
 
+from swing_trade_ml.brain.horizons.guard import horizon_refusal
 from swing_trade_ml.brain.horizons.policy import DEFAULT_POLICIES, HORIZONS, HorizonPolicy
+from swing_trade_ml.core import research_config
 
 NO_DECISION = "NO_DECISION"
 NO_DECISION_TEXT = "No decision for this horizon"
@@ -64,11 +66,9 @@ def _refusal(out: ModelOutput, policy: HorizonPolicy, session: date) -> str | No
     """Why this output cannot feed this horizon's decision, or None if it can."""
     label = f"{out.model_name} {out.model_version}"
     horizon = policy.horizon
-    if out.forecast_horizon_sessions != horizon:
-        return (
-            f"{label} forecasts {out.forecast_horizon_sessions} sessions; "
-            f"this workflow needs a {horizon}-session forecast"
-        )
+    mismatch = horizon_refusal(label, out.forecast_horizon_sessions, horizon)
+    if mismatch:
+        return mismatch
     if out.role not in policy.eligible_roles:
         return f"{label} has role {out.role!r} and is not approved for decisions"
     if out.input_session != session:
@@ -96,6 +96,7 @@ def run_horizon(
     *,
     symbol: str | None = None,
     policies: Mapping[int, HorizonPolicy] = DEFAULT_POLICIES,
+    research_caller: bool = False,
 ) -> HorizonRecord:
     """Run one horizon's workflow for one stock and session.
 
@@ -117,6 +118,9 @@ def run_horizon(
     policy = policies.get(horizon)
     if policy is None or not policy.approved or policy.horizon != horizon:
         return none(f"the {horizon}-session decision policy is not approved")
+    if not research_caller and research_config.is_research_only(horizon):
+        # 10D and 15D are research-only (core/research_config.py): no decision word, except for research.
+        return none(f"the {horizon}-session horizon is research-only")
     if due is None:
         return none(f"the exchange calendar does not reach {horizon} sessions after {session}")
     if not outputs:
@@ -164,12 +168,21 @@ def run_all_horizons(
     *,
     symbol: str,
     policies: Mapping[int, HorizonPolicy] = DEFAULT_POLICIES,
+    research_caller: bool = False,
 ) -> dict[int, HorizonRecord]:
     """Run the 5D, 10D and 15D workflows independently for one stock and store all three results."""
     outputs = list(outputs)
     results = {}
     for horizon in HORIZONS:
-        record = run_horizon(horizon, outputs, session, sessions, symbol=symbol, policies=policies)
+        record = run_horizon(
+            horizon,
+            outputs,
+            session,
+            sessions,
+            symbol=symbol,
+            policies=policies,
+            research_caller=research_caller,
+        )
         store.add(record)
         results[horizon] = record
     return results

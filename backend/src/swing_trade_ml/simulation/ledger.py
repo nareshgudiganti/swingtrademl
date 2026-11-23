@@ -89,6 +89,7 @@ class Candidate:
     sector: str | None = None  # an unmapped stock counts as its own sector
     block_reason: str | None = None
     record_id: int | None = None  # the horizon record the pick was read from
+    rule_ref: str | None = None  # a policy with no record (momentum): the rule and version that made the pick
 
 
 Bars = Mapping[int, Mapping[str, Bar]]  # security_id -> session -> bar
@@ -108,6 +109,7 @@ class FillRecord:
     charges: float
     cost: float  # cash out: price * qty + charges
     record_id: int | None = None  # the horizon record the buy was decided from
+    rule_ref: str | None = None  # or, for momentum, the rule and version that made the pick
 
 
 @dataclass(frozen=True, slots=True)
@@ -122,6 +124,7 @@ class ExitRecord:
         False  # sold at the last known close because the stock had no bar for its whole holding window
     )
     record_id: int | None = None  # the horizon record the position was bought from
+    rule_ref: str | None = None  # or, for momentum, the rule and version that made the pick
 
 
 @dataclass(frozen=True, slots=True)
@@ -130,6 +133,7 @@ class BlockRecord:
     symbol: str  # display only
     reason: str
     record_id: int | None = None
+    rule_ref: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -194,6 +198,7 @@ class _Position:
     security_id: int
     symbol: str  # display only
     record_id: int | None
+    rule_ref: str | None
     key: str  # sector bucket
     tier: str | None
     qty: int
@@ -218,7 +223,9 @@ def _sell(price: float, qty: int) -> float:
 def _exit(
     pos: _Position, qty: int, price: float, reason: str, proceeds: float, *, stale: bool = False
 ) -> ExitRecord:
-    return ExitRecord(pos.security_id, pos.symbol, qty, price, reason, proceeds, stale, pos.record_id)
+    return ExitRecord(
+        pos.security_id, pos.symbol, qty, price, reason, proceeds, stale, pos.record_id, pos.rule_ref
+    )
 
 
 def _equity(cash: float, positions: Mapping[int, _Position]) -> float:
@@ -300,7 +307,7 @@ def run_portfolio(
         buys_allowed = min(buys_allowed, rules.max_new_per_day)
 
         def _blk(c: Candidate, why: str) -> BlockRecord:
-            return BlockRecord(c.security_id, c.symbol, why, c.record_id)
+            return BlockRecord(c.security_id, c.symbol, why, c.record_id, c.rule_ref)
 
         # 1. Buy yesterday's picks at today's open (best score first, then stock id, so the order is fixed).
         considered = 0
@@ -410,6 +417,7 @@ def run_portfolio(
                 security_id=sid,
                 symbol=cand.symbol,
                 record_id=cand.record_id,
+                rule_ref=cand.rule_ref,
                 key=key,
                 tier=tier,
                 qty=qty,
@@ -419,7 +427,11 @@ def run_portfolio(
                 target_px=fill * (1 + rules.target),
                 last_close=fill,
             )
-            fills.append(FillRecord(sid, cand.symbol, qty, fill, brokerage + taxes, cost, cand.record_id))
+            fills.append(
+                FillRecord(
+                    sid, cand.symbol, qty, fill, brokerage + taxes, cost, cand.record_id, cand.rule_ref
+                )
+            )
 
         # 2. Walk every open position through today's bar: stop, then half-out, then target, then the horizon.
         stale: set[int] = set()

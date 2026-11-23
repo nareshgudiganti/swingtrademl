@@ -150,7 +150,8 @@ def save_record(
 
 def save_for_symbol(db: Session, record: RecordLike, **kwargs: Any) -> SaveResult:
     """Resolve the stock through the identity service first. An unknown stock is refused and nothing is written."""
-    security_id = resolve(db, symbol=record.symbol)
+    # The symbol the stock had on the record's own session (a rename is followed), never today's.
+    security_id = resolve(db, symbol=record.symbol, on_date=record.input_session)
     if security_id is None:
         raise UnknownSecurityError(f"stock {record.symbol!r} is not recognised")
     return save_record(db, record, security_id=security_id, **kwargs)

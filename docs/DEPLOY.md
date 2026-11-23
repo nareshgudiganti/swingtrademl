@@ -104,9 +104,17 @@ so any fix that has to change prod behaviour must be a **code** change.
    api, frontend and worker and waits up to 3 minutes for a fresh worker heartbeat. If a step
    fails after the worker was stopped, the script tries to put the previous images back and
    start them, but it cannot undo migrations ("Database remains migrated"), and if putting the
-   old images back also fails the **worker stays stopped**. A
-   failure before the worker was stopped (tests, window, build) leaves the running site
-   as it was. The deploy run itself sends no Telegram message; see step 7.
+   old images back also fails, `release.sh` makes a last attempt with `docker start stml-worker`
+   and says so in the run log if even that fails. A failure before the worker was stopped
+   (tests, window, disk check, build) leaves the running site as it was, and the script puts
+   `/root/app` back on the commit that is running, so the next deploy records the right previous
+   commit. A failed or cancelled deploy job sends a Telegram message (the `deploy-failed` job).
+
+   **Expect an uptime alert during a deploy.** The worker is stopped for the database dump and the
+   migration, a few minutes, and `uptime.yml` now reads `scheduler_running` from the public
+   `/ready` answer without needing the API key. If an uptime check happens to run in that window it
+   messages Telegram that the scheduler is not running, and messages again when it is back. That is
+   the deploy, not a fault: confirm the deploy run finished green and the next uptime run says all good.
 
 7. **Confirm prod is actually serving it.**
 
@@ -119,9 +127,10 @@ so any fix that has to change prod behaviour must be a **code** change.
    `/status` does not expose the released commit, so a green deploy run plus a
    healthy `/health` is the available evidence. The deploy's `smoke` job does
    these checks automatically from outside, but it runs only after the deploy job
-   succeeded, and only the smoke job messages Telegram (when its checks fail). If the
-   deploy job itself failed, nothing is sent: open the run. The backstop is `uptime.yml`,
-   which is scheduled every 10 minutes (GitHub can run it later), checks the site and the scheduler, and messages Telegram
+   succeeded and messages Telegram when its checks fail. A failed or cancelled deploy job is
+   announced by the separate `deploy-failed` job; if that message cannot be delivered its step
+   goes red, so open the run either way. The backstop is `uptime.yml`,
+   which is scheduled every 10 minutes (GitHub can run it much later), checks the site and the scheduler, and messages Telegram
    (see `docs/QUALITY-CHECKS.md`, "After-deploy smoke test (qa2)"). Where the change is
    behavioural, name the observation that will confirm it and when it happens —
    for a scan change, that is the next 15:45 IST run.

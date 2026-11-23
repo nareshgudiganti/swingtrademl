@@ -98,7 +98,8 @@ def test_only_known_owner_only_files_read_lane_records():
     api_importers = {p for p in _importers(LANE_MODULES) if p.startswith("api/")}
     assert api_importers <= allowed_api, f"a new route file reads lane records: {sorted(api_importers - allowed_api)}"
     outside = {p for p in _importers(("swing_trade_ml.brain.horizons",)) if not p.startswith("brain/horizons/")}
-    assert outside == set(), f"live code imports the horizon workflows: {sorted(outside)}"
+    # Only the 5-session nightly job (off by default) may call the workflow, and it runs only the 5-session one.
+    assert outside == {"services/horizon_nightly.py"}, f"live code imports the horizon workflows: {sorted(outside)}"
 
 
 @pytest.mark.parametrize("name", ["lanes", "lane_picks", "h05", "weekly_report"])
@@ -111,11 +112,12 @@ def test_the_lane_routers_are_owner_only(name):
     assert require_owner in {d.dependency for d in router.dependencies}
 
 
-def test_nothing_reads_horizon_records_yet_outside_its_own_service():
-    """Records of all three horizons live in one table; the service is the only door, and nothing calls it yet.
+def test_nothing_reads_horizon_records_outside_its_own_service_and_the_nightly_writer():
+    """Records of all three horizons live in one table; the service is the only door, and only the nightly writer calls it.
     A new caller must be added here on purpose, and must use `product_records`, which leaves 10D and 15D out."""
     importers = _importers(("swing_trade_ml.services.horizon_records",))
-    assert importers == set(), f"new readers of horizon records: {sorted(importers)}"
+    # The only caller is the 5-session nightly job (disabled by default); it writes 5D records and reads none back.
+    assert importers == {"services/horizon_nightly.py"}, f"new readers of horizon records: {sorted(importers)}"
     table_importers = _importers(("swing_trade_ml.db.models.horizon",)) - {"services/horizon_records.py"}
     assert table_importers <= {"db/models/__init__.py"}, sorted(table_importers)
 

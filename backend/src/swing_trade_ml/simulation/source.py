@@ -196,6 +196,48 @@ def _refuse_ambiguity(db: Any, rows: Sequence[Any], named: Sequence[ModelRef]) -
     )
 
 
+def bars_from_candles(
+    db: Any, security_ids: Sequence[int], sessions: Sequence[str]
+) -> dict[int, dict[str, Any]]:
+    """security_id -> session (ISO date) -> `Bar`, from the stored daily candles. Each candle's instrument is matched to
+    its security through the identity read API (`consumers.security_for_instrument`: token and symbol must agree),
+    never by symbol alone. Candles are stamped IST midnight, so the session is the bar's date in IST. A session with no
+    stored candle simply has no bar (the ledger then blocks the buy with `no_price` or marks the position stale):
+    nothing is filled in or carried over. Reads only."""
+    from datetime import datetime, timedelta
+
+    from sqlalchemy import select
+
+    from swing_trade_ml.core.market_session import IST
+    from swing_trade_ml.db.models.market import Candle
+    from swing_trade_ml.services.identity import consumers
+    from swing_trade_ml.simulation.ledger import Bar
+
+    wanted, wanted_ids = set(sessions), set(security_ids)
+    if not wanted or not wanted_ids:
+        return {}
+    first = date.fromisoformat(min(wanted)) - timedelta(days=1)
+    last = date.fromisoformat(max(wanted)) + timedelta(days=2)
+    start = datetime.combine(first, datetime.min.time(), tzinfo=IST)
+    end = datetime.combine(last, datetime.min.time(), tzinfo=IST)
+    window = (Candle.interval == "day", Candle.ts >= start, Candle.ts < end)
+    security_of: dict[int, int] = {}
+    for instrument_id in db.scalars(select(Candle.instrument_id).where(*window).distinct()):
+        security_id = consumers.security_for_instrument(db, instrument_id)
+        if security_id in wanted_ids:
+            security_of[instrument_id] = security_id
+    out: dict[int, dict[str, Any]] = {}
+    if not security_of:
+        return out
+    for candle in db.scalars(select(Candle).where(Candle.instrument_id.in_(set(security_of)), *window)):
+        session = candle.ts.astimezone(IST).date().isoformat()
+        if session in wanted:
+            out.setdefault(security_of[candle.instrument_id], {})[session] = Bar(
+                float(candle.open), float(candle.high), float(candle.low), float(candle.close)
+            )
+    return out
+
+
 def records_by_id(db: Any, security_ids: Sequence[int]) -> dict[int, Any]:
     """record id -> the horizon record row, for the given stocks, every revision, read through the horizon records
     service. Used to trace a stored fill back to the record it was decided from."""

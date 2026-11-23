@@ -11,13 +11,19 @@ import { refusalText } from './trackerRules'
 export const GROWW_MATCH_KEY = ['growwMatching']
 const TRACKER_KEY = ['myWatchlistTracker']
 
+/** A holding can only be matched through its ISIN: without one there is nothing to put in the request path. */
+const hasIsin = (isin: string | null | undefined): isin is string => !!isin && isin.trim() !== ''
+
+const unknownOr = (value: number | null, show: (n: number) => string): string => (value == null ? 'unknown' : show(value))
+
 /** Tie one Groww holding (by ISIN) to the chosen search hit: the request carries the hit's instrument id. */
-export const pickStock = (isin: string, hit: Pick<Instrument, 'id'>) => api.growwMatch(isin, hit.id)
+export const pickStock = (isin: string, hit: Pick<Instrument, 'id'>) =>
+  hasIsin(isin) ? api.growwMatch(isin, hit.id) : Promise.resolve(null)
 
 /** Accept the stock Groww's name was matched to: posts the suggested instrument id. A row with no suggestion
  *  (or one the server could not point at a stock) posts nothing. */
 export const acceptSuggestion = (row: GrowwMatchItem) =>
-  row.match_state === 'suggested' && row.suggested_instrument_id != null
+  row.match_state === 'suggested' && row.suggested_instrument_id != null && hasIsin(row.isin)
     ? api.growwMatch(row.isin, row.suggested_instrument_id)
     : Promise.resolve(null)
 
@@ -65,7 +71,10 @@ export function GrowwMatchingPanel() {
   }
   const all = useMutation({ mutationFn: api.growwConfirmAll, onSuccess: reload, onError: (e) => setError(refusalText(e)) })
   const accept = useMutation({ mutationFn: acceptSuggestion, onSuccess: reload, onError: (e) => setError(refusalText(e)) })
-  const items: GrowwMatchItem[] = q.data?.items ?? []
+  const listed: GrowwMatchItem[] = q.data?.items ?? []
+  // Rows with no ISIN are counted, never listed: the server already leaves them out, a blank one is caught here.
+  const items = listed.filter((i) => hasIsin(i.isin))
+  const withoutIsin = (q.data?.without_isin ?? 0) + (listed.length - items.length)
   if (q.isError && items.length === 0) {
     return (
       <p className="tm-neg tmn-small" role="alert" data-testid="groww-matching-error">
@@ -73,9 +82,17 @@ export function GrowwMatchingPanel() {
       </p>
     )
   }
-  if (items.length === 0) return null
+  const noIsinLine = withoutIsin > 0 && (
+    <p className="tm-dim tmn-small" data-testid="groww-no-isin">
+      {withoutIsin === 1
+        ? '1 Groww holding cannot be matched because Groww gave no ISIN for it.'
+        : `${withoutIsin} Groww holdings cannot be matched because Groww gave no ISIN for them.`}
+    </p>
+  )
+  if (items.length === 0) return noIsinLine || null
   const hasSuggestions = items.some((i) => i.match_state === 'suggested')
   return (
+    <>
     <section className="tmn-card gt-gmatch" data-testid="groww-matching" aria-label="Needs matching">
       <h3>Needs matching</h3>
       <p className="tm-dim tmn-small">
@@ -89,9 +106,10 @@ export function GrowwMatchingPanel() {
       {items.map((i) => (
         <div key={i.isin} className="gt-gmatch-row" data-isin={i.isin}>
           <div>
-            <b>{i.trading_symbol}</b> <span className="tm-dim num">{i.isin}</span>
+            <b>{i.trading_symbol ?? 'unknown'}</b> <span className="tm-dim num">{i.isin}</span>
             <div className="tm-dim tmn-small">
-              {i.quantity.toLocaleString('en-IN')} shares at ₹{i.average_price.toLocaleString('en-IN')}
+              {unknownOr(i.quantity, (n) => n.toLocaleString('en-IN'))} shares at{' '}
+              {unknownOr(i.average_price, (n) => `₹${n.toLocaleString('en-IN')}`)}{i.average_price == null ? ' price' : ''}
               {i.match_state === 'suggested' && i.suggested_symbol ? ` · Suggested: ${i.suggested_symbol}` : ''}
             </div>
           </div>
@@ -111,5 +129,7 @@ export function GrowwMatchingPanel() {
         </p>
       )}
     </section>
+    {noIsinLine}
+    </>
   )
 }

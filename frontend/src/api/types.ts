@@ -755,13 +755,20 @@ export interface GrowwSyncResult {
 
 export interface GrowwMatchItem {
   isin: string
-  trading_symbol: string
-  quantity: number
-  average_price: number
+  /** Groww's name for the holding, quantity and average price: any of them can be missing in a partial sync. */
+  trading_symbol: string | null
+  quantity: number | null
+  average_price: number | null
   match_state: 'suggested' | 'needs_matching'
   suggested_symbol: string | null
   /** The stock the suggestion points at: what a one-tap "Use ..." posts. Null without a suggestion. */
   suggested_instrument_id: number | null
+}
+
+/** GET /groww/matching. Rows with no ISIN cannot be matched, so the server leaves them out of `items` and counts them. */
+export interface GrowwMatching {
+  items: GrowwMatchItem[]
+  without_isin: number
 }
 
 export interface WatchTracker {

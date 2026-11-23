@@ -466,6 +466,64 @@ describe('Groww Tracker page', () => {
       expect(html).toContain('Groww is busy or has no account to update right now')
     })
 
+    // ---- the server may leave quantity, price and symbol empty (a partial sync) and counts rows with no ISIN ----
+
+    it('a row with no quantity, price or symbol shows "unknown", never 0, and does not crash', () => {
+      const holes: GrowwMatchItem = { ...UNMATCHED, isin: 'INE000C01033', trading_symbol: null, quantity: null, average_price: null }
+      const html = render('/trademind/groww-tracker', withGroww({ ...GROWW_FAILED, last_status: 'partial' }), (c) =>
+        c.setQueryData(GROWW_MATCH_KEY, { items: [holes], without_isin: 0 }),
+      ).replace(/<!-- -->/g, '')
+      expect(html).toContain('data-isin="INE000C01033"')
+      expect(html).toContain('unknown shares at unknown price')
+      expect(html).not.toMatch(/0 shares at|₹0|NaN|undefined|null/)
+      // quantity and price known, symbol not: each hole is named on its own
+      const partly = { ...UNMATCHED, trading_symbol: null }
+      const out = render('/trademind/groww-tracker', withGroww(GROWW_FAILED), (c) =>
+        c.setQueryData(GROWW_MATCH_KEY, { items: [partly], without_isin: 0 }),
+      ).replace(/<!-- -->/g, '')
+      expect(out).toContain('unknown')
+      expect(out).toContain('5 shares at ₹120.5')
+    })
+
+    it('rows Groww gave no ISIN for are counted in one plain line, and are not listed', () => {
+      const html = render('/trademind/groww-tracker', withGroww(GROWW_FAILED), (c) =>
+        c.setQueryData(GROWW_MATCH_KEY, { items: [UNMATCHED], without_isin: 2 }),
+      ).replace(/<!-- -->/g, '')
+      expect(html).toContain('data-testid="groww-no-isin"')
+      expect(html).toContain('2 Groww holdings cannot be matched because Groww gave no ISIN for them.')
+      const one = render('/trademind/groww-tracker', withGroww(GROWW_FAILED), (c) =>
+        c.setQueryData(GROWW_MATCH_KEY, { items: [], without_isin: 1 }),
+      ).replace(/<!-- -->/g, '')
+      expect(one).toContain('1 Groww holding cannot be matched because Groww gave no ISIN for it.')
+      const none = render('/trademind/groww-tracker', withGroww(GROWW_FAILED), (c) =>
+        c.setQueryData(GROWW_MATCH_KEY, { items: [UNMATCHED], without_isin: 0 }),
+      )
+      expect(none).not.toContain('data-testid="groww-no-isin"')
+    })
+
+    it('a row with a blank ISIN is counted like the others and never gets a request', async () => {
+      const blank: GrowwMatchItem = { ...SUGGESTED, isin: '  ' }
+      const html = render('/trademind/groww-tracker', withGroww(GROWW_FAILED), (c) =>
+        c.setQueryData(GROWW_MATCH_KEY, { items: [blank, UNMATCHED], without_isin: 0 }),
+      ).replace(/<!-- -->/g, '')
+      expect(html).toContain('1 Groww holding cannot be matched because Groww gave no ISIN for it.')
+      expect(html).not.toContain('Find the stock for  ')
+      expect(html).not.toContain('Use BETA')
+      const spy = vi.spyOn(api, 'growwMatch').mockResolvedValue({})
+      await acceptSuggestion(blank)
+      await pickStock('', { id: 22 })
+      await pickStock('   ', { id: 22 })
+      expect(spy).not.toHaveBeenCalled()
+      spy.mockRestore()
+    })
+
+    it('a refresh that came back empty asks for the owner to confirm, and never says "Done. 0 holdings"', async () => {
+      const r = await runRefresh(async () => ({ status: 'empty_unconfirmed', holdings_count: 0, finished_at: null }))
+      expect(r.kind).toBe('confirm')
+      expect(r.text).toBe('Groww returned no holdings. It needs your confirmation before anything changes.')
+      expect(r.text).not.toMatch(/done|0 holdings/i)
+    })
+
     it('every refusal reads as a plain sentence, whatever the server wrote', () => {
       const server: [number, string][] = [
         [403, "This is a private account. You don't have access."],

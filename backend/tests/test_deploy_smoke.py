@@ -19,11 +19,25 @@ PAGE = smoke.Response(200, "text/html; charset=utf-8", b'<html><div id="root"></
 STATUS_PAPER = json.dumps({"trading_mode": "paper", "live_trading_enabled": False}).encode()
 
 
+def ready_body(ready=True, database=True, scheduler=True) -> bytes:
+    """What /api/v1/ready answers (schemas.ReadinessResponse)."""
+    return json.dumps(
+        {
+            "ready": ready,
+            "database": database,
+            "broker_authenticated": False,
+            "scheduler_running": scheduler,
+            "trading_mode": "paper",
+            "live_trading_enabled": False,
+        }
+    ).encode()
+
+
 def _ok_site(**overrides):
     """A fake site: path -> Response; overrides replace single paths (a list = one answer per call)."""
     answers = {
         "/api/v1/health": smoke.Response(200, "application/json", b"{}"),
-        "/api/v1/ready": smoke.Response(200, "application/json", b"{}"),
+        "/api/v1/ready": smoke.Response(200, "application/json", ready_body()),
         "/api/v1/status": smoke.Response(200, "application/json", STATUS_PAPER),
         "/api/v1/brain/stage": smoke.Response(200, "application/json", b"{}"),
         "/api/v1/risk/limits": smoke.Response(200, "application/json", b"{}"),
@@ -159,6 +173,106 @@ def test_main_writes_problems_for_the_telegram_step(monkeypatch, tmp_path):
     assert smoke.main() == 1
     text = out.read_text()
     assert text.startswith("problems<<SMOKE_EOF\n") and "website health check: no answer" in text
+
+
+class _Answer:
+    """An HTTP answer for a faked urlopen: a status, headers, and what read() hands back (or raises)."""
+
+    status = 200
+
+    def __init__(self, headers, body=b"", error=None):
+        self.headers = headers
+        self._body = body
+        self._error = error
+
+    def read(self, _limit):
+        if self._error is not None:
+            raise self._error
+        return self._body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+def _get_with(monkeypatch, answer):
+    monkeypatch.setattr(smoke.urllib.request, "urlopen", lambda request, timeout: answer)
+    return smoke.http_get(BASE + "/api/v1/ready", None)
+
+
+def test_a_body_cut_short_of_its_declared_length_is_no_answer(monkeypatch):
+    """A partial read must never pass: 200 with fewer bytes than Content-Length is treated as no answer."""
+    whole = ready_body()
+    cut = _Answer({"Content-Type": "application/json", "Content-Length": str(len(whole))}, whole[:20])
+    resp = _get_with(monkeypatch, cut)
+    assert resp.status == 0
+    assert smoke.judge_ready(resp) == "no answer"
+
+
+def test_a_read_that_raises_part_way_is_no_answer(monkeypatch):
+    import http.client
+
+    broken = _Answer({"Content-Type": "application/json"}, error=http.client.IncompleteRead(b"{", 50))
+    resp = _get_with(monkeypatch, broken)
+    assert resp.status == 0 and smoke.judge_ready(resp) == "no answer"
+    reset = _Answer({"Content-Type": "application/json"}, error=ConnectionResetError())
+    assert _get_with(monkeypatch, reset).status == 0
+
+
+def test_a_complete_body_is_still_read_and_judged(monkeypatch):
+    whole = ready_body()
+    ok = _Answer({"Content-Type": "application/json", "Content-Length": str(len(whole))}, whole)
+    resp = _get_with(monkeypatch, ok)
+    assert resp.status == 200 and smoke.judge_ready(resp) is None
+
+
+def test_a_cut_off_ready_answer_fails_the_smoke_test_then_passes_when_complete():
+    cut = smoke.Response(0, "", b"")
+    whole = smoke.Response(200, "application/json", ready_body())
+    get, _ = _ok_site(**{"/api/v1/ready": [cut, whole]})
+    passed, _, sleeps, _ = _run(get)
+    assert passed and sleeps == [5]
+    get, _ = _ok_site(**{"/api/v1/ready": cut})
+    passed, problems, _, _ = _run(get, deadline=40)
+    assert not passed and problems == ["database ready check: no answer"]
+
+
+def test_ready_needs_the_body_to_say_ready_database_and_scheduler():
+    """HTTP 200 alone is not up: /ready answers 200 even when the database or the scheduler is down."""
+    ok = smoke.Response(200, "application/json", ready_body())
+    assert smoke.judge_ready(ok) is None
+    cases = [
+        (ready_body(scheduler=False), "scheduler"),
+        (ready_body(database=False), "database"),
+        (ready_body(ready=False), "not ready"),
+        (b"{}", "ready"),
+        (b"not json", "ready"),
+        (json.dumps({"ready": "true", "database": True, "scheduler_running": True}).encode(), "ready"),
+    ]
+    for body, fragment in cases:
+        problem = smoke.judge_ready(smoke.Response(200, "application/json", body))
+        assert problem and fragment in problem, (body, problem)
+    assert smoke.judge_ready(smoke.Response(503, "", b"")) == "answered 503"
+    assert smoke.judge_ready(smoke.Response(0, "", b"")) == "no answer"
+
+
+def test_a_scheduler_that_is_down_fails_the_smoke_test_with_a_plain_reason():
+    stopped = smoke.Response(200, "application/json", ready_body(scheduler=False))
+    get, _ = _ok_site(**{"/api/v1/ready": stopped})
+    passed, problems, _, _ = _run(get, deadline=40)
+    assert not passed
+    assert len(problems) == 1 and problems[0].startswith("database ready check:")
+    assert "scheduler" in problems[0]
+
+
+def test_a_scheduler_that_comes_up_after_the_restart_passes_on_a_retry():
+    stopped = smoke.Response(200, "application/json", ready_body(scheduler=False))
+    running = smoke.Response(200, "application/json", ready_body())
+    get, _ = _ok_site(**{"/api/v1/ready": [stopped, running]})
+    passed, _, sleeps, _ = _run(get)
+    assert passed and sleeps == [5]
 
 
 def test_expect_200():

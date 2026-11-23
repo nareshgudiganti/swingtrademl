@@ -14,6 +14,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
+from swing_trade_ml.core import modules
 from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.workers import job_runs, jobs
@@ -265,6 +266,11 @@ def start_scheduler() -> None:
     # 5-session recommendation records (disabled by default): the evening job exists only when the owner has
     # set HORIZON_NIGHTLY_ENABLED. It reads predictions and writes horizon_records only; it never trades.
     add_horizon_nightly_job(scheduler)
+
+    # Leave out the jobs of any module that is switched off (core/modules.py). Every module is on by default,
+    # so this removes nothing unless a module was switched off in this process. The horizon nightly job is not
+    # named by any module (it is off by default), so the registry leaves it alone.
+    modules.apply_to_scheduler(scheduler)
 
     # Observe only: records each job's last run for Admin > Jobs (workers/job_runs.py). Never raises.
     job_runs.attach(scheduler)

@@ -125,7 +125,9 @@ REGISTRY: tuple[Module, ...] = (
         "research_lanes",
         "Research lanes (owner only)",
         route_prefixes=("/research/lanes", "/research/lane-picks", "/research/h05"),
-        packages=("swing_trade_ml.shadow_lanes", "swing_trade_ml.brain.lanes"),
+        # The h05 lane's own package is deliberately not named here: nothing outside the lane may reference it
+        # (tests/test_h05_service.py). The registry only needs its route prefix above.
+        packages=("swing_trade_ml.shadow_lanes",),
     ),
 )
 

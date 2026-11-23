@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from collections import defaultdict, deque
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, time, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -25,6 +25,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from swing_trade_ml.db.models.fills import BrokerFill
+from swing_trade_ml.services import report_metrics as rm
 from swing_trade_ml.services.costs import compute_charges
 
 IST = ZoneInfo("Asia/Kolkata")
@@ -84,7 +85,7 @@ def _match(
                     "gross_pnl": _r(gross),
                     "charges": _r(charges),
                     "net_pnl": _r(gross - charges),
-                    "pnl_pct": _r((gross - charges) / cost * 100) if cost else 0.0,
+                    "pnl_pct": _r(rm.percent_of(gross - charges, cost)),
                     "holding_days": max((f.executed_at.date() - lot.bought_at.date()).days, 0),
                 }
             )
@@ -108,14 +109,31 @@ def _day(value: datetime) -> date:
     return value.astimezone(IST).date()
 
 
+def _day_start(day: date) -> datetime:
+    """Midnight at the start of an Indian calendar day, as an aware timestamp the database can compare."""
+    return datetime.combine(day, time.min, tzinfo=IST)
+
+
 def build_report(
     db: Session,
     start: date | None,
     end: date | None,
     holdings: list[dict[str, Any]] | None,
 ) -> dict[str, Any]:
-    """`holdings` is Zerodha's live holdings list, or None when not logged in."""
-    fills = list(db.execute(select(BrokerFill)).scalars().all())
+    """`holdings` is Zerodha's live holdings list, or None when not logged in.
+
+    What is loaded, and why:
+    * Fills up to the end of the last Indian day of the period (an SQL bound). Fills after it cannot change an
+      earlier match (matching is in time order), so they are never loaded.
+    * Fills from BEFORE the period start are loaded on purpose, whatever the start: a sale in the period is
+      matched first-bought-first-sold against buys from any earlier time, so cutting history at the start
+      would give wrong profits. That is the one full-history load here; the period then picks the sales shown.
+    * The records block (count, first and last fill) is over the whole record by definition, in one aggregate.
+    """
+    history = select(BrokerFill)
+    if end is not None and end < date.max:  # date.max has no next day, and nothing can be after it
+        history = history.where(BrokerFill.executed_at < _day_start(end + timedelta(days=1)))
+    fills = list(db.execute(history).scalars().all())
     closed_all, unmatched_all, _lots = _match(fills)
 
     def in_period(moment: datetime) -> bool:
@@ -179,9 +197,10 @@ def build_report(
         r["sold_value"] = _r(r["sold_value"])
         r["realized_pnl"] = _r(r["realized_pnl"])
 
-    net = sum(c["net_pnl"] for c in closed)
-    wins = sum(1 for c in closed if c["net_pnl"] > 0)
-    losses = sum(1 for c in closed if c["net_pnl"] < 0)
+    nets = [c["net_pnl"] for c in closed]
+    net = rm.total(nets)
+    wins = rm.win_count(nets)
+    losses = rm.strict_loss_count(nets)  # a zero trade is neither a win nor a loss here (see report_metrics)
     per_symbol_net: dict[str, float] = defaultdict(float)
     for c in closed:
         per_symbol_net[c["symbol"]] += c["net_pnl"]
@@ -200,13 +219,11 @@ def build_report(
             "buy_count": sum(1 for f in period_fills if f.side == "BUY"),
             "sell_count": sum(1 for f in period_fills if f.side == "SELL"),
             "realized_pnl": _r(net),
-            "gross_pnl": _r(sum(c["gross_pnl"] for c in closed)),
-            "charges": _r(sum(c["charges"] for c in closed)),
+            "gross_pnl": _r(rm.total(c["gross_pnl"] for c in closed)),
+            "charges": _r(rm.total(c["charges"] for c in closed)),
             "winning_sales": wins,
             "losing_sales": losses,
-            "average_holding_days": (
-                _r(sum(c["holding_days"] for c in closed) / len(closed)) if closed else None
-            ),
+            "average_holding_days": (_r(rm.mean([c["holding_days"] for c in closed])) if closed else None),
             "best_stock": {"symbol": best[0], "pnl": _r(best[1])} if best and best[1] > 0 else None,
             "worst_stock": {"symbol": worst[0], "pnl": _r(worst[1])} if worst and worst[1] < 0 else None,
             "open_pnl": _r(open_pnl_total) if open_pnl_total is not None else None,

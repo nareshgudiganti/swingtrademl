@@ -6,9 +6,10 @@ A later lane (10-day, 15-day) adds one more source to `_rows`; the shape of a ro
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 
 from swing_trade_ml.api.deps import DbSession, require_owner
@@ -17,6 +18,8 @@ from swing_trade_ml.db.models.lanes import H05Run, H05Signal
 router = APIRouter(prefix="/research/lane-picks", tags=["lane-picks"], dependencies=[Depends(require_owner)])
 
 CAP_LABEL = {"large": "Large cap", "mid": "Mid cap", "small": "Small cap"}
+# The one lane there is today (h05). A horizon with no lane has nothing to read.
+LANE_HORIZON = 5
 NOTE = (
     "Test picks only. Not trades and not advice. "
     "Each horizon is judged on its own; scores are not comparable across horizons."
@@ -29,18 +32,34 @@ def _status(s: H05Signal) -> str:
     return s.trade_status
 
 
-def _rows(db: DbSession) -> list[dict[str, Any]]:
+def _rows(
+    db: DbSession,
+    start: date | None = None,
+    end: date | None = None,
+    cap: str | None = None,
+    horizon: int | None = None,
+) -> list[dict[str, Any]]:
+    """Selected picks, filtered in SQL: `signal_day` (an Indian session date) from `start` to `end` inclusive,
+    and the cap size. A horizon other than the lane's own reads nothing."""
+    if horizon is not None and horizon != LANE_HORIZON:
+        return []
     q = (
         select(H05Signal, H05Run.run_no)
         .join(H05Run, H05Run.id == H05Signal.run_id)
         .where(H05Signal.selected.is_(True))
         .order_by(H05Signal.signal_day.desc(), H05Signal.group, H05Signal.group_rank)
     )
+    if start is not None:
+        q = q.where(H05Signal.signal_day >= start)
+    if end is not None:
+        q = q.where(H05Signal.signal_day <= end)
+    if cap is not None:
+        q = q.where(H05Signal.group == cap)
     out: list[dict[str, Any]] = []
     for s, run_no in db.execute(q).all():
         out.append(
             {
-                "horizon_days": 5,
+                "horizon_days": LANE_HORIZON,
                 "lane": "h05",
                 "run_no": run_no,
                 "signal_day": s.signal_day.isoformat(),
@@ -68,13 +87,13 @@ def lane_picks(
     db: DbSession,
     horizon: int | None = Query(default=None, ge=1, le=30),
     cap: str | None = Query(default=None, pattern="^(large|mid|small)$"),
+    start: date | None = Query(default=None, alias="from"),
+    end: date | None = Query(default=None, alias="to"),
     limit: int = Query(default=300, ge=1, le=2000),
 ) -> dict[str, Any]:
-    rows = _rows(db)
-    if horizon is not None:
-        rows = [r for r in rows if r["horizon_days"] == horizon]
-    if cap is not None:
-        rows = [r for r in rows if r["cap"] == cap]
+    if start is not None and end is not None and end < start:
+        raise HTTPException(422, "'to' must be on or after 'from'.")
+    rows = _rows(db, start, end, cap, horizon)
     finished = [r for r in rows if r["status"] != "open" and r["net_return"] is not None]
     wins = [r for r in finished if r["net_return"] > 0]
     return {

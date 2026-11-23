@@ -427,10 +427,12 @@ export const api = {
   modelRegistrySlots: () => get<RegistrySlots>('/model-registry/slots'),
   modelRegistryChange: (slotKey: string, body: RegistrySlotChange) =>
     patch<RegistrySlot>(`/model-registry/slots/${encodeURIComponent(slotKey)}`, body),
-  lanePicks: (horizon?: number, cap?: string) => {
+  lanePicks: (horizon?: number, cap?: string, from?: string, to?: string) => {
     const q = new URLSearchParams()
     if (horizon) q.set('horizon', String(horizon))
     if (cap) q.set('cap', cap)
+    if (from) q.set('from', from)
+    if (to) q.set('to', to)
     const qs = q.toString()
     return get<LanePicks>(`/research/lane-picks${qs ? `?${qs}` : ''}`)
   },

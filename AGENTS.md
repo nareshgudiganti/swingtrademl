@@ -10,8 +10,9 @@ The shared rules below add the owner's approval and agent-role requirements.
 
 At the start of each task:
 
-1. Read `CLAUDE.md`, `docs/architecture/CURRENT-STATE.md`, and
-   `docs/ai/HANDOFF.md` for the latest session handoff.
+1. Read `CLAUDE.md`, `docs/ai/DEV-QUEUE.md` (the priority queue and resume steps),
+   `docs/ai/HANDOFF.md` (the latest handoff) and `docs/architecture/CURRENT-STATE.md`.
+   The queue and handoff are local to the main checkout: never push them.
 2. Check `git status --short` and preserve existing user changes.
 3. Read any more specific `AGENTS.md` instructions in the directories you touch.
 4. Inspect the relevant implementation and tests before making a focused change.
@@ -49,8 +50,8 @@ Stay read-only during review tasks.
 3. Claude verifies each finding against the code before acting
    (`superpowers:receiving-code-review`), fixes the valid ones, and marks each as
    fixed, rejected (with reason), or deferred in `REVIEW.md`.
-4. The owner approves before anything reaches `main`, because a push to `main`
-   deploys to production.
+4. The owner approves before anything reaches `main`. A merge does not deploy:
+   a production deploy is a separate manual run that needs its own approval.
 
 ## TradeMind critical boundaries
 
@@ -66,8 +67,8 @@ Stay read-only during review tasks.
 - Keep trading in paper mode. Never enable live trading or place real orders.
 - Do not loosen risk limits. Changes to order placement, sizing, stops, or limits
   require tests and owner approval before reaching `main`.
-- Pushing to `main` deploys to production. Do not push or deploy as part of routine
-  local editing unless the owner has authorized it.
+- `main` takes pull requests only, and merging does not deploy. Do not push, merge,
+  enable the deploy workflow or deploy unless the owner has authorized that action.
 - Never read or display the root `.env` file or expose credentials. Use
   `.env.example` to inspect available settings. The shared rules above require
   approval for production access; credential-handling exceptions in `CLAUDE.md`
@@ -94,7 +95,8 @@ Stay read-only during review tasks.
 
 ## Handoff
 
-Use `docs/ai/HANDOFF.md` for task information. Include the current branch, changed
+Use `docs/ai/DEV-QUEUE.md` for priority and `docs/ai/HANDOFF.md` for task information.
+Update both before a session stops. Include the current branch, changed
 files, test results, remaining issues, and the next agent's task. Update it only
 when the session permits writes; during read-only reviews, provide proposed
 handoff updates in the response.

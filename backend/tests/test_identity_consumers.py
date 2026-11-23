@@ -284,15 +284,6 @@ def test_a_retried_scan_records_one_ledger_row_per_stock_horizon_and_session(db_
         assert len(rows) == 1 and rows[0].revision == 1 and rows[0].horizon_days == 15
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "KNOWN (#360): services/execution.py record_signal (line 59) always inserts, so a retried scan records a "
-        "second v1 `signals` row for the same strategy, stock, horizon and session. The fix is in the v1 trading "
-        "path (S7: needs review-risk and the owner's approval), so it is NOT made here. execution.py is not in "
-        "trial_freeze.json, but it is the signal-to-order path. The ledger above is not affected."
-    ),
-)
 def test_a_retried_scan_records_one_v1_signal(db_session):
     inst = _instrument(db_session, "SIG390")
     strategy = Strategy(name="sig390", strategy_type="ml_swing", params={}, is_active=True, mode="paper")

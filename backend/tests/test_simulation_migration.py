@@ -69,13 +69,13 @@ def _tables(connection, name):
     return set(inspect(connection).get_table_names(schema=name))
 
 
-def test_it_chains_after_horizon_and_is_the_only_head():
+def test_it_chains_after_horizon_and_the_signal_key_migration_is_the_only_head():
     migration = _load("*_simulation_persistence.py", "simulation_chain")
     assert (migration.revision, migration.down_revision) == ("simulation01", "horizon01")
     config = Config(str(BACKEND / "alembic.ini"))
     config.set_main_option("script_location", str(BACKEND / "alembic"))
-    # the module switches (#291) sit on top of it now; it stays the one chain, with one head
-    assert ScriptDirectory.from_config(config).get_heads() == ["modswitch01"]
+    # the module switches (#291) and the signal key (#360) sit on top of it; it stays the one chain, with one head
+    assert ScriptDirectory.from_config(config).get_heads() == ["signalkey01"]
 
 
 def test_upgrade_adds_exactly_the_eight_simulation_tables_and_changes_nothing_else(schema):

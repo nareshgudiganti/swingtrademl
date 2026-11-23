@@ -128,8 +128,21 @@ def _empty_counts() -> dict[str, int]:
     return {"updated": 0, "added": 0, "not_held": 0, "pending_sale": 0, "needs_matching": 0}
 
 
-def apply_sync(db: Session, sync: GrowwSync, *, user_id: int) -> dict:
-    """Apply one complete sync's confirmed rows to this user's tracker rows. Does not commit."""
+def _changed_after(item: UserWatchlistItem, sync: GrowwSync) -> bool:
+    """True when the owner removed (or sold by hand) this row after the sync finished: that sync says nothing
+    about it any more, so applying it again must not bring the row back or rewrite it."""
+    return (
+        item.removed_at is not None
+        and sync.finished_at is not None
+        and item.removed_at > sync.finished_at
+    )
+
+
+def apply_sync(db: Session, sync: GrowwSync, *, user_id: int, only_isins: set[str] | None = None) -> dict:
+    """Apply one complete sync's confirmed rows to this user's tracker rows. Does not commit.
+
+    `only_isins` is for a confirmation: only those ISINs are applied, and no other row is marked not held.
+    A row the owner removed after this sync finished is never touched, whichever way it is applied."""
     counts = _empty_counts()
     if sync.status != SYNC_COMPLETE:
         return counts
@@ -170,12 +183,16 @@ def apply_sync(db: Session, sync: GrowwSync, *, user_id: int) -> dict:
         if symbol in conflicted_symbols:
             continue
         h = rows[0]
+        if only_isins is not None and h.isin not in only_isins:
+            continue
         item = db.scalar(
             select(UserWatchlistItem).where(
                 UserWatchlistItem.user_id == user_id, UserWatchlistItem.symbol == symbol
             )
         )
         qty = h.quantity
+        if item is not None and _changed_after(item, sync):
+            continue
 
         if qty is None or qty <= 0:
             # Present with quantity 0: confirmed zero, only for a row linked to this ISIN.
@@ -225,6 +242,8 @@ def apply_sync(db: Session, sync: GrowwSync, *, user_id: int) -> dict:
 
     # Linked rows this sync no longer backs: their ISIN is absent, or it now belongs to another stock
     # (match moved). Both are confirmed zero; a moved ISIN is also unlinked from the old row.
+    # A confirmation (`only_isins`) looks only at the rows linked to the ISINs just confirmed: an ISIN
+    # that moved to another stock frees its old row, and nothing else is marked not held.
     linked = db.scalars(
         select(UserWatchlistItem).where(
             UserWatchlistItem.user_id == user_id, UserWatchlistItem.groww_isin.is_not(None)
@@ -232,6 +251,10 @@ def apply_sync(db: Session, sync: GrowwSync, *, user_id: int) -> dict:
     )
     for item in list(linked):
         if item.symbol in conflicted_symbols or item.groww_isin in conflicted_isins:
+            continue
+        if only_isins is not None and item.groww_isin not in only_isins:
+            continue
+        if _changed_after(item, sync):
             continue
         moved = item.groww_isin in isin_symbol and isin_symbol[item.groww_isin] != item.symbol
         if not moved and item.groww_isin in present_isins:
@@ -296,11 +319,12 @@ def _target_syncs(db: Session) -> list[GrowwSync]:
     return out
 
 
-def _reapply_latest(db: Session, user_id: int) -> None:
+def _reapply_latest(db: Session, user_id: int, isins: set[str]) -> None:
+    """Apply the latest complete sync for just these ISINs, the ones the owner has now confirmed."""
     db.flush()
     latest = _latest_complete_sync(db)
     if latest is not None:
-        apply_sync(db, latest, user_id=user_id)
+        apply_sync(db, latest, user_id=user_id, only_isins=isins)
 
 
 def confirm_match(db: Session, *, user_id: int, isin: str, instrument_id: int) -> None:
@@ -309,7 +333,7 @@ def confirm_match(db: Session, *, user_id: int, isin: str, instrument_id: int) -
         raise ValueError("unknown instrument")
     symbol = _confirm_rows(db, _target_syncs(db), isin, instrument_id)
     _save_alias(db, user_id=user_id, isin=isin, instrument_id=instrument_id, external_symbol=symbol)
-    _reapply_latest(db, user_id)
+    _reapply_latest(db, user_id, {isin})
 
 
 def confirm_all_suggested(db: Session, *, user_id: int) -> int:
@@ -328,7 +352,7 @@ def confirm_all_suggested(db: Session, *, user_id: int) -> int:
         symbol = _confirm_rows(db, syncs, isin, instrument_id)
         _save_alias(db, user_id=user_id, isin=isin, instrument_id=instrument_id, external_symbol=symbol)
     if pending:
-        _reapply_latest(db, user_id)
+        _reapply_latest(db, user_id, set(pending))
     return len(pending)
 
 

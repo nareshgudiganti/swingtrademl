@@ -4,9 +4,10 @@ name: Uptime alarm
 # when it goes down (and once when it is back). The worker's own checks cannot do this: if the whole
 # droplet stops, nothing on it is left to raise the alarm. Tracker task af3, 2026-10-14.
 #
-# Down = /health or /ready does not answer 200 (each tried twice, 30 s apart). Optional deeper check:
-# with an API_KEY repository secret it also reads /status and calls the site down when the scheduler is
-# not running, or when Zerodha is not connected during market hours. Without that secret it skips it.
+# Down = /health or /ready does not answer 200 (each tried twice, 30 s apart), or /ready answers 200 but
+# its body does not say ready, database and scheduler_running are all true (HTTP 200 alone is not up).
+# Optional deeper check: with an API_KEY repository secret it also reads /status and calls the site down
+# when Zerodha is not connected during market hours. Without that secret it skips it.
 # GitHub's scheduled runs can start 5-20 minutes late; the alarm is a safety net, not a stopwatch.
 on:
   schedule:
@@ -43,12 +44,43 @@ jobs:
             echo "$code"
           }
           health=$(probe "$BASE/health"); [ "$health" = 200 ] || problems+=("the website does not answer (health check gave $health)")
-          ready=$(probe "$BASE/ready");   [ "$ready" = 200 ]  || problems+=("the database does not answer (ready check gave $ready)")
+          # /ready is read ONCE per attempt: the body, the HTTP status and curl's own exit code all come from
+          # that one answer. HTTP 200 alone is not "up" (it answers 200 with the database or the scheduler
+          # down), and any transfer error (cut off, timeout, reset) means down, whatever the body looked like.
+          fetch_ready() {
+            r_rc=0
+            raw=$(curl -s -m 20 -w '\n%{http_code}' "$BASE/ready") || r_rc=$?
+            r_code=${raw##*$'\n'}
+            r_body=${raw%$'\n'*}
+            case "$r_code" in [0-9][0-9][0-9]) ;; *) r_code=000 ;; esac
+          }
+          judge_ready() { # one plain-English problem per line; nothing printed = good
+            if [ "$r_rc" != 0 ]; then
+              echo "the ready check did not complete (curl error $r_rc), so the site is treated as down"; return
+            fi
+            if [ "$r_code" != 200 ]; then echo "the database does not answer (ready check gave $r_code)"; return; fi
+            READY_BODY="$r_body" python3 - <<'PY'
+          import json, os
+          try:
+              data = json.loads(os.environ.get("READY_BODY", ""))
+              if not isinstance(data, dict):
+                  raise ValueError
+          except ValueError:
+              data = {}
+          if data.get("ready") is not True:
+              print("the site is not ready (the ready check does not say it is)")
+          if data.get("database") is not True:
+              print("the database is not reachable (the ready check says so)")
+          if data.get("scheduler_running") is not True:
+              print("the scheduler (the part that runs the brain and the exits) is not running")
+          PY
+          }
+          fetch_ready; verdict=$(judge_ready)
+          if [ -n "$verdict" ]; then sleep 30; fetch_ready; verdict=$(judge_ready); fi  # tried twice, 30 s apart
+          while IFS= read -r line; do [ -n "$line" ] && problems+=("$line"); done <<<"$verdict"
           if [ -n "$API_KEY" ] && [ "$health" = 200 ]; then
             status=$(curl -s -m 30 -H "X-API-Key: $API_KEY" "$BASE/status" || true)
-            sched=$(echo "$status" | jq -r '.scheduler_running // empty' 2>/dev/null || true)
             broker=$(echo "$status" | jq -r '.broker_authenticated // empty' 2>/dev/null || true)
-            [ "$sched" = true ] || problems+=("the scheduler (the part that runs the brain and the exits) is not running")
             hm=$(TZ=Asia/Kolkata date +%H%M); day=$(TZ=Asia/Kolkata date +%u)
             if [ "$day" -le 5 ] && [ "$hm" -ge 0915 ] && [ "$hm" -lt 1530 ] && [ "$broker" != true ]; then
               problems+=("Zerodha is not connected during market hours")

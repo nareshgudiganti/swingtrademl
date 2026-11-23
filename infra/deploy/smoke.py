@@ -3,7 +3,8 @@
 release.sh already checks the deploy from inside the droplet (verify.py: API ready, migration at head,
 fresh worker heartbeat). This checks what a user sees, over the public internet, right after a deploy:
 
-  * /api/v1/health and /api/v1/ready answer 200
+  * /api/v1/health answers 200, and /api/v1/ready answers 200 AND its body says ready, database and
+    scheduler_running are all true (HTTP 200 alone is not "up")
   * /api/v1/status answers 200 and says PAPER trading (a live trading mode fails loudly: risk rule)
   * /api/v1/brain/stage and /api/v1/risk/limits answer 200
   * the web pages / and /trademind load (200, HTML with the app's root element)
@@ -22,6 +23,7 @@ Exit 0 = all good; 1 = something failed (plain-English summary on stdout, and in
 
 from __future__ import annotations
 
+import http.client
 import json
 import os
 import sys
@@ -85,6 +87,22 @@ def judge_status(resp: Response) -> str | None:
     return None
 
 
+def judge_ready(resp: Response) -> str | None:
+    """/ready answers 200 even when the database or the scheduler is down, so the BODY decides: ready and
+    database must be true and scheduler_running must be true (the worker is alive)."""
+    problem = expect_200(resp)
+    if problem:
+        return problem
+    data = _json(resp)
+    if data.get("ready") is not True:
+        return "answered 200 but says the site is not ready (or did not say)"
+    if data.get("database") is not True:
+        return "answered 200 but says the database is not reachable"
+    if data.get("scheduler_running") is not True:
+        return "answered 200 but the scheduler (the worker that runs the exits and the brain) is not running"
+    return None
+
+
 def judge_page(resp: Response) -> str | None:
     problem = expect_200(resp)
     if problem:
@@ -98,7 +116,7 @@ def judge_page(resp: Response) -> str | None:
 
 CHECKS = [
     Check("website health check", "/api/v1/health", False, expect_200),
-    Check("database ready check", "/api/v1/ready", False, expect_200),
+    Check("database ready check", "/api/v1/ready", False, judge_ready),
     Check("bot status (paper mode)", "/api/v1/status", True, judge_status),
     Check("brain stage", "/api/v1/brain/stage", True, expect_200),
     Check("risk limits", "/api/v1/risk/limits", True, expect_200),
@@ -116,10 +134,16 @@ def http_get(url: str, api_key: str | None, timeout: float = 20) -> Response:
         request.add_header("X-API-Key", api_key)
     try:
         with urllib.request.urlopen(request, timeout=timeout) as answer:
-            return Response(answer.status, answer.headers.get("Content-Type", ""), answer.read(BODY_LIMIT))
+            body = answer.read(BODY_LIMIT)
+            # A transfer cut off part-way must never look like a good answer: fewer bytes than the server
+            # announced is "no answer at all" (a read that raises is caught below).
+            declared = answer.headers.get("Content-Length", "")
+            if declared.isdigit() and len(body) < min(int(declared), BODY_LIMIT):
+                return Response(0, "", b"")
+            return Response(answer.status, answer.headers.get("Content-Type", ""), body)
     except urllib.error.HTTPError as exc:
         return Response(exc.code, exc.headers.get("Content-Type", "") if exc.headers else "", b"")
-    except (urllib.error.URLError, TimeoutError, OSError):
+    except (urllib.error.URLError, TimeoutError, OSError, http.client.HTTPException):
         return Response(0, "", b"")
 
 

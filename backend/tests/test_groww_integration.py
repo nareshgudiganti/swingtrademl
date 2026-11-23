@@ -339,7 +339,7 @@ def test_full_journey_first_sync_matches_topup_partial_sale_zero_and_rebuy(lab):
     r = c.post(API + f"/groww/matching/{ISIN[ECHO]}", json={"instrument_id": lab.stocks[ECHO].id}, headers=h)
     assert r.status_code == 200 and r.json() == {"isin": ISIN[ECHO], "instrument_id": lab.stocks[ECHO].id}
     assert rows_of(lab)[ECHO]["quantity"] == 3
-    assert c.get(API + "/groww/matching", headers=h).json() == {"items": []}
+    assert c.get(API + "/groww/matching", headers=h).json() == {"items": [], "without_isin": 0}
 
     # 4. Top-up: more shares at a new average. The buy date does not restart.
     base = [holding(BRAVO, 4, 200.0), holding(CHARLIE, 7, 300.0), holding(ECHO, 3, 400.0, symbol="ECHOX-EQ")]
@@ -489,7 +489,7 @@ def test_a_renamed_stock_follows_its_isin_and_adds_no_second_row(lab):
 
 
 def c_matching_empty(lab) -> bool:
-    return lab.c.get(API + "/groww/matching", headers=lab.h).json() == {"items": []}
+    return lab.c.get(API + "/groww/matching", headers=lab.h).json() == {"items": [], "without_isin": 0}
 
 
 def test_a_match_that_moves_to_another_stock_keeps_the_old_rows_manual_data(lab):
@@ -736,7 +736,8 @@ def test_every_success_response_matches_the_contract(lab):
     assert status["last_status"] in {"complete", "partial", "failed", "empty_unconfirmed"}
 
     matching = c.get(API + "/groww/matching", headers=h).json()
-    _keys(matching, {"items"})
+    _keys(matching, {"items", "without_isin"})
+    assert matching["without_isin"] == 0
     assert len(matching["items"]) == 2
     for item in matching["items"]:
         _keys(item, MATCH_KEYS)
@@ -954,19 +955,11 @@ def test_a_holding_with_a_not_a_number_quantity_makes_the_sync_partial(lab):
     assert refresh(lab).json()["status"] == "partial"
 
 
-# ================================================================== follow-ups for the backend developer (strict xfails)
-# Each is a P3 found in review. Remove the marker when the change lands; a pass with the marker still on fails
-# the run, so a fix is never missed.
+# ================================================================== follow-ups found in review, now fixed (P3)
+# Negative numbers make a sync partial (zero is valid), the tracker reads pending sales in bulk, and a removed
+# stock stops getting prices.
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "FOLLOW-UP (P3): a holdings row with a NEGATIVE quantity passes the completeness check and is applied as a "
-        "confirmed zero (the linked row is marked not held). A negative number is malformed: the sync should be "
-        "partial and change nothing."
-    ),
-)
 def test_a_negative_quantity_makes_the_sync_partial_and_changes_nothing(lab):
     confirm_baseline(lab)
     r = refresh(lab, [holding(ALPHA, -3, 100.5), holding(BRAVO, 4, 200.0), holding(CHARLIE, 7, 300.0)])
@@ -974,30 +967,21 @@ def test_a_negative_quantity_makes_the_sync_partial_and_changes_nothing(lab):
     assert rows_of(lab)[ALPHA]["held_state"] == "held" and rows_of(lab)[ALPHA]["quantity"] == 10
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "FOLLOW-UP (P3): a holdings row with a zero or negative AVERAGE PRICE passes the completeness check and is "
-        "written to the tracker as the buy price. (Owner call for zero: gifted or bonus shares can have a real zero "
-        "cost; a negative price is never real.)"
-    ),
-)
-@pytest.mark.parametrize("price", [0.0, -5.0])
-def test_a_zero_or_negative_average_price_makes_the_sync_partial(lab, price):
+def test_a_negative_average_price_makes_the_sync_partial(lab):
     confirm_baseline(lab)
-    r = refresh(lab, [holding(ALPHA, 10, price), holding(BRAVO, 4, 200.0), holding(CHARLIE, 7, 300.0)])
+    r = refresh(lab, [holding(ALPHA, 10, -5.0), holding(BRAVO, 4, 200.0), holding(CHARLIE, 7, 300.0)])
     assert r.json()["status"] == "partial"
     assert rows_of(lab)[ALPHA]["buy_price"] == 100.5
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "FOLLOW-UP (P3): the tracker asks the database for each linked row's sales and quantity history one row at a "
-        "time (pending_sale_qty), so a list of N linked rows costs N sale queries and N history queries on every "
-        "load. One batched read of each is enough."
-    ),
-)
+def test_a_zero_average_price_is_valid_and_complete(lab):
+    """Owner rule: gifted or bonus shares can have a real zero cost, so zero is a value, not a malformed row."""
+    confirm_baseline(lab)
+    r = refresh(lab, [holding(ALPHA, 10, 0.0), holding(BRAVO, 4, 200.0), holding(CHARLIE, 7, 300.0)])
+    assert r.json()["status"] == "complete"
+    assert rows_of(lab)[ALPHA]["buy_price"] == 0.0
+
+
 def test_the_tracker_reads_sales_and_history_once_for_all_linked_rows(lab):
     confirm_baseline(lab)  # ALPHA, BRAVO and CHARLIE are linked
     seen: list[str] = []
@@ -1020,13 +1004,6 @@ def test_the_tracker_reads_sales_and_history_once_for_all_linked_rows(lab):
     assert len(sales) <= 1 and len(changes) <= 1, (len(sales), len(changes))
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "FOLLOW-UP (P3): groww_held_symbols ignores removed_at, so a stock the owner removed from the tracker keeps "
-        "getting daily candles while Groww still shows it held (until the next sync brings the row back)."
-    ),
-)
 def test_held_symbols_for_prices_leave_out_rows_the_owner_removed(lab):
     from swing_trade_ml.services.groww import apply as groww_apply
 

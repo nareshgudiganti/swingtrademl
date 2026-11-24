@@ -23,6 +23,12 @@ import type {
 import { scoreChange, scoreNow } from './HeldRead'
 import { finalWord, holdingsFrom } from './live'
 import { withoutScorePercent } from './scoreText'
+import {
+  halfText as tradingHalf,
+  maxDrawdownPct,
+  plan as tradingPlan,
+  targetText as tradingTarget,
+} from './tradingRules'
 
 // ------------------------------------------------------------- money --
 
@@ -120,21 +126,22 @@ export function safetyRules(input: {
   const { limits, safety, status } = input
   const rules: SafetyRule[] = []
 
-  rules.push({ key: 'stop', text: 'Sell if a stock falls 4% below its buy price', state: 'every' })
+  rules.push({ key: 'stop', text: `Sell if a stock falls ${tradingPlan().stopPct}% below its buy price`, state: 'every' })
+  const halfText = `Sell half at ${tradingHalf()}, the rest at the ${tradingTarget()} target`
   if (limits && !limits.scale_out_enabled) {
     rules.push({
       key: 'half',
-      text: 'Sell half at +5%, the rest at the +8% target',
-      detail: 'Off at this account size: the whole position is sold at +8% or at the stop.',
+      text: halfText,
+      detail: `Off at this account size: the whole position is sold at ${tradingTarget()} or at the stop.`,
       state: 'off',
     })
   } else {
-    rules.push({ key: 'half', text: 'Sell half at +5%, the rest at the +8% target', state: limits ? 'on' : 'every' })
+    rules.push({ key: 'half', text: halfText, state: limits ? 'on' : 'every' })
   }
-  rules.push({ key: 'days', text: 'Sell within 15 trading days', state: 'every' })
+  rules.push({ key: 'days', text: `Sell within ${tradingPlan().days} trading days`, state: 'every' })
 
-  // The 15% halt. The current fall is an owner-only number.
-  const haltPct = limits ? limits.max_drawdown_pct * 100 : 15
+  // The drawdown halt (read-only from the server). The current fall is an owner-only number.
+  const haltPct = limits ? limits.max_drawdown_pct * 100 : maxDrawdownPct()
   const halt = `Stop all new buys if the account falls ${Math.round(haltPct)}% from its peak`
   if (limits && input.ddPct != null) {
     const dd = Math.max(0, input.ddPct)

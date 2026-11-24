@@ -2,7 +2,7 @@
 // replaces the classic Dashboard's "Why isn't more showing up here?" box). Display only: nothing here buys or sells.
 //
 // These are the version 1 strategies' own signals, not the brain's ideas. Their models ask a different question
-// (does the price close 2% or more higher within 5 days), a second horizon the owner intends to keep. Every signal
+// (the 5-session question, its numbers read from the server), a second horizon the owner intends to keep. Every signal
 // is "Experimental, unproven", and the model score is a ranking, never shown with a % sign.
 //
 // GET /strategies and /strategies/{id}/signals are not opened to any plan, so only accounts that see the whole app
@@ -19,6 +19,7 @@ import { EXPERIMENTAL, withoutScorePercent } from './beginner/cardText'
 import { PageState } from './PageState'
 import { SortTh, useSort } from './sort'
 import { SCORE_NOTE, scoreLabel } from './scoreText'
+import { fiveDayQuestionWords } from './tradingRules'
 import { Card, Tag, inr } from './ui'
 
 const SIGNAL_WORD: Record<string, { label: string; tone: 'green' | 'amber' | 'red' | 'blue' }> = {
@@ -50,8 +51,8 @@ export function StrategySignals({ initiallyOpen = false }: { /** Tests only: dra
           Show the signals
         </summary>
         <p className="tm-dim" style={{ fontSize: '0.76rem' }}>
-          These are not the brain&apos;s ideas. The version 1 models ask a different question: does the price close
-          2% or more higher within 5 days. {EXPERIMENTAL}. The model score is {SCORE_NOTE}.
+          These are not the brain&apos;s ideas. The version 1 models ask a different question: {fiveDayQuestionWords()}
+          . {EXPERIMENTAL}. The model score is {SCORE_NOTE}.
         </p>
         {open && <SignalsBody />}
       </details>

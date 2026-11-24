@@ -3,10 +3,11 @@
 // never recomputed here. Every number can be null: show a dash, never NaN.
 
 import type { SoldRecord, TrackerState, WatchTrackerItem } from '../api/types'
+import { levels } from './pages/positionLevels'
+import { halfText, stopText, targetText } from './tradingRules'
 
-export const STOP_PCT = -4
-export const HALF_PCT = 5
-export const TARGET_PCT = 8
+// The stop, half-profit and target percentages come from the server: use `levels()` (pages/positionLevels.ts).
+export { levels } from './pages/positionLevels'
 /** The bar runs from -6% to +10%, so a stock past the stop or target still sits on it. */
 export const BAR_LO = -6
 export const BAR_HI = 10
@@ -90,7 +91,8 @@ export function signClass(x: number | null | undefined): 'pos' | 'neg' | 'dim' {
 /** Stop and target prices, only when the entry price is known. */
 export function stopTarget(entry: number | null | undefined): { stop: number; target: number } | null {
   if (!isNum(entry) || entry <= 0) return null
-  return { stop: entry * 0.96, target: entry * 1.08 }
+  const { stop, target } = levels()
+  return { stop: entry * (1 + stop / 100), target: entry * (1 + target / 100) }
 }
 
 /** Where a value (in percent) sits on the stop-to-target bar, 0..100 (clamped). Null when unknown. */
@@ -133,9 +135,9 @@ export function whatToDo(item: WatchTrackerItem, horizon: number): string {
   const left = Math.max(0, horizon - item.days_done)
   switch (item.state) {
     case 'stop':
-      return `${item.symbol} is ${ret} since you added it. The stop-loss is at −4%. If your Groww price is lower than this, sell in Groww to protect your money.`
+      return `${item.symbol} is ${ret} since you added it. The stop-loss is at ${stopText()}. If your Groww price is lower than this, sell in Groww to protect your money.`
     case 'target':
-      return `${item.symbol} is ${ret}. The plan says sell half at +5% and the rest at +8%. Check Groww and book profit.`
+      return `${item.symbol} is ${ret}. The plan says sell half at ${halfText()} and the rest at ${targetText()}. Check Groww and book profit.`
     case 'time':
       return `Day ${dayNumber(item)} of ${horizon}. The plan is to exit by day ${horizon}, so decide this week.`
     case 'weak':

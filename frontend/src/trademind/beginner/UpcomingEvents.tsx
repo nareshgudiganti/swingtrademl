@@ -1,8 +1,9 @@
+import { EVENTS_LOOKAHEAD_TRADING_DAYS } from '../../lib/fixedWindows'
 import { useUpcomingEvents } from './api'
 import './beginner.css'
 import type { EventItem } from './types'
 
-export const NO_EVENTS = 'Nothing scheduled in the next 15 trading days'
+export const NO_EVENTS = `Nothing scheduled in the next ${EVENTS_LOOKAHEAD_TRADING_DAYS} trading days`
 
 /** Results and corporate actions, already worded and counted in trading days by the backend. */
 export default function UpcomingEvents({ events }: { events: EventItem[] }) {

@@ -24,6 +24,7 @@ import { greeting, safetySummary, stoppedByRoom, todayHeadline } from '../today/
 import { holdingsNeedingAttention } from '../today/HoldingsNeedsYou'
 import { waitingItems } from '../today/NeedsYou'
 import { ideaCounts } from '../today/TodayIdeas'
+import { planDays } from '../tradingRules'
 import { BrainGate, inr, Tag } from '../ui'
 import { MARKET_LABEL, MARKET_PLAIN, MARKET_TONE } from '../vocab'
 
@@ -49,7 +50,7 @@ export default function TodayNew({ owner = false }: { owner?: boolean }) {
         <Answer owner={owner} />
       </BrainGate>
       <p className="tmn-foot">
-        Practice mode: everything here is paper trading. The 15-day model is experimental and not yet proven.
+        Practice mode: everything here is paper trading. The {planDays()}-day model is experimental and not yet proven.
       </p>
     </div>
   )

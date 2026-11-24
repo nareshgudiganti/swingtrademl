@@ -263,6 +263,17 @@ def status(db: DbSession, principal: PrincipalDep) -> SystemStatus:
     return _build_status(db, principal)
 
 
+@router.get("/config/trading-rules")
+def trading_rules_now(principal: PrincipalDep) -> dict:
+    """The trading-rule numbers, the trial's session count and the holiday list the screens show (#416).
+    Read-only: it reads the versioned research config, the brain plan settings and the NSE calendar. Any
+    signed-in caller may read it (every plan): the numbers are the app's public rules, no account data."""
+    from swing_trade_ml.services import trading_rules
+
+    # The research-only horizons (10 and 15 sessions) are served to the owner and the shared key only.
+    return trading_rules.trading_rules(include_research=principal.is_owner)
+
+
 @router.get("/market/session", dependencies=[Depends(require_auth)])
 def market_session_now(db: DbSession) -> dict:
     """Is the market open right now, when it next opens and closes, and a

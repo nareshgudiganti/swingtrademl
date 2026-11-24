@@ -607,7 +607,13 @@ def refresh_quotes(db: Session) -> int:
             continue
         ohlc = data.get("ohlc", {})
         prev_close = ohlc.get("close") or 0
-        last_price = float(data.get("last_price", 0))
+        # A quote with no price is skipped, never stored as a fresh 0.0 (#471): the last good quote stays,
+        # honestly old, and the paper broker's freshness check handles it.
+        raw_price = data.get("last_price")
+        if raw_price is None or float(raw_price) <= 0:
+            log.warning("ingestion.quotes.no_price", symbol=key)
+            continue
+        last_price = float(raw_price)
         rows.append(
             {
                 "instrument_id": inst.id,

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, time, timedelta
 
 from fastapi import APIRouter, Query
 from sqlalchemy import select
@@ -11,6 +11,7 @@ from sqlalchemy.orm import aliased
 from swing_trade_ml.api.deps import DbSession, PlanAccessDep
 from swing_trade_ml.brokers import get_broker
 from swing_trade_ml.core.enums import PositionStatus
+from swing_trade_ml.core.market_session import IST, last_closed_trading_day, previous_trading_day
 from swing_trade_ml.db.models.market import Candle, Instrument
 from swing_trade_ml.db.models.trading import Position, Signal, Strategy, Trade
 from swing_trade_ml.schemas import SignalOut
@@ -131,6 +132,23 @@ def latest_actionable(
 # so five calendar days covers a long weekend and a holiday.
 PICK_MAX_AGE = timedelta(days=5)
 
+# Buy list and top picks: a BUY is fresh while it is at most this many COMPLETED
+# trading sessions old (owner decision 2026-11-25; provisional, see #281).
+MAX_BUY_AGE_SESSIONS = 5
+
+
+def buy_fresh_since(now: datetime) -> datetime:
+    """Earliest signal time still fresh for the buy list and top picks.
+
+    Counts back from the last closed trading session (a session's own signals
+    are age 0). Weekends and NSE holidays are skipped. Returned as IST midnight
+    of the cutoff session, in UTC.
+    """
+    day = last_closed_trading_day(now)
+    for _ in range(MAX_BUY_AGE_SESSIONS):
+        day = previous_trading_day(day)
+    return datetime.combine(day, time(0, 0), tzinfo=IST).astimezone(UTC)
+
 
 @router.get("/picks", response_model=list[dict])
 def picks(db: DbSession, access: PlanAccessDep) -> list[dict]:
@@ -246,8 +264,8 @@ def top_picks(
             LatestSignal.signal_type == "BUY",
             LatestSignal.confidence >= min_confidence,
             LatestSignal.instrument_id.not_in(held_instrument_ids),
-            # Same window as /picks: an old BUY from weeks ago is not a pick today (#239 gap f1).
-            LatestSignal.generated_at >= datetime.now(UTC) - PICK_MAX_AGE,
+            # An old BUY is not a pick today: 5 completed trading sessions (#239 gap f1).
+            LatestSignal.generated_at >= buy_fresh_since(datetime.now(UTC)),
         )
     ).all()
 
@@ -334,7 +352,8 @@ def buy_list(db: DbSession, access: PlanAccessDep) -> list[dict]:
     Answers "the Signals page shows a BUY row for this stock, but is that
     still true today or from three days ago?" by construction: it's deduped
     to each instrument's single most recent signal (any strategy), then kept
-    only if that latest signal is BUY and no older than `PICK_MAX_AGE`. A stock
+    only if that latest signal is BUY and at most `MAX_BUY_AGE_SESSIONS` completed
+    trading sessions old. A stock
     that reconfirms BUY every day for a week stays on the list the whole week;
     the moment a later scan reads HOLD or weaker, it silently drops off next
     call — no manual dismissal needed for that case, since a stale row is
@@ -367,7 +386,7 @@ def buy_list(db: DbSession, access: PlanAccessDep) -> list[dict]:
         .where(
             LatestSignal.signal_type == "BUY",
             LatestSignal.instrument_id.not_in(held_instrument_ids),
-            LatestSignal.generated_at >= datetime.now(UTC) - PICK_MAX_AGE,
+            LatestSignal.generated_at >= buy_fresh_since(datetime.now(UTC)),
         )
         .order_by(LatestSignal.confidence.desc().nullslast())
     )

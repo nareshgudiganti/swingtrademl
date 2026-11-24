@@ -317,3 +317,16 @@ def test_can_deliver_ignores_the_event_list_for_a_kind_less_safety_alert_but_not
     assert n.can_deliver("signal", kind=alert_policy.HOLDING_WARNINGS) is False  # a switchable kind honours the list
     monkeypatch.setattr(settings, "TELEGRAM_ENABLED", False)
     assert n.can_deliver("signal") is False and n.can_deliver("error") is False
+
+
+def test_a_brain_position_is_never_given_the_derived_warning_already_sent_state(client, db_session):
+    from swing_trade_ml.core.strategy_policy import STAGED_TYPES
+
+    brain = Strategy(name="d480_brain", strategy_type=sorted(STAGED_TYPES)[0], mode="paper", execution_mode="advisory", is_active=True)
+    db_session.add(brain)
+    db_session.flush()
+    pos = position(db_session, brain, inst(db_session, "D480BRAIN"), mode="paper", entry_confidence=0.80, last_confidence=0.40, stop_loss=90.0, take_profit=120.0)
+    rows = client.get("/api/v1/portfolio/positions/detailed", headers={"X-API-Key": "test-api-key"}).json()
+    row = next(r for r in rows if r["id"] == pos.id)
+    # The derived "warning already sent" state is not given to a brain position; its own fresh read is unchanged.
+    assert row["action_code"] != "alert" and "alert already sent" not in row["action_label"]

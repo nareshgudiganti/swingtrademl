@@ -293,7 +293,9 @@ def detailed_positions(
             # Delivered flag, or the same weakening the warning is about (a failed send hides nothing, #480).
             alert_sent=position.confidence_alert_sent_at is not None
             or (
-                position.last_confidence is not None
+                # a brain score is a ranking, not a probability: no derived warning (the sweep skips it too)
+                not is_brain
+                and position.last_confidence is not None
                 and confidence_decay_status(
                     position.entry_confidence,
                     position.last_confidence,

@@ -34,6 +34,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import numpy as np
 import pandas as pd
@@ -61,6 +62,7 @@ from swing_trade_ml.strategies.base import SignalDecision
 log = get_logger(__name__)
 
 TRADING_DAYS_PER_YEAR = 252
+IST = ZoneInfo("Asia/Kolkata")
 
 
 @dataclass(slots=True)
@@ -105,8 +107,18 @@ class BacktestResult:
     stats: dict[str, Any] = field(default_factory=dict)
 
 
-def _last_close(df: pd.DataFrame, day: date) -> float:
-    mask = df["ts"].dt.date <= day
+def _ist_dates(ts: pd.Series) -> pd.Series:
+    """The India trading day of each bar. Daily candles are stamped at India midnight (18:30 UTC the day
+    before), so the UTC date is a day early; the window `start <= day <= end` and every per-day lookup
+    compare India dates. A timestamp with no zone is read as UTC, as the candles table stores it."""
+    stamped = ts.dt.tz_localize("UTC") if ts.dt.tz is None else ts
+    return stamped.dt.tz_convert(IST).dt.date
+
+
+def _last_close(df: pd.DataFrame, day: date, days: pd.Series | None = None) -> float:
+    """Close of the newest bar on or before `day`. `days` is the frame's India day per row, when the caller
+    already has it (the backtest computes it once per instrument)."""
+    mask = (_ist_dates(df["ts"]) if days is None else days) <= day
     if not mask.any():
         return 0.0
     return float(df.loc[mask, "close"].iloc[-1])
@@ -315,17 +327,21 @@ def run_backtest(
     exit_policy = exit_policy_for_strategy(strategy_row)
 
     history: dict[int, pd.DataFrame] = {}
+    days_of: dict[int, pd.Series] = {}  # the India day of every row of history[id], computed once
     for inst in instruments:
         df = load_candles(db, inst.id, interval)
         if df.empty:
             continue
-        history[inst.id] = df[df["ts"].dt.date <= end].reset_index(drop=True)
+        every_day = _ist_dates(df["ts"])
+        keep = every_day <= end
+        history[inst.id] = df[keep].reset_index(drop=True)
+        days_of[inst.id] = every_day[keep].reset_index(drop=True)
 
     if not history:
         raise ValueError("No candle history found for the given symbols — run backfill first")
 
     all_dates = sorted(
-        {d.date() for df in history.values() for d in df["ts"] if start <= d.date() <= end}
+        {d for days in days_of.values() for d in days if start <= d <= end}
     )
     if not all_dates:
         raise ValueError("No candles fall inside the requested date range")
@@ -342,7 +358,7 @@ def run_backtest(
         # A bar that scales out never also fully exits; the remainder is
         # judged from the next bar on. ----
         for inst_id, pos in list(open_positions.items()):
-            bar_rows = history[inst_id][history[inst_id]["ts"].dt.date == day]
+            bar_rows = history[inst_id][days_of[inst_id] == day]
             if bar_rows.empty:
                 continue
             bar = bar_rows.iloc[0]
@@ -368,8 +384,9 @@ def run_backtest(
             df = history.get(inst.id)
             if df is None:
                 continue
-            window = df[df["ts"].dt.date <= day]
-            if len(window) < min_bars or window["ts"].dt.date.iloc[-1] != day:
+            upto = days_of[inst.id] <= day
+            window = df[upto]
+            if len(window) < min_bars or days_of[inst.id][upto].iloc[-1] != day:
                 continue
 
             decision = impl.evaluate(window, inst, db)
@@ -404,7 +421,7 @@ def run_backtest(
                 inst, decision = by_id[inst_id]
 
                 holdings_value = sum(
-                    p.quantity * _last_close(history[i], day) for i, p in open_positions.items()
+                    p.quantity * _last_close(history[i], day, days_of[i]) for i, p in open_positions.items()
                 )
                 portfolio_value = cash + holdings_value
                 # Same account-size resolver as the live gate (risk.check_entry),
@@ -446,7 +463,7 @@ def run_backtest(
                 )
 
         holdings_value = sum(
-            p.quantity * _last_close(history[i], day) for i, p in open_positions.items()
+            p.quantity * _last_close(history[i], day, days_of[i]) for i, p in open_positions.items()
         )
         total_value = cash + holdings_value
         peak = max(peak, total_value)
@@ -458,7 +475,7 @@ def run_backtest(
     # so the reported return isn't inflated by marking unrealised gains at
     # face value the way an open position otherwise would.
     for inst_id, pos in list(open_positions.items()):
-        last_price = _last_close(history[inst_id], end)
+        last_price = _last_close(history[inst_id], end, days_of[inst_id])
         if last_price > 0:
             cash += _close_position(pos, last_price, trades, "BACKTEST_END", end)
 

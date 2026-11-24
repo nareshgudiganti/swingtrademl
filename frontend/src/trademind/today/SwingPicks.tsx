@@ -27,6 +27,7 @@ import { finalWord, ideasFrom, stockSituations } from '../live'
 import { ResearchExperiment } from '../ResearchExperiment'
 import StockLink from '../StockLink'
 import { Term, TermIf } from '../term'
+import { istMonthDay } from '../istDay'
 import type { Action } from '../types'
 import { ActionPill, BrainArt, Card, CheckItem, GlowArea, Meter, Ring, StockLogo, Tag, inr } from '../ui'
 import { plan, planDays, stopText, targetText } from '../tradingRules'
@@ -368,7 +369,7 @@ function SummaryStrip({ run, picks }: { run: BrainRun; picks: BrainDecision[] })
   const regime = useQuery({ queryKey: ['marketRegime'], queryFn: api.marketRegime })
   const nifty = useQuery({ queryKey: ['candles', 'NIFTY 50', 60], queryFn: () => api.candles('NIFTY 50', 60), retry: false })
   const nq = quoteFrom(nifty.data)
-  const spark = (nifty.data ?? []).map((c) => ({ t: c.ts.slice(5, 10), v: c.close }))
+  const spark = (nifty.data ?? []).map((c) => ({ t: istMonthDay(c.ts), v: c.close }))
   const mode = run.banner.mode
   const trendWord =
     regime.data?.regime === 'bullish' ? 'Bullish' : regime.data?.regime === 'bearish' ? 'Bearish' : 'Unclear'
@@ -470,7 +471,7 @@ function PickDetail({
 }) {
   const [range, setRange] = useState<RangeId>('1M')
   const bars = RANGES.find((r) => r.id === range)!.bars
-  const points = (candles ?? []).slice(-bars).map((c) => ({ t: c.ts.slice(5, 10), v: c.close }))
+  const points = (candles ?? []).slice(-bars).map((c) => ({ t: istMonthDay(c.ts), v: c.close }))
   const q = quoteFrom(candles)
   const word = finalWord(d)
   const mid = entryMid(d)

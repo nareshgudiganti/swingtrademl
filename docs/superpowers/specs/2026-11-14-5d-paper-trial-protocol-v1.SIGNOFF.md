@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | Spec file | `2026-11-14-5d-paper-trial-protocol-v1.md` (revision 4), committed unchanged |
-| sha256 at sign-off | `c5cfbaf1c137311c31559a9da7b7cda52004c83f4badc4f8b64e4e0f965f934f` |
+| sha256 at sign-off | `c5cfbaf1c137311c31559a9da7b7cda52004c83f4badc4f8b64e4e0f965f934f`. This is the hash of the file as stored in git (LF line endings): verify with `git show HEAD:<path> \| sha256sum`. A Windows checkout may convert to CRLF and give a different hash for the same text |
 | Approved by | Owner (Naresh), in the Claude Code session, words: "approve as recommended" |
 | Date and time | 2026-11-25 00:57 IST |
 | What was shown | The minimum sign-off table and the R4 research budget (`docs/model-audit/2026-11-24-279-approval-table.md`, sections A, C and E) |

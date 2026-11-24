@@ -18,13 +18,15 @@ from datetime import date
 
 import pandas as pd
 
+from swing_trade_ml.brain.modules.m08_decide.policy import DEFAULT_POLICY
 from swing_trade_ml.brain.modules.m09_learn.outcomes import Outcome, score
 from swing_trade_ml.services.costs import apply_slippage, compute_charges
 
-HORIZON_BARS = 15
-TARGET = 0.08
-STOP = 0.04
-HALF_OUT = 0.05
+# One source of truth: the Brain's decision policy (#239 gap G10). Aliases only; never a copy of the numbers.
+HORIZON_BARS = DEFAULT_POLICY.horizon_days
+TARGET = DEFAULT_POLICY.target_pct
+STOP = DEFAULT_POLICY.stop_pct
+HALF_OUT = DEFAULT_POLICY.first_target_pct
 POSITION_INR = 40_000.0  # about the smallest position the risk rules allow
 
 

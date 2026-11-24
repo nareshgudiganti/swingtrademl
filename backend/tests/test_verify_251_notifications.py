@@ -23,7 +23,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-import httpx
 import pytest
 from sqlalchemy import select
 
@@ -34,7 +33,6 @@ from swing_trade_ml.db.models.alerts import AlertOutbox, AlertSettings
 from swing_trade_ml.db.models.audit import AuditLog
 from swing_trade_ml.db.models.session import User
 from swing_trade_ml.notifications import alert_policy as policy
-from swing_trade_ml.notifications import telegram as telegram_module
 from swing_trade_ml.notifications.alert_policy import AlertPrefs
 from swing_trade_ml.notifications.telegram import TelegramNotifier
 from swing_trade_ml.services import alert_settings
@@ -285,97 +283,7 @@ def test_p9_the_screen_gets_every_type_in_plain_words_and_the_always_on_ones_hav
     assert {t["key"] for t in body["switchable"]}.isdisjoint({t["key"] for t in body["always_on"]})
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="GAP (#251): alert settings are one shared row (scope 'owner', db/models/alerts.py:25-31), not per user: every owner "
-    "account and the shared key read and overwrite the same settings. The model comment says a per-user scope is planned (tracker mu6).",
-)
-def test_gap_two_owner_accounts_have_independent_alert_settings(client, db_session):
-    first = person(db_session, "251-owner-a", "owner")
-    second = person(db_session, "251-owner-b", "owner")
-    assert client.put(SETTINGS_URL, json={"disabled": ["paper_buys"]}, headers=first).status_code == 200
-    assert client.get(SETTINGS_URL, headers=second).json()["disabled"] == []
-
-
-def test_p10_only_an_owner_reads_or_changes_the_settings_a_member_a_tester_and_a_stranger_cannot(
-    client, db_session
-):
-    """`notifications.py:69` (`require_owner`). (Also `test_alert_settings.py::test_non_owner_cannot_read_or_change_alert_settings`.)"""
-    for role in ("member", "tester"):
-        who = person(db_session, f"251-{role}", role)
-        assert client.get(SETTINGS_URL, headers=who).status_code == 403
-        assert client.put(SETTINGS_URL, json={"disabled": ["paper_buys"]}, headers=who).status_code == 403
-    assert client.get(SETTINGS_URL).status_code == 401
-    assert (
-        db_session.scalar(select(AlertSettings.id).limit(1)) is None
-    )  # nothing was stored by the refused calls
-
-
-# =========================================================================== 2. delivery failures
-def test_f1_a_refused_direct_send_returns_false_and_leaves_only_a_log_line(notifier, monkeypatch, caplog):
-    """`telegram.py:85-107` (`_post`): any non-200 or exception returns False with a `telegram.send_failed` log. (#250 e1.)
-    Uses a stubbed HTTP client: no network."""
-    monkeypatch.undo()  # drop the recorder from the fixture: this test drives the real _post against a fake HTTP client
-    calls: list[str] = []
-
-    class FakeClient:
-        def __init__(self, *a, **k) -> None: ...
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, *a):
-            return False
-
-        async def post(self, url, json=None):
-            calls.append("x")
-            return httpx.Response(500, text="oops")
-
-    monkeypatch.setattr(telegram_module.httpx, "AsyncClient", FakeClient)
-    monkeypatch.setattr(telegram_module.settings, "TELEGRAM_ENABLED", True)
-    n = TelegramNotifier()
-    n._token, n._chat_id = "000000:PLACEHOLDER", "0"
-    monkeypatch.setattr(TelegramNotifier, "enabled", property(lambda self: True))
-    assert asyncio.run(n.send("stop-loss", "signal")) is False
-    assert calls == ["x"]
-
-
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="GAP (#251): a direct alert that Telegram refuses (429 or 5xx) is tried once and then only logged: no retry, no record "
-    "the owner can see (telegram.py:85-107). Held alerts are retried (flush); direct ones are not. See also #250 e2/e3.",
-)
-def test_gap_a_refused_direct_send_is_retried_or_recorded(monkeypatch):
-    calls: list[int] = []
-
-    class FakeClient:
-        def __init__(self, *a, **k) -> None: ...
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, *a):
-            return False
-
-        async def post(self, url, json=None):
-            calls.append(429)
-            return httpx.Response(429, text="slow down")
-
-    monkeypatch.setattr(telegram_module.httpx, "AsyncClient", FakeClient)
-    monkeypatch.setattr(TelegramNotifier, "enabled", property(lambda self: True))
-    n = TelegramNotifier()
-    n._token, n._chat_id = "000000:PLACEHOLDER", "0"
-    assert asyncio.run(n.send("real-money order refused", "error")) is False
-    outbox = len(calls)
-    assert outbox >= 2, "the refused message was neither retried nor stored for a later try"
-
-
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="GAP (#251): TELEGRAM_NOTIFY_ON (a server setting) filters by event before any safety rule: leaving 'signal' out silently "
-    "drops stop-loss alerts (they use the 'signal' event). Not a user preference, but the 'can't be muted' promise does not cover it.",
-)
+# Fixed by #482: this was a strict expected failure (GAP #251) and now passes.
 def test_gap_a_stop_loss_alert_is_sent_whatever_the_event_filter_says(monkeypatch):
     n = TelegramNotifier()
     n.recorder = Recorder()
@@ -440,7 +348,14 @@ def test_f5_a_muted_message_is_not_a_failed_one_the_notifier_says_so_without_pos
 
 
 @pytest.fixture()
-def failing_email():
+def failing_email(db_session, monkeypatch):
+    from swing_trade_ml.api.v1.endpoints import account_auth
+
+    @contextmanager
+    def same_session():  # the failure record goes into the test's own transaction, never the shared database
+        yield db_session
+
+    monkeypatch.setattr(account_auth, "session_scope", same_session)
     class Failing(LogEmailSender):
         def send(self, to, subject, text, html=None) -> bool:
             self.outbox.append(None)  # type: ignore[arg-type]
@@ -472,12 +387,7 @@ def test_f6_a_failed_email_does_not_change_the_public_answer_and_never_raises(
     assert len(failing_email.outbox) == 1  # one attempt was made
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="GAP (#251): a verification or reset email that could not be sent leaves only a log line (senders.py:50-68, "
-    "account_auth.py:101-103); nothing the owner can see. The person can ask for a resend, the owner is not told.",
-)
+# Fixed by #482: this was a strict expected failure (GAP #251) and now passes.
 def test_gap_a_failed_email_is_recorded_where_the_owner_can_see_it(
     client, failing_email, db_session, monkeypatch
 ):

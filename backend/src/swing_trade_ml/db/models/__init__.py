@@ -58,6 +58,7 @@ from swing_trade_ml.db.models.market import (
     WatchlistSnapshot,
 )
 from swing_trade_ml.db.models.ml import MLModel, Prediction
+from swing_trade_ml.db.models.module_switch import ModuleSwitch
 from swing_trade_ml.db.models.mutual_funds import MutualFund, MutualFundHolding, MutualFundNav
 from swing_trade_ml.db.models.registry import ModelResearchSlot
 from swing_trade_ml.db.models.safety import RiskEvent, SystemState
@@ -142,6 +143,7 @@ __all__ = [
     "Subscription",
     "LoginCode",
     "MLModel",
+    "ModuleSwitch",
     "ModelResearchSlot",
     "MutualFund",
     "MutualFundHolding",

@@ -25,6 +25,19 @@ async def require_admin_step_up(
 ) -> None:
     if not settings.ADMIN_MFA_ENFORCED:
         return
+    _check(principal, db, x_admin_mfa)
+
+
+async def require_admin_step_up_always(
+    principal: Annotated[Principal, Depends(get_principal)],
+    db: DbSession,
+    x_admin_mfa: Annotated[str | None, Header(alias="X-Admin-Mfa")] = None,
+) -> None:
+    """The same second step, but not switchable off: for changes that must never rest on one login alone."""
+    _check(principal, db, x_admin_mfa)
+
+
+def _check(principal: Principal, db, x_admin_mfa: str | None) -> None:
     user = principal.user
     if principal.via_api_key or user is None or user.role != "owner" or not user.is_active:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Only the admin can do this.")
@@ -40,3 +53,4 @@ async def require_admin_step_up(
 
 
 StepUp = Depends(require_admin_step_up)
+StepUpAlways = Depends(require_admin_step_up_always)

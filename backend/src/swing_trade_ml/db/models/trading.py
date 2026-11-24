@@ -25,6 +25,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import true as sa_true
@@ -153,11 +154,23 @@ class Signal(Base, TimestampMixin):
 
     generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
 
+    # One scan decision = one row (#360): strategy, stock, mode, type, horizon and trading session. NULL on rows
+    # written before this column existed (never backfilled, never touched); the unique index below ignores them.
+    signal_key: Mapped[str | None] = mapped_column(String(96))
+
     strategy: Mapped[Strategy] = relationship(back_populates="signals")
     instrument: Mapped[Any] = relationship("Instrument")
     orders: Mapped[list[Order]] = relationship(back_populates="signal")
 
-    __table_args__ = (Index("ix_signals_scan", "mode", "signal_type", "generated_at"),)
+    __table_args__ = (
+        Index("ix_signals_scan", "mode", "signal_type", "generated_at"),
+        Index(
+            "uq_signals_signal_key",
+            "signal_key",
+            unique=True,
+            postgresql_where=text("signal_key IS NOT NULL"),
+        ),
+    )
 
     def __repr__(self) -> str:
         return f"<Signal {self.signal_type} instrument={self.instrument_id} conf={self.confidence}>"

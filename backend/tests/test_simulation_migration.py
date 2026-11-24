@@ -69,13 +69,13 @@ def _tables(connection, name):
     return set(inspect(connection).get_table_names(schema=name))
 
 
-def test_it_chains_after_horizon_and_is_the_only_head():
+def test_it_chains_after_horizon_and_the_signal_key_migration_is_the_only_head():
     migration = _load("*_simulation_persistence.py", "simulation_chain")
     assert (migration.revision, migration.down_revision) == ("simulation01", "horizon01")
     config = Config(str(BACKEND / "alembic.ini"))
     config.set_main_option("script_location", str(BACKEND / "alembic"))
     script = ScriptDirectory.from_config(config)
-    (head,) = script.get_heads()  # still exactly one head; modswitch01 and simulation02 sit on top of simulation01
+    (head,) = script.get_heads()  # still exactly one head; later revisions (modswitch01, simulation02, signalkey01) sit on top
     assert "simulation01" in {r.revision for r in script.iterate_revisions(head, "base")}
 
 

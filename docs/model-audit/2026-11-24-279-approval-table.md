@@ -49,7 +49,7 @@ None changes how a reference outcome is calculated. Recommended: accept all six.
 | 1 | Purpose | Ranking signal for the top 5 large-cap 5D ideas; not an order, not a probability | **SIGN** |
 | 2 | Target | As H-2 / H-2b | covered by H-2 |
 | 3 | Universe | Fixed 52-stock list; all historical results labelled "selection-biased exploratory evidence"; point-in-time membership required before any promotion claim | **SIGN** |
-| 4 | Inputs | One versioned formula for training and serving; a differing serving formula = a new model version. **Open (R0):** candle-to-stored-feature rebuild matched 13 of 200; addendum pending | **SIGN** after the 13/200 addendum |
+| 4 | Inputs | One versioned formula for training and serving; a differing serving formula = a new model version. R0 addendum (all 637 rows explained) adds two rules for **new** trial code: score only completed bars, and save each prediction's inputs write-once (`2026-11-24-prediction-provenance-proposal.md`). h05 is unchanged | **SIGN** |
 | 5 | Algorithm | No preference; winner chosen out-of-sample after costs on a pre-fingerprinted config; shared model before per-pattern | DELEGATED |
 | 6 | Baselines | Every eligible stock, momentum five, random five, NIFTY 50; incumbent model 2 as served | DELEGATED |
 | 7 | Evaluation | As H-7, H-11, H-11b; costs about 44 bps plus a stress case (reported only) | covered by H rows |
@@ -72,6 +72,6 @@ None changes how a reference outcome is calculated. Recommended: accept all six.
 
 ## Sign-off
 
-SIGN rows: H-1, H-2, H-2b, H-7, H-11, H-11b, 11.4, 11.5, sections 1, 3, 4 (after the addendum) and 14. DELEGATED rows are accepted with them unless edited.
+SIGN rows: H-1, H-2, H-2b, H-7, H-11, H-11b, 11.4, 11.5, sections 1, 3, 4 and 14. DELEGATED rows are accepted with them unless edited.
 
 Owner: ____________ Date (IST): ____________ Edits: ____________

@@ -24,7 +24,7 @@ from swing_trade_ml.services.portfolio import REAL_TRADING_STRATEGY_NAME
 from swing_trade_ml.strategies.tier import cap_tier
 
 if TYPE_CHECKING:
-    from swing_trade_ml.api.deps import PlanAccess
+    from swing_trade_ml.core.plan_access import PlanAccess
 
 PLAN_SETTINGS_ID = 1
 

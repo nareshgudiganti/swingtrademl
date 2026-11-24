@@ -7,6 +7,9 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
 import { modelLabel } from '../lib/format'
+import type { BrainDecision } from '../api/types'
+import { chanceTitle } from './honest'
+import { safetySummary } from './today/answerRules'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const repo = path.resolve(here, '..', '..', '..')
@@ -33,7 +36,7 @@ const LABELS: Label[] = [
   },
   {
     file: 'frontend/src/trademind/Tour.tsx',
-    now: 'This is the plan the Brain follows in its 15-day trial.</p>',
+    now: 'This is the plan the Brain follows in its {plan().days}-day trial.</p>',
     // Codex round 1 P2: the claim that a stock's page names its own window is not true yet, so it is gone.
     was: 'names the window it uses',
     about: 'brain',
@@ -46,7 +49,7 @@ const LABELS: Label[] = [
   },
   {
     file: 'frontend/src/trademind/Tour.tsx',
-    now: 'in the 15-day trial, out within 15 trading days, about three weeks.',
+    now: 'in the {plan().days}-day trial, out within {plan().days} trading days, about three weeks.',
     was: '<Term k="horizon">Time limit</Term>: out within 15 trading days',
     about: 'brain',
   },
@@ -60,32 +63,32 @@ const LABELS: Label[] = [
   },
   {
     file: 'frontend/src/components/HoldingTracker.tsx',
-    now: `"Past the Brain's 15-day plan"`,
+    now: "`Past the Brain's ${planDays()}-day plan`",
     was: "'Past 15 days'",
     about: 'brain',
   },
   {
     file: 'frontend/src/components/HoldingTracker.tsx',
-    now: "of up to 15 (the Brain's 15-day plan)",
+    now: "of up to ${planDays()} (the Brain's ${planDays()}-day plan)",
     was: 'of up to 15`',
     about: 'brain',
   },
   {
     file: 'frontend/src/trademind/pages/PaperPositions.tsx',
     // Codex round 1 P2: a tooltip is invisible on touch, so the scale is named in the visible header.
-    now: 'Progress (−4% to +8%, app 15-day scale)</SortTh>',
+    now: 'Progress ({stopText()} to {targetText()}, app {planDays()}-day scale)</SortTh>',
     was: 'Progress (−4% to +8%)</SortTh>',
     about: 'app',
   },
   {
     file: 'frontend/src/trademind/pages/PaperPositions.tsx',
-    now: "the app's 15-day plan scale",
+    now: "the app's ${planDays()}-day plan scale",
     was: "between the Brain's 15-day plan stop and target",
     about: 'app',
   },
   {
     file: 'frontend/src/trademind/pages/GrowwTracker.tsx',
-    now: "The app's 15-day plan, used here as a yardstick for each stock: +8% target",
+    now: "The app's {planDays()}-day plan, used here as a yardstick for each stock: {targetText()} target",
     was: "The Brain's 15-day plan for each stock",
     about: 'app',
   },
@@ -96,80 +99,81 @@ const LABELS: Label[] = [
   },
   {
     file: 'frontend/src/trademind/pages/IdeaReports.tsx',
-    now: "target: 'Hit +8% first (15-day trial)'",
+    now: 'target: `Hit ${targetText()} first (${planDays()}-day trial)`',
     was: "target: 'Hit +8% first',",
     about: 'brain',
   },
   {
     file: 'frontend/src/trademind/pages/IdeaReports.tsx',
-    now: "the 15-day trial's +8% / −4% results unlock",
+    now: "the {planDays()}-day trial's {targetText()} / {stopText()} results unlock",
     was: '              the +8% / −4% results unlock',
     about: 'brain',
   },
   {
     file: 'frontend/src/trademind/pages/IdeaReports.tsx',
-    now: '15-day trial: hit +8% first',
+    now: '${planDays()}-day trial: hit ${targetText()} first',
     was: 'aria-label={`Hit +8% first',
     about: 'brain',
   },
   {
     file: 'frontend/src/trademind/pages/IdeaReports.tsx',
-    now: 'Hit +8% first (15-day trial) ·',
+    now: 'Hit {targetText()} first ({planDays()}-day trial) ·',
     was: 'Hit +8% first · {res.target}',
     about: 'brain',
   },
   {
     file: 'frontend/src/trademind/today/answerRules.ts',
-    now: "every trade in the Brain's 15-day trial has a −4% stop, a +8% target and a 15-trading-day limit.",
+    // the numbers come from the server now (#416); the window is still named in the sentence
+    now: "every trade in the Brain's ${p.days}-day trial has a ${stopText()} stop, a ${targetText()} target and a ${p.days}-trading-day limit.",
     was: "'Safety net on: every trade has a −4% stop",
     about: 'brain',
   },
   {
     file: 'frontend/src/trademind/honest.tsx',
-    now: "The Brain's 15-day trial estimate: chance of +8% before −4% within 15 trading days",
+    now: "The Brain's ${planDays()}-day trial estimate: chance of ${targetText()} before ${stopText()} within ${planDays()} trading days",
     was: '`Estimated chance of +8% before −4% within 15 trading days',
     about: 'brain',
   },
   // ---- the last unlabelled plan statements (round 2): each names the window and that it is the 15-day plan ----
   {
     file: 'frontend/src/trademind/brainSteps.ts',
-    now: "Buy it, with the Brain's 15-day plan (+8% target, −4% stop, out within 15 trading days).",
+    now: "Buy it, with the Brain's ${plan().days}-day plan (${targetText()} target, ${stopText()} stop, out within ${plan().days} trading days).",
     was: 'Buy it, with the usual plan',
     about: 'brain',
   },
   {
     file: 'frontend/src/pages/Brain.tsx',
-    now: '(+8%, 15-day plan)`,',
+    now: '(${targetText()}, ${planDays()}-day plan)`,',
     was: '(+8%)`,',
     about: 'brain',
   },
   {
     file: 'frontend/src/pages/Brain.tsx',
-    now: 'Target (+8%, 15-day plan)</div>',
+    now: 'Target ({targetText()}, {planDays()}-day plan)</div>',
     was: 'Target (+8%)</div>',
     about: 'brain',
   },
   {
     file: 'frontend/src/trademind/pages/positionLevels.ts',
-    now: "It hit the +8% target of the app's 15-day plan. Consider booking profit.",
+    now: "It hit the ${targetText()} target of the app's ${days}-day plan. Consider booking profit.",
     was: "'It hit the +8% target. Consider booking profit.'",
     about: 'app',
   },
   {
     file: 'frontend/src/trademind/pages/positionLevels.ts',
-    now: 'from your +8% target (15-day plan). Consider booking profit at the target.',
+    now: 'from your ${targetText()} target (${days}-day plan). Consider booking profit at the target.',
     was: 'from your +8% target. Consider booking profit at the target.',
     about: 'app',
   },
   {
     file: 'frontend/src/trademind/pages/PositionParts.tsx',
-    now: '+8%{big && <em>Target · 15-day plan</em>}',
+    now: '{targetText()}{big && <em>Target · {plan().days}-day plan</em>}',
     was: '+8%{big && <em>Target</em>}',
     about: 'app',
   },
   {
     file: 'frontend/src/trademind/pages/PositionParts.tsx',
-    now: '(+8%, 15-day plan)</dd>',
+    now: '({targetText()}, {plan().days}-day plan)</dd>',
     was: '(+8%)</dd>',
     about: 'app',
   },
@@ -259,9 +263,13 @@ describe('no unlabelled +8% or "15 trading days" remains in the files this chang
   })
 
   it('the numbers themselves are unchanged (each labelled line still carries its figure)', () => {
-    expect(read('frontend/src/trademind/today/answerRules.ts')).toContain('a +8% target and a 15-trading-day limit')
-    expect(read('frontend/src/trademind/Tour.tsx')).toContain('out within 15 trading days, about three weeks')
-    expect(read('frontend/src/trademind/pages/GrowwTracker.tsx')).toContain('+8% target, −4% stop, sell')
-    expect(read('frontend/src/trademind/honest.tsx')).toContain('+8% before −4% within 15 trading days')
+    // answerRules.ts builds this sentence from the server's numbers (#416); what the screen says is unchanged
+    expect(safetySummary({ owner: false, ddPct: null, haltPct: null }).text).toContain(
+      'a +8% target and a 15-trading-day limit',
+    )
+    expect(read('frontend/src/trademind/Tour.tsx')).toContain('out within {plan().days} trading days, about three weeks')
+    expect(read('frontend/src/trademind/pages/GrowwTracker.tsx')).toContain('{targetText()} target, {stopText()} stop, sell')
+    const idea = { honest_score: { status: 'ok', honest_chance: 0.4 } } as unknown as BrainDecision
+    expect(chanceTitle(idea)).toContain('chance of +8% before −4% within 15 trading days')
   })
 })

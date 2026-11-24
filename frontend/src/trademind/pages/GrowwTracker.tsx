@@ -12,15 +12,13 @@ import { useLatestRun } from '../live'
 import { QueryNotice } from '../PageState'
 import { useSort, type Sorter } from '../sort'
 import StockLink from '../StockLink'
+import { halfText, planDays, stopText, targetText } from '../tradingRules'
 import {
   ACT_CARDS,
   BAR_HI,
   BAR_LO,
   FILTERS,
-  HALF_PCT,
   STATE_LABEL,
-  STOP_PCT,
-  TARGET_PCT,
   barPosition,
   dayNumber,
   deltaView,
@@ -33,6 +31,7 @@ import {
   fmtMoney,
   fmtRupees,
   formFromItem,
+  levels,
   needsActionCount,
   pips,
   portfolioSummary,
@@ -326,8 +325,8 @@ export default function GrowwTracker() {
           )}
           {!soldView && (
           <p className="tm-dim tmn-small">
-            {needsActionCount(all)} of {all.length} need a look today. The app's 15-day plan, used here as a yardstick for each stock: +8% target, −4% stop, sell
-            half at +5%, and be out within {horizon} trading days. Nothing is bought or sold.
+            {needsActionCount(all)} of {all.length} need a look today. The app's {planDays()}-day plan, used here as a yardstick for each stock: {targetText()} target, {stopText()} stop, sell
+            half at {halfText()}, and be out within {horizon} trading days. Nothing is bought or sold.
           </p>
           )}
         </>
@@ -360,10 +359,10 @@ function Bar({ ret }: { ret: number | null }) {
         {x != null && <i style={{ left: `${x}%` }} />}
       </div>
       <div className="gt-pl num">
-        <span>−{Math.abs(STOP_PCT)}%</span>
+        <span>−{Math.abs(levels().stop)}%</span>
         <span>0</span>
-        <span>+{HALF_PCT}%</span>
-        <span>+{TARGET_PCT}%</span>
+        <span>+{levels().half}%</span>
+        <span>+{levels().target}%</span>
       </div>
     </>
   )
@@ -659,6 +658,7 @@ function ReturnChart({ closes, entry }: { closes: { close: number }[]; entry: nu
   const B = 24
   const lo = BAR_LO
   const hi = BAR_HI
+  const { stop: STOP_PCT, half: HALF_PCT, target: TARGET_PCT } = levels()
   const clamp = (v: number) => Math.max(lo, Math.min(hi, v))
   const y = (v: number) => T + ((hi - v) / (hi - lo)) * (H - T - B)
   const bw = Math.max(4, Math.min(18, (W - L - R) / n - 6))
@@ -783,7 +783,7 @@ function Detail({
         <div className="gt-fact">
           <span>Stop / Target</span>
           <b className="num">
-            {st ? `${fmtPrice(st.stop)} (${fmtPct(STOP_PCT, 0)}) / ${fmtPrice(st.target)} (${fmtPct(TARGET_PCT, 0)})` : '—'}
+            {st ? `${fmtPrice(st.stop)} (${fmtPct(levels().stop, 0)}) / ${fmtPrice(st.target)} (${fmtPct(levels().target, 0)})` : '—'}
           </b>
           {st && k.last_price != null && k.last_price > 0 && (
             <small className="dim">

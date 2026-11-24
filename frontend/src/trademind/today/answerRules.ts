@@ -4,6 +4,7 @@
 import type { BrainDecision, IdeaWord, MarketMode } from '../../api/types'
 import { withoutScorePercent } from '../scoreText'
 import { finalWord } from '../live'
+import { plan, stopText, targetText } from '../tradingRules'
 import { whyNotTrade } from '../whyNotTrade'
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
@@ -63,5 +64,9 @@ export function safetySummary(s: { owner: boolean; paused?: boolean | null; ddPc
     }
     return { tone: 'ok', text: `Safety net on. The account is ${dd.toFixed(1)}% below its peak — new buys stop at ${s.haltPct.toFixed(0)}%.` }
   }
-  return { tone: 'ok', text: "Safety net on: every trade in the Brain's 15-day trial has a −4% stop, a +8% target and a 15-trading-day limit." }
+  const p = plan()
+  return {
+    tone: 'ok',
+    text: `Safety net on: every trade in the Brain's ${p.days}-day trial has a ${stopText()} stop, a ${targetText()} target and a ${p.days}-trading-day limit.`,
+  }
 }

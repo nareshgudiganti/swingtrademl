@@ -267,7 +267,7 @@ export default function ModelRegistry() {
       <div>
         <h2 style={{ marginBottom: 2 }}>Model registry</h2>
         <p className="muted" style={{ marginTop: 0 }}>
-          Nine slots: 5, 10 and 15 trading days across large, mid and small caps. Nine is the most, not a target.
+          Nine slots: {[...HORIZONS].reverse().slice(0, -1).join(', ')} and {HORIZONS[0]} trading days across large, mid and small caps. Nine is the most, not a target.
         </p>
       </div>
       <OwnerGate>

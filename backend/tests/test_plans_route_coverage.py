@@ -69,6 +69,7 @@ SIGNED_IN_ONLY_ROUTES: dict[tuple[str, str], str] = {
     ("POST", "/auth/password"): "change own password",
     ("POST", "/auth/logout-all"): "end own sessions",
     ("GET", "/me/plan"): "how the app learns what to show; must answer every plan",
+    ("GET", "/config/trading-rules"): "the app's public trading numbers and calendar; every plan reads them",
     ("GET", "/billing/plans"): "a signed-in person sees the plans (404 unless BILLING_ENABLED)",
     ("GET", "/billing/me"): "a signed-in person sees their own subscription",
     ("POST", "/billing/checkout"): "a signed-in person starts their own subscription (sandbox only)",

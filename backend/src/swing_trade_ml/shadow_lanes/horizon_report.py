@@ -22,6 +22,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from swing_trade_ml.core.config import settings
+from swing_trade_ml.core.research_config import is_research_only
 from swing_trade_ml.db.models.market import Candle, Instrument
 from swing_trade_ml.services.model_registry import role_of
 
@@ -69,6 +70,20 @@ LAB_START_NOTE = "not before 5 Dec 2026 (Amendments 2 and 3)"
 
 def mean_or_none(values: list[float]) -> float | None:
     return fmean(values) if values else None
+
+
+#: Shown in place of a hit rate and a net per trade while the row says "not enough days" (#474).
+RATES_WITHHELD = "Not enough days yet: a hit rate or a net per trade from this few days would mislead."
+
+
+def readable_rates(
+    enough: bool, hit_rate: float | None, net_per_trade: float | None, edge: float | None = None
+) -> dict[str, Any]:
+    """The hit rate, the net per trade and the edge over every stock only once the row has enough days to be read;
+    the counts always stay."""
+    if enough:
+        return {"hit_rate": hit_rate, "net_per_trade": net_per_trade, "edge_vs_every_stock": edge, "rates_note": None}
+    return {"hit_rate": None, "net_per_trade": None, "edge_vs_every_stock": None, "rates_note": RATES_WITHHELD}
 
 
 def window_return(
@@ -191,6 +206,7 @@ def _lane_row(db: Session, key: str, horizon: int, group: str, slot: str, bars, 
     return {
         "key": key,
         "horizon_days": horizon,
+        "research_only": is_research_only(horizon),
         "cap_group": group,
         "source": "lanes",
         "model": role_view(model),
@@ -199,9 +215,14 @@ def _lane_row(db: Session, key: str, horizon: int, group: str, slot: str, bars, 
             "matured_days": matured_days,
             "picks": len(rows),
             "finished": len(done),
-            "net_per_trade": mean_or_none(nets),
-            "edge_vs_every_stock": mean_or_none(excess),
-            "hit_rate": (sum(1 for n in nets if n > 0) / len(nets)) if nets else None,
+            # A matured pick with no usable price is stored with no return: counted here, never lost.
+            "unresolved": sum(1 for _, o in rows if o is not None and o.net_return is None),
+            **readable_rates(
+                enough,
+                (sum(1 for n in nets if n > 0) / len(nets)) if nets else None,
+                mean_or_none(nets),
+                mean_or_none(excess),
+            ),
             "nifty": nifty_summary(windows, bars),
         },
         "verdict": {
@@ -249,6 +270,7 @@ def _h05_row(db: Session, key: str, horizon: int, group: str, report, picks, P, 
         return {
             "key": key,
             "horizon_days": horizon,
+            "research_only": is_research_only(horizon),
             "cap_group": group,
             "source": "h05",
             "model": role_view(model),
@@ -257,9 +279,12 @@ def _h05_row(db: Session, key: str, horizon: int, group: str, report, picks, P, 
                 "matured_days": 0,
                 "picks": 0,
                 "finished": 0,
+                "open": 0,
+                "unresolved": 0,
                 "net_per_trade": None,
                 "edge_vs_every_stock": None,
                 "hit_rate": None,
+                "rates_note": RATES_WITHHELD,
                 "nifty": nifty_summary([], bars),
             },
             "verdict": {
@@ -295,6 +320,7 @@ def _h05_row(db: Session, key: str, horizon: int, group: str, report, picks, P, 
     return {
         "key": key,
         "horizon_days": horizon,
+        "research_only": is_research_only(horizon),
         "cap_group": group,
         "source": "h05",
         "run_no": run["run_no"],
@@ -304,9 +330,10 @@ def _h05_row(db: Session, key: str, horizon: int, group: str, report, picks, P, 
             "matured_days": matured_days,
             "picks": g["counted_selections"],
             "finished": trade["finished"],
-            "net_per_trade": trade["mean_net_return"],
-            "edge_vs_every_stock": edge["mean"],
-            "hit_rate": trade["win_rate"],
+            # The same counted picks as `picks` and `finished`: picks = finished + open + unresolved.
+            "open": trade["pending"],
+            "unresolved": trade["unresolved"],
+            **readable_rates(matured_days >= needed, trade["win_rate"], trade["mean_net_return"], edge["mean"]),
             "nifty": nifty_summary(windows, bars),
         },
         "verdict": {

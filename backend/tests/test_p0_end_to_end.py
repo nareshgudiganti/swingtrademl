@@ -143,7 +143,9 @@ def _momentum(bars, ids) -> dict[str, list[Candidate]]:
         ranked = sorted(
             symbols, key=lambda s: -(bars[s][SESSIONS[i]].close / bars[s][SESSIONS[i - 3]].close - 1)
         )
-        picks[SESSIONS[i]] = [Candidate(ids[s], s, 0.5, f"sec-{s}") for s in ranked[:2]]
+        picks[SESSIONS[i]] = [
+            Candidate(ids[s], s, 0.5, f"sec-{s}", rule_ref="synthetic-3d-top2:v1") for s in ranked[:2]
+        ]
     return picks
 
 

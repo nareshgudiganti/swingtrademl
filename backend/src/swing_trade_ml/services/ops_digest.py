@@ -171,8 +171,8 @@ def _v1_scan_section(db: Session, day: date) -> dict[str, Any]:
 
 def _trading_section(db: Session, day: date) -> dict[str, Any]:
     """Paper orders and positions opened or closed today. Counts and names only, never profit."""
-    from swing_trade_ml.api.v1.endpoints.system import open_positions_by_book
     from swing_trade_ml.brokers import get_broker
+    from swing_trade_ml.services.portfolio import open_positions_by_book
 
     lo, hi = _day_bounds(day)
     hidden = _private_strategy_ids(db)

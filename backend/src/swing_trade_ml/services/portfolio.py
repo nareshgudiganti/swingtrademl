@@ -15,7 +15,7 @@ from swing_trade_ml.brokers import get_broker, paper_broker
 from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.enums import PositionStatus, TradingMode
 from swing_trade_ml.core.logging import get_logger
-from swing_trade_ml.core.strategy_policy import outside_tester_book
+from swing_trade_ml.core.strategy_policy import NON_SCAN_STRATEGY_TYPES, outside_tester_book
 from swing_trade_ml.db.models.market import Instrument, Quote
 from swing_trade_ml.db.models.trading import PortfolioSnapshot, Position, Strategy, Trade
 from swing_trade_ml.services import capital
@@ -50,6 +50,28 @@ def exclude_hand_books(strategy_id_col: Any) -> Any:
     """Bot book only — excludes My Holdings and manual paper testing."""
     excluded = select(Strategy.id).where(Strategy.name.in_(_HAND_BOOK_STRATEGY_NAMES))
     return or_(strategy_id_col.is_(None), strategy_id_col.not_in(excluded))
+
+
+def open_positions_by_book(db: Session) -> dict[str, int]:
+    """Open positions per book. The three books never mix: the bot's own book, the manual
+    Testing (paper) book, and real Zerodha holdings tracked under `real_trading`."""
+
+    def count(*where: Any) -> int:
+        return int(
+            db.execute(
+                select(func.count(Position.id))
+                .outerjoin(Strategy, Strategy.id == Position.strategy_id)
+                .where(Position.status == PositionStatus.OPEN, *where)
+            ).scalar_one()
+        )
+
+    is_testing = Strategy.strategy_type.in_(sorted(NON_SCAN_STRATEGY_TYPES))
+    is_real = Strategy.name == REAL_TRADING_STRATEGY_NAME
+    return {
+        "bot": count(or_(Strategy.id.is_(None), ~(is_testing | is_real))),
+        "testing": count(is_testing),
+        "real": count(is_real),
+    }
 
 
 def portfolio_value_and_cash(

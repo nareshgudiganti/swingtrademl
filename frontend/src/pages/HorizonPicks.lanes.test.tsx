@@ -81,6 +81,12 @@ describe('Horizon picks lane cards', () => {
     expect(none).toContain('No past-data test is available')
   })
 
+  it('says "not enough finished picks yet" for every blank figure once some picks have finished (#474)', () => {
+    const out = html(resp([lane({ forward: { ...lane().forward, picks: 6, completed: 4, open: 2 } })]))
+    expect(out.match(/Not enough finished picks yet/g)?.length).toBe(4) // hit rate, average, excess, fall
+    expect(out).not.toContain('0.00%')
+  })
+
   it('always shows the mid-cap warning and the forward sample warning', () => {
     const mid = html(resp([lane({ slot_key: 'h15-mid', cap_group: 'mid' })]))
     expect(mid).toContain('Mid-cap stocks trade thinner')

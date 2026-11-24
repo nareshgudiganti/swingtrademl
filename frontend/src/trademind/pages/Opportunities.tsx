@@ -10,6 +10,7 @@ import { BrainGate, Card, Icon, GlowArea, Seg, StockLogo, inr } from '../ui'
 import { noTradeReason } from '../emptyReasons'
 import LiveIdeaCard from '../beginner/LiveIdeaCard'
 import { usePlan } from '../../lib/plan'
+import { istMonthDay } from '../istDay'
 import { StrategySignals } from '../StrategySignals'
 
 type Filter = 'ALL' | IdeaWord
@@ -125,7 +126,7 @@ function FeaturedCard({ decision, dayScores }: { decision: BrainDecision; daySco
     queryKey: ['candles', decision.symbol, 30],
     queryFn: () => api.candles(decision.symbol, 30),
   })
-  const points = (candles.data ?? []).map((c) => ({ t: c.ts.slice(5, 10), v: c.close }))
+  const points = (candles.data ?? []).map((c) => ({ t: istMonthDay(c.ts), v: c.close }))
 
   return (
     <Card glow title="Featured Idea" sub="The top TRADE idea, or the top WATCH idea when there is no TRADE">

@@ -152,9 +152,10 @@
  ],
  "summary": {
   "finished": 5,
-  "mean_net_return": -3.4694469519536144e-19,
+  "mean_net_return": null,
   "open": 2,
   "picks": 7,
+  "rates_note": "Not enough finished picks yet: an average from this few would mislead.",
   "wins": 3
  }
 }

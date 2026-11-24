@@ -1531,6 +1531,27 @@ export interface BrainApproval {
   valid_until: string | null
 }
 
+/** The trading numbers, the trial's session count and the holiday list (GET /config/trading-rules). Fractions: 0.08 is +8%. */
+export interface TradingRulesDto {
+  research: {
+    version: string
+    sha256: string
+    horizons: {
+      horizon: number
+      target_pct: number
+      stop_pct: number
+      half_out_pct: number | null
+      max_sessions: number
+      research_only: boolean
+    }[]
+  }
+  brain_plan: { target_pct: number; stop_pct: number; half_out_pct: number; max_sessions: number }
+  /** Read-only risk limits shown to people; the server enforces them, nothing here changes them. */
+  risk_limits: { max_drawdown_pct: number }
+  trial: { start: string; min_sessions: number; sessions_so_far: number }
+  calendar: { holidays: string[] }
+}
+
 /** The app's one market clock (GET /market/session). */
 export interface MarketSession {
   state: 'pre_open' | 'open' | 'closed' | 'weekend' | 'holiday'

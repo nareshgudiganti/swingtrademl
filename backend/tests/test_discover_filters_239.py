@@ -28,7 +28,6 @@ from swing_trade_ml.db.models.trading import Position, Signal, Strategy
 
 API = "/api/v1"
 KEY = {"X-API-Key": "test-api-key"}
-GAP = {"strict": True, "raises": AssertionError}
 _tokens = iter(range(985_000, 985_900))
 
 
@@ -232,7 +231,6 @@ def test_every_top_pick_carries_a_size_that_buys_at_least_one_share_and_its_cap_
     assert {r["symbol"][-1]: r["cap_tier"] for r in rows}["D"] == "smallcap"
 
 
-@pytest.mark.xfail(**GAP, reason="gap f1: top-picks (and buy-list) have no age limit, so a BUY signal from weeks ago is still listed; /picks stops at 5 days")
 def test_top_picks_do_not_list_a_buy_signal_that_is_weeks_old(client, db_session):
     row = inst(db_session, "TP239OLD")
     signal(db_session, strat(db_session, "s239_old"), row, conf=0.9, age_days=40)
@@ -251,7 +249,6 @@ def test_buy_list_control_a_fresh_buy_is_listed_a_later_hold_from_the_same_strat
     assert {r["symbol"] for r in get(client, "/signals/buy-list") if r["symbol"].startswith("BL239")} == {"BL239KEEP"}
 
 
-@pytest.mark.xfail(**GAP, reason="gap f2: buy-list dedupes per strategy and stock, not per stock as its text says, so an old BUY from one strategy is listed even after another strategy's newer HOLD")
 def test_buy_list_drops_a_stock_whose_newest_signal_from_any_strategy_is_not_a_buy(client, db_session):
     old_buyer, newer_holder = strat(db_session, "s239_bl_a"), strat(db_session, "s239_bl_b")
     row = inst(db_session, "BL239MIX")
@@ -260,7 +257,6 @@ def test_buy_list_drops_a_stock_whose_newest_signal_from_any_strategy_is_not_a_b
     assert "BL239MIX" not in {r["symbol"] for r in get(client, "/signals/buy-list")}
 
 
-@pytest.mark.xfail(**GAP, reason="gap f1: buy-list shows a BUY from any age (the list is only 'fresh' by being each strategy's latest signal)")
 def test_buy_list_does_not_list_a_buy_signal_that_is_weeks_old(client, db_session):
     row = inst(db_session, "BL239OLD")
     signal(db_session, strat(db_session, "s239_old2"), row, conf=0.9, age_days=40)

@@ -246,6 +246,8 @@ def top_picks(
             LatestSignal.signal_type == "BUY",
             LatestSignal.confidence >= min_confidence,
             LatestSignal.instrument_id.not_in(held_instrument_ids),
+            # Same window as /picks: an old BUY from weeks ago is not a pick today (#239 gap f1).
+            LatestSignal.generated_at >= datetime.now(UTC) - PICK_MAX_AGE,
         )
     ).all()
 
@@ -332,23 +334,27 @@ def buy_list(db: DbSession, access: PlanAccessDep) -> list[dict]:
     Answers "the Signals page shows a BUY row for this stock, but is that
     still true today or from three days ago?" by construction: it's deduped
     to each instrument's single most recent signal (any strategy), then kept
-    only if that latest signal is BUY. A stock that reconfirms BUY every day
-    for a week stays on the list the whole week; the moment a later scan
-    reads HOLD or weaker, it silently drops off next call — no manual
-    dismissal needed for that case, since a stale row is structurally
-    impossible here. Already-held symbols are excluded — this list is only
-    for fresh entries, not stocks already bought (that's the Portfolio page).
+    only if that latest signal is BUY and no older than `PICK_MAX_AGE`. A stock
+    that reconfirms BUY every day for a week stays on the list the whole week;
+    the moment a later scan reads HOLD or weaker, it silently drops off next
+    call — no manual dismissal needed for that case, since a stale row is
+    structurally impossible here. Already-held symbols are excluded — this list
+    is only for fresh entries, not stocks already bought (that's the Portfolio page).
     Plan members see every member-facing strategy (model, brain, rules) but
     never the owner's private books (`owner_private_strategy_ids`: real
     holdings and manual paper testing), whatever those strategies are named.
+    Private books are removed BEFORE the per-stock dedupe, so a member sees the
+    latest signal they are allowed to see, not one hidden from them (#239 gap f2).
     """
+    private_ids = set() if access.unrestricted else owner_private_strategy_ids(db)
+
     latest_signal = (
         select(Signal)
-        .where(Signal.mode == get_broker().mode)
-        .distinct(Signal.strategy_id, Signal.instrument_id)
-        .order_by(Signal.strategy_id, Signal.instrument_id, Signal.generated_at.desc())
+        .where(Signal.mode == get_broker().mode, Signal.strategy_id.not_in(private_ids))
+        .distinct(Signal.instrument_id)
+        .order_by(Signal.instrument_id, Signal.generated_at.desc(), Signal.id.desc())
     ).subquery()
-    LatestSignal = aliased(Signal, latest_signal)
+    LatestSignal = aliased(Signal, latest_signal)  # noqa: N806 — same convention as top_picks
 
     held_instrument_ids = select(Position.instrument_id).where(
         Position.mode == get_broker().mode, Position.status == PositionStatus.OPEN
@@ -361,11 +367,11 @@ def buy_list(db: DbSession, access: PlanAccessDep) -> list[dict]:
         .where(
             LatestSignal.signal_type == "BUY",
             LatestSignal.instrument_id.not_in(held_instrument_ids),
+            LatestSignal.generated_at >= datetime.now(UTC) - PICK_MAX_AGE,
         )
         .order_by(LatestSignal.confidence.desc().nullslast())
     )
     rows = db.execute(stmt).all()
-    private_ids = set() if access.unrestricted else owner_private_strategy_ids(db)
 
     return [
         {
@@ -380,7 +386,7 @@ def buy_list(db: DbSession, access: PlanAccessDep) -> list[dict]:
             "generated_at": sig.generated_at,
         }
         for sig, symbol, name, strategy in rows
-        if not _practice_evidence(sig) and strategy.id not in private_ids
+        if not _practice_evidence(sig)
     ]
 
 

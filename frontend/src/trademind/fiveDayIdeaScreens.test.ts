@@ -8,7 +8,8 @@ import { describe, expect, it } from 'vitest'
 
 import type { BrainDecision, BrainRun } from '../api/types'
 import { effectiveWord } from './beginner/IdeaCard'
-import { shownWord } from './live'
+import { discoverCounts, filterIdeas } from './discoverRules'
+import { finalWord, heldByRoomOnly, ROOM_NOTE, shownWord } from './live'
 import { scoreLabel, scoreLabelLong, scorePoints } from './scoreText'
 import { ideaCounts } from './today/TodayIdeas'
 
@@ -61,21 +62,41 @@ describe('one idea reads the same on Today, Stock Detail and AI Analysis', () =>
   // (the stored word). For the owner, an idea restored to TRADE reads TRADE on its stock page and WATCH on Today.
   const RESTORED = { ...IDEA, word: 'WATCH', stock_verdict: 'TRADE', stock_verdict_restored: true } as unknown as BrainDecision
 
-  it("control: Today's counts and cards file the restored idea under the stored word WATCH (the cause of the gaps below)", () => {
+  it("control: Today's counts and cards file the restored idea under the stored word WATCH", () => {
     const counts = ideaCounts({ decisions: [RESTORED] } as unknown as BrainRun)
     expect([counts.WATCH, counts.TRADE]).toEqual([1, 0])
     expect(effectiveWord(RESTORED as never)).toBe('WATCH')
-    expect(shownWord(RESTORED)).toBe('TRADE') // while the stock page shows the stock verdict
   })
 
-  it.fails("GAP: Today's idea counts agree with the word Stock Detail shows when the account's room alone held the idea back", () => {
-    expect(shownWord(RESTORED)).toBe('TRADE')
+  // G11 (owner 2026-11-25): every screen shows the one canonical stored decision; room limits are explained separately.
+  it("Today's idea counts agree with the word Stock Detail shows when the account's room alone held the idea back", () => {
+    expect(shownWord(RESTORED)).toBe('WATCH')
     const run = { decisions: [RESTORED] } as unknown as BrainRun
-    expect(ideaCounts(run).TRADE).toBe(1)
+    expect(ideaCounts(run).WATCH).toBe(1)
+    expect(ideaCounts(run).TRADE).toBe(0)
   })
 
-  it.fails("GAP: Today's idea card word is the word Stock Detail shows when the account's room alone held the idea back", () => {
+  it("Today's idea card word is the word Stock Detail shows when the account's room alone held the idea back", () => {
     expect(effectiveWord(RESTORED as never)).toBe(shownWord(RESTORED))
+    expect(finalWord(RESTORED)).toBe(shownWord(RESTORED))
+  })
+
+  it('Today, Discover and Stock Detail all read the same word for a room-restricted idea', () => {
+    const ideas = [RESTORED]
+    expect(effectiveWord(RESTORED as never)).toBe('WATCH') // Today's card
+    expect(ideaCounts({ decisions: ideas } as unknown as BrainRun).WATCH).toBe(1) // Today's counts
+    expect(discoverCounts(ideas).WATCH).toBe(1) // Discover's tabs
+    expect(discoverCounts(ideas).TRADE).toBe(0)
+    expect(filterIdeas(ideas, { filter: 'WATCH' })).toHaveLength(1)
+    expect(filterIdeas(ideas, { filter: 'TRADE' })).toHaveLength(0)
+    expect(shownWord(RESTORED)).toBe('WATCH') // Stock Detail, AI Analysis, ideas table
+  })
+
+  it('the room restriction is a separate flag and a separate plain line, never the decision word', () => {
+    expect(heldByRoomOnly(RESTORED)).toBe(true)
+    expect(ROOM_NOTE).toMatch(/no room/i)
+    expect(heldByRoomOnly({ ...RESTORED, overruled_word: 'AVOID' } as BrainDecision)).toBe(false)
+    expect(shownWord({ ...RESTORED, overruled_word: 'AVOID' } as BrainDecision)).toBe('AVOID')
   })
 
   it('the day-by-day score line rounds exactly like the headline score for every score from 0 to 1', () => {

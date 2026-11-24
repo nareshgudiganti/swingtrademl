@@ -16,7 +16,7 @@ import { brainSteps, stopOf, type BrainStep } from './brainSteps'
 import { NOTHING_STORED, nextReview, SCORE_IS_NOT_PERMISSION, whyNotTrade } from './whyNotTrade'
 import { ideaChange, ordinal, useChanges, type IdeaChange } from './changes'
 import { useSymbolCaps } from './cap'
-import { finalWord, shownWord } from './live'
+import { finalWord, ROOM_NOTE, shownWord } from './live'
 import { scorePoints, scoreRank, withoutScorePercent, SCORE_HINT } from './scoreText'
 import { dayLabel } from './pricesAge'
 import { halfText } from './tradingRules'
@@ -334,7 +334,7 @@ export function StockHeader({
       )}
       {canManage && d.stock_verdict_restored && (
         <p className="sp-small" data-testid="two-answers">
-          Stock verdict: <b>{d.stock_verdict}</b> · Test portfolio: <b>{d.word}</b> (only the account’s room held it back).
+          Decision: <b>{finalWord(d)}</b>. {ROOM_NOTE}
         </p>
       )}
     </>

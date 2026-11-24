@@ -213,7 +213,8 @@ describe('the 8-item menu', () => {
     expect(trade).not.toContain('data-testid="research-note"')
     const two = render('/trademind/stock/DDDROOMONLY', true, true, RUN_PUBLIC)
     expect(two).toContain('data-testid="two-answers"')
-    expect(two).toContain('Stock verdict')
+    expect(two).toContain('Decision: <b>WATCH</b>')
+    expect(two).toContain('no room for this idea')
     expect(render('/trademind/stock/DDDROOMONLY', false, true, RUN_PUBLIC)).not.toContain('data-testid="two-answers"')
   })
 

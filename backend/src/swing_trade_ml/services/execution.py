@@ -39,7 +39,7 @@ from swing_trade_ml.db.models.market import Instrument
 from swing_trade_ml.db.models.trading import Order, Position, Signal, Strategy, Trade
 from swing_trade_ml.ml import real_question
 from swing_trade_ml.notifications import alert_policy, notifier
-from swing_trade_ml.services import risk, score_history, sell_labels, system_state
+from swing_trade_ml.services import alert_settings, risk, score_history, sell_labels, system_state
 from swing_trade_ml.services.costs import compute_charges
 from swing_trade_ml.services.entry_lock import EntryLockBusy, entry_lock
 from swing_trade_ml.services.exit_policy import (
@@ -864,15 +864,17 @@ def _check_confidence_decay(
     )
 
     if status == "alert":
-        position.confidence_alert_sent_at = datetime.now(UTC)
-        # This message already covers the band change; one per day is enough.
-        score_history.mark_alerted(db, position.id)
-        db.commit()
-        notifier.send_sync(
-            _confidence_decay_message(instrument, position, current_confidence, mode),
+        delivered = notifier.send_sync(
+            _confidence_decay_message(instrument, position, current_confidence, position.mode or mode),
             "signal",
             kind=alert_policy.HOLDING_WARNINGS,
         )
+        # Marked sent only once the message is settled (#480): a failed send is tried again on the next run.
+        if _alert_settled(db, delivered, "signal", alert_policy.HOLDING_WARNINGS):
+            position.confidence_alert_sent_at = datetime.now(UTC)
+            # This message already covers the band change; one per day is enough.
+            score_history.mark_alerted(db, position.id)
+        db.commit()
         return
     if status == "reset":
         position.confidence_alert_sent_at = None
@@ -883,7 +885,9 @@ def _check_confidence_decay(
     db.commit()
     if send_band_alert:
         notifier.send_sync(
-            _score_band_message(instrument, position, current_confidence, recorded.band, mode),
+            _score_band_message(
+                instrument, position, current_confidence, recorded.band, position.mode or mode
+            ),
             "signal",
             kind=alert_policy.HOLDING_WARNINGS,
         )
@@ -1572,20 +1576,26 @@ def check_exits(db: Session) -> list[Trade]:
             # Alert once, not every 60s — the position stays open until the
             # user records the exit via manual_close_position().
             if position.advisory_alert_sent_at is None:
-                notifier.send_sync(_advisory_exit_message(instrument, position, reason, mode), "signal")
-                position.advisory_alert_sent_at = datetime.now(UTC)
+                delivered = notifier.send_sync(
+                    _advisory_exit_message(instrument, position, reason, position.mode or mode), "signal"
+                )
+                # Marked sent (and so shown in the app) once delivered or undeliverable by design;
+                # a failed send is tried again on the next sweep (#480).
+                if _alert_settled(db, delivered, "signal"):
+                    position.advisory_alert_sent_at = datetime.now(UTC)
             continue
 
         if other_book:
             if position.advisory_alert_sent_at is None:
-                notifier.send_sync(
+                delivered = notifier.send_sync(
                     _advisory_exit_message(
                         instrument, position, reason, position.mode,
                         note=_other_book_note(position.mode, mode),
                     ),
                     "signal",
                 )
-                position.advisory_alert_sent_at = datetime.now(UTC)
+                if _alert_settled(db, delivered, "signal"):
+                    position.advisory_alert_sent_at = datetime.now(UTC)
             continue
 
         if not _claim_exit(db, position):
@@ -2053,12 +2063,45 @@ def _advisory_exit_message(instrument, position, reason, mode, note: str | None 
     badge = "📝 PAPER" if mode == "paper" else "💰 <b>LIVE</b>"
     return (
         f"🔔 <b>EXIT RECOMMENDED · {instrument.tradingsymbol}</b>  ({badge})\n\n"
-        f"Reason: {reason}\n"
+        f"Reason: {_exit_reason_words(reason)}\n"
         + (f"{note}\n" if note else "")
         + f"Entry: ₹{position.entry_price:,.2f}  ·  Current: ₹{position.current_price or 0:,.2f}\n"
         f"Quantity: {position.quantity:,}\n\n"
-        f"Sold this? Record it: POST /portfolio/positions/{position.id}/manual-close"
+        "Sold it? Record the sale in the app."
     )
+
+
+_EXIT_REASON_WORDS = {
+    "STOP_LOSS_HIT": "Stop-loss hit",
+    "TARGET_HIT": "Target reached",
+    "TIME_STOP": "Time limit reached",
+    "SIGNAL_EXIT": "The model now says sell",
+    "RISK_LIMIT": "A risk limit was reached",
+    "MANUAL": "Closed by hand",
+}
+
+
+def _exit_reason_words(reason) -> str:
+    """The exit reason in plain English; a code nobody mapped yet is shown as words, never as the raw code."""
+    code = str(reason)
+    return _EXIT_REASON_WORDS.get(code) or code.replace("_", " ").capitalize()
+
+
+def _alert_settled(db: Session, delivered: bool, event: str, kind: str | None = None) -> bool:
+    """True when an alert's flag may be set: Telegram took the message (a held one counts, it will go out),
+    or nothing can be delivered by design (notifications off or not configured, the event type left out, or
+    the owner switched this kind off), so a retry would repeat for ever. A real delivery failure is False:
+    the flag stays unset and the next run tries again (#480). Never raises."""
+    if delivered:
+        return True
+    try:
+        if not notifier.can_deliver(event):
+            return True
+        if kind is not None and kind in alert_settings.load(db).disabled:
+            return True
+    except Exception as exc:  # noqa: BLE001 - when in doubt, retry rather than lose the alert
+        log.warning("alerts.settle_check_failed", error=str(exc))
+    return False
 
 
 def _other_book_note(position_mode: str, bot_mode: str) -> str:

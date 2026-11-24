@@ -45,6 +45,12 @@ class TelegramNotifier:
             return False
         return bool(settings.TELEGRAM_ENABLED and self._token and self._chat_id)
 
+    def can_deliver(self, event: NotificationEvent | str = NotificationEvent.SIGNAL) -> bool:
+        """False when nothing of this event type can reach the chat at all (notifications off, not configured,
+        or the owner's event list leaves it out). A caller that retries a failed send uses it to tell
+        "try again" from "never"."""
+        return self._should_send(event)
+
     def _should_send(self, event: NotificationEvent | str) -> bool:
         event = str(event).lower()
         return self.enabled and event in settings.telegram_events

@@ -167,17 +167,27 @@ def test_the_database_refuses_update_delete_and_truncate(db_session):
     migration.install_triggers(db_session.connection())
     sid = _security(db_session, "HZ387J")
     row = hr.save_record(db_session, _record("HZ387J"), security_id=sid, model_id=1)
+    # UPDATE and DELETE are refused by the append-only trigger, whatever else references the table.
     for statement in (
         f"UPDATE horizon_records SET score = 0.1 WHERE id = {row.row_id}",
         f"DELETE FROM horizon_records WHERE id = {row.row_id}",
-        "TRUNCATE horizon_records",
     ):
         nested = db_session.begin_nested()
-        # TRUNCATE is refused either by the trigger or, once simulation rows reference the table (sim_fills), by the
-        # database's own foreign-key rule; both leave the record in place.
-        with pytest.raises(DBAPIError, match=r"append-only|cannot truncate"):
+        with pytest.raises(DBAPIError, match="append-only"):
             db_session.execute(text(statement))
         nested.rollback()
+    # A plain TRUNCATE is refused by the trigger or, once simulation rows reference the table (sim_fills, #454), by
+    # Postgres' own foreign-key rule before the trigger runs. Either way the record stays.
+    nested = db_session.begin_nested()
+    with pytest.raises(DBAPIError, match=r"append-only|cannot truncate"):
+        db_session.execute(text("TRUNCATE horizon_records"))
+    nested.rollback()
+    # TRUNCATE ... CASCADE also empties the tables that reference it, so the foreign key does not stop it: only the
+    # trigger does. This is the refusal that must always come from the trigger.
+    nested = db_session.begin_nested()
+    with pytest.raises(DBAPIError, match="append-only"):
+        db_session.execute(text("TRUNCATE horizon_records CASCADE"))
+    nested.rollback()
     assert _rows(db_session, sid)[0].score == 0.9
 
 

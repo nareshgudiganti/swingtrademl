@@ -3,7 +3,8 @@ import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YA
 
 import type { Candle } from '../api/types'
 import { Empty } from './Loading'
-import { formatCurrency, formatDate, formatSignedPercent, pnlClass } from '../lib/format'
+import { formatCurrency, formatSignedPercent, pnlClass } from '../lib/format'
+import { formatIstDate } from '../trademind/istDay'
 
 function performanceFor(candles: Candle[], sessions: number) {
   const latest = candles.at(-1)
@@ -47,7 +48,7 @@ function PerformanceCard({
         {value.change >= 0 ? '+' : ''}{formatCurrency(value.change)} per share
       </div>
       <div className="stat-sub">
-        {formatCurrency(value.startClose)} on {formatDate(value.startDate)} to {formatCurrency(value.latestClose)}
+        {formatCurrency(value.startClose)} on {formatIstDate(value.startDate)} to {formatCurrency(value.latestClose)}
       </div>
     </div>
   )
@@ -70,7 +71,7 @@ export default function PricePerformance({ symbol, candles }: { symbol: string; 
   const selectedCandles = candles.slice(-sessions - 1)
   const performance = performanceFor(candles, sessions)
   const chartData = selectedCandles.map((candle) => ({
-    date: formatDate(candle.ts),
+    date: formatIstDate(candle.ts),
     close: candle.close,
   }))
 
@@ -106,7 +107,7 @@ export default function PricePerformance({ symbol, candles }: { symbol: string; 
         <div className="card">
           <div className="stat-label">Latest close</div>
           <div className="stat-value">{formatCurrency(latest.close)}</div>
-          <div className="stat-sub">{formatDate(latest.ts)}</div>
+          <div className="stat-sub">{formatIstDate(latest.ts)}</div>
         </div>
         <PerformanceCard
           label={`Selected ${unit === 'weeks' ? 'period' : 'range'}`}

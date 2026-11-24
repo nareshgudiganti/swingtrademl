@@ -11,14 +11,15 @@ import { Link } from 'react-router-dom'
 import { api } from '../../api/client'
 import { useLatestRun, useMarketSession } from '../live'
 import { istToday } from '../pricesAge'
+import { planDays } from '../tradingRules'
 import {
   evidenceCounts,
   RESULTS_OPEN_TEXT,
   SEALED_RESULTS_TEXT,
   SEALED_RESULTS_TITLE,
   STAGES,
-  TRIAL_START_TEXT,
   trialProgress,
+  trialStartText,
 } from '../wave3Rules'
 import Learn from './Learn'
 import '../newlook-w3.css'
@@ -36,7 +37,7 @@ export default function EvidenceNew({ owner = false }: { owner?: boolean }) {
           Is the brain any good? <span className="tmw3-pill tmw3-pill-violet">Experimental</span>
         </h2>
         <p className="tm-dim">
-          A sealed 15-day test. Nobody sees the results until it ends, so they can&apos;t be tweaked along the way.
+          A sealed {planDays()}-day test. Nobody sees the results until it ends, so they can&apos;t be tweaked along the way.
         </p>
       </div>
 
@@ -49,7 +50,7 @@ export default function EvidenceNew({ owner = false }: { owner?: boolean }) {
           <span style={{ width: `${progress.pct}%` }} />
         </div>
         <div className="tmw3-between tmn-small tm-dim">
-          <span>Started {TRIAL_START_TEXT}</span>
+          <span>Started {trialStartText()}</span>
           <span>Results open on {RESULTS_OPEN_TEXT}</span>
         </div>
         <p className="tmn-small tm-dim">

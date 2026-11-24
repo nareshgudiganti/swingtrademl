@@ -757,7 +757,9 @@ def lane_row(day, rank, net, excess=None, base=None):
     return pick, out
 
 
-def test_lane_forward_view_matches_reference_on_unordered_rows_and_unfinished_picks():
+def test_lane_forward_view_matches_reference_on_unordered_rows_and_unfinished_picks(monkeypatch):
+    # The arithmetic is checked on 4 picks, so the display floor (#474, 60 finished picks) is lowered for this test.
+    monkeypatch.setattr(lane_api, "REVIEW_AFTER", 1)
     d0 = date(2026, 1, 5)
     rows = [
         lane_row(d0 + timedelta(1), 2, -0.04, -0.03, -0.01),
@@ -773,13 +775,14 @@ def test_lane_forward_view_matches_reference_on_unordered_rows_and_unfinished_pi
     assert view["hit_rate"] == approx(0.5)
     assert view["benchmark_excess"] == approx((0.01 + 0.02 - 0.03 + 0.0) / 4)
     assert view["drawdown"] == approx(ref_worst_fall(ordered))
-    assert view["sample_warning"] and view["uncertainty"] == {
+    assert view["uncertainty"] == {
         "low": None,
         "high": None,
-    }  # 4 < 30 picks: no range invented
+    }  # 4 < 30 picks: no range invented (the sample warning is tested with the real floor elsewhere)
 
 
-def test_lane_excess_is_pooled_per_pick_while_h05_edge_is_per_day_these_differ():
+def test_lane_excess_is_pooled_per_pick_while_h05_edge_is_per_day_these_differ(monkeypatch):
+    monkeypatch.setattr(lane_api, "REVIEW_AFTER", 1)  # arithmetic only; the display floor is tested in test_display_gaps_474
     """FINDING: two different 'excess vs every stock' definitions share one UI label. With unequal picks per day the numbers differ."""
     d0 = date(2026, 1, 5)
     # day 1: 1 finished pick with excess +10%; day 2: 4 finished picks each with excess 0

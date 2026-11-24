@@ -26,6 +26,7 @@ import PlansManager from './pages/PlansManager'
 import Settings from './pages/Settings'
 import Brain from './pages/Brain'
 import TradeMindApp from './trademind/TradeMindApp'
+import TradingRulesGate from './trademind/TradingRulesGate'
 import { PLAN_LABELS, usePlan } from './lib/plan'
 import { plansShell } from './lib/plansRoute'
 import { modelLabel } from './lib/format'
@@ -174,7 +175,16 @@ function NotInPlan({ plan }: { plan: string }) {
   )
 }
 
+/** The app, behind the gate that loads the trading numbers (never a guessed number on any screen). */
 export default function App() {
+  return (
+    <TradingRulesGate>
+      <AppShell />
+    </TradingRulesGate>
+  )
+}
+
+function AppShell() {
   const [loginError, setLoginError] = useState<string | null>(null)
   const [exchanging, setExchanging] = useState(!!pendingLoginCode)
   useEffect(() => {

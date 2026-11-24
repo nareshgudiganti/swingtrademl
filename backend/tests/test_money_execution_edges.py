@@ -270,7 +270,7 @@ def test_exit_signal_without_a_position_is_recorded_as_rejected(db_session):
     assert sig.rejection_reason == "No open position to exit"
 
 
-def test_pyramiding_only_into_a_winning_position(db_session, calm):
+def test_pyramiding_only_into_a_winning_position(db_session, calm, monkeypatch):
     inst = _inst(db_session, "QAEXPYR", price=100.0)
     strat = _strat(db_session, "qa8_pyramid", allow_pyramiding=True)
     pos = _pos(db_session, strat, inst, qty=10, price=90.0, unrealized_pnl=-5.0)
@@ -278,6 +278,8 @@ def test_pyramiding_only_into_a_winning_position(db_session, calm):
     assert sig.rejection_reason == "Position already open"  # averaging down refused
     pos.unrealized_pnl = 100.0
     db_session.flush()
+    # the next scan is another trading session (#360: the same decision in one session is a retry)
+    monkeypatch.setattr(execution, "_now", lambda: datetime.now(UTC) + timedelta(days=4))
     sig = execution.process_decision(db_session, strat, inst, _decision(SignalType.BUY))
     assert sig.rejection_reason != "Position already open"
 

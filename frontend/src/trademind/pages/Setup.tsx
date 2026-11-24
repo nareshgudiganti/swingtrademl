@@ -5,7 +5,8 @@ import { Link } from 'react-router-dom'
 import { api, clearToken } from '../../api/client'
 import type { MLModel, Strategy } from '../../api/types'
 import SymbolPicker from '../../components/SymbolPicker'
-import { formatDate, formatPercent, modelLabel } from '../../lib/format'
+import { formatPercent, modelLabel } from '../../lib/format'
+import { formatIstDate } from '../istDay'
 import { Confirm } from '../Confirm'
 import { Card, PageHead, Seg, Tabs, Tag } from '../ui'
 import { QueryNotice } from '../PageState'
@@ -225,8 +226,8 @@ function DataTab() {
                   <tr key={c.symbol}>
                     <td className="tm-strong">{c.symbol}</td>
                     <td className={c.candles < 300 ? 'tm-neg' : ''}>{c.candles.toLocaleString('en-IN')}</td>
-                    <td className="tm-dim">{c.from ? formatDate(c.from) : '—'}</td>
-                    <td className="tm-dim">{c.to ? formatDate(c.to) : '—'}</td>
+                    <td className="tm-dim">{c.from ? formatIstDate(c.from) : '—'}</td>
+                    <td className="tm-dim">{c.to ? formatIstDate(c.to) : '—'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -396,7 +397,7 @@ function ModelAccuracy({ model }: { model: MLModel }) {
         {acc.isLoading && <span className="tm-dim">Loading…</span>}
         {acc.isError && <span className="tm-neg">Could not load</span>}
         {acc.data &&
-          (acc.data.evaluated_predictions > 0 ? (
+          (acc.data.evaluated_predictions > 0 && acc.data.accuracy !== null ? (
             <>
               <span className="tm-strong">{formatPercent(acc.data.accuracy, 0)}</span>{' '}
               <span className="tm-dim">
@@ -493,7 +494,7 @@ function ModelsTab() {
       >
         <QueryNotice q={horizonAcc} what="this check" />
         {horizonAcc.data &&
-          (horizonAcc.data.evaluable > 0 ? (
+          (horizonAcc.data.evaluable > 0 && horizonAcc.data.accuracy !== null ? (
             <>
               <div className="tm-big" style={{ fontSize: '1.4rem' }}>{formatPercent(horizonAcc.data.accuracy, 0)}</div>
               <div className="tm-stat-label">

@@ -41,6 +41,7 @@ from swing_trade_ml.brokers.base import (
     OrderResult,
 )
 from swing_trade_ml.brokers.kite import kite_broker
+from swing_trade_ml.core import market_session
 from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.enums import (
     OrderStatus,
@@ -50,12 +51,18 @@ from swing_trade_ml.core.enums import (
     TransactionType,
 )
 from swing_trade_ml.core.logging import get_logger
+from swing_trade_ml.core.market_session import IST
 from swing_trade_ml.core.strategy_policy import outside_tester_book
 from swing_trade_ml.db.models.market import Candle, Instrument, Quote
 from swing_trade_ml.db.models.trading import Order, Position, Trade
 from swing_trade_ml.services.costs import apply_slippage, compute_charges
+from swing_trade_ml.services.quote_snapshot import STALE_AFTER_SECONDS
 
 log = get_logger(__name__)
+
+
+def _utcnow() -> datetime:
+    return datetime.now(UTC)
 
 
 class PaperBroker(Broker):
@@ -64,11 +71,30 @@ class PaperBroker(Broker):
     # ------------------------------------------------------------ pricing --
 
     def _reference_price(self, tradingsymbol: str, exchange: str, db: Session) -> float | None:
-        """Best available current price, most to least fresh.
+        """The freshest price known, for reading and for exits (`get_ltp`, the exit sweep): it never refuses.
 
-        Falls back through live quote -> cached quote row -> last candle close
-        so a paper fill still happens outside market hours or when the Kite
-        session has lapsed, instead of silently dropping signals.
+        A stale quote is still the best answer an exit check has, so stops, targets and time stops keep
+        running on it. Only a paper BUY is refused for a stale price, and `place_order` does that (#471)."""
+        return self._price_for_fill(tradingsymbol, exchange, db, TransactionType.SELL)[0]
+
+    def _price_for_fill(
+        self,
+        tradingsymbol: str,
+        exchange: str,
+        db: Session,
+        side: TransactionType = TransactionType.BUY,
+        now: datetime | None = None,
+    ) -> tuple[float | None, str | None, float | None]:
+        """(price, reason it is missing, age in seconds of a stale quote that was used).
+
+        The price comes from the live quote, the cached quote or the last close. A cached quote counts only
+        while fresh by the limit the app already uses for a quote (`quote_snapshot.STALE_AFTER_SECONDS`, same
+        India day, never from the future). A stale quote loses only to a close that is genuinely newer: a
+        FINAL daily bar whose close time (15:30 IST on its day) is after the quote's own time.
+
+        A BUY is never filled from a close while the market is open (a past close is not a current price)
+        and is refused with a stated reason when nothing better exists. A SELL always gets the freshest
+        known price, a stale quote included: refusing an exit would leave a losing position open.
         """
         symbol_key = f"{exchange}:{tradingsymbol}"
 
@@ -76,7 +102,7 @@ class PaperBroker(Broker):
             try:
                 ltp = kite_broker.get_ltp([symbol_key], db)
                 if symbol_key in ltp:
-                    return float(ltp[symbol_key])
+                    return float(ltp[symbol_key]), None, None
             except Exception as exc:  # noqa: BLE001 — fall through to cached data
                 log.warning("paper.ltp.failed", symbol=symbol_key, error=str(exc))
 
@@ -87,13 +113,12 @@ class PaperBroker(Broker):
             )
         ).scalar_one_or_none()
         if instrument is None:
-            return None
+            return None, None, None
 
         quote = db.execute(
             select(Quote).where(Quote.instrument_id == instrument.id)
         ).scalar_one_or_none()
-        if quote:
-            return float(quote.last_price)
+        usable_quote = quote is not None and quote.last_price is not None and quote.last_price > 0
 
         candle = db.execute(
             select(Candle)
@@ -101,7 +126,58 @@ class PaperBroker(Broker):
             .order_by(Candle.ts.desc())
             .limit(1)
         ).scalar_one_or_none()
-        return float(candle.close) if candle else None
+        close = float(candle.close) if candle is not None and candle.close else None
+
+        now = now or _utcnow()
+        buying = side == TransactionType.BUY
+
+        if not usable_quote:
+            if close is None:
+                return None, None, None
+            if buying and market_session.is_open(now):
+                return None, (
+                    f"There is no current price for {exchange}:{tradingsymbol} and the market is open, "
+                    "so no paper fill was made."
+                ), None
+            return close, None, None
+
+        age = (now - quote.ts).total_seconds()
+        quote_day = quote.ts.astimezone(IST).date()
+        if age >= 0 and quote_day == now.astimezone(IST).date() and age <= STALE_AFTER_SECONDS:
+            return float(quote.last_price), None, None
+
+        # The quote is stale. Is there a close that is truly newer (by time, not just by date)?
+        newer_close = None
+        if close is not None:
+            candle_day = candle.ts.astimezone(IST).date()
+            final = candle_day <= market_session.last_closed_trading_day(now)
+            closed_at = datetime.combine(candle_day, settings.market_close, tzinfo=IST)
+            if final and closed_at > quote.ts:
+                newer_close = close
+
+        if buying:
+            if market_session.is_open(now):
+                reason = (
+                    f"The saved price for {exchange}:{tradingsymbol} is from "
+                    f"{quote.ts.astimezone(IST):%d %b %H:%M} IST "
+                    f"(older than {STALE_AFTER_SECONDS // 60} minutes) "
+                    "and the market is open, so a past close cannot stand in for a current price: "
+                    "no paper fill was made."
+                )
+                return None, reason, None
+            if newer_close is not None:
+                return newer_close, None, None
+            reason = (
+                f"The saved price for {exchange}:{tradingsymbol} is from "
+                f"{quote.ts.astimezone(IST):%d %b %H:%M} IST "
+                f"(older than {STALE_AFTER_SECONDS // 60} minutes) and no newer close is on file, "
+                "so no paper fill was made."
+            )
+            return None, reason, None
+
+        if newer_close is not None:
+            return newer_close, None, None
+        return float(quote.last_price), None, age
 
     def _apply_slippage(self, price: float, side: TransactionType) -> float:
         return apply_slippage(price, side)
@@ -158,9 +234,19 @@ class PaperBroker(Broker):
 
     def place_order(self, request: OrderRequest, db: Session) -> OrderResult:
         """Simulate an immediate fill, subject to price availability and cash."""
-        ref_price = self._reference_price(request.tradingsymbol, request.exchange, db)
+        ref_price, stale_reason, stale_age = self._price_for_fill(
+            request.tradingsymbol, request.exchange, db, request.transaction_type
+        )
+        if ref_price is not None and stale_age is not None:
+            # An exit at a stale price is allowed (refusing it would leave a loser open) but never silent.
+            log.warning(
+                "paper.sell.stale_quote",
+                symbol=request.tradingsymbol,
+                quote_age_minutes=round(stale_age / 60, 1),
+                price=ref_price,
+            )
         if ref_price is None:
-            msg = f"No price available for {request.exchange}:{request.tradingsymbol}"
+            msg = stale_reason or f"No price available for {request.exchange}:{request.tradingsymbol}"
             log.warning("paper.order.no_price", symbol=request.tradingsymbol)
             return OrderResult(
                 broker_order_id=f"PAPER-{uuid.uuid4().hex[:12].upper()}",

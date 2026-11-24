@@ -12,31 +12,35 @@ import type { AdminJobs } from './jobs'
 import { finalWord } from './live'
 import { stopOf } from './brainSteps'
 import { stoppedByRoom } from './today/answerRules'
+import { holidays, trial } from './tradingRules'
 
 // ------------------------------------------------------------------ trial --
 
-/** The forward trial's first session (brain/trial_journal.py TRIAL_START). */
-export const TRIAL_START = '2026-10-14'
-/** Sessions the trial needs before it can be judged (trial_journal.MIN_SESSIONS). */
-export const TRIAL_SESSIONS = 15
+// The trial's first session, the sessions it needs and the market holidays come from the server
+// (trademind/tradingRules.ts: brain/trial_constants.py and core/holidays.py), never from here.
+
 /** The planned review date: results stay sealed until then (owner plan; the server unseals only on approval). */
 export const RESULTS_OPEN = '2026-11-07'
 export const RESULTS_OPEN_TEXT = '7 Nov 2026'
-export const TRIAL_START_TEXT = '14 Oct 2026'
-/** Weekday market holidays inside the trial window (NSE). */
-export const TRIAL_HOLIDAYS: readonly string[] = ['2026-10-20', '2026-11-10']
+
+/** "14 Oct 2026" from the trial's first session. */
+export function trialStartText(): string {
+  const d = new Date(`${trial().start}T00:00:00Z`)
+  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`
+}
 
 const iso = (d: Date) => d.toISOString().slice(0, 10)
 
-/** Trading sessions (weekdays, not holidays) from TRIAL_START up to and including `asOf` (YYYY-MM-DD). */
-export function trialSessionsSoFar(asOf: string, holidays: readonly string[] = TRIAL_HOLIDAYS): number {
+/** Trading sessions (weekdays, not holidays) from the trial's first day up to and including `asOf` (YYYY-MM-DD). */
+export function trialSessionsSoFar(asOf: string, holidayList: readonly string[] = holidays()): number {
+  const start = trial().start
   const end = asOf.slice(0, 10)
-  if (end < TRIAL_START) return 0
+  if (end < start) return 0
   let n = 0
-  const d = new Date(`${TRIAL_START}T00:00:00Z`)
+  const d = new Date(`${start}T00:00:00Z`)
   for (let guard = 0; guard < 400 && iso(d) <= end; guard += 1) {
     const day = d.getUTCDay()
-    if (day !== 0 && day !== 6 && !holidays.includes(iso(d))) n += 1
+    if (day !== 0 && day !== 6 && !holidayList.includes(iso(d))) n += 1
     d.setUTCDate(d.getUTCDate() + 1)
   }
   return n
@@ -47,15 +51,16 @@ export type TrialProgress = { day: number; of: number; pct: number; finished: bo
 /** "Trading day 7 of 15", counted on the market calendar up to the last finished trading day. */
 export function trialProgress(asOf: string): TrialProgress {
   const n = trialSessionsSoFar(asOf)
-  const day = Math.min(n, TRIAL_SESSIONS)
-  const finished = n >= TRIAL_SESSIONS
+  const needed = trial().minSessions
+  const day = Math.min(n, needed)
+  const finished = n >= needed
   const line =
     n === 0
       ? 'The trial has not started yet'
       : finished
-        ? `All ${TRIAL_SESSIONS} trading days are done. Results open on ${RESULTS_OPEN_TEXT}`
-        : `Trading day ${day} of ${TRIAL_SESSIONS}`
-  return { day, of: TRIAL_SESSIONS, pct: Math.round((day / TRIAL_SESSIONS) * 100), finished, line }
+        ? `All ${needed} trading days are done. Results open on ${RESULTS_OPEN_TEXT}`
+        : `Trading day ${day} of ${needed}`
+  return { day, of: needed, pct: Math.round((day / needed) * 100), finished, line }
 }
 
 /** The scorecard is locked until the review date; after it, it still waits for the owner's review. */
@@ -219,7 +224,7 @@ export function endedText(reason: string | null, label: string | null, own: bool
 
 /** A brain trade from the trial: its result is sealed like every other trial result. */
 export function isSealedTrade(strategy: string | null, entryAt: string): boolean {
-  return strategy === 'brain' && entryAt.slice(0, 10) >= TRIAL_START
+  return strategy === 'brain' && entryAt.slice(0, 10) >= trial().start
 }
 
 export function tradeRow(t: Trade, own: boolean): HistoryRow {

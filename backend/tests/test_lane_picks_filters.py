@@ -22,6 +22,7 @@ import pytest
 from swing_trade_ml.core.security import create_access_token
 from swing_trade_ml.db.models.lanes import H05Run, H05Signal
 from swing_trade_ml.db.models.session import User
+from swing_trade_ml.shadow_lanes import lane_review
 
 _NAMES = count()
 URL = "/api/v1/research/lane-picks"
@@ -91,6 +92,8 @@ def seeded(db_session):
     db_session.flush()
     return db_session
 
+REVIEW_FLOOR = lane_review.CHECKPOINTS[0]  # the lane review's first reading: 60 finished picks
+
 
 def hand_count(day_from=None, day_to=None, cap=None):
     """The summary worked out from PICKS alone, by the definitions the route has always used."""
@@ -109,7 +112,10 @@ def hand_count(day_from=None, day_to=None, cap=None):
         "finished": len(finished),
         "open": len(rows) - len(finished),
         "wins": len(wins),
-        "mean_net_return": (sum(p[6] for p in finished) / len(finished)) if finished else None,
+        # below the review floor (60 finished picks) no average is shown (#474)
+        "mean_net_return": (
+            (sum(p[6] for p in finished) / len(finished)) if len(finished) >= REVIEW_FLOOR else None
+        ),
         "symbols": sorted(p[0] for p in rows),
     }
 
@@ -173,7 +179,7 @@ def test_the_filtered_rows_and_summary_equal_a_hand_count(client, seeded, day_fr
     }
     assert (
         got["mean_net_return"] == pytest.approx(want["mean_net_return"])
-        if want["finished"]
+        if want["mean_net_return"] is not None
         else (got["mean_net_return"] is None)
     )
 

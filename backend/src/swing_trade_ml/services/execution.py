@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 
 import requests
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from swing_trade_ml.brokers import OrderRequest, OrderResult, get_broker
@@ -35,6 +36,7 @@ from swing_trade_ml.core.enums import (
     TransactionType,
 )
 from swing_trade_ml.core.logging import get_logger
+from swing_trade_ml.core.market_session import last_closed_trading_day
 from swing_trade_ml.db.models.market import Instrument
 from swing_trade_ml.db.models.trading import Order, Position, Signal, Strategy, Trade
 from swing_trade_ml.ml import real_question
@@ -56,6 +58,68 @@ from swing_trade_ml.services.portfolio import (
 log = get_logger(__name__)
 
 
+def _now() -> datetime:
+    return datetime.now(UTC)
+
+
+def make_signal_key(strategy: Strategy, instrument: Instrument, decision, mode: str, now: datetime) -> str:
+    """One scan decision = one key (#360): strategy, stock, mode, type, horizon and trading session.
+
+    The session is the last closed trading day of the scan time, so a retry after midnight still maps to the
+    session it belongs to."""
+    kind = getattr(decision.signal, "value", decision.signal)
+    horizon = decision.horizon_days if decision.horizon_days is not None else "-"
+    session = last_closed_trading_day(now).isoformat()
+    return f"{strategy.id}:{instrument.id}:{mode}:{kind}:{horizon}:{session}"
+
+
+def _signal_by_key(db: Session, key: str) -> Signal | None:
+    return db.execute(select(Signal).where(Signal.signal_key == key)).scalars().first()
+
+
+# A rejection that says "not now", not "no": the entry lock was busy, or the idea was ranked out of the slots.
+# Such a signal stays retryable in the same session (the retry goes through the full risk check again).
+RETRYABLE_KEY = "retryable_rejection"
+
+
+def _mark_retryable(signal: Signal) -> None:
+    signal.features = {**(signal.features or {}), RETRYABLE_KEY: True}
+
+
+def _is_retryable(signal: Signal) -> bool:
+    return bool((signal.features or {}).get(RETRYABLE_KEY)) and not signal.was_executed
+
+
+def _clear_retryable(db: Session, signal: Signal) -> None:
+    """A retry starts clean: the "not now" reason (and a practice-brain SLOTS tag it caused) is removed."""
+    features = dict(signal.features or {})
+    features.pop(RETRYABLE_KEY, None)
+    if features.get("blocked_by_risk_limit") == "SLOTS":
+        features.pop("blocked_by_risk_limit", None)
+    signal.features = features
+    signal.rejection_reason = None
+    db.commit()
+
+
+def _is_settled(signal: Signal) -> bool:
+    """A signal that already has its FINAL outcome: executed, advisory, a risk-check block or position-already-open
+    (a rejection_reason without the retryable mark). Nothing is left for a retry to do."""
+    return (
+        signal.signal_type == SignalType.HOLD
+        or signal.was_executed
+        or signal.advisory_only
+        or (signal.rejection_reason is not None and not _is_retryable(signal))
+    )
+
+
+def _has_order(db: Session, signal_id: int | None) -> bool:
+    """True when ANY order (any status) was ever written for this signal. A retry must never place another:
+    the existing one may be PENDING, filled but not yet booked, or half-written; reconciliation settles it."""
+    if signal_id is None:
+        return False
+    return db.execute(select(Order.id).where(Order.signal_id == signal_id).limit(1)).first() is not None
+
+
 def record_signal(
     db: Session,
     strategy: Strategy,
@@ -64,7 +128,15 @@ def record_signal(
     mode: str,
     quantity: int | None = None,
 ) -> Signal:
+    now = _now()
+    key = make_signal_key(strategy, instrument, decision, mode, now)
+    existing = _signal_by_key(db, key)
+    if existing is not None:
+        if quantity is not None and existing.suggested_quantity is None:
+            existing.suggested_quantity = quantity  # an unfinished row being completed by the retry
+        return existing  # a retried scan: the same decision is never recorded twice
     signal = Signal(
+        signal_key=key,
         strategy_id=strategy.id,
         instrument_id=instrument.id,
         signal_type=decision.signal,
@@ -77,9 +149,18 @@ def record_signal(
         horizon_days=decision.horizon_days,
         reason=decision.reason,
         features=decision.features,
-        generated_at=datetime.now(UTC),
+        generated_at=now,
     )
-    db.add(signal)
+    try:
+        with db.begin_nested():
+            db.add(signal)
+    except IntegrityError:
+        # A concurrent scan wrote the same key between the look-up and the insert: use its row.
+        existing = _signal_by_key(db, key)
+        if existing is None:
+            raise
+        db.commit()
+        return existing
     db.commit()
     db.refresh(signal)
     return signal
@@ -175,6 +256,9 @@ def open_position(
     record to reconcile against rather than an untracked broker order.
     """
     require_broker_execution(strategy)
+    if _has_order(db, signal.id):
+        log.warning("execution.entry.order_exists", symbol=instrument.tradingsymbol, signal_id=signal.id)
+        return None  # an order for this signal already exists: never a second one (#360)
     broker = get_broker()
     now = datetime.now(UTC)
 
@@ -1096,6 +1180,26 @@ def _mark_beyond_slot(signal: Signal, why: str) -> None:
     signal.rejection_reason = f"{BEYOND_SLOT_PREFIX}: {detail}"
 
 
+def _refresh_confidence(db: Session, strategy: Strategy, instrument: Instrument, decision, mode: str) -> None:
+    """The read-only part of a scan that must still run on a same-session rescan: the model's freshest read on a
+    stock already held (the same logic as the main path of process_decision)."""
+    if is_staged(strategy):
+        return
+    positions = db.execute(
+        select(Position).where(
+            Position.mode == mode,
+            Position.strategy_id == strategy.id,
+            Position.instrument_id == instrument.id,
+            Position.status == PositionStatus.OPEN,
+        )
+    ).scalars().all()
+    confidence = decision.confidence
+    if decision.signal in (SignalType.EXIT, SignalType.SELL) and confidence is not None:
+        confidence = round(1.0 - confidence, 3)
+    for position in positions:
+        _check_confidence_decay(db, position, strategy, instrument, confidence, mode)
+
+
 def process_decision(
     db: Session,
     strategy: Strategy,
@@ -1126,9 +1230,24 @@ def process_decision(
     # broker happens to be running right now.
     mode = strategy.mode
 
+    # A retried scan (#360): a decision already settled for this session is returned as it is, with no second
+    # risk check, order, alert or risk event. One that was written but never finished (no order, no rejection)
+    # falls through, and record_signal hands back that same row so the retry completes it exactly once.
+    prior = _signal_by_key(db, make_signal_key(strategy, instrument, decision, mode, _now()))
+    announce = True  # False when an earlier attempt already got as far as the entry alert
+    if prior is not None and (_is_settled(prior) or _has_order(db, prior.id)):
+        _refresh_confidence(db, strategy, instrument, decision, mode)
+        return prior
+    if prior is not None:
+        if _is_retryable(prior):
+            _clear_retryable(db, prior)
+        else:
+            announce = False
+
     if decision.signal == SignalType.BUY and ranked_out_reason:
         signal = record_signal(db, strategy, instrument, decision, mode)
         signal.rejection_reason = ranked_out_reason
+        _mark_retryable(signal)
         if _is_practice_brain(db, strategy):
             _mark_blocked_by_risk(signal, "SLOTS", ranked_out_reason)
         db.commit()
@@ -1231,7 +1350,7 @@ def process_decision(
     if is_advisory(strategy):
         # An advisory or practice idea places no order, so there is no cash or slot to protect and
         # nothing to serialise (and the sealed trial's practice evidence must not depend on a lock).
-        return _process_buy(db, strategy, instrument, decision, mode, existing_positions)
+        return _process_buy(db, strategy, instrument, decision, mode, existing_positions, announce)
 
     # An order can follow, so the whole read-check-write section below is ONE critical section per
     # trading mode (services/entry_lock.py): a second entry waits, then sees this one's position instead
@@ -1256,13 +1375,18 @@ def process_decision(
                 .scalars()
                 .all()
             )
-            return _process_buy(db, strategy, instrument, decision, mode, fresh_positions)
+            # Re-checked inside the lock: a scan that held it before us may have just written the order.
+            racing = _signal_by_key(db, make_signal_key(strategy, instrument, decision, mode, _now()))
+            if racing is not None and (_is_settled(racing) or _has_order(db, racing.id)):
+                return racing
+            return _process_buy(db, strategy, instrument, decision, mode, fresh_positions, announce)
     except EntryLockBusy:
         signal = record_signal(db, strategy, instrument, decision, mode)
         signal.rejection_reason = (
             "Another entry was being placed at the same moment, so this one was skipped to keep the "
             "account limits safe. It will be looked at again at the next scan."
         )
+        _mark_retryable(signal)
         db.commit()
         log.warning("execution.entry.lock_busy", symbol=instrument.tradingsymbol, mode=str(mode))
         return signal
@@ -1275,6 +1399,7 @@ def _process_buy(
     decision,
     mode: str,
     existing_positions: list[Position],
+    announce: bool = True,
 ) -> Signal:
     """The buy section of `process_decision`, unchanged: pyramiding rules, cash read, entry risk check,
     signal record, advisory handling, and the order. Callers that can place an order run it inside
@@ -1352,7 +1477,7 @@ def _process_buy(
         # A staged (brain) strategy's ideas are announced by its approvals
         # service instead; in practice mode they are not announced at all, so
         # the owner is never nudged to act on a practice idea.
-        if not is_staged(strategy):
+        if announce and not is_staged(strategy):
             notifier.send_sync(
                 _advisory_entry_message(instrument, decision, strategy, verdict.quantity, mode),
                 "signal",
@@ -1360,12 +1485,13 @@ def _process_buy(
             )
         return signal
 
-    notifier.send_sync(
-        _signal_message(instrument, decision, strategy, verdict.quantity, mode),
-        "signal",
-        # An order follows this message: with real money it is never switched off or held.
-        kind=alert_policy.TRADE_IDEAS if str(mode) == TradingMode.PAPER else None,
-    )
+    if announce:  # a retried unfinished buy does not announce itself a second time
+        notifier.send_sync(
+            _signal_message(instrument, decision, strategy, verdict.quantity, mode),
+            "signal",
+            # An order follows this message: with real money it is never switched off or held.
+            kind=alert_policy.TRADE_IDEAS if str(mode) == TradingMode.PAPER else None,
+        )
     open_position(db, strategy, instrument, signal, verdict.quantity)
     return signal
 

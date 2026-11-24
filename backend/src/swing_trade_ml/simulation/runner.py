@@ -1,7 +1,8 @@
 # ruff: noqa: E501  (long plain-English docstrings)
 """Run the research simulation from STORED data and persist it (#321, #379): the one caller of the simulation store.
 
-    python -m swing_trade_ml.simulation.runner --run-key 5d-2026-12 --from 2026-12-01 --to 2026-12-31 [--dry-run]
+    python -m swing_trade_ml.simulation.runner --run-key 5d-2026-12 --from 2026-12-01 --to 2026-12-31 \
+        --model NAME[@VERSION] --momentum-universe FILE_OR_SYMBOLS [--dry-run]
 
 `run_and_persist` does, in order:
   1. picks the trade rule by version (default "hz-rules-v1/5D", the approved 5D paper rule; "/" and ":" both work).
@@ -17,8 +18,10 @@
      sessions adds only the new days. A call whose past differs from what is stored is refused, and nothing is written.
 
 What it does NOT do: place orders, send a message, run on a schedule, touch a user or an account, or commit (the
-caller owns the transaction; the command line commits, or rolls back with --dry-run). Momentum has no verified ranking
-source yet, so unless picks are passed in its 33 portfolios make no trades (the report says so); they are still stored.
+caller owns the transaction; the command line commits, or rolls back with --dry-run). Momentum's 33 portfolios trade on
+the app's existing momentum rule (`simulation/momentum.py`: the 5 strongest 20-bar risers at each close) over Momentum's
+own DECLARED universe (`momentum_universe`, required, no default, stored on the run row), each pick carrying its rule
+reference in place of a horizon record; picks can instead be passed in.
 
 The command line is admin-only and refuses to run unless DATABASE_URL names a database ending in `_test`, or the
 explicit flag --allow-non-test-database is given (to be passed by the owner, later). There is no job and no schedule.
@@ -67,6 +70,9 @@ class RunReport:
     existing: dict[str, int]
     models: tuple[str, ...] = ()
     notes: tuple[str, ...] = field(default_factory=tuple)
+    momentum_declared: int = 0  # stocks the run declared for Momentum
+    momentum_ranked: int = 0  # of those, the ones with stored prices that the rule ranked
+    momentum_not_ranked: dict[int, str] = field(default_factory=dict)  # security id -> why it was not ranked
 
     @property
     def rows_created(self) -> int:
@@ -78,11 +84,48 @@ class RunReport:
             f"run {self.run_key!r} ({self.rule_version}), {self.session_count} sessions {self.first_session} to {self.last_session}",
             f"models named: {', '.join(self.models)}",
             f"portfolios: {self.portfolios} ({self.compared} compared, {self.validation} validation); {self.zero_trade_portfolios} made no trade",
+            f"momentum universe: {self.momentum_ranked} of {self.momentum_declared} declared stocks ranked",
             f"picks by policy: {self.picks}; fills: {self.fills}; blocked picks: {self.blocks}",
             f"rows created: {made}",
             *self.notes,
         ]
         return "\n".join(lines)
+
+
+def declared_universe(ids: Sequence[int] | None) -> tuple[int, ...]:
+    """The momentum universe as sorted, distinct permanent security ids. Missing, empty, repeated or non-integer ids are
+    refused: the universe is part of the run spec and is never guessed."""
+    if not ids:
+        raise RunnerError("the run must declare Momentum's universe (security ids); there is no default")
+    if any(not isinstance(i, int) or isinstance(i, bool) or i <= 0 for i in ids):
+        raise RunnerError("the momentum universe must be positive integer security ids")
+    if len(set(ids)) != len(ids):
+        raise RunnerError("the momentum universe lists a stock twice")
+    return tuple(sorted(ids))
+
+
+def resolve_universe(db: Any, spec: str, on: date) -> tuple[int, ...]:
+    """A universe given as a file (symbols separated by commas, spaces or lines; `#` starts a comment) or as a comma list
+    of symbols, resolved to security ids on `on` through the identity service. An unknown or ambiguous symbol, or two
+    symbols of one stock, refuses the run: nothing is guessed."""
+    from pathlib import Path
+
+    from swing_trade_ml.simulation import source
+
+    path = Path(spec)
+    text = path.read_text(encoding="utf-8") if path.is_file() else spec
+    symbols = [
+        token for line in text.splitlines() for token in line.split("#", 1)[0].replace(",", " ").split()
+    ]
+    if not symbols:
+        raise RunnerError("the momentum universe names no symbol")
+    if len({s.upper() for s in symbols}) != len(symbols):
+        raise RunnerError("the momentum universe lists a symbol twice")
+    try:
+        resolved = source.security_ids_for(db, symbols, on)
+    except source.UnknownStockError as exc:
+        raise RunnerError(f"momentum universe refused: {exc}") from exc
+    return declared_universe(list(resolved.values()))
 
 
 def rules_for(rule_version: str, *, allow_research: bool = False) -> TradingRules:
@@ -131,6 +174,7 @@ def run_and_persist(
     run_key: str,
     sessions: Sequence[str],
     models: Sequence[ModelRef | str],
+    momentum_universe: Sequence[int],
     rule_version: str = DEFAULT_RULE_VERSION,
     allow_research: bool = False,
     bars: Mapping[int, Mapping[str, Bar]] | None = None,
@@ -138,12 +182,41 @@ def run_and_persist(
     sectors: Mapping[int, str] | None = None,
     specs: Sequence[PortfolioSpec] | None = None,
 ) -> RunReport:
-    """Read stored records (and candles), run the cohort, persist it. See the module docstring. Does not commit."""
+    """Read stored records (and candles), run the cohort, persist it. See the module docstring. Does not commit.
+
+    Momentum's picks come from the app's existing momentum rule over stored closes (`simulation.momentum`), ranking
+    `momentum_universe`: the stocks Momentum is declared to rank, as permanent security ids. It has no default (it is
+    never "whatever the models scored"), it is stored on the run row, and a replay with another universe is refused. If
+    `momentum` picks are passed in, they are used as they are and the universe is only recorded."""
+    from swing_trade_ml.simulation import momentum as momentum_rule
     from swing_trade_ml.simulation import source, store
 
     _check_sessions(sessions)
     rules = rules_for(rule_version, allow_research=allow_research)
     specs = tuple(specs) if specs is not None else build_matrix()
+    universe = declared_universe(momentum_universe)
+    ranked_count, not_ranked = 0, {}
+    if momentum is None:
+        closes = source.closes_from_candles(db, universe, sessions[0], sessions[-1])
+        last_day = date.fromisoformat(sessions[-1])
+        symbols = {sid: source.symbol_on(db, sid, last_day) or "" for sid in closes}
+        ranked_result = momentum_rule.momentum_result(closes, sessions, symbols=symbols, universe=universe)
+        momentum, ranked_count, not_ranked = (
+            ranked_result.decisions,
+            len(ranked_result.ranked),
+            dict(ranked_result.not_ranked),
+        )
+    else:
+        # Picks passed in must carry a reference of their own. Only the momentum rule's own picks (made just above) may
+        # carry the rule's reference, so a caller cannot dress a list up as the app's momentum rule.
+        official = momentum_rule.rule_ref()
+        for picks in momentum.values():
+            for pick in picks:
+                if not pick.rule_ref or not pick.rule_ref.strip() or pick.rule_ref == official:
+                    raise RunnerError(
+                        f"a pick passed in must carry its own rule reference, and not {official!r}, which only the "
+                        "app's momentum rule may use"
+                    )
     decisions = source.decisions_by_policy(
         db, rules, models=models, momentum=momentum, sectors=sectors, sessions=sessions
     )
@@ -153,12 +226,27 @@ def run_and_persist(
         }
         bars = source.bars_from_candles(db, sorted(wanted), sessions)
     ledgers = run_cohort(specs, sessions, bars, decisions, rules)
-    result = store.persist_run(db, run_key, ledgers, rules)
+    result = store.persist_run(
+        db,
+        run_key,
+        ledgers,
+        rules,
+        momentum_universe=universe,
+        momentum_not_ranked=not_ranked if ranked_count or not_ranked else None,
+    )
 
     notes = []
+    if ranked_count or not_ranked:
+        reasons = ", ".join(sorted(set(not_ranked.values())))
+        notes.append(
+            f"momentum: {momentum_rule.rule_ref()} ranked {ranked_count} of {len(universe)} declared stocks "
+            "(the app's existing momentum rule, closes up to each decision day only)"
+            + (f"; {len(not_ranked)} not ranked: {reasons}" if not_ranked else "")
+        )
     if not any(decisions[Policy.MOMENTUM].values()):
         notes.append(
-            "momentum: no verified ranking source yet, so its portfolios made no picks (still stored)"
+            "momentum: the rule made no picks in these sessions (too little stored candle history, or no stocks); "
+            "its portfolios are still stored"
         )
     if not decisions[Policy.MODEL_ONLY]:
         notes.append(f"no stored {rules.horizon_label} horizon records in these sessions: nothing was picked")
@@ -182,6 +270,9 @@ def run_and_persist(
         existing=dict(result.existing),
         models=tuple(str(m) for m in named_models(models)),
         notes=tuple(notes),
+        momentum_declared=len(universe),
+        momentum_ranked=ranked_count,
+        momentum_not_ranked=not_ranked,
     )
 
 
@@ -240,6 +331,12 @@ def _parser() -> argparse.ArgumentParser:
         help="a model whose records decide the picks, NAME or NAME@VERSION; repeat for several. There is no default",
     )
     parser.add_argument(
+        "--momentum-universe",
+        required=True,
+        help="the stocks Momentum ranks: a file of symbols, or a comma list; resolved on the first session, an unknown "
+        "symbol refuses the run. There is no default",
+    )
+    parser.add_argument(
         "--rule", default=DEFAULT_RULE_VERSION, help=f"rule version (default {DEFAULT_RULE_VERSION})"
     )
     parser.add_argument("--allow-research", action="store_true", help="allow a research-only rule (10D, 15D)")
@@ -271,11 +368,15 @@ def main(argv: Sequence[str] | None = None, *, database_url: str | None = None) 
 
         db = SessionLocal()
         try:
+            universe = resolve_universe(
+                db, args.momentum_universe, date.fromisoformat(sessions[0]) if sessions else args.start
+            )
             report = run_and_persist(
                 db,
                 run_key=args.run_key,
                 sessions=sessions,
                 models=models,
+                momentum_universe=universe,
                 rule_version=args.rule,
                 allow_research=args.allow_research,
             )

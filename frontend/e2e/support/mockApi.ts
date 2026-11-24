@@ -20,6 +20,7 @@ import beginnerStockInfy from '../fixtures/beginner-stock-infy.json' with { type
 import brainStage from '../fixtures/brain-stage.json' with { type: 'json' }
 import horizonReport from '../fixtures/horizon-report.json' with { type: 'json' }
 import marketSession from '../fixtures/market-session.json' with { type: 'json' }
+import tradingRules from '../fixtures/trading-rules.json' with { type: 'json' }
 import meMember from '../fixtures/me-member.json' with { type: 'json' }
 import meOwner from '../fixtures/me-owner.json' with { type: 'json' }
 import meTester from '../fixtures/me-tester.json' with { type: 'json' }
@@ -194,6 +195,7 @@ function answer(role: Role, method: string, path: string, query: URLSearchParams
     return { body: { symbol, opened_on: null, points: [], band: [] } }
   }
   if (path === '/market/session') return { body: marketSession }
+  if (path === '/config/trading-rules') return { body: tradingRules }
   if (path === '/strategies') return { body: strategies }
   // A strategy's signals are open to no plan on the real server: the owner and a tester (plans off) only.
   if (path === '/strategies/1/signals') return owner || role === 'tester' ? { body: strategySignals } : { status: 403, body: { detail: 'Not in your plan.' } }

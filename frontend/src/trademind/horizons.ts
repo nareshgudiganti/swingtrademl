@@ -5,6 +5,8 @@
 // One table, so a horizon can later get its own model, evidence and status without redesigning screens.
 // Labels only: nothing here changes what the brain decides or trades.
 
+import { fiveDayQuestion, plan } from './tradingRules'
+
 export type HorizonId = '1d' | '5d' | '15d' | '30d' | '90d'
 export type Validation = 'experimental' | 'validated'
 
@@ -42,17 +44,28 @@ export const HORIZONS: Horizon[] = [
     available: false,
     availabilityText: NONE,
     validation: null,
-    research:
-      'The older ML models make research predictions for this window (closes +2% or more after 5 days). ' +
-      'They are unvalidated and not a trading plan.',
+    // The window's numbers come from the server (read when used, not at import).
+    get research() {
+      return (
+        `The older ML models make research predictions for this window (closes ${fiveDayQuestion()}). ` +
+        'They are unvalidated and not a trading plan.'
+      )
+    },
     experiment: true,
   },
   {
     id: '15d',
-    days: 15,
-    title: '15 Days',
+    // The 15-day window is the brain's plan: its length comes from the server (read when used, not at import).
+    get days() {
+      return plan().days
+    },
+    get title() {
+      return `${plan().days} Days`
+    },
     kind: 'Medium swing',
-    span: 'up to 15 trading days',
+    get span() {
+      return `up to ${plan().days} trading days`
+    },
     available: true,
     availabilityText: 'Trading ideas available',
     validation: 'experimental',

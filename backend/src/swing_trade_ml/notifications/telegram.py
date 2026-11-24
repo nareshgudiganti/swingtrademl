@@ -269,6 +269,8 @@ class TelegramNotifier:
                 "",
                 f"Trades: {stats['total_trades']}  ·  Win rate: {stats.get('win_rate', 0):.1%}",
             ]
+        else:
+            lines += ["", "Trades: no finished trades yet"]
         if stats.get("signals_today"):
             lines.append(f"Signals today: {stats['signals_today']}")
 

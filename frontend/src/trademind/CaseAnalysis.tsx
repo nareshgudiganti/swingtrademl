@@ -7,10 +7,11 @@ import type { BrainDecision, BrainRun } from '../api/types'
 import type { StockBriefData } from './beginner/types'
 import { shownWord } from './live'
 import { rankText, scorePoints, scoreRank, SCORE_HINT } from './scoreText'
-import { SCORE_VS_PLAN } from './scoreVsPlan'
+import { scoreVsPlan } from './scoreVsPlan'
 import { buyLevel, wordSay } from './stockParts'
 import { MARKET_PLAIN } from './vocab'
 import { inr } from './ui'
+import { planDays, stopText, targetText } from './tradingRules'
 
 export type Scenario = { label: string; price: number; pct: number; perShare: number; tone: 'pos' | 'neg' }
 
@@ -218,7 +219,7 @@ export function evidenceFigures(d: BrainDecision): EvidenceFigures {
   if (h.status === 'not_measured' || h.status === 'unverified' || !tr || tr.hit_rate == null || tr.n == null) {
     return {
       kind: 'none',
-      text: h.note ?? 'This score has not been measured against the +8% / −4% question yet, so no record is shown.',
+      text: h.note ?? `This score has not been measured against the ${targetText()} / ${stopText()} question yet, so no record is shown.`,
     }
   }
   return {
@@ -229,7 +230,7 @@ export function evidenceFigures(d: BrainDecision): EvidenceFigures {
     lowPct: tr.lowest_window != null ? Math.round(tr.lowest_window * 100) : null,
     highPct: tr.highest_window != null ? Math.round(tr.highest_window * 100) : null,
     period: h.period ? `${monthYear(h.period.from)} to ${monthYear(h.period.to)}` : null,
-    rule: h.rule ?? '+8% target before the −4% stop, within 15 trading days',
+    rule: h.rule ?? `${targetText()} target before the ${stopText()} stop, within ${planDays()} trading days`,
     enough: tr.enough_evidence,
   }
 }
@@ -272,7 +273,7 @@ export function ModelEvidence({ decision: d }: { decision: BrainDecision }) {
           </ul>
         </>
       )}
-      <p className="sp-small" data-testid="score-vs-plan">{SCORE_VS_PLAN}</p>
+      <p className="sp-small" data-testid="score-vs-plan">{scoreVsPlan()}</p>
       <p className="sp-small">Past results do not guarantee future results. The score is a ranking, not a chance of profit.</p>
     </section>
   )

@@ -183,6 +183,18 @@ def session(now: datetime | None = None) -> MarketSession:
     )
 
 
+def expected_latest_trading_day(now_ist: datetime) -> date:
+    """The most recent trading day whose candle should already be in by now.
+
+    Zerodha doesn't publish a day's own historical candle same-day — even
+    checked well after both the 15:30 close and the 15:40 ingest job, it's
+    consistently still missing, and only shows up some time before the next
+    trading day. So "today" is never the right expectation; the bar is
+    always the previous trading day, all day today, regardless of the hour.
+    """
+    return previous_trading_day(now_ist.date())
+
+
 def calendar_warning(today: date | None = None) -> str | None:
     """A plain warning when the holiday list for this year — or, from
     1 November, for next year — is missing; None when it is in place."""

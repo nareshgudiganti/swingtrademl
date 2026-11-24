@@ -114,6 +114,7 @@ def test_legacy_long_term_auto_row_routes_to_advisory(monkeypatch, signal):
     monkeypatch.setattr(execution.risk, 'check_entry', lambda **kw: SimpleNamespace(allowed=True, quantity=1))
     record = SimpleNamespace(advisory_only=False)
     monkeypatch.setattr(execution, 'record_signal', lambda *a: record)
+    monkeypatch.setattr(execution, '_signal_by_key', lambda *a: None)  # #360: no earlier signal this session
     monkeypatch.setattr(execution, '_advisory_entry_message', lambda *a: '')
     monkeypatch.setattr(execution, '_advisory_exit_message', lambda *a: '')
     monkeypatch.setattr(execution.notifier, 'send_sync', lambda *a, **kw: None)

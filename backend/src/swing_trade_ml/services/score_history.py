@@ -269,7 +269,7 @@ def append_to_ledger(
         with db.begin_nested():
             models: dict[tuple[str, str], MLModel | None] = {}
             scored_securities: set[int] = set()
-            scan_session = max(sessions.values())
+            scan_session = max(sessions.values(), default=None)  # None: nothing was scored (an empty scan)
             for (instrument_id, name), (score, model_version) in latest.items():
                 instrument = db.get(Instrument, instrument_id)
                 if instrument is None:
@@ -300,7 +300,7 @@ def append_to_ledger(
                     scan_key=f"v1:{sessions[instrument_id].isoformat()}",
                 )
                 written += 1 if result.created else 0
-                if sessions[instrument_id] < scan_session:
+                if scan_session is not None and sessions[instrument_id] < scan_session:
                     # Its newest candle is older than this scan's session: the score above belongs to that
                     # older session, and THIS session gets an explicit `stale` gap (never a copied score).
                     stale = ledger.append_score(

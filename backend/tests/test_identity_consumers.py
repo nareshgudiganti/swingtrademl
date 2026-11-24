@@ -284,15 +284,6 @@ def test_a_retried_scan_records_one_ledger_row_per_stock_horizon_and_session(db_
         assert len(rows) == 1 and rows[0].revision == 1 and rows[0].horizon_days == 15
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "KNOWN (#360): services/execution.py record_signal (line 59) always inserts, so a retried scan records a "
-        "second v1 `signals` row for the same strategy, stock, horizon and session. The fix is in the v1 trading "
-        "path (S7: needs review-risk and the owner's approval), so it is NOT made here. execution.py is not in "
-        "trial_freeze.json, but it is the signal-to-order path. The ledger above is not affected."
-    ),
-)
 def test_a_retried_scan_records_one_v1_signal(db_session):
     inst = _instrument(db_session, "SIG390")
     strategy = Strategy(name="sig390", strategy_type="ml_swing", params={}, is_active=True, mode="paper")
@@ -334,3 +325,15 @@ def test_a_token_and_a_symbol_that_name_different_stocks_give_none_not_the_token
     a.tradingsymbol = "CONFB390"  # this instrument's token says stock A, its symbol now says someone else's
     db_session.flush()
     assert consumers.security_for_instrument(db_session, a.id) is None
+
+
+def test_missing_rows_are_written_even_when_no_session_is_given_for_any_stock(db_session, monkeypatch):
+    """append_to_ledger with nothing scored and no sessions (an empty scan): the universe's gaps are still recorded."""
+    a, b = _instrument(db_session, "EMPTYSES390A"), _instrument(db_session, "EMPTYSES390B")
+    for inst in (a, b):
+        _candle(db_session, inst, FRIDAY)
+    _at(monkeypatch, datetime(2026, 11, 20, 15, 50, tzinfo=IST))
+    written = score_history.append_to_ledger(db_session, {}, {}, universe=[a.id, b.id])
+    assert written == 2
+    assert [r.status for r in _rows(db_session, resolve(db_session, symbol="EMPTYSES390A"))] == ["missing"]
+    assert [r.session_date for r in _rows(db_session, resolve(db_session, symbol="EMPTYSES390B"))] == [FRIDAY]

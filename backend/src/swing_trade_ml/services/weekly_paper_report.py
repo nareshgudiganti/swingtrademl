@@ -550,11 +550,17 @@ def format_message(report: dict[str, Any]) -> str:
         )
     for key, label in (("bot", "Bot (paper)"), ("testing", "Testing (paper)")):
         b = report[key]
-        lines.append(
-            f"{label}: {b['buys']['orders']} buys, {b['sells']['orders']} sells "
-            f"({b['sells']['partial']} partial), realized {_money(b['realized_pnl']['net'])} after costs, "
-            f"open now {_money(b['unrealized_pnl']['amount'])}"
-        )
+        if b.get("data_status") == "no buys or sells this week":
+            # Nothing happened: say so, never print zeros that read as a result (#474).
+            held = (b.get("positions") or {}).get("open", 0)
+            tail = f"; {held} still open" if held else ""
+            lines.append(f"{label}: no trades this week (no buys or sells){tail}")
+        else:
+            lines.append(
+                f"{label}: {b['buys']['orders']} buys, {b['sells']['orders']} sells "
+                f"({b['sells']['partial']} partial), realized {_money(b['realized_pnl']['net'])} after costs, "
+                f"open now {_money(b['unrealized_pnl']['amount'])}"
+            )
         if not (
             b["reconciliation"]["sell_orders_equal_trade_rows"] and b["reconciliation"]["exit_reasons_add_up"]
         ):

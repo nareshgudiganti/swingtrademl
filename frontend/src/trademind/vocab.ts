@@ -5,6 +5,7 @@
 // It also holds the glossary (GLOSSARY, at the bottom) that <Term> shows on tap.
 
 import type { BrainTraceEvent, HoldingWord, IdeaWord, MarketMode } from '../api/types'
+import { maxDrawdownPct, plan, targetText } from './tradingRules'
 
 export type Tone = 'pos' | 'warn' | 'neg' | 'neutral'
 export type TagColor = 'green' | 'amber' | 'red' | 'blue' | 'violet'
@@ -130,8 +131,8 @@ export function traceLine(e: BrainTraceEvent): string {
 // ---------------------------------------------------------------------------
 // The glossary: one short, plain explanation per word the app shows. <Term>
 // (term.tsx) opens these on tap, and the Learn page lists them all. Numbers
-// come from the code, not from memory: +8% target / -4% stop / half at +5% /
-// 15 trading days (brain/modules/m08_decide/policy.py), 15% drawdown pause
+// come from the code, not from memory: the plan's target, stop, half-out and window are read from the
+// server (tradingRules.ts); the 15% drawdown pause
 // (core/config.py MAX_PORTFOLIO_DRAWDOWN_PCT, services/risk.py), 25% per
 // sector and one stock per sector on the smallest account
 // (services/limits.py), careful market = at most 2 new ideas at half size
@@ -198,7 +199,9 @@ export const GLOSSARY: Record<GlossaryKey, GlossaryEntry> = {
   REDUCE: {
     label: 'REDUCE',
     group: 'holding',
-    text: 'Sell half. The stock is up 5% from the buy price, so half is sold to lock in that gain and the rest stays in for the +8% target.',
+    get text() {
+      return `Sell half. The stock is up ${plan().halfPct}% from the buy price, so half is sold to lock in that gain and the rest stays in for the ${targetText()} target.`
+    },
   },
   EXIT: {
     label: 'EXIT',
@@ -228,22 +231,30 @@ export const GLOSSARY: Record<GlossaryKey, GlossaryEntry> = {
   stop_loss: {
     label: 'Stop-loss',
     group: 'plan',
-    text: 'The price at which the stock is sold to stop the loss growing: 4% below the buy price. It keeps one bad trade small.',
+    get text() {
+      return `The price at which the stock is sold to stop the loss growing: ${plan().stopPct}% below the buy price. It keeps one bad trade small.`
+    },
   },
   target: {
     label: 'Target',
     group: 'plan',
-    text: 'The price at which the plan takes its profit: 8% above the buy price.',
+    get text() {
+      return `The price at which the plan takes its profit: ${plan().targetPct}% above the buy price.`
+    },
   },
   half_out: {
     label: 'Sell half (first target)',
     group: 'plan',
-    text: 'When a stock is up 5%, half of it is sold to lock in some profit. The rest stays in for the +8% target. (The smallest accounts do not split a holding in half.)',
+    get text() {
+      return `When a stock is up ${plan().halfPct}%, half of it is sold to lock in some profit. The rest stays in for the ${targetText()} target. (The smallest accounts do not split a holding in half.)`
+    },
   },
   horizon: {
     label: 'Horizon',
     group: 'plan',
-    text: 'How long a trade is planned to last: at most 15 trading days, about three weeks. As a safety net, the bot sells anything still held 30 calendar days after buying it.',
+    get text() {
+      return `How long a trade is planned to last: at most ${plan().days} trading days, about three weeks. As a safety net, the bot sells anything still held 30 calendar days after buying it.`
+    },
   },
   buy_zone: {
     label: 'Buy around',
@@ -253,7 +264,9 @@ export const GLOSSARY: Record<GlossaryKey, GlossaryEntry> = {
   drawdown: {
     label: 'Drawdown',
     group: 'money',
-    text: 'How far the account has fallen from its highest value so far. If it falls 15% below that high point, new buys are paused until it recovers.',
+    get text() {
+      return `How far the account has fallen from its highest value so far. If it falls ${maxDrawdownPct()}% below that high point, new buys are paused until it recovers.`
+    },
   },
   sector: {
     label: 'Sector',
@@ -268,7 +281,9 @@ export const GLOSSARY: Record<GlossaryKey, GlossaryEntry> = {
   est_chance: {
     label: 'Estimated chance',
     group: 'money',
-    text: 'How often stocks with a similar score really went up 8% before falling 4%, within 15 trading days, on days the model had not seen. A guide, not a promise.',
+    get text() {
+      return `How often stocks with a similar score really went up ${plan().targetPct}% before falling ${plan().stopPct}%, within ${plan().days} trading days, on days the model had not seen. A guide, not a promise.`
+    },
   },
   paper: {
     label: 'Paper',

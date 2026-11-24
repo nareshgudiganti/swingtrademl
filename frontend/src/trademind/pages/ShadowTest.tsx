@@ -14,6 +14,7 @@ import { shortDate } from '../CompanyTab'
 import { BrainGate } from '../ui'
 import { SortTh, useSort } from '../sort'
 import StockLink from '../StockLink'
+import { planDays, stopText, targetText } from '../tradingRules'
 import '../stockpage.css'
 
 const pct = (n: number | null | undefined, digits = 1) =>
@@ -23,7 +24,12 @@ const share = (part: number, whole: number) => (whole ? ` (${Math.round((part / 
 
 type GroupFilter = 'all' | 'Top 5' | 'Ranks 6-20' | 'Rank 21+'
 type BoughtFilter = 'all' | 'yes' | 'no'
-const OUTCOME_TEXT = { target: 'Reached +8%', stop: 'Hit −4% stop', timeout: 'Ran out of time (day 15)' } as const
+const outcomeText = () =>
+  ({
+    target: `Reached ${targetText()}`,
+    stop: `Hit ${stopText()} stop`,
+    timeout: `Ran out of time (day ${planDays()})`,
+  }) as const
 
 export default function ShadowTest() {
   return (
@@ -74,7 +80,7 @@ export function ShadowView({ v }: { v: ShadowTestView }) {
           <h2 className="sp-h2" style={{ fontSize: 22 }}>
             Do higher-ranked stocks perform better?
           </h2>
-          <div className="sp-sub">We follow ranked stocks for up to 15 trading days, bought or skipped.</div>
+          <div className="sp-sub">We follow ranked stocks for up to {planDays()} trading days, bought or skipped.</div>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <span className="sp-pill sp-pill-amber" data-testid="shadow-label">
@@ -118,14 +124,14 @@ export function ShadowView({ v }: { v: ShadowTestView }) {
           n={v.totals.target}
           of={v.totals.finished}
           k={`Target reached${share(v.totals.target, v.totals.finished)}`}
-          s="Finished ideas that hit +8%."
+          s={`Finished ideas that hit ${targetText()}.`}
           tone="up"
         />
         <Tile
           n={v.totals.stop}
           of={v.totals.finished}
           k={`Stop reached${share(v.totals.stop, v.totals.finished)}`}
-          s="Finished ideas that hit −4%."
+          s={`Finished ideas that hit ${stopText()}.`}
           tone="down"
         />
       </div>
@@ -227,8 +233,8 @@ function GroupsTable({ groups }: { groups: ShadowGroup[] }) {
             <tr>
               <th>Original rank</th>
               <th>Finished</th>
-              <th>Target +8%</th>
-              <th>Stop −4%</th>
+              <th>Target {targetText()}</th>
+              <th>Stop {stopText()}</th>
               <th>Average result</th>
             </tr>
           </thead>
@@ -319,13 +325,13 @@ function RunningTable({ rows: unsorted, caps }: { rows: ShadowRunning[]; caps: M
                 {r.position == null ? (
                   '—'
                 ) : (
-                  <div className="sh-rng" role="img" aria-label={`${pct(r.since_pct)} since ranked, between the −4% stop and the +8% target`}>
+                  <div className="sh-rng" role="img" aria-label={`${pct(r.since_pct)} since ranked, between the ${stopText()} stop and the ${targetText()} target`}>
                     <i className="sh-rng-stop" />
                     <i className="sh-rng-target" />
                     <span className="sh-dot" style={{ left: `${Math.round(r.position * 100)}%` }} />
-                    <small className="sh-l1">−4%</small>
+                    <small className="sh-l1">{stopText()}</small>
                     <small className="sh-l2">0%</small>
-                    <small className="sh-l3">+8%</small>
+                    <small className="sh-l3">{targetText()}</small>
                   </div>
                 )}
               </td>
@@ -347,7 +353,7 @@ function FinishedTable({ rows: unsorted, caps }: { rows: ShadowFinished[]; caps:
     rank: (r: ShadowFinished) => r.rank,
     ranked: (r: ShadowFinished) => r.ranked_on,
     ended: (r: ShadowFinished) => r.ended_on,
-    outcome: (r: ShadowFinished) => OUTCOME_TEXT[r.outcome],
+    outcome: (r: ShadowFinished) => outcomeText()[r.outcome],
     result: (r: ShadowFinished) => r.result_pct,
     took: (r: ShadowFinished) => r.days,
     bought: (r: ShadowFinished) => (r.paper_bought ? 1 : 0),
@@ -383,7 +389,7 @@ function FinishedTable({ rows: unsorted, caps }: { rows: ShadowFinished[]; caps:
               <td>#{r.rank}</td>
               <td>{shortDate(r.ranked_on)}</td>
               <td>{shortDate(r.ended_on)}</td>
-              <td>{OUTCOME_TEXT[r.outcome]}</td>
+              <td>{outcomeText()[r.outcome]}</td>
               <td className={tone(r.result_pct)}>
                 <b>{pct(r.result_pct)}</b>
               </td>

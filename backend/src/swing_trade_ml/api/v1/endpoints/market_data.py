@@ -247,8 +247,9 @@ def coverage(db: DbSession, interval: str = "day") -> list[dict]:
         {
             "symbol": symbol,
             "candles": count,
-            "from": start.date().isoformat() if start else None,
-            "to": end.date().isoformat() if end else None,
+            # A daily bar is stamped at India midnight (18:30 UTC the day before): its day is the IST date.
+            "from": start.astimezone(IST).date().isoformat() if start else None,
+            "to": end.astimezone(IST).date().isoformat() if end else None,
         }
         for symbol, count, start, end in rows
     ]

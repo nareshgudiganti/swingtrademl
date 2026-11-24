@@ -13,6 +13,7 @@ import { errorStatus, pickState, type QueryLike } from '../stateRules'
 import {
   FIGURE_LABELS, excludedText, headlineText, notObservedText, problemCauses, runDuration, timeIst,
 } from '../observatoryText'
+import { plan, targetText } from '../tradingRules'
 import { ObservatoryBoundary } from './ObservatoryBoundary'
 
 const TABS = ['Decision flow', 'Module activity', 'Results & proof'] as const
@@ -485,7 +486,7 @@ function ObservatoryPage() {
               </div>
             )}
           </Card>
-          <Card title="Does a higher score really mean better results?" sub="How often +8% came before -4%, by the score the idea had">
+          <Card title="Does a higher score really mean better results?" sub={`How often ${targetText()} came before -${plan().stopPct}%, by the score the idea had`}>
             <div data-testid="obs-score-bands">
               <QueryState q={bands} id="score-bands" />
               {bands.data && (

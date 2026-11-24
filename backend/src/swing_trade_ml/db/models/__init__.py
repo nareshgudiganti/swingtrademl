@@ -71,6 +71,7 @@ from swing_trade_ml.db.models.simulation import (
     SimFill,
     SimMark,
     SimNotApplied,
+    SimNotRanked,
     SimPortfolio,
     SimRun,
 )
@@ -169,6 +170,7 @@ __all__ = [
     "SimFill",
     "SimMark",
     "SimNotApplied",
+    "SimNotRanked",
     "SimPortfolio",
     "SimRun",
     "Strategy",

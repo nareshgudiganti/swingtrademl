@@ -74,8 +74,9 @@ def test_it_chains_after_horizon_and_is_the_only_head():
     assert (migration.revision, migration.down_revision) == ("simulation01", "horizon01")
     config = Config(str(BACKEND / "alembic.ini"))
     config.set_main_option("script_location", str(BACKEND / "alembic"))
-    # the module switches (#291) sit on top of it now; it stays the one chain, with one head
-    assert ScriptDirectory.from_config(config).get_heads() == ["modswitch01"]
+    script = ScriptDirectory.from_config(config)
+    (head,) = script.get_heads()  # still exactly one head; modswitch01 and simulation02 sit on top of simulation01
+    assert "simulation01" in {r.revision for r in script.iterate_revisions(head, "base")}
 
 
 def test_upgrade_adds_exactly_the_eight_simulation_tables_and_changes_nothing_else(schema):
@@ -90,9 +91,10 @@ def test_upgrade_adds_exactly_the_eight_simulation_tables_and_changes_nothing_el
     assert connection.execute(text("SELECT count(*) FROM signals")).scalar() == 1
 
 
-def test_the_migration_builds_the_columns_the_models_expect(schema):
+def test_the_migrations_build_the_columns_the_models_expect(schema):
     connection, name = schema
     _upgrade_all(connection)
+    _run(connection, _load("*_simulation_rule_ref.py", "simulation_rule_ref_for_columns").upgrade)
     for table in SIM_TABLES:
         built = {c["name"]: c for c in inspect(connection).get_columns(table, schema=name)}
         model = Base.metadata.tables[table]

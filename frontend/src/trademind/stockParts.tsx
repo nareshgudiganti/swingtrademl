@@ -16,6 +16,7 @@ import { brainSteps, stopOf, type BrainStep } from './brainSteps'
 import { NOTHING_STORED, nextReview, SCORE_IS_NOT_PERMISSION, whyNotTrade } from './whyNotTrade'
 import { ideaChange, ordinal, useChanges, type IdeaChange } from './changes'
 import { useSymbolCaps } from './cap'
+import { closeDateText } from './closeDate'
 import { finalWord, shownWord } from './live'
 import { scorePoints, scoreRank, withoutScorePercent, SCORE_HINT } from './scoreText'
 import { dayLabel } from './pricesAge'
@@ -126,6 +127,7 @@ export function useStockData(decision: BrainDecision, run: BrainRun) {
     last,
     prev,
     change,
+    closeOn: snapshot ? undefined : rows.at(-1)?.ts,
     // The line next to the headline is the brain's OWN score per day (same model as the headline). Only when the
     // brain has no stored days yet does it fall back to the cap-tier daily check, and then says so.
     ...pickTrail(toTrail(brainTrailQ.data?.score_trail), toTrail(trail.data?.score_trail)),
@@ -252,6 +254,7 @@ export function StockHeader({
   cap,
   analysisTo,
   snapshot,
+  closeOn,
   withBuy = true,
 }: {
   decision: BrainDecision
@@ -261,6 +264,8 @@ export function StockHeader({
   cap?: string
   analysisTo?: string
   snapshot?: PriceSnapshot
+  /** The timestamp of the stored candle the fallback close comes from (so the page can say which day it is). */
+  closeOn?: string
   withBuy?: boolean
 }) {
   const [buying, setBuying] = useState(false)
@@ -289,9 +294,15 @@ export function StockHeader({
               <b>₹{inr(last)}</b>
               {change != null && prev ? (
                 <span className={up ? 'sp-pos' : 'sp-neg'}>
-                  {up ? '▲' : '▼'} ₹{inr(Math.abs(change))} ({Math.abs((change / prev) * 100).toFixed(2)}%){snapshot ? '' : ' at last close'}
+                  {up ? '▲' : '▼'} ₹{inr(Math.abs(change))} ({Math.abs((change / prev) * 100).toFixed(2)}%)
                 </span>
               ) : null}
+              {/* Without a live snapshot the number is the stored close: say which day it is from, always. */}
+              {!snapshot && (
+                <span className="sp-small" data-testid="close-note">
+                  {closeDateText(closeOn) ? `Last close on ${closeDateText(closeOn)}` : 'Last close'}
+                </span>
+              )}
               {snapshot && (
                 <span
                   className={`sp-small${snapshot.state === 'stale' || snapshot.state === 'delayed' ? ' sp-neg' : ''}`}

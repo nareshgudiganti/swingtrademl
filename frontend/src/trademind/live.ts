@@ -33,6 +33,15 @@ export function shownWord(d: BrainDecision): string {
   return d.stock_verdict_restored && d.stock_verdict ? d.stock_verdict : d.word
 }
 
+/** The one word every screen shows for an idea (#486). The OWNER sees the stored word (`finalWord`), exactly as
+ *  Today and the brain steps do: an idea held back only by the practice account's room reads WATCH everywhere, and
+ *  the stock page's room note says the stock itself passed every check. Everyone else, whose account has no
+ *  room to run out of, sees the stock-level verdict (`shownWord`). Before this the owner saw WATCH on Today but
+ *  TRADE on Stock Detail, AI Analysis and the ideas table. */
+export function wordFor(d: BrainDecision, owner: boolean): string {
+  return owner ? finalWord(d) : shownWord(d)
+}
+
 export function useLatestRun(): UseQueryResult<BrainRun> {
   return useQuery({
     queryKey: ['brainLatest', 'nightly'],

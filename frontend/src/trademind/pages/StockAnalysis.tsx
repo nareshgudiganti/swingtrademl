@@ -12,7 +12,7 @@ import type { StockBriefData } from '../beginner/types'
 import { NO_EVENTS } from '../beginner/UpcomingEvents'
 import { changeHeadline, rankLine } from '../changes'
 import { useSymbolCaps } from '../cap'
-import { stockSituations, useLatestRun } from '../live'
+import { stockSituations, useLatestRun, wordFor } from '../live'
 import { barsFrom } from '../live-stock'
 import { scorePoints, SCORE_HINT } from '../scoreText'
 import { BrainGate, Candles, inr } from '../ui'
@@ -27,7 +27,6 @@ import {
   QuickAnswers,
   ScoreMonitor,
   scoreToday,
-  shownWord,
   StockHeader,
   stepPasses,
   trailModel,
@@ -66,7 +65,7 @@ function StockAnalysisView({ decision: d, run }: { decision: BrainDecision; run:
   const data = useStockData(d, run)
   const [params, setParams] = useSearchParams()
   const tab = params.get('tab') === 'company' ? 'company' : 'brain'
-  const word = shownWord(d)
+  const word = wordFor(d, canManage) // the same word Today shows for this idea (#486)
   const back = `/trademind/stock/${encodeURIComponent(d.symbol)}`
   const cap = caps.get(d.symbol.toUpperCase())
   const steps = brainSteps(d, run, false)
@@ -95,6 +94,7 @@ function StockAnalysisView({ decision: d, run }: { decision: BrainDecision; run:
         prev={data.prev}
         change={data.change}
         snapshot={data.snapshot}
+        closeOn={data.closeOn}
         cap={cap ? CAP_LABEL[cap] : undefined}
       />
 

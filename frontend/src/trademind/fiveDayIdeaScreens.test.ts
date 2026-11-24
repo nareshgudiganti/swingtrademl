@@ -44,9 +44,10 @@ describe('one idea reads the same on Today, Stock Detail and AI Analysis', () =>
     expect(shownWord({ ...IDEA, overruled_word: 'WAIT' } as BrainDecision)).toBe('WAIT')
   })
 
-  it('Stock Detail, AI Analysis and the ideas table take their word from shownWord', () => {
+  it('Stock Detail, AI Analysis and the ideas table take their word from one shared helper', () => {
+    // #486: wordFor(d, owner) gives the owner the stored word (as Today does) and everyone else shownWord
     for (const file of ['IdeasTable.tsx', 'pages/StockDetail.tsx', 'pages/AIDecision.tsx', 'pages/StockAnalysis.tsx']) {
-      expect(read(file), `${file} shows a word`).toContain('shownWord')
+      expect(read(file), `${file} shows a word`).toMatch(/useWordFor|wordFor|shownWord/)
     }
   })
 

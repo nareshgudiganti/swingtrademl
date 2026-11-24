@@ -226,7 +226,9 @@ export function PositionsTable({
                 {p.day_pnl == null ? '—' : formatCurrency(p.day_pnl)}
               </td>
               <td className={`num ${pnlClass(p.unrealized_pnl)}`}>{formatCurrency(p.unrealized_pnl)}</td>
-              <td className={`num ${pnlClass(p.unrealized_pnl)}`}>{formatSignedPercent(p.unrealized_pnl_pct)}</td>
+              <td className={`num ${pnlClass(p.unrealized_pnl)}`}>
+                {p.has_price === false ? 'No price yet' : formatSignedPercent(p.unrealized_pnl_pct)}
+              </td>
               <td>
                 <span className={`badge ${ACTION_BADGE[p.action_code]}`} title={p.action_label}>
                   {ACTION_LABEL_TEXT[p.action_code]}

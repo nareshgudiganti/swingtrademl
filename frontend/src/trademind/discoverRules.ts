@@ -7,7 +7,7 @@
 
 import type { BrainDecision, IdeaWord } from '../api/types'
 import { stopOf } from './brainSteps'
-import { shownWord } from './live'
+import { wordFor } from './live'
 
 export type DiscoverFilter = 'ALL' | IdeaWord
 export const DISCOVER_FILTERS: DiscoverFilter[] = ['ALL', 'TRADE', 'WATCH', 'WAIT', 'AVOID']
@@ -26,9 +26,10 @@ const STOP_LABEL: Record<number, string> = {
 export type StopTone = 'pass' | 'early' | 'late' | 'none'
 export type WhereStopped = { label: string; step: number | null; tone: StopTone; why: string | null }
 
-/** Where the brain stopped this idea: "Passed" for a TRADE, else the step its stored reason points to. */
-export function whereItStopped(d: BrainDecision): WhereStopped {
-  if (shownWord(d) === 'TRADE') return { label: 'Passed', step: null, tone: 'pass', why: null }
+/** Where the brain stopped this idea: "Passed" for a TRADE, else the step its stored reason points to.
+ *  `owner` picks the same word the row shows (wordFor), so the row, its filter, its count and this label agree. */
+export function whereItStopped(d: BrainDecision, owner = false): WhereStopped {
+  if (wordFor(d, owner) === 'TRADE') return { label: 'Passed', step: null, tone: 'pass', why: null }
   // No account-money step anywhere in the lists: a refusal about the account's room shows where the brain decided.
   const stop = stopOf(d, false)
   if (!stop) return { label: 'Not recorded', step: null, tone: 'none', why: null }
@@ -37,10 +38,10 @@ export function whereItStopped(d: BrainDecision): WhereStopped {
 }
 
 /** How many ideas carry each word (after any owner overrule), plus the total. */
-export function discoverCounts(ideas: BrainDecision[]): Record<DiscoverFilter, number> {
+export function discoverCounts(ideas: BrainDecision[], owner = false): Record<DiscoverFilter, number> {
   const c: Record<DiscoverFilter, number> = { ALL: ideas.length, TRADE: 0, WATCH: 0, WAIT: 0, AVOID: 0 }
   for (const d of ideas) {
-    const w = shownWord(d) as IdeaWord
+    const w = wordFor(d, owner) as IdeaWord
     if (w in c) c[w] += 1
   }
   return c
@@ -49,12 +50,18 @@ export function discoverCounts(ideas: BrainDecision[]): Record<DiscoverFilter, n
 /** The ideas to list for a word filter, a sector (null = all) and a search box. `sectorOf` maps SYMBOL → sector. */
 export function filterIdeas(
   ideas: BrainDecision[],
-  opts: { filter: DiscoverFilter; sector?: string | null; query?: string; sectorOf?: Record<string, string | null> },
+  opts: {
+    filter: DiscoverFilter
+    sector?: string | null
+    query?: string
+    sectorOf?: Record<string, string | null>
+    owner?: boolean
+  },
 ): BrainDecision[] {
   const q = (opts.query ?? '').trim().toUpperCase()
   return ideas.filter(
     (d) =>
-      (opts.filter === 'ALL' || shownWord(d) === opts.filter) &&
+      (opts.filter === 'ALL' || wordFor(d, opts.owner ?? false) === opts.filter) &&
       (!opts.sector || opts.sectorOf?.[d.symbol.toUpperCase()] === opts.sector) &&
       (q === '' || d.symbol.toUpperCase().includes(q)),
   )

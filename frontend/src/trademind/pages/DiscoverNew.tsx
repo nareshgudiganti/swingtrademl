@@ -19,7 +19,8 @@ import {
   type DiscoverFilter,
 } from '../discoverRules'
 import { noTradeReason } from '../emptyReasons'
-import { ideasFrom, shownWord, useLatestRun } from '../live'
+import { ideasFrom, useLatestRun, wordFor } from '../live'
+import { useOwner } from '../useWord'
 import { scoreRank } from '../scoreText'
 import { StockRail, type RailCard } from '../StockRail'
 import { BrainGate, Icon } from '../ui'
@@ -81,8 +82,9 @@ function DiscoverBody() {
   const sectorOf = sectors.data
   const sectorList = sectorsIn(ideas, sectorOf)
 
-  const counts = discoverCounts(ideas)
-  const filtered = filterIdeas(ideas, { filter, sector: sector || null, query, sectorOf })
+  const owner = useOwner() // the row, its filter, its count and its slide rail all read the same word (#486)
+  const counts = discoverCounts(ideas, owner)
+  const filtered = filterIdeas(ideas, { filter, sector: sector || null, query, sectorOf, owner })
   const { sorted: rows, sorter } = useIdeaSort(filtered)
   const dayScores = ideas.map((d) => d.confidence)
   const noTrade = noTradeReason(run.banner, ideas.length, counts.TRADE)
@@ -163,7 +165,7 @@ function DiscoverBody() {
         <div className="tmn-w2-rails" data-testid="discover-slides">
           {RAILS.map((r) => {
             const cards: RailCard[] = rows
-              .filter((d) => shownWord(d) === r.word)
+              .filter((d) => wordFor(d, owner) === r.word)
               .map((d) => ({
                 d,
                 rank: scoreRank(d.confidence, dayScores)?.rank ?? null,

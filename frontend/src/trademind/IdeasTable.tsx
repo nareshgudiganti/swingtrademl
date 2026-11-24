@@ -6,26 +6,28 @@ import { Link } from 'react-router-dom'
 import type { BrainDecision } from '../api/types'
 import { CapFlag } from './cap'
 import { whereItStopped } from './discoverRules'
-import { shownWord } from './live'
 import { scorePoints, SCORE_HINT } from './scoreText'
 import { SortTh, useSort, type Sorter } from './sort'
 import { WordTag } from './term'
 import { IdeaFigures } from './stockParts'
 import { oneReason } from './today/answerRules'
 import { StockLogo } from './ui'
+import { useOwner, useWordFor } from './useWord'
 
 export type IdeaSortKey = 'rank' | 'stock' | 'decision' | 'score' | 'stopped'
 
 /** Click-to-sort for the ideas table (best score first until a column header is clicked). */
 export function useIdeaSort(rows: BrainDecision[]) {
+  const wordOf = useWordFor() // the same word the table shows (and Today shows), so sorting by it is honest
+  const owner = useOwner()
   return useSort<BrainDecision, IdeaSortKey>(
     rows,
     {
       rank: (d) => d.confidence,
       stock: (d) => d.symbol,
-      decision: (d) => shownWord(d),
+      decision: (d) => wordOf(d),
       score: (d) => d.confidence,
-      stopped: (d) => whereItStopped(d).label,
+      stopped: (d) => whereItStopped(d, owner).label,
     },
     { key: null },
     { stock: 'asc', decision: 'asc', stopped: 'asc' },
@@ -97,7 +99,8 @@ function IdeaRow({
   sector: string | null
   withFigures: boolean
 }) {
-  const stop = whereItStopped(d)
+  const wordOf = useWordFor()
+  const stop = whereItStopped(d, useOwner())
   const pts = scorePoints(d.confidence)
   const to = `/trademind/stock/${encodeURIComponent(d.symbol)}`
   return (
@@ -113,7 +116,7 @@ function IdeaRow({
         </Link>
       </td>
       <td>
-        <WordTag word={shownWord(d)} />
+        <WordTag word={wordOf(d)} />
       </td>
       <td title={SCORE_HINT}>
         <b>{pts ?? '—'}</b>

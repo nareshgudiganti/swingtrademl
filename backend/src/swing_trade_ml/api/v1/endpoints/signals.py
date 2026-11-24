@@ -132,6 +132,22 @@ def latest_actionable(
 PICK_MAX_AGE = timedelta(days=5)
 
 
+def _still_current(latest_signal, LatestSignal):  # noqa: N803 - the aliased entity, named as at the call sites
+    """SQL conditions that keep a BUY only while it is fresh (#486).
+
+    - Fresh: generated within PICK_MAX_AGE, the window /signals/picks uses. It is a WALL-CLOCK window
+      (now minus 5 x 24 hours, UTC), the same expression as /signals/picks, not an India trading-day cut:
+      a BUY from Friday 15:45 IST drops on Wednesday 15:45 IST. Both lists use this one helper.
+    - Not overtaken: only by the strategy's OWN later signal. Each list already takes one latest signal per
+      strategy and stock (DISTINCT ON), so a strategy that moved on to HOLD or weaker drops out by itself.
+      Another strategy's signal never removes it: the brain records a HOLD for every stock it did not mark
+      TRADE each night, and hand-book or advisory strategies record HOLDs too. Those are other books'
+      opinions; letting them erase a BUY would make the list depend on which job ran last, and would let a
+      private strategy's signal change what another account sees.
+    A recommendation filter only: nothing here places an order, sizes one or touches a risk rule."""
+    return (LatestSignal.generated_at >= datetime.now(UTC) - PICK_MAX_AGE,)
+
+
 @router.get("/picks", response_model=list[dict])
 def picks(db: DbSession, access: PlanAccessDep) -> list[dict]:
     """Today's BUY picks as the caller's plan shows them: the base model
@@ -226,16 +242,19 @@ def top_picks(
     This does not execute anything — it only ranks and suggests. Nothing
     here places an order; that stays a manual decision in Kite.
     """
+    # The broker's mode, as /signals/picks and /signals/buy-list read it (paper today). It used to be hard-coded to
+    # paper here, so the lists could disagree the day the mode changed (#486).
+    mode = get_broker().mode
     latest_signal = (
         select(Signal)
-        .where(Signal.mode == "paper")
+        .where(Signal.mode == mode)
         .distinct(Signal.strategy_id, Signal.instrument_id)
         .order_by(Signal.strategy_id, Signal.instrument_id, Signal.generated_at.desc())
     ).subquery()
     LatestSignal = aliased(Signal, latest_signal)  # noqa: N806 — matches buy_list's own convention below
 
     held_instrument_ids = select(Position.instrument_id).where(
-        Position.mode == "paper", Position.status == PositionStatus.OPEN
+        Position.mode == mode, Position.status == PositionStatus.OPEN
     )
 
     rows = db.execute(
@@ -246,6 +265,7 @@ def top_picks(
             LatestSignal.signal_type == "BUY",
             LatestSignal.confidence >= min_confidence,
             LatestSignal.instrument_id.not_in(held_instrument_ids),
+            *_still_current(latest_signal, LatestSignal),
         )
     ).all()
 
@@ -361,6 +381,7 @@ def buy_list(db: DbSession, access: PlanAccessDep) -> list[dict]:
         .where(
             LatestSignal.signal_type == "BUY",
             LatestSignal.instrument_id.not_in(held_instrument_ids),
+            *_still_current(latest_signal, LatestSignal),
         )
         .order_by(LatestSignal.confidence.desc().nullslast())
     )

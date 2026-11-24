@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { useParams } from 'react-router-dom'
 
 import { usePlan } from '../../lib/plan'
-import { finalWord, shownWord, ideasFrom, useBrainStatus, useLatestRun, useRunTrace, useWhy } from '../live'
+import { finalWord, ideasFrom, useBrainStatus, useLatestRun, useRunTrace, useWhy } from '../live'
+import { useWordFor } from '../useWord'
 import { MODULE_PLAIN, STEP_LABEL, moduleName, traceLine, wordClassName, wordTone } from '../vocab'
 import { TrackRecord, chancePercent, chanceScale, chanceText, chanceTitle } from '../honest'
 import { IdeaExplain } from '../IdeaExplain'
@@ -29,6 +30,7 @@ export default function AIDecision() {
 function AIDecisionBody() {
   const { symbol: rawSymbol } = useParams()
   const { canManage } = usePlan()
+  const wordOf = useWordFor() // the same word Today shows for this idea (#486)
   const ownerView = canManage
   const status = useBrainStatus()
   const latest = useLatestRun()
@@ -151,7 +153,7 @@ function AIDecisionBody() {
             <>
               <p className="tm-strong" style={{ marginTop: 0 }}>
                 TradeMind {decision.kind === 'idea' ? 'recommends' : 'currently has'}{' '}
-                <span className={wordClassName(shownWord(decision))}>{shownWord(decision)}</span> for {symbol}
+                <span className={wordClassName(wordOf(decision))}>{wordOf(decision)}</span> for {symbol}
                 {chancePercent(decision) != null && (
                   <>
                     {' '}

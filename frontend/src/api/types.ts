@@ -245,6 +245,10 @@ export interface DetailedPosition {
   quantity: number
   entry_price: number
   current_price: number
+  /** False for a position nobody has priced yet: `current_price` is then only the entry price standing in.
+   *  Absent from an older server, which means priced. */
+  has_price?: boolean
+  price_status?: 'ok' | 'none'
   invested: number
   current_value: number
   unrealized_pnl: number

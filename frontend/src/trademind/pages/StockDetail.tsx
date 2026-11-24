@@ -6,7 +6,8 @@ import { api } from '../../api/client'
 import type { BrainDecision } from '../../api/types'
 import type { Action } from '../types'
 import { barsFrom } from '../live-stock'
-import { finalWord, shownWord, stockSituations, useBrainStatus, useLatestRun, useWhy } from '../live'
+import { finalWord, stockSituations, useBrainStatus, useLatestRun, useWhy } from '../live'
+import { useWordFor } from '../useWord'
 import { wordClassName, wordTone } from '../vocab'
 import { Term, TermIf, WordTag } from '../term'
 import ScoreTrail from '../ScoreTrail'
@@ -129,6 +130,7 @@ function StockDetailBody() {
   const { symbol: rawSymbol } = useParams()
   const symbol = (rawSymbol ?? '').toUpperCase()
   const caps = useSymbolCaps()
+  const wordOf = useWordFor() // the same word Today shows for this idea (#486)
 
   const status = useBrainStatus()
   const latest = useLatestRun()
@@ -254,9 +256,9 @@ function StockDetailBody() {
           </span>
         )}
         {decision.kind === 'idea' ? (
-          <ActionPill action={shownWord(decision) as Action} />
+          <ActionPill action={wordOf(decision) as Action} />
         ) : (
-          <WordTag word={shownWord(decision)} />
+          <WordTag word={wordOf(decision)} />
         )}
         {decision.confidence != null && (
           <Term k="model_score">
@@ -276,7 +278,7 @@ function StockDetailBody() {
             <Card glow title="TradeMind Decision">
               {decision.reasons.length > 0 ? (
                 decision.reasons.map((r, i) => (
-                  <CheckItem key={i} tone={wordTone(shownWord(decision))}>
+                  <CheckItem key={i} tone={wordTone(wordOf(decision))}>
                     {withoutScorePercent(r)}
                   </CheckItem>
                 ))
@@ -409,7 +411,7 @@ function StockDetailBody() {
           <Card glow title="Why the brain decided this">
             {decision.reasons.length > 0 ? (
               decision.reasons.map((r, i) => (
-                <CheckItem key={i} tone={wordTone(shownWord(decision))}>
+                <CheckItem key={i} tone={wordTone(wordOf(decision))}>
                   {withoutScorePercent(r)}
                 </CheckItem>
               ))
@@ -421,8 +423,8 @@ function StockDetailBody() {
           <Card title="In plain words">
             <p style={{ marginTop: 0 }}>
               TradeMind {decision.kind === 'idea' ? 'suggests' : 'currently has'}{' '}
-              <strong className={wordClassName(shownWord(decision))}>
-                <TermIf k={shownWord(decision)}>{shownWord(decision)}</TermIf>
+              <strong className={wordClassName(wordOf(decision))}>
+                <TermIf k={wordOf(decision)}>{wordOf(decision)}</TermIf>
               </strong>{' '}
               for {symbol}
               {decision.confidence != null && (

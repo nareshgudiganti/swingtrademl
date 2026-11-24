@@ -33,6 +33,7 @@ from swing_trade_ml.db.models.ml import MLModel
 from swing_trade_ml.ml.calibrated_model import CalibratedEstimator, reliability_table
 from swing_trade_ml.ml.dataset import apply_embargo, build_training_dataset, chronological_split
 from swing_trade_ml.ml.features import FEATURE_COLUMNS
+from swing_trade_ml.ml.model_card import build_card
 from swing_trade_ml.ml.registry import artifact_sha256, next_version, save_artifact
 
 log = get_logger(__name__)
@@ -372,6 +373,23 @@ def train_model(
 
     importance = _feature_importance(estimator)
 
+    # The card is built before the file exists, so the bundle's copy has no artifact hash (a file cannot
+    # hold its own); the metrics copy gets it after the save.
+    card = build_card(
+        train_df=train_df, test_df=test_df, dataset=dataset,
+        feature_names=FEATURE_COLUMNS, algorithm=algorithm,
+        train_args={
+            "name": name, "algorithm": algorithm, "symbols": symbols, "interval": interval,
+            "horizon_days": horizon_days, "target_return": target_return,
+            "stop_return": stop_return, "test_size": test_size,
+            "hyperparameters": hyperparameters or {}, "auto_activate": auto_activate,
+            "walk_forward_folds": walk_forward_folds, "calibrate": calibrate,
+            "cutoff": cutoff.isoformat() if cutoff is not None else None,
+        },
+        horizon_days=horizon_days, target_return=target_return,
+        stop_return=stop_return, label_kind="barrier",
+    )
+
     version = next_version(db, name)
     path = save_artifact(
         name, version,
@@ -385,9 +403,11 @@ def train_model(
             "stop_return": stop_return,
             "label_kind": "barrier",
             "calibrated": calibrate,
+            "card": card,
         },
     )
     metrics["artifact_sha256"] = artifact_sha256(path)
+    metrics["card"] = {**card, "artifact_sha256": metrics["artifact_sha256"]}
 
     record = MLModel(
         name=name,

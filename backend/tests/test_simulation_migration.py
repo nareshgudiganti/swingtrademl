@@ -74,7 +74,8 @@ def test_it_chains_after_horizon_and_is_the_only_head():
     assert (migration.revision, migration.down_revision) == ("simulation01", "horizon01")
     config = Config(str(BACKEND / "alembic.ini"))
     config.set_main_option("script_location", str(BACKEND / "alembic"))
-    assert ScriptDirectory.from_config(config).get_heads() == ["simulation01"]
+    # the module switches (#291) sit on top of it now; it stays the one chain, with one head
+    assert ScriptDirectory.from_config(config).get_heads() == ["modswitch01"]
 
 
 def test_upgrade_adds_exactly_the_eight_simulation_tables_and_changes_nothing_else(schema):

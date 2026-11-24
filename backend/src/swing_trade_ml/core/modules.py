@@ -22,23 +22,33 @@ What is enforced, and where (`ENFORCEMENT`, repeated on every audit event): rout
 on every router of a declared optional module; scheduled jobs are removed by `apply_to_scheduler` when the scheduler
 starts, in the process that starts it. Both read the state of THIS process only.
 
-Where the state lives: in the running process (`ModuleSwitches`), starting from the declared defaults. There is NO
-environment setting, database row or admin screen that changes it yet: wiring one is a separate, owner-approved step
-(it needs a migration or a deploy-time setting). Until then nothing changes behaviour unless code switches a module off
-(the tests do, and put it back).
+Where the state lives: in the `module_switches` table, through a store (`services/module_state.DbStore`). Every
+process (the API and the worker) keeps the state in memory, starting from the declared defaults, and refreshes it
+from the table every few seconds; the worker also re-reads it before each scheduled job run. No row means the
+declared default, so nothing changes behaviour until the owner switches a module off through the admin endpoint
+(`PUT /admin/modules/{id}`), which is audited. If the table cannot be read, a process keeps the state it last knew.
 
-Pure: this module imports nothing from the application, only FastAPI's error type, like `release_switches.py`.
+Pure: this module imports nothing from the application, only FastAPI's error type, like `release_switches.py`; the
+audit sink and the store are loaded when first used.
 """
 
 from __future__ import annotations
 
+import functools
+import logging
+import time
 from collections.abc import Callable, Iterable, Iterator
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext, suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
+from typing import Protocol
 
-from fastapi import HTTPException, status
+from fastapi import HTTPException, Request, status
+
+log = logging.getLogger(__name__)
+
+STATE_CACHE_SECONDS = 5.0  # how long a process trusts its copy of the durable state
 
 
 class ModuleState(StrEnum):
@@ -78,6 +88,8 @@ class Module:
     capabilities: tuple[str, ...] = ()  # capability ids (for the later entitlement work, #335)
     depends_on: tuple[str, ...] = ()
     packages: tuple[str, ...] = ()  # the code that belongs to it
+    # Paths under route_prefixes that are SAFETY and never switch off with the module (a guard lets them through).
+    always_on: tuple[str, ...] = ()
 
     @property
     def default_enabled(self) -> bool:
@@ -118,13 +130,22 @@ REGISTRY: tuple[Module, ...] = (
         "brain",
         "TradeMind Brain views",
         route_prefixes=("/brain",),
-        jobs=("brain_nightly", "brain_intraday", "brain_run_queue", "brain_learn", "brain_daily_check"),
+        # Not switchable, on purpose: brain_intraday (the 15-minute holdings check: stop-proximity warnings) and
+        # brain_run_queue (runs requests already accepted); the stage, rollback and approval routes (safety).
+        jobs=("brain_nightly", "brain_learn", "brain_daily_check"),
+        always_on=("/brain/stage", "/brain/approvals"),
+        # A plan reaches the brain's consumer views only with the TradeMind feature (core/plans.py).
+        capabilities=("trademind",),
         packages=("swing_trade_ml.brain",),
     ),
     Module(
         "research_lanes",
         "Research lanes (owner only)",
         route_prefixes=("/research/lanes", "/research/lane-picks", "/research/h05"),
+        jobs=(
+            "lane_shadow_daily",
+            "h05_daily",
+        ),  # the lanes' own daily jobs (shadow_lanes/lane_job.py, h05 lane)
         # The h05 lane's own package is deliberately not named here: nothing outside the lane may reference it
         # (tests/test_h05_service.py). The registry only needs its route prefix above.
         packages=("swing_trade_ml.shadow_lanes",),
@@ -172,9 +193,19 @@ AuditSink = Callable[[dict], None]
 
 ENFORCEMENT = {
     "routes": "enforced: every router of an optional module answers 'switched off' while it is off (require_module)",
-    "jobs": "enforced at scheduler start only, in this process: a switched-off module's jobs are left out",
-    "scope": "this process only: another running process keeps its own state until a shared source exists",
+    "jobs": "enforced: a scheduled job of a switched-off module is left out at start and skipped at every run",
+    "scope": "shared: the state is stored in the database; each process refreshes it every few seconds",
 }
+
+
+class StateStore(Protocol):
+    """Where the on/off state lives. `read` returns module id -> enabled for every module that has a row."""
+
+    def read(self) -> dict[str, bool]: ...
+
+    def write(self, module_id: str, enabled: bool, by: str, reason: str) -> None: ...
+
+    # Optional: `exclusive()`, a context manager that lets only one switch at a time decide and write.
 
 
 def durable_audit(event: dict) -> None:
@@ -184,16 +215,76 @@ def durable_audit(event: dict) -> None:
     module_audit.write_durable(event)
 
 
-class ModuleSwitches:
-    """The running on/off state of a registry, with an audit trail. Defaults come from the declarations."""
+class DurableStore:
+    """The default store: the `module_switches` table (services/module_state), loaded when first used."""
 
-    def __init__(self, registry: Iterable[Module] = REGISTRY, audit: AuditSink | None = None) -> None:
+    def exclusive(self):
+        from swing_trade_ml.services.module_state import DbStore
+
+        return DbStore().exclusive()
+
+    def read(self) -> dict[str, bool]:
+        from swing_trade_ml.services.module_state import DbStore
+
+        return DbStore().read()
+
+    def write(self, module_id: str, enabled: bool, by: str, reason: str) -> None:
+        from swing_trade_ml.services.module_state import DbStore
+
+        DbStore().write(module_id, enabled, by, reason)
+
+
+class ModuleSwitches:
+    """The on/off state of a registry, with an audit trail. Defaults come from the declarations; with a store the
+    state is shared through it (a short cache per process; `enabled(..., fresh=True)` always re-reads)."""
+
+    def __init__(
+        self,
+        registry: Iterable[Module] = REGISTRY,
+        audit: AuditSink | None = None,
+        store: StateStore | None = None,
+        cache_seconds: float = STATE_CACHE_SECONDS,
+    ) -> None:
         self._modules = tuple(registry)
         validate(self._modules)
         self._by_id = {m.id: m for m in self._modules}
         self._on = {m.id: m.default_enabled for m in self._modules}
         self.events: list[dict] = []  # every request, in order (kept in memory as well as sent to `audit`)
         self._audit = audit
+        self._store = store
+        self._cache_seconds = cache_seconds
+        self._loaded_at: float | None = None
+        self._read_ok = False  # whether the stored state has been read successfully (the last time we tried)
+
+    @property
+    def state_unknown(self) -> bool:
+        """True when a store is set but its state could not be read: the declared defaults are in use."""
+        return self._store is not None and not self._read_ok
+
+    def _refresh(self, force: bool = False) -> None:
+        """Take the stored state for every optional module (no row = its default). A read that fails keeps what
+        this process already knew (the declared default at first): a failure never switches anything."""
+        if self._store is None:
+            return
+        now = time.monotonic()
+        if not force and self._loaded_at is not None and now - self._loaded_at < self._cache_seconds:
+            return
+        try:
+            rows = self._store.read()
+        except Exception as exc:  # noqa: BLE001 - the app must keep answering when the table cannot be read
+            log.error(
+                "module_switches.read_failed (%s): the switch state is UNKNOWN; keeping the last known state "
+                "(the declared defaults if none)",
+                type(exc).__name__,
+            )
+            self._read_ok = False
+            self._loaded_at = now
+            return
+        for m in self._modules:
+            if not m.core and m.state is not ModuleState.RETIRED:
+                self._on[m.id] = bool(rows[m.id]) if m.id in rows else m.default_enabled
+        self._read_ok = True
+        self._loaded_at = now
 
     # ---- reading
     def module(self, module_id: str) -> Module:
@@ -205,9 +296,12 @@ class ModuleSwitches:
     def modules(self) -> tuple[Module, ...]:
         return self._modules
 
-    def enabled(self, module_id: str) -> bool:
+    def enabled(self, module_id: str, *, fresh: bool = False) -> bool:
         module = self.module(module_id)
-        return True if module.core else self._on[module_id]
+        if module.core:
+            return True
+        self._refresh(force=fresh)
+        return self._on[module_id]
 
     def dependents(self, module_id: str) -> tuple[str, ...]:
         """The modules that name this one in `depends_on`."""
@@ -218,7 +312,9 @@ class ModuleSwitches:
         best: tuple[int, Module] | None = None
         for m in self._modules:
             for prefix in m.route_prefixes:
-                if (path == prefix or path.startswith(prefix + "/")) and (best is None or len(prefix) > best[0]):
+                if (path == prefix or path.startswith(prefix + "/")) and (
+                    best is None or len(prefix) > best[0]
+                ):
                     best = (len(prefix), m)
         return None if best is None else best[1]
 
@@ -227,7 +323,9 @@ class ModuleSwitches:
         return frozenset(job for m in self._modules if not self.enabled(m.id) for job in m.jobs)
 
     # ---- changing
-    def _record(self, module_id: str, before: bool | None, after: bool, by: str, reason: str, outcome: str) -> None:
+    def _record(
+        self, module_id: str, before: bool | None, after: bool, by: str, reason: str, outcome: str
+    ) -> None:
         event = {
             "at": datetime.now(UTC).isoformat(),
             "module": module_id,
@@ -247,7 +345,15 @@ class ModuleSwitches:
         and anything that would break a dependency are refused (and the refusal is recorded)."""
         if not by.strip() or not reason.strip():
             raise ModuleError("a change needs who made it and why")
+        self.module(module_id)
+        exclusive = getattr(self._store, "exclusive", None)
+        with exclusive() if exclusive is not None else nullcontext():
+            return self._set_enabled(module_id, on, by=by, reason=reason)
+
+    def _set_enabled(self, module_id: str, on: bool, *, by: str, reason: str) -> bool:
+        """The decision and the write, run while no other switch can (see `exclusive` on the store)."""
         module = self.module(module_id)
+        self._refresh(force=True)  # decide from the shared state, not from a stale copy
         before = self._on[module_id] if not module.core else True
         refusal: ModuleError | None = None
         if module.core and not on:
@@ -269,7 +375,19 @@ class ModuleSwitches:
             self._record(module_id, before, on, by, reason, "unchanged")
             return False
         self._record(module_id, before, on, by, reason, "applied")
+        if self._store is not None:
+            try:
+                self._store.write(module_id, on, by, reason)
+            except Exception as exc:
+                # The request was audited as applied but could not be stored: say so, change nothing, tell the caller.
+                with suppress(Exception):  # the failure itself is what the caller sees
+                    self._record(
+                        module_id, before, on, by, reason, f"failed: not stored ({type(exc).__name__})"
+                    )
+                raise
         self._on[module_id] = on
+        if self._store is not None:
+            self._loaded_at = time.monotonic()
         return True
 
     @contextmanager
@@ -282,8 +400,9 @@ class ModuleSwitches:
             self.set_enabled(module_id, True, by=by, reason=f"{reason} (restored)")
 
 
-# The one running instance every part of the app consults. Every request is written to the app's durable audit log.
-switches = ModuleSwitches(audit=durable_audit)
+# The one running instance every part of the app consults. Every request is written to the app's durable audit log,
+# and the on/off state is shared through the database (`module_switches`).
+switches = ModuleSwitches(audit=durable_audit, store=DurableStore())
 
 
 def is_enabled(module_id: str) -> bool:
@@ -295,7 +414,12 @@ def require_module(module_id: str) -> Callable[[], None]:
     default), it does nothing at all."""
     switches.module(module_id)  # an unknown id fails at start-up, not on the first request
 
-    def _guard() -> None:
+    always_on = switches.module(module_id).always_on
+
+    def _guard(request: Request) -> None:
+        path = request.url.path.removeprefix("/api/v1")
+        if any(path == p or path.startswith(p + "/") for p in always_on):
+            return
         if not switches.enabled(module_id):
             raise HTTPException(status.HTTP_403_FORBIDDEN, "This part of the app is switched off.")
 
@@ -313,3 +437,35 @@ def apply_to_scheduler(scheduler: object, state: ModuleSwitches | None = None) -
             scheduler.remove_job(job_id)  # type: ignore[attr-defined]
             removed.append(job_id)
     return removed
+
+
+def guard_scheduler_jobs(scheduler: object, state: ModuleSwitches | None = None) -> list[str]:
+    """Make every job a module owns re-read the shared state before each run and skip the run while the module is
+    off (the job stays scheduled and nothing is deleted: switching the module back on resumes it at its next
+    trigger). Returns the ids wrapped. Jobs that are not in a module are left alone."""
+    chosen = state or switches
+    wrapped: list[str] = []
+    for module in chosen.modules():
+        if module.core:
+            continue
+        for job_id in module.jobs:
+            job = scheduler.get_job(job_id)  # type: ignore[attr-defined]
+            if job is None or getattr(job.func, "_module_gated", None) == module.id:
+                continue
+            scheduler.modify_job(job_id, func=_gated(job.func, module.id, chosen))  # type: ignore[attr-defined]
+            wrapped.append(job_id)
+    return wrapped
+
+
+def _gated(func: Callable, module_id: str, state: ModuleSwitches) -> Callable:
+    @functools.wraps(func)
+    def run(*args, **kwargs):
+        if not state.enabled(module_id, fresh=True):
+            log.info(
+                "module_switches.job_skipped module=%s job=%s", module_id, getattr(func, "__name__", "?")
+            )
+            return None
+        return func(*args, **kwargs)
+
+    run._module_gated = module_id  # type: ignore[attr-defined]
+    return run

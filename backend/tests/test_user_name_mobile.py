@@ -100,7 +100,7 @@ def test_single_migration_head_and_parent():
     heads = script.get_heads()
     assert heads == ["signalkey01"]  # signals.signal_key (#360) sits on simulation02
     assert script.get_revision("signalkey01").down_revision == "simulation02"
-    assert script.get_revision("simulation02").down_revision == "modswitch01"  # the momentum rule reference (#321)
+    assert script.get_revision("simulation02").down_revision == "modswitch01"  # momentum rule ref (#321)
     assert script.get_revision("modswitch01").down_revision == "simulation01"  # the module switches (#291)
     assert script.get_revision("simulation01").down_revision == "horizon01"  # the simulation tables (#321)
     assert script.get_revision("horizon01").down_revision == "identity01"  # the horizon records (#387)

@@ -287,12 +287,6 @@ def test_an_empty_week_says_so_in_every_part_of_the_report(db_session):
     assert report["benchmark"]["available"] is False and "NIFTY" in report["benchmark"]["reason"]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="GAP: the Telegram summary prints '0 buys, 0 sells ... realized ₹0 after costs' for a week with no data; "
-    "only the full report carries data_status 'no buys or sells this week', so a zero reads as a result",
-)
 def test_the_weekly_message_for_an_empty_week_says_there_was_no_activity(db_session):
     message = w.format_message(w.build_report(db_session, NOW))
     assert "no buys or sells" in message.lower() or "no activity" in message.lower()

@@ -193,7 +193,7 @@ describe('the candle chart draws only the candles it is given', () => {
 // ================================================================================= (d) dates on charts are India dates
 
 describe('chart dates are India trading days', () => {
-  it.fails('GAP c2: candle labels are right whatever the browser time zone is', () => {
+  it('FIXED (#470) c2: candle labels are right whatever the browser time zone is', () => {
     // live-stock.ts:12-14 reads the date with local getDate(): it says so ("Assumes the viewer is in IST").
     const previous = process.env.TZ
     process.env.TZ = 'UTC'
@@ -206,7 +206,7 @@ describe('chart dates are India trading days', () => {
     }
   })
 
-  it.fails('GAP c3: no chart label is cut from the first ten characters of a candle timestamp', () => {
+  it('FIXED (#470) c3: no chart label is cut from the first ten characters of a candle timestamp', () => {
     // The API sends 2026-11-29T18:30:00Z for the 30 Nov bar (backend test b1); slice(5, 10) gives "11-29", a day early.
     for (const file of ['trademind/today/SwingPicks.tsx', 'trademind/pages/Opportunities.tsx']) {
       expect(read(file), file).not.toMatch(/c\.ts\.slice\(5, 10\)/)

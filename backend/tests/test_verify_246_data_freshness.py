@@ -218,11 +218,7 @@ def test_a6_every_date_taken_from_a_candle_timestamp_is_in_ist_except_the_listed
                 )  # python: something.ts.date() with no astimezone before it
                 if receiver.split(".")[-1] == "ts" or receiver.endswith('["ts"]'):
                     found.add((rel, ast.unparse(node)))
-    backtest = {  # gap a8: candle timestamps compared as UTC dates
-        ("services/backtest.py", "df['ts'].dt.date"),
-        ("services/backtest.py", "history[inst_id]['ts'].dt.date"),
-        ("services/backtest.py", "window['ts'].dt.date"),
-    }
+    backtest: set = set()  # gap a8 is fixed (#470): backtest dates are IST days now
     snapshots = {  # PortfolioSnapshot.ts, not a candle; written mid-afternoon IST, so its UTC and IST dates agree
         ("services/portfolio.py", "previous.ts.date()"),
         ("services/portfolio.py", "s.ts.date()"),
@@ -230,10 +226,6 @@ def test_a6_every_date_taken_from_a_candle_timestamp_is_in_ist_except_the_listed
     assert found == backtest | snapshots, sorted(found ^ (backtest | snapshots))
 
 
-@pytest.mark.xfail(
-    **GAP,
-    reason="gap a7: GET /market-data/coverage prints the UTC date of the newest bar, one day early in a UTC database",
-)
 def test_a7_the_coverage_endpoint_names_the_ist_date_of_the_newest_bar(db_session):
     from swing_trade_ml.api.v1.endpoints.market_data import coverage
 
@@ -245,10 +237,6 @@ def test_a7_the_coverage_endpoint_names_the_ist_date_of_the_newest_bar(db_sessio
     assert row["to"] == "2026-12-01", row  # market_data.py:250-251 gives "2026-11-30"
 
 
-@pytest.mark.xfail(
-    **GAP,
-    reason="gap a8: services/backtest.py compares df['ts'].dt.date (UTC labels) with trading days; every day shifts alike (no look-ahead in a run) but a window's first or last bar can drop",
-)
 def test_a8_the_backtest_places_each_bar_on_its_ist_trading_day(db_session):
     from swing_trade_ml.ml.dataset import load_candles
     from swing_trade_ml.services.backtest import _last_close
@@ -317,7 +305,7 @@ def test_b1_a_stale_or_future_quote_is_never_shown_as_live(db_session):
         db_session.query(Quote).filter_by(instrument_id=inst.id).delete()
         _quote(db_session, inst, 555.0, ts)
         snap = _snapshot(db_session, "B1STALE")
-        assert snap.state == "stale", (label, snap.state)  # never "live" or "delayed"
+        assert snap.state not in ("live", "delayed"), (label, snap.state)  # "stale", or "holiday"/"closed" on a market holiday
         assert snap.change_pct is None or snap.state != "live"
 
 
@@ -363,10 +351,6 @@ def test_b5_the_screens_ask_for_the_labelled_snapshot_and_not_the_raw_quote():
     assert "/market-data/snapshot/" in client and "/market-data/quote/" not in client
 
 
-@pytest.mark.xfail(
-    **GAP,
-    reason="gap b6: the paper broker prices a fill from a cached quote of ANY age, even when a newer close exists",
-)
 def test_b6_an_old_cached_quote_does_not_beat_a_newer_close_for_a_paper_fill(db_session, monkeypatch):
     from swing_trade_ml.brokers.kite import kite_broker
     from swing_trade_ml.brokers.paper import PaperBroker
@@ -379,10 +363,6 @@ def test_b6_an_old_cached_quote_does_not_beat_a_newer_close_for_a_paper_fill(db_
     assert price == 100.0, price  # brokers/paper.py:92-96 returns the 5-day-old 500.0
 
 
-@pytest.mark.xfail(
-    **GAP,
-    reason="gap b7: a quote with no last price is stored as a fresh quote priced 0.0 (ingestion.refresh_quotes); unlikely in practice, Kite quotes without a price are rare",
-)
 def test_b7_a_quote_with_no_price_is_not_stored_as_a_fresh_zero(db_session, monkeypatch):
     from swing_trade_ml.brokers.kite import kite_broker
 

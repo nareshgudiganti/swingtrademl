@@ -83,7 +83,11 @@ def test_a1_every_horizon_report_row_takes_its_horizon_and_cap_group_from_the_sl
     assert seen == [(5, "large"), (5, "mid"), (5, "small"), (10, "large"), (15, "large"), (15, "mid")]
 
 
-def test_a2_two_lanes_with_different_results_never_mix_and_their_counts_match_the_stored_rows(db_session):
+def test_a2_two_lanes_with_different_results_never_mix_and_their_counts_match_the_stored_rows(db_session, monkeypatch):
+    # #474 withholds rates below the evidence floor; lower it here so the arithmetic of each lane can be checked
+    from swing_trade_ml.shadow_lanes import lane_review
+
+    monkeypatch.setattr(lane_review, "CHECKPOINTS", (1, *lane_review.CHECKPOINTS[1:]))
     seed(
         db_session, slot="15d-midcap", group="mid", horizon=15, name="sl1_S0M_a"
     )  # 6 picks, 4 finished: +2%, -1%
@@ -132,10 +136,6 @@ class SimpleOutcome:
         self.net_return, self.excess_return = net, excess
 
 
-@pytest.mark.xfail(
-    **GAP,
-    reason="gap a4: GET /ml/predictions/accuracy (owner; testers while plans are off; service keys) gives ONE accuracy over every model, whatever its horizon, and mixes the old endpoint-label era",
-)
 def test_a4_the_accuracy_route_does_not_pool_models_of_different_horizons(db_session):
     from swing_trade_ml.api.v1.endpoints.ml import prediction_accuracy
 
@@ -226,10 +226,6 @@ def test_b2_only_the_owner_routers_import_the_lane_the_weekly_and_the_experiment
     )  # a member-visible route never reads them
 
 
-@pytest.mark.xfail(
-    **GAP,
-    reason="gap b3: the 10-day and 15-day rows of the horizon report carry no research_only flag (the config marks both research-only)",
-)
 def test_b3_the_ten_and_fifteen_day_rows_are_marked_research_only_in_the_payload(db_session):
     rows = _rows(db_session)
     for key in ("10d-large", "15d-large", "15d-mid"):
@@ -317,10 +313,6 @@ def test_d1_no_results_is_none_never_zero_and_says_it_is_too_early():
     assert view["uncertainty"] == {"low": None, "high": None} and lanes.SMALL_SAMPLE in view["sample_warning"]
 
 
-@pytest.mark.xfail(
-    **GAP,
-    reason="gap d2: the lanes screen says 'too early to judge' but still prints a hit rate for 3 finished picks",
-)
 def test_d2_a_lane_with_too_few_finished_picks_shows_no_hit_rate():
     rows = [
         (SimplePick(date(2026, 9, 1) + timedelta(days=i), 1), SimpleOutcome(0.02, 0.02)) for i in range(3)
@@ -330,10 +322,6 @@ def test_d2_a_lane_with_too_few_finished_picks_shows_no_hit_rate():
     assert view["hit_rate"] is None, view["hit_rate"]  # lanes.py:202 gives 1.0 (100%)
 
 
-@pytest.mark.xfail(
-    **GAP,
-    reason="gap d3: the horizon report says 'not enough days' but its rows still carry hit rate and net per trade",
-)
 def test_d3_a_horizon_row_that_is_not_enough_days_carries_no_hit_rate(db_session):
     seed(db_session, slot="15d-midcap", group="mid", horizon=15, name="sl1_S0M_a")
     row = _rows(db_session)["15d-mid"]
@@ -343,10 +331,6 @@ def test_d3_a_horizon_row_that_is_not_enough_days_carries_no_hit_rate(db_session
     ]  # horizon_report.py:_lane_row gives 0.5
 
 
-@pytest.mark.xfail(
-    **GAP,
-    reason="gap d4: GET /ml/predictions/accuracy answers 0.0 for accuracy, average probability and average return when nothing is evaluated",
-)
 def test_d4_no_evaluated_predictions_is_not_an_accuracy_of_zero(db_session):
     from swing_trade_ml.api.v1.endpoints.ml import prediction_accuracy
 

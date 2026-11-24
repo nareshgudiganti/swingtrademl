@@ -37,6 +37,7 @@ KEYED_MODULES = {
     "services/horizon_records.py",
     "services/score_history.py",
     "simulation/ledger.py",
+    "simulation/momentum.py",  # picks by security id; behaviour checked in test_simulation_momentum.py (ids, ties, declared universe)
     "simulation/runner.py",
     "simulation/source.py",
     "simulation/store.py",
@@ -282,7 +283,8 @@ def test_the_simulation_runner_resolves_through_the_identity_api_creates_no_stoc
         return real(session, security_ids, sessions)
 
     monkeypatch.setattr(source, "bars_from_candles", spy)
-    report = runner.run_and_persist(db, run_key="xmod-runner", sessions=SESSIONS, models=[MODEL_5D])
+    universe = sorted(db.scalars(select(Security.id)))
+    report = runner.run_and_persist(db, run_key="xmod-runner", sessions=SESSIONS, models=[MODEL_5D], momentum_universe=universe)
     assert report.fills > 0
     assert seen["db"] is db and seen["sessions"] == list(SESSIONS)
     known = {row for row in db.scalars(select(Security.id))}

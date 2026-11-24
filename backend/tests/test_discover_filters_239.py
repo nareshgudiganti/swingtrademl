@@ -249,12 +249,16 @@ def test_buy_list_control_a_fresh_buy_is_listed_a_later_hold_from_the_same_strat
     assert {r["symbol"] for r in get(client, "/signals/buy-list") if r["symbol"].startswith("BL239")} == {"BL239KEEP"}
 
 
-def test_buy_list_drops_a_stock_whose_newest_signal_from_any_strategy_is_not_a_buy(client, db_session):
-    old_buyer, newer_holder = strat(db_session, "s239_bl_a"), strat(db_session, "s239_bl_b")
+def test_buy_list_keeps_a_buy_when_another_strategy_later_says_hold_and_lists_each_stock_once(client, db_session):
+    # Owner decision 2026-11-25 (#486/#497): only the SAME strategy's newer signal replaces its BUY; the Brain's
+    # nightly HOLD for a stock it did not mark TRADE must not erase a v1 BUY.
+    old_buyer, newer_holder, other_buyer = (strat(db_session, n) for n in ("s239_bl_a", "s239_bl_b", "s239_bl_c"))
     row = inst(db_session, "BL239MIX")
     signal(db_session, old_buyer, row, conf=0.9, age_days=3)
     signal(db_session, newer_holder, row, kind="HOLD", conf=0.5, age_days=1)
-    assert "BL239MIX" not in {r["symbol"] for r in get(client, "/signals/buy-list")}
+    signal(db_session, other_buyer, row, conf=0.7, age_days=2)
+    rows = [r for r in get(client, "/signals/buy-list") if r["symbol"] == "BL239MIX"]
+    assert len(rows) == 1 and rows[0]["confidence"] == 0.9  # listed once, with its most confident BUY
 
 
 def test_buy_list_does_not_list_a_buy_signal_that_is_weeks_old(client, db_session):

@@ -351,8 +351,8 @@ def buy_list(db: DbSession, access: PlanAccessDep) -> list[dict]:
 
     Answers "the Signals page shows a BUY row for this stock, but is that
     still true today or from three days ago?" by construction: it's deduped
-    to each instrument's single most recent signal (any strategy), then kept
-    only if that latest signal is BUY and at most `MAX_BUY_AGE_SESSIONS` completed
+    to each strategy's most recent signal per stock, kept only if that signal is a
+    BUY, then to one row per stock (the most confident BUY) and at most `MAX_BUY_AGE_SESSIONS` completed
     trading sessions old. A stock
     that reconfirms BUY every day for a week stays on the list the whole week;
     the moment a later scan reads HOLD or weaker, it silently drops off next
@@ -370,8 +370,11 @@ def buy_list(db: DbSession, access: PlanAccessDep) -> list[dict]:
     latest_signal = (
         select(Signal)
         .where(Signal.mode == get_broker().mode, Signal.strategy_id.not_in(private_ids))
-        .distinct(Signal.instrument_id)
-        .order_by(Signal.instrument_id, Signal.generated_at.desc(), Signal.id.desc())
+        # Each strategy's own latest signal per stock: a BUY is replaced only by the SAME strategy's newer
+        # signal. Another strategy's HOLD does not erase it (the Brain records a HOLD every night for each
+        # stock it does not mark TRADE, so a cross-strategy rule would depend on which job ran last).
+        .distinct(Signal.strategy_id, Signal.instrument_id)
+        .order_by(Signal.strategy_id, Signal.instrument_id, Signal.generated_at.desc(), Signal.id.desc())
     ).subquery()
     LatestSignal = aliased(Signal, latest_signal)  # noqa: N806 — same convention as top_picks
 
@@ -391,6 +394,9 @@ def buy_list(db: DbSession, access: PlanAccessDep) -> list[dict]:
         .order_by(LatestSignal.confidence.desc().nullslast())
     )
     rows = db.execute(stmt).all()
+    # One row per stock: rows are ordered by confidence, so the first BUY seen for a stock is its best.
+    seen: set[int] = set()
+    rows = [r for r in rows if not (r[0].instrument_id in seen or seen.add(r[0].instrument_id))]
 
     return [
         {

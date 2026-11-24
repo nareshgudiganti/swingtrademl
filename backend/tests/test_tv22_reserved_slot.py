@@ -301,6 +301,8 @@ def _allow(monkeypatch):
 def _shift_days(db, strategy, days: int) -> None:
     for s in db.query(Signal).filter_by(strategy_id=strategy.id):
         s.generated_at = s.generated_at - timedelta(days=days)
+        if s.signal_key:  # the key names the scan's session (#360); a row moved to an earlier day is that day's scan
+            s.signal_key = f"{s.signal_key}:shifted-{days}d"
     db.flush()
 
 

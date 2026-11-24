@@ -46,6 +46,12 @@ function Icon({ d, children }: { d?: string; children?: ReactNode }) {
   )
 }
 
+// Signed-out marketing copy about our public test portfolio. A visitor is not signed in, so this page cannot ask
+// the server for the trading numbers (GET /config/trading-rules needs a sign-in); these two sentences are the
+// only copies left in the frontend, listed with this reason in noHardcodedRules.test.ts.
+const TEST_PORTFOLIO_FINE = '−4% stop, +8% target in our 15-day test portfolio'
+const TEST_PORTFOLIO_LONG = 'In our 15-day test portfolio: −4% stop, +8% target, out within 15 trading days.'
+
 const ICON_PULSE = 'M3 12h4l3-8 4 16 3-8h4'
 const ICON_SHIELD = 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z'
 const ICON_TICK = 'M5 12.5l4.5 4.5L19 7.5'
@@ -177,7 +183,7 @@ function Landing({ options }: { options: AuthOptions | null }) {
               </span>
               <span>
                 <b>Safety net</b>
-                <span className="na-fine">−4% stop, +8% target in our 15-day test portfolio</span>
+                <span className="na-fine">{TEST_PORTFOLIO_FINE}</span>
               </span>
             </div>
             <div className="na-t">
@@ -269,7 +275,7 @@ function Promises() {
             <span>
               <b>Safety net built in</b>
               <br />
-              In our 15-day test portfolio: −4% stop, +8% target, out within 15 trading days.
+              {TEST_PORTFOLIO_LONG}
             </span>
           </div>
           <div className="na-pt">

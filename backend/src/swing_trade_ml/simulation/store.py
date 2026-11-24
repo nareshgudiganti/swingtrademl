@@ -15,8 +15,10 @@
 - THE VALIDATION PORTFOLIO is stored with `counts_in_comparison = false` and is left out of every figure
   `performance_by_policy` returns (the same promise as `ledger.compare_by_policy`).
 - BLOCKED PICKS and NOT-APPLIED RULES are stored in full, with their reasons.
-- TRACEABLE: every fill, exit and block carries `security_id`, `horizon_record_id` (empty only where a policy has no
-  record source, which is momentum), policy and rule version; `trace_fills` joins them back to the stock and record.
+- TRACEABLE: every fill, exit and block carries `security_id`, policy and rule version, and either the
+  `horizon_record_id` it was decided from (model-only and Brain-filtered: required, checked, and no rule reference
+  allowed) or, for momentum, which has no record, the `rule_ref` (rule name and version) that made the pick (required).
+  `trace_fills` joins them back to the stock and the record or rule.
 
 Synthetic data only: nothing here has a user or account, sends a message or places an order. Importing this module loads
 no database code; everything database-related is imported when a function is called. It does NOT commit: the caller
@@ -25,7 +27,7 @@ owns the transaction.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date
 from typing import Any
@@ -91,12 +93,18 @@ def _validate(run_key: str, ledgers: Mapping[str, PortfolioLedger], rules: Tradi
             for item in (*record.fills, *record.exits, *record.blocks, *record.positions):
                 if not isinstance(item.security_id, int) or isinstance(item.security_id, bool):
                     raise StoreError(f"{ledger.spec.persona_key} {record.session}: a row has no security_id")
-            if ledger.spec.policy is not Policy.MOMENTUM:
-                for item in (*record.fills, *record.exits, *record.blocks):
+            for item in (*record.fills, *record.exits, *record.blocks):
+                where = f"{ledger.spec.persona_key} {record.session}: a {ledger.spec.policy.value} row for security {item.security_id}"
+                if ledger.spec.policy is Policy.MOMENTUM:
+                    # momentum has no horizon record: it is traced to the rule and version that made the pick
+                    if not item.rule_ref or len(item.rule_ref) > 64:
+                        raise StoreError(f"{where} has no rule reference, so it could not be traced")
+                else:
                     if item.record_id is None:
+                        raise StoreError(f"{where} has no horizon record, so it could not be traced")
+                    if item.rule_ref is not None:
                         raise StoreError(
-                            f"{ledger.spec.persona_key} {record.session}: a {ledger.spec.policy.value} row for security "
-                            f"{item.security_id} has no horizon record, so it could not be traced"
+                            f"{where} carries a rule reference, which only momentum rows may have"
                         )
 
 
@@ -137,10 +145,32 @@ def _same(stored: tuple, new: tuple, what: str) -> None:
         raise ReplayMismatchError(f"{what} is already stored with other values: stored {stored}, new {new}")
 
 
+def universe_fingerprint(ids: Sequence[int] | None) -> tuple[str | None, str | None]:
+    """(the sorted ids as JSON text, its sha256), or (None, None) when no universe is declared."""
+    import hashlib
+    import json
+
+    if ids is None:
+        return None, None
+    text = json.dumps(sorted(int(i) for i in ids), separators=(",", ":"))
+    return text, hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
 def persist_run(
-    db: Any, run_key: str, ledgers: Mapping[str, PortfolioLedger], rules: TradingRules
+    db: Any,
+    run_key: str,
+    ledgers: Mapping[str, PortfolioLedger],
+    rules: TradingRules,
+    *,
+    momentum_universe: Sequence[int] | None = None,
+    momentum_not_ranked: Mapping[int, str] | None = None,
 ) -> StoreResult:
-    """Write the run (and everything under it) that is not stored yet; check what is. See the module docstring."""
+    """Write the run (and everything under it) that is not stored yet; check what is. See the module docstring.
+
+    `momentum_universe` (the security ids Momentum ranks) is stored on the run row with its sha256 so the run can be
+    reproduced; a replay under another universe is refused like any other difference. `momentum_not_ranked` names the
+    declared stocks that were not ranked and why; each is stored once per run (`sim_not_ranked`), and a replay that gives
+    another set is refused."""
     from sqlalchemy import select
 
     from swing_trade_ml.db.models.simulation import (
@@ -165,7 +195,8 @@ def persist_run(
 
     with db.begin_nested():
         run = db.scalar(select(SimRun).where(SimRun.run_key == run_key))
-        wanted = (SCHEMA_VERSION, rules.version, config_version, rules.research_only, horizon)
+        universe_text, universe_sha = universe_fingerprint(momentum_universe)
+        wanted = (SCHEMA_VERSION, rules.version, config_version, rules.research_only, horizon, universe_sha)
         if run is None:
             run = SimRun(
                 run_key=run_key,
@@ -174,6 +205,8 @@ def persist_run(
                 research_config_version=config_version,
                 research_only=rules.research_only,
                 horizon_days=horizon,
+                momentum_universe=universe_text,
+                momentum_universe_sha256=universe_sha,
                 synthetic=True,
                 first_session=first,
                 last_session=last,
@@ -189,6 +222,7 @@ def persist_run(
                     run.research_config_version,
                     run.research_only,
                     run.horizon_days,
+                    run.momentum_universe_sha256,
                 ),
                 wanted,
                 f"run {run_key!r}",
@@ -201,6 +235,8 @@ def persist_run(
                 run.last_session = last  # a replay that carries on past the stored end only extends it
             out.found("sim_runs")
         out.run_id = run.id
+        if momentum_not_ranked is not None:
+            _store_not_ranked(db, run, momentum_not_ranked, out)
 
         stored_portfolios = {
             p.persona_key: p for p in db.scalars(select(SimPortfolio).where(SimPortfolio.run_id == run.id))
@@ -254,6 +290,37 @@ def persist_run(
             )
         db.flush()
     return out
+
+
+def _store_not_ranked(db: Any, run: Any, not_ranked: Mapping[int, str], out: StoreResult) -> None:
+    from sqlalchemy import select
+
+    from swing_trade_ml.db.models.simulation import SimNotRanked
+
+    for security_id, reason in not_ranked.items():
+        if (
+            not isinstance(security_id, int)
+            or isinstance(security_id, bool)
+            or not reason
+            or len(reason) > 255
+        ):
+            raise StoreError(
+                f"a not-ranked stock needs a security id and a reason (got {security_id!r}, {reason!r})"
+            )
+    stored = {
+        r.security_id: r.reason for r in db.scalars(select(SimNotRanked).where(SimNotRanked.run_id == run.id))
+    }
+    if stored and stored != dict(not_ranked):
+        raise ReplayMismatchError(
+            f"run {run.run_key!r}: the declared stocks that were not ranked differ from those stored "
+            f"(stored {sorted(stored)}, now {sorted(not_ranked)})"
+        )
+    for security_id, reason in sorted(not_ranked.items()):
+        if security_id in stored:
+            out.found("sim_not_ranked")
+        else:
+            db.add(SimNotRanked(run_id=run.id, security_id=security_id, reason=reason))
+            out.made("sim_not_ranked")
 
 
 def _store_not_applied(
@@ -336,7 +403,17 @@ def _store_records(
             out.found("sim_days")
 
         for f in record.fills:
-            new = (f.symbol, f.record_id, policy, record.rule_version, f.qty, f.price, f.charges, f.cost)
+            new = (
+                f.symbol,
+                f.record_id,
+                f.rule_ref,
+                policy,
+                record.rule_version,
+                f.qty,
+                f.price,
+                f.charges,
+                f.cost,
+            )
             seen["fills"].add((day, f.security_id))
             row = fills.get((day, f.security_id))
             if row is None:
@@ -347,6 +424,7 @@ def _store_records(
                         security_id=f.security_id,
                         symbol=f.symbol,
                         horizon_record_id=f.record_id,
+                        rule_ref=f.rule_ref,
                         policy=policy,
                         rule_version=record.rule_version,
                         qty=f.qty,
@@ -360,6 +438,7 @@ def _store_records(
                 stored = (
                     row.symbol,
                     row.horizon_record_id,
+                    row.rule_ref,
                     row.policy,
                     row.rule_version,
                     row.qty,
@@ -371,7 +450,17 @@ def _store_records(
                 out.found("sim_fills")
 
         for x in record.exits:
-            new = (x.symbol, x.record_id, policy, record.rule_version, x.qty, x.price, x.proceeds, x.stale)
+            new = (
+                x.symbol,
+                x.record_id,
+                x.rule_ref,
+                policy,
+                record.rule_version,
+                x.qty,
+                x.price,
+                x.proceeds,
+                x.stale,
+            )
             seen["exits"].add((day, x.security_id, x.reason))
             row = exits.get((day, x.security_id, x.reason))
             if row is None:
@@ -382,6 +471,7 @@ def _store_records(
                         security_id=x.security_id,
                         symbol=x.symbol,
                         horizon_record_id=x.record_id,
+                        rule_ref=x.rule_ref,
                         policy=policy,
                         rule_version=record.rule_version,
                         reason=x.reason,
@@ -396,6 +486,7 @@ def _store_records(
                 stored = (
                     row.symbol,
                     row.horizon_record_id,
+                    row.rule_ref,
                     row.policy,
                     row.rule_version,
                     row.qty,
@@ -407,7 +498,7 @@ def _store_records(
                 out.found("sim_exits")
 
         for seq, b in enumerate(record.blocks):
-            new = (b.security_id, b.symbol, b.record_id, policy, record.rule_version, b.reason)
+            new = (b.security_id, b.symbol, b.record_id, b.rule_ref, policy, record.rule_version, b.reason)
             seen["blocks"].add((day, seq))
             row = blocks.get((day, seq))
             if row is None:
@@ -419,6 +510,7 @@ def _store_records(
                         security_id=b.security_id,
                         symbol=b.symbol,
                         horizon_record_id=b.record_id,
+                        rule_ref=b.rule_ref,
                         policy=policy,
                         rule_version=record.rule_version,
                         reason=b.reason,
@@ -430,6 +522,7 @@ def _store_records(
                     row.security_id,
                     row.symbol,
                     row.horizon_record_id,
+                    row.rule_ref,
                     row.policy,
                     row.rule_version,
                     row.reason,
@@ -536,6 +629,7 @@ class TraceRow:
     rule_version: str
     qty: int
     price: float
+    rule_ref: str | None = None  # momentum fills trace to the rule and version instead of a horizon record
 
 
 def trace_fills(db: Any, run_key: str) -> list[TraceRow]:
@@ -576,6 +670,7 @@ def trace_fills(db: Any, run_key: str) -> list[TraceRow]:
                 rule_version=fill.rule_version,
                 qty=fill.qty,
                 price=fill.price,
+                rule_ref=fill.rule_ref,
             )
         )
     return rows

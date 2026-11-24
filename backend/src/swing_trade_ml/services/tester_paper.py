@@ -16,9 +16,7 @@ from sqlalchemy.orm import Session
 from swing_trade_ml.brokers import get_broker, paper_broker
 from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.enums import (
-    OrderType,
     PositionStatus,
-    ProductType,
     SignalType,
     TradingMode,
     TransactionType,
@@ -258,9 +256,11 @@ def paper_buy(
         raise LookupError(f"Unknown symbol {exchange}:{symbol.upper()} — sync instruments first.")
 
     strategy = get_or_create_strategy(db)
-    ref = paper_broker._reference_price(instrument.tradingsymbol, instrument.exchange, db)
+    ref, why_not, _age = paper_broker._price_for_fill(
+        instrument.tradingsymbol, instrument.exchange, db, TransactionType.BUY
+    )
     if ref is None or ref <= 0:
-        raise ValueError(f"No price available for {instrument.tradingsymbol}.")
+        raise ValueError(why_not or f"No price available for {instrument.tradingsymbol}.")
 
     from swing_trade_ml.api.v1.endpoints.portfolio import _derive_stop_target
     from swing_trade_ml.services.costs import compute_charges

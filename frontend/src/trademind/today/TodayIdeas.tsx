@@ -15,6 +15,7 @@ import { horizonById, type HorizonId } from '../horizons'
 import { ChangesSummaryCard } from '../IdeaExplain'
 import { finalWord, ideasFrom, marketSituation, useLearning } from '../live'
 import { PageState } from '../PageState'
+import { planDays } from '../tradingRules'
 import { Card, CheckItem } from '../ui'
 import { holdingsNeedingAttention } from './HoldingsNeedsYou'
 
@@ -52,7 +53,7 @@ export function TodayIdeas({ run, win, onWin }: { run: BrainRun; win: HorizonId;
         <div data-feature="horizon-cards" style={{ marginBottom: '0.9rem' }}>
           <HorizonSelector value={win} onChange={onWin} />
         </div>
-        <div className="tm-grid tm-cols-4" data-feature="idea-counts" aria-label="15-day ideas by decision">
+        <div className="tm-grid tm-cols-4" data-feature="idea-counts" aria-label={`${planDays()}-day ideas by decision`}>
           {IDEA_WORDS.map((w) => (
             <div key={w} style={{ textAlign: 'center' }}>
               <div className="tm-stat-value" style={{ fontSize: '1.4rem' }}>
@@ -63,7 +64,7 @@ export function TodayIdeas({ run, win, onWin }: { run: BrainRun; win: HorizonId;
           ))}
         </div>
         <p className="tm-dim" style={{ fontSize: '0.72rem', margin: '0.4rem 0 0' }}>
-          These counts are the 15-day ideas, the only window with a strategy.
+          These counts are the {planDays()}-day ideas, the only window with a strategy.
         </p>
         {noTrade && (
           <p className="tm-note" data-testid="no-trade-reason" data-feature="no-trade-reason">

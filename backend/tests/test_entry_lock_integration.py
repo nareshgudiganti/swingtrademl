@@ -275,7 +275,7 @@ def test_the_position_list_is_read_again_after_waiting_for_the_lock(committed, m
     sid, iid = strategy.id, inst.id
     seen: dict = {}
 
-    def capture(db_, strategy_, instrument_, decision_, mode_, existing_positions):
+    def capture(db_, strategy_, instrument_, decision_, mode_, existing_positions, *_):
         seen["ids"] = [p.id for p in existing_positions]
         return None
 

@@ -3,28 +3,25 @@
 from __future__ import annotations
 
 from datetime import date, datetime, time
-from typing import Any
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi import status as http_status
-from sqlalchemy import func, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy import func, select
 
 from swing_trade_ml import __version__
 from swing_trade_ml.api.deps import DbSession, Principal, PrincipalDep, require_auth
 from swing_trade_ml.brokers import get_broker, kite_broker
 from swing_trade_ml.core import market_session
 from swing_trade_ml.core.config import settings
-from swing_trade_ml.core.enums import ModelStatus, PositionStatus
-from swing_trade_ml.core.strategy_policy import NON_SCAN_STRATEGY_TYPES
+from swing_trade_ml.core.enums import ModelStatus
 from swing_trade_ml.db.models.market import Candle, Instrument
 from swing_trade_ml.db.models.ml import MLModel
-from swing_trade_ml.db.models.trading import Position, Signal, Strategy
+from swing_trade_ml.db.models.trading import Signal, Strategy
 from swing_trade_ml.db.session import check_connection
 from swing_trade_ml.ml.registry import get_active_model
 from swing_trade_ml.schemas import HealthResponse, ReadinessResponse, SystemStatus
-from swing_trade_ml.services.portfolio import REAL_TRADING_STRATEGY_NAME
+from swing_trade_ml.services.portfolio import open_positions_by_book
 from swing_trade_ml.workers import heartbeat
 from swing_trade_ml.workers.scheduler import list_jobs
 
@@ -33,16 +30,8 @@ router = APIRouter(tags=["system"])
 IST = ZoneInfo("Asia/Kolkata")
 
 
-def _expected_latest_trading_day(now_ist: datetime) -> date:
-    """The most recent trading day whose candle should already be in by now.
-
-    Zerodha doesn't publish a day's own historical candle same-day — even
-    checked well after both the 15:30 close and the 15:40 ingest job, it's
-    consistently still missing, and only shows up some time before the next
-    trading day. So "today" is never the right expectation; the bar is
-    always the previous trading day, all day today, regardless of the hour.
-    """
-    return market_session.previous_trading_day(now_ist.date())
+# Lives in core.market_session now (the services layer must not import this api module); same behaviour.
+_expected_latest_trading_day = market_session.expected_latest_trading_day
 
 
 # Auto-login fires at 06:10 IST; the missing-session nag starts at 06:15.
@@ -149,26 +138,7 @@ def ready(db: DbSession) -> ReadinessResponse:
     )
 
 
-def open_positions_by_book(db: Session) -> dict[str, int]:
-    """Open positions per book. The three books never mix: the bot's own book, the manual
-    Testing (paper) book, and real Zerodha holdings tracked under `real_trading`."""
-
-    def count(*where: Any) -> int:
-        return int(
-            db.execute(
-                select(func.count(Position.id))
-                .outerjoin(Strategy, Strategy.id == Position.strategy_id)
-                .where(Position.status == PositionStatus.OPEN, *where)
-            ).scalar_one()
-        )
-
-    is_testing = Strategy.strategy_type.in_(sorted(NON_SCAN_STRATEGY_TYPES))
-    is_real = Strategy.name == REAL_TRADING_STRATEGY_NAME
-    return {
-        "bot": count(or_(Strategy.id.is_(None), ~(is_testing | is_real))),
-        "testing": count(is_testing),
-        "real": count(is_real),
-    }
+# open_positions_by_book lives in services.portfolio now (imported above); same behaviour.
 
 
 def visible_books(principal: Principal, books: dict[str, int]) -> dict[str, int]:
@@ -261,6 +231,17 @@ def status(db: DbSession, principal: PrincipalDep) -> SystemStatus:
     Built per request for this caller and never cached: the book counts depend on who asks.
     """
     return _build_status(db, principal)
+
+
+@router.get("/config/trading-rules")
+def trading_rules_now(principal: PrincipalDep) -> dict:
+    """The trading-rule numbers, the trial's session count and the holiday list the screens show (#416).
+    Read-only: it reads the versioned research config, the brain plan settings and the NSE calendar. Any
+    signed-in caller may read it (every plan): the numbers are the app's public rules, no account data."""
+    from swing_trade_ml.services import trading_rules
+
+    # The research-only horizons (10 and 15 sessions) are served to the owner and the shared key only.
+    return trading_rules.trading_rules(include_research=principal.is_owner)
 
 
 @router.get("/market/session", dependencies=[Depends(require_auth)])

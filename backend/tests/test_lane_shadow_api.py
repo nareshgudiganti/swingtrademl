@@ -19,6 +19,7 @@ URL = "/api/v1/research/lanes"
 LANE_KEYS = {
     "slot_key",
     "horizon_days",
+    "research_only",
     "cap_group",
     "model",
     "status",
@@ -31,6 +32,7 @@ FORWARD_KEYS = {
     "picks",
     "completed",
     "open",
+    "unresolved",
     "hit_rate",
     "mean_net_return",
     "benchmark_excess",
@@ -139,7 +141,7 @@ def test_empty_state_has_the_three_lanes_with_nulls(client, db_session):
     assert "Limited experiment" not in out["lanes"][0]["forward"]["sample_warning"]
 
 
-def test_forward_numbers_are_fractions_and_drawdown_is_pick_level(client, db_session):
+def test_forward_numbers_are_fractions_and_drawdown_is_pick_level(client, db_session, monkeypatch):
     m = seed(db_session)
     out = client.get(URL, headers=headers(db_session, "owner")).json()
     ln = out["lanes"][2]
@@ -156,9 +158,14 @@ def test_forward_numbers_are_fractions_and_drawdown_is_pick_level(client, db_ses
     )
     f = ln["forward"]
     assert (f["picks"], f["completed"], f["open"]) == (6, 4, 2)
-    assert f["hit_rate"] == pytest.approx(0.5)
-    assert f["mean_net_return"] == pytest.approx(0.005)  # 0.5%, as a fraction
-    assert f["benchmark_excess"] == pytest.approx(0.005)
+    # 4 finished picks is too early to judge (#474): no figure is shown (test_display_gaps_474.py).
+    assert f["hit_rate"] is None and f["mean_net_return"] is None and f["unresolved"] == 0
+    assert f["benchmark_excess"] is None and f["drawdown"] is None
+    # With the floor lowered to this sample the numbers themselves are still right:
+    monkeypatch.setattr(lanes, "REVIEW_AFTER", 4)
+    f = next(e for e in lanes.build_lanes(db_session)["lanes"] if e["slot_key"] == "15d-midcap")["forward"]
+    assert f["hit_rate"] == pytest.approx(0.5) and f["mean_net_return"] == pytest.approx(0.005)
+    assert f["benchmark_excess"] == pytest.approx(0.005)  # 0.5%, as a fraction
     assert f["drawdown"] == pytest.approx(-0.01)  # +0.02, -0.01, +0.02, -0.01: largest fall 1%
     assert f["uncertainty"] == {"low": None, "high": None}  # fewer than 30 completed
     assert "NOT a portfolio drawdown" in out["note"]

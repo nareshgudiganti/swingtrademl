@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import hmac
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Annotated
 
 from fastapi import Depends, Header, HTTPException, Request, status
@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from swing_trade_ml.core.config import settings
+from swing_trade_ml.core.plan_access import PlanAccess  # moved to core; re-exported here for every caller
 from swing_trade_ml.core.plans import DEFAULT_PLAN, FEATURES, PLAN_KEYS, ROUTE_RULES, brain_route_access
 from swing_trade_ml.core.security import decode_access_token
 from swing_trade_ml.db.models.session import User
@@ -131,35 +132,6 @@ async def get_principal(
         status.HTTP_401_UNAUTHORIZED,
         "Provide a valid Authorization bearer token or X-API-Key header",
     )
-
-
-@dataclass(frozen=True)
-class PlanAccess:
-    """What the caller may see. `unrestricted` callers see everything: the
-    owner always, and a tester while plans are switched off. Members always get
-    their plan's rules. The owner can still preview a plan
-    (X-Preview-Plan) and then gets exactly what that plan's users get."""
-
-    unrestricted: bool
-    plan: str | None
-    features: frozenset[str] = frozenset()
-    limits: dict = field(default_factory=dict)
-    previewing: bool = False
-
-    def has(self, feature: str) -> bool:
-        return self.unrestricted or feature in self.features
-
-    @property
-    def picks_per_day(self) -> int | None:
-        return None if self.unrestricted else (self.limits.get("picks_per_day") or None)
-
-    @property
-    def history_days(self) -> int | None:
-        return None if self.unrestricted else (self.limits.get("history_days") or None)
-
-    @property
-    def cap_tiers(self) -> set[str] | None:
-        return None if self.unrestricted else set(self.limits.get("allowed_cap_tiers") or [])
 
 
 def plan_access_for(db: Session, principal: Principal, preview: str | None = None) -> PlanAccess:

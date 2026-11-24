@@ -125,15 +125,26 @@ export function ForwardPanel({ f, cap }: { f: LaneSummary['forward']; cap: strin
       )}
       <Row k="Picks">
         {f.picks} total · {f.completed} finished · {f.open} open
+        {f.unresolved ? ` · ${f.unresolved} with no usable price (unresolved)` : ''}
       </Row>
       <Row k="Hit rate">
-        {f.hit_rate === null ? NOT_MEASURED : `${(f.hit_rate * 100).toFixed(0)}% of ${f.completed} finished picks`}
+        {f.hit_rate === null
+          ? f.completed > 0
+            ? 'Not enough finished picks yet'
+            : NOT_MEASURED
+          : `${(f.hit_rate * 100).toFixed(0)}% of ${f.completed} finished picks`}
       </Row>
       <Row k="Average result after costs">
-        {pctOrWords(f.mean_net_return)} ({f.completed} finished picks)
+        {f.mean_net_return === null && f.completed > 0
+          ? 'Not enough finished picks yet'
+          : `${pctOrWords(f.mean_net_return)} (${f.completed} finished picks)`}
       </Row>
-      <Row k="Excess over the group's own average stock">{pctOrWords(f.benchmark_excess)}</Row>
-      <Row k="Fall in the running total of picks">{pctOrWords(f.drawdown)}</Row>
+      <Row k="Excess over the group's own average stock">
+        {f.benchmark_excess === null && f.completed > 0 ? 'Not enough finished picks yet' : pctOrWords(f.benchmark_excess)}
+      </Row>
+      <Row k="Fall in the running total of picks">
+        {f.drawdown === null && f.completed > 0 ? 'Not enough finished picks yet' : pctOrWords(f.drawdown)}
+      </Row>
       <p className="muted" style={{ fontSize: 11, margin: '2px 0 4px' }}>
         {DRAWDOWN_NOTE}
       </p>
@@ -415,7 +426,8 @@ function FiveDayLane() {
           <div className="card" style={{ padding: 12, margin: '8px 0' }}>
             <strong>{d.summary.picks}</strong> picks · <strong>{d.summary.finished}</strong> finished ·{' '}
             <strong>{d.summary.open}</strong> open · <strong>{d.summary.wins}</strong> made money · average after
-            costs <strong>{pctText(d.summary.mean_net_return)}</strong>
+            costs{' '}
+            <strong>{d.summary.rates_note ? 'not enough finished picks yet' : pctText(d.summary.mean_net_return)}</strong>
           </div>
           <PicksTable rows={d.rows} emptyLabel={emptyPicksLabel(from, to)} />
         </>

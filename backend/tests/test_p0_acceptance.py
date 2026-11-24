@@ -10,7 +10,7 @@ nightly writer and the horizon-record table, the research config, the cohort mat
 and sizing) and the simulation store.
 
 What is SYNTHETIC: the stocks' prices and model scores are invented (the symbols look like NSE names but no market data
-is used), there is no ISIN, the momentum policy has no pick source (so its 33 portfolios hold cash), and the persisted
+is used), there is no ISIN, the momentum policy ranks a declared universe of these invented stocks with the app's 20-day top-5 rule, and the persisted
 simulation rows are flagged synthetic. Nothing is sent, nothing trades, no job is enabled, and every write rolls back
 with the test.
 """
@@ -45,11 +45,14 @@ from swing_trade_ml.db.models.ml import MLModel, Prediction
 from swing_trade_ml.services import horizon_nightly as hn
 from swing_trade_ml.services import horizon_records as hr
 from swing_trade_ml.services.identity import resolve, writer
+from swing_trade_ml.simulation import momentum as momentum_rule
 from swing_trade_ml.simulation import runner, source, store
 from swing_trade_ml.simulation.identity import Policy
-from swing_trade_ml.simulation.ledger import Bar
+from swing_trade_ml.simulation.ledger import Bar, Candidate
 from swing_trade_ml.simulation.rules import TradingRules
+from swing_trade_ml.simulation.runner import RunnerError
 from swing_trade_ml.simulation.source import AmbiguousRecordsError, ModelNotNamedError, ModelRef
+from swing_trade_ml.simulation.store import ReplayMismatchError
 
 DAYS = tuple(d for i in range(40) if (d := date(2026, 12, 1) + timedelta(days=i)).weekday() < 5)[:16]
 SESSIONS = tuple(d.isoformat() for d in DAYS)
@@ -57,6 +60,7 @@ RENAME_AT = 6  # OLDCO becomes NEWCO from the 7th session
 V2_FROM = 8  # the 5-session model is replaced by version v2 from the 9th session
 STALE_AFTER = 2  # STALECO has candles only for the first three sessions
 RUN_KEY = "p0-accept-1"
+PRE_DAYS = tuple(d for i in range(60) if (d := date(2026, 12, 1) - timedelta(days=i + 1)).weekday() < 5)[:26][::-1]  # 26 sessions of history before the window (the 20-day Momentum rule needs more than 20 closes)
 _tokens = iter(range(430_000, 430_900))
 
 # symbol -> the model's (synthetic) score for it, every session. >= 0.80 is TRADE, >= 0.60 WATCH, else WAIT.
@@ -170,6 +174,9 @@ def world(db_session):
         for symbol in ("RELIANCE", LONG_ONLY):
             predict(m10, symbol, i, 0.95)
             predict(m15, symbol, i, 0.95)
+    for k, symbol in enumerate((*SCORES, LONG_ONLY)):  # stored history BEFORE the first session, for the trailing 20-day Momentum rule
+        for bar, day in zip(_bars(300 + k, len(PRE_DAYS)), PRE_DAYS, strict=True):
+            db.add(Candle(instrument_id=instruments[symbol].id, interval="day", ts=_stamp(day), open=bar.open, high=bar.high, low=bar.low, close=bar.close, volume=100_000))
     for symbol, bars in bars_by_symbol.items():  # stored daily candles: STALECO has only its first three
         for i, bar in enumerate(bars):
             db.add(
@@ -334,9 +341,16 @@ def test_ten_and_fifteen_day_research_records_never_reach_a_product_reader_or_a_
 # they are still stored, and this test only asserts that. Once that branch lands, give it its own acceptance case.
 
 
+def _universe(world) -> list[int]:
+    """Momentum's DECLARED universe: every stock of the fixture, as permanent security ids (never 'whatever the models scored')."""
+    ids = (resolve(world["db"], token=i.instrument_token) for i in world["instruments"].values())
+    return sorted({sid for sid in ids if sid is not None})
+
+
 def _run(world, key: str = RUN_KEY, **kwargs):
     """The real caller: stored records and stored candles in, 100 stored portfolios out. Does not commit."""
     kwargs.setdefault("models", MODELS)
+    kwargs.setdefault("momentum_universe", _universe(world))
     return runner.run_and_persist(world["db"], run_key=key, sessions=SESSIONS, **kwargs)
 
 
@@ -364,11 +378,11 @@ def test_the_hundred_portfolios_are_fed_from_stored_records_only(simulated):
                 assert row.horizon_days == 5 and row.research_only is False and row.revision == 1
                 assert row.model_id != prod_id and row.model_name == "swing_5d"
                 assert row.security_id == cand.security_id and cand.symbol == source.symbol_on(db, cand.security_id, row.session_date)
-    assert report.picks["momentum"] == 0 and report.picks["model_only"] > 0 and report.picks["brain_filtered"] >= report.picks["model_only"]
-    assert any("momentum" in note for note in report.notes)  # the runner says momentum has no source
+    assert report.picks["momentum"] > 0 and report.picks["model_only"] > 0 and report.picks["brain_filtered"] >= report.picks["model_only"]
+    assert any("momentum-20d-top5" in note for note in report.notes)  # the runner names the rule Momentum used
     perf = store.performance_by_policy(db, RUN_KEY)
     assert {p: row["portfolios"] for p, row in perf.items()} == {"momentum": 33, "model_only": 33, "brain_filtered": 33}
-    assert perf["momentum"]["zero_trade_portfolios"] == 33 and perf["model_only"]["zero_trade_portfolios"] < 33
+    assert perf["model_only"]["zero_trade_portfolios"] < 33
     assert report.fills > 0 and report.blocks > 0
 
 
@@ -383,8 +397,8 @@ def test_missing_stale_and_blocked_stay_explicit_in_the_stored_run(simulated):
     assert {"held_back: brain check: WATCH", "held_back: brain check: WAIT"} <= reasons
     assert "below_minimum_position" in reasons  # the small accounts' zero-trade reason
     assert db.scalar(select(func.count()).select_from(SimNotApplied)) > 0  # inputs the run did not have are listed
-    for table in (SimFill, SimBlock, SimExit):
-        assert db.scalar(select(func.count()).select_from(table).where(table.security_id == long_id)) == 0
+    for table in (SimFill, SimBlock, SimExit):  # no model decided it: only Momentum (a declared universe, no model) may touch it
+        assert db.scalar(select(func.count()).select_from(table).where(table.security_id == long_id, table.policy != "momentum")) == 0
 
 
 # ------------------------------------------------------------------------------- 4. persisted, traceable, repeatable
@@ -683,7 +697,7 @@ def test_write_the_demonstration_evidence_file(world):
             "explicit_no_data_records": sum(1 for r in records if r.run_ref == "no-data"), "research_records_in_product_run": sum(1 for r in records if r.research_only),
             "portfolios": first.portfolios, "compared": first.compared, "validation": first.validation,
             "fills": first.fills, "blocked_picks": first.blocks, "zero_trade_portfolios": first.zero_trade_portfolios,
-            "rerun_adds_rows": again.rows_created, "momentum": "no verified ranking source yet: its 33 portfolios hold cash",
+            "rerun_adds_rows": again.rows_created, "momentum": f"the app's 20-day top-5 rule over a declared universe of {first.momentum_declared} stocks",
         },
         "input": {
             "stocks": [{"symbol": s, "token": i.instrument_token, "model_score": SCORES.get(s), "candles": len(world["bars_by_symbol"][s]),
@@ -707,3 +721,201 @@ def test_write_the_demonstration_evidence_file(world):
     path = Path(os.environ["P0_DEMO_OUT"])
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(out, indent=2, default=str), encoding="utf8")
+
+
+# ======================================================================================= three-policy acceptance
+# ONE world, the real callers (nightly 5D writer, then runner.run_and_persist with a declared momentum_universe), the three
+# compared policies of #321: Momentum (the app's 20-day top-5 rule), Model-only (the 5-session model's TRADE records) and
+# Brain-filtered (the same model picks, held back unless the Brain's own check said TRADE).
+
+
+POLICIES = ("momentum", "model_only", "brain_filtered")
+
+
+def _oracle_momentum(db, universe: list[int]) -> dict[str, list[int]]:
+    """Independent recomputation of the Momentum picks of each session, straight from the stored candles: the 5 stocks
+    with the highest gain over the last 20 bars up to and including that session's close, a tie broken by the symbol."""
+    closes: dict[int, dict[date, float]] = {}
+    instruments = list(db.scalars(select(Instrument)))
+    for sid in universe:
+        inst_ids = [i.id for i in instruments if resolve(db, token=i.instrument_token) == sid]
+        for c in db.scalars(select(Candle).where(Candle.instrument_id.in_(inst_ids), Candle.interval == "day")):
+            closes.setdefault(sid, {})[c.ts.astimezone(IST).date()] = float(c.close)
+    last_day = date.fromisoformat(SESSIONS[-1])
+    out: dict[str, list[int]] = {}
+    for session in SESSIONS:
+        day = date.fromisoformat(session)
+        scored = []
+        for sid, by_day in closes.items():
+            seen = sorted((d, v) for d, v in by_day.items() if d <= day)
+            if day in by_day and len(seen) > 20 and seen[-21][1] > 0:
+                scored.append((-(seen[-1][1] / seen[-21][1] - 1.0), source.symbol_on(db, sid, last_day) or "", sid))
+        out[session] = [sid for _, _, sid in sorted(scored)[:5]]
+    return out
+
+
+@pytest.fixture()
+def three(world):
+    _nightly(world)
+    universe = _universe(world)
+    report = _run(world)
+    return {**world, "report": report, "universe": universe}
+
+
+def test_all_hundred_portfolios_run_all_three_policies_from_their_own_sources(three):
+    db, report, universe = three["db"], three["report"], three["universe"]
+    assert (report.portfolios, report.compared, report.validation) == (100, 99, 1)
+    assert db.scalar(select(func.count()).select_from(SimPortfolio)) == 100
+    perf = store.performance_by_policy(db, RUN_KEY)
+    assert set(perf) == set(POLICIES) and {p: int(perf[p]["portfolios"]) for p in POLICIES} == dict.fromkeys(POLICIES, 33)
+    assert all(report.picks[p] > 0 for p in POLICIES)  # each policy had picks in the window
+    fills_by_policy = dict(db.execute(select(SimFill.policy, func.count()).group_by(SimFill.policy)).all())
+    assert set(fills_by_policy) == set(POLICIES) and all(n > 0 for n in fills_by_policy.values())
+    # every portfolio is stored through the last session, so none silently dropped out
+    last = date.fromisoformat(SESSIONS[-1])
+    assert db.scalar(select(func.count(func.distinct(SimDay.portfolio_id))).where(SimDay.session_date == last)) == 100
+    run = db.scalar(select(SimRun).where(SimRun.run_key == RUN_KEY))
+    assert json.loads(run.momentum_universe) == universe and run.momentum_universe_sha256  # the declared universe is on the row
+    assert (report.momentum_declared, report.momentum_ranked, report.momentum_not_ranked) == (len(universe), len(universe), {})
+    # each policy traces to its own source: Momentum to the rule, the other two to a stored 5-session record
+    ref = momentum_rule.rule_ref()
+    assert ref == "momentum-20d-top5:v1"
+    for table in (SimFill, SimBlock):
+        for row in db.scalars(select(table)):
+            if row.policy == "momentum":
+                assert row.rule_ref == ref and row.horizon_record_id is None
+            else:
+                rec = db.get(HorizonRecordRow, row.horizon_record_id)
+                assert row.rule_ref is None and rec.horizon_days == 5 and rec.research_only is False and rec.revision == 1
+    # the third policy, Brain-filtered: only records whose Brain check said TRADE are ever bought; the rest are named
+    for t in store.trace_fills(db, RUN_KEY):
+        if t.policy == "brain_filtered":
+            assert t.record_decision == "TRADE"
+    held_back = {p: set(db.scalars(select(SimBlock.reason).where(SimBlock.policy == p, SimBlock.reason.like("held_back%")))) for p in POLICIES}
+    assert {"held_back: brain check: WATCH", "held_back: brain check: WAIT"} <= held_back["brain_filtered"]
+    assert not held_back["momentum"] and not held_back["model_only"]  # only the Brain-filtered policy holds picks back
+
+
+def test_momentum_trades_from_the_twenty_day_top_five_rule_with_no_look_ahead(three):
+    db, universe = three["db"], three["universe"]
+    oracle = _oracle_momentum(db, universe)
+    assert all(len(picks) == 5 for picks in oracle.values())  # 26 sessions of history before the window: ranked on every session
+    # 1. the runner's own picks equal the independent recomputation, session by session
+    closes = source.closes_from_candles(db, universe, SESSIONS[0], SESSIONS[-1])
+    symbols = {sid: source.symbol_on(db, sid, date.fromisoformat(SESSIONS[-1])) or "" for sid in closes}
+    decided = momentum_rule.momentum_decisions(closes, SESSIONS, symbols=symbols, universe=universe)
+    assert {s: [c.security_id for c in picks] for s, picks in decided.items()} == oracle
+    # 2. every stored Momentum fill or block is the NEXT session's open on a stock the rule picked at the close before
+    index = {s: i for i, s in enumerate(SESSIONS)}
+    touched = 0
+    for table in (SimFill, SimBlock):
+        for row in db.scalars(select(table).where(table.policy == "momentum")):
+            i = index[row.session_date.isoformat()]
+            assert i >= 1, "a Momentum buy on the first session would have used a decision made before the window"
+            assert row.security_id in oracle[SESSIONS[i - 1]]
+            touched += 1
+    assert touched > 0
+    # 3. nothing after a session reaches that session's picks: wreck every close after session 8 and the earlier picks stay put
+    cut = date.fromisoformat(SESSIONS[8])
+    poisoned = {sid: {d: (v if d <= cut else v * (50 if sid % 2 else 0.02)) for d, v in by.items()} for sid, by in closes.items()}
+    again = momentum_rule.momentum_decisions(poisoned, SESSIONS, symbols=symbols, universe=universe)
+    got = {s: [c.security_id for c in picks] for s, picks in again.items()}
+    assert {s: got.get(s) for s in SESSIONS[:9]} == {s: oracle[s] for s in SESSIONS[:9]}
+    assert {s: got.get(s) for s in SESSIONS[9:]} != {s: oracle[s] for s in SESSIONS[9:]}  # the poison does bite the later sessions
+
+
+def test_a_shorter_run_makes_the_same_momentum_buys_so_no_future_data_is_used(three):
+    db = three["db"]
+    k = 9
+    short = runner.run_and_persist(db, run_key="p0-accept-short", sessions=SESSIONS[:k], models=MODELS, momentum_universe=three["universe"])
+    assert short.portfolios == 100
+    last = date.fromisoformat(SESSIONS[k - 1])
+
+    def momentum_fills(run_key: str) -> set:
+        return {(t.persona_key, t.session_date, t.security_id, t.qty, t.price) for t in store.trace_fills(db, run_key) if t.policy == "momentum" and t.session_date <= last}
+
+    assert momentum_fills("p0-accept-short") == momentum_fills(RUN_KEY) and momentum_fills(RUN_KEY)
+
+
+def test_zero_trade_portfolios_are_stored_with_their_cash_and_the_reason_never_forced(three):
+    db, report = three["db"], three["report"]
+    portfolios, days, fills, exits, marks = _per_portfolio(db)
+    blocks: dict[int, list[SimBlock]] = {pid: [] for pid in portfolios}
+    for b in db.scalars(select(SimBlock)):
+        blocks[b.portfolio_id].append(b)
+    empty = [pid for pid in portfolios if not fills[pid]]
+    assert empty and len(empty) == report.zero_trade_portfolios  # accounts that cannot afford a position are recorded, not hidden
+    for pid in empty:
+        p = portfolios[pid]
+        assert days[pid] and days[pid][-1].session_date == DAYS[-1]
+        assert all(abs(d.cash - p.balance_inr) < MONEY and abs(d.equity - p.balance_inr) < MONEY for d in days[pid]), p.persona_key  # cash untouched
+        assert not marks[pid] and not exits[pid]
+        assert blocks[pid], f"{p.persona_key} bought nothing and no pick was refused with a reason"  # picks were made and refused, never forced
+        assert all(b.reason and b.reason.strip() for b in blocks[pid])
+    assert "below_minimum_position" in {b.reason for pid in empty for b in blocks[pid]}
+    assert "momentum" in {portfolios[pid].policy for pid in empty}  # Momentum has zero-trade portfolios too, recorded the same way
+    perf = store.performance_by_policy(db, RUN_KEY)
+    compared_empty = [pid for pid in empty if portfolios[pid].counts_in_comparison]
+    assert sum(int(perf[p]["zero_trade_portfolios"]) for p in POLICIES) == len(compared_empty)
+
+
+def test_a_rerun_adds_nothing_and_a_different_universe_is_refused(three):
+    db, universe = three["db"], three["universe"]
+    before = (_sim_counts(db), len(_five_rows(db)))
+    again = _run(three)
+    assert again.rows_created == 0 and again.run_id == three["report"].run_id
+    assert (_sim_counts(db), len(_five_rows(db))) == before
+    with pytest.raises(ReplayMismatchError):
+        _run(three, momentum_universe=universe[:-1])  # a replay under another universe is refused ...
+    assert (_sim_counts(db), len(_five_rows(db))) == before  # ... and writes nothing
+
+
+def test_each_policys_results_reconcile_with_its_stored_fills(three):
+    db = three["db"]
+    portfolios, days, fills, exits, marks = _per_portfolio(db)
+    assert not _reconciliation_problems(db)  # cash and equity add up for every portfolio, day by day
+    perf = store.performance_by_policy(db, RUN_KEY)
+    traced = store.trace_fills(db, RUN_KEY)
+    for policy in POLICIES:
+        mine = [pid for pid, p in portfolios.items() if p.policy == policy]
+        assert sum(len(fills[pid]) for pid in mine) == sum(1 for t in traced if t.policy == policy) > 0, policy
+        start = sum(portfolios[pid].balance_inr for pid in mine)
+        spent = sum(f.cost for pid in mine for f in fills[pid])
+        got = sum(e.proceeds for pid in mine for e in exits[pid])
+        last_value = sum(m.value for pid in mine for m in marks[pid] if m.session_date == DAYS[-1])
+        end_equity = sum(days[pid][-1].equity for pid in mine)
+        end_cash = sum(days[pid][-1].cash for pid in mine)
+        assert abs(start - spent + got - end_cash) < MONEY * len(mine), policy  # cash = start - buys + sales
+        assert abs(end_cash + last_value - end_equity) < MONEY * len(mine), policy  # equity = cash + open positions
+        compared = [pid for pid in mine if portfolios[pid].counts_in_comparison]
+        returns = [days[pid][-1].equity / portfolios[pid].balance_inr - 1 for pid in compared]
+        assert abs(perf[policy]["mean_return"] - sum(returns) / len(returns)) < 1e-9, policy
+
+
+def test_missing_stale_and_rejected_momentum_inputs_are_explicit(three):
+    db, universe = three["db"], three["universe"]
+    # missing: a declared stock with no stored price is reported as not ranked, never dropped silently
+    ghost = Instrument(instrument_token=next(_tokens), tradingsymbol="NOPRICE", name="No Price Limited", exchange="NSE", instrument_type="EQ", is_active=True, is_watchlisted=True)
+    db.add(ghost)
+    db.flush()
+    writer.ensure_for_instrument(db, ghost)
+    ghost_id = resolve(db, token=ghost.instrument_token)
+    wider = runner.run_and_persist(db, run_key="p0-accept-ghost", sessions=SESSIONS, models=MODELS, momentum_universe=[*universe, ghost_id])
+    assert wider.momentum_declared == len(universe) + 1 and wider.momentum_ranked == len(universe)
+    assert wider.momentum_not_ranked == {ghost_id: momentum_rule.NO_PRICES}
+    assert any("not ranked" in n and momentum_rule.NO_PRICES in n for n in wider.notes)
+    assert db.scalar(select(func.count()).select_from(SimFill).where(SimFill.security_id == ghost_id)) == 0
+    # stale: a stock whose candles stop is no longer ranked after its last bar and is bought on no later session
+    stale_id = resolve(db, token=three["instruments"]["STALECO"].instrument_token)
+    oracle = _oracle_momentum(db, universe)
+    assert all(stale_id not in picks for s, picks in oracle.items() if s > SESSIONS[STALE_AFTER])
+    assert db.scalar(select(func.count()).select_from(SimFill).where(SimFill.policy == "momentum", SimFill.security_id == stale_id, SimFill.session_date > DAYS[STALE_AFTER + 1])) == 0
+    # rejected: no universe, an empty or repeated one, and picks that borrow the app rule's name are all refused, and write nothing
+    before = _sim_counts(db)
+    for bad in (None, [], [universe[0], universe[0]], [0], ["x"]):
+        with pytest.raises(RunnerError):
+            runner.run_and_persist(db, run_key="p0-accept-bad", sessions=SESSIONS, models=MODELS, momentum_universe=bad)
+    forged = {SESSIONS[0]: [Candidate(security_id=universe[0], symbol="X", score=1.0, rule_ref=momentum_rule.rule_ref())]}
+    with pytest.raises(RunnerError):
+        runner.run_and_persist(db, run_key="p0-accept-bad", sessions=SESSIONS, models=MODELS, momentum_universe=universe, momentum=forged)
+    assert _sim_counts(db) == before

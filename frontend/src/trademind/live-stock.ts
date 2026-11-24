@@ -3,14 +3,22 @@
 // belongs to one symbol's price history, not a brain run.
 
 import type { Candle } from '../api/types'
+import { istDay } from './istDay'
 import type { CandleBar } from './types'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
 export function barsFrom(candles: Candle[]): CandleBar[] {
   return candles.map((c) => {
-    // Assumes the viewer is in IST: the date is read with local getDate()/getMonth(), so other time zones can show the neighbouring day.
-    const d = new Date(c.ts)
-    return { t: `${d.getDate()} ${MONTHS[d.getMonth()]}`, o: c.open, h: c.high, l: c.low, c: c.close, vol: c.volume ?? 0 }
+    // The India trading day of the bar (istDay.ts), the same in every browser time zone.
+    const day = istDay(c.ts)
+    return {
+      t: `${Number(day.slice(8, 10))} ${MONTHS[Number(day.slice(5, 7)) - 1]}`,
+      o: c.open,
+      h: c.high,
+      l: c.low,
+      c: c.close,
+      vol: c.volume ?? 0,
+    }
   })
 }

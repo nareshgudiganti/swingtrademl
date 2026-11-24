@@ -221,7 +221,7 @@ def test_the_claim_is_visible_in_the_database_before_the_order_is_sent(db_sessio
     try:
         _tick(db_session, position, 890.0)
     finally:
-        paper_broker.place_order = original
+        vars(paper_broker).pop("place_order", None)  # drop the override, never pin a method
 
     assert len(seen) == 1
     assert seen[0] is not None
@@ -245,7 +245,7 @@ def test_the_claim_is_released_when_the_sell_does_not_fill(db_session):
     try:
         assert _tick(db_session, position, 890.0) == []
     finally:
-        paper_broker.place_order = original
+        vars(paper_broker).pop("place_order", None)  # drop the override, never pin a method
 
     assert position.status == PositionStatus.OPEN
     assert position.exit_in_progress_at is None

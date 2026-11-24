@@ -31,6 +31,7 @@ from sqlalchemy import (
     Integer,
     SmallInteger,
     String,
+    Text,
     UniqueConstraint,
     func,
     text,
@@ -41,6 +42,12 @@ from swing_trade_ml.db.base import Base
 
 SCHEMA_VERSION = 1
 POLICIES = ("momentum", "model_only", "brain_filtered")
+# Every fill, exit and block traces somewhere: momentum to the rule and version that made the pick, the other policies to
+# the horizon record they were decided from (and to nothing else).
+TRACE_CHECK = (
+    "(policy = 'momentum' AND rule_ref IS NOT NULL) "
+    "OR (policy <> 'momentum' AND horizon_record_id IS NOT NULL AND rule_ref IS NULL)"
+)
 
 
 class SimRun(Base):
@@ -55,6 +62,9 @@ class SimRun(Base):
     research_config_version: Mapped[str] = mapped_column(String(32))
     research_only: Mapped[bool] = mapped_column(Boolean)
     horizon_days: Mapped[int] = mapped_column(SmallInteger)
+    # Momentum's declared universe: the security ids (sorted JSON list) and its sha256, so the run can be reproduced.
+    momentum_universe: Mapped[str | None] = mapped_column(Text)
+    momentum_universe_sha256: Mapped[str | None] = mapped_column(String(64))
     synthetic: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
     first_session: Mapped[date | None] = mapped_column(Date)
     last_session: Mapped[date | None] = mapped_column(Date)
@@ -150,6 +160,9 @@ class SimFill(Base):
     horizon_record_id: Mapped[int | None] = mapped_column(
         ForeignKey("horizon_records.id", ondelete="RESTRICT"), index=True
     )
+    rule_ref: Mapped[str | None] = mapped_column(
+        String(64)
+    )  # momentum: rule name and version, in place of a record
     policy: Mapped[str] = mapped_column(String(16))
     rule_version: Mapped[str] = mapped_column(String(32))
     qty: Mapped[int] = mapped_column(Integer)
@@ -161,6 +174,7 @@ class SimFill(Base):
         UniqueConstraint("portfolio_id", "session_date", "security_id", name="uq_sim_fills_key"),
         CheckConstraint("qty > 0", name="ck_sim_fills_qty"),
         CheckConstraint("policy IN ('momentum','model_only','brain_filtered')", name="ck_sim_fills_policy"),
+        CheckConstraint(TRACE_CHECK, name="ck_sim_fills_trace"),
     )
 
 
@@ -177,6 +191,7 @@ class SimExit(Base):
     horizon_record_id: Mapped[int | None] = mapped_column(
         ForeignKey("horizon_records.id", ondelete="RESTRICT")
     )
+    rule_ref: Mapped[str | None] = mapped_column(String(64))
     policy: Mapped[str] = mapped_column(String(16))
     rule_version: Mapped[str] = mapped_column(String(32))
     reason: Mapped[str] = mapped_column(String(12))
@@ -189,6 +204,7 @@ class SimExit(Base):
         UniqueConstraint("portfolio_id", "session_date", "security_id", "reason", name="uq_sim_exits_key"),
         CheckConstraint("qty > 0", name="ck_sim_exits_qty"),
         CheckConstraint("reason IN ('stop','half_out','target','horizon')", name="ck_sim_exits_reason"),
+        CheckConstraint(TRACE_CHECK, name="ck_sim_exits_trace"),
     )
 
 
@@ -206,11 +222,15 @@ class SimBlock(Base):
     horizon_record_id: Mapped[int | None] = mapped_column(
         ForeignKey("horizon_records.id", ondelete="RESTRICT")
     )
+    rule_ref: Mapped[str | None] = mapped_column(String(64))
     policy: Mapped[str] = mapped_column(String(16))
     rule_version: Mapped[str] = mapped_column(String(32))
     reason: Mapped[str] = mapped_column(String(255))
 
-    __table_args__ = (UniqueConstraint("portfolio_id", "session_date", "seq", name="uq_sim_blocks_key"),)
+    __table_args__ = (
+        UniqueConstraint("portfolio_id", "session_date", "seq", name="uq_sim_blocks_key"),
+        CheckConstraint(TRACE_CHECK, name="ck_sim_blocks_trace"),
+    )
 
 
 class SimMark(Base):
@@ -234,6 +254,23 @@ class SimMark(Base):
         CheckConstraint("qty > 0", name="ck_sim_marks_qty"),
     )
 
+
+class SimNotRanked(Base):
+    """A stock the run declared for Momentum that was NOT ranked, with the plain reason (for example "no stored prices in
+    window"). Written once per run and stock, so a declared stock is never silently dropped."""
+
+    __tablename__ = "sim_not_ranked"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("sim_runs.id", ondelete="RESTRICT"), index=True)
+    security_id: Mapped[int] = mapped_column(ForeignKey("securities.id", ondelete="RESTRICT"), index=True)
+    reason: Mapped[str] = mapped_column(String(255))
+
+    __table_args__ = (UniqueConstraint("run_id", "security_id", name="uq_sim_not_ranked_key"),)
+
+
+# The tables of migration simulation01. The one added by simulation02 is listed apart.
+SIM_TABLES_02 = ("sim_not_ranked",)
 
 SIM_TABLES = (
     "sim_runs",

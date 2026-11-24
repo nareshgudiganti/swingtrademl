@@ -4,7 +4,7 @@ real order path are unchanged."""
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 from brain_m18_fixtures import DAY, at, brain_strategy, candle, instrument, no_broker, v1_strategy
 from swing_trade_ml.core.enums import SignalType
@@ -65,6 +65,8 @@ def test_non_practice_and_v1_are_unchanged(db_session, monkeypatch):
     assert sig.rejection_reason == "Market stressed, cap full"
     assert execution.BLOCKED_BY_RISK_KEY not in (sig.features or {})
     assert db_session.query(RiskEvent).filter_by(strategy_id=v1.id).count() == 1
+    # a later scan (#360: the same decision in one session would be a retry and return the first row)
+    monkeypatch.setattr(execution, "_now", lambda: datetime.now(UTC) + timedelta(days=4))
     slot = execution.process_decision(db_session, v1, inst, BUY, ranked_out_reason="no slots")
     assert slot.rejection_reason == "no slots" and execution.BLOCKED_BY_RISK_KEY not in (slot.features or {})
 

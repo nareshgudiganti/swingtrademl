@@ -19,6 +19,7 @@ import { useSymbolCaps } from './cap'
 import { finalWord, shownWord } from './live'
 import { scorePoints, scoreRank, withoutScorePercent, SCORE_HINT } from './scoreText'
 import { dayLabel } from './pricesAge'
+import { halfText } from './tradingRules'
 import { inr } from './ui'
 import { wordLabel, wordTagColor } from './vocab'
 import './stockpage.css'
@@ -871,7 +872,7 @@ export function PlanLadder({ decision: d }: { decision: BrainDecision }) {
             <b>₹{inr(low, 0)}{high !== low ? ` – ₹${inr(high, 0)}` : ''}</b>
           </div>
           <div className="sp-ladder-label" style={{ left: at(half), top: 68 }}>
-            <span className="sp-pos">Sell half</span><b>₹{inr(half)}</b><small>+5% · lock in</small>
+            <span className="sp-pos">Sell half</span><b>₹{inr(half)}</b><small>{halfText()} · lock in</small>
           </div>
           <div className="sp-ladder-label" style={{ left: at(d.target), top: 68, transform: 'translateX(-72%)' }}>
             <span className="sp-pos">Target</span><b>₹{inr(d.target)}</b><small>+{targetPct}% · sell rest</small>

@@ -26,6 +26,27 @@ NOTE = (
 )
 
 
+# The lane review's first reading. Kept as a number here, not imported: this route file must not import lane
+# records (tests/test_horizon_research_gate.py). A test pins it equal to lane_review.CHECKPOINTS[0].
+REVIEW_FLOOR = 60
+RATES_WITHHELD = "Not enough finished picks yet: an average from this few would mislead."
+
+
+def summarise(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """The counts always; the average only from the lane review's first reading (60 finished picks, #474)."""
+    finished = [r for r in rows if r["status"] != "open" and r["net_return"] is not None]
+    wins = [r for r in finished if r["net_return"] > 0]
+    enough = len(finished) >= REVIEW_FLOOR
+    return {
+        "picks": len(rows),
+        "finished": len(finished),
+        "open": len(rows) - len(finished),
+        "wins": len(wins),
+        "mean_net_return": (sum(r["net_return"] for r in finished) / len(finished)) if enough else None,
+        "rates_note": None if enough or not finished else RATES_WITHHELD,
+    }
+
+
 def _status(s: H05Signal) -> str:
     if s.trade_status in (None, "pending"):
         return "open"
@@ -94,17 +115,9 @@ def lane_picks(
     if start is not None and end is not None and end < start:
         raise HTTPException(422, "'to' must be on or after 'from'.")
     rows = _rows(db, start, end, cap, horizon)
-    finished = [r for r in rows if r["status"] != "open" and r["net_return"] is not None]
-    wins = [r for r in finished if r["net_return"] > 0]
     return {
         "note": NOTE,
         "lanes": [{"horizon_days": 5, "lane": "h05", "label": "5-day (existing models)", "live": True}],
-        "summary": {
-            "picks": len(rows),
-            "finished": len(finished),
-            "open": len(rows) - len(finished),
-            "wins": len(wins),
-            "mean_net_return": (sum(r["net_return"] for r in finished) / len(finished)) if finished else None,
-        },
+        "summary": summarise(rows),
         "rows": rows[:limit],
     }

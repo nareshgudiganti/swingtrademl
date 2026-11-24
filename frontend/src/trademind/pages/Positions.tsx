@@ -17,6 +17,7 @@ import { PositionBand } from '../PositionBand'
 import { Confirm } from '../Confirm'
 import ScoreTrail from '../ScoreTrail'
 import { SCORE_HINT, scoreLabel, withoutScorePercent } from '../scoreText'
+import { halfText, plan } from '../tradingRules'
 
 const TABS = ['Position Overview', 'Re-evaluation & Exit', 'Notes'] as const
 type TabId = (typeof TABS)[number]
@@ -49,7 +50,10 @@ function ExitPlan({ decision, pos }: { decision: BrainDecision; pos: DetailedPos
     {
       step: 'First target',
       k: 'half_out' as GlossaryKey,
-      price: entry != null ? `₹${inr(entry * 1.05, 0)} (rule: entry +5%)` : 'Rule: entry +5%',
+      price:
+        entry != null
+          ? `₹${inr(entry * (1 + plan().halfPct / 100), 0)} (rule: entry ${halfText()})`
+          : `Rule: entry ${halfText()}`,
       action: 'Sell half, lock in profit',
       icon: <Icon.Target />,
     },

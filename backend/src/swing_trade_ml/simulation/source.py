@@ -204,20 +204,37 @@ def bars_from_candles(
     never by symbol alone. Candles are stamped IST midnight, so the session is the bar's date in IST. A session with no
     stored candle simply has no bar (the ledger then blocks the buy with `no_price` or marks the position stale):
     nothing is filled in or carried over. Reads only."""
-    from datetime import datetime, timedelta
+    from datetime import timedelta
+
+    from swing_trade_ml.simulation.ledger import Bar
+
+    wanted = set(sessions)
+    if not wanted or not security_ids:
+        return {}
+    first = date.fromisoformat(min(wanted)) - timedelta(days=1)
+    last = date.fromisoformat(max(wanted)) + timedelta(days=2)
+    out: dict[int, dict[str, Any]] = {}
+    for security_id, day, candle in _candle_rows(db, security_ids, first, last):
+        if day.isoformat() in wanted:
+            out.setdefault(security_id, {})[day.isoformat()] = Bar(
+                float(candle.open), float(candle.high), float(candle.low), float(candle.close)
+            )
+    return out
+
+
+def _candle_rows(db: Any, security_ids: Sequence[int], first: date, last: date) -> Any:
+    """(security_id, IST date, candle) for every stored daily candle of the given stocks from `first` up to (not
+    including) `last`'s following midnight. Each candle's instrument is matched to its security through the identity
+    read API; reads only."""
+    from datetime import datetime
 
     from sqlalchemy import select
 
     from swing_trade_ml.core.market_session import IST
     from swing_trade_ml.db.models.market import Candle
     from swing_trade_ml.services.identity import consumers
-    from swing_trade_ml.simulation.ledger import Bar
 
-    wanted, wanted_ids = set(sessions), set(security_ids)
-    if not wanted or not wanted_ids:
-        return {}
-    first = date.fromisoformat(min(wanted)) - timedelta(days=1)
-    last = date.fromisoformat(max(wanted)) + timedelta(days=2)
+    wanted_ids = set(security_ids)
     start = datetime.combine(first, datetime.min.time(), tzinfo=IST)
     end = datetime.combine(last, datetime.min.time(), tzinfo=IST)
     window = (Candle.interval == "day", Candle.ts >= start, Candle.ts < end)
@@ -226,15 +243,26 @@ def bars_from_candles(
         security_id = consumers.security_for_instrument(db, instrument_id)
         if security_id in wanted_ids:
             security_of[instrument_id] = security_id
-    out: dict[int, dict[str, Any]] = {}
     if not security_of:
-        return out
+        return
     for candle in db.scalars(select(Candle).where(Candle.instrument_id.in_(set(security_of)), *window)):
-        session = candle.ts.astimezone(IST).date().isoformat()
-        if session in wanted:
-            out.setdefault(security_of[candle.instrument_id], {})[session] = Bar(
-                float(candle.open), float(candle.high), float(candle.low), float(candle.close)
-            )
+        yield security_of[candle.instrument_id], candle.ts.astimezone(IST).date(), candle
+
+
+def closes_from_candles(
+    db: Any, security_ids: Sequence[int], first_session: str, last_session: str, *, lookback_days: int = 60
+) -> dict[int, dict[date, float]]:
+    """security_id -> IST date -> close, for the stored daily candles from `lookback_days` calendar days before
+    `first_session` up to and including `last_session` (nothing later is ever read). History before the first session is
+    what a trailing ranking needs. Reads only."""
+    from datetime import timedelta
+
+    first = date.fromisoformat(first_session) - timedelta(days=lookback_days)
+    last = date.fromisoformat(last_session) + timedelta(days=1)  # the candle of `last_session` itself
+    out: dict[int, dict[date, float]] = {}
+    for security_id, day, candle in _candle_rows(db, security_ids, first, last):
+        if day <= date.fromisoformat(last_session):
+            out.setdefault(security_id, {})[day] = float(candle.close)
     return out
 
 

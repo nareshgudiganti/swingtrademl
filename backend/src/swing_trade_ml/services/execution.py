@@ -864,16 +864,19 @@ def _check_confidence_decay(
     )
 
     if status == "alert":
-        delivered = notifier.send_sync(
-            _confidence_decay_message(instrument, position, current_confidence, position.mode or mode),
-            "signal",
-            kind=alert_policy.HOLDING_WARNINGS,
-        )
-        # Marked sent only once the message is settled (#480): a failed send is tried again on the next run.
-        if _alert_settled(db, delivered, "signal", alert_policy.HOLDING_WARNINGS):
-            position.confidence_alert_sent_at = datetime.now(UTC)
-            # This message already covers the band change; one per day is enough.
-            score_history.mark_alerted(db, position.id)
+        if _may_attempt(("confidence", position.id)):
+            delivered = notifier.send_sync(
+                _confidence_decay_message(instrument, position, current_confidence, position.mode or mode),
+                "signal",
+                kind=alert_policy.HOLDING_WARNINGS,
+            )
+            # Marked sent only once the message is settled (#480): a failed send is tried again after the
+            # retry gap. The app derives the weakening state from the score, so a failure hides nothing.
+            if _alert_settled(db, delivered, "signal", alert_policy.HOLDING_WARNINGS):
+                position.confidence_alert_sent_at = datetime.now(UTC)
+                _ALERT_ATTEMPTS.pop(("confidence", position.id), None)
+                # This message already covers the band change; one per day is enough.
+                score_history.mark_alerted(db, position.id)
         db.commit()
         return
     if status == "reset":
@@ -899,6 +902,32 @@ def _check_confidence_decay(
 # moves than the real alert does. 0.66 -> 0.63 (0.03) still reads as "hold" —
 # consistent with confidence_decay_status() never firing on that jitter.
 EARLY_DIP_DROP_PCT = 0.05
+
+
+def exit_reason_for(position: Position, price: float, policy, now: datetime) -> ExitReason | None:
+    """Pure: the full-exit reason a position has reached at `price`, or None: its stop, its target, then
+    the time limit. The one rule check_exits acts on and the app reads, so a screen never disagrees
+    with a sweep."""
+    if position.stop_loss and price <= position.stop_loss:
+        return ExitReason.STOP_LOSS_HIT
+    if position.take_profit and price >= position.take_profit:
+        return ExitReason.TARGET_HIT
+    if (now - position.entry_at).days >= policy.time_stop_days:
+        # Capital tied up this long in a swing trade is a failed thesis,
+        # regardless of whether it is slightly up or down.
+        return ExitReason.TIME_STOP
+    return None
+
+
+def exit_alert_due(position: Position, broker_mode: str, now: datetime | None = None) -> bool:
+    """True when the sweep would warn about this position (advisory, or in the other book) because it is
+    at its stop, target or time limit. The app shows "exit" from this as well as from the delivered flag,
+    so a Telegram outage never hides an exit (#480)."""
+    strategy = position.strategy
+    if position.current_price is None or not (exits_are_advisory(strategy) or position.mode != broker_mode):
+        return False
+    policy = exit_policy_for_strategy(strategy)
+    return exit_reason_for(position, position.current_price, policy, now or datetime.now(UTC)) is not None
 
 
 def position_action(
@@ -1543,15 +1572,7 @@ def check_exits(db: Session) -> list[Trade]:
         # switched paper/live); it gets a one-off alert instead of a sale.
         other_book = not position_is_advisory and position.mode != mode
 
-        reason: ExitReason | None = None
-        if position.stop_loss and price <= position.stop_loss:
-            reason = ExitReason.STOP_LOSS_HIT
-        elif position.take_profit and price >= position.take_profit:
-            reason = ExitReason.TARGET_HIT
-        elif (datetime.now(UTC) - position.entry_at).days >= policy.time_stop_days:
-            # Capital tied up this long in a swing trade is a failed thesis,
-            # regardless of whether it is slightly up or down.
-            reason = ExitReason.TIME_STOP
+        reason = exit_reason_for(position, price, policy, datetime.now(UTC))
 
         if reason is None:
             if position_is_advisory or other_book:
@@ -1575,18 +1596,19 @@ def check_exits(db: Session) -> list[Trade]:
         if position_is_advisory:
             # Alert once, not every 60s — the position stays open until the
             # user records the exit via manual_close_position().
-            if position.advisory_alert_sent_at is None:
+            if position.advisory_alert_sent_at is None and _may_attempt(("exit", position.id)):
                 delivered = notifier.send_sync(
                     _advisory_exit_message(instrument, position, reason, position.mode or mode), "signal"
                 )
-                # Marked sent (and so shown in the app) once delivered or undeliverable by design;
-                # a failed send is tried again on the next sweep (#480).
+                # The flag means "delivered" (or undeliverable by design); a failed send is tried again after
+                # the retry gap (#480). The app derives "exit" from the price (exit_alert_due).
                 if _alert_settled(db, delivered, "signal"):
                     position.advisory_alert_sent_at = datetime.now(UTC)
+                    _ALERT_ATTEMPTS.pop(("exit", position.id), None)
             continue
 
         if other_book:
-            if position.advisory_alert_sent_at is None:
+            if position.advisory_alert_sent_at is None and _may_attempt(("exit", position.id)):
                 delivered = notifier.send_sync(
                     _advisory_exit_message(
                         instrument, position, reason, position.mode,
@@ -1596,6 +1618,7 @@ def check_exits(db: Session) -> list[Trade]:
                 )
                 if _alert_settled(db, delivered, "signal"):
                     position.advisory_alert_sent_at = datetime.now(UTC)
+                    _ALERT_ATTEMPTS.pop(("exit", position.id), None)
             continue
 
         if not _claim_exit(db, position):
@@ -2087,6 +2110,26 @@ def _exit_reason_words(reason) -> str:
     return _EXIT_REASON_WORDS.get(code) or code.replace("_", " ").capitalize()
 
 
+#: A failed alert is tried again no sooner than this (per position and alert), so a message that was
+#: delivered but whose reply timed out cannot repeat every minute. In memory: resets on a worker restart.
+ALERT_RETRY_MINUTES = 15
+_ALERT_ATTEMPTS: dict[tuple[str, int], datetime] = {}
+
+
+def _alert_now() -> datetime:
+    return datetime.now(UTC)
+
+
+def _may_attempt(key: tuple[str, int]) -> bool:
+    """True for the first try and again once the retry gap has passed; records the try."""
+    now = _alert_now()
+    last = _ALERT_ATTEMPTS.get(key)
+    if last is not None and now - last < timedelta(minutes=ALERT_RETRY_MINUTES):
+        return False
+    _ALERT_ATTEMPTS[key] = now
+    return True
+
+
 def _alert_settled(db: Session, delivered: bool, event: str, kind: str | None = None) -> bool:
     """True when an alert's flag may be set: Telegram took the message (a held one counts, it will go out),
     or nothing can be delivered by design (notifications off or not configured, the event type left out, or
@@ -2095,7 +2138,7 @@ def _alert_settled(db: Session, delivered: bool, event: str, kind: str | None = 
     if delivered:
         return True
     try:
-        if not notifier.can_deliver(event):
+        if not notifier.can_deliver(event, kind):
             return True
         if kind is not None and kind in alert_settings.load(db).disabled:
             return True

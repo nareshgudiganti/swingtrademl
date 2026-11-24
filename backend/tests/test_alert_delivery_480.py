@@ -27,8 +27,26 @@ from swing_trade_ml.services import alert_settings, execution
 _tokens = iter(range(975_000, 975_900))
 
 
+class Clock:
+    """The alert retry clock the code reads, moved by hand."""
+
+    def __init__(self):
+        self.now = datetime(2026, 11, 24, 6, 0, tzinfo=UTC)
+
+    def advance(self, minutes: float) -> None:
+        self.now += timedelta(minutes=minutes)
+
+
 @pytest.fixture()
-def sent(monkeypatch):
+def clock(monkeypatch):
+    c = Clock()
+    monkeypatch.setattr(execution, "_alert_now", lambda: c.now, raising=False)
+    monkeypatch.setattr(execution, "_ALERT_ATTEMPTS", {}, raising=False)
+    return c
+
+
+@pytest.fixture()
+def sent(monkeypatch, clock):
     """Every alert the code tries to send as (text, event, kind). `sent.ok` is what the fake send answers."""
 
     class Box(list):
@@ -42,7 +60,7 @@ def sent(monkeypatch):
 
     monkeypatch.setattr(execution.notifier, "send_sync", fake)
     # Delivery is possible in these tests (a real, configured notifier); the "cannot deliver by design" case sets it off.
-    monkeypatch.setattr(execution.notifier, "can_deliver", lambda event: True, raising=False)
+    monkeypatch.setattr(execution.notifier, "can_deliver", lambda event, kind=None: True, raising=False)
     return box
 
 
@@ -88,13 +106,14 @@ def weak_world(db, symbol):
 # ---------------------------------------------------------------- (1) the flag follows a confirmed delivery
 
 
-def test_a_failed_stop_loss_send_leaves_the_flag_unset_and_is_retried_without_a_duplicate(db_session, monkeypatch, sent):
+def test_a_failed_stop_loss_send_leaves_the_flag_unset_and_is_retried_without_a_duplicate(db_session, monkeypatch, sent, clock):
     pos = real_holding(db_session, "D480STOP", stop_loss=96.0, take_profit=110.0)
     price_at(monkeypatch, 95.0)
     sent.ok = False  # Telegram refused
     execution.check_exits(db_session)
     assert len(sent) == 1 and pos.advisory_alert_sent_at is None
-    sent.ok = True  # the next 60-second sweep, Telegram is back
+    sent.ok = True  # Telegram is back; the next try is due after the retry gap
+    clock.advance(execution.ALERT_RETRY_MINUTES + 1)
     execution.check_exits(db_session)
     assert len(sent) == 2 and pos.advisory_alert_sent_at is not None
     execution.check_exits(db_session)
@@ -109,12 +128,13 @@ def test_a_stop_loss_send_that_works_sets_the_flag_at_once_and_sends_once(db_ses
     assert len(sent) == 1 and pos.advisory_alert_sent_at is not None
 
 
-def test_a_failed_confidence_send_leaves_the_flag_unset_and_is_retried_without_a_duplicate(db_session, sent):
+def test_a_failed_confidence_send_leaves_the_flag_unset_and_is_retried_without_a_duplicate(db_session, sent, clock):
     strat, row, pos = weak_world(db_session, "D480CONF")
     sent.ok = False
     execution._check_confidence_decay(db_session, pos, strat, row, 0.40, "paper")
     assert len(sent) == 1 and pos.confidence_alert_sent_at is None
     sent.ok = True
+    clock.advance(execution.ALERT_RETRY_MINUTES + 1)
     execution._check_confidence_decay(db_session, pos, strat, row, 0.40, "paper")
     assert len(sent) == 2 and pos.confidence_alert_sent_at is not None
     execution._check_confidence_decay(db_session, pos, strat, row, 0.40, "paper")
@@ -132,7 +152,7 @@ def test_a_failed_confidence_send_does_not_mark_the_days_score_as_alerted(db_ses
 
 def test_when_nothing_can_be_delivered_by_design_the_stop_flag_is_still_set_so_the_app_shows_the_exit(db_session, monkeypatch, sent):
     """Telegram switched off or not configured: there is nothing to retry, and the app must still read 'exit'."""
-    monkeypatch.setattr(execution.notifier, "can_deliver", lambda event: False, raising=False)
+    monkeypatch.setattr(execution.notifier, "can_deliver", lambda event, kind=None: False, raising=False)
     pos = real_holding(db_session, "D480OFF", stop_loss=96.0, take_profit=110.0)
     price_at(monkeypatch, 95.0)
     sent.ok = False
@@ -198,3 +218,102 @@ def test_an_unknown_reason_is_shown_as_words_not_as_a_code(db_session):
     pos = Position(strategy_id=1, instrument_id=1, mode="paper", status="OPEN", quantity=1, entry_price=1.0, current_price=1.0)
     text = execution._advisory_exit_message(row, pos, "SOME_NEW_REASON", "paper")
     assert "SOME_NEW_REASON" not in text and "Some new reason" in text
+
+
+# ---------------------------------------------------------------- review follow-ups: a failed send never hides "exit"
+
+
+def _policy(position):
+    from swing_trade_ml.services.exit_policy import exit_policy_for_strategy
+
+    return exit_policy_for_strategy(position.strategy)
+
+
+def test_exit_reason_for_names_the_stop_target_and_time_limit_and_nothing_in_between(db_session):
+    pos = real_holding(db_session, "D480PURE", stop_loss=96.0, take_profit=108.0)
+    policy, now = _policy(pos), datetime.now(UTC)
+    assert execution.exit_reason_for(pos, 96.0, policy, now) == execution.ExitReason.STOP_LOSS_HIT  # at the level
+    assert execution.exit_reason_for(pos, 95.0, policy, now) == execution.ExitReason.STOP_LOSS_HIT
+    assert execution.exit_reason_for(pos, 108.0, policy, now) == execution.ExitReason.TARGET_HIT
+    assert execution.exit_reason_for(pos, 100.0, policy, now) is None
+    assert execution.exit_reason_for(pos, 96.01, policy, now) is None
+    late = now + timedelta(days=policy.time_stop_days + 1)
+    assert execution.exit_reason_for(pos, 100.0, policy, late) == execution.ExitReason.TIME_STOP
+
+
+def _action_of(client, position_id: int) -> str:
+    rows = client.get("/api/v1/portfolio/positions/detailed?book=real", headers={"X-API-Key": "test-api-key"}).json()
+    return next(r["action_code"] for r in rows if r["id"] == position_id)
+
+
+def test_a_position_past_its_stop_reads_exit_in_the_app_even_when_the_alert_could_not_be_delivered(client, db_session, monkeypatch, sent):
+    pos = real_holding(db_session, "D480APP", stop_loss=96.0, take_profit=110.0)
+    price_at(monkeypatch, 95.0)
+    sent.ok = False
+    execution.check_exits(db_session)  # the sweep records the price; the send failed
+    db_session.refresh(pos)
+    assert pos.advisory_alert_sent_at is None  # the flag still means "delivered"
+    assert pos.current_price == 95.0
+    assert _action_of(client, pos.id) == "exit"
+
+
+def test_the_same_position_does_not_read_exit_when_it_is_not_past_a_level(client, db_session, monkeypatch, sent):
+    pos = real_holding(db_session, "D480CALM", stop_loss=96.0, take_profit=110.0)
+    price_at(monkeypatch, 100.0)
+    execution.check_exits(db_session)
+    assert _action_of(client, pos.id) != "exit"
+
+
+def test_a_weakening_confidence_reads_as_the_alert_state_in_the_app_even_when_the_warning_was_not_delivered(client, db_session, sent):
+    strat = strategy(db_session, "real_trading", mode="live", execution_mode="advisory")
+    base = {"entry_confidence": 0.80, "stop_loss": 90.0, "take_profit": 120.0}
+    flagged = position(db_session, strat, inst(db_session, "D480FLAG"), mode="live", last_confidence=0.40, confidence_alert_sent_at=datetime.now(UTC), **base)
+    unflagged = position(db_session, strat, inst(db_session, "D480NOFLAG"), mode="live", last_confidence=0.40, **base)
+    assert _action_of(client, unflagged.id) == _action_of(client, flagged.id)
+
+
+# ---------------------------------------------------------------- retries are capped
+
+
+def test_a_failed_stop_send_is_tried_once_per_retry_gap_not_every_sweep(db_session, monkeypatch, sent, clock):
+    pos = real_holding(db_session, "D480CAP", stop_loss=96.0, take_profit=110.0)
+    price_at(monkeypatch, 95.0)
+    sent.ok = False
+    for _ in range(5):  # five 60-second sweeps
+        execution.check_exits(db_session)
+        clock.advance(1)
+    assert len(sent) == 1 and pos.advisory_alert_sent_at is None
+    clock.advance(execution.ALERT_RETRY_MINUTES)
+    execution.check_exits(db_session)
+    assert len(sent) == 2
+
+
+def test_a_failed_confidence_send_is_tried_once_per_retry_gap(db_session, sent, clock):
+    strat, row, pos = weak_world(db_session, "D480CAPC")
+    sent.ok = False
+    for _ in range(4):
+        execution._check_confidence_decay(db_session, pos, strat, row, 0.40, "paper")
+        clock.advance(1)
+    assert len(sent) == 1
+    clock.advance(execution.ALERT_RETRY_MINUTES)
+    execution._check_confidence_decay(db_session, pos, strat, row, 0.40, "paper")
+    assert len(sent) == 2
+
+
+# ---------------------------------------------------------------- can_deliver: a safety alert ignores the event list
+
+
+def test_can_deliver_ignores_the_event_list_for_a_kind_less_safety_alert_but_not_for_a_switchable_kind(monkeypatch):
+    from swing_trade_ml.core.config import settings
+    from swing_trade_ml.notifications.telegram import TelegramNotifier
+
+    monkeypatch.setattr(settings, "ENVIRONMENT", "production")
+    monkeypatch.setattr(settings, "TELEGRAM_ENABLED", True)
+    monkeypatch.setattr(settings, "TELEGRAM_NOTIFY_ON", "error")  # "signal" is left out
+    n = TelegramNotifier()
+    monkeypatch.setattr(n, "_token", "TEST-TOKEN-NOT-REAL")
+    monkeypatch.setattr(n, "_chat_id", "TEST-CHAT-NOT-REAL")
+    assert n.can_deliver("signal") is True  # kind-less: only "is Telegram on at all" counts
+    assert n.can_deliver("signal", kind=alert_policy.HOLDING_WARNINGS) is False  # a switchable kind honours the list
+    monkeypatch.setattr(settings, "TELEGRAM_ENABLED", False)
+    assert n.can_deliver("signal") is False and n.can_deliver("error") is False

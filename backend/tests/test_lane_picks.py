@@ -99,7 +99,8 @@ def test_pending_pick_is_open_and_has_no_result(client, seeded):
 def test_summary_counts_only_finished_trades(client, seeded):
     s = client.get(URL, headers=headers(seeded, "owner")).json()["summary"]
     assert (s["picks"], s["finished"], s["open"], s["wins"]) == (3, 2, 1, 1)
-    assert s["mean_net_return"] == pytest.approx((0.02 - 0.04) / 2)
+    # 2 finished picks is below the review floor (#474): the counts stay, the average is withheld
+    assert s["mean_net_return"] is None and "not enough" in s["rates_note"].lower()
 
 
 def test_filters_by_cap_and_horizon(client, seeded):

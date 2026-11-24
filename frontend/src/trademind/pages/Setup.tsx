@@ -397,7 +397,7 @@ function ModelAccuracy({ model }: { model: MLModel }) {
         {acc.isLoading && <span className="tm-dim">Loading…</span>}
         {acc.isError && <span className="tm-neg">Could not load</span>}
         {acc.data &&
-          (acc.data.evaluated_predictions > 0 ? (
+          (acc.data.evaluated_predictions > 0 && acc.data.accuracy !== null ? (
             <>
               <span className="tm-strong">{formatPercent(acc.data.accuracy, 0)}</span>{' '}
               <span className="tm-dim">
@@ -494,7 +494,7 @@ function ModelsTab() {
       >
         <QueryNotice q={horizonAcc} what="this check" />
         {horizonAcc.data &&
-          (horizonAcc.data.evaluable > 0 ? (
+          (horizonAcc.data.evaluable > 0 && horizonAcc.data.accuracy !== null ? (
             <>
               <div className="tm-big" style={{ fontSize: '1.4rem' }}>{formatPercent(horizonAcc.data.accuracy, 0)}</div>
               <div className="tm-stat-label">

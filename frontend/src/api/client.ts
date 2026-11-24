@@ -578,7 +578,25 @@ export const api = {
   activateModel: (id: number) => post<MLModel>(`/ml/models/${id}/activate`),
   train: (body: Record<string, unknown>) => post<MessageResponse>('/ml/train', body),
   predictionAccuracy: (modelId?: number) =>
-    get<{ evaluated_predictions: number; correct: number; accuracy: number }>(
+    get<{
+      evaluated_predictions: number
+      correct: number
+      /** null when nothing has been evaluated ("not enough data"), never 0 */
+      accuracy: number | null
+      avg_probability: number | null
+      avg_actual_return: number | null
+      overall_note?: string
+      by_model?: {
+        model_id: number
+        name: string
+        version: string
+        horizon_days: number
+        label_kind: string
+        evaluated_predictions: number
+        correct: number
+        accuracy: number | null
+      }[]
+    }>(
       modelId ? `/ml/predictions/accuracy?model_id=${modelId}` : '/ml/predictions/accuracy',
     ),
   // Scores the whole watchlist now, ranked by probability — the "what should

@@ -754,8 +754,9 @@ export interface HorizonAccuracy {
   total_predictions: number
   evaluable: number
   correct: number
-  accuracy: number
-  avg_actual_return: number
+  /** null when nothing is old enough to check ("no answer"), never 0 */
+  accuracy: number | null
+  avg_actual_return: number | null
 }
 
 export interface Prediction {
@@ -1897,7 +1898,15 @@ export interface LanePick {
 export interface LanePicks {
   note: string
   lanes: { horizon_days: number; lane: string; label: string; live: boolean }[]
-  summary: { picks: number; finished: number; open: number; wins: number; mean_net_return: number | null }
+  summary: {
+    picks: number
+    finished: number
+    open: number
+    wins: number
+    mean_net_return: number | null
+    /** Why the average is blank (fewer than 60 finished picks), or null when it is shown. */
+    rates_note?: string | null
+  }
   rows: LanePick[]
 }
 
@@ -1918,6 +1927,8 @@ export interface LaneForward {
   picks: number
   completed: number
   open: number
+  /** Matured picks with no usable price: picks = completed + open + unresolved. */
+  unresolved?: number
   hit_rate: number | null
   mean_net_return: number | null
   benchmark_excess: number | null
@@ -1931,6 +1942,7 @@ export interface LaneSummary {
   slot_key: string
   horizon_days: number
   cap_group: 'large' | 'mid'
+  research_only?: boolean
   model: { id: number; name: string; version: string } | null
   status: LaneStatus
   started_on: string | null
@@ -1965,13 +1977,20 @@ export interface HorizonReportRow {
     daily_picks_allowed: boolean
   } | null
   qualification: { state: HorizonQualificationState; protocol: string; text: string }
+  /** 10- and 15-day tests are research only (core/research_config). */
+  research_only?: boolean
   forward: {
     matured_days: number
     picks: number
     finished: number
+    /** Matured picks with no usable price: picks = finished + still open + unresolved. */
+    unresolved?: number
+    open?: number
     net_per_trade: number | null
     edge_vs_every_stock: number | null
     hit_rate: number | null
+    /** Why the hit rate and net per trade are blank (too few days yet), or null when they are shown. */
+    rates_note?: string | null
     nifty: { available: boolean; mean_return: number | null; windows: number; note: string | null }
   }
   verdict: { state: HorizonVerdictState; text: string; needed_days: number; rule: string }

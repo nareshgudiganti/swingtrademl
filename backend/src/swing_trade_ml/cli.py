@@ -5,7 +5,9 @@ swingtrade create-user --username admin --password "a long passphrase here" --ro
 swingtrade sync-instruments
 swingtrade sync-context-indices
 swingtrade backfill --days 1825
-swingtrade train --algorithm lightgbm --activate
+swingtrade train --algorithm lightgbm
+swingtrade promote 42 --approver owner --reason "..." --evidence report.md@sha --artifact-sha256 SHA
+swingtrade rollback 41 --approver owner --reason "..." --evidence report.md@sha --artifact-sha256 SHA
 swingtrade scan
 swingtrade status
 swingtrade brain modules | set M02 off | run [--as-of 2026-09-15] | replay-week [--days 5] |
@@ -391,9 +393,11 @@ def cmd_train(args: argparse.Namespace) -> int:
     from swing_trade_ml.db.session import session_scope
     from swing_trade_ml.ml.train import train_model
 
-    if args.activate and (refusal := promotion_refusal()):
-        print(f"❌ {refusal}")
-        print("   Nothing was trained. Run again without --activate to train and save the model.")
+    if args.activate:
+        # #328: activation needs the owner's approval of the finished file, so it is never done here.
+        print(f"❌ {promotion_refusal() or 'Activating straight after training is not allowed.'}")
+        print("   Nothing was trained. Run again without --activate to train and save the model,")
+        print("   review it, then make it active with `swingtrade promote`.")
         return 1
 
     with session_scope() as db:
@@ -448,7 +452,7 @@ def cmd_train(args: argparse.Namespace) -> int:
         )
         print(f"   status           {model.status}")
         if not args.activate:
-            print(f"\n   Activate it with: POST /api/v1/ml/models/{model.id}/activate")
+            print(f"\n   After review, make it active with: swingtrade promote {model.id} (owner approval)")
 
         top = list(model.feature_importance.items())[:10]
         if top:
@@ -456,6 +460,49 @@ def cmd_train(args: argparse.Namespace) -> int:
             for name, value in top:
                 print(f"     {name:<22} {value:.4f}")
     return 0
+
+
+def _promotion_command(args: argparse.Namespace, action: str) -> int:
+    """`swingtrade promote` / `rollback` (#328): the owner's approval, checked by ml/promotion.py."""
+    from datetime import UTC, datetime
+
+    from sqlalchemy import select
+
+    from swing_trade_ml.db.models.session import User
+    from swing_trade_ml.db.session import session_scope
+    from swing_trade_ml.ml import promotion
+
+    with session_scope() as db:
+        user = db.execute(select(User).where(User.username == args.approver)).scalar_one_or_none()
+        if user is None or user.role != "owner" or not user.is_active:
+            print(f"❌ {args.approver!r} is not an active owner login; only the owner can approve.")
+            return 1
+        approval = promotion.Approval(
+            approver=user.username,
+            approver_user_id=user.id,
+            reason=args.reason,
+            evidence=tuple(args.evidence or ()),
+            artifact_sha256=(args.artifact_sha256 or "").strip().lower(),
+            approved_at=datetime.now(UTC),
+            protocol_verdict=args.protocol_verdict,
+        )
+        fn = promotion.promote if action == "promote" else promotion.rollback
+        try:
+            model = fn(db, args.model_id, approval, invoked_by="cli")
+        except ValueError as exc:
+            print(f"❌ {exc}")
+            print("   Nothing changed.")
+            return 1
+        print(f"✅ {model.name}:{model.version} is now active ({action}, approved by {user.username})")
+    return 0
+
+
+def cmd_promote(args: argparse.Namespace) -> int:
+    return _promotion_command(args, "promote")
+
+
+def cmd_rollback(args: argparse.Namespace) -> int:
+    return _promotion_command(args, "rollback")
 
 
 def cmd_scan(args: argparse.Namespace) -> int:
@@ -1040,8 +1087,25 @@ def build_parser() -> argparse.ArgumentParser:
         help="Train on the same stocks the newest model with this name was trained on "
         "(e.g. swing_classifier_midcap) - how the mid/small-cap tier lists are reproduced",
     )
-    p.add_argument("--activate", action="store_true", help="Promote to ACTIVE after training")
+    p.add_argument(
+        "--activate", action="store_true", help="Refused (#328): train, review, then use `swingtrade promote`"
+    )
     p.set_defaults(func=cmd_train)
+
+    for verb, func, what in (
+        ("promote", cmd_promote, "Make a trained model active (owner approval + model card evidence)"),
+        ("rollback", cmd_rollback, "Restore the model the last recorded promotion replaced"),
+    ):
+        p = sub.add_parser(verb, help=what)
+        p.add_argument("model_id", type=int)
+        p.add_argument("--approver", required=True, help="The owner's login name (must have the owner role)")
+        p.add_argument("--reason", required=True, help="Why, in plain words (at least 10 characters)")
+        p.add_argument(
+            "--evidence", action="append", required=True, help="Evidence reference, e.g. report path@commit"
+        )
+        p.add_argument("--artifact-sha256", required=True, help="sha256 of the exact model file approved")
+        p.add_argument("--protocol-verdict", default=None, help="Protocol verdict, e.g. PASS (optional)")
+        p.set_defaults(func=func)
 
     p = sub.add_parser("scan", help="Run all active strategies now")
     p.add_argument("--interval", default="day")

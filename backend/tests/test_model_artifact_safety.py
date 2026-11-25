@@ -286,6 +286,18 @@ def test_a_corrupt_older_file_is_refused_and_the_current_model_stays_active(db_s
     assert current.status == ModelStatus.ACTIVE and old.status == ModelStatus.TRAINED
 
 
+def _approval_request(sha):
+    from swing_trade_ml.api.v1.endpoints.ml import PromotionRequest
+
+    return PromotionRequest(reason="Reviewed and approved", evidence=["report.md@abc"], artifact_sha256=sha)
+
+
+def _api_owner():
+    from swing_trade_ml.api.deps import Principal
+
+    return Principal(user=None, via_api_key=True)
+
+
 def test_the_activate_endpoint_turns_a_corrupt_file_into_a_400_not_a_server_error(
     db_session, model_dir, monkeypatch
 ):
@@ -295,10 +307,15 @@ def test_the_activate_endpoint_turns_a_corrupt_file_into_a_400_not_a_server_erro
 
     path = model_dir / "h1_corrupt_api.joblib"
     path.write_bytes(b"not a joblib file")
-    m = _row(db_session, "h1_corrupt_api", "v1", artifact_path=str(path), metrics={})
-    monkeypatch.setattr(ml_ep, "promotion_refusal", lambda: None)
+    sha = registry.artifact_sha256(path)  # #328: the card names this (corrupt) file, so the load check runs
+    m = _row(
+        db_session, "h1_corrupt_api", "v1", artifact_path=str(path),
+        metrics={"artifact_sha256": sha, "card": {"artifact_sha256": sha}},
+    )
+    monkeypatch.setattr(settings, "ALLOW_MODEL_PROMOTION", True)
     with pytest.raises(HTTPException) as exc:
-        ml_ep.activate(m.id, db=db_session)
+        ml_ep.activate(m.id, payload=_approval_request(sha), db=db_session, principal=_api_owner())
+    assert "could not be read" in exc.value.detail
     assert exc.value.status_code == 400
 
 
@@ -363,10 +380,13 @@ def test_the_activate_endpoint_turns_an_unreadable_file_into_a_400_and_writes_no
 
     current = _published(db_session, "h1_ioerr_api", status=ModelStatus.ACTIVE)
     candidate = _published(db_session, "h1_ioerr_api")
-    monkeypatch.setattr(ml_ep, "promotion_refusal", lambda: None)
+    sha = candidate.metrics["artifact_sha256"]
+    candidate.metrics = {**candidate.metrics, "card": {"artifact_sha256": sha}}  # #328 evidence
+    db_session.flush()
+    monkeypatch.setattr(settings, "ALLOW_MODEL_PROMOTION", True)
     monkeypatch.setattr(registry, "artifact_sha256", _denied)
     with pytest.raises(HTTPException) as exc:
-        ml_ep.activate(candidate.id, db=db_session)
+        ml_ep.activate(candidate.id, payload=_approval_request(sha), db=db_session, principal=_api_owner())
     assert exc.value.status_code == 400
     assert "could not be read" in exc.value.detail and "secret-folder" not in exc.value.detail
     db_session.refresh(current)

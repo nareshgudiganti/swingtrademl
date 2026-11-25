@@ -17,6 +17,15 @@ from swing_trade_ml.core.enums import ExitReason
 
 
 @pytest.fixture(autouse=True)
+def _fills_priced_from_the_stored_close(monkeypatch):
+    """These tests price paper fills from a stored daily close. Since #471 a BUY needs a fresh quote while the market
+    is open, so pin the paper broker's clock to a closed market (Sat 3 Oct 2026) to keep them independent of the hour."""
+    from swing_trade_ml.brokers import paper
+
+    monkeypatch.setattr(paper, "_utcnow", lambda: datetime(2026, 10, 3, 6, 30, tzinfo=UTC))
+
+
+@pytest.fixture(autouse=True)
 def _enable_paper_tester(monkeypatch):
     monkeypatch.setattr(settings, "PAPER_TESTER_ENABLED", True)
     monkeypatch.setattr(settings, "PAPER_TESTER_STARTING_CAPITAL", 1_000_000.0)

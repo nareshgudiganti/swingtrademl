@@ -78,9 +78,16 @@ class TelegramNotifier:
             return False
         return bool(settings.TELEGRAM_ENABLED and self._token and self._chat_id)
 
-    def _should_send(self, event: NotificationEvent | str) -> bool:
-        event = str(event).lower()
-        return self.enabled and event in settings.telegram_events
+    def _should_send(self, event: NotificationEvent | str, kind: str | None = None) -> bool:
+        """Telegram must be on. Then a message tagged with a switchable `kind` (informational) follows the
+        TELEGRAM_NOTIFY_ON list; a message with NO kind is a safety alert (sell, stop-loss, real-money order,
+        risk stop, login or system problem) or untagged, and is sent whatever that list says (#482): a safety
+        alert must never depend on a server setting that leaves a category out."""
+        if not self.enabled:
+            return False
+        if kind is None:
+            return True
+        return str(event).lower() in settings.telegram_events
 
     async def send(
         self,
@@ -93,7 +100,7 @@ class TelegramNotifier:
         message may be dropped (type switched off) or held for quiet hours or the
         digest. A message with no kind is safety-critical or untagged and is
         always sent at once. Held counts as True: it will be delivered."""
-        if not self._should_send(event):
+        if not self._should_send(event, kind):
             # The key must be `event_type`, never `event`: structlog reserves
             # `event` for the log message itself, so passing it as a keyword
             # raises TypeError — which would abort every signal that tries to

@@ -16,10 +16,9 @@ const ROOM_ONLY = {
 const RUN = { banner: { mode: 'DEFENSIVE' }, quality: { overall: null, stale: [] }, situations: [], decisions: [ROOM_ONLY] } as unknown as BrainRun
 
 describe('one word per stock', () => {
-  it('step "Decide" agrees with the BUY banner when only the account room held the stock back', () => {
+  it('step "Decide" shows the same stored word on every view when only the account room held the stock back', () => {
     const decide = brainSteps(ROOM_ONLY, RUN, false).at(-2)!
-    expect(decide.tag).toBe('TRADE')
-    expect(decide.line).not.toMatch(/Not a BUY/)
+    expect(decide.tag).toBe('WATCH')
   })
 
   it('the owner view of the steps keeps the portfolio word', () => {

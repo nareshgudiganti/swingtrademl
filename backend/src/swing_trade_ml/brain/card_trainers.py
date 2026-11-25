@@ -20,8 +20,11 @@ from pathlib import Path
 from typing import Any
 
 from swing_trade_ml.core.config import settings
+from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.ml import model_card as mc
 from swing_trade_ml.ml.registry import artifact_sha256, load_artifact
+
+log = get_logger(__name__)
 
 CARD_SUFFIX = ".card.json"
 
@@ -59,14 +62,14 @@ def card_from_record(model: Any, *, invoked_by: str | None, train_args: dict[str
         },
         "libraries": mc.library_versions(),
         "data_window": {
-            "train_start": mc._iso(model.train_start),
-            "train_end": mc._iso(model.train_end),
+            "train_start": mc.iso_or_none(model.train_start),
+            "train_end": mc.iso_or_none(model.train_end),
             "test_start": None,
             "test_end": None,
         },
         "universe": {
             "symbols": symbols,
-            "symbols_sha256": None if symbols is None else mc._sha256_text("\n".join(symbols)),
+            "symbols_sha256": None if symbols is None else mc.sha256_text("\n".join(symbols)),
         },
         "rows": {
             "dataset": model.n_samples,
@@ -86,11 +89,15 @@ def card_from_record(model: Any, *, invoked_by: str | None, train_args: dict[str
     }
 
 
-def write_card(model: Any, *, invoked_by: str | None, train_args: dict[str, Any]) -> dict[str, Any]:
-    """Write the sidecar next to the artifact (never replacing one) and return the card."""
+def write_card(model: Any, *, invoked_by: str | None, train_args: dict[str, Any]) -> dict[str, Any] | None:
+    """Write the sidecar next to the artifact (never replacing one) and return the card.
+
+    No card is written, and None is returned, when the row has no artifact file on disk."""
+    if not model.artifact_path or not Path(model.artifact_path).is_file():
+        log.warning("model_card.skipped_no_artifact", model=getattr(model, "name", None),
+                    version=getattr(model, "version", None))
+        return None
     card = card_from_record(model, invoked_by=invoked_by, train_args=train_args)
-    if not model.artifact_path:
-        return card
     target = sidecar_path(model.artifact_path)
     tmp = target.with_name(f".{target.name}.{uuid.uuid4().hex}.tmp")
     try:
@@ -99,6 +106,17 @@ def write_card(model: Any, *, invoked_by: str | None, train_args: dict[str, Any]
     finally:
         tmp.unlink(missing_ok=True)
     return card
+
+
+def _write_card_quietly(model: Any, *, invoked_by: str | None, train_args: dict[str, Any]) -> None:
+    """A card is a record about a finished model: if writing it fails, say so and keep the trained model."""
+    try:
+        write_card(model, invoked_by=invoked_by, train_args=train_args)
+    except Exception as exc:  # noqa: BLE001 - never fail a finished training run over its card
+        log.warning(
+            "model_card.write_failed", model=getattr(model, "name", None),
+            version=getattr(model, "version", None), error=type(exc).__name__,
+        )
 
 
 def train_endpoint_model_with_card(
@@ -112,7 +130,7 @@ def train_endpoint_model_with_card(
         db, name=name, cutoff=cutoff, horizon_days=horizon_days,
         target_return=target_return, test_size=test_size,
     )
-    write_card(
+    _write_card_quietly(
         model, invoked_by=invoked_by,
         train_args={
             "name": name, "cutoff": cutoff.isoformat(), "horizon_days": horizon_days,
@@ -128,7 +146,7 @@ def train_lab_model_with_card(db, *, invoked_by: str | None = None, **kwargs: An
 
     model = sl.train_lab_model(db, **kwargs)
     cutoff = kwargs.get("cutoff")
-    write_card(
+    _write_card_quietly(
         model, invoked_by=invoked_by,
         train_args={
             "name": kwargs.get("name"),

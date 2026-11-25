@@ -86,3 +86,28 @@ def test_protected_trainers_do_not_know_about_cards():
     for module in (five_day_train, selection_lab):
         src = inspect.getsource(module)
         assert "card_trainers" not in src and "model_card" not in src
+
+
+def test_no_card_is_written_when_the_artifact_file_is_missing(tmp_path):
+    row = _fake_row(tmp_path, "endpoint")
+    Path(row.artifact_path).unlink()
+    assert ct.write_card(row, invoked_by=None, train_args={}) is None
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_a_card_failure_never_fails_training_in_either_path(monkeypatch, tmp_path):
+    row = _fake_row(tmp_path, "endpoint")
+    monkeypatch.setattr(five_day_train, "train_endpoint_model", lambda db, **kw: row)
+    monkeypatch.setattr(selection_lab, "train_lab_model", lambda db, **kw: row)
+
+    def boom(*a, **k):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(ct, "card_from_record", boom)
+    got = ct.train_endpoint_model_with_card(
+        None, name="m", cutoff=date(2023, 6, 30), horizon_days=5, target_return=0.02
+    )
+    assert got is row
+    got = ct.train_lab_model_with_card(None, name="m", cutoff=date(2023, 6, 30), symbols=["A"], candidates=[], bars={})
+    assert got is row
+    assert not ct.sidecar_path(row.artifact_path).exists()

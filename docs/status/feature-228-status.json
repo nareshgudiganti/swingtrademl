@@ -1,0 +1,180 @@
+{
+  "schema": "trademind.feature-status/v1",
+  "feature": {
+    "issue": 228,
+    "title": "Feature 3: Stock detail and trade plan",
+    "state": "in_progress",
+    "url": "https://github.com/nareshgudiganti/swingtrademl/issues/228"
+  },
+  "updated_at": "2026-11-25T23:24:16+05:30",
+  "source": "GitHub issues, PRs and project 2 board read 25 Nov 2026 about 23:00-23:30 IST, main = 13b9c31b; requirement checks in docs/status/feature-228-requirements-check.md",
+  "summary": {
+    "total": 12,
+    "done": 2,
+    "awaiting_owner": 7,
+    "in_progress": 0,
+    "blocked": 2,
+    "not_started": 1,
+    "superseded": 0
+  },
+  "owner_decisions": [
+    {
+      "id": "D1",
+      "question": "G1: a TRADE idea shows a 5-session score with a 15-session plan. Label only (A), show the 5-session window (B), or rescore on 15 sessions (C)? Shared with Feature 2 G9.",
+      "recommended": "A (label only); B and C after the trial"
+    },
+    {
+      "id": "D2",
+      "question": "Two open PRs fix the stock-page chart (#509 and #520, which replaces #509). Close #509 and review #520?",
+      "recommended": "Yes: close #509, review #520"
+    },
+    {
+      "id": "D3",
+      "question": "#385 admin model view: approve the read-only PR #510 now, and keep the expanded scope (six slots, lanes, versions, validation) on HOLD?",
+      "recommended": "Yes"
+    },
+    {
+      "id": "D4",
+      "question": "Approve the #282 requirements draft (A1-E2) as the acceptance list for the Verify stories?",
+      "recommended": "Yes, after D1 is decided"
+    },
+    {
+      "id": "D5",
+      "question": "G4: always show the date of the stock's close in the header (the empty-snapshot case, test b1, still fails). Approve the wording?",
+      "recommended": "Yes"
+    },
+    {
+      "id": "D6",
+      "question": "G9 and G8: at 4 pm which bar should exist, and what age limit should stop a scan on stale data?",
+      "recommended": "Owner supplies the provider's publish time and the age number"
+    },
+    {
+      "id": "D7",
+      "question": "Show 10D/15D research horizons on the plan card to anyone except the owner?",
+      "recommended": "No (owner only)"
+    }
+  ],
+  "open_pull_requests": [509, 510, 519, 520],
+  "stories": [
+    {
+      "issue": 282,
+      "title": "Requirements: Stock detail and trade plan",
+      "board_status": "In Progress",
+      "state": "awaiting_owner",
+      "blocked_by": "Owner approval of the requirements draft (D4)",
+      "pull_request": null,
+      "evidence": "Draft in #282 comments. Check results: docs/status/feature-228-requirements-check.md (run 25 Nov: 230 backend tests passed, 8 strict xfail = known gaps; frontend not run)",
+      "url": "https://github.com/nareshgudiganti/swingtrademl/issues/282"
+    },
+    {
+      "issue": 240,
+      "title": "Verify quote freshness and chart states",
+      "board_status": "Review",
+      "state": "awaiting_owner",
+      "blocked_by": "Owner review; choose between PR #509 and #520 (D2)",
+      "pull_request": "PR #484 merged (verification); PR #506 merged 55db748 (dated close, no NaN); PR #520 open (replaces #509); PR #509 open",
+      "evidence": "backend/tests/test_verify_240_quote_states.py passed; frontend/src/trademind/verify240.test.tsx still has GAP b1 marked it.fails (frontend not run here)",
+      "url": "https://github.com/nareshgudiganti/swingtrademl/issues/240"
+    },
+    {
+      "issue": 241,
+      "title": "Verify conditional trade plan and holding-period labels",
+      "board_status": "In Progress",
+      "state": "blocked",
+      "blocked_by": "Owner decision D1 (5-session score with 15-session plan)",
+      "pull_request": "PR #498 merged c79dbbb3 (plan percentages from the Brain policy)",
+      "evidence": "backend/tests/test_plan_percentages_from_brain_policy.py passed; #238 test test_the_percentages_on_the_plan_card_agree_with_the_plan_prices still fails as written (see requirements check A7)",
+      "url": "https://github.com/nareshgudiganti/swingtrademl/issues/241"
+    },
+    {
+      "issue": 326,
+      "title": "Show explicit 5D, 10D and 15D forecast flags",
+      "board_status": "Review",
+      "state": "awaiting_owner",
+      "blocked_by": "Owner review; the score-horizon display fix needs D1",
+      "pull_request": "PR #445 merged aaa9b373 (labels name their window and scale)",
+      "evidence": "Labels on main; horizon of the score itself still not stamped (strict xfail test_the_horizon_the_brain_stamps_on_an_idea_is_the_horizon_of_the_score_behind_it)",
+      "url": "https://github.com/nareshgudiganti/swingtrademl/issues/326"
+    },
+    {
+      "issue": 385,
+      "title": "Feature: Show which 5D and 15D models scan, feed the Brain, and determine signal evaluation",
+      "board_status": "In Progress",
+      "state": "awaiting_owner",
+      "blocked_by": "Owner review of PR #510; expanded scope on HOLD (D3)",
+      "pull_request": "PR #510 open (read-only admin Models tab); earlier slices merged (#449, #451, #452)",
+      "evidence": "Issue comment 25 Nov: ready for review; checks for #510 not re-run here",
+      "url": "https://github.com/nareshgudiganti/swingtrademl/issues/385"
+    },
+    {
+      "issue": 386,
+      "title": "Feature: Interactive Progress Chain & Lifecycle Visualization",
+      "board_status": "In Progress",
+      "state": "not_started",
+      "blocked_by": null,
+      "pull_request": null,
+      "evidence": "Board says In Progress but the issue has no comment and no linked PR; design spec docs/superpowers/specs/2026-11-20-progress-chain-design.md is local and uncommitted",
+      "url": "https://github.com/nareshgudiganti/swingtrademl/issues/386"
+    },
+    {
+      "issue": 387,
+      "title": "Three isolated Brain workflows for 5D, 10D and 15D",
+      "board_status": "In Progress",
+      "state": "blocked",
+      "blocked_by": "10D/15D research slice blocked (issue comment 23 Nov); 5D slice merged",
+      "pull_request": "PR #442 merged 26368a72; #449 merged 770cd134; #451 merged 98c2d1f4",
+      "evidence": "All three commits are on main (git merge-base --is-ancestor). Not deployed; jobs off",
+      "url": "https://github.com/nareshgudiganti/swingtrademl/issues/387"
+    },
+    {
+      "issue": 389,
+      "title": "Feature (P0 design): Unified Stock Identity & Continuous Intelligence Lifecycle",
+      "board_status": "In Progress",
+      "state": "awaiting_owner",
+      "blocked_by": "Owner approval of the production migration; owner closes",
+      "pull_request": "PR #448 merged 90f0250f; #452 merged a14b4286; #456 merged 1f8402a7",
+      "evidence": "All on main. Not deployed; migration needs owner approval for production",
+      "url": "https://github.com/nareshgudiganti/swingtrademl/issues/389"
+    },
+    {
+      "issue": 390,
+      "title": "Story: Audit unified stock IDs, daily score continuity and lifecycle visualization",
+      "board_status": "Review",
+      "state": "awaiting_owner",
+      "blocked_by": "Owner review and close",
+      "pull_request": "Delivered by #448 and #452",
+      "evidence": "Issue comment 23 Nov: merged. The lifecycle visualization part belongs to #386 (not started)",
+      "url": "https://github.com/nareshgudiganti/swingtrademl/issues/390"
+    },
+    {
+      "issue": 416,
+      "title": "Core: serve trading-rule numbers and the trial calendar from the backend",
+      "board_status": "In Progress",
+      "state": "awaiting_owner",
+      "blocked_by": "Review of test PR #519, then owner closes",
+      "pull_request": "PR #479 merged 0f977682; PR #498 merged c79dbbb3; PR #519 open (parity tests)",
+      "evidence": "backend/tests/test_trading_rules_endpoint.py and test_plan_percentages_from_brain_policy.py passed; the issue's last comment (says #498 open) is out of date",
+      "url": "https://github.com/nareshgudiganti/swingtrademl/issues/416"
+    },
+    {
+      "issue": 470,
+      "title": "Market data: some daily bars are dated in UTC, not the India trading day (coverage, backtest window edges)",
+      "board_status": "Done",
+      "state": "done",
+      "blocked_by": null,
+      "pull_request": "PR #491 merged 5c235232 (in batch #495 9d68cbf4)",
+      "evidence": "Issue closed; both commits on main; test_verify_246_data_freshness.py a7/a8 passed",
+      "url": "https://github.com/nareshgudiganti/swingtrademl/issues/470"
+    },
+    {
+      "issue": 486,
+      "title": "Screens: stale picks with no age limit, undated or 0% numbers, WATCH vs TRADE for the same idea",
+      "board_status": "Done",
+      "state": "done",
+      "blocked_by": null,
+      "pull_request": "PR #497 merged 111581ed; PR #499 merged f72f104a; PR #506 merged 55db748f",
+      "evidence": "Issue closed; commits on main. Leftover: verify240 GAP b1 (close date when no snapshot) is still an expected failure",
+      "url": "https://github.com/nareshgudiganti/swingtrademl/issues/486"
+    }
+  ]
+}

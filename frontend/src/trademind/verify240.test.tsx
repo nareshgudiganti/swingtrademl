@@ -2,8 +2,7 @@
 // The server side is backend/tests/test_verify_240_quote_states.py; the quote and snapshot rules were verified in #246 (cited).
 // Findings note: docs/verification/240-quotes-charts.md.
 //
-// A gap is an `it.fails`: it states what the screen SHOULD do and passes only while it does not. If the screen is fixed it
-// turns red and the marker is removed on purpose.
+// The gaps found here have been fixed (#240 chart states); each is now an ordinary passing test marked FIXED.
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -111,11 +110,11 @@ describe('the prices label (pricesAge.test.ts holds the full day-counting matrix
 
 const decision = { symbol: 'V240', kind: 'idea', reasons: [] } as unknown as BrainDecision
 
-function header(over: { last?: number; prev?: number; change: number | null; snapshot?: undefined }) {
+function header(over: { last?: number; prev?: number; change: number | null; snapshot?: undefined; lastDate?: string }) {
   return renderToString(
     <QueryClientProvider client={new QueryClient()}>
       <MemoryRouter>
-        <StockHeader decision={decision} last={over.last} prev={over.prev} change={over.change} snapshot={over.snapshot} withBuy={false} />
+        <StockHeader decision={decision} last={over.last} prev={over.prev} change={over.change} snapshot={over.snapshot} lastDate={over.lastDate} withBuy={false} />
       </MemoryRouter>
     </QueryClientProvider>,
   )
@@ -128,16 +127,16 @@ describe('the stock header price (priceSnapshot.test.tsx covers live, delayed, s
     expect(html).not.toContain('NaN')
   })
 
-  it.fails('GAP b1: with no snapshot the stored close is shown with its own date', () => {
-    // The header says "at last close" but never which day; a 12-day-old candle reads the same as yesterday's.
-    const html = header({ last: 123.57, prev: 128.15, change: -4.58 })
-    expect(html).toMatch(/\d{1,2} (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)/)
+  it('FIXED b1: with no snapshot the stored close is shown with its own date', () => {
+    const html = header({ last: 123.57, prev: 128.15, change: -4.58, lastDate: '2026-11-30' })
+    expect(html).toContain('Closing price on 30 Nov 2026')
   })
 
-  it.fails('GAP b2: a bare stored close with no change to show is still labelled as a close', () => {
-    // Only one candle on file: no change, so the "at last close" words (which ride on the change) are not drawn either.
-    const html = header({ last: 123.57, change: null })
-    expect(html.toLowerCase()).toContain('close')
+  it('FIXED b2: a bare stored close with no change to show is still labelled as a close', () => {
+    // Only one candle on file: no change to show, the close still says it is a close and which day.
+    const html = header({ last: 123.57, change: null, lastDate: '2026-11-30' })
+    expect(html).toContain('Closing price on 30 Nov 2026')
+    expect(header({ last: 123.57, change: null })).toContain('Last closing price') // no date on file: still a close
   })
 })
 
@@ -159,18 +158,24 @@ describe('the candle chart draws only the candles it is given', () => {
     expect(html).not.toMatch(/NaN|Infinity/)
   })
 
-  it.fails('GAP c1b: a candle with zero volume (a quiet or suspended day) draws no invalid numbers', () => {
-    // ui.tsx Candles divides each volume by the largest volume, so when every volume is 0 the volume bars get y and
-    // height NaN. Real candles with volume 0 exist.
+  it('FIXED c1b: a candle with zero volume is drawn as a valid candle with no volume bar', () => {
     const html = renderToString(<Candles bars={[{ t: '1 Dec', o: 100, h: 101, l: 99, c: 100, vol: 0 }]} height={300} />)
     expect(html).not.toMatch(/NaN|Infinity/)
+    expect(html).toContain('stroke-width="1"') // the candle itself is drawn
+    expect(html).not.toContain('opacity="0.35"') // no volume bar
   })
 
-  it.fails('GAP c1 (latent): the chart given no candles draws nothing invalid', () => {
-    // The two callers hide the chart when there are no bars (StockDetail, StockAnalysis), so no screen shows this today;
-    // but the component itself computes with -Infinity and prints NaN.
+  it('a quiet day beside a busy day keeps the busy day volume bar and skips the quiet one', () => {
+    const html = renderToString(<Candles bars={[{ t: '1 Dec', o: 100, h: 101, l: 99, c: 100, vol: 0 }, bar(1)]} height={300} />)
+    expect(html).not.toMatch(/NaN|Infinity/)
+    expect((html.match(/opacity="0.35"/g) ?? []).length).toBe(1)
+  })
+
+  it('FIXED c1: the chart given no candles shows a plain empty state and draws nothing invalid', () => {
     const html = renderToString(<Candles bars={[]} height={300} />)
     expect(html).not.toMatch(/NaN|Infinity/)
+    expect(html).toContain('No price history to draw yet.')
+    expect(html).not.toContain('<svg')
   })
 
   it('the two callers show a loading or an empty state instead of the chart', () => {

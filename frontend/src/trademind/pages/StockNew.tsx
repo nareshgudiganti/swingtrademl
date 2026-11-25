@@ -54,6 +54,7 @@ function StockNewView({ decision, run }: { decision: BrainDecision; run: BrainRu
         prev={data.prev}
         change={data.change}
         snapshot={data.snapshot}
+        lastDate={data.lastDate}
         cap={cap ? CAP_LABEL[cap] : undefined}
         analysisTo={analysisTo}
       />

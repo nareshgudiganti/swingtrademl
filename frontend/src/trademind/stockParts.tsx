@@ -20,6 +20,7 @@ import { finalWord, shownWord } from './live'
 import { scorePoints, scoreRank, withoutScorePercent, SCORE_HINT } from './scoreText'
 import { dayLabel } from './pricesAge'
 import { halfText } from './tradingRules'
+import { formatIstDate, istDay } from './istDay'
 import { inr } from './ui'
 import { wordLabel, wordTagColor } from './vocab'
 import './stockpage.css'
@@ -120,8 +121,12 @@ export function useStockData(decision: BrainDecision, run: BrainRun) {
   const row = changes.data?.ideas.find((r) => r.symbol.toUpperCase() === symbol.toUpperCase())
   const idea: IdeaChange | null = row ? ideaChange(row) : null
 
+  // The India trading day of the stored close shown when there is no live snapshot (its own date, never "today").
+  const lastDate = !snapshot && rows.length > 0 ? istDay(rows.at(-1)!.ts) : undefined
+
   return {
     candleRows: rows,
+    lastDate,
     snapshot,
     last,
     prev,
@@ -252,6 +257,7 @@ export function StockHeader({
   cap,
   analysisTo,
   snapshot,
+  lastDate,
   withBuy = true,
 }: {
   decision: BrainDecision
@@ -261,6 +267,8 @@ export function StockHeader({
   cap?: string
   analysisTo?: string
   snapshot?: PriceSnapshot
+  /** India trading day (YYYY-MM-DD) of the stored close in `last`, when there is no live snapshot. */
+  lastDate?: string
   withBuy?: boolean
 }) {
   const [buying, setBuying] = useState(false)
@@ -292,6 +300,11 @@ export function StockHeader({
                   {up ? '▲' : '▼'} ₹{inr(Math.abs(change))} ({Math.abs((change / prev) * 100).toFixed(2)}%){snapshot ? '' : ' at last close'}
                 </span>
               ) : null}
+              {!snapshot && (
+                <span className="sp-small" data-testid="close-note">
+                  {lastDate ? `Closing price on ${formatIstDate(lastDate)}` : 'Last closing price'}
+                </span>
+              )}
               {snapshot && (
                 <span
                   className={`sp-small${snapshot.state === 'stale' || snapshot.state === 'delayed' ? ' sp-neg' : ''}`}

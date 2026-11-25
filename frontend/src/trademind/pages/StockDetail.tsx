@@ -31,6 +31,7 @@ function PlainBrief({ symbol }: { symbol: string }) {
     </Card>
   )
 }
+import { forecastAndHold } from '../scoreVsPlan'
 import { SCORE_HINT, scoreLabel, scoreLabelLong, withoutScorePercent } from '../scoreText'
 
 const TABS = ['Overview', 'Technical', 'Fundamental', 'AI Analysis', 'Similar Cases', 'News', 'Options'] as const
@@ -327,7 +328,9 @@ function StockDetailBody() {
                     <Term k="horizon">Horizon</Term>
                   </div>
                   <div className="tm-stat-value" style={{ color: 'var(--tm-violet)' }}>
-                    {decision.horizon_days} trading days
+                    {forecastAndHold(decision.horizon_days).forecast}
+                    <br />
+                    {forecastAndHold(decision.horizon_days).hold}
                   </div>
                 </div>
               </div>

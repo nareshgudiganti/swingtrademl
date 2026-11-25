@@ -14,3 +14,9 @@ export const scoreVsPlan = (): string => {
 }
 
 export const SCORE_VS_PLAN_SHORT = 'The plan is a separate rule from the model’s 5-day score and has not been tested with it yet.'
+
+/** Stock header "Horizon" line (F3, label only): the 5-session forecast and the 15-session maximum hold, named apart. */
+export const forecastAndHold = (maxHoldDays: number): { forecast: string; hold: string } => ({
+  forecast: `Forecast: ${horizonRule(5).max_sessions} trading days (the window the score looks at)`,
+  hold: `Longest hold: up to ${maxHoldDays} trading days (when the plan sells)`,
+})

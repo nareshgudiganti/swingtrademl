@@ -273,3 +273,26 @@ describe('no unlabelled +8% or "15 trading days" remains in the files this chang
     expect(chanceTitle(idea)).toContain('chance of +8% before −4% within 15 trading days')
   })
 })
+
+// F3 (G1 option A, label only): the stock header names the 5-session forecast and the 15-session maximum hold apart.
+describe('stock header horizon wording (F3)', () => {
+  it('names the forecast window and the longest hold as two things', async () => {
+    const { setTradingRules } = await import('./tradingRules')
+    const { forecastAndHold } = await import('./scoreVsPlan')
+    const rules = {
+      brain_plan: { target_pct: 0.08, stop_pct: 0.04, half_out_pct: 0.05, max_sessions: 15 },
+      research: { horizons: [{ horizon: 5, target_pct: 0.02, stop_pct: 0.02, max_sessions: 5 }] },
+    }
+    setTradingRules(rules as never)
+    const t = forecastAndHold(15)
+    expect(t.forecast).toBe('Forecast: 5 trading days (the window the score looks at)')
+    expect(t.hold).toBe('Longest hold: up to 15 trading days (when the plan sells)')
+    for (const line of [t.forecast, t.hold]) expect(line).not.toMatch(/score[^.]*15|15[- ]day (prediction|forecast)/i)
+    expect(t.forecast).not.toContain('15')
+  })
+  it('the stock header uses the helper and no longer prints a bare horizon', () => {
+    const src = read('frontend/src/trademind/pages/StockDetail.tsx')
+    expect(src).toContain('forecastAndHold(decision.horizon_days)')
+    expect(src).not.toMatch(/\{decision\.horizon_days\} trading days/)
+  })
+})

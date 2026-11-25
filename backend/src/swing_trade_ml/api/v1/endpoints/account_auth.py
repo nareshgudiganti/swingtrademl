@@ -37,6 +37,7 @@ from swing_trade_ml.core.mobile import normalise_full_name, normalise_mobile
 from swing_trade_ml.core.password_policy import check_password
 from swing_trade_ml.core.security import hash_password
 from swing_trade_ml.db.models.session import User
+from swing_trade_ml.db.session import session_scope
 from swing_trade_ml.services import audit, auth_tokens
 from swing_trade_ml.services.email import get_sender
 from swing_trade_ml.services.email.templates import already_registered_email, reset_email, verification_email
@@ -98,9 +99,37 @@ def _notice_allowed(email: str) -> bool:
         return True
 
 
-def _send(to: str, message: tuple[str, str, str]) -> None:
+def _masked(email: str) -> str:
+    local, _, domain = email.partition("@")
+    return f"{local[:1]}***@{domain}" if domain else "***"
+
+
+def _record_email_failure(kind: str, user_id: int | None, to: str) -> None:
+    """A refused or failed email leaves a row in the audit log the owner reads (#482), with no token, no
+    password and no full address. Never raises: the request that queued the email already succeeded."""
+    try:
+        with session_scope() as db:
+            audit.record(
+                db,
+                "auth.email_failed",
+                actor_label="system",
+                target_type="user" if user_id is not None else "email",
+                target_id=user_id if user_id is not None else _masked(to),
+                after={"kind": kind},
+            )
+    except Exception as exc:  # noqa: BLE001
+        log.error("auth.email_failure_record_failed", error=type(exc).__name__)
+
+
+def _send(to: str, message: tuple[str, str, str], kind: str = "email", user_id: int | None = None) -> None:
     subject, text, html = message
-    get_sender().send(to, subject, text, html)
+    try:
+        delivered = get_sender().send(to, subject, text, html)
+    except Exception as exc:  # noqa: BLE001 - a provider fault must not break the request that queued this
+        log.error("auth.email_send_error", kind=kind, error=type(exc).__name__)
+        delivered = False
+    if delivered is False:
+        _record_email_failure(kind, user_id, to)
 
 
 def _bad(detail: str) -> HTTPException:
@@ -137,6 +166,7 @@ def register(payload: RegisterIn, db: DbSession, request: Request, background: B
     hashed = hash_password(payload.password)  # done in both cases so the work is the same shape
     taken = db.execute(select(User.id).where(func.lower(User.email) == email).limit(1)).first()
     message: tuple[str, str, str] | None = None
+    message_kind, message_user = "verify_email", None
     if not taken:
         user = User(
             username=_unique_username_from_email(db, email),
@@ -170,10 +200,12 @@ def register(payload: RegisterIn, db: DbSession, request: Request, background: B
             )
             db.commit()
             message = verification_email(raw)
+            message_user = user.id
     if taken and _notice_allowed(email):
         message = already_registered_email()
+        message_kind, message_user = "already_registered", None
     if message is not None:
-        background.add_task(_send, email, message)
+        background.add_task(_send, email, message, message_kind, message_user)
     return {"message": REGISTER_ACCEPTED}
 
 
@@ -208,7 +240,7 @@ def resend_verification(
         raw = auth_tokens.issue(db, user, "verify_email", _ip(request))
         db.commit()
     if raw is not None:
-        background.add_task(_send, email, verification_email(raw))
+        background.add_task(_send, email, verification_email(raw), "verify_email", user.id)
     else:
         auth_tokens.hash_token("equalise-timing")  # same shape of work either way
     return {"message": VERIFY_RESENT}
@@ -224,7 +256,7 @@ def forgot_password(payload: EmailIn, db: DbSession, request: Request, backgroun
             db, "auth.reset_requested", actor=user, target_type="user", target_id=user.id, request=request
         )
         db.commit()
-        background.add_task(_send, email, reset_email(raw))
+        background.add_task(_send, email, reset_email(raw), "reset_password", user.id)
     else:
         auth_tokens.hash_token("equalise-timing")
     return {"message": RESET_SENT}
@@ -274,5 +306,5 @@ def admin_send_reset(
         request=request,
     )
     db.commit()
-    background.add_task(_send, target.email, reset_email(raw))
+    background.add_task(_send, target.email, reset_email(raw), "reset_password", target.id)
     return {"message": "A password reset email has been sent to that member."}

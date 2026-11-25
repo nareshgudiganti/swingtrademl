@@ -23,3 +23,17 @@ GitHub (issues and project 2) remains the source of truth; these files are a sna
 - `superseded`: replaced by another story, kept for history.
 
 `board_status` is copied from the project board. `state` adds what the column cannot show: who or what the story is waiting on.
+
+## Optional fields (added 25 Nov 2026, backward compatible)
+
+Engineering readiness and model effectiveness are tracked separately: a successfully created model is not necessarily a reliable model.
+
+| Field | Values |
+|---|---|
+| `engineering_readiness` (feature) | `{state, note}`: `not_started` / `partial` / `ready` |
+| `model_effectiveness` (feature) | `{state, note}`: `untested` / `not_proven` / `proven` / `failed` |
+| `stories[].engineering` | `done` / `in_progress` / `not_started` / `blocked` / `not_applicable` |
+| `stories[].effectiveness` | `proven` / `not_proven` / `failed` / `untested` / `not_applicable` |
+| `stories[].effectiveness_note` | One line of evidence, or null |
+
+`proven` requires a PASS under the signed protocol (SELECTION and ECONOMIC verdicts) and an owner decision. Readers that do not know these fields can ignore them.

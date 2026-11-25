@@ -1,0 +1,24 @@
+{
+  "code_sha256": {
+    "brain/lanes/r4_5d.py": "954f024e5e0da52f0016a3c8169abab2b4a3dd869fb0eb3ab8d2f6beb447d72f",
+    "brain/lanes/r4_5d_run.py": "0ccc096e8d3df963ef44f3c419afa546ed9fe3b38c56ad5ae036d7fda601468e"
+  },
+  "config_sha256": {
+    "C1": "91d67ff05f5967c28ac734be6aeafab3a92f4edfbd58e3a59afd8f26b95084dd",
+    "C2": "2a1c9d20bdf219b6d5735d440358cb80c6a85fad70c75ae1ece1412d5e4c162c",
+    "C3": "1ce9f83ba6a28642fd5da62313c58c74f67fff9aee139c58056100ad013e4422"
+  },
+  "data_snapshot_sha256": "d95091a114f6210dd759d335d194e98d50ebd79cbc066ac0815317d9e49397ae",
+  "experiment": "r4-219-5d-largecap-v1",
+  "feature_set": {
+    "fingerprint_sha256": "efacbaa3192fd04976345ef41e8dc7b6ef38ce9730a8408b5478bb4eabae434d",
+    "golden_output_sha256": "111f208ec83167f27899e942071c323a6eebc071f9c1149730fabacedf5fe509",
+    "names_sha256": "f5a8d398d56e47d8bce33943ea78d50d949933022d12c2cb6ef24f5792086f29",
+    "obv_formula": "obv.diff(10) / volume.rolling(20).mean() (0 -> NaN): 10-day OBV change over the 20-day mean daily VOLUME; window-independent",
+    "version": "r4-fs53-obvvol-v1"
+  },
+  "missing_symbols": [],
+  "newest_session": "2026-09-07",
+  "rule_sha256": "3dab34cd06b5756b633c957d61e71af8e64f8b7e055fa49375b570fd79d8eee6",
+  "universe_sha256": "811261fcf37e91f28e0c3c4067f8282a7953e346ccfbb1d67553d61a63e844c9"
+}

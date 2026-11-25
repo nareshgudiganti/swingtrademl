@@ -134,7 +134,7 @@ describe('the stock header price (priceSnapshot.test.tsx covers live, delayed, s
     expect(html).toMatch(/\d{1,2} (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)/)
   })
 
-  it.fails('GAP b2: a bare stored close with no change to show is still labelled as a close', () => {
+  it('FIXED (#486) b2: a bare stored close with no change to show is still labelled as a close', () => {
     // Only one candle on file: no change, so the "at last close" words (which ride on the change) are not drawn either.
     const html = header({ last: 123.57, change: null })
     expect(html.toLowerCase()).toContain('close')
@@ -159,14 +159,14 @@ describe('the candle chart draws only the candles it is given', () => {
     expect(html).not.toMatch(/NaN|Infinity/)
   })
 
-  it.fails('GAP c1b: a candle with zero volume (a quiet or suspended day) draws no invalid numbers', () => {
+  it('FIXED (#486) c1b: a candle with zero volume (a quiet or suspended day) draws no invalid numbers', () => {
     // ui.tsx Candles divides each volume by the largest volume, so when every volume is 0 the volume bars get y and
     // height NaN. Real candles with volume 0 exist.
     const html = renderToString(<Candles bars={[{ t: '1 Dec', o: 100, h: 101, l: 99, c: 100, vol: 0 }]} height={300} />)
     expect(html).not.toMatch(/NaN|Infinity/)
   })
 
-  it.fails('GAP c1 (latent): the chart given no candles draws nothing invalid', () => {
+  it('FIXED (#486) c1 (latent): the chart given no candles draws nothing invalid', () => {
     // The two callers hide the chart when there are no bars (StockDetail, StockAnalysis), so no screen shows this today;
     // but the component itself computes with -Infinity and prints NaN.
     const html = renderToString(<Candles bars={[]} height={300} />)

@@ -108,5 +108,9 @@
   "vix_percentile_rank": 0.9761904762,
   "breadth_pct_above_sma50": 0.3543760646,
   "breadth_advance_pct": 0.7482615509
+ },
+ "down_regimes": {
+  "nifty_trend_regime": -1.0,
+  "sector_trend_regime": -1.0
  }
 }

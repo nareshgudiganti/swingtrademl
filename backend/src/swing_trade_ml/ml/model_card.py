@@ -32,10 +32,16 @@ def _sha256_text(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
-def synthetic_candles(seed_shift: float = 0.0, n: int = 400) -> pd.DataFrame:
+def synthetic_candles(
+    seed_shift: float = 0.0, n: int = 400, slope: float = 0.08, wiggle: bool = True
+) -> pd.DataFrame:
     """Fixed OHLCV candles from plain arithmetic (no random generator, so identical on every machine and library)."""
     i = np.arange(n, dtype=np.float64)
-    close = 100.0 + 0.08 * i + 6.0 * np.sin(i / 7.0 + seed_shift) + 2.5 * np.sin(i / 2.3 + 2 * seed_shift)
+    close = 100.0 + slope * i
+    if wiggle:
+        close = close + 6.0 * np.sin(i / 7.0 + seed_shift) + 2.5 * np.sin(i / 2.3 + 2 * seed_shift)
+    if slope < 0:
+        close = close + 200.0  # keep prices positive on a falling series
     open_ = close * (1 + 0.004 * np.sin(i * 1.7 + seed_shift))
     high = np.maximum(open_, close) * (1 + 0.006 + 0.004 * np.abs(np.sin(i * 0.9)))
     low = np.minimum(open_, close) * (1 - 0.006 - 0.004 * np.abs(np.cos(i * 1.3)))
@@ -48,10 +54,14 @@ def synthetic_candles(seed_shift: float = 0.0, n: int = 400) -> pd.DataFrame:
     )
 
 
-def golden_fixture_frame() -> pd.DataFrame:
-    """`build_features` run on the fixed fixture: stock, index, sector, VIX and breadth are all synthetic."""
+def golden_fixture_frame(index_slope: float = 0.08, index_wiggle: bool = True) -> pd.DataFrame:
+    """`build_features` run on the fixed fixture: stock, index, sector, VIX and breadth are all synthetic.
+
+    `index_slope` / `index_wiggle` reshape the index and sector series only (the default is the pinned
+    uptrend); a falling or flat one exercises the other sides of the trend-regime rule."""
     stock = synthetic_candles(0.0)
-    index_df, sector_df = synthetic_candles(1.1), synthetic_candles(2.2)
+    index_df = synthetic_candles(1.1, slope=index_slope, wiggle=index_wiggle)
+    sector_df = synthetic_candles(2.2, slope=index_slope, wiggle=index_wiggle)
     vix = synthetic_candles(3.3)[["ts", "close"]].assign(close=lambda d: 12 + d["close"] / 20)
     ts = stock["ts"]
     j = np.arange(len(ts), dtype=np.float64)
@@ -100,7 +110,12 @@ def feature_code_sha256() -> str | None:
 
 
 def git_state() -> dict[str, Any]:
-    """HEAD sha and a dirty flag, or None for each when git is unavailable."""
+    """Code commit and a tracked-changes-only dirty flag; None for what cannot be determined.
+
+    The sha comes from env GIT_SHA first (set at image build or deploy; Docker images have no .git),
+    then from git. Nothing in the repo sets GIT_SHA yet, so in Docker it stays null until deploy sets it."""
+    import os
+
     cwd = Path(__file__).resolve().parent
 
     def run(*args: str) -> str | None:
@@ -112,8 +127,9 @@ def git_state() -> dict[str, Any]:
         except (OSError, subprocess.SubprocessError):
             return None
 
-    sha = run("rev-parse", "HEAD")
-    status = run("status", "--porcelain")
+    env_sha = (os.environ.get("GIT_SHA") or "").strip()
+    sha = env_sha or run("rev-parse", "HEAD")
+    status = run("status", "--porcelain", "--untracked-files=no")
     return {"sha": sha or None, "dirty": None if status is None else bool(status)}
 
 
@@ -145,6 +161,18 @@ def matrix_sha256(frame: pd.DataFrame, columns: list[str]) -> str:
     return hashlib.sha256(hashed.to_numpy().tobytes()).hexdigest()
 
 
+def estimator_class(estimator: Any) -> str | None:
+    """The class that was really fitted (e.g. a GBDT when LightGBM was missing), with the base of a calibrated wrapper."""
+    if estimator is None:
+        return None
+    cls = type(estimator)
+    name = f"{cls.__module__}.{cls.__qualname__}"
+    base = getattr(estimator, "base", None)
+    if base is not None:
+        name += f"[{estimator_class(base)}]"
+    return name
+
+
 def build_card(
     *,
     train_df: pd.DataFrame,
@@ -157,6 +185,8 @@ def build_card(
     target_return: float,
     stop_return: float,
     label_kind: str,
+    invoked_by: str | None = None,
+    estimator: Any = None,
 ) -> dict[str, Any]:
     """The card before the file exists (artifact_sha256 is filled in after saving). JSON-serialisable."""
     symbols = sorted(dataset["symbol"].unique().tolist()) if "symbol" in dataset.columns else None
@@ -170,7 +200,9 @@ def build_card(
         "git": git_state(),
         "training": {
             "entry_point": "swing_trade_ml.ml.train.train_model",
-            "algorithm": algorithm,
+            "invoked_by": invoked_by,  # a label such as cli / api, never raw argv or env
+            "requested_algorithm": algorithm,
+            "estimator_class": estimator_class(estimator),
             "args": train_args,
             "seed": settings.ML_RANDOM_SEED,
         },

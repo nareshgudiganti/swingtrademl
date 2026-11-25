@@ -12,6 +12,9 @@ from __future__ import annotations
 
 import asyncio
 import html
+import threading
+from contextvars import ContextVar
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
@@ -20,6 +23,7 @@ import httpx
 from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.enums import NotificationEvent
 from swing_trade_ml.core.logging import get_logger
+from swing_trade_ml.notifications import failure_log
 from swing_trade_ml.notifications.alert_policy import DAILY_SUMMARY
 
 log = get_logger(__name__)
@@ -28,6 +32,35 @@ API_BASE = "https://api.telegram.org"
 TIMEOUT = httpx.Timeout(10.0, connect=5.0)
 # Telegram rejects messages over 4096 characters outright
 MAX_MESSAGE_LENGTH = 4000
+
+
+# Urgent alerts (no `kind`) that fail for a temporary reason are retried twice, at about 30 s and
+# about 2 min after the first attempt (owner criteria, #217 / #358).
+RETRY_AT_SECONDS = (30.0, 120.0)
+
+
+@dataclass(frozen=True)
+class SendResult:
+    ok: bool
+    status: int | None = None
+    permanent: bool = False
+    reason: str = ""
+
+
+# The outcome of the latest `_post` in this task, so `send` can tell a temporary failure from a
+# permanent one without changing `_post`'s plain True/False answer.
+_last_result: ContextVar[SendResult | None] = ContextVar("telegram_last_result", default=None)
+
+
+def _sleep(seconds: float):
+    """Indirection so tests can run the retry timings without really waiting."""
+    return asyncio.sleep(seconds)
+
+
+def _spawn(make_coro) -> None:
+    """Run the pending retries off to the side so a trade or scheduler job never waits minutes on
+    Telegram. A daemon thread because send_sync callers run in short-lived event loops."""
+    threading.Thread(target=lambda: asyncio.run(make_coro()), name="telegram-retry", daemon=True).start()
 
 
 def _esc(value: Any) -> str:
@@ -86,10 +119,16 @@ class TelegramNotifier:
             if decision == "held":
                 log.info("telegram.held", kind=kind)
                 return True
+            return await self._post(text)
 
-        return await self._post(text)
+        # Urgent (no kind): a failure is recorded and, if temporary, retried in the background.
+        _last_result.set(None)
+        if await self._post(text):
+            return True
+        self._after_first_failure(text, event)
+        return False
 
-    async def _post(self, text: str) -> bool:
+    async def _attempt(self, text: str) -> SendResult:
         payload = {
             "chat_id": self._chat_id,
             "text": text[:MAX_MESSAGE_LENGTH],
@@ -108,11 +147,81 @@ class TelegramNotifier:
                     status=response.status_code,
                     body=response.text[:300],
                 )
-                return False
-            return True
+                code = response.status_code
+                # 429 and 5xx pass with time; anything else (bad token, blocked chat, bad request)
+                # fails the same way every time.
+                transient = code == 429 or code >= 500
+                return SendResult(False, code, permanent=not transient, reason=f"HTTP {code}")
+            return SendResult(True, 200)
         except Exception as exc:  # noqa: BLE001 — never let notification failure propagate
-            log.error("telegram.send_error", error=str(exc))
-            return False
+            # Class name only: an httpx error message can carry the request URL, which holds the token.
+            log.error("telegram.send_error", error_kind=type(exc).__name__)
+            return SendResult(False, None, reason=f"network error ({type(exc).__name__})")
+
+    async def _post(self, text: str) -> bool:
+        result = await self._attempt(text)
+        _last_result.set(result)
+        return result.ok
+
+    def _after_first_failure(self, text: str, event: NotificationEvent | str) -> None:
+        """An urgent alert's first attempt failed: record it, then retry or stop."""
+        result = _last_result.get()
+        if result is None or result.ok:
+            return
+        event_name = str(event).lower()
+        if result.permanent:
+            failure_log.record(
+                failure_log.PERMANENT,
+                event=event_name,
+                status=result.status,
+                reason=result.reason,
+                attempts=1,
+            )
+            log.warning("telegram.alert_failed_permanently", event_type=event_name, status=result.status)
+            return
+        entry_id = failure_log.record(
+            failure_log.RETRYING, event=event_name, status=result.status, reason=result.reason, attempts=1
+        )
+        _spawn(lambda: self.retry_urgent(text, event_name, entry_id))
+
+    async def retry_urgent(self, text: str, event_name: str, entry_id: str, sleep=None) -> bool:
+        """Two more tries, at about 30 s and 2 min after the first. Quiet on success; one warning
+        when the retries are used up; stops at once on a permanent refusal."""
+        sleep = sleep or _sleep
+        waited = 0.0
+        attempts = 1
+        result = SendResult(False)
+        for at in RETRY_AT_SECONDS:
+            await sleep(at - waited)
+            waited = at
+            attempts += 1
+            result = await self._attempt(text)
+            if result.ok:
+                failure_log.clear(entry_id)
+                log.info("telegram.retry_succeeded", event_type=event_name, attempts=attempts)
+                return True
+            state = failure_log.PERMANENT if result.permanent else failure_log.RETRYING
+            failure_log.record(
+                state,
+                event=event_name,
+                status=result.status,
+                reason=result.reason,
+                attempts=attempts,
+                entry_id=entry_id,
+            )
+            if result.permanent:
+                log.warning("telegram.alert_failed_permanently", event_type=event_name, status=result.status)
+                return False
+        failure_log.record(
+            failure_log.GAVE_UP,
+            event=event_name,
+            status=result.status,
+            reason=result.reason,
+            attempts=attempts,
+            entry_id=entry_id,
+        )
+        log.warning("telegram.alert_not_delivered", event_type=event_name, attempts=attempts)
+        return False
 
     def deliver_sync(self, text: str) -> bool:
         """Send already-held messages (the digest), past the alert settings. Blocking, for

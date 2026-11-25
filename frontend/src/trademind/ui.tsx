@@ -563,6 +563,10 @@ export function Candles({
   const maxVol = Math.max(...bars.map((b) => b.vol))
   const ticks = Array.from({ length: 5 }, (_, i) => lo + (span * i) / 4)
   const id = useId().replace(/:/g, '')
+  // No candles: nothing to draw (the numbers above would be -Infinity and NaN). A day with zero volume draws no
+  // volume bar rather than a bar of NaN size (#486).
+  if (bars.length === 0) return null
+  const volShare = (v: number) => (maxVol > 0 ? v / maxVol : 0)
 
   return (
     <svg className="tm-candles" viewBox={`0 0 ${W} ${H}`} width="100%" height={H} preserveAspectRatio="none">
@@ -612,9 +616,9 @@ export function Candles({
               <rect x={x - bw / 2} y={top} width={bw} height={Math.max(bot - top, 1)} fill={col} />
               <rect
                 x={x - bw / 2}
-                y={H - padB - (b.vol / maxVol) * volH}
+                y={H - padB - volShare(b.vol) * volH}
                 width={bw}
-                height={(b.vol / maxVol) * volH}
+                height={volShare(b.vol) * volH}
                 fill={col}
                 opacity={0.35}
               />

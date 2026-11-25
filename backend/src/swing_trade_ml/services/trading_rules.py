@@ -13,6 +13,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
+from swing_trade_ml.brain.modules.m08_decide.policy import DEFAULT_POLICY
 from swing_trade_ml.brain.trial_constants import MIN_SESSIONS, TRIAL_START
 from swing_trade_ml.core import research_config
 from swing_trade_ml.core.config import settings
@@ -22,7 +23,6 @@ from swing_trade_ml.core.holidays import NSE_HOLIDAYS
 def trading_rules(as_of: date | None = None, *, include_research: bool = True) -> dict[str, Any]:
     """`as_of` is the last finished trading day (default: from the market clock). `include_research=False`
     leaves the research-only horizons (10 and 15 sessions) out: what everyone but the owner is served."""
-    from swing_trade_ml.brain import replay_scoring
     from swing_trade_ml.core import market_session
 
     day = as_of or market_session.session().last_closed_trading_day
@@ -47,13 +47,14 @@ def trading_rules(as_of: date | None = None, *, include_research: bool = True) -
         # A risk limit, shown read-only: the drawdown from the account's peak that pauses new buys. Read from
         # the settings that enforce it (services/risk.py); nothing here can change it.
         "risk_limits": {"max_drawdown_pct": settings.MAX_PORTFOLIO_DRAWDOWN_PCT},
-        # The brain's own 15-day plan, from the brain's constants (brain/replay_scoring.py, the same numbers
-        # as m08_decide/policy.py). Not the v1 ml_swing settings, which production overrides separately.
+        # The brain's own plan, from the Brain's decision policy (m08_decide/policy.py DEFAULT_POLICY),
+        # the same object that sets each stored target and stop. Not the v1 ml_swing settings,
+        # which production overrides.
         "brain_plan": {
-            "target_pct": replay_scoring.TARGET,
-            "stop_pct": replay_scoring.STOP,
-            "half_out_pct": replay_scoring.HALF_OUT,
-            "max_sessions": replay_scoring.HORIZON_BARS,
+            "target_pct": DEFAULT_POLICY.target_pct,
+            "stop_pct": DEFAULT_POLICY.stop_pct,
+            "half_out_pct": DEFAULT_POLICY.first_target_pct,
+            "max_sessions": DEFAULT_POLICY.horizon_days,
         },
         "trial": {
             "start": TRIAL_START.isoformat(),

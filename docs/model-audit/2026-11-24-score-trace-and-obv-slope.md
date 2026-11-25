@@ -213,3 +213,56 @@ Suggested order, for the owner to decide: R4 now, R5 as a test-only change, R3 a
   obv_slope verified against code, git history and artifacts (Part 2) = met; parity per artifact for the other inputs = met for definitions and window (2.4), NOT met for context data and completed candles;
   baseline SHA `ab926d9` recorded; gaps recorded. The owner's after-trial criteria (old baseline vs separately versioned candidate; parity check test) are future work and not started (R3, R5).
 * **#325** (reconcile the same prediction across API, UI and reports; regression examples): not in scope here. Relevant finding: for the same stock the served score and the training-basis score differ by up to 0.25 (mean 0.057 for model 2), so any reconciliation must name which recipe produced the number. The 5-day-score-versus-15-day-plan mismatch is tracked in #341.
+
+## Addendum 2026-11-24: input reconstruction investigation
+
+Question: why did rebuilding model-2 inputs from local candles match only 13 of 200 sampled saved predictions? Read-only; SELECT only; scripts in
+`<local session scratchpad>` (path redacted for the public repo) (`recon.py`, `recon2.py`, `recon3.py`; outputs `recon.json`, `recon2.json`).
+All 637 saved model-2 rows (13 scan dates, 49 stocks each) were classified, not a sample. Correction to the text above: the `load_candles(... limit=400)` call is `ml/predict.py:77` (not 67-69).
+
+**Method.** For every row: find the candle with the same `ts`; take the 400 bars ending there; rebuild the 37 inputs with the feature code that was live when the rows were written
+(`git show abc9c0b:backend/src/swing_trade_ml/ml/features.py`, copy in the scratchpad; model 2's 37 inputs are identical in `7da460c`, shown earlier); compare each input with the stored `features` JSON (tolerance 1e-6 relative).
+Then test shifted bars (D-1, D+1, D+-2) and test substituting the stored last-bar close (`price_at_prediction`) and the volume implied by the stored `volume_ratio_20` into the final candle.
+
+**Limitation (evidence that does not exist locally).** Local `candle_corrections`, `candle_arrivals` and `corporate_actions` all have 0 rows; `candles` has no ingestion timestamp; `predictions` has no created-at column.
+All local DBs are the same snapshot (newest daily candle 2026-09-08 18:30 UTC); no fresher approved non-prod copy exists, and prod and backups were not used. So "the bar was corrected later" versus "the bar was not yet final at scan time" cannot be separated by timestamps, only by the numbers below.
+
+### Result (637 rows)
+
+| Bucket | Rows | Dates (ts, UTC stamp) | Evidence |
+|---|---|---|---|
+| Exact reproduction (all 37 inputs, and the probability to 1e-9) | 49 | 2026-08-20 | stored close equals final close and implied volume equals final volume in 49 of 49 |
+| (d) Last bar was not the final bar when scored | 539 | 2026-08-04, 08-05, 08-24, 08-25, 08-26, 08-27, 08-30, 08-31, 09-01, 09-02, 09-03 | see below |
+| (c) Feature-code difference (new `obv_slope`), everything else exact | 49 | 2026-09-06 | stored `obv_slope` equals the NEW formula (400 bars) in 49 of 49 (max diff 0); old formula 0 of 49 |
+| (a) Stale or missing source data (bar absent, or fewer than 220 bars) | 0 | | every row has its bar; the window is 400 bars in all 637 (at least 1239 bars to date) |
+| (b) Candle corrections, splits, bonus in the window | not detectable | | the three tables are empty; for the 539 rows the earlier bars match the DB exactly (below), so no change to earlier bars was seen |
+| (e) Unexplained | 0 for the inputs that could be tested (see caveat) | | |
+
+**Bucket (d), 539 rows.** In all 539: (1) the stored `price_at_prediction` lies inside the final candle's [low, high] (539 of 539) but equals the final close in only 26 rows (median gap 0.27%);
+(2) the volume implied by the stored `volume_ratio_20` is below the final candle's volume in 539 of 539 (median 95.7% of it), and a day's volume can only grow;
+(3) the stored `return_1d` implies a previous close equal to the DB's previous close (exact in all 588 mismatching rows, buckets d and c), so bars before the last one match;
+(4) shifted bars never match (D-1, D+1, D+-2: 0 matches), so the bar is the right one and IST stamping (18:30 UTC = next IST date) is aligned;
+(5) after replacing only the last bar's close and volume with the stored values (and widening high/low to include the stored close), the 21 inputs that do not depend on the last bar's own high/low
+(sma/ema ratios, crosses, rsi, macd x3, roc x2, return x4, volatility_20, volume_ratio_20, old-formula obv_slope) reproduce exactly in 539 of 539 rows.
+That is the signature of a bar that was still partial (intraday, or an earlier snapshot) at scan time and was completed later. It fits `ml/predict.py:77`, which reads whatever newest bar is stored (no completed-bar check).
+What cannot be told from local data: whether the scan read a live intraday bar or an earlier stored version of the bar (no timestamps).
+Size before substitution, median / max absolute difference over these 539 rows: return_1d 0.0029 / 0.033; rsi_14 0.99 / 15.4 points; stoch_k 4.1 / 51 points; bb_position 0.034 / 0.55;
+volume_ratio_20 0.034 / 3.5; mfi_14 0.14 / 14.7; obv_slope (old formula) 0.0022 / 47; adx_14 0.16 / 2.7 (79 rows); upper_wick_pct 0.096 / 0.61 (283 rows).
+Inputs that depend on the last bar's own high and low (stoch_k/d, williams_r, bb_*, mfi_14, atr, wicks, body, high/low distances, adx) could not be tested because the partial bar's high and low are unknown; for those the statement is "consistent", not "proven".
+
+**Bucket (c), 49 rows (2026-09-06).** Every input except `obv_slope` reproduces exactly (including close and volume); `obv_slope` differs by 2.1 to 3.4 on the three examples and equals the new formula exactly.
+These are the newest bar of the local snapshot. `_upsert_prediction` overwrites `features` and `probability` on conflict (`ml/predict.py:192-198`), so these rows were evidently re-scored by code containing `fcaef35`
+(2026-10-05 or later) on the same bar, replacing what was stored. Which run did it is not recorded. Consequence for traceability: a saved prediction row is NOT immutable; its inputs can be replaced by a later scan of the same bar.
+
+**Worked examples.**
+1. ADANIENT, ts 2026-08-04: stored price 3045.0 vs final close 3050.0 (final range 3037.3-3085.9); implied volume 860,325 vs final 870,914; 33 inputs differ against the final bar (largest stoch_k 2.08, williams_r 2.08);
+   after substituting close and volume all 21 testable inputs match. Bucket (d).
+2. HDFCBANK, ts 2026-08-25: stored 727.6 vs final 727.2 (range 724.15-731.0); implied volume 20,351,781 vs final 21,156,463; 33 inputs differ (stoch_k 1.78); after substitution all match. Bucket (d).
+3. ICICIBANK, ts 2026-08-20: stored price 1420.0 = final close, volume equal, nothing differs. Exact reproduction. (ONGC, ts 2026-09-06: stored obv_slope differs from the old-formula rebuild by 2.13 and equals the new formula; bucket (c).)
+
+**Answer.** 13 of 200 was 49 of 637 (7.7%): only the 2026-08-20 scan used a final bar and the old code. 85% of rows (539 of 637) were scored on a bar that was not final (bucket d); 8% (49 of 637) were later overwritten under the new `obv_slope` code (bucket c).
+No row failed because of missing data, a one-day shift or time-zone stamping. Candle corrections and corporate actions could not be tested (no records locally); earlier bars matched the DB everywhere.
+This explains the "unknown reason" in section 1.4 for the tested inputs; the score trace itself is unchanged (stored inputs reproduce stored probabilities exactly, 637 of 637).
+
+**Not verified:** whether the partial bar came from a live intraday read or an earlier stored version; inputs that depend on the partial bar's high and low; the date and run that rewrote the 2026-09-06 rows; anything in prod (saved prod rows may differ).
+Exit condition for #226 stays unmet (no saved KEC prediction).

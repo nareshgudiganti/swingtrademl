@@ -20,9 +20,9 @@ describe('the chain has no account step', () => {
 })
 
 describe('the word the stock page shows', () => {
-  it('is the stock verdict when only the account room held it back, else the stored word', () => {
+  it('is always the stored word, even when only the account room held it back', () => {
     const base = { kind: 'idea', word: 'WATCH', reasons: [] } as unknown as BrainDecision
-    expect(shownWord({ ...base, stock_verdict: 'TRADE', stock_verdict_restored: true } as BrainDecision)).toBe('TRADE')
+    expect(shownWord({ ...base, stock_verdict: 'TRADE', stock_verdict_restored: true } as BrainDecision)).toBe('WATCH')
     expect(shownWord({ ...base, stock_verdict: 'WATCH', stock_verdict_restored: false } as BrainDecision)).toBe('WATCH')
   })
 })

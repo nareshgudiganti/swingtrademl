@@ -354,6 +354,9 @@ class Settings(BaseSettings):
     TELEGRAM_ENABLED: bool = False
     TELEGRAM_BOT_TOKEN: str = ""
     TELEGRAM_CHAT_ID: str = ""
+    # Filters only the INFORMATIONAL messages (those tagged with a switchable alert kind). Safety alerts
+    # (sells, stop-losses, real-money orders, risk stops, login and system problems) carry no kind and are
+    # sent whatever this list says (#482); only TELEGRAM_ENABLED, the token and the chat id switch them off.
     TELEGRAM_NOTIFY_ON: str = "signal,order,fill,error,daily_summary,system"
     # Telegram messages come from production only (ENVIRONMENT=production). A laptop running
     # with the real token in its .env would otherwise send its own paper-trading messages to the

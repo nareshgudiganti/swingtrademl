@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, time, timedelta
 
 from fastapi import APIRouter, Query
 from sqlalchemy import select
@@ -11,6 +11,7 @@ from sqlalchemy.orm import aliased
 from swing_trade_ml.api.deps import DbSession, PlanAccessDep
 from swing_trade_ml.brokers import get_broker
 from swing_trade_ml.core.enums import PositionStatus
+from swing_trade_ml.core.market_session import IST, last_closed_trading_day, previous_trading_day
 from swing_trade_ml.db.models.market import Candle, Instrument
 from swing_trade_ml.db.models.trading import Position, Signal, Strategy, Trade
 from swing_trade_ml.schemas import SignalOut
@@ -131,6 +132,23 @@ def latest_actionable(
 # so five calendar days covers a long weekend and a holiday.
 PICK_MAX_AGE = timedelta(days=5)
 
+# Buy list and top picks: a BUY is fresh while it is at most this many COMPLETED
+# trading sessions old (owner decision 2026-11-25; provisional, see #281).
+MAX_BUY_AGE_SESSIONS = 5
+
+
+def buy_fresh_since(now: datetime) -> datetime:
+    """Earliest signal time still fresh for the buy list and top picks.
+
+    Counts back from the last closed trading session (a session's own signals
+    are age 0). Weekends and NSE holidays are skipped. Returned as IST midnight
+    of the cutoff session, in UTC.
+    """
+    day = last_closed_trading_day(now)
+    for _ in range(MAX_BUY_AGE_SESSIONS):
+        day = previous_trading_day(day)
+    return datetime.combine(day, time(0, 0), tzinfo=IST).astimezone(UTC)
+
 
 @router.get("/picks", response_model=list[dict])
 def picks(db: DbSession, access: PlanAccessDep) -> list[dict]:
@@ -246,6 +264,8 @@ def top_picks(
             LatestSignal.signal_type == "BUY",
             LatestSignal.confidence >= min_confidence,
             LatestSignal.instrument_id.not_in(held_instrument_ids),
+            # An old BUY is not a pick today: 5 completed trading sessions (#239 gap f1).
+            LatestSignal.generated_at >= buy_fresh_since(datetime.now(UTC)),
         )
     ).all()
 
@@ -331,24 +351,32 @@ def buy_list(db: DbSession, access: PlanAccessDep) -> list[dict]:
 
     Answers "the Signals page shows a BUY row for this stock, but is that
     still true today or from three days ago?" by construction: it's deduped
-    to each instrument's single most recent signal (any strategy), then kept
-    only if that latest signal is BUY. A stock that reconfirms BUY every day
-    for a week stays on the list the whole week; the moment a later scan
-    reads HOLD or weaker, it silently drops off next call — no manual
-    dismissal needed for that case, since a stale row is structurally
-    impossible here. Already-held symbols are excluded — this list is only
-    for fresh entries, not stocks already bought (that's the Portfolio page).
+    to each strategy's most recent signal per stock, kept only if that signal is a
+    BUY, then to one row per stock (the most confident BUY) and at most `MAX_BUY_AGE_SESSIONS` completed
+    trading sessions old. A stock
+    that reconfirms BUY every day for a week stays on the list the whole week;
+    the moment a later scan reads HOLD or weaker, it silently drops off next
+    call — no manual dismissal needed for that case, since a stale row is
+    structurally impossible here. Already-held symbols are excluded — this list
+    is only for fresh entries, not stocks already bought (that's the Portfolio page).
     Plan members see every member-facing strategy (model, brain, rules) but
     never the owner's private books (`owner_private_strategy_ids`: real
     holdings and manual paper testing), whatever those strategies are named.
+    Private books are removed BEFORE the per-stock dedupe, so a member sees the
+    latest signal they are allowed to see, not one hidden from them (#239 gap f2).
     """
+    private_ids = set() if access.unrestricted else owner_private_strategy_ids(db)
+
     latest_signal = (
         select(Signal)
-        .where(Signal.mode == get_broker().mode)
+        .where(Signal.mode == get_broker().mode, Signal.strategy_id.not_in(private_ids))
+        # Each strategy's own latest signal per stock: a BUY is replaced only by the SAME strategy's newer
+        # signal. Another strategy's HOLD does not erase it (the Brain records a HOLD every night for each
+        # stock it does not mark TRADE, so a cross-strategy rule would depend on which job ran last).
         .distinct(Signal.strategy_id, Signal.instrument_id)
-        .order_by(Signal.strategy_id, Signal.instrument_id, Signal.generated_at.desc())
+        .order_by(Signal.strategy_id, Signal.instrument_id, Signal.generated_at.desc(), Signal.id.desc())
     ).subquery()
-    LatestSignal = aliased(Signal, latest_signal)
+    LatestSignal = aliased(Signal, latest_signal)  # noqa: N806 — same convention as top_picks
 
     held_instrument_ids = select(Position.instrument_id).where(
         Position.mode == get_broker().mode, Position.status == PositionStatus.OPEN
@@ -361,11 +389,14 @@ def buy_list(db: DbSession, access: PlanAccessDep) -> list[dict]:
         .where(
             LatestSignal.signal_type == "BUY",
             LatestSignal.instrument_id.not_in(held_instrument_ids),
+            LatestSignal.generated_at >= buy_fresh_since(datetime.now(UTC)),
         )
         .order_by(LatestSignal.confidence.desc().nullslast())
     )
     rows = db.execute(stmt).all()
-    private_ids = set() if access.unrestricted else owner_private_strategy_ids(db)
+    # One row per stock: rows are ordered by confidence, so the first BUY seen for a stock is its best.
+    seen: set[int] = set()
+    rows = [r for r in rows if not (r[0].instrument_id in seen or seen.add(r[0].instrument_id))]
 
     return [
         {
@@ -380,7 +411,7 @@ def buy_list(db: DbSession, access: PlanAccessDep) -> list[dict]:
             "generated_at": sig.generated_at,
         }
         for sig, symbol, name, strategy in rows
-        if not _practice_evidence(sig) and strategy.id not in private_ids
+        if not _practice_evidence(sig)
     ]
 
 

@@ -65,6 +65,7 @@ trap 'exit 143' TERM
 bash "$APP_DIR/infra/deploy/preflight.sh"
 
 compose=(docker compose -f docker-compose.yml -f docker-compose.prod.yml)
+export GIT_SHA="$release_sha"  # baked into the image (backend/Dockerfile) for model cards
 backup_dir="$BACKUP_ROOT/release-$(date +%Y%m%d_%H%M%S)-${release_sha:0:12}"
 mkdir -p "$backup_dir"
 printf '%s\n' "$previous_sha" > "$backup_dir/previous-sha"

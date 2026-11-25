@@ -61,6 +61,8 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      args:
+        GIT_SHA: ${GIT_SHA:-}
     container_name: stml-api
     restart: unless-stopped
     env_file:
@@ -88,6 +90,8 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      args:
+        GIT_SHA: ${GIT_SHA:-}
     container_name: stml-worker
     restart: unless-stopped
     env_file:

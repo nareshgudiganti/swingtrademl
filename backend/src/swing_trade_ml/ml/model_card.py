@@ -28,7 +28,7 @@ CARD_VERSION = 1
 _FEATURES_FILE = Path(__file__).with_name("features.py")
 
 
-def _sha256_text(value: str) -> str:
+def sha256_text(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
@@ -88,17 +88,20 @@ def golden_values(position: int = -1) -> dict[str, float | None]:
 def golden_output_hash() -> str:
     """Hash of the feature builder's output on the fixture, at 6 decimals so float noise cannot change it."""
     rounded = {k: None if v is None else round(v, 6) for k, v in golden_values().items()}
-    return _sha256_text(json.dumps(rounded, sort_keys=True))
+    return sha256_text(json.dumps(rounded, sort_keys=True))
+
+
+_sha256_text = sha256_text  # old private names kept as aliases
 
 
 def feature_fingerprint(names: list[str] | None = None) -> dict[str, str]:
     names = list(FEATURE_COLUMNS if names is None else names)
-    names_sha = _sha256_text(json.dumps(names))
+    names_sha = sha256_text(json.dumps(names))
     golden = golden_output_hash()
     return {
         "names_sha256": names_sha,
         "golden_output_sha256": golden,
-        "fingerprint_sha256": _sha256_text(names_sha + golden),
+        "fingerprint_sha256": sha256_text(names_sha + golden),
     }
 
 
@@ -150,7 +153,7 @@ def library_versions() -> dict[str, str | None]:
     }
 
 
-def _iso(value: Any) -> str | None:
+def iso_or_none(value: Any) -> str | None:
     if value is None or pd.isna(value):
         return None
     return pd.Timestamp(value).isoformat()
@@ -160,6 +163,9 @@ def matrix_sha256(frame: pd.DataFrame, columns: list[str]) -> str:
     """sha256 over the training matrix (inputs plus target), row order included."""
     hashed = pd.util.hash_pandas_object(frame[[*columns, "target"]].reset_index(drop=True), index=False)
     return hashlib.sha256(hashed.to_numpy().tobytes()).hexdigest()
+
+
+_iso = iso_or_none
 
 
 def estimator_class(estimator: Any) -> str | None:
@@ -209,14 +215,14 @@ def build_card(
         },
         "libraries": library_versions(),
         "data_window": {
-            "train_start": _iso(train_df["ts"].min()) if not train_df.empty else None,
-            "train_end": _iso(train_df["ts"].max()) if not train_df.empty else None,
-            "test_start": _iso(test_df["ts"].min()) if not test_df.empty else None,
-            "test_end": _iso(test_df["ts"].max()) if not test_df.empty else None,
+            "train_start": iso_or_none(train_df["ts"].min()) if not train_df.empty else None,
+            "train_end": iso_or_none(train_df["ts"].max()) if not train_df.empty else None,
+            "test_start": iso_or_none(test_df["ts"].min()) if not test_df.empty else None,
+            "test_end": iso_or_none(test_df["ts"].max()) if not test_df.empty else None,
         },
         "universe": {
             "symbols": symbols,
-            "symbols_sha256": None if symbols is None else _sha256_text("\n".join(symbols)),
+            "symbols_sha256": None if symbols is None else sha256_text("\n".join(symbols)),
         },
         "rows": {"dataset": len(dataset), "train": len(train_df), "test": len(test_df)},
         "training_matrix_sha256": matrix_sha256(train_df, list(feature_names)),

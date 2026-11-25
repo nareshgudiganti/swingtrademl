@@ -23,6 +23,7 @@ test "$(basename "$APP_DIR")" = app-staging || { echo "Refusing: unexpected app 
 bash infra/staging/preflight.sh "$APP_DIR/.env"
 
 compose=(docker compose -f docker-compose.yml -f docker-compose.staging.yml)
+export GIT_SHA="$release_sha"  # baked into the image (backend/Dockerfile) for model cards
 "${compose[@]}" build api frontend
 "${compose[@]}" up -d postgres redis
 "${compose[@]}" run --rm -e DB_AUTO_MIGRATE=false api python -m alembic upgrade head

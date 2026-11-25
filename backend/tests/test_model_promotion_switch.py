@@ -22,16 +22,17 @@ def test_refusal_text_when_off_and_none_when_on(monkeypatch):
 
 
 def _payload():
-    # #328: activation now carries the owner's approval of one exact file.
-    return ml_ep.PromotionRequest(
-        reason="Reviewed and approved", evidence=["report.md@abc"], artifact_sha256="a" * 64
-    )
+    # #328: activation spends an approval the signed-in owner recorded earlier.
+    return ml_ep.UseApproval(approval_id=1)
 
 
-def _owner():
+def _owner(monkeypatch):
+    from types import SimpleNamespace
+
     from swing_trade_ml.api.deps import Principal
 
-    return Principal(user=None, via_api_key=True)
+    monkeypatch.setattr(settings, "REAL_ACCOUNT_USERS", "boss")
+    return Principal(user=SimpleNamespace(id=1, username="boss", role="owner", is_active=True))
 
 
 def test_activate_endpoint_refuses_before_touching_the_database_when_off(monkeypatch):
@@ -42,7 +43,7 @@ def test_activate_endpoint_refuses_before_touching_the_database_when_off(monkeyp
 
     monkeypatch.setattr(ml_ep.promotion, "promote", boom)
     with pytest.raises(HTTPException) as e:
-        ml_ep.activate(1, payload=_payload(), db=None, principal=_owner())  # type: ignore[arg-type]
+        ml_ep.activate(1, payload=_payload(), db=None, principal=_owner(monkeypatch))  # type: ignore[arg-type]
     assert e.value.status_code == 403
     assert e.value.detail == rs.PROMOTION_OFF_MESSAGE
 
@@ -50,9 +51,9 @@ def test_activate_endpoint_refuses_before_touching_the_database_when_off(monkeyp
 def test_activate_endpoint_proceeds_when_on(monkeypatch):
     monkeypatch.setattr(settings, "ALLOW_MODEL_PROMOTION", True)
     sentinel = object()
-    monkeypatch.setattr(ml_ep.promotion, "promote", lambda db, mid, approval, invoked_by: sentinel)
+    monkeypatch.setattr(ml_ep.promotion, "promote", lambda db, mid, approval_id, invoked_by: sentinel)
     monkeypatch.setattr(ml_ep.predict_service, "clear_cache", lambda: None)
-    assert ml_ep.activate(7, payload=_payload(), db=None, principal=_owner()) is sentinel  # type: ignore[arg-type]
+    assert ml_ep.activate(7, payload=_payload(), db=None, principal=_owner(monkeypatch)) is sentinel  # type: ignore[arg-type]
 
 
 def _train_client():

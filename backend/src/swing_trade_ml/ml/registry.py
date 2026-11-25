@@ -55,6 +55,11 @@ def _lock_name(db: Session, name: str) -> None:
         db.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": name_lock_key(name)})
 
 
+def lock_model_name(db: Session, name: str) -> None:
+    """Take the per-name activation lock for the rest of the caller's transaction (re-entrant)."""
+    _lock_name(db, name)
+
+
 def save_artifact(name: str, version: str, bundle: dict[str, Any]) -> str:
     """Write the bundle to `{name}_{version}.joblib`, never replacing an existing file.
 

@@ -14,7 +14,7 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
 
-from swing_trade_ml.api.deps import DbSession, Principal, get_principal
+from swing_trade_ml.api.deps import DbSession, Principal, actor_name, get_principal
 from swing_trade_ml.brain import score_evidence, service
 from swing_trade_ml.brain.alerts import service as alerts
 from swing_trade_ml.brain.module import Mode
@@ -38,7 +38,8 @@ router = APIRouter(prefix="/brain", tags=["brain"], dependencies=[Depends(_brain
 class ModeUpdate(BaseModel):
     mode: Mode
     note: str | None = None
-    by: str = "owner"
+    by: str = "owner"  # ignored: "changed by" comes from the signed-in credential (#328)
+    approval_id: int | None = None  # needed to switch M06 on (it serves a model; #328)
 
 
 class RunCreate(BaseModel):
@@ -233,10 +234,43 @@ def list_modules(db: DbSession) -> dict:
     return {"steps": service.step_overview(), "modules": service.module_overview(db)}
 
 
-@router.put("/modules/{module_id}")
-def switch_module(module_id: str, payload: ModeUpdate, db: DbSession) -> dict:
+#: Modules whose "on" mode puts a saved model file into use: switching them on is a model promotion (#328).
+MODEL_SERVING_MODULES = {"M06"}
+
+
+def _approve_model_module_on(
+    db: DbSession, module_id: str, payload: ModeUpdate, principal: Principal
+) -> None:
+    """M06 on = serving the newest saved combiner: the signed-in designated owner's recorded approval of
+    that exact file is spent here and audited (brain/service.py is trial-frozen, so the gate lives here)."""
+    from swing_trade_ml.core.release_switches import promotion_refusal
+    from swing_trade_ml.ml import promotion
+
+    if module_id.upper() not in MODEL_SERVING_MODULES or Mode(payload.mode) is not Mode.ON:
+        return
+    if refusal := promotion_refusal():
+        raise HTTPException(403, refusal)
     try:
-        row = service.set_mode(db, module_id, payload.mode, by=payload.by, note=payload.note)
+        promotion.signed_in_owner(principal)
+    except promotion.PromotionError as exc:
+        raise HTTPException(403, str(exc)) from exc
+    try:
+        promotion.approve_m06_on(db, payload.approval_id, invoked_by="api")
+    except promotion.PromotionError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@router.put("/modules/{module_id}")
+def switch_module(
+    module_id: str,
+    payload: ModeUpdate,
+    db: DbSession,
+    principal: Annotated[Principal, Depends(get_principal)],
+) -> dict:
+    _approve_model_module_on(db, module_id, payload, principal)
+    try:
+        # set_mode commits, so the approval's audit row (if any) is saved together with the switch.
+        row = service.set_mode(db, module_id, payload.mode, by=actor_name(principal), note=payload.note)
     except service.UnknownModuleError as exc:
         raise HTTPException(404, str(exc)) from exc
     except service.ModeRefusedError as exc:
@@ -582,12 +616,25 @@ def proposals(db: DbSession, status: str | None = Query(None)) -> list[dict]:
 
 
 @router.post("/proposals/{proposal_id}/accept")
-def accept_proposal(proposal_id: int, payload: ProposalDecision, db: DbSession) -> dict:
+def accept_proposal(
+    proposal_id: int,
+    payload: ProposalDecision,
+    db: DbSession,
+    principal: Annotated[Principal, Depends(get_principal)],
+) -> dict:
     """Constitution C9: nothing a proposal suggests takes effect until now."""
     from swing_trade_ml.brain.modules.m09_learn import store
 
+    proposal = db.get(BrainProposal, proposal_id)
+    change = (proposal.change or {}) if proposal is not None and proposal.kind == "module_mode" else {}
+    if str(change.get("module", "")).upper() in MODEL_SERVING_MODULES and change.get("mode") == Mode.ON.value:
+        # #328: switching a model-serving module on needs a recorded owner approval of the exact file;
+        # a learning proposal cannot carry one.
+        raise HTTPException(
+            409, "Switching M06 on needs the owner's recorded approval: use PUT /brain/modules/M06 instead."
+        )
     try:
-        p = store.accept(db, proposal_id, payload.by, payload.note)
+        p = store.accept(db, proposal_id, actor_name(principal), payload.note)
     except store.UnknownProposalError as exc:
         raise HTTPException(404, str(exc)) from exc
     except LookupError as exc:  # a module_mode proposal naming a module that is not installed

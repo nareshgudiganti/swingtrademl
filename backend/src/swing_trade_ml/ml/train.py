@@ -34,14 +34,14 @@ from swing_trade_ml.ml.calibrated_model import CalibratedEstimator, reliability_
 from swing_trade_ml.ml.dataset import apply_embargo, build_training_dataset, chronological_split
 from swing_trade_ml.ml.features import FEATURE_COLUMNS
 from swing_trade_ml.ml.model_card import build_card
-from swing_trade_ml.ml.promotion import Approval, promote
 from swing_trade_ml.ml.registry import artifact_sha256, next_version, save_artifact
 
 log = get_logger(__name__)
 
 AUTO_ACTIVATE_REFUSED = (
-    "Activating straight after training needs a recorded owner approval of the new model file. "
-    "Train without activating, review the result, then run `swingtrade promote`."
+    "Activating straight after training is not allowed: an owner approval must name the finished "
+    "model file. Train without activating, review the result, record an approval, then run "
+    "`swingtrade promote`."
 )
 
 
@@ -307,21 +307,20 @@ def train_model(
     calibrate: bool = False,
     cutoff: date | None = None,
     invoked_by: str | None = None,
-    approval: Approval | None = None,
 ) -> MLModel:
     """Train, evaluate on a held-out future window, and register the result.
 
-    The returned model is TRAINED, not ACTIVE. `auto_activate` goes through
-    `ml.promotion.promote` (#328) and is refused before any training unless an
-    owner `approval` is given; that approval must name the new file's sha256,
-    so in practice the safe flow is: train, review, then promote.
+    The returned model is TRAINED, never ACTIVE. `auto_activate=True` is
+    refused before any training (#328): an owner approval must name the
+    finished file's sha256, which cannot exist before training, so activation
+    would always be refused. Flow: train, review, approve, `ml.promotion.promote`.
 
     `walk_forward_folds > 0` also scores the model on that many successive
     earlier windows and stores them under `metrics["walk_forward"]`. One
     held-out window can flatter a model that happened to suit its regime;
     the spread across folds is what says whether the edge is real.
     """
-    if auto_activate and approval is None:
+    if auto_activate:
         raise ValueError(AUTO_ACTIVATE_REFUSED)
     horizon_days = horizon_days or settings.ML_PREDICTION_HORIZON_DAYS
     target_return = target_return if target_return is not None else settings.ML_TARGET_RETURN_PCT
@@ -457,9 +456,6 @@ def train_model(
         roc_auc=round(metrics["roc_auc"], 4),
         precision_at_threshold=round(metrics["precision_at_threshold"], 4),
     )
-
-    if auto_activate:
-        record = promote(db, record.id, approval, invoked_by=invoked_by or "train")
 
     return record
 

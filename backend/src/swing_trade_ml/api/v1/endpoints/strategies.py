@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 
-from swing_trade_ml.api.deps import DbSession
+from swing_trade_ml.api.deps import DbSession, Principal, get_principal
 from swing_trade_ml.brokers import get_broker
 from swing_trade_ml.core.enums import PositionStatus
 from swing_trade_ml.core.logging import get_logger
@@ -159,6 +159,46 @@ def list_strategies(db: DbSession, active_only: bool = False) -> list[Strategy]:
     return list(db.execute(stmt).scalars().all())
 
 
+#: Strategy params that pick which model serves its signals; changing one re-points the served model (#328)
+MODEL_SELECTOR_KEYS = ("model_name", "model_id", "model_version")
+
+
+def _selector_changes(before: dict | None, after: dict | None) -> dict[str, tuple[Any, Any]]:
+    before, after = before or {}, after or {}
+    return {k: (before.get(k), after.get(k)) for k in MODEL_SELECTOR_KEYS if before.get(k) != after.get(k)}
+
+
+def _approve_selector_change(
+    db: DbSession, strategy: Strategy, changed: dict, principal: Principal, approval_id: int | None
+) -> None:
+    """A model selector change needs the signed-in designated owner and a recorded approval for exactly
+    this strategy and model name; it is spent and audited here (committed with the change)."""
+    from swing_trade_ml.core.release_switches import promotion_refusal
+    from swing_trade_ml.ml import promotion
+
+    if refusal := promotion_refusal():
+        raise HTTPException(status.HTTP_403_FORBIDDEN, refusal)
+    try:
+        promotion.signed_in_owner(principal)
+    except promotion.PromotionError as exc:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from exc
+    if set(changed) != {"model_name"} or not isinstance(changed["model_name"][1], str):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, "Only params.model_name can be re-pointed, to a named model."
+        )
+    try:
+        promotion.approve_strategy_model(
+            db,
+            approval_id,
+            strategy_id=strategy.id,
+            model_name=changed["model_name"][1],
+            before=changed["model_name"][0],
+            invoked_by="api",
+        )
+    except promotion.PromotionError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+
 @router.post("", response_model=StrategyOut, status_code=status.HTTP_201_CREATED)
 def create_strategy(payload: StrategyCreate, db: DbSession) -> Strategy:
     if payload.strategy_type not in STRATEGY_REGISTRY:
@@ -166,6 +206,13 @@ def create_strategy(payload: StrategyCreate, db: DbSession) -> Strategy:
             status.HTTP_400_BAD_REQUEST,
             f"Unknown strategy_type '{payload.strategy_type}'. "
             f"Available: {sorted(STRATEGY_REGISTRY)}",
+        )
+    defaults = getattr(STRATEGY_REGISTRY[payload.strategy_type], "default_params", None) or {}
+    if _selector_changes(defaults, {**defaults, **(payload.params or {})}):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "A new strategy starts on its default model. To point it at another model, create it, record "
+            "the owner's approval, then PATCH params.model_name with that approval id (#328).",
         )
     if db.execute(select(Strategy).where(Strategy.name == payload.name)).scalar_one_or_none():
         raise HTTPException(status.HTTP_409_CONFLICT, f"Strategy '{payload.name}' already exists")
@@ -210,12 +257,20 @@ def get_strategy_by_id(strategy_id: int, db: DbSession) -> Strategy:
 
 
 @router.patch("/{strategy_id}", response_model=StrategyOut)
-def update_strategy(strategy_id: int, payload: StrategyUpdate, db: DbSession) -> Strategy:
+def update_strategy(
+    strategy_id: int,
+    payload: StrategyUpdate,
+    db: DbSession,
+    principal: Annotated[Principal, Depends(get_principal)],
+    approval_id: int | None = None,
+) -> Strategy:
     strategy = db.get(Strategy, strategy_id)
     if strategy is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Strategy not found")
 
     changes = payload.model_dump(exclude_unset=True)
+    if "params" in changes and (changed := _selector_changes(strategy.params, changes["params"])):
+        _approve_selector_change(db, strategy, changed, principal, approval_id)
     try:
         validate_execution_mode(strategy.strategy_type, changes.get("execution_mode", strategy.execution_mode))
     except ValueError as exc:

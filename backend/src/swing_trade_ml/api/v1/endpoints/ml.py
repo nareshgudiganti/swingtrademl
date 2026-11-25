@@ -16,7 +16,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import Integer, cast, func, select
 
-from swing_trade_ml.api.deps import DbSession, Principal, actor_name, require_owner
+from swing_trade_ml.api.deps import DbSession, Principal, require_owner
 from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.core.release_switches import promotion_refusal
 from swing_trade_ml.db.models.market import Instrument
@@ -186,41 +186,78 @@ def train(payload: TrainRequest, background: BackgroundTasks) -> MessageResponse
 
 
 AUTO_ACTIVATE_REFUSED = (
-    "Activating straight after training is not allowed: train, review the result, then approve and "
-    "activate that exact model file with POST /ml/models/{id}/activate."
+    "Activating straight after training is not allowed: train, review the result, record an owner "
+    "approval with POST /ml/approvals, then POST /ml/models/{id}/activate with that approval id."
 )
 
 
-class PromotionRequest(BaseModel):
-    """The owner's approval of one exact model file. The approver is the signed-in caller, never the body."""
+class EvidenceRef(BaseModel):
+    """A repo file and its sha256 (checked on disk), or a PR number (recorded only)."""
 
+    path: str | None = Field(default=None, max_length=300)
+    sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    pr: int | None = Field(default=None, gt=0)
+
+    def as_ref(self) -> dict:
+        return {k: v for k, v in self.model_dump().items() if v is not None}
+
+
+class ApprovalRequest(BaseModel):
+    """The designated owner's approval. The approver is the signed-in user, never the body."""
+
+    kind: Literal["promote", "rollback", "brain_module_on", "strategy_model"]
+    target: str = Field(min_length=1, max_length=64)
     reason: str = Field(min_length=promotion.MIN_REASON_CHARS, max_length=promotion.MAX_TEXT_CHARS)
-    evidence: list[str] = Field(min_length=1, max_length=20)
+    evidence: list[EvidenceRef] = Field(min_length=1, max_length=promotion.MAX_EVIDENCE)
+    protocol_verdict: str = Field(max_length=32)
     artifact_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
-    protocol_verdict: str | None = Field(default=None, max_length=promotion.MAX_TEXT_CHARS)
+    model_name: str | None = Field(default=None, max_length=128)
 
 
-def _approval(payload: PromotionRequest, principal: Principal) -> promotion.Approval:
-    return promotion.Approval(
-        approver=actor_name(principal),
-        approver_user_id=principal.user.id if principal.user is not None else None,
-        reason=payload.reason,
-        evidence=tuple(payload.evidence),
-        artifact_sha256=payload.artifact_sha256,
-        approved_at=datetime.now(UTC),
-        protocol_verdict=payload.protocol_verdict,
-    )
+class UseApproval(BaseModel):
+    approval_id: int
 
 
-def _gated(
-    fn, db: DbSession, model_id: int, payload: PromotionRequest | None, principal: Principal
-) -> MLModel:
+def _owner_or_403(principal: Principal):
+    try:
+        return promotion.signed_in_owner(principal)
+    except promotion.PromotionError as exc:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from exc
+
+
+@router.post("/approvals", status_code=status.HTTP_201_CREATED)
+def record_approval(
+    payload: ApprovalRequest, db: DbSession, principal: Annotated[Principal, Depends(require_owner)]
+) -> dict:
+    """Signed-in designated owner only: record an approval (#328). It changes nothing by itself; it is
+    used once, within 7 days, by activate / rollback / the M06 switch / a strategy model change."""
+    user = _owner_or_403(principal)
+    try:
+        row = promotion.record_approval(
+            db,
+            user,
+            kind=payload.kind,
+            target=payload.target,
+            reason=payload.reason,
+            evidence=[e.as_ref() for e in payload.evidence],
+            protocol_verdict=payload.protocol_verdict,
+            artifact_sha256=payload.artifact_sha256,
+            model_name=payload.model_name,
+        )
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    db.commit()
+    return {"approval_id": row.id, "recorded_at": row.ts, "kind": payload.kind, "target": row.target_id}
+
+
+def _gated(fn, db: DbSession, model_id: int, payload: UseApproval | None, principal: Principal) -> MLModel:
     if refusal := promotion_refusal():  # checked before the body, so "switched off" is always the answer
         raise HTTPException(status.HTTP_403_FORBIDDEN, refusal)
+    _owner_or_403(principal)
     if payload is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, promotion.APPROVAL_REQUIRED)
     try:
-        model = fn(db, model_id, _approval(payload, principal), invoked_by="api")
+        model = fn(db, model_id, payload.approval_id, invoked_by="api")
     except ValueError as exc:  # PromotionError, ArtifactMismatchError, wrong status: nothing changed
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
     predict_service.clear_cache()
@@ -232,11 +269,10 @@ def activate(
     model_id: int,
     db: DbSession,
     principal: Annotated[Principal, Depends(require_owner)],
-    payload: Annotated[PromotionRequest | None, Body()] = None,
+    payload: Annotated[UseApproval | None, Body()] = None,
 ) -> MLModel:
-    """Owner only: make a model ACTIVE through the promotion safeguard (#328); the previous active
-    version is archived. Needs ALLOW_MODEL_PROMOTION, a model card naming the file, and the approved
-    file's sha256. Writes an audit_log row."""
+    """Signed-in designated owner only: make a model ACTIVE through the promotion safeguard (#328), using
+    a recorded approval; the previous active version is archived. Needs ALLOW_MODEL_PROMOTION."""
     return _gated(promotion.promote, db, model_id, payload, principal)
 
 
@@ -245,9 +281,9 @@ def rollback(
     model_id: int,
     db: DbSession,
     principal: Annotated[Principal, Depends(require_owner)],
-    payload: Annotated[PromotionRequest | None, Body()] = None,
+    payload: Annotated[UseApproval | None, Body()] = None,
 ) -> MLModel:
-    """Owner only: restore the model the last recorded promotion replaced, through the same gate."""
+    """Signed-in designated owner only: restore the model the last recorded promotion replaced."""
     return _gated(promotion.rollback, db, model_id, payload, principal)
 
 

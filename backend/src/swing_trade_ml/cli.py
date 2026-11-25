@@ -429,6 +429,7 @@ def cmd_train(args: argparse.Namespace) -> int:
                 auto_activate=args.activate,
                 walk_forward_folds=args.walk_forward_folds,
                 calibrate=args.calibrate,
+                invoked_by="cli",
             )
         except ValueError as exc:
             print(f"❌ {exc}")

@@ -245,6 +245,10 @@ export interface DetailedPosition {
   quantity: number
   entry_price: number
   current_price: number
+  /** False for a position nobody has priced yet: `current_price` is then only the entry price standing in.
+   *  Absent from an older server, which means priced. */
+  has_price?: boolean
+  price_status?: 'ok' | 'none'
   invested: number
   current_value: number
   unrealized_pnl: number
@@ -1179,7 +1183,7 @@ export interface BrainDecision {
   what_would_change?: { key: string; text: string }[]
   /** The stock-level verdict public screens show. For the owner `word` is the test portfolio's decision; this is the stock's. */
   stock_verdict?: string
-  /** Owner only: true when `stock_verdict` is TRADE although `word` is WATCH because only the account's room held it back. */
+  /** Owner only: true when only the account's room held the idea back (`word` stays the canonical decision; screens explain the room separately). */
   stock_verdict_restored?: boolean
 }
 

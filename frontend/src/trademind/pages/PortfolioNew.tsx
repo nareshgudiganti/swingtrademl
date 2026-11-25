@@ -268,7 +268,11 @@ function HeldTable({
                 {positionsLoaded && (
                   <span className="tmn-w2-hcard-money">
                     <span className={`tmn-w2-hcard-pct ${p ? (p.unrealized_pnl >= 0 ? 'tm-pos' : 'tm-neg') : ''}`}>
-                      {p ? `${p.unrealized_pnl_pct >= 0 ? '+' : '−'}${Math.abs(p.unrealized_pnl_pct * 100).toFixed(1)}%` : '—'}
+                      {p
+                        ? p.has_price === false
+                          ? 'No price yet'
+                          : `${p.unrealized_pnl_pct >= 0 ? '+' : '−'}${Math.abs(p.unrealized_pnl_pct * 100).toFixed(1)}%`
+                        : '—'}
                     </span>
                     <span className="tmn-small tm-dim">
                       {p ? `${p.unrealized_pnl >= 0 ? '+' : '−'}₹${inr(Math.abs(p.unrealized_pnl), 0)} · ${p.quantity} × ₹${inr(p.current_price)}` : ''}

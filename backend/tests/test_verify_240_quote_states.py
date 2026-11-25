@@ -182,10 +182,6 @@ def test_c2_a_never_priced_position_is_shown_at_its_entry_price_as_a_flat_zero_p
     )
 
 
-@pytest.mark.xfail(
-    **GAP,
-    reason="gap c3: a position row carries no price timestamp or status, so a screen cannot say how old its price is",
-)
 def test_c3_a_position_row_says_how_old_its_price_is_or_that_it_has_none(client, db_session):
     _real_book_position(db_session, current_price=None)
     row = next(r for r in _rows(client) if r["symbol"] == "V240POS")

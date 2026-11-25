@@ -1,0 +1,310 @@
+{
+  "schema": "trademind.feature-status/v1",
+  "feature": {
+    "issue": 218,
+    "title": "Feature 1: Model creation",
+    "state": "in_progress",
+    "url": "https://github.com/nareshgudiganti/swingtrademl/issues/218"
+  },
+  "updated_at": "2026-11-25T10:17:14+05:30",
+  "source": "GitHub project 2 board snapshot plus lead review",
+  "summary": {
+    "total": 25,
+    "done": 2,
+    "awaiting_owner": 7,
+    "in_progress": 2,
+    "blocked": 10,
+    "not_started": 3,
+    "superseded": 1
+  },
+  "owner_decisions": [
+    {
+      "id": "D1",
+      "question": "Pause #220-#222 after the negative #219 result, test a different trade rule, or continue?",
+      "recommended": "Pause (option A)"
+    },
+    {
+      "id": "D2",
+      "question": "Change how model 2's score is shown, given no out-of-sample edge?",
+      "recommended": "Decide at R3"
+    },
+    {
+      "id": "D3",
+      "question": "Accept #280 recommendations (keep models 2/16/17 unchanged as benchmarks)?",
+      "recommended": "Yes"
+    },
+    {
+      "id": "D4",
+      "question": "Approve the score_ledger provenance migration?",
+      "recommended": "Yes"
+    },
+    {
+      "id": "D5",
+      "question": "Sign #279 sections 11.4 and 11.5?",
+      "recommended": "Before #321 trial build"
+    },
+    {
+      "id": "D6",
+      "question": "After h05: limit models 16/17 to their training stocks?",
+      "recommended": "Later"
+    }
+  ],
+  "open_pull_requests": [
+    502,
+    503,
+    504,
+    505
+  ],
+  "stories": [
+    {
+      "issue": 219,
+      "title": "Task: Horizon 5 days model — Large cap",
+      "board_status": "Review",
+      "state": "awaiting_owner",
+      "blocked_by": "Owner closes after reviewing the negative result",
+      "pull_request": "PR #505 (draft) needs independent review",
+      "evidence": "docs/model-audit/2026-11-25-219-results.md",
+      "url": "https://github.com/nareshgudiganti/swingtrademl/issues/219"
+    },
+    {
+      "issue": 220,
+      "title": "Task: Compare one 5-day model with models per scan pattern",
+      "board_status": "Ready",
+      "state": "blocked",
+      "blocked_by": "Owner decision D1: pause or continue after the #219 result",
+      "pull_request": null,
+      "evidence": null,
+      "url": "https://github.com/nareshgudiganti/swingtrademl/issues/220"
+    },
+    {
+      "issue": 221,
+      "title": "5D model validation — Mid cap",
+      "board_status": "Ready",
+      "state": "blocked",
+      "blocked_by": "Owner decision D1: pause or continue after the #219 result",
+      "pull_request": null,
+      "evidence": null,
+      "url": "https://github.com/nareshgudiganti/swingtrademl/issues/221"
+    },
+    {
+      "issue": 222,
+      "title": "5D model validation — Small cap",
+      "board_status": "Ready",
+      "state": "blocked",
+      "blocked_by": "Owner decision D1: pause or continue after the #219 result",
+      "pull_request": null,
+      "evidence": null,
+      "url": "https://github.com/nareshgudiganti/swingtrademl/issues/222"
+    },
+    {
+      "issue": 223,
+      "title": "10D model research — Large cap",
+      "board_status": "Backlog",
+      "state": "not_started",
+      "blocked_by": "Future 10D research, research-only through R5",
+      "pull_request": null,
+      "evidence": null,
+      "url": "https://github.com/nareshgudiganti/swingtrademl/issues/223"
+    },
+    {
+      "issue": 224,
+      "title": "15D model lab — Large cap",
+      "board_status": "Backlog",
+      "state": "not_started",
+      "blocked_by": "Future 15D lab, not before 5 Dec 2026",
+      "pull_request": null,
+      "evidence": null,
+      "url": "https://github.com/nareshgudiganti/swingtrademl/issues/224"
+    },
+    {
+      "issue": 225,
+      "title": "15D model lab — Mid cap",
+      "board_status": "Backlog",
+      "state": "not_started",
+      "blocked_by": "Future 15D lab, not before 5 Dec 2026",
+      "pull_request": null,
+      "evidence": null,
+      "url": "https://github.com/nareshgudiganti/swingtrademl/issues/225"
+    },
+    {
+      "issue": 226,
+      "title": "Model 2 score traceability — 37 inputs and KEC example",
+      "board_status": "Review",
+      "state": "awaiting_owner",
+      "blocked_by": "Owner closes; KEC recorded as unavailable",
+      "pull_request": null,
+      "evidence": "docs/model-audit/2026-11-24-score-trace-and-obv-slope.md",
+      "url": "https://github.com/nareshgudiganti/swingtrademl/issues/226"
+    },
+    {
+      "issue": 262,
+      "title": "Historical replay for 5D, 10D and 15D candidates",
+      "board_status": "Backlog",
+      "state": "blocked",
+      "blocked_by": "Waits for a candidate that passes",
+      "pull_request": null,
+      "evidence": null,
+      "url": "https://github.com/nareshgudiganti/swingtrademl/issues/262"
+    },
+    {
+      "issue": 267,
+      "title": "01 · As-built inventory of model artifacts and research history",
+      "board_status": "Done",
+      "state": "done",
+      "blocked_by": null,
+      "pull_request": null,
+      "evidence": "docs/model-audit/2026-11-24-research-candidates-10d-15d.md",
+      "url": "https://github.com/nareshgudiganti/swingtrademl/issues/267"
+    },
+    {
+      "issue": 268,
+      "title": "02 · Define model design and acceptance protocol",
+      "board_status": "Backlog",
+      "state": "superseded",
+      "blocked_by": "Superseded by #279",
+      "pull_request": null,
+      "evidence": null,
+      "url": "https://github.com/nareshgudiganti/swingtrademl/issues/268"
+    },
+    {
+      "issue": 269,
+      "title": "Model 2 · As-built record: design and reproducibility (no changes to the model)",
+      "board_status": "Review",
+      "state": "awaiting_owner",
+      "blocked_by": "Owner closes",
+      "pull_request": null,
+      "evidence": "docs/model-audit/2026-11-24-as-built-models-2-16-17.md",
+      "url": "https://github.com/nareshgudiganti/swingtrademl/issues/269"
+    },
+    {
+      "issue": 270,
+      "title": "Model 16 · As-built record: design and reproducibility (no changes to the model)",
+      "board_status": "Review",
+      "state": "awaiting_owner",
+      "blocked_by": "Owner closes",
+      "pull_request": null,
+      "evidence": "docs/model-audit/2026-11-24-as-built-models-2-16-17.md",
+      "url": "https://github.com/nareshgudiganti/swingtrademl/issues/270"
+    },
+    {
+      "issue": 271,
+      "title": "Model 17 · As-built record: design and reproducibility (no changes to the model)",
+      "board_status": "Review",
+      "state": "awaiting_owner",
+      "blocked_by": "Owner closes",
+      "pull_request": null,
+      "evidence": "docs/model-audit/2026-11-24-as-built-models-2-16-17.md",
+      "url": "https://github.com/nareshgudiganti/swingtrademl/issues/271"
+    },
+    {
+      "issue": 272,
+      "title": "03 · Verify model inputs before implementation",
+      "board_status": "In Progress",
+      "state": "blocked",
+      "blocked_by": "obv_slope fix waits for the h05 trial to end",
+      "pull_request": null,
+      "evidence": "docs/model-audit/2026-11-24-score-trace-and-obv-slope.md",
+      "url": "https://github.com/nareshgudiganti/swingtrademl/issues/272"
+    },
+    {
+      "issue": 273,
+      "title": "04 · Implement and validate approved model candidates",
+      "board_status": "Backlog",
+      "state": "blocked",
+      "blocked_by": "No candidate has passed",
+      "pull_request": null,
+      "evidence": null,
+      "url": "https://github.com/nareshgudiganti/swingtrademl/issues/273"
+    },
+    {
+      "issue": 274,
+      "title": "05 · Validate frozen candidates in forward testing",
+      "board_status": "Backlog",
+      "state": "blocked",
+      "blocked_by": "Waits for the h05 trial to end and a passing candidate",
+      "pull_request": null,
+      "evidence": null,
+      "url": "https://github.com/nareshgudiganti/swingtrademl/issues/274"
+    },
+    {
+      "issue": 279,
+      "title": "Model requirements: purpose, target, inputs, algorithm choice, evaluation, gates",
+      "board_status": "In Progress",
+      "state": "in_progress",
+      "blocked_by": "11.4 and 11.5 unsigned (owner decision D5)",
+      "pull_request": "PR #502 (sign-off record) awaits merge",
+      "evidence": "docs/superpowers/specs/2026-11-14-5d-paper-trial-protocol-v1.SIGNOFF.md",
+      "url": "https://github.com/nareshgudiganti/swingtrademl/issues/279"
+    },
+    {
+      "issue": 280,
+      "title": "Model gap list: requirements versus as-built",
+      "board_status": "Review",
+      "state": "awaiting_owner",
+      "blocked_by": "Owner decision D3 on recommendations",
+      "pull_request": "PR #503 awaits merge",
+      "evidence": "docs/model-audit/2026-11-25-280-requirements-vs-as-built.md",
+      "url": "https://github.com/nareshgudiganti/swingtrademl/issues/280"
+    },
+    {
+      "issue": 325,
+      "title": "Investigate V1/V2 score and label mismatches",
+      "board_status": "Backlog",
+      "state": "blocked",
+      "blocked_by": "Touches frozen brain files; after the h05 trial",
+      "pull_request": null,
+      "evidence": null,
+      "url": "https://github.com/nareshgudiganti/swingtrademl/issues/325"
+    },
+    {
+      "issue": 328,
+      "title": "Design model data feed and training lifecycle",
+      "board_status": "In Progress",
+      "state": "in_progress",
+      "blocked_by": "Slice 1 merged (PR #496); slice 2 not started",
+      "pull_request": "PR #504 (review fixes) awaits merge",
+      "evidence": null,
+      "url": "https://github.com/nareshgudiganti/swingtrademl/issues/328"
+    },
+    {
+      "issue": 329,
+      "title": "Design backtest, accelerated replay and forward validation",
+      "board_status": "Backlog",
+      "state": "blocked",
+      "blocked_by": "Waits for a candidate that passes",
+      "pull_request": null,
+      "evidence": null,
+      "url": "https://github.com/nareshgudiganti/swingtrademl/issues/329"
+    },
+    {
+      "issue": 342,
+      "title": "Bug (Gated, post-h05): h05 protocol text vs code - cost total, matured-day count, random-five pool order",
+      "board_status": "Backlog",
+      "state": "blocked",
+      "blocked_by": "Gated until after the h05 trial",
+      "pull_request": null,
+      "evidence": null,
+      "url": "https://github.com/nareshgudiganti/swingtrademl/issues/342"
+    },
+    {
+      "issue": 377,
+      "title": "Bug: bind score calibration evidence to the original model and protocol",
+      "board_status": "Done",
+      "state": "done",
+      "blocked_by": null,
+      "pull_request": null,
+      "evidence": null,
+      "url": "https://github.com/nareshgudiganti/swingtrademl/issues/377"
+    },
+    {
+      "issue": 415,
+      "title": "Core: versioned research configuration (targets, stops, horizons, score lines)",
+      "board_status": "Review",
+      "state": "awaiting_owner",
+      "blocked_by": "Owner closes; first version merged (#449)",
+      "pull_request": null,
+      "evidence": null,
+      "url": "https://github.com/nareshgudiganti/swingtrademl/issues/415"
+    }
+  ]
+}

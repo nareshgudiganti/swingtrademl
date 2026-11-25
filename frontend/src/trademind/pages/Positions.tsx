@@ -18,6 +18,7 @@ import { Confirm } from '../Confirm'
 import ScoreTrail from '../ScoreTrail'
 import { SCORE_HINT, scoreLabel, withoutScorePercent } from '../scoreText'
 import { halfText, plan } from '../tradingRules'
+import { hasPrice, returnText } from './PositionParts'
 
 const TABS = ['Position Overview', 'Re-evaluation & Exit', 'Notes'] as const
 type TabId = (typeof TABS)[number]
@@ -196,10 +197,10 @@ function PositionsBody() {
           <dt>Entry Price</dt>
           <dd>{pos ? `₹${inr(pos.entry_price)}` : '—'}</dd>
           <dt>Current Price</dt>
-          <dd>{pos ? `₹${inr(pos.current_price)}` : '—'}</dd>
+          <dd>{pos && hasPrice(pos) ? `₹${inr(pos.current_price)}` : pos ? 'No price yet' : '—'}</dd>
           <dt>P&amp;L</dt>
-          <dd className={pos ? toneClass(pos.unrealized_pnl_pct) : undefined}>
-            {pos ? signed(pos.unrealized_pnl_pct * 100) : '—'}
+          <dd className={pos && hasPrice(pos) ? toneClass(pos.unrealized_pnl_pct) : undefined}>
+            {pos ? returnText(pos) : '—'}
           </dd>
           <dt>Quantity</dt>
           <dd>{pos ? pos.quantity : '—'}</dd>
@@ -266,10 +267,10 @@ function PositionsBody() {
         {pos && (
           <>
             <span className="tm-num" style={{ fontSize: '1.1rem', fontWeight: 600 }}>
-              ₹{inr(pos.current_price)}
+              {hasPrice(pos) ? `₹${inr(pos.current_price)}` : 'No price yet'}
             </span>
-            <span className={`tm-num ${toneClass(pos.unrealized_pnl_pct)}`} style={{ fontWeight: 600 }}>
-              {signed(pos.unrealized_pnl_pct * 100)}
+            <span className={`tm-num ${hasPrice(pos) ? toneClass(pos.unrealized_pnl_pct) : 'tm-dim'}`} style={{ fontWeight: 600 }}>
+              {hasPrice(pos) ? signed(pos.unrealized_pnl_pct * 100) : ''}
             </span>
           </>
         )}

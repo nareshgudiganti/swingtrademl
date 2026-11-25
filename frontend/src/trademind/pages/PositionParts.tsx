@@ -7,11 +7,16 @@ import type { DetailedPosition } from '../../api/types'
 import ScoreTrail from '../ScoreTrail'
 import { inr, signed, toneClass } from '../ui'
 import { halfText, plan, stopText, targetText } from '../tradingRules'
-import { barPercent, levelFor, levels, priceAt, type Level } from './positionLevels'
+import { NO_PRICE_LEVEL, barPercent, levelFor, levels, priceAt, type Level } from './positionLevels'
 import '../newlook-w4.css'
 
 export const retPct = (p: DetailedPosition) => p.unrealized_pnl_pct * 100
-export const levelOf = (p: DetailedPosition): Level => levelFor(retPct(p), p.suggestion === 'WATCH')
+/** False only when the server says nobody has priced the position (an older server sends no flag: priced). */
+export const hasPrice = (p: DetailedPosition) => p.has_price !== false
+/** The return as text, or "No price yet": a position nobody has priced is never shown as exactly flat (#486). */
+export const returnText = (p: DetailedPosition) => (hasPrice(p) ? signed(retPct(p)) : 'No price yet')
+export const levelOf = (p: DetailedPosition): Level =>
+  hasPrice(p) ? levelFor(retPct(p), p.suggestion === 'WATCH') : NO_PRICE_LEVEL
 
 const rupee = (n: number, d = 2) => `${n < 0 ? '−' : ''}₹${inr(Math.abs(n), d)}`
 
@@ -64,7 +69,7 @@ export function ActToday({ rows, onPick }: { rows: DetailedPosition[]; onPick: (
                 <b>
                   {p.symbol} — {l.title}
                 </b>
-                <span className={`op-act-pct ${toneClass(p.unrealized_pnl)}`}>{signed(retPct(p))}</span>
+                <span className={`op-act-pct ${toneClass(p.unrealized_pnl)}`}>{returnText(p)}</span>
                 <span>{l.advice}</span>
               </button>
             )
@@ -112,9 +117,15 @@ export function DetailPanel({
       </div>
       <div className="tm-dim">Current return</div>
       <div className={`op-panel-ret ${toneClass(p.unrealized_pnl)}`}>
-        {signed(retPct(p))} <small>({rupee(p.unrealized_pnl, 0)})</small>
+        {hasPrice(p) ? (
+          <>
+            {signed(retPct(p))} <small>({rupee(p.unrealized_pnl, 0)})</small>
+          </>
+        ) : (
+          returnText(p)
+        )}
       </div>
-      <PositionBar pct={retPct(p)} big />
+      {hasPrice(p) && <PositionBar pct={retPct(p)} big />}
       <div className="op-levels">
         <dl>
           <dt>Entry price</dt>

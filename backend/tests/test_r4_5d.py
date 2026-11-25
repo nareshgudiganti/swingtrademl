@@ -309,8 +309,8 @@ def test_run_end_to_end_on_synthetic_data_is_reproducible(tmp_path, monkeypatch)
     bundle = {"estimator": est, "scaler": sc, "feature_names": m2_names}
     monkeypatch.setattr(run, "_load_model2", lambda path: bundle)
 
-    a = run.run(inp, tmp_path / "a", tmp_path / "m2.joblib")
-    b = run.run(inp, tmp_path / "b", tmp_path / "m2.joblib")
+    a = run.run(inp, tmp_path / "a", tmp_path / "m2.joblib", prereg=run.fingerprints(inp))
+    b = run.run(inp, tmp_path / "b", tmp_path / "m2.joblib", prereg=run.fingerprints(inp))
     assert a["metrics_sha256"] == b["metrics_sha256"]
     w = a["windows"]["W_FULL"]
     assert len(w["runs"]) >= 3
@@ -325,3 +325,103 @@ def test_run_end_to_end_on_synthetic_data_is_reproducible(tmp_path, monkeypatch)
     for c in cards:
         start = date.fromisoformat(a["windows"][c["candidate"]["window"]]["runs"][c["candidate"]["run"]][0])
         assert pd.Timestamp(c["data_window"]["train_end"]).date() < start
+
+
+# ------------------------------------------------------------------ post-review (PR #505) checks
+
+
+def _tiny_inputs():
+    from swing_trade_ml.brain.lanes import r4_5d_run as run
+
+    n = 30
+    idx = _candles(9.9, n)
+    return run.Inputs(
+        sessions=sorted({run._day(t) for t in idx["ts"]}),
+        candles={"S00": _candles(0.0, n)},
+        index_df=idx,
+        vix_df=idx[["ts", "close"]],
+        breadth_df=pd.DataFrame(
+            {"ts": idx["ts"], "breadth_pct_above_sma50": 0.5, "breadth_advance_pct": 0.5}
+        ),
+        sector_of={"S00": "SEC"},
+        sector_dfs={"SEC": _candles(2.2, n)},
+    )
+
+
+def test_run_itself_refuses_a_mismatched_preregistration_before_any_work(tmp_path, monkeypatch):
+    from swing_trade_ml.brain.lanes import r4_5d_run as run
+
+    inp = _tiny_inputs()
+    monkeypatch.setattr(run, "build_panel", lambda i: pytest.fail("work started despite a mismatch"))
+    pre = {**run.fingerprints(inp), "data_snapshot_sha256": "0" * 64}
+    with pytest.raises(run.PreregMismatchError, match="data_snapshot_sha256"):
+        run.run(inp, tmp_path / "out", tmp_path / "m2.joblib", prereg=pre)
+    assert not (tmp_path / "out").exists()
+
+
+def test_cli_exits_3_on_mismatch(tmp_path, monkeypatch, capsys):
+    import contextlib
+    import json
+
+    from swing_trade_ml.brain.lanes import r4_5d_run as run
+
+    inp = _tiny_inputs()
+    monkeypatch.setenv("R219_DATABASE_URL", "unused")
+    monkeypatch.setattr(run, "readonly_session", lambda url: contextlib.nullcontext())
+    monkeypatch.setattr(run, "load_inputs", lambda db: inp)
+    pre = tmp_path / "pre.json"
+    pre.write_text(json.dumps({**run.fingerprints(inp), "code_sha256": {}}), encoding="utf-8")
+    code = run.main(["run", "--out", str(tmp_path / "o"), "--prereg", str(pre), "--model2", "x"])
+    assert code == 3
+    assert "refusing to run" in capsys.readouterr().err
+    assert not (tmp_path / "o").exists()
+
+
+def test_code_fingerprint_v2_covers_reused_modules_and_leaves_v1_alone():
+    from swing_trade_ml.brain.lanes import r4_5d_run as run
+
+    v1 = run.code_sha256()
+    assert set(v1) == {"brain/lanes/r4_5d.py", "brain/lanes/r4_5d_run.py"}
+    v2 = run.code_fingerprint_v2()
+    assert v2 == run.code_fingerprint_v2() and v2["version"] == 2
+    for rel in (
+        "brain/lanes/h05_rules.py",
+        "brain/lanes/h05_verdict.py",
+        "ml/model_card.py",
+        "ml/features.py",
+    ):
+        assert rel in v2["files"]
+    assert {k: v2["files"][k] for k in v1} == v1
+    assert len(v2["combined_sha256"]) == 64
+
+
+def test_combine_runs_reads_min_runs_passing_and_matches_the_hard_coded_rule():
+    import itertools
+
+    from swing_trade_ml.brain.lanes import h05_protocol as proto
+    from swing_trade_ml.brain.lanes import h05_verdict as verdict
+
+    assert proto.RUN_VALUES["combined_three_run_rule"]["min_runs_passing"] == 2
+
+    def reference(words, pooled):  # the rule as first written, with a literal 2
+        passing, failing = sum(w == "PASS" for w in words), sum(w == "FAIL" for w in words)
+        word = verdict._word(verdict._range(pooled))
+        if word == "FAIL" or failing >= 2:
+            return "FAIL"
+        return "PASS" if passing >= 2 and failing == 0 and word == "PASS" else "INCONCLUSIVE"
+
+    pos = [0.01, 0.012, 0.009, 0.011, 0.013] * 12
+    series = (pos, [-v for v in pos], [0.01, -0.01] * 30)
+    for n in (3, 4):
+        for words in itertools.product(("PASS", "FAIL", "INCONCLUSIVE"), repeat=n):
+            for pooled in series:
+                assert r4.combine_runs(words, pooled)["verdict"] == reference(words, pooled)
+
+
+def test_stress_series_skips_a_day_whose_stress_trades_are_all_unresolved():
+    s = _sessions(15)
+    d = s[0]
+    pool = [f"S{i:02d}" for i in range(12)]
+    out = {(d, sym): r4.Outcome(0.01, None, 1, ()) for sym in pool}
+    res = r4.evaluate_run([d], s, {d: pool}, {d: pool[:5]}, out)
+    assert res["matured_days"] == 1 and res["picks_net_stress"] == []

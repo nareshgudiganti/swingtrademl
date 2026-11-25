@@ -35,11 +35,52 @@ CODE_FILES = ("brain/lanes/r4_5d.py", "brain/lanes/r4_5d_run.py")
 PACKAGE = Path(__file__).resolve().parents[2]
 
 
+# v2 (post-review 2026-11-25, for FUTURE runs only): the two r4 files plus every reused module that can change a
+# figure. The #219 run was pre-registered with v1 (`code_sha256`, the two r4 files only); v1 is left unchanged.
+CODE_FILES_V2 = (
+    *CODE_FILES,
+    "brain/lanes/h05_rules.py",
+    "brain/lanes/h05_verdict.py",
+    "brain/lanes/h05_protocol.py",
+    "core/research_config.py",
+    "ml/model_card.py",
+    "ml/features.py",
+    "ml/market_context.py",
+    "ml/sector_map.py",
+    "ml/dataset.py",
+)
+PREREG_KEYS = (
+    "feature_set",
+    "config_sha256",
+    "data_snapshot_sha256",
+    "code_sha256",
+    "universe_sha256",
+    "rule_sha256",
+)
+
+
+def _file_sha256(rel: str) -> str:
+    return hashlib.sha256((PACKAGE / rel).read_bytes().replace(b"\r\n", b"\n")).hexdigest()
+
+
 def code_sha256() -> dict[str, str]:
-    return {
-        rel: hashlib.sha256((PACKAGE / rel).read_bytes().replace(b"\r\n", b"\n")).hexdigest()
-        for rel in CODE_FILES
-    }
+    """v1 code fingerprint (as pre-registered for #219): the two r4 files only."""
+    return {rel: _file_sha256(rel) for rel in CODE_FILES}
+
+
+def code_fingerprint_v2() -> dict[str, Any]:
+    """v2 code fingerprint for future runs: per-file sha256 of CODE_FILES_V2 and one combined hash."""
+    files = {rel: _file_sha256(rel) for rel in CODE_FILES_V2}
+    combined = hashlib.sha256(json.dumps(files, sort_keys=True).encode()).hexdigest()
+    return {"version": 2, "files": files, "combined_sha256": combined}
+
+
+class PreregMismatchError(RuntimeError):
+    """The current fingerprints differ from the pre-registration: nothing may be trained."""
+
+
+def prereg_mismatch(pre: dict[str, Any], now: dict[str, Any]) -> list[str]:
+    return [k for k in PREREG_KEYS if pre.get(k) != now.get(k)]
 
 
 # ------------------------------------------------------------------ loading (read-only)
@@ -338,12 +379,15 @@ def _load_model2(path: Path) -> dict:
     return joblib.load(path)
 
 
-def run(inp: Inputs, out_dir: Path, model2_path: Path) -> dict[str, Any]:
+def run(inp: Inputs, out_dir: Path, model2_path: Path, *, prereg: dict[str, Any]) -> dict[str, Any]:
     import joblib
 
     from swing_trade_ml.ml import model_card
 
     fps = fingerprints(inp)
+    diff = prereg_mismatch(prereg, fps)
+    if diff:  # checked here too, so no caller can train without a matching pre-registration
+        raise PreregMismatchError(f"fingerprints differ from the pre-registration: {diff}")
     sessions = inp.sessions
     panel = build_panel(inp)
     bundle = _load_model2(model2_path)
@@ -467,20 +511,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(json.dumps(fingerprints(inp), indent=2, sort_keys=True))
         return 0
     pre = json.loads(args.prereg.read_text(encoding="utf-8"))
-    now = fingerprints(inp)
-    keys = (
-        "feature_set",
-        "config_sha256",
-        "data_snapshot_sha256",
-        "code_sha256",
-        "universe_sha256",
-        "rule_sha256",
-    )
-    diff = [k for k in keys if pre.get(k) != now.get(k)]
-    if diff:
-        print(f"refusing to run: fingerprints differ from the pre-registration: {diff}", file=sys.stderr)
+    try:
+        result = run(inp, args.out, args.model2, prereg=pre)
+    except PreregMismatchError as exc:
+        print(f"refusing to run: {exc}", file=sys.stderr)
         return 3
-    result = run(inp, args.out, args.model2)
     args.out.mkdir(parents=True, exist_ok=True)
     (args.out / "results.json").write_text(
         json.dumps(result, indent=2, sort_keys=True, default=str), encoding="utf-8"

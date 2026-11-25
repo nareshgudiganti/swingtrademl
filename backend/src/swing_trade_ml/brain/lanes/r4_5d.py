@@ -317,9 +317,13 @@ def evaluate_run(
         out["picks_net"].append(p_mean)
         out["pool_net"].append(b_mean)
         out["trade_edge"].append(p_mean - b_mean)
-        out["picks_net_stress"].append(
-            fmean(outcomes[(d, s)].net_stress for s in mine if outcomes[(d, s)].net is not None)
-        )
+        stress = [
+            outcomes[(d, s)].net_stress
+            for s in mine
+            if outcomes[(d, s)].net is not None and outcomes[(d, s)].net_stress is not None
+        ]
+        if stress:  # reported only; a day with no finished stress trade adds no stress value
+            out["picks_net_stress"].append(fmean(stress))
         random_pools.append([o.net for o in b_rows])
         p_lab = [outcomes[(d, s)].label for s in mine if outcomes[(d, s)].label is not None]
         b_lab = [outcomes[(d, s)].label for s in pool if outcomes[(d, s)].label is not None]
@@ -365,7 +369,11 @@ def combine_runs(words: Sequence[str], pooled: Sequence[float]) -> dict[str, Any
     word = V._word(rng)
     if word == V.FAIL or failing >= 2:
         verdict = V.FAIL
-    elif passing >= 2 and failing == 0 and word == V.PASS:
+    elif (
+        passing >= P.RUN_VALUES["combined_three_run_rule"]["min_runs_passing"]
+        and failing == 0
+        and word == V.PASS
+    ):
         verdict = V.PASS
     else:
         verdict = V.INCONCLUSIVE

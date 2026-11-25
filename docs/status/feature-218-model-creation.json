@@ -6,54 +6,21 @@
     "state": "in_progress",
     "url": "https://github.com/nareshgudiganti/swingtrademl/issues/218"
   },
-  "updated_at": "2026-11-25T10:17:14+05:30",
+  "updated_at": "2026-11-25T22:35:20+05:30",
   "source": "GitHub project 2 board snapshot plus lead review",
   "summary": {
     "total": 25,
     "done": 2,
-    "awaiting_owner": 7,
-    "in_progress": 2,
+    "awaiting_owner": 8,
+    "in_progress": 1,
     "blocked": 10,
     "not_started": 3,
     "superseded": 1
   },
-  "owner_decisions": [
-    {
-      "id": "D1",
-      "question": "Pause #220-#222 after the negative #219 result, test a different trade rule, or continue?",
-      "recommended": "Pause (option A)"
-    },
-    {
-      "id": "D2",
-      "question": "Change how model 2's score is shown, given no out-of-sample edge?",
-      "recommended": "Decide at R3"
-    },
-    {
-      "id": "D3",
-      "question": "Accept #280 recommendations (keep models 2/16/17 unchanged as benchmarks)?",
-      "recommended": "Yes"
-    },
-    {
-      "id": "D4",
-      "question": "Approve the score_ledger provenance migration?",
-      "recommended": "Yes"
-    },
-    {
-      "id": "D5",
-      "question": "Sign #279 sections 11.4 and 11.5?",
-      "recommended": "Before #321 trial build"
-    },
-    {
-      "id": "D6",
-      "question": "After h05: limit models 16/17 to their training stocks?",
-      "recommended": "Later"
-    }
-  ],
+  "owner_decisions": [],
   "open_pull_requests": [
-    502,
-    503,
-    504,
-    505
+    513,
+    514
   ],
   "stories": [
     {
@@ -61,17 +28,17 @@
       "title": "Task: Horizon 5 days model — Large cap",
       "board_status": "Review",
       "state": "awaiting_owner",
-      "blocked_by": "Owner closes after reviewing the negative result",
-      "pull_request": "PR #505 (draft) needs independent review",
+      "blocked_by": "Owner closes; negative result, PR #505 merged",
+      "pull_request": null,
       "evidence": "docs/model-audit/2026-11-25-219-results.md",
       "url": "https://github.com/nareshgudiganti/swingtrademl/issues/219"
     },
     {
       "issue": 220,
       "title": "Task: Compare one 5-day model with models per scan pattern",
-      "board_status": "Ready",
+      "board_status": "Backlog",
       "state": "blocked",
-      "blocked_by": "Owner decision D1: pause or continue after the #219 result",
+      "blocked_by": "Paused by owner 25 Nov 2026 after the #219 result",
       "pull_request": null,
       "evidence": null,
       "url": "https://github.com/nareshgudiganti/swingtrademl/issues/220"
@@ -79,9 +46,9 @@
     {
       "issue": 221,
       "title": "5D model validation — Mid cap",
-      "board_status": "Ready",
+      "board_status": "Backlog",
       "state": "blocked",
-      "blocked_by": "Owner decision D1: pause or continue after the #219 result",
+      "blocked_by": "Paused by owner 25 Nov 2026 after the #219 result",
       "pull_request": null,
       "evidence": null,
       "url": "https://github.com/nareshgudiganti/swingtrademl/issues/221"
@@ -89,9 +56,9 @@
     {
       "issue": 222,
       "title": "5D model validation — Small cap",
-      "board_status": "Ready",
+      "board_status": "Backlog",
       "state": "blocked",
-      "blocked_by": "Owner decision D1: pause or continue after the #219 result",
+      "blocked_by": "Paused by owner 25 Nov 2026 after the #219 result",
       "pull_request": null,
       "evidence": null,
       "url": "https://github.com/nareshgudiganti/swingtrademl/issues/222"
@@ -230,9 +197,9 @@
       "issue": 279,
       "title": "Model requirements: purpose, target, inputs, algorithm choice, evaluation, gates",
       "board_status": "In Progress",
-      "state": "in_progress",
-      "blocked_by": "11.4 and 11.5 unsigned (owner decision D5)",
-      "pull_request": "PR #502 (sign-off record) awaits merge",
+      "state": "awaiting_owner",
+      "blocked_by": "Owner closes; minimum set signed (PR #502 merged); 11.4/11.5 substance owner-ruled 14-16 Nov",
+      "pull_request": null,
       "evidence": "docs/superpowers/specs/2026-11-14-5d-paper-trial-protocol-v1.SIGNOFF.md",
       "url": "https://github.com/nareshgudiganti/swingtrademl/issues/279"
     },
@@ -241,8 +208,8 @@
       "title": "Model gap list: requirements versus as-built",
       "board_status": "Review",
       "state": "awaiting_owner",
-      "blocked_by": "Owner decision D3 on recommendations",
-      "pull_request": "PR #503 awaits merge",
+      "blocked_by": "Owner closes; recommendations = keep (PR #503 merged)",
+      "pull_request": null,
       "evidence": "docs/model-audit/2026-11-25-280-requirements-vs-as-built.md",
       "url": "https://github.com/nareshgudiganti/swingtrademl/issues/280"
     },
@@ -261,8 +228,8 @@
       "title": "Design model data feed and training lifecycle",
       "board_status": "In Progress",
       "state": "in_progress",
-      "blocked_by": "Slice 1 merged (PR #496); slice 2 not started",
-      "pull_request": "PR #504 (review fixes) awaits merge",
+      "blocked_by": "Slice 1 + fixes merged (#496, #504); slices 2/2b in review; promote() next",
+      "pull_request": "PR #513, PR #514 (drafts, independent review running)",
       "evidence": null,
       "url": "https://github.com/nareshgudiganti/swingtrademl/issues/328"
     },

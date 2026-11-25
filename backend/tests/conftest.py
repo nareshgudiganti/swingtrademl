@@ -104,3 +104,17 @@ def _billing_on_for_route_audits(request, monkeypatch):
         monkeypatch.setattr(settings, "BILLING_ENABLED", True)
         monkeypatch.setattr(settings, "ACCOUNT_DELETION_ENABLED", True)
         monkeypatch.setattr(settings, "BILLING_ACCEPT_NEW_CHECKOUTS", True)  # checkout is audited too
+
+
+@pytest.fixture(autouse=True)
+def _telegram_retries_stay_inside_tests(request, monkeypatch, tmp_path):
+    """A failed urgent Telegram alert schedules background retries and writes a small failure record
+    (#358). Tests must never start a real retry thread or write into the real model folder, so both
+    are redirected here. tests/test_telegram_retry.py sets up its own."""
+    if request.module.__name__ == "test_telegram_retry":
+        return
+    from swing_trade_ml.core.config import settings
+    from swing_trade_ml.notifications import telegram
+
+    monkeypatch.setattr(telegram, "_spawn", lambda make: None)
+    monkeypatch.setattr(settings, "MODEL_ARTIFACT_DIR", str(tmp_path / "models"))

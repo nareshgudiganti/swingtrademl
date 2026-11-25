@@ -24,11 +24,6 @@ RUN pip install --upgrade pip setuptools wheel \
 
 FROM python:3.12-slim AS runtime
 
-# The commit this image was built from. Passed by compose from release.sh; read by ml/model_card.py so a
-# model card records its code version (Docker images have no .git). Empty when built by hand.
-ARG GIT_SHA=
-ENV GIT_SHA=$GIT_SHA
-
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1
@@ -56,6 +51,12 @@ COPY src ./src
 # survive as mounted volumes; each directory has to exist and be writable by
 # appuser first, or a fresh named volume mounts there owned by root.
 RUN mkdir -p /app/data/models /app/data/model_backups && chown -R appuser:appuser /app
+
+# Declared last among the layers so a new commit sha does not invalidate the apt-get and pip layers above.
+# The commit this image was built from. Passed by compose from release.sh; read by ml/model_card.py so a
+# model card records its code version (Docker images have no .git). Empty when built by hand.
+ARG GIT_SHA=
+ENV GIT_SHA=$GIT_SHA
 
 USER appuser
 

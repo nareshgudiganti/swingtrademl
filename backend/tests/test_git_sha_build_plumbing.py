@@ -21,6 +21,9 @@ def test_dockerfile_bakes_the_arg_into_the_runtime_environment():
     docker = _text("backend/Dockerfile")
     runtime = docker.split("AS runtime", 1)[1]
     assert "ARG GIT_SHA=" in runtime and "ENV GIT_SHA=$GIT_SHA" in runtime
+    # after every cached layer (apt-get, pip), just before the user switch, so a new sha rebuilds nothing heavy
+    assert runtime.index("apt-get install") < runtime.index("ARG GIT_SHA=") < runtime.index("USER appuser")
+    assert runtime.index("COPY src ./src") < runtime.index("ARG GIT_SHA=")
 
 
 def test_compose_passes_the_sha_to_both_images():

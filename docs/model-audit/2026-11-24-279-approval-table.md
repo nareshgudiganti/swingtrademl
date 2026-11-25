@@ -49,7 +49,7 @@ None changes how a reference outcome is calculated. Recommended: accept all six.
 | 1 | Purpose | Ranking signal for the top 5 large-cap 5D ideas; not an order, not a probability | **SIGN** |
 | 2 | Target | As H-2 / H-2b | covered by H-2 |
 | 3 | Universe | Fixed 52-stock list; all historical results labelled "selection-biased exploratory evidence"; point-in-time membership required before any promotion claim | **SIGN** |
-| 4 | Inputs | One versioned formula for training and serving; a differing serving formula = a new model version. **Open (R0):** candle-to-stored-feature rebuild matched 13 of 200; addendum pending | **SIGN** after the 13/200 addendum |
+| 4 | Inputs | One versioned formula for training and serving; a differing serving formula = a new model version. R0 addendum (all 637 rows explained) adds two rules for **new** trial code: score only completed bars, and save each prediction's inputs write-once (`2026-11-24-prediction-provenance-proposal.md`). h05 is unchanged | **SIGN** |
 | 5 | Algorithm | No preference; winner chosen out-of-sample after costs on a pre-fingerprinted config; shared model before per-pattern | DELEGATED |
 | 6 | Baselines | Every eligible stock, momentum five, random five, NIFTY 50; incumbent model 2 as served | DELEGATED |
 | 7 | Evaluation | As H-7, H-11, H-11b; costs about 44 bps plus a stress case (reported only) | covered by H rows |
@@ -70,8 +70,23 @@ None changes how a reference outcome is calculated. Recommended: accept all six.
 - The new trial writes only to its own storage. A CI test proves a SELECT-only role can read approved h05 data and cannot INSERT/UPDATE/DELETE/TRUNCATE h05 tables.
 - A corrected `obv_slope` is a separate candidate version, never a silent fix to model 2.
 
+## E. Evidence for each SIGN row
+
+| Row | Evidence (this folder unless stated) | What it shows |
+|---|---|---|
+| H-1 | spec header (rev 4, sha256 `c5cfbaf1…934f`); decision brief §3 | The spec is separate from h05 and changes no h05 code, data or text |
+| H-2 | `h05_rules.py:107-174`; `core/research_config.py` `hz-rules-v1` (#449) | The exit rule is the code h05 already runs, pinned by a fingerprint test |
+| H-2b | as-built audit, model 2 "Label" row (`abc9c0b` `ml/features.py:212-226`) | Model 2 was trained on exactly this target: +2% at the session-5 close, no stop |
+| H-7, H-11, H-11b | `h05_verdict.py:44-110`, `h05_rules.py:232-250`; requirements draft "Forward gate" | Same verdict and bootstrap code as h05. Overlapping holds and non-independence are stated |
+| 11.4, 11.5 | spec sections 3.1, 5.3, 9 and 11 | Portfolio and display rules only. No reference-outcome rule changes |
+| Section 1 | score trace §1.1 (`services/idea_report.py:222-226`) | The score is round(100 × an uncalibrated probability), so "ranking signal" is the honest label |
+| Section 3 | as-built audit D7; research catalogue | The fixed lists are today's lists, so survivorship is real. Hence the "selection-biased" label |
+| Section 4 | score trace Part 2 and the 637-row addendum; provenance proposal | `obv_slope` train/serve mismatch (42 stocks cross 0.60). 539 rows scored on a non-final bar. Overwritten predictions. PR #496 adds golden formula tests and model cards |
+| Section 14 | decision brief §4; Feature 1 breakdown on #218 | Gates R0-R7 and which issues each gate blocks |
+
 ## Sign-off
 
-SIGN rows: H-1, H-2, H-2b, H-7, H-11, H-11b, 11.4, 11.5, sections 1, 3, 4 (after the addendum) and 14. DELEGATED rows are accepted with them unless edited.
+SIGN rows: H-1, H-2, H-2b, H-7, H-11, H-11b, 11.4, 11.5, sections 1, 3, 4 and 14. DELEGATED rows are accepted with them unless edited.
+Minimum set to unblock R3/R4 only: H-1, H-2, H-2b, H-7, H-11, H-11b, sections 1, 3, 4, 14, plus the R4 research budget. 11.4 and 11.5 can wait until the paper trial is built.
 
 Owner: ____________ Date (IST): ____________ Edits: ____________

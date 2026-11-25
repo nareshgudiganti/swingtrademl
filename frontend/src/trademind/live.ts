@@ -26,12 +26,22 @@ export function finalWord(d: BrainDecision): string {
   return d.overruled_word ?? d.word
 }
 
-/** The word a stock list or page SHOWS: the owner's overrule if any, else the stock-level verdict when only the
- *  account's room held the idea back (so every screen agrees), else the stored word. Stored decisions never change. */
+/** The word a stock list or page SHOWS. Since owner decision G11 (2026-11-25) it is the one canonical stored decision,
+ *  the same as `finalWord`: every screen reads the same word. When only the test portfolio's room held an idea back,
+ *  the word is not swapped: the screens add a separate plain line instead (see `roomNote`). */
 export function shownWord(d: BrainDecision): string {
-  if (d.overruled_word) return d.overruled_word
-  return d.stock_verdict_restored && d.stock_verdict ? d.stock_verdict : d.word
+  return finalWord(d)
 }
+
+/** True when the stock itself passed every check and only the test portfolio's room held the idea back. Owner only
+ *  (the backend sends the flag to the owner alone). Never changes the decision word. */
+export function heldByRoomOnly(d: BrainDecision): boolean {
+  return !!d.stock_verdict_restored && !d.overruled_word
+}
+
+/** The separate plain-English line that explains a room restriction. Shown beside the word, never instead of it. */
+export const ROOM_NOTE = 'Your test portfolio has no room for this idea right now. The stock itself passed every check.'
+
 
 export function useLatestRun(): UseQueryResult<BrainRun> {
   return useQuery({

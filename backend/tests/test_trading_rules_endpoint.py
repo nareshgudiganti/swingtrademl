@@ -184,3 +184,23 @@ def test_sessions_so_far_is_zero_before_the_trial_starts():
 
     before = TRIAL_START - timedelta(days=1)
     assert trading_rules.trading_rules(before)["trial"]["sessions_so_far"] == 0
+
+
+def test_the_served_calendar_has_hard_coded_known_holidays_and_ordinary_days_trade(client):
+    # Independent of NSE_HOLIDAYS: fixed-date national holidays (Republic Day 26 Jan, Gandhi Jayanti 2 Oct,
+    # Ambedkar Jayanti 14 Apr, Christmas 25 Dec) and Good Friday (Easter 2026 = 5 Apr, 2027 = 28 Mar).
+    # The repo's holidays.py says it is compiled from public calendars, not the NSE circular, so only
+    # dates that fall on a weekday and follow from those fixed rules are used here.
+    from swing_trade_ml.core import market_session
+
+    known = ["2026-01-26", "2026-04-03", "2026-10-02", "2026-12-25", "2027-01-26", "2027-03-26", "2027-04-14"]
+    served = client.get(URL, headers={"X-API-Key": "test-api-key"}).json()["calendar"]["holidays"]
+    for d in known:
+        assert d in served, d
+        assert market_session.is_trading_day(date.fromisoformat(d)) is False, d
+    # weekends never trade (Sat 15 Aug 2026, Sun 3 Jan 2027); ordinary Wednesdays do
+    for d in ("2026-08-15", "2027-01-03"):
+        assert market_session.is_trading_day(date.fromisoformat(d)) is False, d
+    for d in ("2026-06-10", "2027-06-09"):
+        assert d not in served
+        assert market_session.is_trading_day(date.fromisoformat(d)) is True, d

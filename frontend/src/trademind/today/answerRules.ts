@@ -3,7 +3,7 @@
 
 import type { BrainDecision, IdeaWord, MarketMode } from '../../api/types'
 import { withoutScorePercent } from '../scoreText'
-import { finalWord } from '../live'
+import { finalWord, ROOM_NOTE } from '../live'
 import { plan, stopText, targetText } from '../tradingRules'
 import { whyNotTrade } from '../whyNotTrade'
 
@@ -34,7 +34,7 @@ export function stoppedByRoom(ideas: BrainDecision[]): number {
 /** The one short reason shown on an idea row: the first stored reason in plain words, never a raw score. */
 export function oneReason(d: BrainDecision): string {
   // Held back only by the account's room: the stock itself passed, and the list says so (no account wording).
-  if (d.stock_verdict_restored && !d.overruled_word) return 'Passed every check about the stock.'
+  if (d.stock_verdict_restored && !d.overruled_word) return ROOM_NOTE
   const word = finalWord(d)
   if (word !== 'TRADE') {
     const why = whyNotTrade(d)[0]

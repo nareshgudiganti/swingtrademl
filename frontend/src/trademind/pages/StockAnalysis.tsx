@@ -12,7 +12,7 @@ import type { StockBriefData } from '../beginner/types'
 import { NO_EVENTS } from '../beginner/UpcomingEvents'
 import { changeHeadline, rankLine } from '../changes'
 import { useSymbolCaps } from '../cap'
-import { stockSituations, useLatestRun } from '../live'
+import { ROOM_NOTE, stockSituations, useLatestRun } from '../live'
 import { barsFrom } from '../live-stock'
 import { scorePoints, SCORE_HINT } from '../scoreText'
 import { BrainGate, Candles, inr } from '../ui'
@@ -130,7 +130,7 @@ function StockAnalysisView({ decision: d, run }: { decision: BrainDecision; run:
         </div>
         {canManage && d.stock_verdict_restored && !d.overruled_word && (
           <span className="sp-small" data-testid="room-note">
-            The stock passed every check. The practice account had no room for it, so it did not buy.
+            {ROOM_NOTE} It did not buy.
           </span>
         )}
         <span className="sp-small">Brain’s run on {formatDateTime(run.started_at)}</span>

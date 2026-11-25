@@ -5,9 +5,9 @@ from __future__ import annotations
 from datetime import UTC, date, datetime
 
 from sqlalchemy import event
-from tests.test_admin_console import enrol, make_user, stepped
 
 from swing_trade_ml.db.models.ml import MLModel
+from test_admin_console import enrol, make_user, stepped
 
 URL = "/api/v1/admin/console/models"
 

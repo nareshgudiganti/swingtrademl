@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { ErrorBox, Loading } from '../components/Loading'
 import type { AdminCall } from './AdminModules'
 
-// Admin only, read only: which 5-day and 15-day models exist, which are approved, when they last ran and whether the
+// Admin only, read only: which 5D and 15D models exist, which are approved, when they last ran and whether the
 // Brain used them. This screen only displays; nothing here can change, activate or train a model.
 
 export type BrainUsage = { state: 'used' | 'shadow_only' | 'unknown'; label: string; last_session: string | null }
@@ -41,7 +41,7 @@ const when = (iso: string | null | undefined) =>
 export function ModelOverviewView({ data }: { data: ModelOverview }) {
   return (
     <div>
-      <h2 style={{ marginTop: 0 }}>Models: 5-day and 15-day</h2>
+      <h2 style={{ marginTop: 0 }}>Models: 5D and 15D</h2>
       <p>This page only shows information. Nothing here can approve, switch or train a model.</p>
       {['5', '15'].map((h) => (
         <section key={h}>

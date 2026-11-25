@@ -115,3 +115,64 @@ def test_git_failure_gives_nulls(monkeypatch, bad):
 
     monkeypatch.setattr(mc.subprocess, "run", boom)
     assert mc.git_state() == {"sha": None, "dirty": None}
+
+
+def test_git_sha_prefers_env_then_git_then_null(monkeypatch):
+    monkeypatch.setenv("GIT_SHA", "abc123def456")
+    assert mc.git_state()["sha"] == "abc123def456"
+    monkeypatch.delenv("GIT_SHA")
+
+    def boom(*a, **k):
+        raise OSError("no git")
+
+    monkeypatch.setattr(mc.subprocess, "run", boom)
+    assert mc.git_state() == {"sha": None, "dirty": None}
+
+
+def test_dirty_flag_ignores_untracked_files(monkeypatch):
+    monkeypatch.delenv("GIT_SHA", raising=False)
+    seen: list[tuple] = []
+
+    class R:
+        stdout = ""
+
+    def fake(cmd, **k):
+        seen.append(tuple(cmd))
+        return R()
+
+    monkeypatch.setattr(mc.subprocess, "run", fake)
+    mc.git_state()
+    assert any("--untracked-files=no" in c for c in seen)
+
+
+def test_card_records_invoked_by_and_actual_estimator_class():
+    data = _pooled(n_dates=40)
+    from sklearn.linear_model import LogisticRegression
+
+    est = LogisticRegression()
+    card = mc.build_card(
+        train_df=data, test_df=data, dataset=data, feature_names=FEATURE_COLUMNS,
+        algorithm="lightgbm", train_args={}, horizon_days=5, target_return=0.02,
+        stop_return=-0.04, label_kind="barrier", invoked_by="cli", estimator=est,
+    )
+    assert card["training"]["invoked_by"] == "cli"
+    assert card["training"]["requested_algorithm"] == "lightgbm"
+    assert card["training"]["estimator_class"] == "sklearn.linear_model._logistic.LogisticRegression"
+    assert "entry_point" in card["training"] and "command" not in card["training"]
+
+
+def test_train_model_threads_invoked_by(monkeypatch, tmp_path):
+    dataset = _pooled(n_dates=80)
+
+    class S:
+        def add(self, o): pass
+        def commit(self): pass
+        def refresh(self, o): pass
+
+    monkeypatch.setattr(train_module, "build_training_dataset", lambda db, **kw: dataset)
+    monkeypatch.setattr(train_module, "next_version", lambda db, name: "v1")
+    monkeypatch.setattr(train_module, "save_artifact", lambda n, v, b: _save(tmp_path, n, v, b))
+    rec = train_module.train_model(S(), algorithm="logistic_regression", horizon_days=4, invoked_by="api")
+    assert rec.metrics["card"]["training"]["invoked_by"] == "api"
+    assert "LogisticRegression" in rec.metrics["card"]["training"]["estimator_class"]
+    assert train_module.train_model.__defaults__ is not None

@@ -340,14 +340,10 @@ def test_f1_a_refused_direct_send_returns_false_and_leaves_only_a_log_line(notif
     assert calls == ["x"]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="GAP (#251): a direct alert that Telegram refuses (429 or 5xx) is tried once and then only logged: no retry, no record "
-    "the owner can see (telegram.py:85-107). Held alerts are retried (flush); direct ones are not. See also #250 e2/e3.",
-)
 def test_gap_a_refused_direct_send_is_retried_or_recorded(monkeypatch):
+    """Closed by #358: a refused urgent alert is recorded and two retries are scheduled (30 s, 2 min)."""
     calls: list[int] = []
+    scheduled: list = []
 
     class FakeClient:
         def __init__(self, *a, **k) -> None: ...
@@ -361,21 +357,22 @@ def test_gap_a_refused_direct_send_is_retried_or_recorded(monkeypatch):
             calls.append(429)
             return httpx.Response(429, text="slow down")
 
+    async def no_wait(_seconds):
+        return None
+
     monkeypatch.setattr(telegram_module.httpx, "AsyncClient", FakeClient)
+    monkeypatch.setattr(telegram_module, "_spawn", scheduled.append)
+    monkeypatch.setattr(telegram_module, "_sleep", no_wait)
     monkeypatch.setattr(TelegramNotifier, "enabled", property(lambda self: True))
     n = TelegramNotifier()
     n._token, n._chat_id = "000000:PLACEHOLDER", "0"
     assert asyncio.run(n.send("real-money order refused", "error")) is False
-    outbox = len(calls)
-    assert outbox >= 2, "the refused message was neither retried nor stored for a later try"
+    assert len(scheduled) == 1, "the refused message was not scheduled for a retry"
+    asyncio.run(scheduled[0]())
+    assert len(calls) == 3  # first attempt plus the two retries
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="GAP (#251): TELEGRAM_NOTIFY_ON (a server setting) filters by event before any safety rule: leaving 'signal' out silently "
-    "drops stop-loss alerts (they use the 'signal' event). Not a user preference, but the 'can't be muted' promise does not cover it.",
-)
+# Fixed by #482: this was a strict expected failure (GAP #251) and now passes.
 def test_gap_a_stop_loss_alert_is_sent_whatever_the_event_filter_says(monkeypatch):
     n = TelegramNotifier()
     n.recorder = Recorder()
@@ -440,7 +437,14 @@ def test_f5_a_muted_message_is_not_a_failed_one_the_notifier_says_so_without_pos
 
 
 @pytest.fixture()
-def failing_email():
+def failing_email(db_session, monkeypatch):
+    from swing_trade_ml.api.v1.endpoints import account_auth
+
+    @contextmanager
+    def same_session():  # the failure record goes into the test's own transaction, never the shared database
+        yield db_session
+
+    monkeypatch.setattr(account_auth, "session_scope", same_session)
     class Failing(LogEmailSender):
         def send(self, to, subject, text, html=None) -> bool:
             self.outbox.append(None)  # type: ignore[arg-type]
@@ -472,12 +476,7 @@ def test_f6_a_failed_email_does_not_change_the_public_answer_and_never_raises(
     assert len(failing_email.outbox) == 1  # one attempt was made
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="GAP (#251): a verification or reset email that could not be sent leaves only a log line (senders.py:50-68, "
-    "account_auth.py:101-103); nothing the owner can see. The person can ask for a resend, the owner is not told.",
-)
+# Fixed by #482: this was a strict expected failure (GAP #251) and now passes.
 def test_gap_a_failed_email_is_recorded_where_the_owner_can_see_it(
     client, failing_email, db_session, monkeypatch
 ):

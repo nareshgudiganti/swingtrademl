@@ -255,6 +255,24 @@ def _jobs_section() -> dict[str, Any]:
     }
 
 
+def _telegram_section() -> dict[str, Any]:
+    """Urgent Telegram alerts that never got through (retries used up, or refused for good)."""
+    from swing_trade_ml.notifications import failure_log
+
+    rows = failure_log.needing_attention()
+    keys = ("event", "state", "status", "reason", "attempts", "first_failed_at", "last_attempt_at")
+    return {"undelivered_alerts": [{k: r.get(k) for k in keys} for r in rows]}
+
+
+def _telegram_attention(section: dict[str, Any]) -> list[str]:
+    lines = []
+    for r in section.get("undelivered_alerts", []):
+        how = "was refused for good" if r.get("state") == "permanent" else "was not delivered after retries"
+        what = f"A Telegram alert ({r.get('event')}) {how}: {r.get('reason')}."
+        lines.append(f"{what} Check the bot token and chat.")
+    return lines
+
+
 def _freshness_section(db: Session, now_ist: datetime) -> dict[str, Any]:
     latest_ts = db.execute(select(func.max(Candle.ts)).where(Candle.interval == "day")).scalar_one_or_none()
     latest = latest_ts.astimezone(IST).date() if latest_ts else None
@@ -312,9 +330,10 @@ def build_digest(db: Session, now: datetime | None = None) -> dict[str, Any]:
     jobs = _safe("scheduler", _jobs_section)
     fresh = _safe("data_freshness", _freshness_section, db, now_ist)
     risk_ = _safe("risk", _risk_section, db)
+    telegram = _safe("telegram", _telegram_section)
 
     attention: list[str] = []
-    for section in (brain, jobs, fresh, risk_):
+    for section in (brain, jobs, fresh, risk_, telegram):
         if "error" in section:
             attention.append(section["error"])
     if brain.get("failed_runs_today"):
@@ -331,6 +350,7 @@ def build_digest(db: Session, now: datetime | None = None) -> dict[str, Any]:
         attention.append("Market data is behind where it should be.")
     if risk_.get("new_entries_halted"):
         attention.append("The drawdown limit is reached: new entries are halted.")
+    attention.extend(_telegram_attention(telegram))
 
     return {
         "generated_at": _iso_ist(now),
@@ -348,4 +368,5 @@ def build_digest(db: Session, now: datetime | None = None) -> dict[str, Any]:
         "scheduler": jobs,
         "data_freshness": fresh,
         "risk": risk_,
+        "telegram": telegram,
     }

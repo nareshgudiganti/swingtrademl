@@ -22,7 +22,9 @@ GOLDEN = json.loads((Path(__file__).parent / "fixtures" / "feature_golden_values
 
 
 def test_golden_file_covers_exactly_the_feature_list():
-    for row in GOLDEN.values():
+    for key, row in GOLDEN.items():
+        if key == "down_regimes":
+            continue
         assert list(row) == FEATURE_COLUMNS
 
 
@@ -64,3 +66,17 @@ def test_two_obv_slope_definitions_differ_on_the_fixture(frame):
     )
     assert float(current.iloc[-1]) == pytest.approx(GOLDEN["row_-1"]["obv_slope"], rel=1e-6)
     assert float(old.iloc[-1]) != pytest.approx(float(current.iloc[-1]), rel=1e-3)
+
+
+def test_regime_features_hit_both_sides_of_their_threshold():
+    """The main fixture is an uptrend (regimes = 1). A falling index/sector must give -1, so a change to
+    the sma50/sma200 sign rule fails here."""
+    up = mc.golden_fixture_frame().iloc[-1]
+    down = mc.golden_fixture_frame(index_slope=-0.25).iloc[-1]
+    assert up["nifty_trend_regime"] == 1.0 and up["sector_trend_regime"] == 1.0
+    assert down["nifty_trend_regime"] == -1.0 and down["sector_trend_regime"] == -1.0
+    for name in ("nifty_trend_regime", "sector_trend_regime"):
+        assert GOLDEN["down_regimes"][name] == down[name]
+    # flat index (zero slope, no wiggle) -> exactly 0
+    flat = mc.golden_fixture_frame(index_slope=0.0, index_wiggle=False).iloc[-1]
+    assert flat["nifty_trend_regime"] == 0.0 and flat["sector_trend_regime"] == 0.0

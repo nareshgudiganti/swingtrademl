@@ -270,15 +270,21 @@ def test_buy_list_does_not_list_a_buy_signal_that_is_weeks_old(client, db_sessio
 # ============================================================================ GET /signals/picks
 
 
-def test_picks_use_a_five_day_window_one_row_per_stock_the_best_confidence_and_the_signals_own_horizon(client, db_session):
+def test_picks_use_a_five_session_window_one_row_per_stock_the_best_confidence_and_the_signals_own_horizon(client, db_session):
     a, b = strat(db_session, "s239_pa"), strat(db_session, "s239_pb")
     fresh, edge, old = inst(db_session, "PK239FRESH"), inst(db_session, "PK239EDGE"), inst(db_session, "PK239OLD")
     signal(db_session, a, fresh, conf=0.72, horizon=5)
     signal(db_session, b, fresh, conf=0.91, horizon=15)  # same stock, more confident, another model
-    signal(db_session, a, edge, conf=0.8, age_days=4.9, horizon=5)
-    signal(db_session, a, old, conf=0.99, age_days=5.2, horizon=5)
+    from swing_trade_ml.api.v1.endpoints.signals import buy_fresh_since
+
+    cutoff = buy_fresh_since(datetime.now(UTC))  # sessions, not calendar days (#227)
+    hour = timedelta(hours=1)
+    for row, when, conf in ((edge, cutoff + hour, 0.8), (old, cutoff - hour, 0.99)):
+        sig = signal(db_session, a, row, conf=conf, horizon=5)
+        sig.generated_at = when
+    db_session.flush()
     rows = {r["symbol"]: r for r in get(client, "/signals/picks") if r["symbol"].startswith("PK239")}
-    assert set(rows) == {"PK239FRESH", "PK239EDGE"}  # the 5.2-day-old one is outside the window
+    assert set(rows) == {"PK239FRESH", "PK239EDGE"}  # the one before the cutoff is outside the session window
     assert rows["PK239FRESH"]["confidence"] == 0.91 and rows["PK239FRESH"]["strategy_name"] == "s239_pb"
     assert rows["PK239FRESH"]["horizon_days"] == 15 and rows["PK239EDGE"]["horizon_days"] == 5  # each pick says its own horizon
 

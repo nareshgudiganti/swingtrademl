@@ -128,10 +128,6 @@ def latest_actionable(
     ]
 
 
-# A BUY older than this is not a pick for today. Scans run every weekday,
-# so five calendar days covers a long weekend and a holiday.
-PICK_MAX_AGE = timedelta(days=5)
-
 # Buy list and top picks: a BUY is fresh while it is at most this many COMPLETED
 # trading sessions old: ages 0-4 (owner decision 2026-11-26, #227/#281). A signal
 # from session D is entered at the next open, and the 5-day protocol ends the trade
@@ -161,6 +157,8 @@ def picks(db: DbSession, access: PlanAccessDep) -> list[dict]:
     One row per stock: when several strategies say BUY, the most confident
     one is shown. Unlike /buy-list this doesn't hide stocks the bot already
     holds, because the pick is still today's pick for someone who doesn't.
+
+    A BUY stays a pick for the same 0-4 completed trading sessions as the buy list.
     """
     latest_signal = (
         select(Signal)
@@ -176,7 +174,7 @@ def picks(db: DbSession, access: PlanAccessDep) -> list[dict]:
         .join(Strategy, Strategy.id == LatestSignal.strategy_id)
         .where(
             LatestSignal.signal_type == "BUY",
-            LatestSignal.generated_at >= datetime.now(UTC) - PICK_MAX_AGE,
+            LatestSignal.generated_at >= buy_fresh_since(datetime.now(UTC)),
             Strategy.is_active.is_(True),
         )
         .order_by(LatestSignal.confidence.desc().nullslast())

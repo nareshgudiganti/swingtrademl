@@ -218,6 +218,11 @@ class Settings(BaseSettings):
     # ----------------------------------------------------------- strategy --
     SIGNAL_SCAN_CRON_HOUR: int = 15
     SIGNAL_SCAN_CRON_MINUTE: int = 45
+    # #316: while the session's candles are missing, the scan re-checks every few minutes until this
+    # IST time on the same day, then gives up with one alert. Later recovery slots are an owner decision.
+    SCAN_RETRY_EVERY_MINUTES: int = 5
+    SCAN_RETRY_DEADLINE_HOUR: int = 17
+    SCAN_RETRY_DEADLINE_MINUTE: int = 0
     ENABLE_SCHEDULER: bool = True
     # The TradeMind brain (brain/ package) runs beside version 1 and only
     # records decisions. Off by default so production is unchanged until the

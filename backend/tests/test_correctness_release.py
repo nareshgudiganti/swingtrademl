@@ -169,7 +169,15 @@ def test_scan_exits_first_then_stable_rank_in_strategy_mode(monkeypatch, confirm
     assert calls[3][1] is not None
 
 
-def test_mismatched_direct_scan_rejected(client, db_session):
+def test_mismatched_direct_scan_rejected(client, db_session, monkeypatch):
+    # #316: a manual scan now waits for the session's prices first; say they are in, so the
+    # engine's own mode check is what answers.
+    from swing_trade_ml.services import scan_readiness
+
+    monkeypatch.setattr(
+        scan_readiness, 'check',
+        lambda db, now=None: scan_readiness.Readiness(scan_readiness.target_session(now), 'complete', 1, 1),
+    )
     row = Strategy(name='wrong-mode', strategy_type='ml_swing', mode='live', execution_mode='auto')
     db_session.add(row)
     db_session.commit()

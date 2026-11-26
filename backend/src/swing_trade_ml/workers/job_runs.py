@@ -61,6 +61,8 @@ JOB_LABELS: dict[str, tuple[str, str]] = {
     "daily_ingest": ("Daily candles", "Downloads the day's prices after the close"),
     "predict_watchlist": ("Watchlist scores", "Scores the watchlist with the model"),
     "signal_scan": ("Daily scan", "Looks for new trades"),
+    "scan_retry": ("Daily scan: waiting for prices", "Re-checks until 17:00 when prices are late"),
+    "scan_recovery": ("Daily scan: start-up check", "Scans the day once if the worker was down at scan time"),
     "sync_real_holdings": ("My Zerodha holdings sync", "Drops shares you sold by hand"),
     "brain_nightly": ("Brain: nightly run", "The brain's daily ideas"),
     "capture_fills": ("Save today's trades", "Saves the day's real trades from Zerodha"),

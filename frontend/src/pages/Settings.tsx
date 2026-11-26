@@ -121,6 +121,28 @@ export default function Settings() {
   const s = status.data
   // The limit that refused the most entries in the last scan, if any did.
   const topBlocked = s?.last_scan_result?.blocked?.[0]
+  // #316: a record written without a finished scan (prices late, scan running, cut off, or given up).
+  const scanState = s?.last_scan_result?.status
+  const noScanBadge =
+    scanState === 'not_started'
+      ? 'scan not run yet'
+      : scanState === 'waiting'
+      ? "waiting for today's prices"
+      : scanState === 'running'
+        ? 'scanning now'
+        : scanState === 'interrupted'
+          ? 'scan stopped part-way'
+          : scanState === 'gave_up'
+            ? 'no scan for this day'
+            : null
+  const noScanText =
+    scanState === 'not_started'
+      ? "Today's scan has not run yet. The brain and the daily summary wait for it."
+      : scanState === 'running'
+      ? 'The daily scan is running.'
+      : scanState === 'interrupted'
+        ? 'The scan stopped part-way and was not re-run, so no signal is duplicated. Check it before the next open.'
+        : `not scanned: ${s?.last_scan_result?.waiting_reason ?? "today's prices have not arrived yet"}. The daily scan made no buys or sells from old prices.`
 
   return (
     <>
@@ -210,7 +232,9 @@ export default function Settings() {
           <div>
             <div className="stat-label">Last scan</div>
             <div className="stat-value">
-              {s?.last_scan_result ? (
+              {noScanBadge ? (
+                <span className="badge badge-warn">{noScanBadge}</span>
+              ) : s?.last_scan_result ? (
                 <span
                   className={`badge ${
                     s.last_scan_result.errors > 0 || s.last_scan_result.blocked?.length
@@ -228,7 +252,11 @@ export default function Settings() {
               )}
             </div>
             <div className="stat-sub">
-              {s?.last_scan_result ? (
+              {noScanBadge && s?.last_scan_result ? (
+                <>
+                  {new Date(s.last_scan_result.ts).toLocaleString('en-IN')} — {noScanText}
+                </>
+              ) : s?.last_scan_result ? (
                 <>
                   {new Date(s.last_scan_result.ts).toLocaleString('en-IN')} —{' '}
                   {s.last_scan_result.instruments_evaluated} symbols checked across{' '}
@@ -240,6 +268,20 @@ export default function Settings() {
                   {topBlocked ? (
                     <div className="stat-sub" style={{ marginTop: 6 }}>
                       {topBlocked.count} blocked: {topBlocked.reason ?? 'by a safety limit'}
+                    </div>
+                  ) : null}
+                  {s.last_scan_result.status === 'partial' && s.last_scan_result.missing_count ? (
+                    <div className="stat-sub" style={{ marginTop: 6 }}>
+                      Partial: {s.last_scan_result.missing_count} stock
+                      {s.last_scan_result.missing_count === 1 ? ' had' : 's had'} no price for that day
+                      {s.last_scan_result.missing_symbols?.length
+                        ? ` (${s.last_scan_result.missing_symbols.join(', ')}${
+                            s.last_scan_result.missing_count > s.last_scan_result.missing_symbols.length
+                              ? ', …'
+                              : ''
+                          })`
+                        : ''}
+                      .
                     </div>
                   ) : null}
                 </>

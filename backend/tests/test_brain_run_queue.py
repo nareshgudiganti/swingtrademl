@@ -245,7 +245,7 @@ def test_the_scheduled_nightly_run_waits_for_a_run_in_progress_and_then_reports_
     reported = MagicMock()
     monkeypatch.setattr(jobs, "_report_error", reported)
     with queue.run_lock("nightly", "paper"):
-        jobs.job_brain_nightly()
+        jobs._run_brain_job("nightly")
     ran.assert_not_called()
     reported.assert_called_once()
 

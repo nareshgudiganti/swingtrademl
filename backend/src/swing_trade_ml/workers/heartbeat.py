@@ -14,6 +14,7 @@ check how stale it is.
 from __future__ import annotations
 
 import json
+import os
 import time
 from pathlib import Path
 from typing import Any
@@ -69,8 +70,12 @@ _LAST_SCAN_PATH = Path(settings.MODEL_ARTIFACT_DIR) / ".last_scan.json"
 
 
 def write_last_scan(data: dict[str, Any]) -> None:
+    """Replace the record in one step. It also holds the day's scan state (#316): a half-written file would
+    read back as "no scan yet" and could let a finished session be scanned a second time."""
     _LAST_SCAN_PATH.parent.mkdir(parents=True, exist_ok=True)
-    _LAST_SCAN_PATH.write_text(json.dumps(data))
+    tmp = _LAST_SCAN_PATH.with_name(f"{_LAST_SCAN_PATH.name}.{os.getpid()}.tmp")
+    tmp.write_text(json.dumps(data))
+    os.replace(tmp, _LAST_SCAN_PATH)
 
 
 def read_last_scan() -> dict[str, Any] | None:

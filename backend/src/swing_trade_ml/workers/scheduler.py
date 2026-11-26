@@ -8,10 +8,12 @@ both see no open position and both enter the same trade.
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.date import DateTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
 from swing_trade_ml.core import modules
@@ -150,6 +152,27 @@ def start_scheduler() -> None:
             timezone=IST,
         ),
         id="signal_scan",
+        replace_existing=True,
+    )
+    # #316: while the session's candles are missing, re-check every few minutes until the deadline,
+    # and once shortly after start-up so a worker that was down at 15:45 still scans that session.
+    # Both go through jobs.run_daily_scan, which scans a session at most once and one run at a time.
+    every = max(1, settings.SCAN_RETRY_EVERY_MINUTES)
+    scheduler.add_job(
+        jobs.job_scan_retry,
+        CronTrigger(
+            day_of_week=WEEKDAYS,
+            hour=f"{settings.SIGNAL_SCAN_CRON_HOUR}-{settings.SCAN_RETRY_DEADLINE_HOUR}",
+            minute=",".join(str(m) for m in range(0, 60, every)),
+            timezone=IST,
+        ),
+        id="scan_retry",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        jobs.job_scan_recovery,
+        DateTrigger(run_date=datetime.now(IST) + timedelta(seconds=60)),
+        id="scan_recovery",
         replace_existing=True,
     )
     # Kite keeps no trade history, so save the day's real trades shortly after

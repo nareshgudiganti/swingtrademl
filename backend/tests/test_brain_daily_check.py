@@ -90,14 +90,14 @@ def test_job_skips_days_without_trading(db_session, monkeypatch):
     monkeypatch.setattr(jobs, "_ist_today", lambda: date(2026, 10, 17))  # a Saturday
     called = []
     monkeypatch.setattr(daily, "compute", lambda *a, **k: called.append(1))
-    jobs.job_brain_daily_check()
+    jobs._brain_daily_check_body()
     assert called == []
 
 
 def test_job_never_raises(monkeypatch):
     monkeypatch.setattr(jobs, "_ist_today", lambda: DAY)
     monkeypatch.setattr(daily, "compute", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
-    jobs.job_brain_daily_check()  # must not raise
+    jobs._brain_daily_check_body()  # must not raise
 
 
 def test_endpoints_list_and_latest(client, db_session, tmp_path):

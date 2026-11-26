@@ -34,6 +34,7 @@ from swing_trade_ml.services import engine
 from swing_trade_ml.services import portfolio as portfolio_service
 from swing_trade_ml.strategies import STRATEGY_REGISTRY
 from swing_trade_ml.strategies.tier import cap_tier
+from swing_trade_ml.workers import jobs as scan_jobs
 
 log = get_logger(__name__)
 
@@ -285,22 +286,40 @@ def scan_one(strategy_id: int, db: DbSession, interval: str = "day") -> ScanResp
 
     Synchronous on purpose: a manual scan is how a strategy gets tested, and
     the caller wants the result rather than a job id.
+
+    Under the daily scan's safeguards (#316): never alongside another scan, not before the
+    session's prices are in, and never for an active strategy (the daily scan scores it, so a
+    run by hand would duplicate its signals). 409 with the reason otherwise.
     """
     strategy = db.get(Strategy, strategy_id)
     if strategy is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Strategy not found")
     try:
-        result = engine.run_strategy(db, strategy, interval)
+        scan = scan_jobs.run_manual_strategy_scan(db, strategy, interval)
     except ValueError as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
-    return ScanResponse(**asdict(result))
+    if scan.result is None:
+        raise HTTPException(status.HTTP_409_CONFLICT, scan.message)
+    return ScanResponse(**asdict(scan.result))
 
 
 @router.post("/scan-all", response_model=ScanResponse)
-def scan_all(db: DbSession, interval: str = "day") -> ScanResponse:
-    """Run every active strategy now, without waiting for the scheduled time."""
-    result = engine.run_all_active(db, interval)
-    return ScanResponse(**asdict(result))
+def scan_all(interval: str = "day") -> ScanResponse:
+    """Run the day's scan now instead of waiting for the scheduled time.
+
+    It is the scheduled scan itself (#316): one at a time, only once the session's prices
+    are in, and at most once per session. 409 with the reason when it did not run.
+    """
+    if interval != "day":
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, "Only the daily scan can be started by hand"
+        )
+    scan = scan_jobs.run_manual_scan()
+    if scan.result is None:
+        if scan.outcome == "error":
+            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, scan.message)
+        raise HTTPException(status.HTTP_409_CONFLICT, scan.message)
+    return ScanResponse(**asdict(scan.result))
 
 
 @router.get("/{strategy_id}/signals", response_model=list[SignalOut])

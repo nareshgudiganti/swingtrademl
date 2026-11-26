@@ -167,3 +167,38 @@ def test_nothing_calls_the_admin_command_so_no_job_can_run_it():
             if any(n.endswith("identity.admin") for n in names):
                 callers.append(rel)
     assert callers == []
+
+
+def _conflicting_score(db):
+    """A score row whose instrument shares a symbol history with another company: the writer must refuse it."""
+    from swing_trade_ml.services.identity import writer
+
+    first = instrument(db, "CONFL390", name="Alpha Industries Limited")
+    writer.ensure_for_instrument(db, first)
+    first.tradingsymbol = "CONFLOLD390"  # the symbol is freed in `instruments`, but its history stays with Alpha
+    db.flush()
+    second = instrument(db, "CONFL390", name="Zebra Textiles Corporation")
+    db.add(StockScore(instrument_id=second.id, as_of=FRIDAY, score=0.5, band="easing", model_version="m:v1", model_name="m"))
+    db.flush()
+    return second
+
+
+@pytest.mark.parametrize("flags", [(), ("--dry-run",)])
+def test_backfill_scores_counts_and_reports_a_skipped_conflict(cli, db_session, capsys, flags):
+    from swing_trade_ml.services.identity import ledger
+
+    second = _conflicting_score(db_session)
+    result = ledger.backfill_from_stock_scores(db_session)
+    assert result == {"written": 0, "skipped": 1}
+    assert cli(*flags, "backfill-scores") == 0
+    out = capsys.readouterr().out
+    assert "skipped=1" in out and "written=0" in out
+    assert "1 row(s) were skipped" in out and "different company" in out
+    assert list(db_session.scalars(select(ScoreLedger).where(ScoreLedger.session_date == FRIDAY, ScoreLedger.note.like("backfilled%")))) == [] or second
+
+
+def test_backfill_instruments_also_fills_security_id(cli, db_session):
+    inst = instrument(db_session, "ADMINSID390")
+    assert inst.security_id is None
+    assert cli("backfill-instruments") == 0
+    assert inst.security_id == resolve(db_session, symbol="ADMINSID390")

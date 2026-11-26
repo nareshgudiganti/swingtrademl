@@ -256,13 +256,13 @@ def test_old_score_history_is_copied_into_the_ledger_without_changing_it(db_sess
     db_session.add(StockScore(instrument_id=inst.id, as_of=THURSDAY, score=0.55, band="easing", model_version="swing_classifier:v1", model_name="swing_classifier"))
     db_session.add(StockScore(instrument_id=inst.id, as_of=FRIDAY, score=0.65, band="strong", model_version=None, model_name=""))
     db_session.flush()
-    assert ledger.backfill_from_stock_scores(db_session) >= 2
+    assert ledger.backfill_from_stock_scores(db_session)["written"] >= 2
     rows = _rows(db_session, resolve(db_session, symbol="OLDHIST390"))
     assert [(r.session_date, r.source, r.model_name, r.model_version, r.score) for r in rows] == [
         (THURSDAY, "backfill", "swing_classifier", "v1", 0.55),
         (FRIDAY, "backfill", "", "", 0.65),
     ]
-    assert ledger.backfill_from_stock_scores(db_session) == 0, "idempotent"
+    assert ledger.backfill_from_stock_scores(db_session)["written"] == 0, "idempotent"
     assert db_session.scalar(select(StockScore.score).where(StockScore.instrument_id == inst.id, StockScore.as_of == FRIDAY)) == 0.65
 
 

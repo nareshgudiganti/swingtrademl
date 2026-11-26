@@ -306,11 +306,15 @@ def append_from_brain_run(db: Session, run_id: str) -> int:
     return written
 
 
-def backfill_from_stock_scores(db: Session, *, since: date | None = None) -> int:
+def backfill_from_stock_scores(db: Session, *, since: date | None = None) -> dict[str, int]:
     """Copy the old one-row-a-day `stock_score_history` into the ledger as source `backfill` (#389 S5).
 
     The old table is never changed. Model name and version are copied exactly as stored (empty when the old row
-    had none: never guessed); the horizon is unknown (None). Idempotent. Returns rows written."""
+    had none: never guessed); the horizon is unknown (None). Idempotent.
+
+    Returns counts: written (new ledger rows) and skipped (old score rows whose instrument could not be placed
+    because its symbol belongs to another company: left alone, never guessed, and counted so none vanish quietly).
+    """
     from swing_trade_ml.db.models.market import Instrument
     from swing_trade_ml.db.models.trading import StockScore
     from swing_trade_ml.services.identity import writer
@@ -319,11 +323,13 @@ def backfill_from_stock_scores(db: Session, *, since: date | None = None) -> int
     if since is not None:
         query = query.where(StockScore.as_of >= since)
     written = 0
+    skipped = 0
     for score_row, instrument in db.execute(query.order_by(StockScore.as_of, StockScore.id)):
         try:
             with db.begin_nested():
                 security_id = writer.ensure_for_instrument(db, instrument)
         except writer.IdentityConflictError:
+            skipped += 1
             continue
         stored = score_row.model_version or ""
         result = append_score(
@@ -337,4 +343,4 @@ def backfill_from_stock_scores(db: Session, *, since: date | None = None) -> int
             note="backfilled from stock_score_history",
         )
         written += 1 if result.created else 0
-    return written
+    return {"written": written, "skipped": skipped}

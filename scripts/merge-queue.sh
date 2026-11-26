@@ -24,9 +24,11 @@ DRY=0
 APPROVED="owner-approved"
 REVIEWED="independent-review-passed"
 
-prs=$(gh pr list --state open --label "$APPROVED" --limit 100 \
+# Filter labels locally: `gh pr list --label` uses GitHub search, which can lag minutes behind a new label.
+prs=$(gh pr list --state open --limit 200 \
   --json number,title,isDraft,mergeable,mergeStateStatus,labels,autoMergeRequest \
-  --jq '.[] | [.number, .isDraft, .mergeable, .mergeStateStatus,
+  --jq '.[] | select([.labels[].name] | index("'"$APPROVED"'") != null)
+             | [.number, .isDraft, .mergeable, .mergeStateStatus,
                ([.labels[].name] | index("'"$REVIEWED"'") != null),
                (.autoMergeRequest != null), .title] | @tsv')
 

@@ -13,6 +13,7 @@ import StockLink from '../StockLink'
 import { PageState } from '../PageState'
 import { pickState } from '../stateRules'
 import { planDays, stopText, targetText } from '../tradingRules'
+import { HorizonFlags } from '../horizonFlags'
 
 const WORD_NAME: Record<string, string> = { TRADE: 'Buy', WATCH: 'Watch', WAIT: 'Wait', AVOID: 'Avoid' }
 const WORD_TONE: Record<string, 'green' | 'amber' | 'red' | 'blue'> = {
@@ -150,6 +151,7 @@ export default function IdeaReports() {
     >
       {d && (
         <>
+          <HorizonFlags compact />
           <div className="ir-filters" data-testid="report-filters">
             <div className="ir-pick ir-decision">
               <span className="tm-stat-label">Decision</span>
@@ -170,7 +172,7 @@ export default function IdeaReports() {
               options={d.options.horizons.map(String)}
               value={horizon}
               onChange={setHorizon}
-              name={(h) => `${h} days`}
+              name={(h) => `up to ${h}-day hold`}
               anyText="All horizons"
             />
             <Pick
@@ -290,7 +292,7 @@ export default function IdeaReports() {
                 <th>Stock</th>
                 <th>Decision</th>
                 <th>First seen</th>
-                <th>Sessions left</th>
+                <th>Sessions left of the hold</th>
                 <th>Score then → now</th>
                 <th>Market mood</th>
                 <th>Outcome</th>

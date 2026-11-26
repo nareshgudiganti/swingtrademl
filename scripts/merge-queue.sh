@@ -6,9 +6,14 @@
 #   independent-review-passed  a developer who did not write the branch reviewed it
 #
 # For each queued PR this script:
-#   1. skips drafts and PRs with conflicts (reported, never forced);
-#   2. updates the branch from main when it is behind (so CI re-runs on the real result);
-#   3. turns on GitHub auto-merge (squash).
+#   1. skips drafts and reports PRs with conflicts (resolved by hand, never forced);
+#   2. turns on GitHub auto-merge (squash).
+#
+# It does NOT update branches from main: main does not require up-to-date branches (strict off,
+# owner 26 Nov), and a pushed update would untick an owner-gate approval (#527) on sensitive PRs.
+#
+# Planned (once #527's owner-gate is a required check): drop the owner-approved label requirement;
+# owner-gate then holds sensitive PRs and routine reviewed PRs merge on green.
 #
 # It never bypasses anything: GitHub merges only after every required check passes and branch
 # protection allows it. It does not deploy (a production deploy is a separate manual run), never
@@ -43,10 +48,6 @@ while IFS=$'\t' read -r num draft mergeable state reviewed auto title; do
   if [[ "$reviewed" != "true" ]]; then echo "WAIT  $line (needs label '$REVIEWED')"; continue; fi
   if [[ "$mergeable" == "CONFLICTING" || "$state" == "DIRTY" ]]; then
     echo "BLOCK $line (merge conflict: resolve by hand)"; continue
-  fi
-  if [[ "$state" == "BEHIND" ]]; then
-    echo "SYNC  $line (updating from main)"
-    [[ $DRY -eq 0 ]] && gh pr update-branch "$num" >/dev/null
   fi
   if [[ "$auto" != "true" ]]; then
     echo "AUTO  $line (auto-merge on: merges when checks pass)"

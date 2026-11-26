@@ -72,7 +72,9 @@ def inst(db, symbol: str) -> Instrument:
 
 
 def strategy(db, name: str, *, mode: str = "paper", execution_mode: str = "auto") -> Strategy:
-    row = Strategy(name=name, strategy_type="ml_swing", mode=mode, execution_mode=execution_mode, is_active=True)
+    row = Strategy(
+        name=name, strategy_type="ml_swing", mode=mode, execution_mode=execution_mode, is_active=True
+    )
     db.add(row)
     db.flush()
     return row
@@ -80,8 +82,16 @@ def strategy(db, name: str, *, mode: str = "paper", execution_mode: str = "auto"
 
 def position(db, strat: Strategy, row: Instrument, *, mode: str = "paper", **kw) -> Position:
     p = Position(
-        strategy_id=strat.id, instrument_id=row.id, mode=mode, status="OPEN", quantity=10, entry_price=100.0,
-        entry_at=kw.pop("entry_at", datetime.now(UTC) - timedelta(days=2)), current_price=100.0, total_charges=10.0, **kw,
+        strategy_id=strat.id,
+        instrument_id=row.id,
+        mode=mode,
+        status="OPEN",
+        quantity=10,
+        entry_price=100.0,
+        entry_at=kw.pop("entry_at", datetime.now(UTC) - timedelta(days=2)),
+        current_price=100.0,
+        total_charges=10.0,
+        **kw,
     )
     db.add(p)
     db.flush()
@@ -89,7 +99,9 @@ def position(db, strat: Strategy, row: Instrument, *, mode: str = "paper", **kw)
 
 
 def real_holding(db, symbol: str, **kw) -> Position:
-    strat = db.scalar(select(Strategy).where(Strategy.name == "real_trading")) or strategy(db, "real_trading", mode="live", execution_mode="advisory")
+    strat = db.scalar(select(Strategy).where(Strategy.name == "real_trading")) or strategy(
+        db, "real_trading", mode="live", execution_mode="advisory"
+    )
     return position(db, strat, inst(db, symbol), mode="live", **kw)
 
 
@@ -106,7 +118,9 @@ def weak_world(db, symbol):
 # ---------------------------------------------------------------- (1) the flag follows a confirmed delivery
 
 
-def test_a_failed_stop_loss_send_leaves_the_flag_unset_and_is_retried_without_a_duplicate(db_session, monkeypatch, sent, clock):
+def test_a_failed_stop_loss_send_leaves_the_flag_unset_and_is_retried_without_a_duplicate(
+    db_session, monkeypatch, sent, clock
+):
     pos = real_holding(db_session, "D480STOP", stop_loss=96.0, take_profit=110.0)
     price_at(monkeypatch, 95.0)
     sent.ok = False  # Telegram refused
@@ -128,7 +142,9 @@ def test_a_stop_loss_send_that_works_sets_the_flag_at_once_and_sends_once(db_ses
     assert len(sent) == 1 and pos.advisory_alert_sent_at is not None
 
 
-def test_a_failed_confidence_send_leaves_the_flag_unset_and_is_retried_without_a_duplicate(db_session, sent, clock):
+def test_a_failed_confidence_send_leaves_the_flag_unset_and_is_retried_without_a_duplicate(
+    db_session, sent, clock
+):
     strat, row, pos = weak_world(db_session, "D480CONF")
     sent.ok = False
     execution._check_confidence_decay(db_session, pos, strat, row, 0.40, "paper")
@@ -147,10 +163,15 @@ def test_a_failed_confidence_send_does_not_mark_the_days_score_as_alerted(db_ses
     strat, row, pos = weak_world(db_session, "D480BAND")
     sent.ok = False
     execution._check_confidence_decay(db_session, pos, strat, row, 0.40, "paper")
-    assert all(not r.alerted for r in db_session.scalars(select(PositionScore).where(PositionScore.position_id == pos.id)))
+    assert all(
+        not r.alerted
+        for r in db_session.scalars(select(PositionScore).where(PositionScore.position_id == pos.id))
+    )
 
 
-def test_when_nothing_can_be_delivered_by_design_the_stop_flag_is_still_set_so_the_app_shows_the_exit(db_session, monkeypatch, sent):
+def test_when_nothing_can_be_delivered_by_design_the_stop_flag_is_still_set_so_the_app_shows_the_exit(
+    db_session, monkeypatch, sent
+):
     """Telegram switched off or not configured: there is nothing to retry, and the app must still read 'exit'."""
     monkeypatch.setattr(execution.notifier, "can_deliver", lambda event, kind=None: False, raising=False)
     pos = real_holding(db_session, "D480OFF", stop_loss=96.0, take_profit=110.0)
@@ -173,7 +194,9 @@ def test_a_confidence_warning_the_owner_switched_off_is_settled_not_retried_fore
 # ---------------------------------------------------------------- (2) labelled by the position's own book
 
 
-def test_a_real_holding_exit_alert_says_live_not_paper_while_the_bot_is_on_paper(db_session, monkeypatch, sent):
+def test_a_real_holding_exit_alert_says_live_not_paper_while_the_bot_is_on_paper(
+    db_session, monkeypatch, sent
+):
     real_holding(db_session, "D480REAL", stop_loss=96.0, take_profit=110.0)
     price_at(monkeypatch, 95.0)
     execution.check_exits(db_session)
@@ -183,14 +206,32 @@ def test_a_real_holding_exit_alert_says_live_not_paper_while_the_bot_is_on_paper
 
 def test_a_real_holding_confidence_warning_is_labelled_by_the_holding_too(db_session, sent):
     strat = strategy(db_session, "real_trading", mode="live", execution_mode="advisory")
-    pos = position(db_session, strat, inst(db_session, "D480RCONF"), mode="live", entry_confidence=0.80, stop_loss=96.0, take_profit=108.0)
-    execution._check_confidence_decay(db_session, pos, strat, db_session.get(Instrument, pos.instrument_id), 0.40, "paper")
+    pos = position(
+        db_session,
+        strat,
+        inst(db_session, "D480RCONF"),
+        mode="live",
+        entry_confidence=0.80,
+        stop_loss=96.0,
+        take_profit=108.0,
+    )
+    execution._check_confidence_decay(
+        db_session, pos, strat, db_session.get(Instrument, pos.instrument_id), 0.40, "paper"
+    )
     assert "PAPER" not in sent[0][0] and "LIVE" in sent[0][0]
 
 
 def test_a_paper_positions_alert_still_says_paper(db_session):
     inst_row = Instrument(instrument_token=next(_tokens), tradingsymbol="D480PAPER", exchange="NSE")
-    pos = Position(strategy_id=1, instrument_id=1, mode="paper", status="OPEN", quantity=10, entry_price=100.0, current_price=95.0)
+    pos = Position(
+        strategy_id=1,
+        instrument_id=1,
+        mode="paper",
+        status="OPEN",
+        quantity=10,
+        entry_price=100.0,
+        current_price=95.0,
+    )
     text = execution._advisory_exit_message(inst_row, pos, "STOP_LOSS_HIT", "paper")
     assert "PAPER" in text and "LIVE" not in text
 
@@ -200,11 +241,26 @@ def test_a_paper_positions_alert_still_says_paper(db_session):
 
 @pytest.mark.parametrize(
     ("reason", "words"),
-    [("STOP_LOSS_HIT", "Stop-loss hit"), ("TARGET_HIT", "Target reached"), ("TIME_STOP", "Time limit reached")],
+    [
+        ("STOP_LOSS_HIT", "Stop-loss hit"),
+        ("TARGET_HIT", "Target reached"),
+        ("TIME_STOP", "Time limit reached"),
+    ],
 )
-def test_the_exit_alert_says_the_reason_in_plain_english_with_no_codes_or_route_text(db_session, reason, words):
+def test_the_exit_alert_says_the_reason_in_plain_english_with_no_codes_or_route_text(
+    db_session, reason, words
+):
     row = Instrument(instrument_token=next(_tokens), tradingsymbol="D480TEXT", exchange="NSE")
-    pos = Position(id=77, strategy_id=1, instrument_id=1, mode="live", status="OPEN", quantity=10, entry_price=100.0, current_price=95.0)
+    pos = Position(
+        id=77,
+        strategy_id=1,
+        instrument_id=1,
+        mode="live",
+        status="OPEN",
+        quantity=10,
+        entry_price=100.0,
+        current_price=95.0,
+    )
     text = re.sub(r"<[^>]+>", "", execution._advisory_exit_message(row, pos, reason, "live"))
     assert words in text
     assert not re.search(r"\b[A-Z]{2,}_[A-Z_]+\b", text), text
@@ -215,7 +271,15 @@ def test_the_exit_alert_says_the_reason_in_plain_english_with_no_codes_or_route_
 
 def test_an_unknown_reason_is_shown_as_words_not_as_a_code(db_session):
     row = Instrument(instrument_token=next(_tokens), tradingsymbol="D480ODD", exchange="NSE")
-    pos = Position(strategy_id=1, instrument_id=1, mode="paper", status="OPEN", quantity=1, entry_price=1.0, current_price=1.0)
+    pos = Position(
+        strategy_id=1,
+        instrument_id=1,
+        mode="paper",
+        status="OPEN",
+        quantity=1,
+        entry_price=1.0,
+        current_price=1.0,
+    )
     text = execution._advisory_exit_message(row, pos, "SOME_NEW_REASON", "paper")
     assert "SOME_NEW_REASON" not in text and "Some new reason" in text
 
@@ -232,7 +296,9 @@ def _policy(position):
 def test_exit_reason_for_names_the_stop_target_and_time_limit_and_nothing_in_between(db_session):
     pos = real_holding(db_session, "D480PURE", stop_loss=96.0, take_profit=108.0)
     policy, now = _policy(pos), datetime.now(UTC)
-    assert execution.exit_reason_for(pos, 96.0, policy, now) == execution.ExitReason.STOP_LOSS_HIT  # at the level
+    assert (
+        execution.exit_reason_for(pos, 96.0, policy, now) == execution.ExitReason.STOP_LOSS_HIT
+    )  # at the level
     assert execution.exit_reason_for(pos, 95.0, policy, now) == execution.ExitReason.STOP_LOSS_HIT
     assert execution.exit_reason_for(pos, 108.0, policy, now) == execution.ExitReason.TARGET_HIT
     assert execution.exit_reason_for(pos, 100.0, policy, now) is None
@@ -242,11 +308,15 @@ def test_exit_reason_for_names_the_stop_target_and_time_limit_and_nothing_in_bet
 
 
 def _action_of(client, position_id: int) -> str:
-    rows = client.get("/api/v1/portfolio/positions/detailed?book=real", headers={"X-API-Key": "test-api-key"}).json()
+    rows = client.get(
+        "/api/v1/portfolio/positions/detailed?book=real", headers={"X-API-Key": "test-api-key"}
+    ).json()
     return next(r["action_code"] for r in rows if r["id"] == position_id)
 
 
-def test_a_position_past_its_stop_reads_exit_in_the_app_even_when_the_alert_could_not_be_delivered(client, db_session, monkeypatch, sent):
+def test_a_position_past_its_stop_reads_exit_in_the_app_even_when_the_alert_could_not_be_delivered(
+    client, db_session, monkeypatch, sent
+):
     pos = real_holding(db_session, "D480APP", stop_loss=96.0, take_profit=110.0)
     price_at(monkeypatch, 95.0)
     sent.ok = False
@@ -257,18 +327,32 @@ def test_a_position_past_its_stop_reads_exit_in_the_app_even_when_the_alert_coul
     assert _action_of(client, pos.id) == "exit"
 
 
-def test_the_same_position_does_not_read_exit_when_it_is_not_past_a_level(client, db_session, monkeypatch, sent):
+def test_the_same_position_does_not_read_exit_when_it_is_not_past_a_level(
+    client, db_session, monkeypatch, sent
+):
     pos = real_holding(db_session, "D480CALM", stop_loss=96.0, take_profit=110.0)
     price_at(monkeypatch, 100.0)
     execution.check_exits(db_session)
     assert _action_of(client, pos.id) != "exit"
 
 
-def test_a_weakening_confidence_reads_as_the_alert_state_in_the_app_even_when_the_warning_was_not_delivered(client, db_session, sent):
+def test_a_weakening_confidence_reads_as_the_alert_state_in_the_app_even_when_the_warning_was_not_delivered(
+    client, db_session, sent
+):
     strat = strategy(db_session, "real_trading", mode="live", execution_mode="advisory")
     base = {"entry_confidence": 0.80, "stop_loss": 90.0, "take_profit": 120.0}
-    flagged = position(db_session, strat, inst(db_session, "D480FLAG"), mode="live", last_confidence=0.40, confidence_alert_sent_at=datetime.now(UTC), **base)
-    unflagged = position(db_session, strat, inst(db_session, "D480NOFLAG"), mode="live", last_confidence=0.40, **base)
+    flagged = position(
+        db_session,
+        strat,
+        inst(db_session, "D480FLAG"),
+        mode="live",
+        last_confidence=0.40,
+        confidence_alert_sent_at=datetime.now(UTC),
+        **base,
+    )
+    unflagged = position(
+        db_session, strat, inst(db_session, "D480NOFLAG"), mode="live", last_confidence=0.40, **base
+    )
     assert _action_of(client, unflagged.id) == _action_of(client, flagged.id)
 
 
@@ -303,7 +387,9 @@ def test_a_failed_confidence_send_is_tried_once_per_retry_gap(db_session, sent, 
 # ---------------------------------------------------------------- can_deliver: a safety alert ignores the event list
 
 
-def test_can_deliver_ignores_the_event_list_for_a_kind_less_safety_alert_but_not_for_a_switchable_kind(monkeypatch):
+def test_can_deliver_ignores_the_event_list_for_a_kind_less_safety_alert_but_not_for_a_switchable_kind(
+    monkeypatch,
+):
     from swing_trade_ml.core.config import settings
     from swing_trade_ml.notifications.telegram import TelegramNotifier
 
@@ -314,7 +400,9 @@ def test_can_deliver_ignores_the_event_list_for_a_kind_less_safety_alert_but_not
     monkeypatch.setattr(n, "_token", "TEST-TOKEN-NOT-REAL")
     monkeypatch.setattr(n, "_chat_id", "TEST-CHAT-NOT-REAL")
     assert n.can_deliver("signal") is True  # kind-less: only "is Telegram on at all" counts
-    assert n.can_deliver("signal", kind=alert_policy.HOLDING_WARNINGS) is False  # a switchable kind honours the list
+    assert (
+        n.can_deliver("signal", kind=alert_policy.HOLDING_WARNINGS) is False
+    )  # a switchable kind honours the list
     monkeypatch.setattr(settings, "TELEGRAM_ENABLED", False)
     assert n.can_deliver("signal") is False and n.can_deliver("error") is False
 
@@ -322,10 +410,25 @@ def test_can_deliver_ignores_the_event_list_for_a_kind_less_safety_alert_but_not
 def test_a_brain_position_is_never_given_the_derived_warning_already_sent_state(client, db_session):
     from swing_trade_ml.core.strategy_policy import STAGED_TYPES
 
-    brain = Strategy(name="d480_brain", strategy_type=sorted(STAGED_TYPES)[0], mode="paper", execution_mode="advisory", is_active=True)
+    brain = Strategy(
+        name="d480_brain",
+        strategy_type=sorted(STAGED_TYPES)[0],
+        mode="paper",
+        execution_mode="advisory",
+        is_active=True,
+    )
     db_session.add(brain)
     db_session.flush()
-    pos = position(db_session, brain, inst(db_session, "D480BRAIN"), mode="paper", entry_confidence=0.80, last_confidence=0.40, stop_loss=90.0, take_profit=120.0)
+    pos = position(
+        db_session,
+        brain,
+        inst(db_session, "D480BRAIN"),
+        mode="paper",
+        entry_confidence=0.80,
+        last_confidence=0.40,
+        stop_loss=90.0,
+        take_profit=120.0,
+    )
     rows = client.get("/api/v1/portfolio/positions/detailed", headers={"X-API-Key": "test-api-key"}).json()
     row = next(r for r in rows if r["id"] == pos.id)
     # The derived "warning already sent" state is not given to a brain position; its own fresh read is unchanged.

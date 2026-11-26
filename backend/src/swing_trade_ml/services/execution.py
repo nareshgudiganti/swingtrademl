@@ -188,16 +188,20 @@ def _finalize_open_position(
     position grows and its entry price becomes the weighted average. Cash
     (entry_price * quantity + total_charges) stays exact because
     avg * total_qty equals the sum of what each buy cost."""
-    existing = db.execute(
-        select(Position)
-        .where(
-            Position.mode == mode,
-            Position.instrument_id == instrument.id,
-            Position.strategy_id == strategy.id,
-            Position.status == PositionStatus.OPEN,
+    existing = (
+        db.execute(
+            select(Position)
+            .where(
+                Position.mode == mode,
+                Position.instrument_id == instrument.id,
+                Position.strategy_id == strategy.id,
+                Position.status == PositionStatus.OPEN,
+            )
+            .order_by(Position.entry_at)
         )
-        .order_by(Position.entry_at)
-    ).scalars().first()
+        .scalars()
+        .first()
+    )
     if existing is not None:
         old_qty = existing.quantity
         new_qty = old_qty + quantity
@@ -386,8 +390,17 @@ def manual_open_position(
     # (and shown) separately from paper-simulated positions rather than
     # silently collapsing into whichever mode the broker happens to be in.
     position = _finalize_open_position(
-        db, strategy, instrument, strategy.mode, quantity, entry_price, brokerage, taxes,
-        stop_loss, take_profit, now,
+        db,
+        strategy,
+        instrument,
+        strategy.mode,
+        quantity,
+        entry_price,
+        brokerage,
+        taxes,
+        stop_loss,
+        take_profit,
+        now,
         signal.confidence if signal is not None else None,
     )
 
@@ -447,9 +460,7 @@ def _finalize_close_position(
     return_pct = net_pnl / invested if invested else 0.0
     holding_days = max(0, (closed_at - position.entry_at).days)
 
-    had_partial_exit = (
-        position.initial_quantity is not None and position.quantity < position.initial_quantity
-    )
+    had_partial_exit = position.initial_quantity is not None and position.quantity < position.initial_quantity
     earlier_realized = 0.0
     earlier_charges = 0.0
     if had_partial_exit:
@@ -459,9 +470,7 @@ def _finalize_close_position(
         earlier_realized = position.realized_pnl or 0.0
         earlier_charges = float(
             db.execute(
-                select(func.coalesce(func.sum(Trade.charges), 0.0)).where(
-                    Trade.position_id == position.id
-                )
+                select(func.coalesce(func.sum(Trade.charges), 0.0)).where(Trade.position_id == position.id)
             ).scalar_one()
         )
 
@@ -672,8 +681,16 @@ def close_position(
     filled_quantity = result.filled_quantity or sell_quantity
     if filled_quantity < held:
         trade = _finalize_partial_close(
-            db, position, instrument, filled_quantity, fill_price,
-            result.brokerage, result.taxes, reason, now, note,
+            db,
+            position,
+            instrument,
+            filled_quantity,
+            fill_price,
+            result.brokerage,
+            result.taxes,
+            reason,
+            now,
+            note,
         )
         log.info(
             "execution.partial_exit.filled",
@@ -726,7 +743,9 @@ def manual_close_position(
         raise ValueError(f"Instrument {position.instrument_id} not found for position {position.id}")
 
     if brokerage is None or taxes is None:
-        default_brokerage, default_taxes = compute_charges(exit_price * position.quantity, TransactionType.SELL)
+        default_brokerage, default_taxes = compute_charges(
+            exit_price * position.quantity, TransactionType.SELL
+        )
         brokerage = default_brokerage if brokerage is None else brokerage
         taxes = default_taxes if taxes is None else taxes
 
@@ -741,9 +760,7 @@ def manual_close_position(
         reason=reason,
     )
 
-    notifier.send_sync(
-        _exit_message(instrument, trade, reason, position.mode, _book(position)), "fill"
-    )
+    notifier.send_sync(_exit_message(instrument, trade, reason, position.mode, _book(position)), "fill")
     return trade
 
 
@@ -833,7 +850,10 @@ def _place_real_holding_order(
         )
         log.error(
             "execution.real_holding.send_failed",
-            symbol=instrument.tradingsymbol, side=word, qty=quantity, error=str(exc),
+            symbol=instrument.tradingsymbol,
+            side=word,
+            qty=quantity,
+            error=str(exc),
         )
         raise
     order.broker_order_id = result.broker_order_id
@@ -856,7 +876,10 @@ def _place_real_holding_order(
         )
     log.info(
         "execution.real_holding.sent",
-        symbol=instrument.tradingsymbol, side=word, qty=quantity, status=str(result.status),
+        symbol=instrument.tradingsymbol,
+        side=word,
+        qty=quantity,
+        status=str(result.status),
     )
     return order
 
@@ -865,8 +888,12 @@ def place_real_holding_buy(
     db: Session, strategy: Strategy, instrument: Instrument, quantity: int, reference_price: float
 ) -> Order:
     return _place_real_holding_order(
-        db, strategy_id=strategy.id, instrument=instrument, side=TransactionType.BUY,
-        quantity=quantity, reference_price=reference_price,
+        db,
+        strategy_id=strategy.id,
+        instrument=instrument,
+        side=TransactionType.BUY,
+        quantity=quantity,
+        reference_price=reference_price,
     )
 
 
@@ -875,8 +902,13 @@ def place_real_holding_sell(db: Session, position: Position, quantity: int) -> O
     if instrument is None:
         raise ValueError(f"Instrument {position.instrument_id} not found for position {position.id}")
     return _place_real_holding_order(
-        db, strategy_id=position.strategy_id, instrument=instrument, side=TransactionType.SELL,
-        quantity=quantity, reference_price=position.current_price, position_id=position.id,
+        db,
+        strategy_id=position.strategy_id,
+        instrument=instrument,
+        side=TransactionType.SELL,
+        quantity=quantity,
+        reference_price=position.current_price,
+        position_id=position.id,
         exit_reason=ExitReason.MANUAL,
     )
 
@@ -916,8 +948,12 @@ def confidence_decay_status(
 
 
 def _check_confidence_decay(
-    db: Session, position: Position, strategy: Strategy, instrument: Instrument,
-    current_confidence: float | None, mode: str,
+    db: Session,
+    position: Position,
+    strategy: Strategy,
+    instrument: Instrument,
+    current_confidence: float | None,
+    mode: str,
 ) -> None:
     """Warn once when a held position's confidence has genuinely declined.
 
@@ -1087,10 +1123,7 @@ def position_action(
             f"Losing conviction ({last_confidence:.0%} today) — approaching exit level{horizon_note}",
         )
 
-    if (
-        entry_confidence is not None
-        and entry_confidence - last_confidence >= EARLY_DIP_DROP_PCT
-    ):
+    if entry_confidence is not None and entry_confidence - last_confidence >= EARLY_DIP_DROP_PCT:
         return (
             "dip",
             f"Confidence easing ({entry_confidence:.0%} → {last_confidence:.0%}) today — "
@@ -1185,14 +1218,18 @@ def _refresh_confidence(db: Session, strategy: Strategy, instrument: Instrument,
     stock already held (the same logic as the main path of process_decision)."""
     if is_staged(strategy):
         return
-    positions = db.execute(
-        select(Position).where(
-            Position.mode == mode,
-            Position.strategy_id == strategy.id,
-            Position.instrument_id == instrument.id,
-            Position.status == PositionStatus.OPEN,
+    positions = (
+        db.execute(
+            select(Position).where(
+                Position.mode == mode,
+                Position.strategy_id == strategy.id,
+                Position.instrument_id == instrument.id,
+                Position.status == PositionStatus.OPEN,
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     confidence = decision.confidence
     if decision.signal in (SignalType.EXIT, SignalType.SELL) and confidence is not None:
         confidence = round(1.0 - confidence, 3)
@@ -1289,10 +1326,7 @@ def process_decision(
     #
     # Positions want the model's read on *the stock*, so undo the inversion.
     bullish_confidence = decision.confidence
-    if (
-        decision.signal in (SignalType.EXIT, SignalType.SELL)
-        and bullish_confidence is not None
-    ):
+    if decision.signal in (SignalType.EXIT, SignalType.SELL) and bullish_confidence is not None:
         bullish_confidence = round(1.0 - bullish_confidence, 3)
 
     # Not for a staged (brain) strategy: its confidence is not always a
@@ -1330,7 +1364,10 @@ def process_decision(
             for position in existing_positions:
                 notifier.send_sync(
                     _advisory_exit_message(
-                        instrument, position, decision.reason, mode,
+                        instrument,
+                        position,
+                        decision.reason,
+                        mode,
                         note=_other_book_note(position.mode, broker.mode),
                     ),
                     "signal",
@@ -1657,7 +1694,8 @@ def check_exits(db: Session) -> list[Trade]:
             .join(Strategy, Strategy.id == Position.strategy_id, isouter=True)
             .where(
                 Position.status == PositionStatus.OPEN,
-                (Position.mode == mode) | ((Strategy.execution_mode == "advisory") | (Strategy.strategy_type == "long_term_value")),
+                (Position.mode == mode)
+                | ((Strategy.execution_mode == "advisory") | (Strategy.strategy_type == "long_term_value")),
             )
         )
         .scalars()
@@ -1737,7 +1775,10 @@ def check_exits(db: Session) -> list[Trade]:
             if position.advisory_alert_sent_at is None and _may_attempt(("exit", position.id)):
                 delivered = notifier.send_sync(
                     _advisory_exit_message(
-                        instrument, position, reason, position.mode,
+                        instrument,
+                        position,
+                        reason,
+                        position.mode,
                         note=_other_book_note(position.mode, mode),
                     ),
                     "signal",
@@ -1941,7 +1982,14 @@ def _finish_reconciled_order(db: Session, order: Order, result: OrderResult) -> 
             take_profit = round(fill_price * (1 + REAL_HOLDING_TARGET_PCT), 2)
 
         position = _finalize_open_position(
-            db, strategy, instrument, order.mode, filled_qty, fill_price, brokerage, taxes,
+            db,
+            strategy,
+            instrument,
+            order.mode,
+            filled_qty,
+            fill_price,
+            brokerage,
+            taxes,
             stop_loss,
             take_profit,
             order.filled_at or datetime.now(UTC),
@@ -1957,7 +2005,10 @@ def _finish_reconciled_order(db: Session, order: Order, result: OrderResult) -> 
 
         log.info(
             "execution.reconcile.entry_filled",
-            symbol=instrument.tradingsymbol, order_id=order.id, price=fill_price, qty=filled_qty,
+            symbol=instrument.tradingsymbol,
+            order_id=order.id,
+            price=fill_price,
+            qty=filled_qty,
         )
         notifier.send_sync(
             _entry_message(instrument, position, signal, result, order.mode),
@@ -2000,13 +2051,23 @@ def _finish_reconciled_order(db: Session, order: Order, result: OrderResult) -> 
             # first-target scale-out: nothing else places one.
             partial_reason = ExitReason(order.exit_reason) if order.exit_reason else ExitReason.SCALE_OUT
             trade = _finalize_partial_close(
-                db, position, instrument, filled_qty, fill_price, brokerage, taxes,
-                partial_reason, closed_at,
+                db,
+                position,
+                instrument,
+                filled_qty,
+                fill_price,
+                brokerage,
+                taxes,
+                partial_reason,
+                closed_at,
             )
             log.info(
                 "execution.reconcile.partial_exit_filled",
-                symbol=instrument.tradingsymbol, order_id=order.id, price=fill_price,
-                qty=filled_qty, remaining=position.quantity,
+                symbol=instrument.tradingsymbol,
+                order_id=order.id,
+                price=fill_price,
+                qty=filled_qty,
+                remaining=position.quantity,
             )
             notifier.send_sync(
                 _partial_exit_message(
@@ -2025,14 +2086,22 @@ def _finish_reconciled_order(db: Session, order: Order, result: OrderResult) -> 
         # carries no reason of ours — one the user initiated themselves.
         exit_reason = ExitReason(order.exit_reason) if order.exit_reason else ExitReason.MANUAL
         trade = _finalize_close_position(
-            db, position, instrument, fill_price, brokerage, taxes,
-            exit_reason, closed_at,
+            db,
+            position,
+            instrument,
+            fill_price,
+            brokerage,
+            taxes,
+            exit_reason,
+            closed_at,
         )
         # The position is closed; nothing is left for a second sell to claim.
         position.exit_in_progress_at = None
         log.info(
             "execution.reconcile.exit_filled",
-            symbol=instrument.tradingsymbol, order_id=order.id, price=fill_price,
+            symbol=instrument.tradingsymbol,
+            order_id=order.id,
+            price=fill_price,
             reason=str(exit_reason),
         )
         notifier.send_sync(_exit_message(instrument, trade, exit_reason, order.mode, _book(position)), "fill")
@@ -2058,7 +2127,9 @@ def _fail_reconciled_order(db: Session, order: Order, result: OrderResult) -> No
 
     log.warning(
         "execution.reconcile.order_failed",
-        order_id=order.id, status=str(result.status), message=result.message,
+        order_id=order.id,
+        status=str(result.status),
+        message=result.message,
     )
     notifier.send_sync(
         f"⚠️ <b>Order {result.status}</b> — {_symbol_for(db, order)}, "
@@ -2082,13 +2153,10 @@ def _signal_message(instrument, decision, strategy, quantity, mode) -> str:
     if decision.confidence is not None:
         lines.append(f"Confidence: <b>{decision.confidence:.1%}</b>")
     if decision.stop_loss:
-        lines.append(
-            f"Stop: ₹{decision.stop_loss:,.2f}  ({decision.stop_loss / decision.price - 1:+.1%})"
-        )
+        lines.append(f"Stop: ₹{decision.stop_loss:,.2f}  ({decision.stop_loss / decision.price - 1:+.1%})")
     if decision.take_profit:
         lines.append(
-            f"Target: ₹{decision.take_profit:,.2f}  "
-            f"({decision.take_profit / decision.price - 1:+.1%})"
+            f"Target: ₹{decision.take_profit:,.2f}  ({decision.take_profit / decision.price - 1:+.1%})"
         )
     lines += ["", f"Strategy: <i>{strategy.name}</i>", f"Reason: {decision.reason}"]
     return "\n".join(lines)
@@ -2186,13 +2254,10 @@ def _advisory_entry_message(instrument, decision, strategy, quantity, mode) -> s
     if decision.confidence is not None:
         lines.append(f"Confidence: <b>{decision.confidence:.1%}</b>")
     if decision.stop_loss:
-        lines.append(
-            f"Stop: ₹{decision.stop_loss:,.2f}  ({decision.stop_loss / decision.price - 1:+.1%})"
-        )
+        lines.append(f"Stop: ₹{decision.stop_loss:,.2f}  ({decision.stop_loss / decision.price - 1:+.1%})")
     if decision.take_profit:
         lines.append(
-            f"Target: ₹{decision.take_profit:,.2f}  "
-            f"({decision.take_profit / decision.price - 1:+.1%})"
+            f"Target: ₹{decision.take_profit:,.2f}  ({decision.take_profit / decision.price - 1:+.1%})"
         )
     lines += [
         "",

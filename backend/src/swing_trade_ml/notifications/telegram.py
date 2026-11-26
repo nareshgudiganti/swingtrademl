@@ -82,8 +82,8 @@ class TelegramNotifier:
         self, event: NotificationEvent | str = NotificationEvent.SIGNAL, kind: str | None = None
     ) -> bool:
         """False when nothing of this kind can reach the chat at all. A caller that retries a failed send
-        uses it to tell "try again" from "never". A safety alert (no `kind`) ignores the owner's event list and only
-        needs Telegram to be on and configured; a switchable kind also honours the list."""
+        uses it to tell "try again" from "never". A safety alert (no `kind`) ignores the owner's event
+        list and only needs Telegram to be on and configured; a switchable kind also honours the list."""
         if kind is None:
             return self.enabled
         return self._should_send(event, kind)
@@ -148,9 +148,7 @@ class TelegramNotifier:
 
         try:
             async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-                response = await client.post(
-                    f"{API_BASE}/bot{self._token}/sendMessage", json=payload
-                )
+                response = await client.post(f"{API_BASE}/bot{self._token}/sendMessage", json=payload)
             if response.status_code != 200:
                 log.error(
                     "telegram.send_failed",
@@ -395,10 +393,7 @@ class TelegramNotifier:
             lines += ["", "<b>Open positions</b>"]
             for pos in top[:5]:
                 arrow = "▲" if pos["pnl_pct"] >= 0 else "▼"
-                lines.append(
-                    f"  {arrow} {_esc(pos['symbol'])}: {pos['pnl_pct']:+.2%} "
-                    f"(₹{pos['pnl']:,.0f})"
-                )
+                lines.append(f"  {arrow} {_esc(pos['symbol'])}: {pos['pnl_pct']:+.2%} (₹{pos['pnl']:,.0f})")
 
         if post_exit_watch:
             lines += ["", "<b>Since we sold</b>"]
@@ -415,10 +410,7 @@ class TelegramNotifier:
         return await self.send("\n".join(lines), NotificationEvent.DAILY_SUMMARY, kind=kind)
 
     async def notify_error(self, context: str, error: str) -> bool:
-        text = (
-            f"⚠️ <b>Error — {_esc(context)}</b>\n\n"
-            f"<code>{_esc(error[:800])}</code>"
-        )
+        text = f"⚠️ <b>Error — {_esc(context)}</b>\n\n<code>{_esc(error[:800])}</code>"
         return await self.send(text, NotificationEvent.ERROR)
 
     async def notify_system(self, message: str) -> bool:

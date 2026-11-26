@@ -21,6 +21,7 @@ const RULE = new RegExp(
     '15-trading-day',
     '\\b0\\.96\\b',
     '\\b1\\.08\\b',
+    '\\b1\\.05\\b',
     'HOLIDAYS',
     '\\b15\\s?%',
     '[+−-]\\s?(2|6|3\\.5)\\s?%',
@@ -100,6 +101,7 @@ describe('no hardcoded trading rule or holiday list in the frontend (#416)', () 
     ['the 10-session research target', 'a +6% target'],
     ['the 10-session research stop', 'a −3.5% stop'],
     ['the 10-session research fractions', 'const stop = 0.035; const target = 0.06'],
+    ['the half-way price factor', 'const half = mid * 1.05'],
     ['the 10-session window', 'within 10 trading days'],
   ])('the pattern catches %s', (_name, line) => {
     expect(RULE.test(line)).toBe(true)

@@ -57,6 +57,9 @@ export const targetText = () => `+${plan().targetPct}%`
 export const stopText = () => `−${plan().stopPct}%`
 export const halfText = () => `+${plan().halfPct}%`
 
+/** The price at which half is sold: the entry price plus the served half-out percent. */
+export const halfOutPrice = (entry: number) => entry * (1 + plan().halfPct / 100)
+
 /** The drawdown that pauses new buys, in percent (read-only: the server enforces it). */
 export const maxDrawdownPct = () => pct(loaded().risk_limits.max_drawdown_pct)
 

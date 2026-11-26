@@ -159,7 +159,6 @@ test.describe('Discover (#227)', () => {
   })
 
   test('a changed half-way level on the server changes both the label and the price', async ({ page }) => {
-    test.fail(true, 'Defect: PlanLadder (stockParts.tsx) prices "Sell half" at a hard-coded mid * 1.05 but labels it from the served half_out_pct.')
     await mockApi(page) // only to read the served rules
     await page.goto('/trademind')
     const base: Rules & Record<string, unknown> = await page.evaluate(async () => (await fetch('/api/v1/config/trading-rules')).json())
@@ -175,7 +174,6 @@ test.describe('Discover (#227)', () => {
   })
 
   test('a TRADE row on Discover shows its plan (buy zone, target, stop)', async ({ page }) => {
-    test.fail(true, 'Gap vs requirements section 1: the Discover table has no plan columns; the plan is only one tap away on the stock page.')
     await setup(page)
     await openDiscover(page)
     const row = rowOf(page, 'INFY')

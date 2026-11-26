@@ -11,7 +11,7 @@ import { scoreVsPlan } from './scoreVsPlan'
 import { buyLevel, wordSay } from './stockParts'
 import { MARKET_PLAIN } from './vocab'
 import { inr } from './ui'
-import { planDays, stopText, targetText } from './tradingRules'
+import { halfOutPrice, planDays, stopText, targetText } from './tradingRules'
 
 export type Scenario = { label: string; price: number; pct: number; perShare: number; tone: 'pos' | 'neg' }
 
@@ -46,7 +46,7 @@ export function caseFigures(d: BrainDecision, run: BrainRun): CaseFigures {
       perShare: price - entry,
       tone: price >= entry ? 'pos' : 'neg',
     })
-    scenarios.push(at('Target', d.target), at('Sell half', entry * 1.05), at('Stop', d.stop))
+    scenarios.push(at('Target', d.target), at('Sell half', halfOutPrice(entry)), at('Stop', d.stop))
     const risk = entry - d.stop
     rewardToRisk = risk > 0 ? (d.target - entry) / risk : null
   }

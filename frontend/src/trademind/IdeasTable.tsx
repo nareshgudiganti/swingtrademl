@@ -12,7 +12,8 @@ import { SortTh, useSort, type Sorter } from './sort'
 import { WordTag } from './term'
 import { IdeaFigures } from './stockParts'
 import { oneReason } from './today/answerRules'
-import { StockLogo } from './ui'
+import { halfText, planDays, stopText, targetText } from './tradingRules'
+import { inr, StockLogo } from './ui'
 
 export type IdeaSortKey = 'rank' | 'stock' | 'decision' | 'score' | 'stopped'
 
@@ -39,6 +40,7 @@ export function IdeasTable({
   tierOf,
   sectorOf,
   withFigures = false,
+  withPlan = false,
   testId = 'discover-table',
 }: {
   rows: BrainDecision[]
@@ -48,6 +50,8 @@ export function IdeasTable({
   sectorOf?: Record<string, string | null> | undefined
   /** Today: add the last close and the score's last days (two small reads per row, so only for a short list). */
   withFigures?: boolean
+  /** Discover: a compact plan (buy zone, target, stop) on BUY rows, from the stored decision. */
+  withPlan?: boolean
   testId?: string
 }) {
   return (
@@ -61,6 +65,7 @@ export function IdeasTable({
             <SortTh sorter={sorter} k="score" title={SCORE_HINT}>Score</SortTh>
             {withFigures && <th>Last close and score trend</th>}
             <th>Why, in a few words</th>
+            {withPlan && <th>Plan for a BUY</th>}
             <SortTh sorter={sorter} k="stopped">Where it stopped</SortTh>
             <th>
               <span className="tmn-w2-sr">AI analysis</span>
@@ -76,6 +81,7 @@ export function IdeasTable({
               tier={tierOf(d)}
               sector={sectorOf?.[d.symbol.toUpperCase()] ?? null}
               withFigures={withFigures}
+              withPlan={withPlan}
             />
           ))}
         </tbody>
@@ -90,12 +96,14 @@ function IdeaRow({
   tier,
   sector,
   withFigures,
+  withPlan,
 }: {
   d: BrainDecision
   rank: number | null
   tier?: string
   sector: string | null
   withFigures: boolean
+  withPlan: boolean
 }) {
   const stop = whereItStopped(d)
   const pts = scorePoints(d.confidence)
@@ -124,6 +132,11 @@ function IdeaRow({
         </td>
       )}
       <td className="tmn-w2-why">{oneReason(d)}</td>
+      {withPlan && (
+        <td>
+          <IdeaPlanCell d={d} />
+        </td>
+      )}
       <td>
         <span className="tmn-w2-stop" data-tone={stop.tone} title={stop.why ?? undefined}>
           <span className="tmn-w2-dot" aria-hidden="true" />
@@ -136,5 +149,23 @@ function IdeaRow({
         </Link>
       </td>
     </tr>
+  )
+}
+
+/** The plan of a BUY row, from the stored decision: buy zone, target, stop. Any other row gets a dash (it keeps
+ *  "Where it stopped"). The rules (percentages, days) are in the tooltip, read from the served trading rules. */
+export function IdeaPlanCell({ d }: { d: BrainDecision }) {
+  if (d.kind !== 'idea' || shownWord(d) !== 'TRADE' || d.entry_low == null || d.target == null || d.stop == null) {
+    return <span className="tm-dim">—</span>
+  }
+  const high = d.entry_high ?? d.entry_low
+  const zone = high !== d.entry_low ? `₹${inr(d.entry_low, 0)} – ₹${inr(high, 0)}` : `₹${inr(d.entry_low, 0)}`
+  const rules = `Target ${targetText()}, stop ${stopText()}, sell half at ${halfText()}, sold within ${planDays()} trading days.`
+  return (
+    <span className="tmn-w2-plan" data-testid="idea-plan" title={rules}>
+      <span>Buy {zone}</span>
+      <span className="sp-pos">Target ₹{inr(d.target, 0)}</span>
+      <span className="sp-neg">Stop ₹{inr(d.stop, 0)}</span>
+    </span>
   )
 }

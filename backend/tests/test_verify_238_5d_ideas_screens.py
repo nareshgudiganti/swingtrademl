@@ -258,19 +258,17 @@ def test_the_api_passes_the_stored_horizon_through_so_the_label_comes_from_the_b
     assert _idea(_get(client, "/brain/runs/latest?kind=nightly").json())["horizon_days"] == 15
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="GAP (#416): Stock Detail's plan answer takes 'target_pct', 'stop_pct' and the half-out % from the v1 ml_swing settings "
-    "(beginner_views.py:q3_plan, settings.ML_*), while the target PRICE beside them is the Brain's own +8% plan; where the settings "
-    "differ (the v1 target setting can be overridden) the same card can say +2% next to a +8% price",
-)
-def test_the_percentages_on_the_plan_card_agree_with_the_plan_prices(client, world, monkeypatch):
+def test_the_percentages_on_the_plan_card_come_from_the_brain_policy_not_the_v1_settings(client, world, monkeypatch):
+    """Was GAP (#416); fixed by #498 (#239 gap G10): `beginner_views.py:q3_plan` takes target %, stop % and the half-out % from the
+    Brain's own `DEFAULT_POLICY`, so overriding the v1 ml_swing settings no longer moves them."""
+    from swing_trade_ml.brain.modules.m08_decide.policy import DEFAULT_POLICY
+
     monkeypatch.setattr(settings, "ML_TARGET_RETURN_PCT", 0.02)
     monkeypatch.setattr(settings, "ML_FIRST_TARGET_PCT", 0.02)
     plan = _get(client, f"/beginner/stock/{SYMBOL}").json()["q3_plan"]
-    middle = (PLAN["entry_low"] + PLAN["entry_high"]) / 2
-    assert plan["target_pct"] == pytest.approx(PLAN["target"] / middle - 1, abs=0.005)
+    assert plan["target_pct"] == DEFAULT_POLICY.target_pct == 0.08
+    assert plan["stop_pct"] == DEFAULT_POLICY.stop_pct
+    assert plan["sell_half_pct"] == DEFAULT_POLICY.first_target_pct
 
 
 @pytest.mark.xfail(

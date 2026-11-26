@@ -921,15 +921,6 @@ def test_the_named_real_account_owner_reads_the_live_book_track(client, db_sessi
     assert r.status_code == 200 and r.json()["points"]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "REAL DEFECT (#414): /brain/track/{symbol}?book=live lets ANY signed-in owner read the day-by-day "
-        "track of the real holdings (brain.py holding_track checks is_owner, not "
-        "can_see_real_account). Every other real-account route refuses an owner who is not in "
-        "REAL_ACCOUNT_USERS. Not fixed here."
-    ),
-)
 def test_an_owner_who_is_not_the_named_user_cannot_read_the_live_book_track(
     client, db_session, people, live_track
 ):

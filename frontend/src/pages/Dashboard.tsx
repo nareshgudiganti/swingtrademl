@@ -276,7 +276,7 @@ export default function Dashboard() {
   // own even when the model still likes the stock.
   const NEAR_STOP_THRESHOLD = 0.03
   const nearStopLoss = openPositions.filter((p) => {
-    if (flaggedIds.has(p.id) || p.stop_loss == null || p.current_price <= 0) return false
+    if (flaggedIds.has(p.id) || p.stop_loss == null || p.current_price == null || p.current_price <= 0) return false
     const gap = (p.current_price - p.stop_loss) / p.current_price
     // No lower bound: a position that has already fallen THROUGH its stop is
     // the most urgent case there is, and requiring gap >= 0 silently dropped
@@ -439,7 +439,8 @@ export default function Dashboard() {
               />
             ))}
             {nearStopLoss.map((p) => {
-              const gap = (p.current_price - p.stop_loss!) / p.current_price
+              const livePrice = p.current_price! // the filter above keeps only priced positions
+              const gap = (livePrice - p.stop_loss!) / livePrice
               const past = gap < 0
               const shortReason = past
                 ? `Already below its stop-loss — due to be sold.`
@@ -457,7 +458,7 @@ export default function Dashboard() {
                       symbol: p.symbol,
                       tone: 'watch',
                       actionLabel: past ? 'BELOW STOP' : 'NEAR STOP',
-                      price: p.current_price,
+                      price: livePrice,
                       entryPrice: p.entry_price,
                       stopLoss: p.stop_loss,
                       takeProfit: p.take_profit,
@@ -471,13 +472,13 @@ export default function Dashboard() {
                       <span className="pill-action watch">{past ? 'BELOW STOP' : 'NEAR STOP'}</span>
                       <span className="action-card-symbol">{p.symbol}</span>
                     </div>
-                    <span className={pnlClass(p.unrealized_pnl)} style={{ fontSize: '0.82rem', fontWeight: 650 }}>
-                      {formatCurrency(p.unrealized_pnl)}
+                    <span className={pnlClass(p.unrealized_pnl ?? 0)} style={{ fontSize: '0.82rem', fontWeight: 650 }}>
+                      {p.unrealized_pnl == null ? '—' : formatCurrency(p.unrealized_pnl)}
                     </span>
                   </div>
                   <div className="strength-row">
                     <span className="muted" style={{ fontSize: '0.82rem' }}>
-                      Current <span className="mono" style={{ fontWeight: 650, color: 'var(--text)' }}>{formatCurrency(p.current_price)}</span>
+                      Current <span className="mono" style={{ fontWeight: 650, color: 'var(--text)' }}>{formatCurrency(livePrice)}</span>
                     </span>
                     <span className="muted" style={{ fontSize: '0.82rem' }}>
                       Stop-loss <span className="mono neg" style={{ fontWeight: 650 }}>{formatCurrency(p.stop_loss!)}</span>

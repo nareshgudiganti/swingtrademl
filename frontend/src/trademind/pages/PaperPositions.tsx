@@ -88,13 +88,13 @@ export default function PaperPositions() {
   const moneyRow = summary.data
   const invested = rows.reduce((s, p) => s + p.invested, 0)
   const currentValue = rows.reduce((s, p) => s + p.current_value, 0)
-  const openPnl = rows.reduce((s, p) => s + p.unrealized_pnl, 0)
+  const openPnl = rows.reduce((s, p) => s + (p.unrealized_pnl ?? 0), 0)
   const dayPnl = rows.reduce((s, p) => s + (p.day_pnl ?? 0), 0)
   // Total = open + banked profit, measured against everything put into trades (open and closed).
   const totalPnl = openPnl + (moneyRow?.realized_pnl ?? 0)
   const totalCost = invested + (trades.data ?? []).reduce((s, t) => s + t.quantity * t.entry_price, 0)
   // Best and worst count only positions that have a price: an unpriced one is not "flat", it is unknown (#486).
-  const byReturn = rows.filter(hasPrice).sort((a, b) => b.unrealized_pnl_pct - a.unrealized_pnl_pct)
+  const byReturn = rows.filter(hasPrice).sort((a, b) => (b.unrealized_pnl_pct ?? 0) - (a.unrealized_pnl_pct ?? 0))
   const best = byReturn[0]
   const worst = byReturn[byReturn.length - 1]
   const dayPct = (p: DetailedPosition) => {
@@ -102,7 +102,7 @@ export default function PaperPositions() {
     return before > 0 ? ((p.day_pnl ?? 0) / before) * 100 : 0
   }
   const dayPctTotal = currentValue - dayPnl > 0 ? (dayPnl / (currentValue - dayPnl)) * 100 : undefined
-  const byDay = [...rows].sort((a, b) => dayPct(b) - dayPct(a))
+  const byDay = rows.filter(hasPrice).sort((a, b) => dayPct(b) - dayPct(a))
   const bestDay = byDay[0]
   const worstDay = byDay[byDay.length - 1]
 
@@ -113,8 +113,8 @@ export default function PaperPositions() {
       const cur = m.get(name) ?? { value: 0, cost: 0, pnl: 0, stocks: [] }
       cur.value += p.current_value
       cur.cost += p.invested
-      cur.pnl += p.unrealized_pnl
-      if (hasPrice(p)) cur.stocks.push({ symbol: p.symbol, pct: p.unrealized_pnl_pct * 100 })
+      cur.pnl += p.unrealized_pnl ?? 0
+      if (hasPrice(p)) cur.stocks.push({ symbol: p.symbol, pct: retPct(p) })
       m.set(name, cur)
     }
     const total = rows.reduce((s, p) => s + p.current_value, 0)
@@ -188,12 +188,12 @@ export default function PaperPositions() {
           )}
           {best && (
             <Card>
-              <Stat label="Best overall (open)" value={<StockLink symbol={best.symbol} withScore={false} />} tone={toneClass(best.unrealized_pnl_pct)} note={signed(best.unrealized_pnl_pct * 100)} />
+              <Stat label="Best overall (open)" value={<StockLink symbol={best.symbol} withScore={false} />} tone={toneClass(best.unrealized_pnl_pct ?? 0)} note={signed(retPct(best))} />
             </Card>
           )}
           {worst && (
             <Card>
-              <Stat label="Worst overall (open)" value={<StockLink symbol={worst.symbol} withScore={false} />} tone={toneClass(worst.unrealized_pnl_pct)} note={signed(worst.unrealized_pnl_pct * 100)} />
+              <Stat label="Worst overall (open)" value={<StockLink symbol={worst.symbol} withScore={false} />} tone={toneClass(worst.unrealized_pnl_pct ?? 0)} note={signed(retPct(worst))} />
             </Card>
           )}
         </div>
@@ -473,12 +473,12 @@ function OpenTable({
               </td>
               <td className="tm-right tm-num">{p.quantity}</td>
               <td className="tm-right tm-num">₹{inr(p.entry_price)}</td>
-              <td className="tm-right tm-num">{hasPrice(p) ? `₹${inr(p.current_price)}` : '—'}</td>
-              <td className={`tm-right tm-num ${toneClass(p.unrealized_pnl)}`}>
-                {hasPrice(p) ? `${p.unrealized_pnl < 0 ? '−' : '+'}₹${inr(Math.abs(p.unrealized_pnl), 0)}` : '—'}
+              <td className="tm-right tm-num">{hasPrice(p) ? `₹${inr(p.current_price ?? 0)}` : '—'}</td>
+              <td className={`tm-right tm-num ${toneClass(p.unrealized_pnl ?? 0)}`}>
+                {hasPrice(p) && p.unrealized_pnl != null ? `${p.unrealized_pnl < 0 ? '−' : '+'}₹${inr(Math.abs(p.unrealized_pnl), 0)}` : '—'}
               </td>
               <td className="tm-right tm-num">
-                <span className={`tm-pnl-pill ${hasPrice(p) ? toneClass(p.unrealized_pnl) : 'tm-dim'}`}>{returnText(p)}</span>
+                <span className={`tm-pnl-pill ${hasPrice(p) ? toneClass(p.unrealized_pnl ?? 0) : 'tm-dim'}`}>{returnText(p)}</span>
               </td>
               <td>{hasPrice(p) ? <PositionBar pct={retPct(p)} /> : null}</td>
               <td>

@@ -1,4 +1,5 @@
 import type { DetailedPosition } from '../api/types'
+import { PRICE_UNAVAILABLE, priceUnavailableText } from '../lib/priceUnavailable'
 import { ChevronRightIcon } from './icons'
 import type { StockDetail } from './StockDetailModal'
 import {
@@ -50,6 +51,7 @@ export function detailForPosition(p: DetailedPosition): StockDetail {
     tone: action.tone === 'neutral' ? 'hold' : action.tone,
     actionLabel: action.label,
     price: p.current_price,
+    priceAsOf: p.price_as_of,
     entryPrice: p.entry_price,
     stopLoss: p.stop_loss,
     takeProfit: p.take_profit,
@@ -90,7 +92,7 @@ export default function PositionAttentionCard({
   const stop = position.stop_loss
   // Signed so "below" reads as a fact rather than a distance: a position that
   // has already fallen through its stop is the whole reason this card exists.
-  const stopGap = stop != null && position.current_price > 0
+  const stopGap = stop != null && position.current_price != null && position.current_price > 0
     ? (position.current_price - stop) / position.current_price
     : null
   const pastStop = stopGap != null && stopGap < 0
@@ -110,10 +112,10 @@ export default function PositionAttentionCard({
           <span className="action-card-symbol">{position.symbol}</span>
         </div>
         <span
-          className={pnlClass(position.unrealized_pnl)}
+          className={pnlClass(position.unrealized_pnl ?? 0)}
           style={{ fontSize: '0.9rem', fontWeight: 700, whiteSpace: 'nowrap' }}
         >
-          {formatCurrency(position.unrealized_pnl)}
+          {position.unrealized_pnl == null ? '—' : formatCurrency(position.unrealized_pnl)}
         </span>
       </div>
 
@@ -139,11 +141,22 @@ export default function PositionAttentionCard({
       <div className="tech-grid attention-grid">
         <Field label="You hold" value={`${formatNumber(position.quantity)} shares`} />
         <Field label="You paid" value={formatCurrency(position.entry_price)} />
-        <Field label="Price now" value={position.has_price === false ? 'No price yet' : formatCurrency(position.current_price)} />
+        <Field
+          label="Price now"
+          value={
+            position.current_price == null || position.has_price === false
+              ? priceUnavailableText(position.price_as_of)
+              : formatCurrency(position.current_price)
+          }
+        />
         <Field
           label="Gain / loss"
-          value={position.has_price === false ? 'No price yet' : formatSignedPercent(position.unrealized_pnl_pct, 1)}
-          className={pnlClass(position.unrealized_pnl)}
+          value={
+            position.unrealized_pnl_pct == null || position.has_price === false
+              ? PRICE_UNAVAILABLE
+              : formatSignedPercent(position.unrealized_pnl_pct, 1)
+          }
+          className={pnlClass(position.unrealized_pnl ?? 0)}
         />
         {stop != null && (
           <Field

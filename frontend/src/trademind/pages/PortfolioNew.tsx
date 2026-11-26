@@ -38,6 +38,7 @@ import { scorePoints } from '../scoreText'
 import { useSort } from '../sort'
 import { SellList } from '../HeldRead'
 import { GlowArea, inr, StockLogo, Tag } from '../ui'
+import { priceUnavailableText } from '../../lib/priceUnavailable'
 import '../newlook-w2.css'
 
 /** A server refusal for this account (not a failure): said once, quietly. */
@@ -245,7 +246,7 @@ function HeldTable({
         <div className="tmn-w2-rail" role="region" aria-label="Your stocks, scroll sideways to see more" tabIndex={0}>
           {sorted.map((r) => {
             const p = r.position
-            const tone = p ? (p.unrealized_pnl >= 0 ? 'up' : 'down') : 'none'
+            const tone = p && p.unrealized_pnl != null ? (p.unrealized_pnl >= 0 ? 'up' : 'down') : 'none'
             return (
               <Link key={r.symbol} to={`/trademind/stock/${encodeURIComponent(r.symbol)}`} className="tmn-w2-hcard" data-tone={tone}>
                 <span className="tmn-w2-hcard-top">
@@ -267,15 +268,19 @@ function HeldTable({
                 )}
                 {positionsLoaded && (
                   <span className="tmn-w2-hcard-money">
-                    <span className={`tmn-w2-hcard-pct ${p ? (p.unrealized_pnl >= 0 ? 'tm-pos' : 'tm-neg') : ''}`}>
+                    <span className={`tmn-w2-hcard-pct ${p && p.unrealized_pnl != null ? (p.unrealized_pnl >= 0 ? 'tm-pos' : 'tm-neg') : ''}`}>
                       {p
-                        ? p.has_price === false
-                          ? 'No price yet'
+                        ? p.has_price === false || p.unrealized_pnl_pct == null
+                          ? priceUnavailableText(p.price_as_of)
                           : `${p.unrealized_pnl_pct >= 0 ? '+' : '−'}${Math.abs(p.unrealized_pnl_pct * 100).toFixed(1)}%`
                         : '—'}
                     </span>
                     <span className="tmn-small tm-dim">
-                      {p ? `${p.unrealized_pnl >= 0 ? '+' : '−'}₹${inr(Math.abs(p.unrealized_pnl), 0)} · ${p.quantity} × ₹${inr(p.current_price)}` : ''}
+                      {p
+                        ? p.unrealized_pnl == null || p.current_price == null
+                          ? `${p.quantity} shares`
+                          : `${p.unrealized_pnl >= 0 ? '+' : '−'}₹${inr(Math.abs(p.unrealized_pnl), 0)} · ${p.quantity} × ₹${inr(p.current_price)}`
+                        : ''}
                     </span>
                   </span>
                 )}

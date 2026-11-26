@@ -244,15 +244,18 @@ export interface DetailedPosition {
   name: string | null
   quantity: number
   entry_price: number
-  current_price: number
-  /** False for a position nobody has priced yet: `current_price` is then only the entry price standing in.
-   *  Absent from an older server, which means priced. */
+  /** Null for a position nobody has priced yet (#281): never the entry price standing in. */
+  current_price: number | null
+  /** False for a position nobody has priced yet. Absent from an older server, which means priced. */
   has_price?: boolean
   price_status?: 'ok' | 'none'
+  /** When the latest quote for the stock was taken (ISO, UTC); null or absent when unknown. */
+  price_as_of?: string | null
   invested: number
+  /** For an unpriced position this is its cost, so totals keep it; the screen shows "Price unavailable". */
   current_value: number
-  unrealized_pnl: number
-  unrealized_pnl_pct: number
+  unrealized_pnl: number | null
+  unrealized_pnl_pct: number | null
   // Today's move only — vs. yesterday's close, or vs. entry price if bought
   // today. Null when there's no previous close to compare against yet
   // (brand-new symbol, no history).

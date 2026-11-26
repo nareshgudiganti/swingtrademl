@@ -90,7 +90,7 @@ export default function Holdings() {
   const onRecordSale = (p: DetailedPosition) => {
     const entered = window.prompt(
       `Record the sale of ${p.symbol}.\n\nWhat price did you actually get per share?`,
-      String(p.current_price),
+      p.current_price == null ? '' : String(p.current_price),
     )
     if (entered == null) return
     const exitPrice = Number(entered)

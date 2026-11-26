@@ -4,13 +4,17 @@ import { api } from '../api/client'
 import { ErrorBox, Loading } from './Loading'
 import Modal from './Modal'
 import PricePerformance from './PricePerformance'
+import { priceUnavailableText } from '../lib/priceUnavailable'
 import { formatCurrency, formatDateTime, formatPercent, formatSignedPercent, pnlClass } from '../lib/format'
 
 export interface StockDetail {
   symbol: string
   tone: 'buy' | 'sell' | 'watch' | 'hold'
   actionLabel: string
-  price: number
+  /** Null when the stock has no price yet (#281): the card says "Price unavailable". */
+  price: number | null
+  /** When the last known price was taken, for the "Price unavailable" line. */
+  priceAsOf?: string | null
   entryPrice?: number | null
   stopLoss?: number | null
   takeProfit?: number | null
@@ -29,6 +33,7 @@ export interface StockDetail {
  * means the same thing on Dashboard, Portfolio, or anywhere else a stock is
  * shown as a card. */
 export default function StockDetailModal({ detail, onClose }: { detail: StockDetail; onClose: () => void }) {
+  const price = detail.price
   const candles = useQuery({
     queryKey: ['dailyCandles', detail.symbol],
     queryFn: () => api.candles(detail.symbol, 90),
@@ -53,7 +58,9 @@ export default function StockDetailModal({ detail, onClose }: { detail: StockDet
         <div className="detail-stat-row" style={{ marginTop: '0.9rem' }}>
           <div className="detail-stat">
             <div className="tech-label">Current price</div>
-            <div className="detail-stat-value">{formatCurrency(detail.price)}</div>
+            <div className="detail-stat-value">
+              {price == null ? priceUnavailableText(detail.priceAsOf) : formatCurrency(price)}
+            </div>
           </div>
           {detail.entryPrice != null && (
             <div className="detail-stat">
@@ -61,16 +68,16 @@ export default function StockDetailModal({ detail, onClose }: { detail: StockDet
               <div className="detail-stat-value">{formatCurrency(detail.entryPrice)}</div>
             </div>
           )}
-          {detail.entryPrice != null && detail.entryPrice > 0 && (
+          {price != null && detail.entryPrice != null && detail.entryPrice > 0 && (
             <div className="detail-stat">
               <div className="tech-label">Change</div>
               <div
-                className={`detail-stat-value ${pnlClass(detail.price - detail.entryPrice)}`}
+                className={`detail-stat-value ${pnlClass(price - detail.entryPrice)}`}
               >
-                {formatSignedPercent((detail.price - detail.entryPrice) / detail.entryPrice)}
+                {formatSignedPercent((price - detail.entryPrice) / detail.entryPrice)}
               </div>
               <div className="tech-label">
-                {formatCurrency(detail.price - detail.entryPrice)} / share
+                {formatCurrency(price - detail.entryPrice)} / share
               </div>
             </div>
           )}
@@ -92,9 +99,9 @@ export default function StockDetailModal({ detail, onClose }: { detail: StockDet
               {/* How far price has to fall before the stop fires — the number
                   that actually tells you how much room is left, which a bare
                   rupee level does not. */}
-              {detail.stopLoss != null && detail.price > 0 && (
+              {detail.stopLoss != null && price != null && price > 0 && (
                 <div className="tech-label">
-                  {formatPercent((detail.price - detail.stopLoss) / detail.price)} away
+                  {formatPercent((price - detail.stopLoss) / price)} away
                 </div>
               )}
             </div>
@@ -103,9 +110,9 @@ export default function StockDetailModal({ detail, onClose }: { detail: StockDet
               <div className="detail-stat-value pos">
                 {detail.takeProfit != null ? formatCurrency(detail.takeProfit) : '—'}
               </div>
-              {detail.takeProfit != null && detail.price > 0 && (
+              {detail.takeProfit != null && price != null && price > 0 && (
                 <div className="tech-label">
-                  {formatPercent((detail.takeProfit - detail.price) / detail.price)} away
+                  {formatPercent((detail.takeProfit - price) / price)} away
                 </div>
               )}
             </div>

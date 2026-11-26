@@ -16,7 +16,7 @@ const src = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 // signed percents, as "N% or more", or as a decimal fraction.
 const RULE = new RegExp(
   [
-    '[+−-]\\s?(8|4|5)\\s?%',
+    '[+−-]\\s?(8|4|5)(\\.0)?\\s?%',
     '\\b15[- ](trading[- ])?days?\\b',
     '15-trading-day',
     '\\b0\\.96\\b',
@@ -102,6 +102,7 @@ describe('no hardcoded trading rule or holiday list in the frontend (#416)', () 
     ['the 10-session research stop', 'a −3.5% stop'],
     ['the 10-session research fractions', 'const stop = 0.035; const target = 0.06'],
     ['the half-way price factor', 'const half = mid * 1.05'],
+    ['a rule with a decimal', "{t1 != null ? '(+5.0%)' : ''}"],
     ['the 10-session window', 'within 10 trading days'],
   ])('the pattern catches %s', (_name, line) => {
     expect(RULE.test(line)).toBe(true)

@@ -300,7 +300,7 @@ export function SwingPicksList({ run, win, onWin }: { run: BrainRun; win: Horizo
                       <td className="tm-dim">{situation?.label ?? '—'}</td>
                       <td className="tm-dim">{entryText(d)}</td>
                       <td className="tm-pos">
-                        {money(t1)} <small>{t1 != null ? '+5.0%' : ''}</small>
+                        {money(t1)} <small>{t1 != null ? `+${plan().halfPct.toFixed(1)}%` : ''}</small>
                       </td>
                       <td className="tm-pos">
                         {money(d.target)} <small>{pct(mid, d.target)}</small>
@@ -539,7 +539,7 @@ function PickDetail({
             <strong>{entryText(d)}</strong>
             <span>Target 1 (sell half)</span>
             <strong className="tm-pos">
-              {money(t1)} {t1 != null ? '(+5.0%)' : ''}
+              {money(t1)} {t1 != null ? `(+${plan().halfPct.toFixed(1)}%)` : ''}
             </strong>
             <span>Target 2</span>
             <strong className="tm-pos">

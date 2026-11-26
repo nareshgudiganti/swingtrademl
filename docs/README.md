@@ -6,6 +6,10 @@ One authoritative document per topic. If you need to know where to look, start h
 |---|---|
 | Current state and status | `docs/brain/PROJECT_COMPLETION_MATRIX.md` (full detail); short summary: `docs/architecture/CURRENT-STATE.md` |
 | Architecture and solution (vision vs shipped) | `docs/architecture/TRADEMIND-SOLUTION-OVERVIEW.md` |
+| Target architecture (proposed; Steps 0-1 approved 2026-11-22, Steps 2-3 and database changes await the owner): modules, capabilities, identity, research config; has the "where does a new feature go" answer | `docs/architecture/TARGET-ARCHITECTURE-PROPOSAL.md` |
+| Decision records (ADR index) | `docs/decisions/README.md`: ADR-001 Service 1 gaps, ADR-002 modular monolith, ADR-003 capability registry, ADR-004 identity and score ledger, ADR-005 versioned research config |
+| Permanent engineering standards (module boundaries, capabilities, identity, frontend numbers, change-impact checklist) | `CLAUDE.md` "Core platform standards"; agents: `AGENTS.md` |
+| Stock identity read API | `docs/architecture/IDENTITY-READ-API.md` |
 | Service 1 (market data and input processing) | `docs/architecture/service-01-market-data.md` |
 | Service 1 gaps and their status | `docs/architecture/architecture-gaps.md` (reasoning: `docs/decisions/ADR-001-service-01-gaps.md`) |
 | Deploy, rollback, environment | `docs/DEPLOY.md` |

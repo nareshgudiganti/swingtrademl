@@ -64,6 +64,14 @@ Stay read-only during review tasks.
 - Preserve risk checks and trading safety controls.
 - Require approval for schema migrations and model activation.
 
+## Core platform standards
+
+Full text in [`CLAUDE.md`](CLAUDE.md) ("Core platform standards") and `docs/decisions/README.md`. In short: a new
+feature is one module in `core/modules.py` with its router mounted through `optional(...)`; respect the import
+directions the boundary test enforces; the backend enforces access and the frontend only hides; use one `security_id`
+per stock; put no business numbers in the frontend; answer the change-impact checklist before coding. Do not create or
+renumber migrations without the lead and the owner's approval. Items marked *planned* there are proposals, not built.
+
 ## Safety reminders
 
 - Keep trading in paper mode. Never enable live trading or place real orders.

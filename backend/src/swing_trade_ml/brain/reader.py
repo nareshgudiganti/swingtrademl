@@ -337,9 +337,11 @@ class DatedReader:
 
     def breadth_series(self) -> pd.Series:
         """Share of watchlist stocks above their 50-day average, per day, to as_of."""
-        from swing_trade_ml.ml import market_context
+        # The market judgement (M10) counts each past day over that day's watchlist (#488). Model inputs
+        # (context_frames) keep v1's breadth, the series the models were trained on.
+        from swing_trade_ml.brain import pit_breadth
 
-        frame = market_context.load_market_breadth(self.db, upto=pd.Timestamp(self.as_of))
+        frame = pit_breadth.load_breadth(self.db, pd.Timestamp(self.as_of))
         if frame.empty:
             return pd.Series(dtype=float)
         return frame["breadth_pct_above_sma50"].astype(float).reset_index(drop=True)

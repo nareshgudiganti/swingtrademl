@@ -90,12 +90,23 @@ def _sector_gate(d, f, p) -> Proposal:
     from swing_trade_ml.core.config import settings
 
     top = settings.BRAIN_SECTOR_GATE_TOP_N
-    if top <= 0 or f.sector_rank is None:
+    if top <= 0:
         return None
-    if f.sector_rank > top:
+    name = getattr(f, "sector_name", None)
+    sector = f"Its sector ({name})" if name else "Its sector"
+    if f.sector_rank is None:
+        # Missing sector data never lets an idea through that a known weak sector would hold back.
         return (
             IdeaWord.WAIT,
-            f"Its sector ranks {f.sector_rank} of 15 — outside the top {top} for new ideas.",
+            f"{sector} has no strength rank (unmapped stock or too little sector history), "
+            f"so it cannot be confirmed as one of the top {top} sectors.",
+        )
+    if f.sector_rank > top:
+        total = getattr(f, "sector_total", None)
+        of = f" of {total}" if total else ""
+        return (
+            IdeaWord.WAIT,
+            f"{sector} ranks {f.sector_rank}{of} — outside the top {top} for new ideas.",
         )
     return None
 

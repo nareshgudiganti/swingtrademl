@@ -276,11 +276,22 @@ def _line(reason: str, rank: ModelRank | None, banner_mode: str | None, banner_h
         return "careful_market_falling", (
             "The stock would need to start rising, or the market mode return to NORMAL."
         )
-    m = re.match(r"^Its sector ranks (\d+) of (\d+) — outside the top (\d+) for new ideas\.$", r)
+    # Old records: "Its sector ranks 9 of 15 — ..."; since #488 the sector name and the total are optional.
+    m = re.match(
+        r"^Its sector(?: \((?P<name>[^)]+)\))? ranks (?P<rank>\d+)(?: of (?P<total>\d+))? "
+        r"— outside the top (?P<top>\d+) for new ideas\.$",
+        r,
+    )
     if m:
+        of = f" of {m['total']}" if m["total"] else ""
         return "sector_rank", (
-            f"Its sector would need to climb into the top {m.group(3)} "
-            f"(today it ranks {m.group(1)} of {m.group(2)})."
+            f"Its sector would need to climb into the top {m['top']} (today it ranks {m['rank']}{of})."
+        )
+    m = re.match(r"^Its sector(?: \([^)]+\))? has no strength rank .* one of the top (\d+) sectors\.$", r)
+    if m:
+        return "sector_unranked", (
+            f"Its sector would need a strength rank in the top {m.group(1)} "
+            "(today there is not enough sector data to rank it)."
         )
     if r == "No classic setup (pullback or breakout on volume) today.":
         return "no_setup", (

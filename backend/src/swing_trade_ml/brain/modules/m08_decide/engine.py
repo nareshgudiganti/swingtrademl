@@ -35,6 +35,8 @@ class IdeaFacts:
     market_mode: MarketMode
     notes: tuple[str, ...] = ()  # context lines from modifier opinions; never change the word
     sector_rank: int | None = None  # M11 rank (1 = strongest); for optional sector gate
+    sector_total: int | None = None  # how many sectors were ranked
+    sector_name: str | None = None  # plain name of the idea's sector
     playbook_match: bool = True  # False when playbook gate is on and no setup found
 
 

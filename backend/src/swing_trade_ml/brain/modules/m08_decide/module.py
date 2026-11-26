@@ -24,6 +24,7 @@ from swing_trade_ml.brain.modules.m08_decide.engine import (
 )
 from swing_trade_ml.brain.modules.m08_decide.policy import DEFAULT_POLICY
 from swing_trade_ml.brain.modules.m11_sector.module import sector_index_of
+from swing_trade_ml.brain.modules.m11_sector.ranking import plain_name
 from swing_trade_ml.brain.modules.m12_stock.setups import find_setups
 from swing_trade_ml.brain.opinions import modifier_notes, pick_opinion
 from swing_trade_ml.core.config import settings
@@ -73,12 +74,17 @@ class DecisionEngine(BrainModule):
         held = {h.symbol for h in view.holdings}
         sectors = {s.sector: s for s in view.sectors.values()}
 
-        def _sector_rank(symbol: str) -> int | None:
+        def _sector_state(symbol: str) -> c.SectorState | None:
             idx = sector_index_of(symbol)
-            if idx is None:
-                return None
-            st = sectors.get(idx)
+            return sectors.get(idx) if idx is not None else None
+
+        def _sector_rank(symbol: str) -> int | None:
+            st = _sector_state(symbol)
             return st.rank if st is not None else None
+
+        def _sector_name(symbol: str) -> str | None:
+            idx = sector_index_of(symbol)
+            return plain_name(idx) if idx is not None else None
 
         def _playbook_match(symbol: str) -> bool:
             if not settings.BRAIN_PLAYBOOK_GATE:
@@ -102,11 +108,14 @@ class DecisionEngine(BrainModule):
                 market_mode=mode,
                 notes=modifier_notes(opinions.get(symbol, [])),
                 sector_rank=_sector_rank(symbol),
+                sector_total=getattr(_sector_state(symbol), "of_total", None),
+                sector_name=_sector_name(symbol),
                 playbook_match=_playbook_match(symbol),
             )
             for symbol in view.request.universe
             if symbol not in held
         }
+
         def _held_score(symbol: str) -> tuple[float, str] | None:
             # The same raw model score version 1 reads for a stock; None (a gap,
             # never a guess) when there is no model, no price data or a replay.

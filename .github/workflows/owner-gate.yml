@@ -29,7 +29,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.pull_request.base.sha }}
+          # The latest main, not the PR's base sha: a PR opened before a gate change (or before
+          # the gate existed) must still be judged by main's current script.
+          ref: ${{ github.event.repository.default_branch }}
           sparse-checkout: |
             .github/scripts
             backend/tests/trial_freeze.json

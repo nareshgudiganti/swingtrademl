@@ -1171,7 +1171,7 @@ def test_api_proposals_list_accept_reject_and_errors(client, db_session):
     body = r.json()
     assert (
         body["status"] == "accepted"
-        and body["decided_by"] == "owner"
+        and body["decided_by"] == "api-key"  # #328: who accepted comes from the credential, not the body
         and body["decided_note"] == "looks good"
     )
 

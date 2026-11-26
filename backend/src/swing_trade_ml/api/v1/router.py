@@ -87,15 +87,23 @@ api_router.include_router(admin_console.console)
 # dashboard login (JWT) or the shared X-API-Key (for scripts/automation),
 # and — for anyone but the owner — a plan that includes that route.
 protected = [Depends(require_auth)]
+
+
+def switchable(module_id: str) -> list:
+    """`protected`, then only the module's on/off guard. No plan check is added (these routes keep the access
+    rules they had), so nothing changes for anyone while the module is on."""
+    return [*protected, Depends(require_module(module_id))]
+
+
 api_router.include_router(instruments.router, dependencies=protected)
 api_router.include_router(market_data.router, dependencies=protected)
-api_router.include_router(company.router, dependencies=protected)
-api_router.include_router(compare.router, dependencies=protected)
+api_router.include_router(company.router, dependencies=switchable("discover"))
+api_router.include_router(compare.router, dependencies=switchable("discover"))
 api_router.include_router(strategies.router, dependencies=protected)
 api_router.include_router(signals.router, dependencies=protected)
 api_router.include_router(orders.router, dependencies=protected)
 api_router.include_router(portfolio.router, dependencies=protected)
-api_router.include_router(real_report.router, dependencies=protected)
+api_router.include_router(real_report.router, dependencies=switchable("reports"))
 api_router.include_router(ml.router, dependencies=protected)
 api_router.include_router(notifications.router, dependencies=protected)
 api_router.include_router(backtest.router, dependencies=protected)
@@ -120,7 +128,7 @@ api_router.include_router(brain_observatory.router, dependencies=optional("brain
 api_router.include_router(brain_shadow.router, dependencies=optional("brain"))
 api_router.include_router(experiments.router, dependencies=protected)
 api_router.include_router(h05.router, dependencies=optional("research_lanes"))
-api_router.include_router(weekly_report.router, dependencies=protected)
+api_router.include_router(weekly_report.router, dependencies=switchable("reports"))
 api_router.include_router(model_registry.router, dependencies=protected)
 api_router.include_router(lane_picks.router, dependencies=optional("research_lanes"))
 api_router.include_router(lanes.router, dependencies=optional("research_lanes"))
@@ -128,7 +136,7 @@ api_router.include_router(jobs.router, dependencies=protected)
 # Read-only daily digest: owner or a read_ops / read_all service key only (endpoints/ops.py).
 api_router.include_router(ops.router, dependencies=protected)
 api_router.include_router(server_watch.router, dependencies=protected)
-api_router.include_router(beginner.router, dependencies=protected)
+api_router.include_router(beginner.router, dependencies=switchable("today"))
 # Each person's own watchlist: require_auth opens these few routes to every signed-in person
 # (deps.SELF_SERVICE_ROUTES); the handlers only touch the caller's own rows.
-api_router.include_router(my_watchlist.router, dependencies=protected)
+api_router.include_router(my_watchlist.router, dependencies=switchable("watchlist"))

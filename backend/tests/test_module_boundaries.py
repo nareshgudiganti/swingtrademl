@@ -200,7 +200,7 @@ def cross_product_violations(files: dict[str, str]) -> list[tuple[str, int, str]
 
 
 def unprotected_routers(router_source: str) -> list[tuple[int, str]]:
-    """(line, 'module.attr') of every `include_router` that is neither `protected` nor `optional(...)`."""
+    """(line, 'module.attr') of every `include_router` without `protected`, `optional(...)` or `switchable(...)`."""
     out = []
     for node in ast.walk(ast.parse(router_source)):
         if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)):
@@ -210,7 +210,9 @@ def unprotected_routers(router_source: str) -> list[tuple[int, str]]:
         target = ast.unparse(node.args[0])
         deps = next((kw.value for kw in node.keywords if kw.arg == "dependencies"), None)
         guarded = (isinstance(deps, ast.Name) and deps.id == "protected") or (
-            isinstance(deps, ast.Call) and isinstance(deps.func, ast.Name) and deps.func.id == "optional"
+            isinstance(deps, ast.Call)
+            and isinstance(deps.func, ast.Name)
+            and deps.func.id in ("optional", "switchable")
         )
         if not guarded:
             out.append((node.lineno, target))
@@ -263,7 +265,7 @@ def test_every_router_is_protected_or_named_public():
     source = (SRC / "api" / "v1" / "router.py").read_text(encoding="utf-8")
     loose = {target for _, target in unprotected_routers(source)}
     assert sorted(loose - set(PUBLIC_ROUTERS)) == [], (
-        "a router is included without `protected` or `optional()`"
+        "a router is included without `protected`, `optional()` or `switchable()`"
     )
     assert sorted(set(PUBLIC_ROUTERS) - loose) == [], "a public allow-list entry no longer matches a router"
 

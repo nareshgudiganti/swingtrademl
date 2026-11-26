@@ -29,6 +29,11 @@ def _row(m: modules.Module) -> dict:
         "state": str(m.state),
         "enabled": modules.switches.enabled(m.id),
         "jobs": list(m.jobs),
+        # the interface inventory (#258): what the module owns and needs
+        "route_prefixes": list(m.route_prefixes),
+        "capabilities": list(m.capabilities),
+        "depends_on": list(m.depends_on),
+        "packages": list(m.packages),
     }
 
 

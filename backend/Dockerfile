@@ -14,12 +14,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
+# constraints.txt pins every runtime dependency (#525): same commit, same versions.
 WORKDIR /build
-COPY pyproject.toml ./
+COPY pyproject.toml constraints.txt ./
 COPY src ./src
 
 RUN pip install --upgrade pip setuptools wheel \
-    && pip wheel --wheel-dir /wheels .
+    && pip wheel --constraint constraints.txt --wheel-dir /wheels .
 
 
 FROM python:3.12-slim AS runtime
@@ -40,8 +41,9 @@ RUN useradd --create-home --uid 1000 appuser
 
 WORKDIR /app
 
+COPY constraints.txt ./
 COPY --from=builder /wheels /wheels
-RUN pip install --no-index --find-links=/wheels swing-trade-ml && rm -rf /wheels
+RUN pip install --no-index --constraint constraints.txt --find-links=/wheels swing-trade-ml && rm -rf /wheels
 
 COPY alembic.ini ./
 COPY alembic ./alembic

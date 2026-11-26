@@ -265,3 +265,85 @@ the version 1 bot's strategy signals; copying any third-party product's features
 - D6. Is a saved screen part of the Free plan or a paid plan? (plan access rules, #335/#458)
 - D7. Pattern filter: stored-date evaluation only (proposal), or evaluate live from candles when the page opens?
 - D8. Wait for #353 and #360 (proposal), or accept that a duplicate or stale score could create a false "came in"?
+
+## 15. Decisions: recommendations (26 Nov)
+
+Status: RECOMMENDATIONS ONLY. Nothing below is decided; the owner decides each item. Written 2026-11-26 (IST)
+after the owner asked: "Provide decisions D1-D8 with your recommendation for each. Identify which saved-screen
+requirements can remain independent of #260. Avoid unnecessary coupling."
+
+Checked in code on origin/main (897da862): `GET /brain/changes` is gated by `brain_route_access` as "trademind"
+(`core/plans.py:132-147`) and the code has two plans, `free` and `pro` (`core/plans.py:22, 100-110`); `/me/*`
+routes are allowed per plan from an explicit list (`core/plans.py:191-198`), so new `/me/screens` routes need
+adding there or they stay owner-only. `brain_decisions` already holds word, reasons, `horizon_days`, downgrade
+and overrule fields (`db/models/brain.py:68-110`) and also outcome fields (`outcome`, `outcome_return`, ...),
+which the digest must never read (sealed trial).
+
+| # | Question | Options | Recommendation | Why, in plain English |
+|---|---|---|---|---|
+| D1 | Wait for #260 before any digest? | (a) wait; (b) saved screens first, then a digest from stored brain ideas only, v1 scan ranks added later | (b) | Saving filters needs nothing from #260. A "what changed" note for brain ideas can use data already stored every night. The v1 scan ranks are a later add-on, so #260 being late blocks nothing. |
+| D2 | Approve the `saved_screens` table? | yes / no / store in browser only | Yes, one small table, when the owner approves migrations | Browser-only storage would not follow the person to another phone or laptop and could not be tested for privacy. One table of settings, no history, is the smallest safe version. Not written until approved. |
+| D3 | How many screens, how long a name? | 20 and 60 chars / smaller / unlimited | 10 screens, 60 characters | Nobody needs 20 saved screens; a short list stays easy to use. Easy to raise later, harder to lower once people have more. |
+| D4 | Digest for people who are not the owner? | public wording for all / owner only first | Public wording for all, same as `/brain/changes` | The existing change view already hides private owner text for others. Reusing that rule adds no new risk; owner-only would need extra code to switch off later. |
+| D5 | "Since your last visit" or "since the previous scan"? | per person (needs `last_seen_scan_id`) / same for everyone | "Since the previous scan" first | It needs no extra stored field and nothing to keep in step per person. "Since your last visit" can be added later if people ask. |
+| D6 | Which plan gets saved screens? | Free / Pro / split | Saved filters on Free (small limit, e.g. 3); digest on Pro with the `trademind` feature | The digest reads the same brain data that `/brain/changes` already gates for Pro, so it follows the same rule with no new plan logic. Saving filters costs almost nothing, so a small free allowance helps people try it. Plan details stay with #335/#458. |
+| D7 | Pattern filter: scan date or live candles? | stored date / live | Stored date for the digest, live candles for the Discover list | The digest compares two past nights, so it uses each night's own candles (no look-ahead). The list you see today behaves as Discover does now, so a restored screen gives the same list as setting the filters by hand (A1). |
+| D8 | Wait for #353 and #360 before the digest? | wait / accept risk | Do not wait for the brain-idea digest; do wait for the v1 scan-rank digest | #353 (stale candle gives a score) and #360 (duplicate signals on re-run) are about v1 signals. The brain-idea digest uses only finished live runs, so a false "came in" from them is not expected there. This is an inference from reading the code, to be confirmed by a test (A12) before shipping. The v1 rank digest should wait. |
+
+## 16. Delivery slices
+
+The spec ties the whole feature to #260 (section 12, item 1). Only the "which stocks moved by scan rank" part
+truly needs it. Two slices avoid that coupling.
+
+### Slice A: can ship without #260
+
+Reads: the user's own `saved_screens` rows (new table, D2), existing `/signals/picks` fields (`cap_tier`),
+`horizons.ts`, `find_setups` on stored candles, `user_watchlist_items`, and for the digest the existing
+`brain_runs` / `brain_decisions` through the same logic as `services/brain_changes.py`. No new rank table.
+
+| Id | Item | Data source |
+|---|---|---|
+| Stories 1, 2, 4, 5, 6 | Save, restore, rename, delete, privacy, caution | `saved_screens`, existing Discover data |
+| Section 4, section 5 items 1-2, section 9 `/me/screens` CRUD | Saved-screen storage and menu | `saved_screens` |
+| Section 9 digest endpoints, reduced to brain ideas | Digest for a screen and for the watchlist | `brain_runs`, `brain_decisions`, `user_watchlist_items` |
+| Story 3, section 5 items 3-4 | "What changed", reasons and footer, brain ideas only | `brain_decisions` (word, reasons, downgrade, overrule), brain "place of N" as `brain_changes.py:66-80` |
+| Section 6 rules 1, 3-8 | Rules, with "scan" meaning a finished live nightly brain run | as `brain_changes.py:36-52` |
+| Section 6 rule 2, reasons (a), (b), (c), (f) | Data problem, word changed, pattern appeared or disappeared, not recorded | `brain_decisions`, stored candles |
+| A1 | Restore equals hand-set filters | existing list endpoints and front-end filter functions |
+| A2 | Every digest reason traceable (brain reasons only) | `brain_decisions` |
+| A3, A4, A5 | Two-account isolation, cascade, name/limit/422 | `saved_screens` |
+| A6 | "No longer available", never substituted | `horizons.ts`, `find_setups` labels |
+| A7 | Fewer than two runs gives "not enough history" | `brain_runs` |
+| A8 | Stale or missing data never "came in" | `brain_decisions`, candles |
+| A9, A10 | Banned words; four words only | digest strings |
+| A11 | Digest writes nothing | all tables |
+| A12 | Replay, failed, superseded, intraday runs excluded | `brain_runs` |
+| A13 | No account-room text for non-owners | public fields as `brain_changes.py:112-130` |
+| A14, A15 | Discover unchanged without a screen; phone width | front end |
+
+Rule to keep in the test plan: the digest query must not select `outcome`, `outcome_return`, `max_up`,
+`max_down`, `resolved_on`.
+
+### Slice B: needs #260
+
+| Id | Item | Data source (does not exist yet) |
+|---|---|---|
+| Section 6 rule 2, reason (d) | "Rank crossed the screen's cut-off", "left because rank fell" | #260 per-stock per-scan rank rows |
+| Section 6 rule 2, reason (e) | Cap tier or window of a v1 signal changed | #260 per-scan rows (horizon, kind) |
+| Section 5 item 3, rank wording for v1 | "7th of 118 on 26 Nov" for v1 scan scores | #260 `rank`, `rank_of`, score kind |
+| Section 7 digest data, coverage and stale flags | Scan coverage (how many stocks were checked) | #260 scan record |
+| Section 12 item 3 | 5-day window digest | #260 item 4 (5-day rankings) |
+| A2, A7, A8, A12 applied to v1 scans | Same rules for v1 scans | #260 scan record; also #316, #353, #360 |
+
+### Unnecessary coupling in the spec
+
+1. Section 12 item 1 makes #260, #316, #353 and #360 a hard dependency of the whole feature. Only Slice B needs
+   them. Saved screens and a brain-idea digest need none of them.
+2. Section 7 says the digest reads "a scan record per run" from #260. For brain ideas the equivalent already
+   exists (`brain_runs`, `brain_decisions`), and `/brain/changes` already compares two runs.
+3. `last_seen_scan_id` (section 7) ties the new table to the #260 scan id. With D5 "since the previous scan" the
+   column is not needed in the first version.
+4. The 5-day window being "unavailable" until #260 item 4 (section 12 item 3) only affects Slice B. Saved
+   screens on a window show it as unavailable by the existing rule anyway (A6).
+5. Section 6 rule 2 can ship with reasons (a), (b), (c), (f) in Slice A and gain (d), (e) in Slice B without
+   changing the order or the wording rules.

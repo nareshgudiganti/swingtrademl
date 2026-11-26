@@ -25,6 +25,7 @@ import pandas as pd
 import pytest
 
 from swing_trade_ml.brain import contracts as c
+from swing_trade_ml.brain import pit_breadth
 from swing_trade_ml.brain.contracts import MarketMode
 from swing_trade_ml.brain.modules.m05_memory.cases import barrier_outcomes
 from swing_trade_ml.brain.modules.m05_memory.recall import MIN_CASES, recall
@@ -88,8 +89,10 @@ def _rising(n: int, step: float = 0.003, start: float = 100.0):
 @pytest.fixture(autouse=True)
 def _fresh_market_cache():
     market_context.clear_cache()
+    pit_breadth.clear_cache()
     yield
     market_context.clear_cache()
+    pit_breadth.clear_cache()
 
 
 # ================================================================ 1. the market judgement is point in time
@@ -168,13 +171,56 @@ def test_breadth_for_a_past_day_does_not_change_when_the_watchlist_changes_later
         db_session.add(WatchlistSnapshot(snapshot_date=DAYS[100], symbol=f"BRW{k}"))  # the list as it stood then
     db_session.flush()
     upto = pd.Timestamp(_as_of(DAYS[250]))
-    before = float(market_context.load_market_breadth(db_session, upto=upto)["breadth_pct_above_sma50"].iloc[-1])
+    before = float(pit_breadth.load_breadth(db_session, upto)["breadth_pct_above_sma50"].iloc[-1])
     market_context.clear_cache()
     _candles(db_session, _instrument(db_session, "BRWLATE", watchlisted=True), list(_rising(len(DAYS), -0.004)))  # added later, falling
     db_session.add(WatchlistSnapshot(snapshot_date=DAYS[300], symbol="BRWLATE"))  # snapshot AFTER the run date
     db_session.flush()
-    after = float(market_context.load_market_breadth(db_session, upto=upto)["breadth_pct_above_sma50"].iloc[-1])
+    after = float(pit_breadth.load_breadth(db_session, upto)["breadth_pct_above_sma50"].iloc[-1])
     assert after == pytest.approx(before)
+
+
+def test_default_breadth_ignores_snapshots_so_v1_models_strategies_and_lanes_are_unchanged(db_session):
+    """#488 review: point-in-time breadth lives in brain/pit_breadth.py, read only by the market judgement. v1's
+    loader (ml_swing, dataset, predict, asof, deployable, h05 lanes) ignores snapshots and gives what it gave before."""
+    from swing_trade_ml.db.models.market import WatchlistSnapshot
+
+    for k in range(3):
+        _candles(db_session, _instrument(db_session, f"BRV{k}", watchlisted=True), _rising(len(DAYS), 0.002 - 0.003 * k))
+    upto = pd.Timestamp(_as_of(DAYS[250]))
+    legacy = market_context.load_market_breadth(db_session, upto=upto)
+    db_session.add(WatchlistSnapshot(snapshot_date=DAYS[100], symbol="BRV0"))  # the list then held only one stock
+    db_session.flush()
+    market_context.clear_cache()
+    pd.testing.assert_frame_equal(market_context.load_market_breadth(db_session, upto=upto), legacy)
+    market_context.clear_cache()
+    pit = pit_breadth.load_breadth(db_session, upto)
+    assert float(pit["breadth_pct_above_sma50"].iloc[-1]) != pytest.approx(float(legacy["breadth_pct_above_sma50"].iloc[-1]))
+    # Only the market judgement's breadth series reads the point-in-time module; model inputs keep v1's breadth.
+    reader_src = (SRC / "brain" / "reader.py").read_text(encoding="utf-8")
+    assert reader_src.count("pit_breadth.load_breadth(") == 1
+    assert '"breadth": market_context.load_market_breadth(self.db, upto=upto)' in reader_src
+
+
+def test_days_before_the_first_snapshot_keep_todays_watchlist_rather_than_going_empty(db_session):
+    """#488 review: snapshots began ~5 Oct 2026. Earlier days have no record of the list, so they keep today's list
+    (the old behaviour) instead of empty breadth, which would force every earlier replay DEFENSIVE."""
+    from swing_trade_ml.db.models.market import WatchlistSnapshot
+
+    for k in range(3):
+        _candles(db_session, _instrument(db_session, f"BRF{k}", watchlisted=True), _rising(len(DAYS), 0.002))
+    db_session.add(WatchlistSnapshot(snapshot_date=DAYS[200], symbol="BRF0"))
+    db_session.flush()
+    upto = pd.Timestamp(_as_of(DAYS[250]))
+    legacy = market_context.load_market_breadth(db_session, upto=upto)
+    market_context.clear_cache()
+    pit = pit_breadth.load_breadth(db_session, upto)
+    day = lambda t: pd.Timestamp(t).tz_convert(IST).date()  # noqa: E731
+    early_pit = pit[[day(t) < DAYS[200] for t in pit["ts"]]].reset_index(drop=True)
+    early_legacy = legacy[[day(t) < DAYS[200] for t in legacy["ts"]]].reset_index(drop=True)
+    pd.testing.assert_frame_equal(early_pit, early_legacy)
+    assert early_pit["breadth_pct_above_sma50"].iloc[60:].notna().all()  # past the 50-day warm-up, never empty
+    assert len(pit) == len(legacy)  # no day lost at the seam
 
 
 # ================================================================ 2. missing data is said, and never makes it bolder

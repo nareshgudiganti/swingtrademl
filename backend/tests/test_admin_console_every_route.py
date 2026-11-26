@@ -46,6 +46,7 @@ def test_the_walk_finds_the_admin_routes():
     routes = _admin_routes()
     assert len(routes) >= 10
     assert ("GET", f"{PREFIX}/admin/console/users") in routes
+    assert ("GET", f"{PREFIX}/admin/console/models") in routes  # the read-only model overview (#385)
     assert any(m in {"POST", "PUT", "PATCH", "DELETE"} for m, _ in routes), "no write route found"
 
 

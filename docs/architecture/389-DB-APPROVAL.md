@@ -1,6 +1,8 @@
 # #389 database approval document (unified stock identity)
 
-Status: FOR OWNER DECISION. Written 2026-11-26 (IST) against `origin/main` `933d3e0c`. Read-only: no migration was
+Status: **APPROVED by the owner, 26 Nov 2026 ~12:10 IST: all 8 decisions in section 8 as recommended** (recorded on
+issue #389). Decision 7 done: tags `archive/feat-389-identity-*`. Decision 2 still waits for the skipped-score count
+(section 4). The deploy itself (decision 1) remains a separate manual run. Written 2026-11-26 (IST) against `origin/main` `933d3e0c`. Read-only: no migration was
 run against any database, no code was changed, nothing was touched in production. Anything not checked is marked
 UNVERIFIED. Related docs (not repeated here): `docs/architecture/IDENTITY-READ-API.md` (as built, on main); on
 unmerged branches `docs/389-stock-identity-design`, `docs/389-identity-contracts`, `docs/389-consolidated-audit`.

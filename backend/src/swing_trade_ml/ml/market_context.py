@@ -31,6 +31,9 @@ _symbol_cache: dict[tuple[str, str], pd.DataFrame] = {}
 # Keyed by interval only — one breadth series per interval, computed across
 # the full watchlist.
 _breadth_cache: dict[str, pd.DataFrame] = {}
+# Closes of every stock that was ever on a watchlist snapshot, one column per stock; per-day
+# membership is applied on top (point-in-time breadth).
+_pit_closes_cache: dict[str, pd.DataFrame] = {}
 
 # Each process keeps its own copy. The worker clears it after its nightly ingest, but the API runs in
 # a separate process and never sees that call, so every entry also expires on its own. Daily data
@@ -50,6 +53,7 @@ def _expired(key: tuple) -> bool:
 def clear_cache() -> None:
     _symbol_cache.clear()
     _breadth_cache.clear()
+    _pit_closes_cache.clear()
     _loaded_at.clear()
 
 
@@ -77,9 +81,7 @@ def load_symbol_candles(
         ).scalar_one_or_none()
         if instrument is None:
             log.warning("market_context.symbol_not_found", symbol=symbol)
-            _symbol_cache[key] = pd.DataFrame(
-                columns=["ts", "open", "high", "low", "close", "volume"]
-            )
+            _symbol_cache[key] = pd.DataFrame(columns=["ts", "open", "high", "low", "close", "volume"])
         else:
             _symbol_cache[key] = load_candles(db, instrument.id, interval)
         _loaded_at[key] = _now()
@@ -90,9 +92,7 @@ def load_symbol_candles(
     return full[full["ts"] <= upto].reset_index(drop=True)
 
 
-def load_index_candles(
-    db: Session, interval: str = "day", upto: pd.Timestamp | None = None
-) -> pd.DataFrame:
+def load_index_candles(db: Session, interval: str = "day", upto: pd.Timestamp | None = None) -> pd.DataFrame:
     """The primary benchmark's own candle history — settings.BENCHMARK_INDEX_SYMBOL."""
     return load_symbol_candles(db, settings.BENCHMARK_INDEX_SYMBOL, interval, upto)
 
@@ -105,26 +105,32 @@ def load_sector_candles(
     return load_symbol_candles(db, sector_symbol, interval, upto)
 
 
-def load_vix_candles(
-    db: Session, interval: str = "day", upto: pd.Timestamp | None = None
-) -> pd.DataFrame:
+def load_vix_candles(db: Session, interval: str = "day", upto: pd.Timestamp | None = None) -> pd.DataFrame:
     """INDIA VIX's own candle history — a macro/regime feature input, not a
     trading candidate."""
     return load_symbol_candles(db, "INDIA VIX", interval, upto)
 
 
-def compute_breadth(wide: pd.DataFrame) -> pd.DataFrame:
+def compute_breadth(wide: pd.DataFrame, member: pd.DataFrame | None = None) -> pd.DataFrame:
     """Breadth from a ts-indexed frame of closes, one column per stock.
 
     A comparison with NaN is False, not NaN, so a stock with no bar (late
     listing, warm-up, missing day) would count as "below its average" or "did
     not advance" and drag breadth down. Those values are masked first, so a
     stock only counts on days it has a usable value; a day with none is NaN.
+
+    `member` (same shape, True where the stock was on the watchlist that day) restricts each
+    day's count to the stocks that were on the list then (point-in-time breadth).
     """
     sma = wide.rolling(50, min_periods=50).mean()
     prev = wide.shift(1)
-    above = (wide > sma).where(wide.notna() & sma.notna())
-    advanced = (wide > prev).where(wide.notna() & prev.notna())
+    above_ok = wide.notna() & sma.notna()
+    advanced_ok = wide.notna() & prev.notna()
+    if member is not None:
+        above_ok &= member
+        advanced_ok &= member
+    above = (wide > sma).where(above_ok)
+    advanced = (wide > prev).where(advanced_ok)
     return pd.DataFrame(
         {
             "ts": wide.index,
@@ -134,9 +140,7 @@ def compute_breadth(wide: pd.DataFrame) -> pd.DataFrame:
     ).reset_index(drop=True)
 
 
-def load_market_breadth(
-    db: Session, interval: str = "day", upto: pd.Timestamp | None = None
-) -> pd.DataFrame:
+def load_market_breadth(db: Session, interval: str = "day", upto: pd.Timestamp | None = None) -> pd.DataFrame:
     """Cross-sectional breadth across the watchlist: what fraction of
     watchlisted stocks are above their own 50-day SMA, and what fraction
     advanced (closed up) on the day, per day.
@@ -150,14 +154,20 @@ def load_market_breadth(
     Deliberately built from watchlist candles rather than an index's own
     advance/decline count (Kite exposes no such series directly), so this is
     an approximation scoped to this app's own universe, not the full NSE.
+
+    With `upto` set (a dated run) the count uses the watchlist as it stood on each day, from the
+    daily watchlist snapshots, so adding or removing a stock later never changes a past day. Only
+    when no snapshot has ever been recorded does it fall back to today's watchlist.
     """
+    if upto is not None:
+        pit = _pit_breadth(db, interval, upto)
+        if pit is not None:
+            return pit
     if interval not in _breadth_cache or _expired(("breadth", interval)):
         from swing_trade_ml.ml.dataset import load_candles
 
         instruments = list(
-            db.execute(select(Instrument).where(Instrument.is_watchlisted.is_(True)))
-            .scalars()
-            .all()
+            db.execute(select(Instrument).where(Instrument.is_watchlisted.is_(True))).scalars().all()
         )
         closes: dict[str, pd.Series] = {}
         for inst in instruments:
@@ -183,6 +193,58 @@ def load_market_breadth(
     if upto is None or full.empty:
         return full
     return full[full["ts"] <= upto].reset_index(drop=True)
+
+
+def _pit_breadth(db: Session, interval: str, upto: pd.Timestamp) -> pd.DataFrame | None:
+    """Breadth to `upto` counted over the stocks that were on the watchlist on each day, from the
+    daily watchlist snapshots. None when no snapshot has ever been recorded (then the caller falls
+    back to today's watchlist, as before)."""
+    from zoneinfo import ZoneInfo
+
+    import numpy as np
+
+    from swing_trade_ml.db.models.market import WatchlistSnapshot
+
+    ist = ZoneInfo("Asia/Kolkata")
+    if db.execute(select(WatchlistSnapshot.symbol).limit(1)).first() is None:
+        return None
+    cut = upto.tz_convert(ist).date() if upto.tzinfo is not None else upto.date()
+    rows = db.execute(
+        select(WatchlistSnapshot.snapshot_date, WatchlistSnapshot.symbol).where(
+            WatchlistSnapshot.snapshot_date <= cut
+        )
+    ).all()
+    if interval not in _pit_closes_cache or _expired(("pitwide", interval)):
+        from swing_trade_ml.ml.dataset import load_candles
+
+        symbols = set(db.execute(select(WatchlistSnapshot.symbol).distinct()).scalars())
+        instruments = db.execute(
+            select(Instrument).where(Instrument.tradingsymbol.in_(sorted(symbols)))
+        ).scalars()
+        closes: dict[str, pd.Series] = {}
+        for inst in instruments:
+            df = load_candles(db, inst.id, interval)
+            if not df.empty:
+                closes[inst.tradingsymbol] = df.set_index("ts")["close"]
+        _pit_closes_cache[interval] = pd.DataFrame(closes).sort_index()
+        _loaded_at[("pitwide", interval)] = _now()
+    wide = _pit_closes_cache[interval]
+    wide = wide[wide.index <= upto]
+    if wide.empty:
+        return pd.DataFrame(columns=["ts", "breadth_pct_above_sma50", "breadth_advance_pct"])
+    by_day: dict = {}
+    for day, symbol in rows:
+        by_day.setdefault(day, set()).add(symbol)
+    snap_days = sorted(by_day)
+    member = pd.DataFrame(False, index=wide.index, columns=wide.columns)
+    if snap_days:
+        bar_days = np.array([ts.tz_convert(ist).date() for ts in wide.index])
+        snap_idx = np.searchsorted(np.array(snap_days), bar_days, side="right") - 1
+        for k, day in enumerate(snap_days):
+            cols = [c for c in wide.columns if c in by_day[day]]
+            if cols:
+                member.loc[snap_idx == k, cols] = True
+    return compute_breadth(wide, member)
 
 
 def classify_regime(close: pd.Series) -> dict:

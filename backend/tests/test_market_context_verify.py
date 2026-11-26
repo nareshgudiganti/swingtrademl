@@ -160,19 +160,19 @@ def test_breadth_for_a_run_date_uses_only_closes_up_to_that_date(db_session):
     assert pd.Timestamp(frame["ts"].iloc[-1]).tz_convert(IST).date() <= cut
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="GAP: breadth is counted over the stocks that are on the watchlist TODAY (market_context.load_market_breadth); a past "
-    "run date has no record of who was on the list then, so adding or removing a stock changes breadth for dates already judged",
-)
 def test_breadth_for_a_past_day_does_not_change_when_the_watchlist_changes_later(db_session):
+    from swing_trade_ml.db.models.market import WatchlistSnapshot
+
     for k in range(3):
         _candles(db_session, _instrument(db_session, f"BRW{k}", watchlisted=True), _rising(len(DAYS), 0.002))
+        db_session.add(WatchlistSnapshot(snapshot_date=DAYS[100], symbol=f"BRW{k}"))  # the list as it stood then
+    db_session.flush()
     upto = pd.Timestamp(_as_of(DAYS[250]))
     before = float(market_context.load_market_breadth(db_session, upto=upto)["breadth_pct_above_sma50"].iloc[-1])
     market_context.clear_cache()
     _candles(db_session, _instrument(db_session, "BRWLATE", watchlisted=True), list(_rising(len(DAYS), -0.004)))  # added later, falling
+    db_session.add(WatchlistSnapshot(snapshot_date=DAYS[300], symbol="BRWLATE"))  # snapshot AFTER the run date
+    db_session.flush()
     after = float(market_context.load_market_breadth(db_session, upto=upto)["breadth_pct_above_sma50"].iloc[-1])
     assert after == pytest.approx(before)
 
@@ -218,20 +218,31 @@ def test_missing_fii_data_is_said_and_does_not_lower_or_raise_the_mode():
 
 def test_a_missing_vix_leaves_the_vix_line_out_rather_than_inventing_one():
     state = judge(_inputs(vix=[]))
-    assert not any("India VIX" in r for r in state.reasons) and state.vix is None
+    assert not any("India VIX is " in r for r in state.reasons) and state.vix is None
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="GAP: with no breadth data a rising market is judged NORMAL and the reasons do not mention it (a narrow market would be "
-    "DEFENSIVE); missing breadth or VIX should be said, and should not make the Brain bolder than it would be with the data",
-)
 @pytest.mark.parametrize("missing", ["breadth", "vix"])
 def test_missing_breadth_or_vix_is_said_in_words_or_keeps_the_brain_careful(missing):
     state = judge(_inputs(breadth=[] if missing == "breadth" else None, vix=[] if missing == "vix" else None))
     said = any(missing in r.lower() and ("not available" in r.lower() or "no " in r.lower()) for r in state.reasons)
-    assert state.mode is not MarketMode.NORMAL or said
+    assert state.mode is not MarketMode.NORMAL and said  # #488: more careful, and says why
+
+
+def test_full_data_day_is_unchanged_by_the_missing_data_rule():
+    state = judge(_inputs(fii=[50.0] * 25))
+    assert state.mode is MarketMode.NORMAL and not any("not available" in r for r in state.reasons[:1])
+
+
+def test_a_short_vix_history_is_not_missing_data_and_does_not_trip_the_missing_data_rule():
+    # Owner 2026-11-26 (option a): only "no VIX at all" counts as missing; under a year of history does not.
+    state = judge(_inputs(vix=[16.0 + (i % 6) for i in range(100)], fii=[50.0] * 25))
+    assert not any("India VIX data is not available" in r for r in state.reasons)
+    assert state.mode is MarketMode.NORMAL
+
+
+def test_missing_breadth_is_never_bolder_than_a_narrow_market_and_the_first_reason_says_so():
+    state = judge(_inputs(breadth=[]))
+    assert state.mode is MarketMode.DEFENSIVE and "Breadth data" in state.reasons[0] and "stays careful" in state.reasons[0]
 
 
 def test_a_crash_day_or_a_vix_spike_stops_new_trades_and_a_calm_morning_after_does_not_relax_at_once():
@@ -297,37 +308,20 @@ def test_the_sector_gate_is_off_when_the_setting_is_zero(monkeypatch):
     assert rules._sector_gate(None, _facts(14), None) is None
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="GAP: the owner's decision of 2026-10-09 is 'strongest sectors by default'; BRAIN_SECTOR_GATE_TOP_N is 0 (off) by default "
-    "(core/config.py:255), so no idea is held back for a weak sector unless the setting is raised",
-)
-def test_the_strongest_sectors_gate_is_on_by_default():
-    assert settings.model_fields["BRAIN_SECTOR_GATE_TOP_N"].default > 0
+def test_the_strongest_sectors_gate_stays_off_by_default_by_owner_decision_488():
+    assert settings.model_fields["BRAIN_SECTOR_GATE_TOP_N"].default == 0  # owner 2026-11-26: leave off
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="GAP: the gate's reason says 'ranks N of 15' whatever the real number of ranked sectors is, and does not name the sector "
-    "(only the separate M11 card line does)",
-)
 def test_the_gate_reason_names_the_sector_and_the_real_total(monkeypatch):
     monkeypatch.setattr(settings, "BRAIN_SECTOR_GATE_TOP_N", 5)
     reason = rules._sector_gate(None, SimpleNamespace(sector_rank=8, sector_total=12, sector_name="Banks", symbol="HDFCBANK"), None)[1]
     assert "of 12" in reason and "Banks" in reason
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="GAP: an idea whose sector has no rank (an unmapped stock, or its index has too little history) passes the sector gate "
-    "silently, so missing sector data lets an idea through that a known weak sector would have held back",
-)
 def test_an_idea_with_no_sector_rank_does_not_pass_the_gate_silently(monkeypatch):
     monkeypatch.setattr(settings, "BRAIN_SECTOR_GATE_TOP_N", 5)
-    assert rules._sector_gate(None, _facts(None), None) is not None
+    held = rules._sector_gate(None, _facts(None), None)
+    assert held is not None and held[0].value == "WAIT" and "no strength rank" in held[1]
 
 
 def test_the_top_five_a_day_is_a_display_cut_that_the_digest_and_the_screen_agree_on():

@@ -89,6 +89,20 @@ def _raw(inputs: MarketInputs) -> tuple[MarketMode, str, list[str]]:
     context.append(f"Overall the market looks {PLAIN_REGIME.get(dep.regime, dep.regime)}.")
 
     if dep.regime in NORMAL_REGIMES:
+        # Missing breadth or VIX never makes the brain bolder: without them a "normal" market is
+        # only DEFENSIVE (a narrow market would be), and the reason says which input is missing.
+        missing = []
+        if breadth is None:
+            missing.append("Breadth data (watchlist stocks above their 50-day average) is not available")
+        # Only "no VIX at all" counts (owner, 2026-11-26): a history shorter than a year is not missing data.
+        if vix is None:
+            missing.append("India VIX data is not available")
+        if missing:
+            return (
+                MarketMode.DEFENSIVE,
+                dep.regime,
+                [f"{'; '.join(missing)}, so the brain stays careful.", trend_reason, *context],
+            )
         if dep.regime == "normal" and _fii_selling(inputs.fii_net):
             reason = (
                 "Foreign investors (FIIs) sold on at least 4 of the last 5 days and over the last 20 days."

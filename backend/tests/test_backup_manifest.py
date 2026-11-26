@@ -5,6 +5,7 @@ from __future__ import annotations
 import gzip
 import hashlib
 import importlib.util
+import json
 from pathlib import Path
 
 from swing_trade_ml.ml import backup_manifest as bm
@@ -106,3 +107,85 @@ def test_model_offsite_copy_is_off_unless_the_flag_file_exists():
     gate = script.index("/root/.backup-models-enabled")
     assert gate < call, "the flag check must come before the upload call"
     assert "switched off" in script
+
+
+# ---------------------------------------------------------------- #328: model cards in the backup
+
+
+def _card(folder: Path, artifact: str, artifact_sha: str | None) -> Path:
+    path = folder / (artifact + bm.CARD_SUFFIX)
+    path.write_text(json.dumps({"artifact_sha256": artifact_sha, "card_version": 1}), encoding="utf-8")
+    return path
+
+
+def _carded(tmp_path):
+    rows = _rows(tmp_path)[:2]
+    _card(tmp_path, "a_v1.joblib", hashlib.sha256(b"alpha").hexdigest())
+    rows[1]["card_artifact_sha256"] = hashlib.sha256(b"bravo").hexdigest()  # b: card kept in metrics["card"]
+    manifest = bm.build_manifest(rows, tmp_path)
+    files = {k: v for k, v in bm.hash_folder(tmp_path).items() if k != "random.txt"}
+    return manifest, rows, files
+
+
+def test_manifest_records_each_sidecar_card_with_its_checksum(tmp_path):
+    manifest, _, _ = _carded(tmp_path)
+    side = tmp_path / ("a_v1.joblib" + bm.CARD_SUFFIX)
+    assert manifest["cards"] == [{
+        "for": "a v1", "file": side.name, "size": side.stat().st_size,
+        "sha256": hashlib.sha256(side.read_bytes()).hexdigest(),
+        "artifact_sha256": hashlib.sha256(b"alpha").hexdigest(),
+    }]
+    by = {m["name"]: m for m in manifest["models"]}
+    assert by["b"]["metrics_card_artifact_sha256"] == hashlib.sha256(b"bravo").hexdigest()
+    assert by["a"]["metrics_card_artifact_sha256"] is None
+
+
+def test_compare_passes_with_cards_and_counts_them_as_verified_files(tmp_path):
+    manifest, rows, files = _carded(tmp_path)
+    report = bm.compare(manifest, rows, files)
+    assert report["ok"], report["problems"]
+    assert report["files_verified"] == 5 and report["manifest_cards"] == 1
+
+
+def test_a_card_lost_or_altered_after_backup_is_flagged(tmp_path):
+    manifest, rows, files = _carded(tmp_path)
+    name = "a_v1.joblib" + bm.CARD_SUFFIX
+    altered = dict(files, **{name: ("f" * 64, files[name][1])})
+    assert bm.compare(manifest, rows, altered)["problem_counts"] == {"hash_mismatch": 1}
+    lost = {k: v for k, v in files.items() if k != name}
+    assert bm.compare(manifest, rows, lost)["problem_counts"] == {"missing_file": 1}
+
+
+def test_a_card_that_names_other_bytes_than_its_model_file_is_flagged(tmp_path):
+    rows = _rows(tmp_path)[:2]
+    _card(tmp_path, "a_v1.joblib", "0" * 64)
+    manifest = bm.build_manifest(rows, tmp_path)
+    files = {k: v for k, v in bm.hash_folder(tmp_path).items() if k != "random.txt"}
+    report = bm.compare(manifest, rows, files)
+    assert report["problem_counts"] == {"card_mismatch": 1}
+
+
+def test_a_restored_metrics_card_must_name_the_restored_file(tmp_path):
+    manifest, rows, files = _carded(tmp_path)
+    restored = [rows[0], dict(rows[1], card_artifact_sha256="9" * 64)]
+    assert bm.compare(manifest, restored, files)["problem_counts"] == {"card_mismatch": 1}
+
+
+def test_a_card_file_without_a_manifest_entry_is_an_orphan(tmp_path):
+    manifest, rows, files = _good(tmp_path)
+    files["zz_v1.joblib" + bm.CARD_SUFFIX] = ("2" * 64, 3)
+    assert bm.compare(manifest, rows, files)["problem_counts"] == {"orphan_file": 1}
+
+
+def test_an_older_manifest_without_cards_still_compares(tmp_path):
+    manifest, rows, files = _good(tmp_path)
+    manifest.pop("cards", None)
+    for m in manifest["models"]:
+        m.pop("metrics_card_artifact_sha256", None)
+    assert bm.compare(manifest, rows, files)["ok"]
+
+
+def test_the_offsite_upload_list_includes_cards():
+    infra = Path(__file__).resolve().parents[2] / "infra" / "deploy"
+    script = (infra / "backup-models-offsite.sh").read_text()
+    assert 'm.get("cards", [])' in script

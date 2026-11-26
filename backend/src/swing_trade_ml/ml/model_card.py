@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import platform
 import subprocess
 from importlib import metadata
@@ -180,6 +181,37 @@ def estimator_class(estimator: Any) -> str | None:
     return name
 
 
+def _json_safe(value: Any) -> Any:
+    if isinstance(value, np.generic):
+        value = value.item()
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None  # NaN / inf are not valid strict JSON
+    if value is None or isinstance(value, (bool, int, str)):
+        return value
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(v) for v in value]
+    if isinstance(value, dict):
+        return {str(k): _json_safe(v) for k, v in value.items()}
+    return f"{type(value).__module__}.{type(value).__qualname__}"
+
+
+def effective_params(estimator: Any) -> dict[str, Any] | None:
+    """What the fitted estimator really used (get_params), not only the overrides asked for. None if unknown.
+
+    A calibrated wrapper is unwrapped through its `base`. Values are made JSON-safe; objects become class names.
+    """
+    if estimator is None:
+        return None
+    target = getattr(estimator, "base", None) or estimator
+    getter = getattr(target, "get_params", None)
+    if getter is None:
+        return None
+    try:
+        return _json_safe(dict(getter()))
+    except Exception:  # noqa: BLE001 - a card must never break training
+        return None
+
+
 def build_card(
     *,
     train_df: pd.DataFrame,
@@ -210,6 +242,7 @@ def build_card(
             "invoked_by": invoked_by,  # a label such as cli / api, never raw argv or env
             "requested_algorithm": algorithm,
             "estimator_class": estimator_class(estimator),
+            "effective_params": effective_params(estimator),
             "args": train_args,
             "seed": settings.ML_RANDOM_SEED,
         },

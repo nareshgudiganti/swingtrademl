@@ -3,7 +3,8 @@
 # Called by daily-backup.sh after the database copy; can also be run alone:  bash backup-models-offsite.sh [stamp]
 #
 # - Writes manifest.json from the live registry (read-only): name, version, status, file, size, sha256 for every
-#   ml_models row, plus brain_meta_v* files (which have no row).
+#   ml_models row, plus brain_meta_v* files (which have no row), plus each model's card file
+#   (<model file>.card.json, #328) when it has one.
 # - Each model file is uploaded ONCE, encrypted, as models/<sha256>.enc. The name is the content hash, so an
 #   unchanged file is never transferred again and an uploaded file can never be overwritten by a different one.
 #   Model files are never deleted from the remote.
@@ -27,11 +28,11 @@ enc() { openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass "file:$PASSPHR
 docker exec "$WORKER_CONTAINER" python -m swing_trade_ml.ml.backup_manifest write --out /tmp/manifest.json
 docker cp "$WORKER_CONTAINER:/tmp/manifest.json" "$work/manifest.json"
 
-# "<sha256> <file name>" for every file the manifest says exists (models and brain_meta files).
+# "<sha256> <file name>" for every file the manifest says exists (models, brain_meta files and model cards).
 python3 - "$work/manifest.json" >"$work/list.txt" <<'PY'
 import json, sys
 m = json.load(open(sys.argv[1]))
-for e in m["models"] + m["extra_files"]:
+for e in m["models"] + m["extra_files"] + m.get("cards", []):
     if e.get("sha256") and e.get("file"):
         print(e["sha256"], e["file"])
 PY

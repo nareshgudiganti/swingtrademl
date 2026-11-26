@@ -58,7 +58,11 @@ CROSS_PRODUCT_ALLOW: dict[tuple[str, str], str] = {
     ("brain/prediction_reliability.py", "swing_trade_ml.shadow_lanes.lane_review"): (
         "reads the lane review's checkpoint constants only (no lane code runs)"
     ),
-    ("shadow_lanes/lane_freeze.py", "swing_trade_ml.brain.selection_lab"): _LANES_USE_BRAIN,
+    ("shadow_lanes/lane_freeze.py", "swing_trade_ml.brain.card_trainers"): (
+        "lane freezing trains its lab candidates through the card wrapper, which calls "
+        "selection_lab.train_lab_model unchanged and writes the model card beside the file (#328); "
+        + _LANES_USE_BRAIN
+    ),
     ("shadow_lanes/lane_freeze.py", "swing_trade_ml.brain.selection_lab_run"): _LANES_USE_BRAIN,
     ("shadow_lanes/lane_service.py", "swing_trade_ml.brain.ten_day"): _LANES_USE_BRAIN,
     ("shadow_lanes/lane_service.py", "swing_trade_ml.brain.replay_scoring"): _LANES_USE_BRAIN,
@@ -322,7 +326,7 @@ def test_a_package_init_resolves_relative_imports_from_the_package_itself():
 
 def test_importing_a_submodule_by_name_is_judged_as_that_submodule_not_the_package():
     # one allow-listed brain module must not let a lane file reach any other brain module
-    both = {"shadow_lanes/lane_freeze.py": "from swing_trade_ml.brain import selection_lab, reader\n"}
+    both = {"shadow_lanes/lane_freeze.py": "from swing_trade_ml.brain import card_trainers, reader\n"}
     reader = ("shadow_lanes/lane_freeze.py", 1, "swing_trade_ml.brain.reader")
     assert cross_product_violations(both) == [reader]
 

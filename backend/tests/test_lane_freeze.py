@@ -198,3 +198,68 @@ def test_the_tool_never_activates_or_schedules_anything_or_names_the_held_back_s
     ]
     assert "auto_activate=False" in src and "ACTIVE" not in src.replace("never activated", "")
     assert "reject_set" not in src and "scheduler" not in src.lower()
+
+
+# ---------------------------------------------------------------- #328: lab candidates get a model card
+
+
+def _fake_lab_row(tmp_path, name):
+    import joblib
+    from sklearn.linear_model import LogisticRegression
+
+    path = tmp_path / f"{name}_v1.joblib"
+    joblib.dump({"estimator": LogisticRegression(), "feature_names": ["a"]}, path)
+    return SimpleNamespace(
+        id=7,
+        name=name,
+        version="v1",
+        algorithm="lightgbm",
+        artifact_path=str(path),
+        feature_names=["a"],
+        training_symbols=["U00"],
+        train_start=None,
+        train_end=None,
+        n_samples=1,
+        prediction_horizon_days=15,
+        target_return_pct=0.08,
+        stop_return_pct=0.04,
+        label_kind="excess_top30",
+        metrics={},
+        status="TRAINED",
+    )
+
+
+def test_a_lab_candidate_trains_unchanged_through_the_card_wrapper_and_gets_its_card(tmp_path, monkeypatch):
+    from swing_trade_ml.brain import card_trainers, selection_lab, selection_lab_run
+
+    calls = []
+    name = F.model_name("S1", CUT)
+    row = _fake_lab_row(tmp_path, name)
+    before = Path(row.artifact_path).read_bytes()
+    monkeypatch.setattr(selection_lab_run, "collect_db", lambda db: ({"bars": 1}, USED, ["X1"], MID))
+
+    def lab(db, **kwargs):
+        calls.append(kwargs)
+        return row
+
+    monkeypatch.setattr(selection_lab, "train_lab_model", lab)
+    got = F.default_trainer(None, "S1", CUT, {"large": USED, "mid": MID}, name)
+    assert got is row
+    # exactly the arguments lane freezing always passed to the protected trainer
+    assert calls == [{"name": name, "cutoff": CUT, "symbols": USED, "candidates": USED, "bars": {"bars": 1}}]
+    card = json.loads(card_trainers.sidecar_path(row.artifact_path).read_text(encoding="utf-8"))
+    assert card["training"]["invoked_by"] == "shadow_lanes.lane_freeze"
+    assert card["artifact_sha256"] == hashlib.sha256(before).hexdigest()
+    assert Path(row.artifact_path).read_bytes() == before
+
+
+def test_a_barrier_candidate_still_goes_straight_to_the_general_trainer(monkeypatch):
+    from swing_trade_ml.brain import card_trainers
+    from swing_trade_ml.ml import train
+
+    seen = {}
+    monkeypatch.setattr(train, "train_model", lambda db, **kw: seen.update(kw) or "model")
+    never = lambda *a, **k: pytest.fail("not a lab model")  # noqa: E731
+    monkeypatch.setattr(card_trainers, "train_lab_model_with_card", never)
+    assert F.default_trainer(None, "S0", CUT, {"large": USED, "mid": MID}, "n") == "model"
+    assert seen["auto_activate"] is False and seen["symbols"] == USED

@@ -78,6 +78,16 @@ class TelegramNotifier:
             return False
         return bool(settings.TELEGRAM_ENABLED and self._token and self._chat_id)
 
+    def can_deliver(
+        self, event: NotificationEvent | str = NotificationEvent.SIGNAL, kind: str | None = None
+    ) -> bool:
+        """False when nothing of this kind can reach the chat at all. A caller that retries a failed send
+        uses it to tell "try again" from "never". A safety alert (no `kind`) ignores the owner's event list and only
+        needs Telegram to be on and configured; a switchable kind also honours the list."""
+        if kind is None:
+            return self.enabled
+        return self._should_send(event, kind)
+
     def _should_send(self, event: NotificationEvent | str, kind: str | None = None) -> bool:
         """Telegram must be on. Then a message tagged with a switchable `kind` (informational) follows the
         TELEGRAM_NOTIFY_ON list; a message with NO kind is a safety alert (sell, stop-loss, real-money order,

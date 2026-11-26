@@ -53,6 +53,8 @@ from swing_trade_ml.services import capital as capital_service
 from swing_trade_ml.services import portfolio as portfolio_service
 from swing_trade_ml.services.execution import (
     close_position,
+    confidence_decay_status,
+    exit_alert_due,
     manual_close_position,
     manual_open_position,
     position_action,
@@ -288,7 +290,20 @@ def detailed_positions(
         action_code, action_label = position_action(
             position.entry_confidence,
             position.last_confidence,
-            alert_sent=position.confidence_alert_sent_at is not None,
+            # Delivered flag, or the same weakening the warning is about (a failed send hides nothing, #480).
+            alert_sent=position.confidence_alert_sent_at is not None
+            or (
+                # a brain score is a ranking, not a probability: no derived warning (the sweep skips it too)
+                not is_brain
+                and position.last_confidence is not None
+                and confidence_decay_status(
+                    position.entry_confidence,
+                    position.last_confidence,
+                    exit_confidence,
+                    already_alerted=False,
+                )
+                == "alert"
+            ),
             holding_days=position.holding_days,
             horizon_days=horizon_days,
             exit_confidence=exit_confidence,
@@ -298,7 +313,8 @@ def detailed_positions(
             # advisory holding past its stop that the bot may not sell —
             # rendered as an ordinary confidence read, so "Needs attention"
             # stayed empty while the alerts kept arriving.
-            exit_alert_sent=position.advisory_alert_sent_at is not None,
+            exit_alert_sent=position.advisory_alert_sent_at is not None
+            or exit_alert_due(position, get_broker().mode),
         )
 
         result.append(

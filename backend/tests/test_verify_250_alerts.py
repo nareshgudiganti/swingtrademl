@@ -217,10 +217,6 @@ def test_a4_a_confidence_alert_fires_once_per_episode_with_the_right_numbers(db_
     assert len(sent) == 2
 
 
-@pytest.mark.xfail(
-    **GAP,
-    reason="gap a6: sell and exit alerts print internal codes (STOP_LOSS_HIT, TIME_STOP) and an API path, not plain English",
-)
 def test_a6_exit_alerts_are_in_plain_english(db_session, monkeypatch, sent):
     real_holding(db_session, "A6PLAIN", stop_loss=96.0, take_profit=110.0)
     price_at(monkeypatch, 95.0)
@@ -311,10 +307,6 @@ def test_b4_a_real_money_buy_alert_can_never_be_switched_off_and_a_paper_one_can
     assert alert_policy.PAPER_BUYS in alert_policy.SWITCHABLE_KEYS
 
 
-@pytest.mark.xfail(
-    **GAP,
-    reason="gap b5: the exit alert for a real (My Holdings) position is labelled with the BOT's mode, so a real-money holding says PAPER while the bot is on paper",
-)
 def test_b5_an_exit_alert_for_a_real_holding_does_not_say_paper(db_session, monkeypatch, sent):
     _, _, pos = real_holding(db_session, "B5REAL", stop_loss=96.0, take_profit=110.0)
     assert pos.mode == "live"
@@ -500,31 +492,22 @@ def test_e1_a_failed_telegram_send_returns_false_and_only_logs(monkeypatch):
     assert asyncio.run(notifier._post("x")) is False
 
 
-@pytest.mark.xfail(
-    **GAP,
-    reason="gap e2: check_exits marks a stop-loss alert as sent even when the send failed, so it is never retried and the loss is silent",
-)
 def test_e2_a_stop_alert_that_failed_to_send_is_not_marked_as_sent(db_session, monkeypatch, sent):
+    # Telegram is on and configured, so a refused message is a real failure (#480 fixed)
+    monkeypatch.setattr(execution.notifier, "can_deliver", lambda event, kind=None: True, raising=False)
     sent.ok = False  # Telegram refused the message
     _, _, pos = real_holding(db_session, "E2LOST", stop_loss=96.0, take_profit=110.0)
     price_at(monkeypatch, 95.0)
     execution.check_exits(db_session)
-    assert pos.advisory_alert_sent_at is None, (
-        pos.advisory_alert_sent_at
-    )  # execution.py:1575-1576 sets it regardless
+    assert pos.advisory_alert_sent_at is None, pos.advisory_alert_sent_at
 
 
-@pytest.mark.xfail(
-    **GAP,
-    reason="gap e3: a failed confidence alert is also marked as sent before the send, so it is never retried",
-)
-def test_e3_a_confidence_alert_that_failed_to_send_is_not_marked_as_sent(db_session, sent):
+def test_e3_a_confidence_alert_that_failed_to_send_is_not_marked_as_sent(db_session, monkeypatch, sent):
+    monkeypatch.setattr(execution.notifier, "can_deliver", lambda event, kind=None: True, raising=False)
     sent.ok = False
     strat, row, pos = _weak_world(db_session, "E3LOST")
     execution._check_confidence_decay(db_session, pos, strat, row, 0.40, "paper")
-    assert pos.confidence_alert_sent_at is None, (
-        pos.confidence_alert_sent_at
-    )  # execution.py:867 sets it before sending
+    assert pos.confidence_alert_sent_at is None, pos.confidence_alert_sent_at
 
 
 # ==================================================================== (f) a stock sold elsewhere stops alerting

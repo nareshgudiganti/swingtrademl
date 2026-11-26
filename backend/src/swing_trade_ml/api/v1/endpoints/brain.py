@@ -271,7 +271,14 @@ def latest(
     kind: str | None = Query(None),
     include_replays: bool = Query(False),
 ) -> dict:
-    run = service.latest_run(db, kind, include_replays)
+    if kind == "nightly" and not include_replays:
+        # The idea screens and Stock Detail's plain answers must show one stored decision: both read the
+        # newest finished live nightly of the PAPER book (#238), whoever asks. A live-book run never wins.
+        from swing_trade_ml.services.beginner_views import latest_nightly
+
+        run = latest_nightly(db)
+    else:
+        run = service.latest_run(db, kind, include_replays)
     if run is None:
         raise HTTPException(404, "The brain has not run yet.")
     return _run_out(db, run, owner=principal.is_owner)

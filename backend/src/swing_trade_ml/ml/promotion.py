@@ -33,7 +33,7 @@ from __future__ import annotations
 import hashlib
 import re
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
 from sqlalchemy import select
@@ -115,6 +115,16 @@ def _file_sha(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _is_repo_relative(rel: str) -> bool:
+    """True only for a plain relative path with no parent step, judged the same on Windows and Linux.
+
+    `Path.is_absolute()` depends on the machine: 'C:/x' is absolute on Windows but a plain name on Linux, and
+    'a\\..\\b' has a '..' step only on Windows. Parsing as a Windows path (which also accepts '/') catches
+    drive letters, UNC shares and backslash steps everywhere."""
+    win = PureWindowsPath(rel)
+    return bool(rel) and not win.anchor and not PurePosixPath(rel).is_absolute() and ".." not in win.parts
+
+
 def check_evidence(evidence: Any) -> list[dict]:
     """Each ref is {"path": repo-relative file, "sha256": its hash} (checked on disk now) or {"pr": number}
     (recorded only). At least one file ref is required. Returns the cleaned list."""
@@ -132,7 +142,7 @@ def check_evidence(evidence: Any) -> list[dict]:
         if not isinstance(rel, str) or not isinstance(sha, str) or not _SHA256.match(sha):
             raise PromotionError("An evidence file needs a repo path and its sha256 (64 hex characters).")
         candidate = (root / rel).resolve()
-        if Path(rel).is_absolute() or ".." in Path(rel).parts or root not in candidate.parents:
+        if not _is_repo_relative(rel) or root not in candidate.parents:
             raise PromotionError(f"Evidence path {rel!r} must be a path inside the repository.")
         try:
             actual = _file_sha(candidate) if candidate.is_file() else None

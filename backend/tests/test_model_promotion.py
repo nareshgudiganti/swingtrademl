@@ -166,6 +166,25 @@ def test_evidence_must_be_checkable(db_session, model_dir, repo, evidence, match
         _approve(db_session, owner, repo, "promote", 1, "a" * 64, evidence=evidence)
 
 
+@pytest.mark.parametrize(
+    "rel, ok",
+    [
+        ("docs/report.md", True),
+        ("docs\\report.md", True),
+        ("C:/x/report.md", False),  # drive letter: absolute on Windows, a plain name on Linux
+        ("c:report.md", False),  # drive-relative
+        ("/etc/passwd", False),
+        ("\\\\server\\share\\report.md", False),  # UNC
+        ("../outside.md", False),
+        ("docs\\..\\..\\outside.md", False),  # backslash parent: one name on Linux, '..' on Windows
+        ("", False),
+    ],
+)
+def test_repo_relative_check_is_the_same_on_every_platform(rel, ok):
+    """CI runs on Linux, developers on Windows: a path refused on one must be refused on the other."""
+    assert promotion._is_repo_relative(rel) is ok
+
+
 # ------------------------------------------------------------------ promote
 
 

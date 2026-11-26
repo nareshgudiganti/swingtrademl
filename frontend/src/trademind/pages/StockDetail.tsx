@@ -31,6 +31,8 @@ function PlainBrief({ symbol }: { symbol: string }) {
     </Card>
   )
 }
+import { forecastAndHold } from '../scoreVsPlan'
+import { HorizonFlags } from '../horizonFlags'
 import { SCORE_HINT, scoreLabel, scoreLabelLong, withoutScorePercent } from '../scoreText'
 
 const TABS = ['Overview', 'Technical', 'Fundamental', 'AI Analysis', 'Similar Cases', 'News', 'Options'] as const
@@ -327,8 +329,18 @@ function StockDetailBody() {
                     <Term k="horizon">Horizon</Term>
                   </div>
                   <div className="tm-stat-value" style={{ color: 'var(--tm-violet)' }}>
-                    {decision.horizon_days} trading days
+                    {(() => {
+                      const fh = forecastAndHold(decision.horizon_days)
+                      return (
+                        <>
+                          {fh.forecast}
+                          {fh.forecast && fh.hold ? <br /> : null}
+                          {fh.hold}
+                        </>
+                      )
+                    })()}
                   </div>
+                  <HorizonFlags compact />
                 </div>
               </div>
             </Card>

@@ -14,3 +14,22 @@ export const scoreVsPlan = (): string => {
 }
 
 export const SCORE_VS_PLAN_SHORT = 'The plan is a separate rule from the model’s 5-day score and has not been tested with it yet.'
+
+/**
+ * Stock header "Horizon" lines (F3, label only): the forecast window (from the 5-day rule) and the longest hold
+ * (from the decision's own horizon_days). A value that is missing gives no line (null): nothing is invented.
+ */
+export const forecastAndHold = (
+  maxHoldDays: number | null | undefined,
+): { forecast: string | null; hold: string | null } => {
+  let sessions: number | null = null
+  try {
+    sessions = horizonRule(5).max_sessions
+  } catch {
+    sessions = null
+  }
+  return {
+    forecast: sessions ? `Forecast: ${sessions} trading days (the window the score looks at)` : null,
+    hold: maxHoldDays ? `Longest hold: up to ${maxHoldDays} trading days (when the plan sells)` : null,
+  }
+}

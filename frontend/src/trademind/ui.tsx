@@ -574,7 +574,12 @@ export function Candles({
   const id = useId().replace(/:/g, '')
   // No candles: nothing to draw (the numbers above would be -Infinity and NaN). A day with zero volume draws no
   // volume bar rather than a bar of NaN size (#486).
-  if (bars.length === 0) return null
+  if (bars.length === 0)
+    return (
+      <div data-testid="candles-empty" className="tm-candles-empty" style={{ color: 'var(--tm-muted, #888)', padding: '16px 0' }}>
+        No price history to draw yet.
+      </div>
+    )
   const volShare = (v: number) => (maxVol > 0 ? v / maxVol : 0)
 
   return (

@@ -67,12 +67,12 @@ describe('Candles edge cases', () => {
     expect(Number(heights[1])).toBeGreaterThan(0)
   })
 
-  // DECISION PENDING (owner): #509 drew "No price history to draw yet." for empty bars. #520 does not, because the owner
-  // has not decided. This test documents what happens today so the decision is visible: empty bars render nothing at all.
-  // If the owner chooses to add the message, change this test with that change.
-  it('documents current behaviour: empty bars render nothing (no message, no svg, no NaN)', () => {
+  // Owner-approved: empty bars show a plain message, never a blank gap, svg or NaN.
+  it('empty bars show "No price history to draw yet." (no svg, no NaN)', () => {
     const html = renderToString(<Candles bars={[]} height={300} />)
-    expect(html).toBe('')
-    expect(html).not.toContain('No price history to draw yet.')
+    expect(html).toContain('data-testid="candles-empty"')
+    expect(html).toContain('No price history to draw yet.')
+    expect(html).not.toContain('<svg')
+    expect(html).not.toMatch(/NaN|Infinity/)
   })
 })

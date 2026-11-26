@@ -11,6 +11,7 @@
 // `data-feature` attributes name the rows of the oa5 feature list (./featureList.ts), so its test can find them.
 
 import { useMemo, useState } from 'react'
+import { HorizonFlags, holdText } from '../horizonFlags'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 
@@ -318,7 +319,9 @@ export function SwingPicksList({ run, win, onWin }: { run: BrainRun; win: Horizo
                         )}
                       </td>
                       <td>
-                        <span className="tm-dash-badge">{d.horizon_days}D</span>{' '}
+                        <span className="tm-dash-badge" title="When the plan sells at the latest. This is not a forecast window.">
+                          up to {d.horizon_days}D hold
+                        </span>{' '}
                         <small className="tm-horizon-experimental">{EXPERIMENTAL}</small>
                       </td>
                       <td>
@@ -533,7 +536,8 @@ function PickDetail({
       </Card>
 
       <div className="tm-grid">
-        <Card title={`Trade setup (${d.horizon_days} days)`}>
+        <Card title={`Trade setup (${holdText(d.horizon_days).toLowerCase()})`}>
+          <HorizonFlags compact />
           <div className="tm-dash-kv">
             <span>Entry range</span>
             <strong>{entryText(d)}</strong>

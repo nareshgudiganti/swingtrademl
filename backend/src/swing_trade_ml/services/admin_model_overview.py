@@ -31,7 +31,7 @@ JOBS: dict[str, str] = {
     "brain_nightly": "Brain night run: decides ideas from the scores",
     "horizon5_nightly": "5-day recommendation records (Brain horizon workflow)",
     "h05_daily": "5-day evaluation lane (test only, no trades)",
-    "lane_shadow_daily": "10-day and 15-day shadow lanes (test only, no trades)",
+    "lane_shadow_daily": "Shadow lanes: record the top picks and score them later (test only, no trades; off unless enabled)",
     "evaluate_predictions": "Marks past model scores right or wrong",
 }
 
@@ -92,7 +92,7 @@ def _brain_usage(last_horizon_rec: tuple | None, lane_pick_day: Any) -> dict[str
             "label": "Shadow only: a test lane scored with it, the Brain did not",
             "last_session": lane_pick_day.isoformat(),
         }
-    return {"state": UNKNOWN, "label": "No Brain or lane record found for this model", "last_session": None}
+    return {"state": UNKNOWN, "label": NOT_RECORDED, "last_session": None}
 
 
 def _model_row(

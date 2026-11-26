@@ -10,11 +10,11 @@ const TITLES = [
   'What the words mean',
   'Paper money and real money',
   'What the brain does, and does not do',
-  'The plan for every trade',
+  "The Brain's plan for a trade",
   'Where to look each day',
 ]
 
-const tour = (page: Page) => page.getByRole('dialog', { name: /What the words mean|Paper money|What the brain|The plan|Where to look/ })
+const tour = (page: Page) => page.getByRole('dialog', { name: /What the words mean|Paper money|What the brain|The Brain's plan|Where to look/ })
 
 test.describe('first-time tour', () => {
   test('a new account sees it once by itself, and Help opens it again', async ({ page }) => {

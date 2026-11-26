@@ -30,6 +30,7 @@ from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.core.market_session import last_closed_trading_day
 from swing_trade_ml.db.models.lane_shadow import LanePick
 from swing_trade_ml.db.models.ml import MLModel
+from swing_trade_ml.services.lane_slots import is_dormant, research_slot_of
 from swing_trade_ml.services.model_registry import role_of, slot_for
 from swing_trade_ml.shadow_lanes import lane_service as S
 from swing_trade_ml.shadow_lanes import lane_universe
@@ -74,7 +75,7 @@ def lane_model_for(db: Session, slot_key: str) -> MLModel | None:
         return db.get(MLModel, used)
     chosen = configured_model_ids().get(slot_key)
     model = db.get(MLModel, chosen) if chosen is not None else None
-    if model is not None and slot_for(model.name, model.prediction_horizon_days) == slot_key:
+    if model is not None and slot_for(model.name, model.prediction_horizon_days) == research_slot_of(slot_key):
         return model
     return None
 
@@ -98,6 +99,13 @@ def model_conflict(db: Session, slot_key: str) -> str | None:
     if used is not None and chosen is not None and used != chosen:
         return f"slot keeps model {used}; configured model is {chosen}"
     return None
+
+
+def slot_in_use(db: Session | None, slot_key: str) -> bool:
+    """A dormant slot (the 5-session ones) is ignored until the owner chooses a model for it or it has picks."""
+    if not is_dormant(slot_key) or slot_key in configured_model_ids():
+        return True
+    return db is not None and _used_model_id(db, slot_key) is not None
 
 
 def _try_lock(db: Session | None) -> bool:
@@ -127,10 +135,13 @@ def run_daily(db: Session, now: datetime | None = None) -> dict:
         universe = lane_universe.load_universe()
     except lane_universe.UniverseError as exc:
         for slot_key in S.SLOTS:
-            result["slots"][slot_key] = f"no_universe: {exc}"
+            if slot_in_use(db, slot_key):
+                result["slots"][slot_key] = f"no_universe: {exc}"
         result["outcomes"] = _outcomes(db, signal_day)
         return result
     for slot_key, (_, group) in S.SLOTS.items():
+        if not slot_in_use(db, slot_key):
+            continue
         try:
             result["slots"][slot_key] = _isolated(
                 db,

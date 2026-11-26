@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { api } from '../../api/client'
 import type { Trade, TrackRecordSignal } from '../../api/types'
 import { Card, PageHead, Seg, Tabs, Tag, inr, signed, toneClass } from '../ui'
+import { POST_EXIT_DAYS } from '../../lib/fixedWindows'
 import { usePlan } from '../../lib/plan'
 import StockLink from '../StockLink'
 import { EvidencePanelLive } from '../beginner/EvidencePanel'
@@ -240,8 +241,8 @@ function TradeHistory() {
                 <th className="tm-right" title="Price move 5 trading days after we sold">
                   Moved after selling (5 days)
                 </th>
-                <th className="tm-right" title="Price move 15 trading days after we sold">
-                  Moved after selling (15 days)
+                <th className="tm-right" title={`Price move ${POST_EXIT_DAYS.long} trading days after we sold`}>
+                  Moved after selling ({POST_EXIT_DAYS.long} days)
                 </th>
               </tr>
             </thead>

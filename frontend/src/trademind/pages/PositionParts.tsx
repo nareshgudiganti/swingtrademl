@@ -1,4 +1,4 @@
-// Pieces of the Open positions screen: the −4% / +5% / +8% progress bar, the "Act today" strip and the detail panel.
+// Pieces of the Open positions screen: the stop / half-profit / target progress bar, the "Act today" strip and the detail panel.
 // Display only. Selling and "buy more" go through the same calls PaperPositions already makes.
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
@@ -6,11 +6,17 @@ import { Link } from 'react-router-dom'
 import type { DetailedPosition } from '../../api/types'
 import ScoreTrail from '../ScoreTrail'
 import { inr, signed, toneClass } from '../ui'
-import { HALF_PCT, STOP_PCT, TARGET_PCT, barPercent, levelFor, priceAt, type Level } from './positionLevels'
+import { halfText, plan, stopText, targetText } from '../tradingRules'
+import { NO_PRICE_LEVEL, barPercent, levelFor, levels, priceAt, type Level } from './positionLevels'
 import '../newlook-w4.css'
 
 export const retPct = (p: DetailedPosition) => p.unrealized_pnl_pct * 100
-export const levelOf = (p: DetailedPosition): Level => levelFor(retPct(p), p.suggestion === 'WATCH')
+/** False only when the server says nobody has priced the position (an older server sends no flag: priced). */
+export const hasPrice = (p: DetailedPosition) => p.has_price !== false
+/** The return as text, or "No price yet": a position nobody has priced is never shown as exactly flat (#486). */
+export const returnText = (p: DetailedPosition) => (hasPrice(p) ? signed(retPct(p)) : 'No price yet')
+export const levelOf = (p: DetailedPosition): Level =>
+  hasPrice(p) ? levelFor(retPct(p), p.suggestion === 'WATCH') : NO_PRICE_LEVEL
 
 const rupee = (n: number, d = 2) => `${n < 0 ? '−' : ''}₹${inr(Math.abs(n), d)}`
 
@@ -18,9 +24,10 @@ export function LevelTag({ level }: { level: Level }) {
   return <span className={`op-tag op-tag-${level.tone}`}>{level.tag}</span>
 }
 
-/** One bar from the stop (−4%) to the target (+8%), with a dot where the stock is now. */
+/** One bar from the stop to the target, with a dot where the stock is now. */
 export function PositionBar({ pct, big }: { pct: number; big?: boolean }) {
   const mark = (v: number) => `${barPercent(v)}%`
+  const { stop: STOP_PCT, half: HALF_PCT, target: TARGET_PCT } = levels()
   return (
     <div
       className={`op-bar ${big ? 'op-bar-big' : ''}`}
@@ -31,10 +38,10 @@ export function PositionBar({ pct, big }: { pct: number; big?: boolean }) {
         <span className="op-dot" style={{ left: mark(pct) }} />
       </div>
       <div className="op-bar-ticks">
-        <span style={{ left: mark(STOP_PCT) }}>−4%{big && <em>Stop</em>}</span>
+        <span style={{ left: mark(STOP_PCT) }}>{stopText()}{big && <em>Stop</em>}</span>
         <span style={{ left: mark(0) }}>0%{big && <em>Entry</em>}</span>
-        <span style={{ left: mark(HALF_PCT) }}>+5%{big && <em>Half sell</em>}</span>
-        <span style={{ left: mark(TARGET_PCT) }}>+8%{big && <em>Target</em>}</span>
+        <span style={{ left: mark(HALF_PCT) }}>{halfText()}{big && <em>Half sell</em>}</span>
+        <span style={{ left: mark(TARGET_PCT) }}>{targetText()}{big && <em>Target · {plan().days}-day plan</em>}</span>
       </div>
     </div>
   )
@@ -62,7 +69,7 @@ export function ActToday({ rows, onPick }: { rows: DetailedPosition[]; onPick: (
                 <b>
                   {p.symbol} — {l.title}
                 </b>
-                <span className={`op-act-pct ${toneClass(p.unrealized_pnl)}`}>{signed(retPct(p))}</span>
+                <span className={`op-act-pct ${toneClass(p.unrealized_pnl)}`}>{returnText(p)}</span>
                 <span>{l.advice}</span>
               </button>
             )
@@ -89,9 +96,10 @@ export function DetailPanel({
   children: ReactNode
 }) {
   const l = levelOf(p)
-  const half = priceAt(p.entry_price, HALF_PCT)
-  const target = priceAt(p.entry_price, TARGET_PCT)
-  const stop = priceAt(p.entry_price, STOP_PCT)
+  const lv = levels()
+  const half = priceAt(p.entry_price, lv.half)
+  const target = priceAt(p.entry_price, lv.target)
+  const stop = priceAt(p.entry_price, lv.stop)
   return (
     <aside className="op-panel" aria-label={`${p.symbol} detail`}>
       <div className="op-panel-head">
@@ -109,9 +117,15 @@ export function DetailPanel({
       </div>
       <div className="tm-dim">Current return</div>
       <div className={`op-panel-ret ${toneClass(p.unrealized_pnl)}`}>
-        {signed(retPct(p))} <small>({rupee(p.unrealized_pnl, 0)})</small>
+        {hasPrice(p) ? (
+          <>
+            {signed(retPct(p))} <small>({rupee(p.unrealized_pnl, 0)})</small>
+          </>
+        ) : (
+          returnText(p)
+        )}
       </div>
-      <PositionBar pct={retPct(p)} big />
+      {hasPrice(p) && <PositionBar pct={retPct(p)} big />}
       <div className="op-levels">
         <dl>
           <dt>Entry price</dt>
@@ -125,11 +139,11 @@ export function DetailPanel({
         </dl>
         <dl>
           <dt>Stop loss</dt>
-          <dd className="tm-neg">₹{inr(stop)} (−4%)</dd>
+          <dd className="tm-neg">₹{inr(stop)} ({stopText()})</dd>
           <dt>Half-profit</dt>
-          <dd className="tm-pos">₹{inr(half)} (+5%)</dd>
+          <dd className="tm-pos">₹{inr(half)} ({halfText()})</dd>
           <dt>Target</dt>
-          <dd className="tm-pos">₹{inr(target)} (+8%)</dd>
+          <dd className="tm-pos">₹{inr(target)} ({targetText()}, {plan().days}-day plan)</dd>
         </dl>
       </div>
       <p className={`op-suggest op-tone-${l.tone}`}>

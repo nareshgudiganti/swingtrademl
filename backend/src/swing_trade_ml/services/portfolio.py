@@ -15,10 +15,11 @@ from swing_trade_ml.brokers import get_broker, paper_broker
 from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.enums import PositionStatus, TradingMode
 from swing_trade_ml.core.logging import get_logger
-from swing_trade_ml.core.strategy_policy import outside_tester_book
+from swing_trade_ml.core.strategy_policy import NON_SCAN_STRATEGY_TYPES, outside_tester_book
 from swing_trade_ml.db.models.market import Instrument, Quote
 from swing_trade_ml.db.models.trading import PortfolioSnapshot, Position, Strategy, Trade
 from swing_trade_ml.services import capital
+from swing_trade_ml.services import report_metrics as rm
 
 log = get_logger(__name__)
 
@@ -49,6 +50,28 @@ def exclude_hand_books(strategy_id_col: Any) -> Any:
     """Bot book only — excludes My Holdings and manual paper testing."""
     excluded = select(Strategy.id).where(Strategy.name.in_(_HAND_BOOK_STRATEGY_NAMES))
     return or_(strategy_id_col.is_(None), strategy_id_col.not_in(excluded))
+
+
+def open_positions_by_book(db: Session) -> dict[str, int]:
+    """Open positions per book. The three books never mix: the bot's own book, the manual
+    Testing (paper) book, and real Zerodha holdings tracked under `real_trading`."""
+
+    def count(*where: Any) -> int:
+        return int(
+            db.execute(
+                select(func.count(Position.id))
+                .outerjoin(Strategy, Strategy.id == Position.strategy_id)
+                .where(Position.status == PositionStatus.OPEN, *where)
+            ).scalar_one()
+        )
+
+    is_testing = Strategy.strategy_type.in_(sorted(NON_SCAN_STRATEGY_TYPES))
+    is_real = Strategy.name == REAL_TRADING_STRATEGY_NAME
+    return {
+        "bot": count(or_(Strategy.id.is_(None), ~(is_testing | is_real))),
+        "testing": count(is_testing),
+        "real": count(is_real),
+    }
 
 
 def portfolio_value_and_cash(
@@ -405,6 +428,12 @@ def performance_stats(
     describes the same period. `all_time=True` restores the full record.
     Open positions are never windowed: what the account holds right now is
     the same fact whenever the trial began.
+
+    What the trial window bounds in SQL: the closed trades (`exit_at >= since`) and the equity snapshots.
+    What is read in full on purpose: the top-ups (`_deposits`: the opening equity needs every top-up made
+    before the trial, and the money-in figure needs the ones since), the single last snapshot before the trial
+    (a LIMIT 1 query, the opening equity) and the open positions (a state, not a date). Cutting any of these
+    at the trial start would change a displayed number.
     """
     mode = mode or get_broker().mode
     since = None if all_time else trial_start(mode)
@@ -443,7 +472,7 @@ def performance_stats(
         added = sum(a for _, a in deposits)
     money_in = starting + added
     unrealized = sum(p.unrealized_pnl for p in open_positions)
-    realized = sum(t.net_pnl for t in trades)
+    realized = rm.total(t.net_pnl for t in trades)
 
     stats: dict[str, Any] = {
         "mode": mode,
@@ -467,25 +496,24 @@ def performance_stats(
     }
 
     if trades:
-        wins = [t for t in trades if t.is_win]
-        losses = [t for t in trades if not t.is_win]
-        gross_profit = sum(t.net_pnl for t in wins)
-        gross_loss = abs(sum(t.net_pnl for t in losses))
+        # Wins come from each trade's stored win flag; every other trade, a zero one included, is "not a win"
+        # (report_metrics names how the other report paths treat zero).
+        wl = rm.win_loss([t.net_pnl for t in trades], [t.is_win for t in trades])
 
         stats |= {
-            "winning_trades": len(wins),
-            "losing_trades": len(losses),
-            "win_rate": len(wins) / len(trades),
-            "avg_win": gross_profit / len(wins) if wins else 0.0,
-            "avg_loss": -gross_loss / len(losses) if losses else 0.0,
-            "largest_win": max((t.net_pnl for t in wins), default=0.0),
-            "largest_loss": min((t.net_pnl for t in losses), default=0.0),
+            "winning_trades": wl.wins,
+            "losing_trades": wl.not_wins,
+            "win_rate": wl.win_rate,
+            "avg_win": wl.avg_win,
+            "avg_loss": wl.avg_loss,
+            "largest_win": wl.largest_win,
+            "largest_loss": wl.largest_loss,
             # Gross profit per rupee of gross loss. Above 1.5 is a genuinely
             # tradeable edge; below 1.0 the strategy loses money by definition.
-            "profit_factor": (gross_profit / gross_loss) if gross_loss else float("inf"),
-            "avg_holding_days": float(np.mean([t.holding_days for t in trades])),
-            "avg_return_pct": float(np.mean([t.return_pct for t in trades])),
-            "total_charges": sum(t.charges for t in trades),
+            "profit_factor": wl.profit_factor,
+            "avg_holding_days": rm.mean_numpy([t.holding_days for t in trades]),
+            "avg_return_pct": rm.mean_numpy([t.return_pct for t in trades]),
+            "total_charges": rm.total(t.charges for t in trades),
             "expectancy": realized / len(trades),
         }
     else:
@@ -607,16 +635,13 @@ def strategy_performance_stats(
     if not trades:
         return {"trades": 0, "win_rate": 0.0, "profit_factor": 0.0, "net_pnl": 0.0}
 
-    wins = [t for t in trades if t.is_win]
-    losses = [t for t in trades if not t.is_win]
-    gross_profit = sum(t.net_pnl for t in wins)
-    gross_loss = abs(sum(t.net_pnl for t in losses))
+    wl = rm.win_loss([t.net_pnl for t in trades], [t.is_win for t in trades])
 
     return {
         "trades": len(trades),
-        "win_rate": len(wins) / len(trades),
-        "profit_factor": (gross_profit / gross_loss) if gross_loss else float("inf"),
-        "net_pnl": sum(t.net_pnl for t in trades),
+        "win_rate": wl.win_rate,
+        "profit_factor": wl.profit_factor,
+        "net_pnl": rm.total(t.net_pnl for t in trades),
     }
 
 

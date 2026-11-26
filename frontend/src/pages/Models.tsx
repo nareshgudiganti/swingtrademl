@@ -120,7 +120,7 @@ export default function Models() {
                     {formatPercent(active.target_return_pct, 1)} target
                   </div>
                   <div className="stat-value" style={{ fontSize: '1.3rem' }}>
-                    {acc && acc.evaluated_predictions > 0 ? formatPercent(acc.accuracy, 1) : '—'}
+                    {acc && acc.evaluated_predictions > 0 && acc.accuracy !== null ? formatPercent(acc.accuracy, 1) : '—'}
                   </div>
                   <div className="stat-sub">
                     {acc && acc.evaluated_predictions > 0
@@ -202,7 +202,7 @@ export default function Models() {
           <Stat
             label={`Accuracy at ${horizonAccuracy.data.horizon_days}d`}
             value={
-              horizonAccuracy.data.evaluable
+              horizonAccuracy.data.evaluable && horizonAccuracy.data.accuracy !== null
                 ? formatPercent(horizonAccuracy.data.accuracy, 1)
                 : '—'
             }
@@ -215,7 +215,7 @@ export default function Models() {
           <Stat
             label="Avg actual return"
             value={
-              horizonAccuracy.data.evaluable
+              horizonAccuracy.data.evaluable && horizonAccuracy.data.avg_actual_return !== null
                 ? formatPercent(horizonAccuracy.data.avg_actual_return, 2)
                 : '—'
             }

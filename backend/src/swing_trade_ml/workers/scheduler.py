@@ -14,6 +14,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
+from swing_trade_ml.core import modules
 from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.workers import job_runs, jobs
@@ -263,6 +264,18 @@ def start_scheduler() -> None:
     # LANE_SHADOW_ENABLED. It never picks a model by itself and never trades.
     add_lane_job(scheduler)
 
+    # 5-session recommendation records (disabled by default): the evening job exists only when the owner has
+    # set HORIZON_NIGHTLY_ENABLED. It reads predictions and writes horizon_records only; it never trades.
+    add_horizon_nightly_job(scheduler)
+
+    # Leave out the jobs of any module that is switched off (core/modules.py). Every module is on by default,
+    # so this removes nothing unless a module was switched off in this process. The horizon nightly job is not
+    # named by any module (it is off by default), so the registry leaves it alone.
+    modules.apply_to_scheduler(scheduler)
+    # ...and make every remaining job of an optional module re-read the shared state before each run, so a
+    # module switched off later (by the API process) is skipped without a restart. Nothing is deleted.
+    modules.guard_scheduler_jobs(scheduler)
+
     # Observe only: records each job's last run for Admin > Jobs (workers/job_runs.py). Never raises.
     job_runs.attach(scheduler)
     scheduler.start()
@@ -316,6 +329,20 @@ def add_lane_job(target: BackgroundScheduler) -> bool:
         return added
     except Exception as exc:  # noqa: BLE001
         log.error("lane_shadow.job_registration_failed", error_kind=type(exc).__name__)
+        return False
+
+
+def add_horizon_nightly_job(target: BackgroundScheduler) -> bool:
+    """Register the 5-session record job only if HORIZON_NIGHTLY_ENABLED is true. Never raises. Disabled (the
+    default) imports only the job module's tiny settings class."""
+    try:
+        from swing_trade_ml.services import horizon_nightly
+
+        added = horizon_nightly.register(target)
+        log.info("horizon5.job", registered=added)
+        return added
+    except Exception as exc:  # noqa: BLE001
+        log.error("horizon5.job_registration_failed", error_kind=type(exc).__name__)
         return False
 
 

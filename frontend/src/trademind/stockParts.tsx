@@ -16,9 +16,11 @@ import { brainSteps, stopOf, type BrainStep } from './brainSteps'
 import { NOTHING_STORED, nextReview, SCORE_IS_NOT_PERMISSION, whyNotTrade } from './whyNotTrade'
 import { ideaChange, ordinal, useChanges, type IdeaChange } from './changes'
 import { useSymbolCaps } from './cap'
-import { finalWord, shownWord } from './live'
+import { closeDateText } from './closeDate'
+import { finalWord, ROOM_NOTE, shownWord } from './live'
 import { scorePoints, scoreRank, withoutScorePercent, SCORE_HINT } from './scoreText'
 import { dayLabel } from './pricesAge'
+import { halfText } from './tradingRules'
 import { inr } from './ui'
 import { wordLabel, wordTagColor } from './vocab'
 import './stockpage.css'
@@ -125,6 +127,7 @@ export function useStockData(decision: BrainDecision, run: BrainRun) {
     last,
     prev,
     change,
+    closeOn: snapshot ? undefined : rows.at(-1)?.ts,
     // The line next to the headline is the brain's OWN score per day (same model as the headline). Only when the
     // brain has no stored days yet does it fall back to the cap-tier daily check, and then says so.
     ...pickTrail(toTrail(brainTrailQ.data?.score_trail), toTrail(trail.data?.score_trail)),
@@ -251,6 +254,7 @@ export function StockHeader({
   cap,
   analysisTo,
   snapshot,
+  closeOn,
   withBuy = true,
 }: {
   decision: BrainDecision
@@ -260,6 +264,8 @@ export function StockHeader({
   cap?: string
   analysisTo?: string
   snapshot?: PriceSnapshot
+  /** The timestamp of the stored candle the fallback close comes from (so the page can say which day it is). */
+  closeOn?: string
   withBuy?: boolean
 }) {
   const [buying, setBuying] = useState(false)
@@ -288,9 +294,15 @@ export function StockHeader({
               <b>₹{inr(last)}</b>
               {change != null && prev ? (
                 <span className={up ? 'sp-pos' : 'sp-neg'}>
-                  {up ? '▲' : '▼'} ₹{inr(Math.abs(change))} ({Math.abs((change / prev) * 100).toFixed(2)}%){snapshot ? '' : ' at last close'}
+                  {up ? '▲' : '▼'} ₹{inr(Math.abs(change))} ({Math.abs((change / prev) * 100).toFixed(2)}%)
                 </span>
               ) : null}
+              {/* Without a live snapshot the number is the stored close: say which day it is from, always. */}
+              {!snapshot && (
+                <span className="sp-small" data-testid="close-note">
+                  {closeDateText(closeOn) ? `Last close on ${closeDateText(closeOn)}` : 'Last close'}
+                </span>
+              )}
               {snapshot && (
                 <span
                   className={`sp-small${snapshot.state === 'stale' || snapshot.state === 'delayed' ? ' sp-neg' : ''}`}
@@ -333,7 +345,7 @@ export function StockHeader({
       )}
       {canManage && d.stock_verdict_restored && (
         <p className="sp-small" data-testid="two-answers">
-          Stock verdict: <b>{d.stock_verdict}</b> · Test portfolio: <b>{d.word}</b> (only the account’s room held it back).
+          Decision: <b>{finalWord(d)}</b>. {ROOM_NOTE}
         </p>
       )}
     </>
@@ -871,7 +883,7 @@ export function PlanLadder({ decision: d }: { decision: BrainDecision }) {
             <b>₹{inr(low, 0)}{high !== low ? ` – ₹${inr(high, 0)}` : ''}</b>
           </div>
           <div className="sp-ladder-label" style={{ left: at(half), top: 68 }}>
-            <span className="sp-pos">Sell half</span><b>₹{inr(half)}</b><small>+5% · lock in</small>
+            <span className="sp-pos">Sell half</span><b>₹{inr(half)}</b><small>{halfText()} · lock in</small>
           </div>
           <div className="sp-ladder-label" style={{ left: at(d.target), top: 68, transform: 'translateX(-72%)' }}>
             <span className="sp-pos">Target</span><b>₹{inr(d.target)}</b><small>+{targetPct}% · sell rest</small>

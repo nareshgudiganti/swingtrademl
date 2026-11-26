@@ -1,13 +1,17 @@
 # CLAUDE.md — Swing Trade Bot / TradeMind
 
-Read this first in every session. Then read `docs/architecture/CURRENT-STATE.md`.
+Read this first in every session. Then read `docs/ai/DEV-QUEUE.md`, `docs/ai/HANDOFF.md` and
+`docs/architecture/CURRENT-STATE.md`. The queue and handoff are local files in the main checkout
+(`D:/machine learning/swing-trade-bot`): never push them. When the owner says "Resume TradeMind development",
+follow the resume steps at the top of the queue. Resuming approves no merge, deploy or production change.
 
 @AGENTS.md
 
 ## What this repo is
 
-- **Production** runs from GitHub `main` (latest on origin: `9deb26a`, a merge of PR #181). Push to
-  `main` deploys to swingtrademl.com (DigitalOcean droplet). Git tag `v1` = `64fcb05` is a **frozen
+- **Production** (swingtrademl.com, DigitalOcean droplet) runs the last manual "Deploy to production" run
+  from `main`. A merge or push does not deploy (PR #439). `main` is protected and takes pull requests
+  only. Each merge and each deploy needs the owner's approval. Git tag `v1` = `64fcb05` is a **frozen
   rollback reference only** — prod does not run from that tag.
 - **Version 1 (v1)**: the swing-trading app stack (FastAPI + Postgres/TimescaleDB + Redis +
   APScheduler, React/Vite frontend). Still the core runtime; brain modules plug into it.
@@ -77,7 +81,7 @@ Read this first in every session. Then read `docs/architecture/CURRENT-STATE.md`
 ## Important constraints
 
 - **`brain/*` branches** are for in-progress brain work not yet on `main`. Ship brain changes via
-  `main` (deploys to prod). Do not push experimental `brain/*` branches or open brain PRs without
+  `main` by pull request (a deploy is a separate manual run). Do not push experimental `brain/*` branches or open brain PRs without
   the owner’s go-ahead; trading-sensitive merges still need owner approval before `main`.
 - Never `ruff format` the whole package (rewrites ~50 v1 files) — format only files you touched.
   No prettier on existing frontend files; check with `npx tsc --noEmit -p .`.
@@ -86,6 +90,9 @@ Read this first in every session. Then read `docs/architecture/CURRENT-STATE.md`
   Postgres up (they hang silently otherwise).
 - Daily candles are stamped IST midnight (18:30 UTC previous day) → always `.astimezone(IST).date()`.
 - Never use bare `git stash` (stack is shared across worktrees).
+- **Owner gate**: never tick, pre-tick or edit the "Owner approval" box in a PR description (the
+  `owner-gate` check). Sessions share the owner's GitHub account, so GitHub cannot stop you: only
+  the owner ticks it. Routine PRs pass the gate on their own; see `.github/scripts/owner_gate.py`.
 - Owner is not a finance/ML expert: plain English in UI and summaries.
 
 ## Which skill when

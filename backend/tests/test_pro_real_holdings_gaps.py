@@ -6,12 +6,13 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-from sqlalchemy import update
+from sqlalchemy import select, update
 
 from brain_m18_fixtures import DAY, at, instrument
 from swing_trade_ml.core.enums import SignalType
 from swing_trade_ml.core.security import create_access_token
 from swing_trade_ml.db.models.brain import BrainTrack
+from swing_trade_ml.db.models.market import Instrument
 from swing_trade_ml.db.models.session import User
 from swing_trade_ml.db.models.trading import Position, Signal, Strategy
 from swing_trade_ml.services.plans import set_plans_enabled
@@ -111,7 +112,12 @@ def test_member_cannot_read_non_paper_track(client, db_session, people, who, boo
     assert "points" not in r.json()
 
 
-def test_owner_user_reads_real_track(client, db_session, people):
+def test_owner_user_reads_real_track(client, db_session, people, monkeypatch):
+    # Only an owner named in REAL_ACCOUNT_USERS reads the real book (#414); any other owner is refused
+    # (tests/test_tenant_isolation.py covers that side).
+    from swing_trade_ml.core.config import settings
+
+    monkeypatch.setattr(settings, "REAL_ACCOUNT_USERS", "prg-owner")
     _track(db_session, "real", "PRGREAL")
     r = client.get("/api/v1/brain/track/PRGREAL?book=real", headers=people["owner"])
     assert r.status_code == 200, r.text
@@ -210,6 +216,44 @@ def test_free_member_buy_list_denied(client, db_session, people):
     _seed_buy_list(db_session)
     r = client.get("/api/v1/signals/buy-list", headers=people["free"])
     assert r.status_code == 403
+
+
+def test_a_newer_private_hold_does_not_hide_the_members_buy_for_the_same_stock(client, db_session, people):
+    """#239 gap f2: the owner's private book is removed before the per-stock dedupe, so its newer HOLD
+    cannot hide the member's BUY (and a private BUY never shows to a member)."""
+    _signal(db_session, "prg_same_model", "ml_swing", "PRGSAME", 929020)  # member BUY at DAY 15:55
+    stock = db_session.execute(select(Instrument).where(Instrument.tradingsymbol == "PRGSAME")).scalar_one()
+    private = Strategy(
+        name="prg_same_private",
+        strategy_type="tester_paper",
+        params={},
+        is_active=True,
+        mode="paper",
+        execution_mode="auto",
+        owner_private=True,
+    )
+    db_session.add(private)
+    db_session.flush()
+    db_session.add(
+        Signal(
+            strategy_id=private.id,
+            instrument_id=stock.id,
+            signal_type="HOLD",
+            mode="paper",
+            price=100.0,
+            confidence=0.5,
+            stop_loss=96.0,
+            take_profit=108.0,
+            horizon_days=5,
+            generated_at=at(DAY, 16, 0),  # newer than the member's BUY
+            features={},
+        )
+    )
+    db_session.flush()
+    r = client.get("/api/v1/signals/buy-list", headers=people["pro"])
+    assert r.status_code == 200, r.text
+    shown = [row for row in r.json() if row["symbol"] == "PRGSAME"]
+    assert [row["strategy_name"] for row in shown] == ["prg_same_model"]
 
 
 @pytest.mark.parametrize("headers_key", ["owner", "key"])

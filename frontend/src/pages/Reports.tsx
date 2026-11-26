@@ -6,6 +6,7 @@ import type { Trade } from '../api/types'
 import Stat from '../components/Stat'
 import { Empty, ErrorBox, Loading } from '../components/Loading'
 import { formatCurrency, formatDate, formatPercent, formatSignedPercent, pnlClass } from '../lib/format'
+import { POST_EXIT_DAYS } from '../lib/fixedWindows'
 import { strategyLabel } from '../lib/tiers'
 
 type Period = 'month' | 'quarter' | 'year'
@@ -262,7 +263,7 @@ export default function Reports() {
                   <th className="num" title="Price move vs. our exit price, 5 trading days later">
                     +5d since sold
                   </th>
-                  <th className="num" title="Price move vs. our exit price, 15 trading days later">
+                  <th className="num" title={`Price move vs. our exit price, ${POST_EXIT_DAYS.long} trading days later`}>
                     +15d since sold
                   </th>
                 </tr>

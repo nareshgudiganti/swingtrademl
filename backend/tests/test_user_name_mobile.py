@@ -98,9 +98,15 @@ def test_invalid_names_are_refused(raw):
 def test_single_migration_head_and_parent():
     script = ScriptDirectory.from_config(Config(str(BACKEND / "alembic.ini")))
     heads = script.get_heads()
-    assert heads == ["growwsync01"]  # Groww sync tables sit on wlsales01
-    assert script.get_revision("growwsync01").down_revision == "wlsales01"
-    # sold records sit on acctdelete01 (joins servicekeys01 and adminmfa01)
+    assert heads == ["growwsync01"]  # Groww sync tables (#388) sit on signalkey01
+    assert script.get_revision("growwsync01").down_revision == "signalkey01"
+    assert script.get_revision("signalkey01").down_revision == "simulation02"  # signals.signal_key (#360)
+    assert script.get_revision("simulation02").down_revision == "modswitch01"  # momentum rule ref (#321)
+    assert script.get_revision("modswitch01").down_revision == "simulation01"  # the module switches (#291)
+    assert script.get_revision("simulation01").down_revision == "horizon01"  # the simulation tables (#321)
+    assert script.get_revision("horizon01").down_revision == "identity01"  # the horizon records (#387)
+    assert script.get_revision("identity01").down_revision == "wlsales01"
+    # sold records sit on acctdelete01, which joins servicekeys01 and adminmfa01
     assert script.get_revision("wlsales01").down_revision == "acctdelete01"
     assert script.get_revision("billing01").down_revision == "authtokens01"
     assert script.get_revision("authtokens01").down_revision == "usernamemob01"

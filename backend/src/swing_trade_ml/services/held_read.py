@@ -270,9 +270,11 @@ def score_tracked_stocks(db: Session) -> int:
                 scores.append((instrument.id, float(raw), model if isinstance(model, str) else None))
         except Exception as exc:  # noqa: BLE001 - one stock must not stop the rest
             log.warning("held_read.tracked_score.failed", symbol=instrument.tradingsymbol, error=str(exc))
-    if not scores:
-        return 0
-    written = score_history.record_stock_scores(db, scores, exit_confidence_for(strategy))
+    # Every followed stock is the universe: one the model could not read is a `missing` ledger row (a gap),
+    # not an absence. With nothing scored at all the gaps are still written.
+    written = score_history.record_stock_scores(
+        db, scores, exit_confidence_for(strategy), universe=[i.id for i in instruments]
+    )
     try:
         db.commit()
     except Exception as exc:  # noqa: BLE001

@@ -271,7 +271,14 @@ def latest(
     kind: str | None = Query(None),
     include_replays: bool = Query(False),
 ) -> dict:
-    run = service.latest_run(db, kind, include_replays)
+    if kind == "nightly" and not include_replays:
+        # The idea screens and Stock Detail's plain answers must show one stored decision: both read the
+        # newest finished live nightly of the PAPER book (#238), whoever asks. A live-book run never wins.
+        from swing_trade_ml.services.beginner_views import latest_nightly
+
+        run = latest_nightly(db)
+    else:
+        run = service.latest_run(db, kind, include_replays)
     if run is None:
         raise HTTPException(404, "The brain has not run yet.")
     return _run_out(db, run, owner=principal.is_owner)
@@ -397,10 +404,11 @@ def holding_track(
     """An open trade day by day against the band of similar trades (M15).
 
     Plan members (Pro) read the brain's own paper book only. Any other book,
-    the owner's real Zerodha holdings included, is for a signed-in owner only.
-    The shared API key is paper-only here: nothing in the repo calls this route
-    with it for another book."""
-    if book != "paper" and (principal.via_api_key or not principal.is_owner):
+    the owner's real Zerodha holdings included, is for a signed-in owner named in
+    REAL_ACCOUNT_USERS only (can_see_real_account, as on every other real-account
+    route; any other owner login is refused, #414). The shared API key is
+    paper-only here: nothing in the repo calls this route with it for another book."""
+    if book != "paper" and (principal.via_api_key or not principal.can_see_real_account):
         raise HTTPException(403, "This is a private account. You don't have access.")
     from swing_trade_ml.brain.modules.m15_tracker.store import track_rows
 

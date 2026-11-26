@@ -12,6 +12,7 @@ import { Card, Icon, Tag, toneClass } from '../ui'
 import StockLink from '../StockLink'
 import { PageState } from '../PageState'
 import { pickState } from '../stateRules'
+import { planDays, stopText, targetText } from '../tradingRules'
 
 const WORD_NAME: Record<string, string> = { TRADE: 'Buy', WATCH: 'Watch', WAIT: 'Wait', AVOID: 'Avoid' }
 const WORD_TONE: Record<string, 'green' | 'amber' | 'red' | 'blue'> = {
@@ -25,12 +26,13 @@ const MOOD_NAME: Record<string, string> = {
   DEFENSIVE: 'Cautious market',
   NO_NEW_TRADES: 'No-new-trades market',
 }
-const OUTCOME_NAME: Record<string, string> = {
-  target: 'Hit +8% first',
-  stop: 'Hit −4% first',
+// A function: the plan's numbers come from the server (trademind/tradingRules.ts).
+const outcomeName = (): Record<string, string> => ({
+  target: `Hit ${targetText()} first (${planDays()}-day trial)`,
+  stop: `Hit ${stopText()} first`,
   timeout: 'Ended without either',
   open: 'Still running',
-}
+})
 const DEFAULTS = { scope: 'mine' as 'mine' | 'all', word: 'WATCH', band: '', horizon: '', mood: '', outcome: '', currentOnly: false }
 
 /** One compact dropdown; '' means "Any" (no filter). */
@@ -76,7 +78,7 @@ function ResultCell({ r, sealed }: { r: IdeaReportRow; sealed: boolean }) {
     return r.status === 'due' ? <Tag tone="amber">Waiting for result</Tag> : <Tag tone="green">Still running</Tag>
   return (
     <span className={toneClass(r.return_pct ?? 0)}>
-      {pct(r.return_pct)} <span className="tm-dim">· {OUTCOME_NAME[r.outcome]}</span>
+      {pct(r.return_pct)} <span className="tm-dim">· {outcomeName()[r.outcome]}</span>
     </span>
   )
 }
@@ -184,7 +186,7 @@ export default function IdeaReports() {
               options={d.options.outcomes}
               value={outcome}
               onChange={setOutcome}
-              name={(o) => OUTCOME_NAME[o] ?? o}
+              name={(o) => outcomeName()[o] ?? o}
               disabled={sealed}
               anyText="All outcomes"
             />
@@ -211,7 +213,7 @@ export default function IdeaReports() {
             <p className="tm-dim" data-testid="report-sealed">
               Results are hidden while the test is running (from {d.seal.from ? day(d.seal.from) : 'its start'}), so the
               test stays fair. You can see how many stocks, the score, and the days done and left. “What happened” and
-              the +8% / −4% results unlock when the test is reviewed.
+              the {planDays()}-day trial's {targetText()} / {stopText()} results unlock when the test is reviewed.
             </p>
           )}
           <div className="ir-stats" data-testid="report-summary">
@@ -241,7 +243,7 @@ export default function IdeaReports() {
               <div
                 className="ir-bar"
                 role="img"
-                aria-label={`Hit +8% first ${share(res.target)}%, hit −4% first ${share(res.stop)}%, neither ${share(res.timeout)}%`}
+                aria-label={`${planDays()}-day trial: hit ${targetText()} first ${share(res.target)}%, hit ${stopText()} first ${share(res.stop)}%, neither ${share(res.timeout)}%`}
               >
                 {res.target > 0 && (
                   <span className="ir-bar-win" style={{ flexGrow: res.target }}>
@@ -261,10 +263,10 @@ export default function IdeaReports() {
               </div>
               <div className="ir-legend">
                 <span>
-                  <i className="ir-bar-win" /> Hit +8% first · {res.target}
+                  <i className="ir-bar-win" /> Hit {targetText()} first ({planDays()}-day trial) · {res.target}
                 </span>
                 <span>
-                  <i className="ir-bar-loss" /> Hit −4% first · {res.stop}
+                  <i className="ir-bar-loss" /> Hit {stopText()} first · {res.stop}
                 </span>
                 <span>
                   <i className="ir-bar-flat" /> Neither · {res.timeout}

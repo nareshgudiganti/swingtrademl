@@ -18,6 +18,7 @@ import Modal from '../components/Modal'
 import { HoldingTracker } from '../components/HoldingTracker'
 import { BrainApprovalsCard, BrainCompareCard, BrainStageCard } from '../components/BrainGoLive'
 import { formatCurrency, formatDateTime } from '../lib/format'
+import { planDays, stopText, targetText } from '../trademind/tradingRules'
 import { MODULE_PLAIN, moduleName, traceLine } from '../trademind/vocab'
 import { runNowLine, useBrainRunNow } from '../trademind/live'
 import { SEALED_PROPOSAL_NOTE } from '../trademind/live-system'
@@ -134,8 +135,8 @@ function planText(d: BrainDecision): string {
   return [
     `${d.symbol}: TRADE`,
     `Buy around ${zone}`,
-    `Target ${d.target != null ? formatCurrency(d.target) : '—'} (+8%)`,
-    `Stop ${d.stop != null ? formatCurrency(d.stop) : '—'} (−4%)`,
+    `Target ${d.target != null ? formatCurrency(d.target) : '—'} (${targetText()}, ${planDays()}-day plan)`,
+    `Stop ${d.stop != null ? formatCurrency(d.stop) : '—'} (${stopText()}, ${planDays()}-day plan)`,
     `Shares ${d.qty} · up to ${d.horizon_days} trading days`,
   ].join('\n')
 }
@@ -239,11 +240,11 @@ function DecisionDetail({
             <strong>{formatCurrency(decision.entry_low)}</strong>
           </div>
           <div>
-            <div className="stat-sub">Target (+8%)</div>
+            <div className="stat-sub">Target ({targetText()}, {planDays()}-day plan)</div>
             <strong>{decision.target != null ? formatCurrency(decision.target) : '—'}</strong>
           </div>
           <div>
-            <div className="stat-sub">Stop (−4%)</div>
+            <div className="stat-sub">Stop ({stopText()}, {planDays()}-day plan)</div>
             <strong>{decision.stop != null ? formatCurrency(decision.stop) : '—'}</strong>
           </div>
           <div>

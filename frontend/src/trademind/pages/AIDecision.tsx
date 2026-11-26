@@ -4,7 +4,7 @@ import { useParams } from 'react-router-dom'
 import { usePlan } from '../../lib/plan'
 import { finalWord, shownWord, ideasFrom, useBrainStatus, useLatestRun, useRunTrace, useWhy } from '../live'
 import { MODULE_PLAIN, STEP_LABEL, moduleName, traceLine, wordClassName, wordTone } from '../vocab'
-import { TrackRecord, chancePercent, chanceText, chanceTitle } from '../honest'
+import { TrackRecord, chancePercent, chanceScale, chanceText, chanceTitle } from '../honest'
 import { IdeaExplain } from '../IdeaExplain'
 import { BrainGate, Card, CheckItem, Icon, NotConnected, Tabs, inr } from '../ui'
 import { WhatWouldChange } from '../WhatWouldChange'
@@ -156,7 +156,7 @@ function AIDecisionBody() {
                   <>
                     {' '}
                     with an estimated{' '}
-                    <span title={chanceTitle(decision)}>{chanceText(decision)} chance</span> of reaching the target first
+                    <span title={chanceTitle(decision)}>{chanceText(decision)} chance</span> of reaching the target first; {chanceScale(decision)}
                   </>
                 )}
                 .

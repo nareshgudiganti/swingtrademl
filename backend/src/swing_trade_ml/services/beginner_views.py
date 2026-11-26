@@ -10,6 +10,7 @@ from datetime import date, datetime, time
 from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session
 
+from swing_trade_ml.brain.modules.m08_decide.policy import DEFAULT_POLICY
 from swing_trade_ml.brain.modules.m13_news.calendar import trading_days_until
 from swing_trade_ml.brain.trial_journal import TRIAL_START as BRAIN_TRIAL_START
 from swing_trade_ml.core.config import settings
@@ -75,7 +76,7 @@ def money_at_stake(
 
     first_qty = qty // 2
     rest_qty = qty - first_qty
-    first_price = entry * (1 + settings.ML_FIRST_TARGET_PCT)
+    first_price = entry * (1 + DEFAULT_POLICY.first_target_pct)
     half = (first_price - entry) * first_qty + (target - entry) * rest_qty - buy
     if first_qty > 0:
         half -= _charges(first_qty * first_price, "SELL")
@@ -351,7 +352,7 @@ def _company(db: Session, inst: Instrument) -> dict:
     }
 
 
-def _latest_nightly(db: Session):
+def latest_nightly(db: Session):
     """The latest finished LIVE nightly run of the PAPER book (any date). Replays, why-runs,
     intraday runs, failed runs and any other book never count (as `strategies.brain.todays_run`)."""
     from swing_trade_ml.db.models.brain import BrainRun
@@ -369,13 +370,16 @@ def _latest_nightly(db: Session):
     ).first()
 
 
+_latest_nightly = latest_nightly
+
+
 def _run_is_current(run, today: date) -> bool:
     """A run counts as "today's" view only if it was made on the latest expected trading day
-    (system._expected_latest_trading_day: the previous trading day, all day) or later — i.e.
+    (market_session.expected_latest_trading_day: the previous trading day, all day) or later — i.e.
     yesterday's nightly before today's 15:50 run, or today's once it has run. Older is stale."""
-    from swing_trade_ml.api.v1.endpoints.system import _expected_latest_trading_day
+    from swing_trade_ml.core.market_session import expected_latest_trading_day
 
-    expected = _expected_latest_trading_day(datetime.combine(today, time(12, 0), tzinfo=IST))
+    expected = expected_latest_trading_day(datetime.combine(today, time(12, 0), tzinfo=IST))
     return run.as_of.astimezone(IST).date() >= expected
 
 
@@ -501,19 +505,21 @@ def stock_brief(db: Session, symbol: str, today: date) -> dict:
             day = run.as_of.astimezone(IST).date()
             for _ in range(dec.horizon_days):
                 day = next_trading_day(day)
+            # The percentages are the Brain's own policy, the same numbers that set dec.target and dec.stop
+            # (#239 gap G10). The v1 ml_swing settings are a different book and must not reach this plan.
             out["q3_plan"] = {
                 "answer": f"Buy between {dec.entry_low:g} and {dec.entry_high:g}, sell half at +"
-                f"{settings.ML_FIRST_TARGET_PCT:.0%}, target {dec.target:g}, stop {dec.stop:g}, "
+                f"{DEFAULT_POLICY.first_target_pct:.0%}, target {dec.target:g}, stop {dec.stop:g}, "
                 f"out by {_day_text(day)}",
                 "available": True,
                 "why": None,
                 "buy_zone": [dec.entry_low, dec.entry_high],
-                "sell_half_price": round(entry * (1 + settings.ML_FIRST_TARGET_PCT), 2),
-                "sell_half_pct": settings.ML_FIRST_TARGET_PCT,
+                "sell_half_price": round(entry * (1 + DEFAULT_POLICY.first_target_pct), 2),
+                "sell_half_pct": DEFAULT_POLICY.first_target_pct,
                 "target": dec.target,
-                "target_pct": settings.ML_TARGET_RETURN_PCT,
+                "target_pct": DEFAULT_POLICY.target_pct,
                 "stop": dec.stop,
-                "stop_pct": settings.ML_STOP_RETURN_PCT,
+                "stop_pct": DEFAULT_POLICY.stop_pct,
                 "last_exit_day": day.isoformat(),
             }
             money = money_at_stake(entry, dec.stop, dec.target, dec.qty or 0)

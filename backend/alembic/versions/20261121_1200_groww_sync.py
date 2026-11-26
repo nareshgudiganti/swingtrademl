@@ -3,7 +3,7 @@
 Additive only. Existing watchlist rows backfill to source 'manual' / held_state 'unknown'.
 
 Revision ID: growwsync01
-Revises: wlsales01
+Revises: signalkey01
 Create Date: 2026-11-21 12:00:00.000000+00:00
 """
 
@@ -16,7 +16,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision: str = "growwsync01"
-down_revision: str | None = "wlsales01"
+down_revision: str | None = "signalkey01"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

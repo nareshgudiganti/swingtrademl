@@ -128,8 +128,9 @@ def test_lane_numbers_and_nifty_yardstick_over_the_same_windows(client, db_sessi
     row = row_of(client, db_session, "15d-mid")
     f = row["forward"]
     assert (f["picks"], f["finished"], f["matured_days"]) == (6, 4, 2)
-    assert f["net_per_trade"] == pytest.approx(0.005) and f["hit_rate"] == pytest.approx(0.5)
-    assert f["edge_vs_every_stock"] == pytest.approx(0.005)
+    # not enough days yet (#474): the counts stay, the hit rate and net per trade are withheld
+    assert f["net_per_trade"] is None and f["hit_rate"] is None and f["rates_note"]
+    assert f["edge_vs_every_stock"] is None  # the same floor for the edge over every stock
     n = f["nifty"]
     assert n["available"] and n["windows"] == 4 and n["mean_return"] is not None
     assert row["verdict"]["state"] == "not_enough_days" and row["verdict"]["needed_days"] == 60

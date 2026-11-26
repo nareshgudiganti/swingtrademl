@@ -45,6 +45,21 @@ const report = (rows: HorizonReportRow[]): HorizonReport => ({
 const html = (d: HorizonReport | null) => renderToString(<HorizonReportView data={d} />).replace(/<!-- -->/g, '')
 
 describe('Horizon report', () => {
+  it('says research only, shows why the rates are blank, and counts unresolved picks (#474)', () => {
+    const out = html(
+      report([
+        row({
+          research_only: true,
+          forward: { ...row().forward, picks: 6, finished: 4, unresolved: 1, rates_note: 'Not enough days yet: a hit rate or a net per trade from this few days would mislead.' },
+        }),
+      ]),
+    )
+    expect(out).toContain('research only')
+    expect(out).toContain('1 with no usable price (unresolved)')
+    expect(out).toContain('Not enough days yet')
+    expect(out).not.toContain('0%')
+  })
+
   it('labels a fold model as not used for daily picks and never as a final model', () => {
     const out = html(report([row()]))
     expect(out).toContain('Evaluation fold model - not used for daily picks')

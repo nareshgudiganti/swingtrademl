@@ -1,0 +1,44 @@
+# Owner gate (required check "owner-gate").
+#
+# Routine PRs pass at once and auto-merge when CI is green. A PR that touches migrations, CI or
+# deployment, authentication, billing, order placement, risk limits, model activation or frozen
+# trial files fails until the owner ticks the "Owner approval" box that this check adds to the PR
+# description. New commits untick it. Logic and the full file list: .github/scripts/owner_gate.py.
+#
+# pull_request_target runs the copy of this workflow and script on main, so a PR cannot edit the
+# gate that judges it. The job never checks out or runs PR code, which keeps the write token safe.
+
+name: owner-gate
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, edited, ready_for_review]
+
+concurrency:
+  group: owner-gate-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  owner-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The latest main, not the PR's base sha: a PR opened before a gate change (or before
+          # the gate existed) must still be judged by main's current script.
+          ref: ${{ github.event.repository.default_branch }}
+          sparse-checkout: |
+            .github/scripts
+            backend/tests/trial_freeze.json
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Check for sensitive changes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 .github/scripts/owner_gate.py

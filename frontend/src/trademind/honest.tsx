@@ -1,4 +1,5 @@
 import type { BrainDecision } from '../api/types'
+import { planDays, stopText, targetText } from './tradingRules'
 
 /** What an idea's score really meant on days the model had not seen (the API's `honest_score`).
  *  The raw model score is a ranking, never shown as a chance. */
@@ -12,11 +13,24 @@ export const chanceText = (d: BrainDecision): string => {
   return p == null ? '—' : `~${p}%`
 }
 
+/** What an estimated chance is a chance of, in plain English, as short visible text: a phone has no tooltip, so
+ *  the scale cannot live only in `chanceTitle`. Read from the rule the server sent (h.rule); the 15-day text is the
+ *  fallback when it sent none. Empty when there is no measured chance, so none of it ever shows without one. */
+const fallbackScale = () =>
+  `aims for ${targetText()} target before the ${stopText()} stop, within ${planDays()} trading days (${planDays()}-day trial)`
+
+export const chanceScale = (d: BrainDecision): string => {
+  if (chancePercent(d) == null) return ''
+  const rule = d.honest_score?.rule
+  // the server writes "-4%" with a hyphen; the screen writes a real minus
+  return rule ? `aims for ${rule.replace(/-(?=\d)/g, '−')} (trial)` : fallbackScale()
+}
+
 export const chanceTitle = (d: BrainDecision): string => {
   const h = d.honest_score
   if (!h) return 'No score for this stock.'
   if (h.status === 'not_measured' || h.status === 'unverified') return h.note ?? 'No measured chance for this model.'
-  return `Estimated chance of +8% before −4% within 15 trading days, from how this score did on days the model had not seen. ${h.track_record?.text ?? ''}`.trim()
+  return `The Brain's ${planDays()}-day trial estimate: chance of ${targetText()} before ${stopText()} within ${planDays()} trading days, from how this score did on days the model had not seen. ${h.track_record?.text ?? ''}`.trim()
 }
 
 /** Plain-English track record under an idea: how often similar ideas really worked. */

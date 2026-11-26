@@ -251,3 +251,11 @@ def audit_trail(
 @console.get("/release-switches")
 def release_switches(admin: MfaAdmin) -> dict[str, Any]:
     return {"switches": switch_states()}
+
+
+@console.get("/models")
+def model_overview(admin: MfaAdmin, db: DbSession) -> dict[str, Any]:
+    """Read-only: which 5-day and 15-day models exist, are approved, last ran and feed the Brain (#385)."""
+    from swing_trade_ml.services.admin_model_overview import build_overview
+
+    return build_overview(db)

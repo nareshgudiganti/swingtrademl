@@ -723,11 +723,17 @@ def cmd_brain(args: argparse.Namespace) -> int:
             _print_run(db, run_id)
             return 0
         if args.brain_command == "meta-train":
-            from swing_trade_ml.brain.modules.m06_reason.training import TrainingError, train_and_save
+            from swing_trade_ml.brain.modules.m06_reason import training
+            from swing_trade_ml.ml import promotion
 
             try:
-                result = train_and_save(db, args.barrier_model, args.swing_model)
-            except TrainingError as exc:
+                promotion.refuse_combiner_save_while_m06_on(db)
+            except promotion.PromotionError as exc:
+                print(f"❌ {exc}", file=sys.stderr)
+                return 1
+            try:
+                result = training.train_and_save(db, args.barrier_model, args.swing_model)
+            except training.TrainingError as exc:
                 print(f"❌ {exc}", file=sys.stderr)
                 return 1
             r = result["report"]

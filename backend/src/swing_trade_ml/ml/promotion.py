@@ -450,6 +450,20 @@ def _record_use(db: Session, approval: AuditLog, action: str, target_type: str, 
     )
 
 
+def refuse_combiner_save_while_m06_on(db: Session) -> None:
+    """M06 serves the newest saved combiner (frozen `artifact.load_latest`), so saving a new one while M06 is
+    on would swap the approved file with no approval. Refuse it: switch M06 to shadow or off, train, record an
+    approval for the new file, then switch it on. Shadow/off saves change no decision."""
+    from swing_trade_ml.db.models.brain import BrainModuleSetting
+
+    row = db.get(BrainModuleSetting, "M06")
+    if row is not None and row.mode == "on":
+        raise PromotionError(
+            "M06 is on, so a new combiner can't be saved: it would replace the approved file unseen. "
+            "Switch M06 to shadow, train, approve the new file, then switch it on."
+        )
+
+
 def approve_m06_on(
     db: Session, approval_id: int | None, *, invoked_by: str, now: datetime | None = None
 ) -> None:

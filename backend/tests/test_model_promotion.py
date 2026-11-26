@@ -633,6 +633,43 @@ def test_cli_brain_set_m06_on_needs_an_approval(db_session, switch_on, combiner,
     assert "approval" in capsys.readouterr().err
 
 
+def _m06_mode(db, mode):
+    from swing_trade_ml.db.models.brain import BrainModuleSetting
+
+    row = db.get(BrainModuleSetting, "M06") or BrainModuleSetting(module_id="M06")
+    row.mode, row.changed_by = mode, "test"
+    db.add(row)
+    db.flush()
+
+
+@pytest.mark.parametrize("mode, refused", [("on", True), ("shadow", False), ("off", False), (None, False)])
+def test_no_new_combiner_may_be_saved_while_m06_is_on(db_session, mode, refused):
+    """M06 serves the newest saved combiner, so a save while it is on would swap the approved file unseen
+    (independent review of #523). Shadow/off saves change no decision."""
+    if mode is not None:
+        _m06_mode(db_session, mode)
+    if refused:
+        with pytest.raises(promotion.PromotionError, match="M06 is on"):
+            promotion.refuse_combiner_save_while_m06_on(db_session)
+    else:
+        promotion.refuse_combiner_save_while_m06_on(db_session)
+
+
+def test_cli_meta_train_is_refused_while_m06_is_on(db_session, monkeypatch, capsys):
+    from swing_trade_ml import cli
+
+    _cli_scope(db_session, monkeypatch)
+    _m06_mode(db_session, "on")
+    from swing_trade_ml.brain.modules.m06_reason import training
+
+    called = []
+    monkeypatch.setattr(training, "train_and_save", lambda *a, **k: called.append(a))
+    args = argparse.Namespace(brain_command="meta-train", barrier_model=None, swing_model=None)
+    assert cli.cmd_brain(args) == 1
+    assert called == []
+    assert "M06 is on" in capsys.readouterr().err
+
+
 # ------------------------------------------------------------------ strategy model selector
 
 

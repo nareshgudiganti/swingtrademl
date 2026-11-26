@@ -44,6 +44,12 @@ SET_MODE_CALLERS = {
     "swing_trade_ml/cli.py",
     "swing_trade_ml/brain/modules/m09_learn/store.py",
 }
+#: callers allowed to save a new M06 combiner (M06 serves the newest one). The CLI refuses while M06 is on
+#: (promotion.refuse_combiner_save_while_m06_on); training.py is the frozen trainer that calls artifact.save.
+COMBINER_SAVERS = {
+    "swing_trade_ml/cli.py": "train_and_save",
+    "swing_trade_ml/brain/modules/m06_reason/training.py": "save",
+}
 STATUS_WORDS = {"ACTIVE", "ARCHIVED"}
 _SQL_WRITE = re.compile(
     r"\b(UPDATE\s+ml_models|INSERT\s+INTO\s+ml_models|DELETE\s+FROM\s+ml_models)\b", re.IGNORECASE
@@ -275,6 +281,11 @@ class _Scan(ast.NodeVisitor):
             self.flag(node, "builds an active/archived ModelStatus from a string")
         if name == "set_mode" and self.rel not in SET_MODE_CALLERS:
             self.flag(node, "switches a brain module (set_mode)")
+        saves_combiner = name == "train_and_save" or (
+            name == "save" and isinstance(fn, ast.Attribute) and getattr(fn.value, "id", None) == "artifact"
+        )
+        if saves_combiner and COMBINER_SAVERS.get(self.rel) != name:
+            self.flag(node, "saves a new M06 combiner (train_and_save / artifact.save)")
         if name == "update" and not self.in_status_writer() and self._chain_has_mlmodel(fn):
             self.flag(node, "bulk-updates MLModel")
         if isinstance(fn, ast.Name) and fn.id in {"update", "insert"} and node.args:
@@ -344,6 +355,8 @@ EVASIONS = {
     "bulk_update.py": "def f(db, MLModel):\n    db.query(MLModel).update({MLModel.version: 'v9'})\n",
     "set_mode.py": "def f(db, service):\n    service.set_mode(db, 'M06', 'on', by='x')\n",
     "role_assign.py": "def f(m):\n    m.model_role = 'prod'\n",
+    "combiner_train.py": "def f(db, training):\n    training.train_and_save(db, 'b', 's')\n",
+    "combiner_save.py": "def f(artifact, c):\n    artifact.save(c, {}, {})\n",
 }
 
 

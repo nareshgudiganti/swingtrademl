@@ -20,7 +20,7 @@ import { closeDateText } from './closeDate'
 import { finalWord, ROOM_NOTE, shownWord } from './live'
 import { scorePoints, scoreRank, withoutScorePercent, SCORE_HINT } from './scoreText'
 import { dayLabel } from './pricesAge'
-import { halfText } from './tradingRules'
+import { halfOutPrice, halfText } from './tradingRules'
 import { inr } from './ui'
 import { wordLabel, wordTagColor } from './vocab'
 import './stockpage.css'
@@ -842,7 +842,7 @@ export function PlanLadder({ decision: d }: { decision: BrainDecision }) {
   const low = d.entry_low
   const high = d.entry_high ?? d.entry_low
   const mid = (low + high) / 2
-  const half = mid * 1.05
+  const half = halfOutPrice(mid)
   const word = finalWord(d)
   const pad = (d.target - d.stop) * 0.04
   const lo = d.stop - pad

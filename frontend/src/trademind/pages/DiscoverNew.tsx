@@ -201,6 +201,7 @@ function DiscoverBody() {
             rankOf={(d) => scoreRank(d.confidence, dayScores)?.rank ?? null}
             tierOf={(d) => caps.get(d.symbol.toUpperCase())}
             sectorOf={sectorOf}
+            withPlan
           />
         )}
       </section>

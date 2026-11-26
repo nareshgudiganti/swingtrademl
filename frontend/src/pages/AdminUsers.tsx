@@ -5,6 +5,7 @@ import { Empty, ErrorBox, Loading } from '../components/Loading'
 import { formatDate } from '../lib/format'
 import { useIsOwner } from '../lib/plan'
 import AdminModules from './AdminModules'
+import AdminModels from './AdminModels'
 
 // Admin only: people, Free/Pro, gifts, the change log and the release switches.
 // The second-step token is kept in memory only (gone on refresh, ends after 15 minutes).
@@ -27,7 +28,7 @@ export type AdminUserRow = {
 }
 type AuditRow = { id: number; ts: string; actor: string; action: string; target_id: string | null }
 type Switch = { key: string; label: string; enabled: boolean }
-type Tab = 'users' | 'audit' | 'switches' | 'modules'
+type Tab = 'users' | 'audit' | 'switches' | 'modules' | 'models'
 
 class AdminError extends Error {
   code: string | null
@@ -407,9 +408,9 @@ export default function AdminUsers() {
     <div>
       <h1>Admin</h1>
       <div role="tablist" style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
-        {(['users', 'audit', 'switches', 'modules'] as Tab[]).map((t) => (
+        {(['users', 'audit', 'switches', 'modules', 'models'] as Tab[]).map((t) => (
           <button key={t} role="tab" aria-selected={tab === t} className={tab === t ? 'btn' : 'btn-link'} onClick={() => setTab(t)}>
-            {t === 'users' ? 'People' : t === 'audit' ? 'Change log' : t === 'switches' ? 'Release switches' : 'Parts of the app'}
+            {t === 'users' ? 'People' : t === 'audit' ? 'Change log' : t === 'switches' ? 'Release switches' : t === 'models' ? 'Models' : 'Parts of the app'}
           </button>
         ))}
       </div>
@@ -417,6 +418,7 @@ export default function AdminUsers() {
       {tab === 'audit' && <Audit token={token} onExpired={expired} />}
       {tab === 'switches' && <Switches token={token} onExpired={expired} />}
       {tab === 'modules' && <AdminModules call={moduleCall} onExpired={expired} />}
+      {tab === 'models' && <AdminModels call={moduleCall} onExpired={expired} />}
     </div>
   )
 }

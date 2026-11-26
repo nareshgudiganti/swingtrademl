@@ -31,6 +31,10 @@ class UserWatchlistItem(Base, TimestampMixin):
     buy_price: Mapped[float | None] = mapped_column(Float)
     # How many shares the person bought. Display only (invested / profit in rupees).
     quantity: Mapped[float | None] = mapped_column(Float)
+    # The stock's permanent identity (#389). Null until linked by the owner-approved backfill; nothing reads it yet.
+    security_id: Mapped[int | None] = mapped_column(
+        ForeignKey("securities.id", ondelete="RESTRICT", name="fk_user_watchlist_items_security_id"), index=True
+    )
 
     __table_args__ = (UniqueConstraint("user_id", "symbol", name="uq_user_watchlist_items_user_symbol"),)
 

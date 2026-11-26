@@ -48,6 +48,11 @@ class Instrument(Base, TimestampMixin):
     is_watchlisted: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
+    # The stock's permanent identity (#389). Null until the owner-approved backfill links it; nothing reads it yet.
+    security_id: Mapped[int | None] = mapped_column(
+        ForeignKey("securities.id", ondelete="RESTRICT", name="fk_instruments_security_id"), index=True
+    )
+
     candles: Mapped[list[Candle]] = relationship(back_populates="instrument")
 
     __table_args__ = (

@@ -177,7 +177,7 @@ def backfill_instruments(db: Session, *, exchange: str = "NSE", limit: int | Non
     """Give every equity instrument a security. Idempotent; an instrument it cannot place stays untouched.
 
     Returns counts: added (a security was made or linked now), unchanged (it already resolved), skipped (a
-    conflict: left alone, never guessed).
+    conflict: left alone, never guessed). Also fills `instruments.security_id` when it is still empty.
     """
     counts = {"added": 0, "unchanged": 0, "skipped": 0}
     query = select(Instrument).where(Instrument.exchange == exchange, Instrument.instrument_type == "EQ")
@@ -189,5 +189,7 @@ def backfill_instruments(db: Session, *, exchange: str = "NSE", limit: int | Non
         except IdentityConflictError:
             counts["skipped"] += 1
             continue
+        if instrument.security_id is None:
+            instrument.security_id = sid
         counts["unchanged" if before == sid else "added"] += 1
     return counts

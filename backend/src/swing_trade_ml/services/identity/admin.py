@@ -66,7 +66,7 @@ def _run(args: argparse.Namespace) -> dict[str, int]:
         if args.command == "backfill-instruments":
             counts = writer.backfill_instruments(db, exchange=args.exchange)
         elif args.command == "backfill-scores":
-            counts = {"written": ledger.backfill_from_stock_scores(db, since=args.since)}
+            counts = ledger.backfill_from_stock_scores(db, since=args.since)
         else:
             counts = {"written": ledger.append_from_brain_run(db, args.run_id)}
         if args.dry_run:
@@ -98,6 +98,11 @@ def main(
         print(f"refused: {exc}", file=sys.stderr)
         return REFUSED
     counts = _run(args)
+    if counts.get("skipped"):
+        print(
+            f"warning: {counts['skipped']} row(s) were skipped because the stock's symbol belongs to a "
+            "different company; nothing was guessed. They need a manual look."
+        )
     suffix = " (dry run: nothing was saved)" if args.dry_run else ""
     print(f"{args.command}: " + ", ".join(f"{k}={v}" for k, v in counts.items()) + suffix)
     return 0

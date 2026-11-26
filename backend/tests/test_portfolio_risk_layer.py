@@ -229,16 +229,17 @@ def test_a_third_bank_is_rejected_while_the_first_two_orders_are_still_pending(
 
     _flat_deployable(monkeypatch)
     _pending_live_broker(monkeypatch)
-    # 12.5% per stock means two full-size banking positions fill the 25%
-    # sector cap of a ₹10L account exactly — the third has nothing left.
-    strat = _strategy(db_session, name="live_sector_strategy", mode="live",
-                      capital_allocation=0.125)
+    # The ₹10L ladder caps one stock at 10% (a strategy can only tighten that,
+    # #463), so three pending banking orders (10% + 10% + the 5% of sector room
+    # left) fill the 25% sector cap exactly — the next bank has nothing left.
+    strat = _strategy(db_session, name="live_sector_strategy", mode="live")
     icici = _instrument(db_session, "ICICIBANK")
     hdfc = _instrument(db_session, "HDFCBANK")
+    kotak = _instrument(db_session, "KOTAKBANK")
     axis = _instrument(db_session, "AXISBANK")
     db_session.commit()
 
-    for instrument in (icici, hdfc):
+    for instrument in (icici, hdfc, kotak):
         execution.process_decision(
             db_session, strat, instrument,
             SignalDecision(signal=SignalType.BUY, price=1000.0, confidence=0.8,
@@ -246,7 +247,7 @@ def test_a_third_bank_is_rejected_while_the_first_two_orders_are_still_pending(
         )
 
     orders = db_session.execute(select(Order)).scalars().all()
-    assert [o.status for o in orders] == ["PENDING", "PENDING"]
+    assert [o.status for o in orders] == ["PENDING", "PENDING", "PENDING"]
     assert sum(o.quantity for o in orders) * 1000.0 == 250_000.0
     assert db_session.execute(select(Position)).first() is None  # nothing has filled
 

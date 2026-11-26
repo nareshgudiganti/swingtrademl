@@ -12,10 +12,10 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any
 
-import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from swing_trade_ml.core import http_client
 from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.db.models.mutual_funds import MutualFund, MutualFundHolding, MutualFundNav
 
@@ -87,9 +87,7 @@ def sync_nav_snapshot(db: Session, raw_text: str | None = None) -> int:
         # AMFI 302-redirects www.amfiindia.com to portal.amfiindia.com as of
         # 2026 — follow it rather than hardcoding the new host, since it has
         # moved before and may again.
-        response = httpx.get(NAVALL_URL, timeout=30.0, follow_redirects=True)
-        response.raise_for_status()
-        raw_text = response.text
+        raw_text = http_client.get(NAVALL_URL).text
 
     rows = parse_navall(raw_text)
     appended = 0

@@ -13,7 +13,7 @@ const DATA: ModelOverview = {
         approval: { live_approved: true, label: 'Approved: the live scan loads it', role: 'prod', role_recorded: true, approved_at: null, approved_by: 'not recorded' },
         evidence: { trained_at: 'not recorded', training_samples: 1200, accuracy: 'not recorded', precision: 0.5, evaluation_report_link: 'not recorded' },
         last_scored_at: 'never scored', last_shadow_lane_day: null,
-        brain_usage: { state: 'unknown', label: 'No Brain or lane record found for this model', last_session: null },
+        brain_usage: { state: 'unknown', label: 'not recorded', last_session: null },
       },
     ],
     '15': [],

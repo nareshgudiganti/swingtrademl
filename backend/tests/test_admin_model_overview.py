@@ -50,6 +50,7 @@ def test_shape_groups_models_by_horizon_and_unstored_fields_say_so(client, db_se
     assert a["evidence"]["evaluation_report_link"] == "not recorded"
     assert a["last_scored_at"] == "never scored"
     assert a["brain_usage"]["state"] == "unknown"
+    assert a["brain_usage"]["label"] == "not recorded"
     b = {m["name"]: m for m in body["horizons"]["15"]}["swing_b"]
     assert b["evidence"]["accuracy"] == 0.61
     assert b["evidence"]["trained_at"].startswith("2026-11-01")
@@ -117,3 +118,25 @@ def test_no_write_verbs_on_the_route(client, db_session):
     assert client.post(URL, headers=h, json={}).status_code == 405
     assert client.put(URL, headers=h, json={}).status_code == 405
     assert client.delete(URL, headers=h).status_code == 405
+
+
+# DB-free unit tests of the two #510 corrections.
+def test_shadow_lane_label_names_no_horizon_it_does_not_state():
+    from swing_trade_ml.services.admin_model_overview import JOBS
+
+    label = JOBS["lane_shadow_daily"]
+    assert "10-day" not in label and "15-day" not in label
+    assert "test only" in label
+
+
+def test_brain_usage_line_needs_a_record():
+    import datetime as dt
+
+    from swing_trade_ml.services.admin_model_overview import _brain_usage
+
+    none = _brain_usage(None, None)
+    assert none["label"] == "not recorded" and none["last_session"] is None
+    day = dt.date(2026, 11, 20)
+    assert _brain_usage((day, False), None)["state"] == "used"
+    assert _brain_usage((day, True), None)["state"] == "shadow_only"
+    assert _brain_usage(None, day)["state"] == "shadow_only"

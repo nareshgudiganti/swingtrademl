@@ -271,15 +271,17 @@ def test_the_percentages_on_the_plan_card_come_from_the_brain_policy_not_the_v1_
     assert plan["sell_half_pct"] == DEFAULT_POLICY.first_target_pct
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="GAP: for the owner, /brain/runs/latest serves the newest run of ANY book, while Stock Detail's plain answers read the newest "
-    "PAPER nightly (beginner_views._latest_nightly): when a live-book run is newest the two screens show different decisions for one stock",
-)
 def test_the_idea_list_and_the_plain_answers_use_the_same_run_when_a_live_book_run_is_newest(client, world):
     newer = datetime.now(UTC) + timedelta(minutes=5)
     _run(world["db"], "v238-live", book="live", confidence=0.61, when=newer)
     list_run = _idea(_get(client, "/brain/runs/latest?kind=nightly").json())["run_id"]
     brief_run = _get(client, f"/beginner/stock/{SYMBOL}").json()["q2_brain"]["decision"]["run_id"]
     assert list_run == brief_run
+
+
+def test_a_member_sees_the_paper_run_too_and_never_a_live_book_run(client, world):
+    """Fixed #238: the selection rule is the same for everyone, so a member's idea list never shows the live book."""
+    member = _pro_member(world["db"])
+    _run(world["db"], "v238-live", book="live", confidence=0.61, when=datetime.now(UTC) + timedelta(minutes=5))
+    body = _get(client, "/brain/runs/latest?kind=nightly", member).json()
+    assert body["book"] == "paper" and body["run_id"] != "v238-live"

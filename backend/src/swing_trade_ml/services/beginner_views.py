@@ -352,7 +352,7 @@ def _company(db: Session, inst: Instrument) -> dict:
     }
 
 
-def _latest_nightly(db: Session):
+def latest_nightly(db: Session):
     """The latest finished LIVE nightly run of the PAPER book (any date). Replays, why-runs,
     intraday runs, failed runs and any other book never count (as `strategies.brain.todays_run`)."""
     from swing_trade_ml.db.models.brain import BrainRun
@@ -368,6 +368,9 @@ def _latest_nightly(db: Session):
         .order_by(BrainRun.as_of.desc(), BrainRun.started_at.desc())
         .limit(1)
     ).first()
+
+
+_latest_nightly = latest_nightly
 
 
 def _run_is_current(run, today: date) -> bool:

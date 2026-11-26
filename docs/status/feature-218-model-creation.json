@@ -6,7 +6,7 @@
     "state": "in_progress",
     "url": "https://github.com/nareshgudiganti/swingtrademl/issues/218"
   },
-  "updated_at": "2026-11-26T11:54:34+05:30",
+  "updated_at": "2026-11-26T12:40:00+05:30",
   "source": "GitHub project 2 board snapshot plus lead review",
   "summary": {
     "total": 25,
@@ -260,7 +260,7 @@
       "title": "Model requirements: purpose, target, inputs, algorithm choice, evaluation, gates",
       "board_status": "Review",
       "state": "awaiting_owner",
-      "blocked_by": "Treated as UNAPPROVED (owner decision O-7, 26 Nov 2026): no original approval evidence found. PR #502's SIGNOFF.md restates a chat approval and is not a signature; the spec on main still reads DRAFT with a blank sign-off line. Owner to sign or correct.",
+      "blocked_by": "Minimum set + R4 envelope APPROVED by the owner in chat, 25 Nov 2026 00:57 IST (typed reply \"approve as recommended\" to the request listing those rows; verified in the session transcript 26 Nov). 11.4/11.5 not signed. Spec header and approval table on main still to be updated to match.",
       "pull_request": null,
       "evidence": "docs/superpowers/specs/2026-11-14-5d-paper-trial-protocol-v1.SIGNOFF.md",
       "url": "https://github.com/nareshgudiganti/swingtrademl/issues/279",

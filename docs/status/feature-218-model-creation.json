@@ -6,7 +6,7 @@
     "state": "in_progress",
     "url": "https://github.com/nareshgudiganti/swingtrademl/issues/218"
   },
-  "updated_at": "2026-11-25T23:23:07+05:30",
+  "updated_at": "2026-11-26T11:54:34+05:30",
   "source": "GitHub project 2 board snapshot plus lead review",
   "summary": {
     "total": 25,
@@ -30,9 +30,8 @@
     }
   ],
   "open_pull_requests": [
-    513,
-    514,
-    521
+    521,
+    523
   ],
   "stories": [
     {
@@ -261,7 +260,7 @@
       "title": "Model requirements: purpose, target, inputs, algorithm choice, evaluation, gates",
       "board_status": "Review",
       "state": "awaiting_owner",
-      "blocked_by": "Owner closes; minimum set signed (PR #502 merged); 11.4/11.5 owner-ruled 14-16 Nov",
+      "blocked_by": "Treated as UNAPPROVED (owner decision O-7, 26 Nov 2026): no original approval evidence found. PR #502's SIGNOFF.md restates a chat approval and is not a signature; the spec on main still reads DRAFT with a blank sign-off line. Owner to sign or correct.",
       "pull_request": null,
       "evidence": "docs/superpowers/specs/2026-11-14-5d-paper-trial-protocol-v1.SIGNOFF.md",
       "url": "https://github.com/nareshgudiganti/swingtrademl/issues/279",
@@ -300,8 +299,8 @@
       "title": "Design model data feed and training lifecycle",
       "board_status": "In Progress",
       "state": "in_progress",
-      "blocked_by": "Slice 1 + fixes merged (#496, #504); slices 2/2b in review; promote() next",
-      "pull_request": "PR #513, PR #514 (merge queue); promotion safeguard and training integration in progress",
+      "blocked_by": "Slice 1 + fixes merged (#496, #504); slices 2a/2b merged (#513, #514, 25 Nov); promotion safeguard next",
+      "pull_request": "PR #523 (draft): promotion safeguard",
       "evidence": null,
       "url": "https://github.com/nareshgudiganti/swingtrademl/issues/328",
       "engineering": "in_progress",

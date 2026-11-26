@@ -36,4 +36,4 @@ Engineering readiness and model effectiveness are tracked separately: a successf
 | `stories[].effectiveness` | `proven` / `not_proven` / `failed` / `untested` / `not_applicable` |
 | `stories[].effectiveness_note` | One line of evidence, or null |
 
-`proven` requires a PASS under the signed protocol (SELECTION and ECONOMIC verdicts) and an owner decision. Readers that do not know these fields can ignore them.
+`proven` requires a PASS under an owner-approved protocol (SELECTION and ECONOMIC verdicts) and an owner decision. Readers that do not know these fields can ignore them.

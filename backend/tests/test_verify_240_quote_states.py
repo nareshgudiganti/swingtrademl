@@ -172,17 +172,42 @@ def test_c1_a_position_that_was_never_priced_says_its_exit_check_is_unavailable(
     assert row["sell_status"] == "Exit check unavailable"  # the honest words (services/sell_labels.py:51)
 
 
-def test_c2_a_never_priced_position_is_shown_at_its_entry_price_as_a_flat_zero_percent(client, db_session):
-    """OBSERVED: the row falls back to the entry price (api/v1/endpoints/portfolio.py:`current = current_price or entry_price`),
-    so a position nobody has priced reads as exactly flat. The sell status above is the only warning on the row."""
+def test_c2_a_never_priced_position_has_no_price_and_no_percent(client, db_session):
+    """#281 D2: a position nobody has priced is NOT shown at its entry price as a flat 0%. Price and percent are null,
+    `has_price` is false; the value stays at cost so portfolio totals do not drop the position."""
     _real_book_position(db_session, current_price=None)
     row = next(r for r in _rows(client) if r["symbol"] == "V240POS")
-    assert (
-        row["current_price"] == 100.0 and row["unrealized_pnl_pct"] == 0.0 and row["current_value"] == 1000.0
-    )
+    assert row["has_price"] is False
+    assert row["current_price"] is None and row["unrealized_pnl_pct"] is None
+    assert row["current_value"] == 1000.0  # cost, so sums over the book stay whole
 
 
 def test_c3_a_position_row_says_how_old_its_price_is_or_that_it_has_none(client, db_session):
     _real_book_position(db_session, current_price=None)
     row = next(r for r in _rows(client) if r["symbol"] == "V240POS")
-    assert {"price_as_of", "price_status", "price_is_stale"} & set(row), sorted(row)  # none of these exists
+    assert row["price_status"] == "none" and row["price_as_of"] is None  # no quote exists: no time to show
+
+
+def test_c3b_a_priced_position_carries_the_time_of_its_latest_quote(client, db_session):
+    from swing_trade_ml.db.models import Quote
+
+    pos = _real_book_position(db_session, current_price=110.0)
+    quote_ts = datetime(2026, 11, 25, 10, 0, tzinfo=UTC)
+    db_session.add(Quote(instrument_id=pos.instrument_id, last_price=110.0, ts=quote_ts))
+    db_session.commit()
+    row = next(r for r in _rows(client) if r["symbol"] == "V240POS")
+    assert row["has_price"] is True and row["current_price"] == 110.0
+    assert row["unrealized_pnl_pct"] == pytest.approx(0.10)
+    assert row["current_value"] == 1100.0
+    assert row["price_as_of"].startswith("2026-11-25T10:00:00")
+
+
+def test_c3c_a_never_priced_position_shows_the_time_of_a_quote_when_one_exists(client, db_session):
+    from swing_trade_ml.db.models import Quote
+
+    pos = _real_book_position(db_session, current_price=None)
+    db_session.add(Quote(instrument_id=pos.instrument_id, last_price=99.0, ts=datetime(2026, 11, 25, 10, 0, tzinfo=UTC)))
+    db_session.commit()
+    row = next(r for r in _rows(client) if r["symbol"] == "V240POS")
+    assert row["has_price"] is False and row["current_price"] is None
+    assert row["price_as_of"].startswith("2026-11-25T10:00:00")

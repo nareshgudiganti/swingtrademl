@@ -797,7 +797,8 @@ TRACE_SECRET = "ISO-RISK-GATE-ANSWER"
             "t",
             False,
             marks=pytest.mark.xfail(
-                strict=True, reason="tester reads the raw brain trace while plans are off"
+                strict=True,
+                reason="REAL DEFECT (#414): tester reads the raw brain trace while plans are off.",
             ),
         ),
         ("t", True),
@@ -876,8 +877,16 @@ def live_track(db_session, monkeypatch):
     for book, symbol in (("live", "ISOREAL"), ("paper", "ISOHOUSE")):
         db_session.add(
             BrainTrack(
-                book=book, symbol=symbol, opened_on=date(2026, 11, 2), day=date(2026, 11, 3), day_n=1,
-                ret=0.01, status="ok", reason="ISO-TRACK-REASON", stop=95.0, band=[],
+                book=book,
+                symbol=symbol,
+                opened_on=date(2026, 11, 2),
+                day=date(2026, 11, 3),
+                day_n=1,
+                ret=0.01,
+                status="ok",
+                reason="ISO-TRACK-REASON",
+                stop=95.0,
+                band=[],
             )
         )
     db_session.flush()

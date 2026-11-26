@@ -47,8 +47,11 @@ services:
       # Its own volume, so losing or wiping model_data does not take the
       # backup with it. Same disk, though - not a substitute for off-server.
       MODEL_BACKUP_DIR: /app/data/model_backups
+      # Weekly prediction-reliability reports (#526); own volume so a deploy keeps them.
+      RELIABILITY_REPORT_DIR: /app/data/reliability
     volumes:
       - model_backups:/app/data/model_backups
+      - reliability_reports:/app/data/reliability
 
   frontend:
     build:
@@ -68,3 +71,4 @@ services:
 
 volumes:
   model_backups:
+  reliability_reports:

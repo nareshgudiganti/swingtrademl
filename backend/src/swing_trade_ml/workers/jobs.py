@@ -921,6 +921,12 @@ def job_weekly_reliability_report() -> None:
         with session_scope() as db:
             path = rel.run_weekly_report(db, Path(settings.RELIABILITY_REPORT_DIR), today)
         log.info("job.weekly_reliability_report.done", written=str(path) if path else None)
+        if path is not None:
+            notifier.send_sync(
+                f"Weekly prediction reliability report is ready: {path.name}. "
+                "It checks how often the model's scores matched what happened (read only).",
+                kind=alert_policy.WEEKLY_REPORT,
+            )
     except Exception as exc:  # noqa: BLE001
         _report_error("weekly_reliability_report", exc)
 

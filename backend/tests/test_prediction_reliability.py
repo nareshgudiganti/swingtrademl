@@ -498,3 +498,42 @@ def test_weekly_reliability_job_is_registered_on_sunday_with_a_unique_id():
     assert len(ids) == len(set(ids)) and "weekly_reliability_report" in ids
     t = str(s.get_job("weekly_reliability_report").trigger)
     assert "day_of_week='sun'" in t and "hour='10'" in t and "minute='15'" in t
+
+
+def test_weekly_reliability_job_sends_one_line_only_when_a_report_is_written(monkeypatch, tmp_path):
+    """Independent review of #550: a report nobody sees is not a report. One Telegram line when written,
+    nothing when skipped."""
+    from contextlib import contextmanager
+
+    from swing_trade_ml.brain import prediction_reliability as rel
+    from swing_trade_ml.workers import jobs
+
+    @contextmanager
+    def scope():
+        yield None
+
+    sent: list[tuple[str, str]] = []
+    monkeypatch.setattr(jobs, "session_scope", scope)
+    monkeypatch.setattr(jobs.notifier, "send_sync", lambda text, kind=None: sent.append((text, kind)))
+
+    monkeypatch.setattr(rel, "run_weekly_report", lambda db, d, today: None)
+    jobs.job_weekly_reliability_report()
+    assert sent == []
+
+    written = tmp_path / "prediction-reliability-2026-11-29.md"
+    monkeypatch.setattr(rel, "run_weekly_report", lambda db, d, today: written)
+    jobs.job_weekly_reliability_report()
+    assert len(sent) == 1
+    text, kind = sent[0]
+    assert written.name in text and kind == jobs.alert_policy.WEEKLY_REPORT
+
+
+def test_prod_worker_keeps_reliability_reports_on_a_volume():
+    """The report folder must survive a deploy (release.sh recreates the worker)."""
+    from pathlib import Path
+
+    compose = (Path(__file__).resolve().parents[2] / "docker-compose.prod.yml").read_text(encoding="utf-8")
+    worker = compose.split("\n  worker:", 1)[1].split("\n  frontend:", 1)[0]
+    assert "RELIABILITY_REPORT_DIR: /app/data/reliability" in worker
+    assert "- reliability_reports:/app/data/reliability" in worker
+    assert "\n  reliability_reports:" in compose.split("\nvolumes:", 1)[1]

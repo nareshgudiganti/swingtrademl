@@ -133,8 +133,10 @@ def latest_actionable(
 PICK_MAX_AGE = timedelta(days=5)
 
 # Buy list and top picks: a BUY is fresh while it is at most this many COMPLETED
-# trading sessions old (owner decision 2026-11-25; provisional, see #281).
-MAX_BUY_AGE_SESSIONS = 5
+# trading sessions old: ages 0-4 (owner decision 2026-11-26, #227/#281). A signal
+# from session D is entered at the next open, and the 5-day protocol ends the trade
+# by the close of D+5, so an age-5 BUY could only be entered outside its window.
+MAX_BUY_AGE_SESSIONS = 4
 
 
 def buy_fresh_since(now: datetime) -> datetime:
@@ -352,7 +354,7 @@ def buy_list(db: DbSession, access: PlanAccessDep) -> list[dict]:
     Answers "the Signals page shows a BUY row for this stock, but is that
     still true today or from three days ago?" by construction: it's deduped
     to each strategy's most recent signal per stock, kept only if that signal is a
-    BUY, then to one row per stock (the most confident BUY) and at most `MAX_BUY_AGE_SESSIONS` completed
+    BUY, then to one row per stock (the most confident BUY) and at most `MAX_BUY_AGE_SESSIONS` (4) completed
     trading sessions old. A stock
     that reconfirms BUY every day for a week stays on the list the whole week;
     the moment a later scan reads HOLD or weaker, it silently drops off next

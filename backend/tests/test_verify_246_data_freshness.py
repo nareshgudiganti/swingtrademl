@@ -511,10 +511,7 @@ def test_d1_the_scan_job_is_a_separate_cron_job_with_no_link_to_the_ingest_resul
         assert word not in scan  # no freshness or ingest-status check inside the scan job
 
 
-@pytest.mark.xfail(
-    **GAP,
-    reason="gap d2: no freshness gate exists upstream of the scan (engine stubbed here); that the engine then scores a stale bar is #253 (PR #462), tracked #344 / #353",
-)
+# Gap d2 closed by #316 (PR #548): the scan now waits for validated candles and does not run on a stale day.
 def test_d2_no_scan_runs_when_the_candles_are_stale_and_the_ingest_failed(db_session, monkeypatch):
     from contextlib import contextmanager
 

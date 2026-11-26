@@ -5,13 +5,15 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 
 from swing_trade_ml.api.deps import require_auth
+from swing_trade_ml.api.module_capability import require_module_capability
 from swing_trade_ml.api.v1.endpoints import (
     account_auth,
+    account_deletion,
     admin_console,
+    admin_modules,
     auth,
     backtest,
     beginner,
-    account_deletion,
     billing,
     brain,
     brain_changes,
@@ -49,6 +51,7 @@ from swing_trade_ml.api.v1.endpoints import (
     system,
     weekly_report,
 )
+from swing_trade_ml.core.modules import require_module
 
 api_router = APIRouter()
 
@@ -70,6 +73,7 @@ api_router.include_router(invites.admin)
 api_router.include_router(plans.router)
 api_router.include_router(plans.admin)
 api_router.include_router(service_keys.admin)
+api_router.include_router(admin_modules.admin)
 # Pro billing: 404 unless BILLING_ENABLED; each route checks its own caller (see endpoints/billing.py).
 api_router.include_router(billing.router)
 api_router.include_router(billing.admin)
@@ -95,22 +99,31 @@ api_router.include_router(real_report.router, dependencies=protected)
 api_router.include_router(ml.router, dependencies=protected)
 api_router.include_router(notifications.router, dependencies=protected)
 api_router.include_router(backtest.router, dependencies=protected)
-api_router.include_router(finance.router, dependencies=protected)
-api_router.include_router(mutual_funds.router, dependencies=protected)
+
+
+def optional(module_id: str) -> list:
+    """`protected`, then the module registry's guard (core/modules.py): sign-in is checked first, then, only
+    while the module is switched off, its routes answer "switched off". Switched on (the default) nothing
+    changes."""
+    return [*protected, Depends(require_module(module_id)), Depends(require_module_capability(module_id))]
+
+
+api_router.include_router(finance.router, dependencies=optional("finance"))
+api_router.include_router(mutual_funds.router, dependencies=optional("mutual_funds"))
 api_router.include_router(safety.router, dependencies=protected)
 api_router.include_router(risk.router, dependencies=protected)
-api_router.include_router(brain.router, dependencies=protected)
-api_router.include_router(brain_changes.router, dependencies=protected)
-api_router.include_router(brain_golive.router, dependencies=protected)
-api_router.include_router(brain_idea_report.router, dependencies=protected)
-api_router.include_router(brain_observatory.router, dependencies=protected)
-api_router.include_router(brain_shadow.router, dependencies=protected)
+api_router.include_router(brain.router, dependencies=optional("brain"))
+api_router.include_router(brain_changes.router, dependencies=optional("brain"))
+api_router.include_router(brain_golive.router, dependencies=optional("brain"))
+api_router.include_router(brain_idea_report.router, dependencies=optional("brain"))
+api_router.include_router(brain_observatory.router, dependencies=optional("brain"))
+api_router.include_router(brain_shadow.router, dependencies=optional("brain"))
 api_router.include_router(experiments.router, dependencies=protected)
-api_router.include_router(h05.router, dependencies=protected)
+api_router.include_router(h05.router, dependencies=optional("research_lanes"))
 api_router.include_router(weekly_report.router, dependencies=protected)
 api_router.include_router(model_registry.router, dependencies=protected)
-api_router.include_router(lane_picks.router, dependencies=protected)
-api_router.include_router(lanes.router, dependencies=protected)
+api_router.include_router(lane_picks.router, dependencies=optional("research_lanes"))
+api_router.include_router(lanes.router, dependencies=optional("research_lanes"))
 api_router.include_router(jobs.router, dependencies=protected)
 # Read-only daily digest: owner or a read_ops / read_all service key only (endpoints/ops.py).
 api_router.include_router(ops.router, dependencies=protected)

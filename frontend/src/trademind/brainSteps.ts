@@ -12,6 +12,7 @@ import type { BrainDecision, BrainRun } from '../api/types'
 import { finalWord, shownWord, stockSituations } from './live'
 import { SCORE_VS_PLAN_SHORT } from './scoreVsPlan'
 import { rankText, scorePoints, scoreRank } from './scoreText'
+import { plan, stopText, targetText } from './tradingRules'
 import { MARKET_LABEL, MARKET_PLAIN } from './vocab'
 import { whyNotTrade, type WhyItem, type WhyKind } from './whyNotTrade'
 
@@ -53,8 +54,9 @@ const LIMITS_OFF = /switched off for testing/i
 
 export const NOT_RECORDED = 'Not recorded for this stock yet: the brain saves every step from 7 Nov.'
 
-const WORD_PLAIN: Record<string, string> = {
-  TRADE: `Buy it, with the usual plan (+8% target, −4% stop, out within 15 trading days). ${SCORE_VS_PLAN_SHORT}`,
+// A function, not a constant: the plan's numbers come from the server (tradingRules.ts) after the app has loaded.
+const wordPlain = (): Record<string, string> => ({
+  TRADE: `Buy it, with the Brain's ${plan().days}-day plan (${targetText()} target, ${stopText()} stop, out within ${plan().days} trading days). ${SCORE_VS_PLAN_SHORT}`,
   WATCH: 'Not a BUY today. Keep an eye on it.',
   WAIT: 'Nothing to do today.',
   AVOID: 'Stay away for now.',
@@ -62,7 +64,7 @@ const WORD_PLAIN: Record<string, string> = {
   MONITOR: 'Keep it, but watch it closely.',
   REDUCE: 'Sell some.',
   EXIT: 'Sell it all.',
-}
+})
 
 /** Where the brain stopped this idea, and why: null for a TRADE or when nothing stored says why. */
 export function stopOf(d: BrainDecision, owner = true): { step: number; why: WhyItem } | null {
@@ -149,8 +151,9 @@ export function brainSteps(d: BrainDecision, run: BrainRun, owner = true): Brain
   else push(6, NOT_RECORDED, 'none', 'Not recorded')
 
   // 7 · decide
-  if (stopAt === 7) push(7, `${stop!.why.text} ${WORD_PLAIN[word] ?? ''}`.trim(), 'word', word)
-  else push(7, WORD_PLAIN[word] ?? word, 'word', word)
+  const plainWords = wordPlain()
+  if (stopAt === 7) push(7, `${stop!.why.text} ${plainWords[word] ?? ''}`.trim(), 'word', word)
+  else push(7, plainWords[word] ?? word, 'word', word)
 
   // 8 · learn
   push(8, 'Happens after an idea finishes. You will see it in History.', 'later', 'LATER')

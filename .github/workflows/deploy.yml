@@ -65,6 +65,14 @@ jobs:
             cd /root/app
             PREVIOUS_SHA=$(git rev-parse HEAD)
             git fetch origin "$RELEASE_SHA"
+            # The disk check runs BEFORE the checkout, from the release commit's own copy of the script, so a
+            # deploy that is refused leaves this folder on the commit that is running (and the next deploy
+            # records the right previous commit). Written to a file, not piped: a failed read must stop the
+            # deploy, not silently skip the check.
+            preflight=$(mktemp)
+            trap 'rm -f "$preflight"' EXIT
+            git show "$RELEASE_SHA:infra/deploy/preflight.sh" > "$preflight"
+            bash "$preflight"
             git checkout --detach "$RELEASE_SHA"
             bash infra/deploy/release.sh "$RELEASE_SHA" "$PREVIOUS_SHA"
 
@@ -111,3 +119,40 @@ jobs:
           text=$(printf '🔴 TradeMind deploy %s finished, but the after-deploy check FAILED (%s)\n%s\nOpen GitHub, Actions, Deploy to production for details. To undo: revert the commit on main, then run Deploy to production again.' "${SHA:0:7}" "$when" "${PROBLEMS:-the smoke test did not finish}")
           curl -s -m 20 -o /dev/null -w 'telegram %{http_code}\n' "https://api.telegram.org/bot${TOKEN}/sendMessage" \
             --data-urlencode "chat_id=${CHAT}" --data-urlencode "text=${text}"
+
+  # When the deploy job itself fails the smoke job above is skipped, so it cannot speak. The release script
+  # rolls back on its own, but whether it left the worker running is exactly what the owner must hear about
+  # (22 Nov: the disk filled mid-release and nothing was sent). Plain words, no secret ever printed.
+  deploy-failed:
+    needs: deploy
+    if: always() && (needs.deploy.result == 'failure' || needs.deploy.result == 'cancelled')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Message on Telegram
+        env:
+          TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
+          SHA: ${{ github.sha }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          # This alert is the only thing that tells the owner the worker may be stopped, so a message that was
+          # not delivered must turn this step red (a green step would say "the owner was told"). Missing
+          # secrets count as not delivered. Nothing secret is ever printed: only the status code is shown.
+          not_delivered() { echo "::error::The deploy-failed alert was NOT delivered ($1). The deploy failed: check the site and the worker by hand."; exit 1; }
+          if [ -z "$TOKEN" ] || [ -z "$CHAT" ]; then not_delivered "the Telegram secrets are not set"; fi
+          when=$(TZ=Asia/Kolkata date '+%d %b %H:%M IST')
+          text=$(printf '🔴 TradeMind deploy %s FAILED or was CANCELLED during the release (%s).\nThe server may have gone back to the previous version, and the WORKER (exits, scans, the brain) may be stopped. Check the site and Admin > Jobs now.\nDetails: %s' "${SHA:0:7}" "$when" "$RUN")
+          code=000
+          for attempt in 1 2 3 4 5; do
+            rc=0
+            code=$(curl -s -m 20 -o /dev/null -w '%{http_code}' "https://api.telegram.org/bot${TOKEN}/sendMessage" \
+              --data-urlencode "chat_id=${CHAT}" --data-urlencode "text=${text}") || rc=$?
+            [ "$rc" = 0 ] || code=000   # a transfer error is no answer, whatever status was seen
+            echo "telegram $code (try $attempt of 5)"
+            [ "$code" = 200 ] && exit 0
+            # 429 (slow down), 5xx (Telegram's trouble) and no answer are worth a short wait; anything else
+            # (a bad token or chat id) will not get better by asking again.
+            case "$code" in 429|5[0-9][0-9]|000) [ "$attempt" -lt 5 ] && sleep $((attempt * 5)) ;; *) break ;; esac
+          done
+          not_delivered "Telegram answered $code"

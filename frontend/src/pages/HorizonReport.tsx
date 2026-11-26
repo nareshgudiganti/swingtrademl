@@ -40,6 +40,7 @@ export function HorizonCard({ row }: { row: HorizonReportRow }) {
     <div className="card" style={{ padding: 12, margin: '8px 0' }} data-horizon-row={row.key}>
       <strong>
         {row.horizon_days}-day · {CAP_LABEL[row.cap_group] ?? row.cap_group}
+        {row.research_only ? ' · research only' : ''}
       </strong>
       <div style={{ fontSize: 13, margin: '4px 0' }}>
         {row.model ? (
@@ -70,7 +71,13 @@ export function HorizonCard({ row }: { row: HorizonReportRow }) {
       </Line>
       <Line k="Picks">
         {f.picks} total · {f.finished} finished
+        {f.unresolved ? ` · ${f.unresolved} with no usable price (unresolved)` : ''}
       </Line>
+      {f.rates_note && (
+        <p className="muted" style={{ fontSize: 12, margin: '2px 0' }} data-rates-note>
+          {f.rates_note}
+        </p>
+      )}
       <Line k="Average result per pick, after costs">{pct(f.net_per_trade)}</Line>
       <Line k="Better than every eligible stock by">{pct(f.edge_vs_every_stock)}</Line>
       <Line k="Picks that made money">{hitRate(f.hit_rate)}</Line>

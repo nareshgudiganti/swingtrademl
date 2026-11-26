@@ -34,6 +34,7 @@ from swing_trade_ml.core.enums import PositionStatus, TradingMode
 from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.core.strategy_policy import HAND_BOOK_STRATEGY_NAMES
 from swing_trade_ml.db.models.trading import Order, Position, Strategy, Trade
+from swing_trade_ml.services import report_metrics as rm
 from swing_trade_ml.strategies.tier import cap_tier
 
 log = get_logger(__name__)
@@ -68,10 +69,17 @@ def is_brain_strategy(name: str | None, strategy_type: str | None = None) -> boo
 
 def _pnl_block(trades: list[dict]) -> dict[str, Any]:
     return {
-        "gross": round(sum(t["gross_pnl"] for t in trades), 2),
-        "charges": round(sum(t["charges"] for t in trades), 2),
-        "net": round(sum(t["net_pnl"] for t in trades), 2),
+        "gross": round(rm.total(t["gross_pnl"] for t in trades), 2),
+        "charges": round(rm.total(t["charges"] for t in trades), 2),
+        "net": round(rm.total(t["net_pnl"] for t in trades), 2),
     }
+
+
+def _avg_return_pct(trades: list[dict]) -> float | None:
+    """Average per-trade return as a percentage (Trade.return_pct is a fraction), or None with no trades."""
+    if not trades:
+        return None
+    return round(rm.fraction_as_percent(rm.mean([t["return_pct"] for t in trades])), 2)
 
 
 def summarise_book(
@@ -98,11 +106,9 @@ def summarise_book(
         rows = [t for t in week_trades if (t["cap_tier"] or "unknown") == tier]
         by_tier[tier] = {
             "sells": len(rows),
-            "wins": sum(1 for t in rows if t["net_pnl"] > 0),
-            "net_pnl": round(sum(t["net_pnl"] for t in rows), 2),
-            "avg_return_pct": round(sum(t["return_pct"] for t in rows) / len(rows) * 100, 2)
-            if rows
-            else None,
+            "wins": rm.win_count(t["net_pnl"] for t in rows),
+            "net_pnl": round(rm.total(t["net_pnl"] for t in rows), 2),
+            "avg_return_pct": _avg_return_pct(rows),
         }
 
     invested = sum(p["invested"] for p in open_positions)
@@ -132,7 +138,7 @@ def summarise_book(
             "closed_in_week": full,
             "partially_sold_in_week": partial,
         },
-        "realized_pnl": {**_pnl_block(week_trades), "wins": sum(1 for t in week_trades if t["net_pnl"] > 0)},
+        "realized_pnl": {**_pnl_block(week_trades), "wins": rm.win_count(t["net_pnl"] for t in week_trades)},
         "unrealized_pnl": {
             "amount": round(sum(p["unrealized_pnl"] for p in open_positions), 2),
             "pct_of_invested": round(sum(p["unrealized_pnl"] for p in open_positions) / invested * 100, 2)
@@ -141,9 +147,7 @@ def summarise_book(
             "note": "open positions at their last stored price, before the cost of selling them",
         },
         "by_cap_group": by_tier,
-        "avg_sell_return_pct": round(sum(t["return_pct"] for t in week_trades) / len(week_trades) * 100, 2)
-        if week_trades
-        else None,
+        "avg_sell_return_pct": _avg_return_pct(week_trades),
         "events": _events(done, week_trades),
         "data_status": "no buys or sells this week" if not (done or week_trades) else "activity recorded",
     }
@@ -199,7 +203,11 @@ def _instrument_tiers(db: Session, position_ids: set[int]) -> dict[int, str | No
 def collect(db: Session, start: date, end: date) -> dict[str, dict[str, list[dict]]]:
     """Plain-dict inputs per source, from paper-mode rows only. Reads only."""
     names, tiers = _strategy_maps(db)
-    since = datetime.combine(start - timedelta(days=1), datetime.min.time(), tzinfo=UTC)
+    # The week's rows are chosen in SQL, to the second: from midnight IST at the start of the first day up to
+    # midnight IST after the last day. Both the order log and the trades are date-bound, so nothing outside the
+    # window is loaded. Open positions below are a state (what is held now), not a date, so they are read in full.
+    since = datetime.combine(start, datetime.min.time(), tzinfo=IST)
+    until = datetime.combine(end + timedelta(days=1), datetime.min.time(), tzinfo=IST)
     out: dict[str, dict[str, list[dict]]] = {
         s: {"orders": [], "trades": [], "open_positions": []} for s in ("bot", "testing", "brain_paper")
     }
@@ -213,13 +221,19 @@ def collect(db: Session, start: date, end: date) -> dict[str, dict[str, list[dic
         return (source_of(name) if name is not None else "bot"), name, tiers.get(strategy_id)
 
     orders = (
-        db.execute(select(Order).where(Order.mode == TradingMode.PAPER, Order.placed_at >= since))
+        db.execute(
+            select(Order).where(
+                Order.mode == TradingMode.PAPER, Order.placed_at >= since, Order.placed_at < until
+            )
+        )
         .scalars()
         .all()
     )
     position_ids = {o.position_id for o in orders if o.position_id}
     trades = (
-        db.execute(select(Trade).where(Trade.mode == TradingMode.PAPER, Trade.exit_at >= since))
+        db.execute(
+            select(Trade).where(Trade.mode == TradingMode.PAPER, Trade.exit_at >= since, Trade.exit_at < until)
+        )
         .scalars()
         .all()
     )
@@ -391,8 +405,19 @@ def h05_section(db: Session, start: date, end: date) -> dict[str, Any]:
     )
     if run is None:
         return {"active": False, "note": "no active h05 run"}
-    days = db.execute(select(H05GroupDay).where(H05GroupDay.run_id == run.id)).scalars().all()
-    in_week = [d for d in days if start <= d.signal_day <= end]
+    # The week's recorded signal days only (an SQL bound): they are used for this week's counts and for which
+    # sessions of the week were recorded. The pick and outcome totals below ("so far") are all-time by their
+    # own definition and are read for the whole run.
+    days = (
+        db.execute(
+            select(H05GroupDay).where(
+                H05GroupDay.run_id == run.id, H05GroupDay.signal_day >= start, H05GroupDay.signal_day <= end
+            )
+        )
+        .scalars()
+        .all()
+    )
+    in_week = list(days)
     groups: dict[str, dict[str, Any]] = {}
     for g in ("large", "mid", "small"):
         sigs = (
@@ -525,11 +550,17 @@ def format_message(report: dict[str, Any]) -> str:
         )
     for key, label in (("bot", "Bot (paper)"), ("testing", "Testing (paper)")):
         b = report[key]
-        lines.append(
-            f"{label}: {b['buys']['orders']} buys, {b['sells']['orders']} sells "
-            f"({b['sells']['partial']} partial), realized {_money(b['realized_pnl']['net'])} after costs, "
-            f"open now {_money(b['unrealized_pnl']['amount'])}"
-        )
+        if b.get("data_status") == "no buys or sells this week":
+            # Nothing happened: say so, never print zeros that read as a result (#474).
+            held = (b.get("positions") or {}).get("open", 0)
+            tail = f"; {held} still open" if held else ""
+            lines.append(f"{label}: no trades this week (no buys or sells){tail}")
+        else:
+            lines.append(
+                f"{label}: {b['buys']['orders']} buys, {b['sells']['orders']} sells "
+                f"({b['sells']['partial']} partial), realized {_money(b['realized_pnl']['net'])} after costs, "
+                f"open now {_money(b['unrealized_pnl']['amount'])}"
+            )
         if not (
             b["reconciliation"]["sell_orders_equal_trade_rows"] and b["reconciliation"]["exit_reasons_add_up"]
         ):

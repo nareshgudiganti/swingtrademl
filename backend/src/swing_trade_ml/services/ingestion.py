@@ -11,7 +11,7 @@ import time
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import or_, select
+from sqlalchemy import or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -21,6 +21,7 @@ from swing_trade_ml.core.enums import PositionStatus
 from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.db.models.market import Candle, CandleArrival, CandleCorrection, Instrument, Quote
 from swing_trade_ml.services.feature_snapshots import invalidate_snapshots_for_candle_corrections
+from swing_trade_ml.services.identity import same_company
 from swing_trade_ml.db.models.trading import Position
 
 log = get_logger(__name__)
@@ -54,6 +55,89 @@ def is_market_open(now: datetime | None = None) -> bool:
     from swing_trade_ml.core import market_session
 
     return market_session.is_open(now or datetime.now(UTC), include_close=True)
+
+
+def _apply_reissued_tokens(db: Session, batch: list[dict]) -> tuple[list[dict], int]:
+    """Handle the rows the token upsert cannot (#389 S0). Returns (rows left for the upsert, tokens moved).
+
+    The upsert conflicts on `instrument_token` alone, but a stock also has a unique (exchange, symbol). Kite
+    re-issues tokens, so a NEW token for a symbol already stored would violate that second constraint, the
+    sync would raise, and every other stock in the batch would be lost. For each row:
+
+    * token known, symbol known, SAME row, or token known only: the ordinary upsert handles it (a rename by
+      token works as it always did);
+    * symbol known with a DIFFERENT token and the new token is free, and the stored row is the SAME company
+      (the same normalised name; a missing name cannot be compared): the new token is written onto the
+      stock's existing row, so one instrument stays per symbol and its candles, positions and scores stay
+      attached; a different or unverifiable company is skipped with a warning (the symbol may be reused);
+    * token and symbol belong to DIFFERENT stored rows: ambiguous, so nothing is moved and the row is skipped
+      with a warning (never guessed, never raises).
+    """
+    tokens = [r["instrument_token"] for r in batch]
+    symbols = [(r["exchange"], r["tradingsymbol"]) for r in batch]
+    by_token = {
+        row.instrument_token: row
+        for row in db.execute(select(Instrument).where(Instrument.instrument_token.in_(tokens))).scalars()
+    }
+    by_symbol = {
+        (row.exchange, row.tradingsymbol): row
+        for row in db.execute(
+            select(Instrument).where(
+                or_(
+                    *[
+                        (Instrument.exchange == ex) & (Instrument.tradingsymbol == sym)
+                        for ex, sym in set(symbols)
+                    ]
+                )
+            )
+        ).scalars()
+    }
+    keep: list[dict] = []
+    moved = 0
+    for r in batch:
+        holder = by_token.get(r["instrument_token"])
+        stored = by_symbol.get((r["exchange"], r["tradingsymbol"]))
+        if stored is None or (holder is not None and holder.id == stored.id):
+            keep.append(r)
+            continue
+        if not same_company(name_a=stored.name, name_b=r.get("name")):
+            # A symbol can be handed to a different company. Its token is not moved onto the old company's
+            # row (that would give the new company the old one's candles and scores): skipped, for review.
+            log.warning(
+                "ingestion.instruments.symbol_reused_or_unverified",
+                symbol=r["tradingsymbol"],
+                token=r["instrument_token"],
+            )
+            continue
+        if holder is not None:  # the new token and the symbol are held by two different stored stocks
+            log.warning(
+                "ingestion.instruments.token_conflict",
+                symbol=r["tradingsymbol"],
+                token=r["instrument_token"],
+                stored_symbol=holder.tradingsymbol,
+            )
+            continue
+        db.execute(
+            update(Instrument)
+            .where(Instrument.id == stored.id)
+            .values(
+                instrument_token=r["instrument_token"],
+                exchange_token=r.get("exchange_token"),
+                name=r.get("name"),
+                segment=r.get("segment"),
+                lot_size=r["lot_size"],
+                tick_size=r["tick_size"],
+                is_active=True,
+            )
+        )
+        log.info(
+            "ingestion.instruments.token_reissued",
+            symbol=r["tradingsymbol"],
+            old_token=stored.instrument_token,
+            new_token=r["instrument_token"],
+        )
+        moved += 1
+    return keep, moved
 
 
 def sync_instruments(db: Session, exchange: str = "NSE", equity_only: bool = True) -> int:
@@ -94,8 +178,12 @@ def sync_instruments(db: Session, exchange: str = "NSE", equity_only: bool = Tru
     # a single-statement bulk insert broke outright the first time this ran
     # against a real Kite instrument dump.
     batch_size = 3000
+    reissued = 0
     for i in range(0, len(rows), batch_size):
-        batch = rows[i : i + batch_size]
+        batch, moved = _apply_reissued_tokens(db, rows[i : i + batch_size])
+        reissued += moved
+        if not batch:
+            continue
         # Upsert on instrument_token: the same symbol may reappear with
         # updated metadata, and is_watchlisted must survive the refresh.
         stmt = pg_insert(Instrument).values(batch)
@@ -113,7 +201,7 @@ def sync_instruments(db: Session, exchange: str = "NSE", equity_only: bool = Tru
         db.execute(stmt)
     db.commit()
 
-    log.info("ingestion.instruments.done", exchange=exchange, count=len(rows))
+    log.info("ingestion.instruments.done", exchange=exchange, count=len(rows), reissued_tokens=reissued)
     return len(rows)
 
 
@@ -519,7 +607,13 @@ def refresh_quotes(db: Session) -> int:
             continue
         ohlc = data.get("ohlc", {})
         prev_close = ohlc.get("close") or 0
-        last_price = float(data.get("last_price", 0))
+        # A quote with no price is skipped, never stored as a fresh 0.0 (#471): the last good quote stays,
+        # honestly old, and the paper broker's freshness check handles it.
+        raw_price = data.get("last_price")
+        if raw_price is None or float(raw_price) <= 0:
+            log.warning("ingestion.quotes.no_price", symbol=key)
+            continue
+        last_price = float(raw_price)
         rows.append(
             {
                 "instrument_id": inst.id,

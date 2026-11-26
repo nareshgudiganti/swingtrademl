@@ -166,6 +166,7 @@ def train(payload: TrainRequest, background: BackgroundTasks) -> MessageResponse
                     hyperparameters=payload.hyperparameters,
                     auto_activate=payload.auto_activate,
                     walk_forward_folds=payload.walk_forward_folds or 0,
+                    invoked_by="api",
                 )
         except Exception as exc:  # noqa: BLE001 — surface via logs/Telegram, don't crash the worker
             log.error("ml.train.failed", error=str(exc))
@@ -303,6 +304,11 @@ def prediction_accuracy(db: DbSession, model_id: int | None = None) -> dict:
 
     This, not the training-time test split, is the number to judge the model on
     after six months of paper trading.
+
+    `by_model` is the answer: one row per model with its name, version, horizon and label kind, because models
+    of different horizons answer different questions. The top-level figures are every chosen model together
+    (`overall_note` says so) and are kept only for older callers. With nothing evaluated, accuracy, average
+    probability and average return are null ("not enough data"), never 0.0.
     """
     stmt = select(
         func.count(Prediction.id),
@@ -312,19 +318,62 @@ def prediction_accuracy(db: DbSession, model_id: int | None = None) -> dict:
         func.avg(Prediction.probability),
         func.avg(Prediction.actual_return),
     ).where(Prediction.evaluated_at.isnot(None))
+    per_model = (
+        select(
+            MLModel.id,
+            MLModel.name,
+            MLModel.version,
+            MLModel.prediction_horizon_days,
+            MLModel.label_kind,
+            func.count(Prediction.id),
+            func.sum(cast(Prediction.was_correct, Integer)),
+            func.avg(Prediction.probability),
+            func.avg(Prediction.actual_return),
+        )
+        .join(MLModel, MLModel.id == Prediction.model_id)
+        .where(Prediction.evaluated_at.isnot(None))
+        .group_by(
+            MLModel.id, MLModel.name, MLModel.version, MLModel.prediction_horizon_days, MLModel.label_kind
+        )
+        .order_by(MLModel.name, MLModel.version)
+    )
     if model_id:
         stmt = stmt.where(Prediction.model_id == model_id)
+        per_model = per_model.where(Prediction.model_id == model_id)
 
     total, correct, avg_prob, avg_return = db.execute(stmt).one()
     total = int(total or 0)
     correct = int(correct or 0)
 
+    by_model = []
+    for mid, name, version, horizon, kind, n, n_correct, m_prob, m_ret in db.execute(per_model).all():
+        n, n_correct = int(n or 0), int(n_correct or 0)
+        by_model.append(
+            {
+                "model_id": mid,
+                "name": name,
+                "version": version,
+                "horizon_days": horizon,
+                "label_kind": kind,
+                "evaluated_predictions": n,
+                "correct": n_correct,
+                "accuracy": (n_correct / n) if n else None,
+                "avg_probability": float(m_prob) if m_prob is not None else None,
+                "avg_actual_return": float(m_ret) if m_ret is not None else None,
+            }
+        )
+
     return {
         "evaluated_predictions": total,
         "correct": correct,
-        "accuracy": (correct / total) if total else 0.0,
-        "avg_probability": float(avg_prob) if avg_prob is not None else 0.0,
-        "avg_actual_return": float(avg_return) if avg_return is not None else 0.0,
+        "accuracy": (correct / total) if total else None,
+        "avg_probability": float(avg_prob) if avg_prob is not None else None,
+        "avg_actual_return": float(avg_return) if avg_return is not None else None,
+        "overall_note": (
+            "The figures above are all models together, across horizons and label kinds. "
+            "Judge a model by its own row in by_model."
+        ),
+        "by_model": by_model,
     }
 
 
@@ -353,8 +402,9 @@ def prediction_accuracy_at_horizon(
         "total_predictions": result.total_predictions,
         "evaluable": result.evaluable,
         "correct": result.correct,
-        "accuracy": result.accuracy,
-        "avg_actual_return": result.avg_actual_return,
+        # Nothing old enough to check is "no answer", never 0.0 (#474).
+        "accuracy": result.accuracy if result.evaluable else None,
+        "avg_actual_return": result.avg_actual_return if result.evaluable else None,
     }
 
 

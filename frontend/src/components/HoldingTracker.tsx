@@ -1,14 +1,16 @@
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../api/client'
+import { planDays } from '../trademind/tradingRules'
 
-const STATUS_PLAIN: Record<string, string> = {
+// A function: the plan's length comes from the server (trademind/tradingRules.ts).
+const statusPlain = (): Record<string, string> => ({
   'on track': 'On track',
   drift: 'Drifting',
   breakdown: 'Breaking down',
   'stop hit': 'Stop hit',
-  'past horizon': 'Past 15 days',
+  'past horizon': `Past the Brain's ${planDays()}-day plan`,
   'no data': 'No new prices',
-}
+})
 
 const W = 320
 const H = 140
@@ -27,7 +29,7 @@ export function HoldingTracker({ symbol }: { symbol: string }) {
   const lo = Math.min(...values)
   const hi = Math.max(...values)
   const span = hi - lo || 0.01
-  const days = Math.max(15, ...data.points.map((p) => p.day_n))
+  const days = Math.max(planDays(), ...data.points.map((p) => p.day_n))
   const x = (d: number) => PAD + (d / days) * (W - 2 * PAD)
   const y = (r: number) => H - PAD - ((r - lo) / span) * (H - 2 * PAD)
 
@@ -44,9 +46,9 @@ export function HoldingTracker({ symbol }: { symbol: string }) {
   return (
     <div className="card" style={{ margin: '0.8rem 0', padding: '0.7rem' }}>
       <div className="between">
-        <strong>{STATUS_PLAIN[last.status] ?? last.status}</strong>
+        <strong>{statusPlain()[last.status] ?? last.status}</strong>
         <span className="stat-sub">
-          {last.day_n <= 15 ? `day ${last.day_n} of up to 15` : `day ${last.day_n}`} · {(last.ret * 100).toFixed(1)}%
+          {last.day_n <= planDays() ? `day ${last.day_n} of up to ${planDays()} (the Brain's ${planDays()}-day plan)` : `day ${last.day_n}`} · {(last.ret * 100).toFixed(1)}%
         </span>
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label={`${symbol} against similar trades`}>

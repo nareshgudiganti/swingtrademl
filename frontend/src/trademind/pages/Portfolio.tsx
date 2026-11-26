@@ -12,6 +12,7 @@ import StockLink from '../StockLink'
 import { PageState, QueryNotice } from '../PageState'
 import AddMoneyCard from '../AddMoney'
 import { HoldingsHealthCard } from '../HoldingsHealth'
+import { EVENTS_LOOKAHEAD_TRADING_DAYS } from '../../lib/fixedWindows'
 import { usePlan } from '../../lib/plan'
 import { UpcomingEventsLive } from '../beginner/UpcomingEvents'
 import { withoutScorePercent } from '../scoreText'
@@ -347,7 +348,7 @@ export default function Portfolio() {
       </div>
 
       {canManage && (
-        <Card title="Coming up for the stocks the bot holds" sub="Results and other company events in the next 15 trading days">
+        <Card title="Coming up for the stocks the bot holds" sub={`Results and other company events in the next ${EVENTS_LOOKAHEAD_TRADING_DAYS} trading days`}>
           <UpcomingEventsLive scope="held" />
         </Card>
       )}

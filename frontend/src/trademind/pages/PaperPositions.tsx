@@ -11,10 +11,11 @@ import { Card, inr, signed, StockLogo, toneClass } from '../ui'
 import StockLink from '../StockLink'
 import { PageState, StaleNotice } from '../PageState'
 import { pickState } from '../stateRules'
-import { ActToday, DetailPanel, LevelTag, PositionBar, levelOf, retPct } from './PositionParts'
+import { ActToday, DetailPanel, LevelTag, PositionBar, hasPrice, levelOf, retPct, returnText } from './PositionParts'
 import type { LevelState } from './positionLevels'
 import { AllocationCard, ClosedScoreboard } from './PortfolioInsights'
 import IdeaReports from './IdeaReports'
+import { planDays, stopText, targetText } from '../tradingRules'
 
 const SECTOR_COLORS = ['#3f55d6', '#1f9d6b', '#e0a72b', '#d9486a', '#7a4fd6', '#17a2b8', '#e8702a', '#5a6b8c']
 
@@ -92,7 +93,8 @@ export default function PaperPositions() {
   // Total = open + banked profit, measured against everything put into trades (open and closed).
   const totalPnl = openPnl + (moneyRow?.realized_pnl ?? 0)
   const totalCost = invested + (trades.data ?? []).reduce((s, t) => s + t.quantity * t.entry_price, 0)
-  const byReturn = [...rows].sort((a, b) => b.unrealized_pnl_pct - a.unrealized_pnl_pct)
+  // Best and worst count only positions that have a price: an unpriced one is not "flat", it is unknown (#486).
+  const byReturn = rows.filter(hasPrice).sort((a, b) => b.unrealized_pnl_pct - a.unrealized_pnl_pct)
   const best = byReturn[0]
   const worst = byReturn[byReturn.length - 1]
   const dayPct = (p: DetailedPosition) => {
@@ -112,7 +114,7 @@ export default function PaperPositions() {
       cur.value += p.current_value
       cur.cost += p.invested
       cur.pnl += p.unrealized_pnl
-      cur.stocks.push({ symbol: p.symbol, pct: p.unrealized_pnl_pct * 100 })
+      if (hasPrice(p)) cur.stocks.push({ symbol: p.symbol, pct: p.unrealized_pnl_pct * 100 })
       m.set(name, cur)
     }
     const total = rows.reduce((s, p) => s + p.current_value, 0)
@@ -395,6 +397,7 @@ const STATE_RANK: Record<LevelState, number> = {
   near_half: 5,
   watch: 6,
   hold: 7,
+  no_price: 8,
 }
 
 /** Today's strength score out of 100, same source as the score trail. */
@@ -443,12 +446,12 @@ function OpenTable({
             <SortTh sorter={sorter} k="price" right>Current</SortTh>
             <SortTh sorter={sorter} k="pnlAbs" right>P&amp;L (₹)</SortTh>
             <SortTh sorter={sorter} k="pnl" right>P&amp;L %</SortTh>
-            <SortTh sorter={sorter} k="progress">Progress (−4% to +8%)</SortTh>
+            <SortTh sorter={sorter} k="progress" title={`Where the stock sits on the app's ${planDays()}-day plan scale, from the stop to the target`}>Progress ({stopText()} to {targetText()}, app {planDays()}-day scale)</SortTh>
             <SortTh sorter={sorter} k="state" title="What to do today, from where the stock sits between stop, half-profit and target">
               Suggestion
             </SortTh>
             {wide && <SortTh sorter={sorter} k="score" right title="How strongly the model likes this stock today, out of 100">Model score</SortTh>}
-            {wide && <SortTh sorter={sorter} k="days" right title="Trading days held, out of the 15-day plan">Days</SortTh>}
+            {wide && <SortTh sorter={sorter} k="days" right title={`Trading days held, out of the ${planDays()}-day plan`}>Days</SortTh>}
           </tr>
         </thead>
         <tbody>
@@ -470,16 +473,14 @@ function OpenTable({
               </td>
               <td className="tm-right tm-num">{p.quantity}</td>
               <td className="tm-right tm-num">₹{inr(p.entry_price)}</td>
-              <td className="tm-right tm-num">₹{inr(p.current_price)}</td>
+              <td className="tm-right tm-num">{hasPrice(p) ? `₹${inr(p.current_price)}` : '—'}</td>
               <td className={`tm-right tm-num ${toneClass(p.unrealized_pnl)}`}>
-                {p.unrealized_pnl < 0 ? '−' : '+'}₹{inr(Math.abs(p.unrealized_pnl), 0)}
+                {hasPrice(p) ? `${p.unrealized_pnl < 0 ? '−' : '+'}₹${inr(Math.abs(p.unrealized_pnl), 0)}` : '—'}
               </td>
               <td className="tm-right tm-num">
-                <span className={`tm-pnl-pill ${toneClass(p.unrealized_pnl)}`}>{signed(retPct(p))}</span>
+                <span className={`tm-pnl-pill ${hasPrice(p) ? toneClass(p.unrealized_pnl) : 'tm-dim'}`}>{returnText(p)}</span>
               </td>
-              <td>
-                <PositionBar pct={retPct(p)} />
-              </td>
+              <td>{hasPrice(p) ? <PositionBar pct={retPct(p)} /> : null}</td>
               <td>
                 <LevelTag level={levelOf(p)} />
               </td>

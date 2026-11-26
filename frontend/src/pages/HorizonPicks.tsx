@@ -125,15 +125,26 @@ export function ForwardPanel({ f, cap }: { f: LaneSummary['forward']; cap: strin
       )}
       <Row k="Picks">
         {f.picks} total · {f.completed} finished · {f.open} open
+        {f.unresolved ? ` · ${f.unresolved} with no usable price (unresolved)` : ''}
       </Row>
       <Row k="Hit rate">
-        {f.hit_rate === null ? NOT_MEASURED : `${(f.hit_rate * 100).toFixed(0)}% of ${f.completed} finished picks`}
+        {f.hit_rate === null
+          ? f.completed > 0
+            ? 'Not enough finished picks yet'
+            : NOT_MEASURED
+          : `${(f.hit_rate * 100).toFixed(0)}% of ${f.completed} finished picks`}
       </Row>
       <Row k="Average result after costs">
-        {pctOrWords(f.mean_net_return)} ({f.completed} finished picks)
+        {f.mean_net_return === null && f.completed > 0
+          ? 'Not enough finished picks yet'
+          : `${pctOrWords(f.mean_net_return)} (${f.completed} finished picks)`}
       </Row>
-      <Row k="Excess over the group's own average stock">{pctOrWords(f.benchmark_excess)}</Row>
-      <Row k="Fall in the running total of picks">{pctOrWords(f.drawdown)}</Row>
+      <Row k="Excess over the group's own average stock">
+        {f.benchmark_excess === null && f.completed > 0 ? 'Not enough finished picks yet' : pctOrWords(f.benchmark_excess)}
+      </Row>
+      <Row k="Fall in the running total of picks">
+        {f.drawdown === null && f.completed > 0 ? 'Not enough finished picks yet' : pctOrWords(f.drawdown)}
+      </Row>
       <p className="muted" style={{ fontSize: 11, margin: '2px 0 4px' }}>
         {DRAWDOWN_NOTE}
       </p>
@@ -273,8 +284,64 @@ function LanesSection() {
   )
 }
 
-export function PicksTable({ rows }: { rows: LanePick[] }) {
-  if (rows.length === 0) return <Empty label="No picks recorded yet for this choice." />
+/** True when both days are chosen and the end is before the start: the server refuses that too (422). */
+export function datesInvalid(from: string, to: string): boolean {
+  return from !== '' && to !== '' && to < from
+}
+
+/** What an empty list says: the old wording with no dates, else which days were asked for. */
+export function emptyPicksLabel(from: string, to: string): string {
+  if (from && to) return `No picks from ${from} to ${to} for this choice.`
+  if (from) return `No picks from ${from} onwards for this choice.`
+  if (to) return `No picks up to ${to} for this choice.`
+  return 'No picks recorded yet for this choice.'
+}
+
+/** The two day inputs of the 5-day table. Both ends are included; an end before the start is said in words. */
+export function LaneFilters({
+  from,
+  to,
+  onFrom,
+  onTo,
+}: {
+  from: string
+  to: string
+  onFrom: (v: string) => void
+  onTo: (v: string) => void
+}) {
+  const invalid = datesInvalid(from, to)
+  return (
+    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', margin: '8px 0' }}>
+      <label>
+        From{' '}
+        <input type="date" aria-label="From day" value={from} max={to || undefined} onChange={(e) => onFrom(e.target.value)} />
+      </label>
+      <label>
+        To{' '}
+        <input type="date" aria-label="To day" value={to} min={from || undefined} onChange={(e) => onTo(e.target.value)} />
+      </label>
+      {(from || to) && (
+        <button
+          className="btn btn-ghost"
+          onClick={() => {
+            onFrom('')
+            onTo('')
+          }}
+        >
+          Clear dates
+        </button>
+      )}
+      {invalid && (
+        <span role="alert" className="muted">
+          “To” must be on or after “From”.
+        </span>
+      )}
+    </div>
+  )
+}
+
+export function PicksTable({ rows, emptyLabel }: { rows: LanePick[]; emptyLabel?: string }) {
+  if (rows.length === 0) return <Empty label={emptyLabel ?? 'No picks recorded yet for this choice.'} />
   return (
     <div style={{ overflowX: 'auto' }}>
       <table className="table" style={{ width: '100%', fontSize: 13 }}>
@@ -318,17 +385,23 @@ export function PicksTable({ rows }: { rows: LanePick[] }) {
 function FiveDayLane() {
   const [horizon, setHorizon] = useState<number | undefined>(undefined)
   const [cap, setCap] = useState('')
-  const q = useQuery({ queryKey: ['lane-picks', horizon, cap], queryFn: () => api.lanePicks(horizon, cap || undefined) })
+  const [from, setFrom] = useState('')
+  const [to, setTo] = useState('')
+  const invalid = datesInvalid(from, to)
+  const q = useQuery({
+    queryKey: ['lane-picks', horizon, cap, from, to],
+    queryFn: () => api.lanePicks(horizon, cap || undefined, from || undefined, to || undefined),
+    enabled: !invalid, // an end before the start is said in words, never sent
+  })
 
-  if (q.isLoading) return <Loading />
-  if (q.error || !q.data) return <ErrorBox error={q.error} />
+  // The filters stay on screen whatever the state below them is, so a refused or empty choice can be changed.
   const d = q.data
-  const horizons = Array.from(new Set(d.lanes.map((l) => l.horizon_days))).sort((a, b) => a - b)
+  const horizons = d ? Array.from(new Set(d.lanes.map((l) => l.horizon_days))).sort((a, b) => a - b) : [5]
 
   return (
     <div>
       <h2>5-day lane (existing models)</h2>
-      <p className="muted">{d.note}</p>
+      {d && <p className="muted">{d.note}</p>}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', margin: '8px 0' }}>
         <button className={horizon === undefined ? 'btn' : 'btn btn-ghost'} onClick={() => setHorizon(undefined)}>
           All horizons
@@ -345,12 +418,20 @@ function FiveDayLane() {
           </button>
         ))}
       </div>
-      <div className="card" style={{ padding: 12, margin: '8px 0' }}>
-        <strong>{d.summary.picks}</strong> picks · <strong>{d.summary.finished}</strong> finished ·{' '}
-        <strong>{d.summary.open}</strong> open · <strong>{d.summary.wins}</strong> made money · average after costs{' '}
-        <strong>{pctText(d.summary.mean_net_return)}</strong>
-      </div>
-      <PicksTable rows={d.rows} />
+      <LaneFilters from={from} to={to} onFrom={setFrom} onTo={setTo} />
+      {!invalid && q.isLoading && <Loading />}
+      {!invalid && q.error && <ErrorBox error={q.error} />}
+      {!invalid && d && (
+        <>
+          <div className="card" style={{ padding: 12, margin: '8px 0' }}>
+            <strong>{d.summary.picks}</strong> picks · <strong>{d.summary.finished}</strong> finished ·{' '}
+            <strong>{d.summary.open}</strong> open · <strong>{d.summary.wins}</strong> made money · average after
+            costs{' '}
+            <strong>{d.summary.rates_note ? 'not enough finished picks yet' : pctText(d.summary.mean_net_return)}</strong>
+          </div>
+          <PicksTable rows={d.rows} emptyLabel={emptyPicksLabel(from, to)} />
+        </>
+      )}
     </div>
   )
 }

@@ -399,7 +399,7 @@ function HoldingsTable({
                 <td className="tm-right">{rupees(p.current_price)}</td>
                 <td className="tm-right">{rupees(p.current_value)}</td>
                 <td className={`tm-right ${toneClass(p.unrealized_pnl)}`}>
-                  {signedRupees(p.unrealized_pnl)} ({signed(p.unrealized_pnl_pct * 100)})
+                  {p.has_price === false ? 'No price yet' : `${signedRupees(p.unrealized_pnl)} (${signed(p.unrealized_pnl_pct * 100)})`}
                 </td>
                 <td className="tm-right">{p.stop_loss != null ? rupees(p.stop_loss) : '—'}</td>
                 <td className="tm-right">{p.take_profit != null ? rupees(p.take_profit) : '—'}</td>

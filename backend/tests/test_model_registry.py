@@ -517,6 +517,8 @@ def test_nothing_in_the_brain_ml_strategies_workers_or_trading_imports_the_regis
         for f in (PKG / d).rglob("*.py"):
             if f.name == "model_registry.py":
                 continue
+            if f.relative_to(PKG).as_posix() == "services/admin_model_overview.py":
+                continue  # #385: owner-only admin console reads a model's research role for display (role_of), read only
             if any(
                 i.endswith(("model_registry", "db.models.registry", "ModelResearchSlot"))
                 or "model_registry" in i

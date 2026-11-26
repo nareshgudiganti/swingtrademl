@@ -44,6 +44,7 @@ import type {
   BrainRun,
   BrainRunQueued,
   MarketSession,
+  TradingRulesDto,
   BrainRunSummary,
   BrainTraceEvent,
   BrainWhy,
@@ -427,10 +428,12 @@ export const api = {
   modelRegistrySlots: () => get<RegistrySlots>('/model-registry/slots'),
   modelRegistryChange: (slotKey: string, body: RegistrySlotChange) =>
     patch<RegistrySlot>(`/model-registry/slots/${encodeURIComponent(slotKey)}`, body),
-  lanePicks: (horizon?: number, cap?: string) => {
+  lanePicks: (horizon?: number, cap?: string, from?: string, to?: string) => {
     const q = new URLSearchParams()
     if (horizon) q.set('horizon', String(horizon))
     if (cap) q.set('cap', cap)
+    if (from) q.set('from', from)
+    if (to) q.set('to', to)
     const qs = q.toString()
     return get<LanePicks>(`/research/lane-picks${qs ? `?${qs}` : ''}`)
   },
@@ -575,7 +578,25 @@ export const api = {
   activateModel: (id: number) => post<MLModel>(`/ml/models/${id}/activate`),
   train: (body: Record<string, unknown>) => post<MessageResponse>('/ml/train', body),
   predictionAccuracy: (modelId?: number) =>
-    get<{ evaluated_predictions: number; correct: number; accuracy: number }>(
+    get<{
+      evaluated_predictions: number
+      correct: number
+      /** null when nothing has been evaluated ("not enough data"), never 0 */
+      accuracy: number | null
+      avg_probability: number | null
+      avg_actual_return: number | null
+      overall_note?: string
+      by_model?: {
+        model_id: number
+        name: string
+        version: string
+        horizon_days: number
+        label_kind: string
+        evaluated_predictions: number
+        correct: number
+        accuracy: number | null
+      }[]
+    }>(
       modelId ? `/ml/predictions/accuracy?model_id=${modelId}` : '/ml/predictions/accuracy',
     ),
   // Scores the whole watchlist now, ranked by probability — the "what should
@@ -768,6 +789,7 @@ export const api = {
   brainWhatIf: (symbol: string, qty: number, price?: number) =>
     post<BrainWhatIf>('/brain/whatif', { symbol, qty, price }),
   marketSession: () => get<MarketSession>('/market/session'),
+  tradingRules: () => get<TradingRulesDto>('/config/trading-rules'),
   brainRuns: (limit = 10) => get<BrainRunSummary[]>(`/brain/runs?limit=${limit}`),
   brainLatestRun: (kind = 'nightly') => get<BrainRun>(`/brain/runs/latest?kind=${kind}`),
   // Queues a run and answers at once; poll brainRunGet until done/failed.

@@ -139,10 +139,10 @@ export default function PositionAttentionCard({
       <div className="tech-grid attention-grid">
         <Field label="You hold" value={`${formatNumber(position.quantity)} shares`} />
         <Field label="You paid" value={formatCurrency(position.entry_price)} />
-        <Field label="Price now" value={formatCurrency(position.current_price)} />
+        <Field label="Price now" value={position.has_price === false ? 'No price yet' : formatCurrency(position.current_price)} />
         <Field
           label="Gain / loss"
-          value={formatSignedPercent(position.unrealized_pnl_pct, 1)}
+          value={position.has_price === false ? 'No price yet' : formatSignedPercent(position.unrealized_pnl_pct, 1)}
           className={pnlClass(position.unrealized_pnl)}
         />
         {stop != null && (

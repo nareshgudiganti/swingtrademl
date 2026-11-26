@@ -20,6 +20,7 @@ from sqlalchemy import select
 
 from swing_trade_ml.api.deps import DbSession, require_owner
 from swing_trade_ml.core.config import REPO_ROOT
+from swing_trade_ml.core.research_config import is_research_only
 from swing_trade_ml.db.models.lane_shadow import LaneOutcome, LanePick
 from swing_trade_ml.db.models.ml import MLModel
 from swing_trade_ml.services.model_registry import role_of
@@ -34,6 +35,8 @@ NOTE = (
 )
 MID_WARNING = "Limited experiment: about 14 mid-cap stocks. Sample-size limits are large; not a basis for trading approval."
 SMALL_SAMPLE = "Fewer than 60 completed picks: too early to judge."
+#: Shown in place of a hit rate or a net per trade while the sample is too small to read (#474).
+RATES_WITHHELD = "Not enough data yet: a hit rate or a net per trade from this few finished picks would mislead."
 REVIEW_AFTER = 60
 BOOTSTRAP_MIN = 30
 DRAWDOWN_NOTE = "Drawdown is pick-level (largest fall of the running sum of completed picks' net returns). It is NOT a portfolio drawdown."
@@ -126,6 +129,8 @@ def _empty_history(note: str | None = None) -> dict:
 
 def history_for(slot_key: str, root: Path = EVIDENCE) -> dict:
     out = _empty_history()
+    if SLOTS.get(slot_key, (0, ""))[0] == 5:
+        return out  # no 5-session history test is stored here; never show a 10- or 15-day test as a 5-day one
     if slot_key == "10d-large":
         files = sorted((root / "td_v1").glob("ten_day_*.json")) if (root / "td_v1").is_dir() else []
         rep = _load(files[-1]) if files else None
@@ -181,6 +186,8 @@ def forward_view(rows: list, horizon: int, cap_group: str) -> tuple[dict, int, i
     picks = len(rows)
     done = [(p, o) for p, o in rows if o is not None and o.net_return is not None]
     open_n = sum(1 for _, o in rows if o is None)
+    # A matured pick with no usable price has an outcome row with no return: it is neither open nor completed.
+    unresolved = sum(1 for _, o in rows if o is not None and o.net_return is None)
     nets = [o.net_return for _, o in done]
     excess = [o.excess_return for _, o in done if o.excess_return is not None]
     sessions = len({p.signal_day for p, _ in rows})
@@ -197,11 +204,16 @@ def forward_view(rows: list, horizon: int, cap_group: str) -> tuple[dict, int, i
         "picks": picks,
         "completed": len(done),
         "open": open_n,
-        "hit_rate": (sum(1 for n in nets if n > 0) / len(nets)) if nets else None,
-        "mean_net_return": (sum(nets) / len(nets)) if nets else None,
-        "benchmark_excess": (sum(excess) / len(excess)) if excess else None,
-        "drawdown": pick_drawdown(
-            [o.net_return for p, o in sorted(done, key=lambda po: (po[0].signal_day, po[0].rank))]
+        "unresolved": unresolved,
+        # Too early to judge: no rate is shown (the counts above stay). The review sample is the same 60 as the warning.
+        "hit_rate": (sum(1 for n in nets if n > 0) / len(nets)) if len(nets) >= REVIEW_AFTER else None,
+        "mean_net_return": (sum(nets) / len(nets)) if len(nets) >= REVIEW_AFTER else None,
+        # Averages and falls drawn from the same picks wait for the same floor as the hit rate.
+        "benchmark_excess": (sum(excess) / len(excess)) if excess and len(nets) >= REVIEW_AFTER else None,
+        "drawdown": (
+            pick_drawdown([o.net_return for p, o in sorted(done, key=lambda po: (po[0].signal_day, po[0].rank))])
+            if len(nets) >= REVIEW_AFTER
+            else None
         ),
         "uncertainty": {"low": interval[0], "high": interval[1]} if interval else {"low": None, "high": None},
         "sample_warning": " ".join(warnings) or None,
@@ -217,6 +229,8 @@ def forward_view(rows: list, horizon: int, cap_group: str) -> tuple[dict, int, i
 def build_lanes(db) -> dict[str, Any]:
     lanes = []
     for slot_key, (horizon, group) in SLOTS.items():
+        if not lane_job.slot_in_use(db, slot_key):
+            continue
         rows = _rows(db, slot_key)
         forward, sessions, completed = forward_view(rows, horizon, group)
         model = db.get(MLModel, rows[-1][0].model_id) if rows else None
@@ -227,6 +241,7 @@ def build_lanes(db) -> dict[str, Any]:
             {
                 "slot_key": slot_key,
                 "horizon_days": horizon,
+                "research_only": is_research_only(horizon),
                 "cap_group": group,
                 "model": (
                     {"id": model.id, "name": model.name, "version": model.version, "role": role_of(model)}
@@ -254,6 +269,15 @@ def horizon_report(db: DbSession) -> dict[str, Any]:
     from swing_trade_ml.shadow_lanes import horizon_report as hr
 
     return hr.build(db)
+
+
+@router.get("/outcome-ledger")
+def outcome_ledger_view(db: DbSession, run_no: int | None = Query(default=None, ge=1)) -> dict[str, Any]:
+    """The 5-day lane's forward outcome ledger, one row per recorded pick (read-only).
+    See shadow_lanes/outcome_ledger.py for the row grain and field names."""
+    from swing_trade_ml.shadow_lanes import outcome_ledger
+
+    return outcome_ledger.build(db, run_no)
 
 
 @router.get("/{slot_key}/picks")

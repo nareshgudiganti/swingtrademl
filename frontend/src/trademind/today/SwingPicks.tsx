@@ -20,15 +20,17 @@ import { formatDateTime } from '../../lib/format'
 import { usePlan } from '../../lib/plan'
 import { EXPERIMENTAL } from '../beginner/cardText'
 import { withoutScorePercent } from '../scoreText'
-import { chancePercent, chanceText, chanceTitle } from '../honest'
+import { chancePercent, chanceScale, chanceText, chanceTitle } from '../honest'
 import { HorizonSelector, HorizonUnavailable } from '../HorizonSelector'
 import { HORIZONS, horizonById, type HorizonId } from '../horizons'
 import { finalWord, ideasFrom, stockSituations } from '../live'
 import { ResearchExperiment } from '../ResearchExperiment'
 import StockLink from '../StockLink'
 import { Term, TermIf } from '../term'
+import { istMonthDay } from '../istDay'
 import type { Action } from '../types'
 import { ActionPill, BrainArt, Card, CheckItem, GlowArea, Meter, Ring, StockLogo, Tag, inr } from '../ui'
+import { plan, planDays, stopText, targetText } from '../tradingRules'
 import { MARKET_LABEL, MARKET_PLAIN, MARKET_TONE, wordTone } from '../vocab'
 
 const RANGES = [
@@ -47,7 +49,8 @@ const MIN_SCORES = [
   { id: 80, label: 'Ranking 80+' },
 ]
 
-const FIRST_TARGET = 0.05 // the rule: sell half at +5%
+// The rule: sell half at the first target. Read from the server when used (trademind/tradingRules.ts).
+const firstTarget = () => plan().halfPct / 100
 
 const money = (n: number | null | undefined) => (n == null ? '—' : `₹${inr(n)}`)
 const score = (d: BrainDecision) => (d.confidence != null ? Math.round(d.confidence * 100) : null)
@@ -121,7 +124,7 @@ export function HowItWorks() {
     <Card title="How it works?">
       <ol className="tm-dash-how" data-feature="how-it-works">
         <li>The brain studies the market and looks for opportunities.</li>
-        <li>Picks are shown for the 15-day window only; other windows have no supported strategy yet.</li>
+        <li>Picks are shown for the {planDays()}-day window only; other windows have no supported strategy yet.</li>
         <li>Each pick has an entry, targets, a stop loss and its reasons.</li>
         <li>You review and decide. Nothing here places an order.</li>
       </ol>
@@ -264,7 +267,7 @@ export function SwingPicksList({ run, win, onWin }: { run: BrainRun; win: Horizo
                   <th>
                     <Term k="stop_loss">Stop loss</Term>
                   </th>
-                  <th className="tm-right" title="Estimated chance of +8% before −4%, from past results on unseen days">
+                  <th className="tm-right" title={`Estimated chance of ${targetText()} before ${stopText()}, from past results on unseen days`}>
                     <Term k="est_chance">Est. chance</Term>
                   </th>
                   <th>Timeframe</th>
@@ -274,7 +277,7 @@ export function SwingPicksList({ run, win, onWin }: { run: BrainRun; win: Horizo
               <tbody>
                 {rows.map((d, i) => {
                   const mid = entryMid(d)
-                  const t1 = mid != null ? mid * (1 + FIRST_TARGET) : null
+                  const t1 = mid != null ? mid * (1 + firstTarget()) : null
                   const q = quotes.get(d.symbol)
                   const situation = stockSituations(run, d.symbol).find((s) => !s.is_unknown && s.label !== 'unlabelled')
                   return (
@@ -307,6 +310,12 @@ export function SwingPicksList({ run, win, onWin }: { run: BrainRun; win: Horizo
                       </td>
                       <td className="tm-right tm-num" title={chanceTitle(d)}>
                         {chanceText(d)}
+                        {chanceScale(d) && (
+                          <>
+                            <br />
+                            <small className="tm-dim">{chanceScale(d)}</small>
+                          </>
+                        )}
                       </td>
                       <td>
                         <span className="tm-dash-badge">{d.horizon_days}D</span>{' '}
@@ -360,7 +369,7 @@ function SummaryStrip({ run, picks }: { run: BrainRun; picks: BrainDecision[] })
   const regime = useQuery({ queryKey: ['marketRegime'], queryFn: api.marketRegime })
   const nifty = useQuery({ queryKey: ['candles', 'NIFTY 50', 60], queryFn: () => api.candles('NIFTY 50', 60), retry: false })
   const nq = quoteFrom(nifty.data)
-  const spark = (nifty.data ?? []).map((c) => ({ t: c.ts.slice(5, 10), v: c.close }))
+  const spark = (nifty.data ?? []).map((c) => ({ t: istMonthDay(c.ts), v: c.close }))
   const mode = run.banner.mode
   const trendWord =
     regime.data?.regime === 'bullish' ? 'Bullish' : regime.data?.regime === 'bearish' ? 'Bearish' : 'Unclear'
@@ -420,7 +429,7 @@ function SummaryStrip({ run, picks }: { run: BrainRun; picks: BrainDecision[] })
         )}
       </Card>
 
-      <Card title="Estimated chance" sub="Average of today's 15-day picks">
+      <Card title="Estimated chance" sub={`Average of today's ${planDays()}-day picks`}>
         <div className="tm-flex" style={{ alignItems: 'center', gap: '0.9rem' }}>
           <Ring
             value={avgScore ?? 0}
@@ -433,7 +442,7 @@ function SummaryStrip({ run, picks }: { run: BrainRun; picks: BrainDecision[] })
         </div>
       </Card>
 
-      <Card title="Total Picks" sub="15-day window; other windows have none">
+      <Card title="Total Picks" sub={`${planDays()}-day window; other windows have none`}>
         <div className="tm-big tm-num" style={{ fontSize: '1.9rem' }}>
           {picks.length}
         </div>
@@ -462,11 +471,11 @@ function PickDetail({
 }) {
   const [range, setRange] = useState<RangeId>('1M')
   const bars = RANGES.find((r) => r.id === range)!.bars
-  const points = (candles ?? []).slice(-bars).map((c) => ({ t: c.ts.slice(5, 10), v: c.close }))
+  const points = (candles ?? []).slice(-bars).map((c) => ({ t: istMonthDay(c.ts), v: c.close }))
   const q = quoteFrom(candles)
   const word = finalWord(d)
   const mid = entryMid(d)
-  const t1 = mid != null ? mid * (1 + FIRST_TARGET) : null
+  const t1 = mid != null ? mid * (1 + firstTarget()) : null
   const risks = [d.downgrade_reason, d.overrule_reason].filter((r): r is string => !!r).map(withoutScorePercent)
 
   return (
@@ -547,7 +556,7 @@ function PickDetail({
           </div>
         </Card>
 
-        <Card title="Why this pick?" sub={`Estimated chance ${chanceText(d)} of reaching the target first. ${EXPERIMENTAL}.`}>
+        <Card title="Why this pick?" sub={`Estimated chance ${chanceText(d)} of reaching the target first${chanceScale(d) ? `; ${chanceScale(d)}` : ''}. ${EXPERIMENTAL}.`}>
           {d.reasons.length === 0 && <p className="tm-dim">The brain gave no reasons for this one.</p>}
           {d.reasons.map((r, i) => (
             <CheckItem key={i} tone={wordTone(word)}>

@@ -1,7 +1,7 @@
 // The first-time tour (ux5): five short screens for someone new to the app. It opens by itself once per account
 // (see tourRules.ts for how "seen" is kept), and the Help button in the top bar opens it again at any time.
 // Every word explained here comes from the one glossary (vocab.ts) through <Term>/<WordTag>, and every number
-// matches the code: +8% / -4% / half at +5% / 15 trading days (brain/modules/m08_decide/policy.py and
+// matches the code, for the Brain's 15-day trial: +8% / -4% / half at +5% / 15 trading days (m08_decide/policy.py and
 // core/config.py ML_*), practice mode wording (services/brain_golive/stage.py), Paper/Real strips (books.ts).
 // The model score is described only as a ranking, never as a chance of winning.
 
@@ -14,6 +14,7 @@ import { Link } from 'react-router-dom'
 import './tour.css'
 import { api, getToken } from '../api/client'
 import { Term, WordTag } from './term'
+import { plan } from './tradingRules'
 import { HOLDING_WORDS, IDEA_WORDS, MARKET_LABEL, MARKET_MODES } from './vocab'
 import { TOUR_STEP_COUNT, backStep, markTourSeen, nextStep, shouldAutoOpen, tourKeyAction, wrapFocus } from './tourRules'
 
@@ -107,21 +108,22 @@ export const TOUR_STEPS: Step[] = [
     ),
   },
   {
-    title: 'The plan for every trade',
+    title: "The Brain's plan for a trade",
     body: () => (
       <>
+        <p>This is the plan the Brain follows in its {plan().days}-day trial.</p>
         <ul className="tm-tour-list">
           <li>
-            <Term k="target">Target</Term>: sell at 8% above the buy price.
+            <Term k="target">Target</Term>: sell at {plan().targetPct}% above the buy price.
           </li>
           <li>
-            <Term k="stop_loss">Stop-loss</Term>: sell at 4% below the buy price, to keep a bad trade small.
+            <Term k="stop_loss">Stop-loss</Term>: sell at {plan().stopPct}% below the buy price, to keep a bad trade small.
           </li>
           <li>
-            <Term k="half_out">Sell half</Term> when the stock is up 5%, and keep the rest for the target.
+            <Term k="half_out">Sell half</Term> when the stock is up {plan().halfPct}%, and keep the rest for the target.
           </li>
           <li>
-            <Term k="horizon">Time limit</Term>: out within 15 trading days, about three weeks.
+            <Term k="horizon">Time limit</Term>: in the {plan().days}-day trial, out within {plan().days} trading days, about three weeks.
           </li>
         </ul>
         <p>These are the plan&rsquo;s limits, not a forecast. Many trades end at the stop-loss or the time limit.</p>

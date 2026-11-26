@@ -259,3 +259,11 @@ def model_overview(admin: MfaAdmin, db: DbSession) -> dict[str, Any]:
     from swing_trade_ml.services.admin_model_overview import build_overview
 
     return build_overview(db)
+
+
+@console.get("/candle-log")
+def candle_log(admin: MfaAdmin, db: DbSession) -> dict[str, Any]:
+    """Read-only: daily price bars that arrived late or were corrected after we stored them (#565)."""
+    from swing_trade_ml.services.admin_candle_log import build_candle_log
+
+    return build_candle_log(db)

@@ -153,3 +153,54 @@ def test_only_the_owner_is_served_the_research_only_horizons(client, db_session)
     body = client.get(URL, headers=person(db_session, "member")).json()
     assert all(h["research_only"] is False for h in body["research"]["horizons"])
     assert "0.035" not in str(body) and "0.06" not in str(body)
+
+
+def test_the_served_brain_plan_equals_the_default_policy_values(client):
+    from swing_trade_ml.brain.modules.m08_decide.policy import DEFAULT_POLICY
+
+    plan = client.get(URL, headers={"X-API-Key": "test-api-key"}).json()["brain_plan"]
+    assert plan == {
+        "target_pct": DEFAULT_POLICY.target_pct,
+        "stop_pct": DEFAULT_POLICY.stop_pct,
+        "half_out_pct": DEFAULT_POLICY.first_target_pct,
+        "max_sessions": DEFAULT_POLICY.horizon_days,
+    }
+
+
+def test_the_served_holidays_agree_with_the_market_calendar(client):
+    from swing_trade_ml.core import market_session
+
+    served = client.get(URL, headers={"X-API-Key": "test-api-key"}).json()["calendar"]["holidays"]
+    weekday_holidays = [date.fromisoformat(d) for d in served if date.fromisoformat(d).weekday() < 5]
+    assert weekday_holidays, "expected at least one weekday holiday"
+    for d in weekday_holidays:
+        assert market_session.is_trading_day(d) is False, d
+
+
+def test_sessions_so_far_is_zero_before_the_trial_starts():
+    from datetime import timedelta
+
+    from swing_trade_ml.brain.trial_constants import TRIAL_START
+
+    before = TRIAL_START - timedelta(days=1)
+    assert trading_rules.trading_rules(before)["trial"]["sessions_so_far"] == 0
+
+
+def test_the_served_calendar_has_hard_coded_known_holidays_and_ordinary_days_trade(client):
+    # Independent of NSE_HOLIDAYS: fixed-date national holidays (Republic Day 26 Jan, Gandhi Jayanti 2 Oct,
+    # Ambedkar Jayanti 14 Apr, Christmas 25 Dec) and Good Friday (Easter 2026 = 5 Apr, 2027 = 28 Mar).
+    # The repo's holidays.py says it is compiled from public calendars, not the NSE circular, so only
+    # dates that fall on a weekday and follow from those fixed rules are used here.
+    from swing_trade_ml.core import market_session
+
+    known = ["2026-01-26", "2026-04-03", "2026-10-02", "2026-12-25", "2027-01-26", "2027-03-26", "2027-04-14"]
+    served = client.get(URL, headers={"X-API-Key": "test-api-key"}).json()["calendar"]["holidays"]
+    for d in known:
+        assert d in served, d
+        assert market_session.is_trading_day(date.fromisoformat(d)) is False, d
+    # weekends never trade (Sat 15 Aug 2026, Sun 3 Jan 2027); ordinary Wednesdays do
+    for d in ("2026-08-15", "2027-01-03"):
+        assert market_session.is_trading_day(date.fromisoformat(d)) is False, d
+    for d in ("2026-06-10", "2027-06-09"):
+        assert d not in served
+        assert market_session.is_trading_day(date.fromisoformat(d)) is True, d

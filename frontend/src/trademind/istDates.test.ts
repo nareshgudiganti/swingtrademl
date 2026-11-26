@@ -65,7 +65,7 @@ describe('the Swing Picks and Opportunities chart labels', () => {
     for (const file of ['trademind/today/SwingPicks.tsx', 'trademind/pages/Opportunities.tsx']) {
       const text = read(file)
       expect(text, file).not.toMatch(/\.ts\.slice\(\s*5\s*,\s*10\s*\)/)
-      expect(text, file).toContain('istMonthDay(c.ts)')
+      expect(text, file).toContain('candlePoints(') // chartSessions.ts labels with istMonthDay
     }
   })
 })

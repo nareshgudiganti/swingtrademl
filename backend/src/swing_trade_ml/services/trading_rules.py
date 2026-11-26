@@ -1,9 +1,10 @@
 """The trading-rule numbers and the trading calendar the screens show, served from one place (#416).
 
 The frontend displays these; it never owns them. Everything here is read from where the number already
-lives: the versioned research rules (core/research_config.py), the brain's 15-day plan settings
-(core/config.py), the trial's fixed numbers (brain/trial_constants.py) and the NSE holiday list
-(core/holidays.py). Nothing here is a new rule, and nothing here changes a limit, a stop or an order.
+lives: the versioned research rules (core/research_config.py), the brain's 15-day plan
+(DEFAULT_POLICY in brain/modules/m08_decide/policy.py, not the v1 settings in core/config.py),
+the trial's fixed numbers (brain/trial_constants.py) and the NSE holiday list (core/holidays.py).
+Nothing here is a new rule, and nothing here changes a limit, a stop or an order.
 
 Percentages are fractions (0.08 is +8%), exactly as stored. Pure apart from reading settings.
 """

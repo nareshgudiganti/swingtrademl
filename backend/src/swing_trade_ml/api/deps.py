@@ -218,6 +218,10 @@ TESTER_PRIVATE_PREFIXES: tuple[str, ...] = (
     "/brain/stage",
     "/brain/compare",
     "/brain/trial-journal",
+    # A run's raw trace and its Telegram preview are the owner's working notes (#414). Without these,
+    # a tester passed them while plans were off ("unrestricted" returns before the brain gate).
+    "/brain/runs/{run_id}/trace",
+    "/brain/runs/{run_id}/alerts",
     "/admin",
 )
 PRIVATE_AREA = "This is a private part of the app. You don't have access."

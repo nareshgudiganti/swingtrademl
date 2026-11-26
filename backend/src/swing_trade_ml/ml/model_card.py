@@ -117,7 +117,8 @@ def git_state() -> dict[str, Any]:
     """Code commit and a tracked-changes-only dirty flag; None for what cannot be determined.
 
     The sha comes from env GIT_SHA first (set at image build or deploy; Docker images have no .git),
-    then from git. Nothing in the repo sets GIT_SHA yet, so in Docker it stays null until deploy sets it."""
+    then from git. The release scripts export GIT_SHA and compose bakes it into the image (backend/Dockerfile); a build
+    by hand leaves it empty, and then the sha is null."""
     import os
 
     cwd = Path(__file__).resolve().parent

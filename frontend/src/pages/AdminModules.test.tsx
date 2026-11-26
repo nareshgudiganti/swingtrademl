@@ -16,6 +16,52 @@ const LIST: ModuleList = {
 const noCall = (async () => undefined) as unknown as AdminCall
 const view = (data: ModuleList) => renderToStaticMarkup(<ModuleListView data={data} call={noCall} onChanged={() => {}} />)
 
+const DETAILED: ModuleList = {
+  scope: 'shared',
+  state_unknown: false,
+  modules: [
+    {
+      id: 'brain',
+      label: 'TradeMind Brain',
+      core: false,
+      state: 'active',
+      enabled: true,
+      jobs: ['brain_nightly', 'brain_score'],
+      route_prefixes: ['/brain', '/ideas'],
+      capabilities: ['ideas', 'reports'],
+      depends_on: ['core.orders'],
+      packages: ['swing_trade_ml.brain'],
+    },
+    { id: 'finance', label: 'Finance', core: false, state: 'parked', enabled: true, jobs: [], route_prefixes: [], capabilities: [], depends_on: [], packages: [] },
+  ],
+}
+
+describe('parts of the app (admin): what each part owns and needs', () => {
+  it('lists the inventory in plain words under a details row', () => {
+    const html = view(DETAILED)
+    expect(html).toContain('<details')
+    for (const label of ['Needs', 'Screens’ data paths', 'Background jobs', 'What it can do', 'Code packages']) {
+      expect(html).toContain(label)
+    }
+    for (const value of ['/brain', '/ideas', 'brain_nightly', 'brain_score', 'core.orders', 'swing_trade_ml.brain', 'reports']) {
+      expect(html).toContain(value)
+    }
+  })
+
+  it('shows core or optional and the stage', () => {
+    const html = view(DETAILED)
+    expect(html).toContain('Optional')
+    expect(html).toContain('Stage: parked')
+    expect(view({ ...LIST, modules: LIST.modules.filter((m) => m.core) })).toContain('Core')
+  })
+
+  it('says "none" for an empty list and survives a server that omits the fields', () => {
+    const html = view(DETAILED)
+    expect(html).toContain('none')
+    expect(() => view(LIST)).not.toThrow()
+  })
+})
+
 describe('parts of the app (admin)', () => {
   it('is a tab of the admin screen, which already needs the two-step code', () => {
     expect(adminSource).toContain("'modules'")

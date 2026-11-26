@@ -624,6 +624,16 @@ export interface MLModel {
   metrics?: { walk_forward?: WalkForwardFold[] } & Record<string, unknown>
 }
 
+/** Body of POST /ml/approvals for a model (#328). Evidence is a repo file with its sha256, or a PR number. */
+export interface ModelApprovalBody {
+  kind: 'promote' | 'rollback'
+  target: string
+  reason: string
+  protocol_verdict: string
+  artifact_sha256: string
+  evidence: Array<{ path: string; sha256: string } | { pr: number }>
+}
+
 /** One successive train/test window from ml/train.py::walk_forward. The
  * headline number is precision at the confidence threshold: of the calls the
  * model was confident enough to act on, how many worked out. */

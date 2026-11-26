@@ -38,6 +38,11 @@ services:
     environment:
       BRAIN_ENABLED: "true"
       MAX_PORTFOLIO_DRAWDOWN_PCT: "0.15"
+      # Model promotion evidence (#328): the image has no docs/ folder, so the audit files the owner
+      # cites are mounted read-only from the server's checkout and re-hashed from here.
+      EVIDENCE_ROOT: /app/evidence
+    volumes:
+      - ./docs/model-audit:/app/evidence/docs/model-audit:ro
 
   worker:
     environment:

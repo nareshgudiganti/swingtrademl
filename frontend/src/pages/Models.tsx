@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api/client'
 import Stat from '../components/Stat'
 import { Empty, ErrorBox, Loading } from '../components/Loading'
+import { ModelApprovalForm } from '../components/ModelApprovalForm'
 import TierBadge from '../components/TierBadge'
 import { TIERS } from '../lib/tiers'
 import { formatCurrency, formatDate, formatDateTime, formatPercent, formatSignedPercent } from '../lib/format'
@@ -74,13 +75,13 @@ export default function Models() {
     }),
   ]
 
-  const activate = useMutation({
-    mutationFn: (id: number) => api.activateModel(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['models'] })
-      queryClient.invalidateQueries({ queryKey: ['status'] })
-    },
-  })
+  // Owner-only approval form (#328): a model goes live only with a recorded approval, never from a bare click.
+  const [approvingId, setApprovingId] = useState<number | null>(null)
+  const afterPromotion = () => {
+    setApprovingId(null)
+    queryClient.invalidateQueries({ queryKey: ['models'] })
+    queryClient.invalidateQueries({ queryKey: ['status'] })
+  }
 
   if (models.isLoading) return <Loading />
   if (models.error) return <ErrorBox error={models.error} />
@@ -170,7 +171,7 @@ export default function Models() {
       </div>
 
       {train.data && <div className="banner banner-info">{train.data.message}. {train.data.detail}</div>}
-      {(train.error || activate.error) && <ErrorBox error={train.error ?? activate.error} />}
+      {train.error && <ErrorBox error={train.error} />}
 
       <h2>Test a custom horizon</h2>
       <div className="banner banner-info">
@@ -281,10 +282,9 @@ export default function Models() {
                     {m.status !== 'ACTIVE' && (
                       <button
                         className="primary"
-                        onClick={() => activate.mutate(m.id)}
-                        disabled={activate.isPending}
+                        onClick={() => setApprovingId(m.id)}
                       >
-                        Activate
+                        Approve and activate...
                       </button>
                     )}
                   </td>
@@ -295,6 +295,14 @@ export default function Models() {
           </table>
         )}
       </div>
+
+      {approvingId !== null && rows.find((r) => r.id === approvingId) && (
+        <ModelApprovalForm
+          model={rows.find((r) => r.id === approvingId)!}
+          onDone={afterPromotion}
+          onCancel={() => setApprovingId(null)}
+        />
+      )}
 
       <h2 style={{ marginTop: '2rem' }}>Prediction history</h2>
       <div className="banner banner-info">

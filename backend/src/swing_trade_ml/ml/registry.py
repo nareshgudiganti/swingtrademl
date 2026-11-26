@@ -12,6 +12,7 @@ import hashlib
 import os
 import re
 import uuid
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -52,6 +53,11 @@ def _lock_name(db: Session, name: str) -> None:
     committed its row, then sees that version as taken. Other databases (none in use) skip the lock."""
     if db.get_bind().dialect.name == "postgresql":
         db.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": name_lock_key(name)})
+
+
+def lock_model_name(db: Session, name: str) -> None:
+    """Take the per-name activation lock for the rest of the caller's transaction (re-entrant)."""
+    _lock_name(db, name)
 
 
 def save_artifact(name: str, version: str, bundle: dict[str, Any]) -> str:
@@ -158,8 +164,18 @@ def get_active_model(db: Session, name: str | None = None) -> MLModel | None:
     return db.execute(stmt.order_by(MLModel.activated_at.desc()).limit(1)).scalar_one_or_none()
 
 
-def activate_model(db: Session, model_id: int) -> MLModel:
+def activate_model(
+    db: Session,
+    model_id: int,
+    *,
+    before_commit: Callable[[MLModel, list[MLModel]], None] | None = None,
+) -> MLModel:
     """Promote one version and archive whatever it replaces.
+
+    Call it only through `ml.promotion.promote` / `rollback` (#328): they check the owner's approval and
+    the evidence, and pass `before_commit`, which writes the audit row in the same transaction. It gets
+    the newly active row and the rows it replaced, read under the lock. A guard test
+    (tests/test_model_activation_guard.py) fails if anything else calls this.
 
     Demoting the incumbent in the same transaction guarantees there is never a
     window with two ACTIVE models of the same name — the inference path picks
@@ -177,14 +193,18 @@ def activate_model(db: Session, model_id: int) -> MLModel:
     # Never promote a file that is missing or is not the one this row describes; the incumbent stays.
     load_model_artifact(model)
 
-    db.query(MLModel).filter(
+    incumbents = db.query(MLModel).filter(
         MLModel.name == model.name,
         MLModel.status == ModelStatus.ACTIVE,
         MLModel.id != model_id,
-    ).update({"status": ModelStatus.ARCHIVED})
+    )
+    replaced = list(incumbents.order_by(MLModel.activated_at.desc()))
+    incumbents.update({"status": ModelStatus.ARCHIVED})
 
     model.status = ModelStatus.ACTIVE
     model.activated_at = datetime.now(UTC)
+    if before_commit is not None:
+        before_commit(model, replaced)
     db.commit()
     db.refresh(model)
     log.info("model.activated", name=model.name, version=model.version)

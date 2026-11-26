@@ -38,6 +38,12 @@ from swing_trade_ml.ml.registry import artifact_sha256, next_version, save_artif
 
 log = get_logger(__name__)
 
+AUTO_ACTIVATE_REFUSED = (
+    "Activating straight after training is not allowed: an owner approval must name the finished "
+    "model file. Train without activating, review the result, record an approval, then run "
+    "`swingtrade promote`."
+)
+
 
 def _build_estimator(algorithm: str, hyperparameters: dict[str, Any] | None = None):
     """Instantiate the estimator.
@@ -304,15 +310,18 @@ def train_model(
 ) -> MLModel:
     """Train, evaluate on a held-out future window, and register the result.
 
-    The returned model is TRAINED, not ACTIVE, unless `auto_activate` is set.
-    Promotion stays a deliberate act — during the paper phase a new model
-    should be inspected before it starts generating signals.
+    The returned model is TRAINED, never ACTIVE. `auto_activate=True` is
+    refused before any training (#328): an owner approval must name the
+    finished file's sha256, which cannot exist before training, so activation
+    would always be refused. Flow: train, review, approve, `ml.promotion.promote`.
 
     `walk_forward_folds > 0` also scores the model on that many successive
     earlier windows and stores them under `metrics["walk_forward"]`. One
     held-out window can flatter a model that happened to suit its regime;
     the spread across folds is what says whether the edge is real.
     """
+    if auto_activate:
+        raise ValueError(AUTO_ACTIVATE_REFUSED)
     horizon_days = horizon_days or settings.ML_PREDICTION_HORIZON_DAYS
     target_return = target_return if target_return is not None else settings.ML_TARGET_RETURN_PCT
     stop_return = stop_return if stop_return is not None else settings.ML_STOP_RETURN_PCT
@@ -447,11 +456,6 @@ def train_model(
         roc_auc=round(metrics["roc_auc"], 4),
         precision_at_threshold=round(metrics["precision_at_threshold"], 4),
     )
-
-    if auto_activate:
-        from swing_trade_ml.ml.registry import activate_model
-
-        record = activate_model(db, record.id)
 
     return record
 

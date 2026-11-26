@@ -12,7 +12,16 @@ export function levels(): { stop: number; half: number; target: number } {
 /** "Near" means within this many percentage points of a line. */
 const NEAR_PTS = 1
 
-export type LevelState = 'stop' | 'near_stop' | 'target' | 'near_target' | 'half' | 'near_half' | 'watch' | 'hold'
+export type LevelState =
+  | 'stop'
+  | 'near_stop'
+  | 'target'
+  | 'near_target'
+  | 'half'
+  | 'near_half'
+  | 'watch'
+  | 'hold'
+  | 'no_price'
 
 export type Level = {
   state: LevelState
@@ -57,3 +66,13 @@ export function barPercent(retPct: number): number {
 }
 
 export const priceAt = (entry: number, pct: number) => entry * (1 + pct / 100)
+
+/** What a position nobody has priced yet reads as: never "Hold: nothing to do", which would be a guess (#486). */
+export const NO_PRICE_LEVEL: Level = {
+  state: 'no_price',
+  tag: 'No price yet',
+  title: 'No price yet',
+  advice: 'No price has been stored for this stock yet, so its stop and target cannot be checked. Check it by hand.',
+  tone: 'grey',
+  act: true, // listed under "Act today": its stop and target cannot be checked until someone looks
+}

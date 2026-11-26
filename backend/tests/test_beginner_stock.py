@@ -19,6 +19,7 @@ from swing_trade_ml.brain import service
 from swing_trade_ml.db.models.brain import BrainDecision, BrainRun
 from swing_trade_ml.db.models.feeds import UpcomingEvent
 from swing_trade_ml.db.models.market import Instrument
+from swing_trade_ml.services import beginner_views
 from swing_trade_ml.services.beginner_views import money_at_stake, stock_brief
 
 HEADERS = {"X-API-Key": "test-api-key"}
@@ -290,3 +291,34 @@ def test_replay_or_live_book_runs_are_never_read(db_session, other):
     out = stock_brief(db_session, SYM, TODAY)
     assert out["q2_brain"]["word"] == "WAIT"
     assert out["as_of"].startswith("2026-10-16T09:00")
+
+
+@pytest.mark.parametrize(
+    ("horizon", "last_day"),
+    [
+        (1, "2026-10-19"),  # Friday run: the weekend is skipped
+        (5, "2026-10-26"),  # skips the weekend and the Dussehra holiday (20 Oct)
+        (15, "2026-11-09"),  # 15 real trading days later, not 15 calendar days
+    ],
+)
+def test_last_exit_day_counts_trading_days_for_the_stored_horizon(db_session, horizon, last_day):
+    """#241: the "out by" day is the stored horizon in NSE trading days (weekends, listed holidays skipped)."""
+    _inst(db_session)
+    _run(db_session, "bx-h")
+    _dec(db_session, "bx-h", horizon_days=horizon)
+    plan = stock_brief(db_session, SYM, TODAY)["q3_plan"]
+    assert plan["available"] is True
+    assert plan["last_exit_day"] == last_day
+    assert plan["answer"].endswith(f"out by {beginner_views._day_text(date.fromisoformat(last_day))}")
+
+
+@pytest.mark.parametrize("word", ["WATCH", "WAIT", "AVOID"])
+def test_non_trade_idea_has_no_exit_day_or_levels(db_session, word):
+    """#241: a plan that is conditional on TRADE carries no holding-period label or prices otherwise."""
+    _inst(db_session)
+    _run(db_session, "bx-n")
+    _dec(db_session, "bx-n", word=word)
+    plan = stock_brief(db_session, SYM, TODAY)["q3_plan"]
+    assert plan["available"] is False
+    for key in ("last_exit_day", "buy_zone", "target", "stop", "sell_half_price"):
+        assert key not in plan

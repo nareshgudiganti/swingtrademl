@@ -52,6 +52,12 @@ COPY src ./src
 # appuser first, or a fresh named volume mounts there owned by root.
 RUN mkdir -p /app/data/models /app/data/model_backups && chown -R appuser:appuser /app
 
+# Declared last among the layers so a new commit sha does not invalidate the apt-get and pip layers above.
+# The commit this image was built from. Passed by compose from release.sh; read by ml/model_card.py so a
+# model card records its code version (Docker images have no .git). Empty when built by hand.
+ARG GIT_SHA=
+ENV GIT_SHA=$GIT_SHA
+
 USER appuser
 
 EXPOSE 8000

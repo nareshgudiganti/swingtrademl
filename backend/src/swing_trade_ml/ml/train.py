@@ -300,6 +300,7 @@ def train_model(
     walk_forward_folds: int = 0,
     calibrate: bool = False,
     cutoff: date | None = None,
+    invoked_by: str | None = None,
 ) -> MLModel:
     """Train, evaluate on a held-out future window, and register the result.
 
@@ -388,6 +389,7 @@ def train_model(
         },
         horizon_days=horizon_days, target_return=target_return,
         stop_return=stop_return, label_kind="barrier",
+        invoked_by=invoked_by, estimator=estimator,
     )
 
     version = next_version(db, name)

@@ -41,12 +41,12 @@ describe('the stock header price', () => {
     expect(html).toContain('124.45')
     expect(html).toContain('Live price as of 26 Oct, 14:03 IST.')
     expect(html).toContain('data-state="live"')
-    expect(html).not.toContain('at last close')
+    expect(html).not.toMatch(/last close/i)
   })
 
-  it('without a snapshot it falls back to the stored close and says so', () => {
+  it('without a snapshot it falls back to the stored close and says so (the date is tested in screens486.test.tsx)', () => {
     const html = header(undefined, 123.57, 128.15, -4.58)
-    expect(html).toContain('at last close')
+    expect(html).toContain('Last close')
     expect(html).not.toContain('data-testid="price-note"')
   })
 

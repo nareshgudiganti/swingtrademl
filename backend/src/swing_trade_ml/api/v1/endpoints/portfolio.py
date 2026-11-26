@@ -325,6 +325,10 @@ def detailed_positions(
                 "quantity": position.quantity,
                 "entry_price": position.entry_price,
                 "current_price": current,
+                # False for a position nobody has priced yet: `current_price` is then only the entry price
+                # standing in, so a screen must say "No price yet", never "0.0%" (#486).
+                "has_price": bool(position.current_price),
+                "price_status": "ok" if position.current_price else "none",
                 "invested": invested,
                 "current_value": current * position.quantity,
                 "unrealized_pnl": position.unrealized_pnl,

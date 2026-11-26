@@ -161,6 +161,34 @@ def test_card_records_invoked_by_and_actual_estimator_class():
     assert "entry_point" in card["training"] and "command" not in card["training"]
 
 
+def test_card_records_effective_params_not_only_overrides():
+    from sklearn.linear_model import LogisticRegression
+
+    data = _pooled(n_dates=40)
+    est = LogisticRegression(C=0.5)
+    card = mc.build_card(
+        train_df=data, test_df=data, dataset=data, feature_names=FEATURE_COLUMNS,
+        algorithm="logistic", train_args={}, horizon_days=5, target_return=0.02,
+        stop_return=-0.04, label_kind="barrier", estimator=est,
+    )
+    params = card["training"]["effective_params"]
+    assert params["C"] == 0.5 and "max_iter" in params  # default recorded too
+    import json
+
+    json.dumps(card)
+
+
+def test_effective_params_unwraps_calibrated_base_and_handles_unknown():
+    from sklearn.linear_model import LogisticRegression
+
+    class Wrap:
+        base = LogisticRegression(C=2.0)
+
+    assert mc.effective_params(Wrap())["C"] == 2.0
+    assert mc.effective_params(None) is None
+    assert mc.effective_params(object()) is None
+
+
 def test_train_model_threads_invoked_by(monkeypatch, tmp_path):
     dataset = _pooled(n_dates=80)
 

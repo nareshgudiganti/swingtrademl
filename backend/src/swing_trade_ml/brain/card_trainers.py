@@ -71,6 +71,7 @@ def card_from_record(
             "invoked_by": invoked_by,
             "requested_algorithm": model.algorithm,
             "estimator_class": mc.estimator_class(estimator),
+            "effective_params": mc.effective_params(estimator),
             "args": train_args,
             "seed": settings.ML_RANDOM_SEED,
         },

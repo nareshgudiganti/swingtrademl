@@ -28,6 +28,8 @@ At the start of each task:
   Codex never queries prod. The read-only `API_KEY` exception in `CLAUDE.md`
   applies to Claude Code only.
 - Never deploy, push, or merge without approval.
+- Never tick or edit the "Owner approval" box that the `owner-gate` check adds to a
+  PR description. Only the owner ticks it.
 
 ## Claude Code
 

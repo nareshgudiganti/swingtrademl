@@ -90,6 +90,9 @@ follow the resume steps at the top of the queue. Resuming approves no merge, dep
   Postgres up (they hang silently otherwise).
 - Daily candles are stamped IST midnight (18:30 UTC previous day) → always `.astimezone(IST).date()`.
 - Never use bare `git stash` (stack is shared across worktrees).
+- **Owner gate**: never tick, pre-tick or edit the "Owner approval" box in a PR description (the
+  `owner-gate` check). Sessions share the owner's GitHub account, so GitHub cannot stop you: only
+  the owner ticks it. Routine PRs pass the gate on their own; see `.github/scripts/owner_gate.py`.
 - Owner is not a finance/ML expert: plain English in UI and summaries.
 
 ## Which skill when

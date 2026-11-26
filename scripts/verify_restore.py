@@ -4,12 +4,14 @@
 Given a backup folder:
     manifest.json            written by swing_trade_ml.ml.backup_manifest at backup time
     database.sql[.gz]        a pg_dump or pg_dumpall of the app database
-    files/                   the model files (and brain_meta_v* files) named as in the manifest
+    files/                   the model files (and brain_meta_v* files, and model cards <model file>.card.json)
+                             named as in the manifest
 this script
   1. restores the dump into a SCRATCH database (drill_scratch_<timestamp>) on a local Docker Postgres,
   2. recomputes the sha256 of every file and compares it with the manifest,
   3. compares the restored ml_models rows with the manifest and the files (every row has a file, every
-     file has a row, version and status as recorded),
+     file has a row, version and status as recorded), and that every model card (sidecar file, or the card
+     kept in the restored row's metrics) names the sha256 of the restored model file (#328),
   4. prints a PASS/FAIL table, drops the scratch database (also on failure) and exits 0 / 1.
 
 Safety: it only ever runs SQL inside a database whose name starts with drill_scratch_, except "select 1",
@@ -163,8 +165,14 @@ def main() -> int:
                 tables[t] = int(pg.sql(scratch, f"select count(*) from {t}"))
             except RuntimeError:
                 tables[t] = None
-        raw = pg.sql(scratch, "select coalesce(json_agg(row_to_json(t)), '[]') from "
-                              "(select id, name, version, status, artifact_path from ml_models order by id) t")
+        try:  # the card kept in the row (ml/train.py, #328); an older dump may have no metrics column
+            raw = pg.sql(scratch, "select coalesce(json_agg(row_to_json(t)), '[]') from "
+                                  "(select id, name, version, status, artifact_path, "
+                                  "metrics::json->'card'->>'artifact_sha256' as card_artifact_sha256 "
+                                  "from ml_models order by id) t")
+        except RuntimeError:
+            raw = pg.sql(scratch, "select coalesce(json_agg(row_to_json(t)), '[]') from (select id, name, "
+                                  "version, status, artifact_path from ml_models order by id) t")
         rows = json.loads(raw)
         files = bm.hash_folder(folder / "files")
         cmp = bm.compare(manifest, rows, files)
@@ -186,7 +194,8 @@ def main() -> int:
         def n(*kinds: str) -> int:
             return sum(c.get(k, 0) for k in kinds)
 
-        expected = cmp["manifest_models"] - n("missing_at_source") + cmp["manifest_extra_files"]
+        expected = (cmp["manifest_models"] - n("missing_at_source") + cmp["manifest_extra_files"]
+                    + cmp.get("manifest_cards", 0))
         lines = [
             ("database restored (no real errors)", db_ok),
             (f"ml_models rows restored ({cmp['db_rows']})", tables.get("ml_models") is not None),
@@ -197,6 +206,8 @@ def main() -> int:
             (f"manifest vs database rows ({n('row_not_in_manifest', 'manifest_not_in_db')} differ)",
              n("row_not_in_manifest", "manifest_not_in_db") == 0),
             (f"status/version/file name as recorded ({n('field_diff')} differ)", n("field_diff") == 0),
+            (f"model cards name their file ({cmp.get('manifest_cards', 0)} files; "
+             f"{n('card_mismatch')} differ)", n("card_mismatch") == 0),
         ]
         for label, good in lines:
             print(f"{label:<44}{'PASS' if good else 'FAIL':>10}")

@@ -91,7 +91,7 @@ needs nothing new on the Drive beyond the setup above):
 |---|---|---|
 | `swingtrademl-backups/database-<stamp>.sql.gz.enc` | database dump (as before) | 15 days |
 | `swingtrademl-backups/models/<sha256>.enc` | one encrypted model file, named by its content hash | forever, never overwritten |
-| `swingtrademl-backups/manifests/manifest-<stamp>.json.enc` | name, version, status, file, size, sha256 of every model row plus `brain_meta_v*` files | forever |
+| `swingtrademl-backups/manifests/manifest-<stamp>.json.enc` | name, version, status, file, size, sha256 of every model row plus `brain_meta_v*` files, plus each model card (`<model file>.card.json`, under `cards`) | forever |
 
 An unchanged model file is never sent twice (the file name is its hash; the script checks the Drive first).
 A file whose hash on the server differs from the manifest is not uploaded and the nightly run fails, so you get
@@ -102,12 +102,13 @@ database `drill_scratch_<time>` and never touches `swing_trade_ml`):**
 
 1. Make a folder, e.g. `drill-set`, and put in it: `database.sql.gz` (decrypted as in "Getting a copy back"),
    `manifest.json` (decrypt `manifests/manifest-<stamp>.json.enc` with the same `openssl enc -d` command), and a
-   subfolder `files/` holding each model file under its manifest name: for every entry in the manifest,
-   decrypt `models/<sha256>.enc` to `files/<file>`.
+   subfolder `files/` holding each model file under its manifest name: for every entry in the manifest
+   (`models`, `extra_files` and `cards`), decrypt `models/<sha256>.enc` to `files/<file>`.
 2. Run: `python scripts/verify_restore.py --backup-dir drill-set`
 3. Read the table. `OVERALL: PASS` means: the database restored with no real errors, every file's sha256 and size
    match the manifest, every `ml_models` row has a file, every file has a row, and status/version/file name equal
-   what the manifest recorded. Any FAIL line names the model or file.
+   what the manifest recorded, and every model card (the card file, or the card kept in the row) names the
+   sha256 of the restored model file. Any FAIL line names the model or file.
 
 Rows whose file was already gone on the server when the backup ran show as `missing_at_source` and make the drill
 FAIL on purpose: that is a real hole (local rehearsal 2026-11-03: 216 of 278 rows).

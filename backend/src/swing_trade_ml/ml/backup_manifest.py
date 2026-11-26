@@ -5,6 +5,11 @@ This module writes one JSON record (name, version, status, file name, size, sha2
 row plus the `brain_meta_v*` combiner files (which have no row), and compares a restored database and a
 folder of files against that record.
 
+Model cards (#328) are part of the record: a sidecar `<model file>.card.json` is listed under "cards" with its
+own sha256 and the model-file sha256 it names; a card kept inside the row (`metrics["card"]`, ml/train.py)
+travels with the database dump, and the model-file sha256 it names is recorded per model so a restore can
+check it still describes the restored file.
+
 The comparison part is pure standard library on purpose: `scripts/verify_restore.py` loads this file by
 path and runs it on a PC without the app installed. Only `write_manifest` touches the database, and only
 reads it.
@@ -24,7 +29,8 @@ from pathlib import Path, PureWindowsPath
 from typing import Any
 
 MANIFEST_NAME = "manifest.json"
-FORMAT = 1
+FORMAT = 1  # "cards" and "metrics_card_artifact_sha256" are optional additions; older manifests still compare
+CARD_SUFFIX = ".card.json"  # brain/card_trainers.py writes these beside the model file
 _BRAIN_META = re.compile(r"^brain_meta_v\d+\.(joblib|json)$")
 
 
@@ -45,6 +51,15 @@ def sha256_file(path: Path) -> tuple[str, int]:
     return digest.hexdigest(), size
 
 
+def _card_entry(label: str, card: Path) -> dict[str, Any]:
+    sha, size = sha256_file(card)
+    try:
+        named = json.loads(card.read_text(encoding="utf-8")).get("artifact_sha256")
+    except (OSError, ValueError, AttributeError):
+        named = None  # unreadable: recorded, and compare() reports it as not matching its model file
+    return {"for": label, "file": card.name, "size": size, "sha256": sha, "artifact_sha256": named}
+
+
 def build_manifest(
     rows: list[dict[str, Any]],
     model_dir: Path,
@@ -55,6 +70,7 @@ def build_manifest(
     exists, else the same file name inside `model_dir`. A row whose file cannot be found is recorded with
     missing=True, never skipped: the gap is the finding."""
     models: list[dict[str, Any]] = []
+    cards: list[dict[str, Any]] = []
     for row in rows:
         fname = file_name_of(row.get("artifact_path"))
         found: Path | None = None
@@ -75,9 +91,13 @@ def build_manifest(
             "size": None,
             "sha256": None,
             "missing": found is None,
+            "metrics_card_artifact_sha256": row.get("card_artifact_sha256"),
         }
         if found is not None:
             entry["sha256"], entry["size"] = sha256_file(found)
+            card = found.with_name(found.name + CARD_SUFFIX)
+            if card.is_file():
+                cards.append(_card_entry(f"{row['name']} {row['version']}", card))
         models.append(entry)
 
     extra: list[dict[str, Any]] = []
@@ -91,6 +111,7 @@ def build_manifest(
         "generated_at": (now or datetime.now(UTC)).isoformat(),
         "models": models,
         "extra_files": extra,
+        "cards": cards,
     }
 
 
@@ -112,7 +133,9 @@ def compare(
     - missing_at_source: the manifest itself records the file as already gone when the backup was made
     - row_not_in_manifest / manifest_not_in_db: the restored table and the manifest disagree on which models exist
     - field_diff: same model (name, version) but status or file name differs
-    - orphan_file: a file in the backup folder that no row or extra-file entry accounts for
+    - orphan_file: a file in the backup folder that no row, extra-file or card entry accounts for
+    - card_mismatch: a model card (sidecar, or metrics["card"] in the restored row) names a different
+      model-file sha256 than the manifest recorded for that model
     """
     problems: list[dict[str, str]] = []
 
@@ -137,6 +160,9 @@ def compare(
         db_file = file_name_of(r.get("artifact_path"))
         if m.get("file") != db_file:
             add("field_diff", f"{label}: file manifest={m.get('file')} database={db_file}")
+        named = r.get("card_artifact_sha256")
+        if named and m.get("sha256") and named != m["sha256"]:
+            add("card_mismatch", f"{label}: metrics card names other bytes than the model file")
     for m in manifest.get("models", []):
         label = f"{m['name']} {m['version']}"
         if m.get("missing") or not m.get("sha256"):
@@ -147,6 +173,12 @@ def compare(
     for e in manifest.get("extra_files", []):
         expected_files.add(e["file"])
         checked += _check_one(e["file"], e, files, add)
+    for c in manifest.get("cards", []):
+        expected_files.add(c["file"])
+        checked += _check_one(f"card {c['for']}", c, files, add)
+        model = by_key.get(tuple(c["for"].rsplit(" ", 1)))
+        if model is not None and c.get("artifact_sha256") != model.get("sha256"):
+            add("card_mismatch", f"{c['for']}: {c['file']} names other bytes than the model file")
     for fname in sorted(set(files) - expected_files):
         add("orphan_file", fname)
 
@@ -156,6 +188,7 @@ def compare(
         "db_rows": len(restored_rows),
         "manifest_models": len(by_key),
         "manifest_extra_files": len(manifest.get("extra_files", [])),
+        "manifest_cards": len(manifest.get("cards", [])),
         "files_in_backup": len(files),
         "files_verified": checked,
         "problem_counts": count,
@@ -174,6 +207,11 @@ def _check_one(label: str, entry: dict[str, Any], files: dict[str, tuple[str, in
     return 1
 
 
+def _metrics_card_sha(metrics: Any) -> str | None:
+    card = metrics.get("card") if isinstance(metrics, dict) else None
+    return card.get("artifact_sha256") if isinstance(card, dict) else None
+
+
 def write_manifest(out: Path) -> dict[str, Any]:
     """Read-only against the database. Imports the app lazily so the functions above stay standalone."""
     from sqlalchemy import select
@@ -184,7 +222,14 @@ def write_manifest(out: Path) -> dict[str, Any]:
 
     with session_scope() as db:
         rows = [
-            {"id": m.id, "name": m.name, "version": m.version, "status": str(getattr(m.status, "value", m.status)), "artifact_path": m.artifact_path}
+            {
+                "id": m.id,
+                "name": m.name,
+                "version": m.version,
+                "status": str(getattr(m.status, "value", m.status)),
+                "artifact_path": m.artifact_path,
+                "card_artifact_sha256": _metrics_card_sha(m.metrics),
+            }
             for m in db.execute(select(MLModel).order_by(MLModel.name, MLModel.version)).scalars()
         ]
     manifest = build_manifest(rows, Path(settings.MODEL_ARTIFACT_DIR))
@@ -200,7 +245,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     manifest = write_manifest(args.out)
     missing = [m for m in manifest["models"] if m["missing"]]
-    print(f"manifest: {len(manifest['models'])} models, {len(manifest['extra_files'])} extra files, {len(missing)} missing")
+    print(
+        f"manifest: {len(manifest['models'])} models, {len(manifest['extra_files'])} extra files, "
+        f"{len(manifest['cards'])} cards, {len(missing)} missing"
+    )
     return 0
 
 

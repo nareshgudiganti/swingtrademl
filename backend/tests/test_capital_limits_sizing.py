@@ -120,19 +120,38 @@ def test_a_strategy_may_make_its_own_limits_tighter_than_the_ladder(value):
     assert tight.max_positions <= ladder.max_positions and tight.max_position_pct <= ladder.max_position_pct
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="GAP (#463): a strategy's max_positions and capital_allocation REPLACE the ladder's position count and single-stock "
-    "cap (services/limits.py:219-226) with no cap at the ladder. 1% risk sizing, the sector rule, the cash floor, the "
-    "minimum position and the drawdown halt still apply",
-)
 @pytest.mark.parametrize("value", [10_000, 100_000, 10_000_000])
 def test_a_strategy_override_must_never_loosen_the_ladder(value):
     ladder = limits_for(value)
     loose = limits_for(value, _strategy_row(max_positions=50, capital_allocation=0.9))
     assert loose.max_positions <= ladder.max_positions
     assert loose.max_position_pct <= ladder.max_position_pct
+
+
+@pytest.mark.parametrize("value", [10_000, 100_000, 1_000_000, 10_000_000])
+def test_a_looser_strategy_is_capped_at_exactly_the_ladder_values(value):
+    ladder = limits_for(value)
+    loose = limits_for(value, _strategy_row(max_positions=50, capital_allocation=0.9))
+    assert loose.max_positions == ladder.max_positions
+    assert loose.max_position_pct == ladder.max_position_pct
+
+
+@pytest.mark.parametrize("value", [10_000, 100_000, 1_000_000, 10_000_000])
+def test_each_field_is_capped_on_its_own_and_unset_means_the_ladder(value):
+    ladder = limits_for(value)
+    only_count = limits_for(value, _strategy_row(max_positions=50, capital_allocation=0.01))
+    assert only_count.max_positions == ladder.max_positions and only_count.max_position_pct == 0.01
+    only_pct = limits_for(value, _strategy_row(max_positions=1, capital_allocation=0.9))
+    assert only_pct.max_positions == 1 and only_pct.max_position_pct == ladder.max_position_pct
+    unset = limits_for(value, _strategy_row())
+    assert (unset.max_positions, unset.max_position_pct) == (ladder.max_positions, ladder.max_position_pct)
+
+
+@pytest.mark.parametrize("value", [10_000, 100_000, 1_000_000, 10_000_000])
+def test_a_strategy_equal_to_the_ladder_is_unchanged(value):
+    ladder = limits_for(value)
+    same = limits_for(value, _strategy_row(max_positions=ladder.max_positions, capital_allocation=ladder.max_position_pct))
+    assert same == ladder
 
 
 def test_what_a_loosened_override_does_not_loosen_the_other_limits_still_hold():

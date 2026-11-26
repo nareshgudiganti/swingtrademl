@@ -219,9 +219,10 @@ def limits_for(portfolio_value: float, strategy: Strategy | None = None) -> Limi
     if strategy is not None:
         overrides: dict[str, object] = {}
         if strategy.max_positions:
-            overrides["max_positions"] = int(strategy.max_positions)
+            # A strategy may only TIGHTEN the account-size ladder, never loosen it (#463).
+            overrides["max_positions"] = min(limits.max_positions, int(strategy.max_positions))
         if strategy.capital_allocation:
-            overrides["max_position_pct"] = float(strategy.capital_allocation)
+            overrides["max_position_pct"] = min(limits.max_position_pct, float(strategy.capital_allocation))
         if overrides:
             limits = replace(limits, **overrides)
 

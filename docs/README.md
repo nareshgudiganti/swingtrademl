@@ -12,6 +12,7 @@ One authoritative document per topic. If you need to know where to look, start h
 | Stock identity read API | `docs/architecture/IDENTITY-READ-API.md` |
 | Service 1 (market data and input processing) | `docs/architecture/service-01-market-data.md` |
 | Service 1 gaps and their status | `docs/architecture/architecture-gaps.md` (reasoning: `docs/decisions/ADR-001-service-01-gaps.md`) |
+| How to add a connector, a model or a module | `docs/how-to/add-a-model-or-connector.md` |
 | Deploy, rollback, environment | `docs/DEPLOY.md` |
 | Quality checks (tests, CI gates) | `docs/QUALITY-CHECKS.md` |
 | Brain go-live (practice, approval, auto) | `docs/brain/GO_LIVE.md` |

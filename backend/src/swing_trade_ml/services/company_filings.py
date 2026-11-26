@@ -20,6 +20,7 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
+from swing_trade_ml.core import http_client
 from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.db.models.company import CompanyAnnouncement, CompanyShareholding
 from swing_trade_ml.db.models.market import Candle, Instrument
@@ -131,14 +132,15 @@ def parse_shareholding(rows: list[dict]) -> tuple[list[dict], list[str]]:
 def fetch_nse(symbol: str) -> tuple[list[dict], list[dict]]:
     """(announcements, shareholding) as NSE returns them. NSE wants the page visited first to hand
     out its cookies; any failure raises so the caller can report it."""
-    with httpx.Client(headers=HEADERS, timeout=TIMEOUT, follow_redirects=True) as client:
-        client.get(HOME_URL.format(symbol=symbol)).raise_for_status()
-        ref = {"Referer": "https://www.nseindia.com/"}
-        ann = client.get(ANNOUNCEMENTS_URL.format(symbol=symbol), headers=ref)
-        ann.raise_for_status()
-        sh = client.get(SHAREHOLDING_URL.format(symbol=symbol), headers=ref)
-        sh.raise_for_status()
-        return ann.json(), sh.json()
+    # NSE hands out the cookie on the first page, so the three calls share one cookie jar (a retry of one call
+    # repeats only that call). The helper opens its own client per call, so the cookie is carried by hand.
+    home = http_client.get(HOME_URL.format(symbol=symbol), headers=HEADERS, timeout=TIMEOUT)
+    cookies = dict(home.cookies.items())
+    ref = {**HEADERS, "Referer": "https://www.nseindia.com/"}
+    opts = {"headers": ref, "timeout": TIMEOUT, "cookies": cookies}
+    ann = http_client.get(ANNOUNCEMENTS_URL.format(symbol=symbol), **opts)
+    sh = http_client.get(SHAREHOLDING_URL.format(symbol=symbol), **opts)
+    return ann.json(), sh.json()
 
 
 @dataclass

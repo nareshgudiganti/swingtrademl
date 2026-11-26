@@ -25,6 +25,7 @@ from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
+from swing_trade_ml.core import http_client
 from swing_trade_ml.core.holidays import is_trading_holiday
 from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.db.models.feeds import (
@@ -63,10 +64,9 @@ BACKFILL_PAUSE_SECONDS = 0.4
 def fetch(url: str) -> bytes | None:
     """The body, or None when NSE has no such file (holiday, weekend, or not
     published yet). Any other failure raises so the caller can report it."""
-    response = httpx.get(url, headers=HEADERS, timeout=TIMEOUT, follow_redirects=True)
+    response = http_client.get(url, headers=HEADERS, timeout=TIMEOUT, ok_statuses=(404,))
     if response.status_code == 404:
         return None
-    response.raise_for_status()
     return response.content
 
 

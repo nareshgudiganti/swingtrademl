@@ -31,7 +31,7 @@ def _no_real_amfi_network(monkeypatch):
             return None
 
     monkeypatch.setattr(
-        "swing_trade_ml.services.finance.mutual_funds.httpx.get",
+        "swing_trade_ml.services.finance.mutual_funds.http_client.get",
         lambda *args, **kwargs: _FakeResponse(),
     )
 

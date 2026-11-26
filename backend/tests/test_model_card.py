@@ -204,3 +204,13 @@ def test_train_model_threads_invoked_by(monkeypatch, tmp_path):
     assert rec.metrics["card"]["training"]["invoked_by"] == "api"
     assert "LogisticRegression" in rec.metrics["card"]["training"]["estimator_class"]
     assert train_module.train_model.__defaults__ is not None
+
+
+def test_effective_params_nan_and_inf_become_strict_json():
+    class Est:
+        def get_params(self):
+            return {"a": float("nan"), "b": float("inf"), "c": -float("inf"), "d": [float("nan"), 1.5], "e": 2.0}
+
+    params = mc.effective_params(Est())
+    assert params == {"a": None, "b": None, "c": None, "d": [None, 1.5], "e": 2.0}
+    json.dumps(params, allow_nan=False)

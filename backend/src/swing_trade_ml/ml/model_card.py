@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import platform
 import subprocess
 from importlib import metadata
@@ -180,10 +181,12 @@ def estimator_class(estimator: Any) -> str | None:
 
 
 def _json_safe(value: Any) -> Any:
-    if value is None or isinstance(value, (bool, int, float, str)):
-        return value
     if isinstance(value, np.generic):
-        return value.item()
+        value = value.item()
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None  # NaN / inf are not valid strict JSON
+    if value is None or isinstance(value, (bool, int, str)):
+        return value
     if isinstance(value, (list, tuple)):
         return [_json_safe(v) for v in value]
     if isinstance(value, dict):

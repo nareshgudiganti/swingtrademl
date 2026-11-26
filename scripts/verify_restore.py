@@ -111,6 +111,29 @@ def find_dump(folder: Path) -> Path:
     return found[-1]
 
 
+def fetch_model_rows(pg, scratch: str) -> tuple[list, bool]:
+    """ml_models rows from the restored database, with the card kept in the row (ml/train.py, #328).
+    Returns (rows, card_query_ok). If the card query errors (an older dump may have no metrics column) the
+    plain query is used and card_query_ok is False, so the drill can show the card check as not done."""
+    try:
+        raw = pg.sql(scratch, "select coalesce(json_agg(row_to_json(t)), '[]') from "
+                              "(select id, name, version, status, artifact_path, "
+                              "metrics::json->'card'->>'artifact_sha256' as card_artifact_sha256 "
+                              "from ml_models order by id) t")
+        return json.loads(raw), True
+    except RuntimeError:
+        raw = pg.sql(scratch, "select coalesce(json_agg(row_to_json(t)), '[]') from (select id, name, "
+                              "version, status, artifact_path from ml_models order by id) t")
+        return json.loads(raw), False
+
+
+def card_check_result(card_query_ok: bool, manifest_cards: int, mismatches: int) -> str:
+    """PASS / FAIL / SKIPPED for the card check. Never PASS when the card query could not run."""
+    if not card_query_ok:
+        return "FAIL" if manifest_cards else "SKIPPED"
+    return "PASS" if mismatches == 0 else "FAIL"
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Restore drill: database + model files + registry")
     ap.add_argument("--backup-dir", required=True, type=Path)
@@ -165,20 +188,13 @@ def main() -> int:
                 tables[t] = int(pg.sql(scratch, f"select count(*) from {t}"))
             except RuntimeError:
                 tables[t] = None
-        try:  # the card kept in the row (ml/train.py, #328); an older dump may have no metrics column
-            raw = pg.sql(scratch, "select coalesce(json_agg(row_to_json(t)), '[]') from "
-                                  "(select id, name, version, status, artifact_path, "
-                                  "metrics::json->'card'->>'artifact_sha256' as card_artifact_sha256 "
-                                  "from ml_models order by id) t")
-        except RuntimeError:
-            raw = pg.sql(scratch, "select coalesce(json_agg(row_to_json(t)), '[]') from (select id, name, "
-                                  "version, status, artifact_path from ml_models order by id) t")
-        rows = json.loads(raw)
+        rows, card_query_ok = fetch_model_rows(pg, scratch)
         files = bm.hash_folder(folder / "files")
         cmp = bm.compare(manifest, rows, files)
         result.update(compare=cmp, tables=tables, restore_errors=len(real_errors), seconds=round(restore_seconds, 1))
         db_ok = len(real_errors) == 0 and tables.get("ml_models") is not None
-        ok = db_ok and cmp["ok"]
+        card_result = card_check_result(card_query_ok, cmp.get("manifest_cards", 0), cmp["problem_counts"].get("card_mismatch", 0))
+        ok = db_ok and cmp["ok"] and card_result != "FAIL"
 
         print(f"\nBackup folder : {folder}")
         print(f"Dump          : {dump.name} -> scratch database {scratch}")
@@ -206,16 +222,20 @@ def main() -> int:
             (f"manifest vs database rows ({n('row_not_in_manifest', 'manifest_not_in_db')} differ)",
              n("row_not_in_manifest", "manifest_not_in_db") == 0),
             (f"status/version/file name as recorded ({n('field_diff')} differ)", n("field_diff") == 0),
-            (f"model cards name their file ({cmp.get('manifest_cards', 0)} files; "
-             f"{n('card_mismatch')} differ)", n("card_mismatch") == 0),
         ]
         for label, good in lines:
             print(f"{label:<44}{'PASS' if good else 'FAIL':>10}")
+        card_label = (f"model cards name their file ({cmp.get('manifest_cards', 0)} files; "
+                      f"{n('card_mismatch')} differ)")
+        print(f"{card_label:<44}{card_result:>10}")
+        if not card_query_ok:
+            print("   card query on the restored ml_models failed: card check against the database rows NOT done")
         for p in cmp["problems"][:40]:
             print(f"   {p['kind']}: {p['what']}")
         if len(cmp["problems"]) > 40:
             print(f"   ... {len(cmp['problems']) - 40} more")
         print(f"\nOVERALL: {'PASS' if ok else 'FAIL'}")
+        result["card_check"] = card_result
         result["ok"] = ok
         if args.json_out:
             args.json_out.write_text(json.dumps(result, indent=2, default=str), encoding="utf-8")

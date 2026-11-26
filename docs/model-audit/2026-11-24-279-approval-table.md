@@ -1,6 +1,6 @@
 # #279 final approval table (5D large cap): for owner sign-off
 
-Written 2026-11-24 (IST). **NOT APPROVED.** Nothing here takes effect until the owner signs below.
+Written 2026-11-24 (IST). **STATUS (updated 2026-11-26): the minimum set and the R4 research envelope are APPROVED**, by the owner's typed reply "approve as recommended" at 25 Nov 2026 00:57:25 IST (issue #279 comment of 26 Nov; record: `docs/superpowers/specs/2026-11-14-5d-paper-trial-protocol-v1.SIGNOFF.md`). **11.4 and 11.5 are NOT signed.** Nothing else here takes effect until the owner signs below.
 Spec under review: `docs/superpowers/specs/2026-11-14-5d-paper-trial-protocol-v1.md`, revision 4,
 sha256 `c5cfbaf1c137311c31559a9da7b7cda52004c83f4badc4f8b64e4e0f965f934f` (local, uncommitted).
 Background: `2026-11-24-279-decision-brief.md`, `2026-11-24-279-requirements-draft.md`, and the two R0 audits in this folder.

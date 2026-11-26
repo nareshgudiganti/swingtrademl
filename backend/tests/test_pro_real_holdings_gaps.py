@@ -112,7 +112,12 @@ def test_member_cannot_read_non_paper_track(client, db_session, people, who, boo
     assert "points" not in r.json()
 
 
-def test_owner_user_reads_real_track(client, db_session, people):
+def test_owner_user_reads_real_track(client, db_session, people, monkeypatch):
+    # Only an owner named in REAL_ACCOUNT_USERS reads the real book (#414); any other owner is refused
+    # (tests/test_tenant_isolation.py covers that side).
+    from swing_trade_ml.core.config import settings
+
+    monkeypatch.setattr(settings, "REAL_ACCOUNT_USERS", "prg-owner")
     _track(db_session, "real", "PRGREAL")
     r = client.get("/api/v1/brain/track/PRGREAL?book=real", headers=people["owner"])
     assert r.status_code == 200, r.text

@@ -315,7 +315,7 @@ def test_pro_cannot_read_the_real_book_through_brain_track():
     from swing_trade_ml.api.v1.endpoints.brain import holding_track
 
     assert _gate("GET", "/brain/track/{symbol}", "book=real", "pro") is None  # the gate lets Pro in
-    principal = SimpleNamespace(via_api_key=False, is_owner=False)
+    principal = SimpleNamespace(via_api_key=False, is_owner=False, can_see_real_account=False)
     with pytest.raises(HTTPException) as err:
         holding_track("ABC", None, principal, book="real")
     assert err.value.status_code == 403

@@ -1,7 +1,8 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import type { BrainDecision, TradingRulesDto } from '../api/types'
+import type { BrainDecision, BrainRun, TradingRulesDto } from '../api/types'
+import { caseFigures } from './CaseAnalysis'
 import { IdeaPlanCell } from './IdeasTable'
 import { PlanLadder } from './stockParts'
 import { halfOutPrice, plan, setTradingRules } from './tradingRules'
@@ -29,6 +30,17 @@ describe('halfOutPrice', () => {
     setTradingRules(rulesWith(0.06))
     expect(halfOutPrice(1000)).toBeCloseTo(1060, 6)
     expect(plan().halfPct).toBe(6)
+  })
+})
+
+describe('Case analysis "Sell half" scenario', () => {
+  it('prices the half-way sale from the served half-out percent, not a fixed 5%', () => {
+    setTradingRules(rulesWith(0.06))
+    const d = dec({ entry_low: 98, entry_high: 102, target: 108, stop: 96 })
+    const run = { run_id: 'r', banner: { mode: 'NORMAL', headline: '' }, decisions: [d] } as unknown as BrainRun
+    const half = caseFigures(d, run).scenarios.find((s) => s.label === 'Sell half')
+    expect(half?.price).toBeCloseTo(106, 6)
+    expect(Math.round(half?.pct ?? 0)).toBe(6)
   })
 })
 

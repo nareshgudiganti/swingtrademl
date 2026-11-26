@@ -290,6 +290,13 @@ describe('stock header horizon wording (F3)', () => {
     for (const line of [t.forecast, t.hold]) expect(line).not.toMatch(/score[^.]*15|15[- ]day (prediction|forecast)/i)
     expect(t.forecast).not.toContain('15')
   })
+  it('omits a line whose value is missing instead of inventing it', async () => {
+    const { forecastAndHold } = await import('./scoreVsPlan')
+    expect(forecastAndHold(null).hold).toBeNull()
+    expect(forecastAndHold(undefined).hold).toBeNull()
+    expect(forecastAndHold(null).forecast).toContain('Forecast: 5 trading days')
+    expect(forecastAndHold(12).hold).toContain('up to 12 trading days')
+  })
   it('the stock header uses the helper and no longer prints a bare horizon', () => {
     const src = read('frontend/src/trademind/pages/StockDetail.tsx')
     expect(src).toContain('forecastAndHold(decision.horizon_days)')

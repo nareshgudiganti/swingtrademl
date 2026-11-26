@@ -329,7 +329,7 @@ function StockDetailBody() {
                   </div>
                   <div className="tm-stat-value" style={{ color: 'var(--tm-violet)' }}>
                     {forecastAndHold(decision.horizon_days).forecast}
-                    <br />
+                    {forecastAndHold(decision.horizon_days).forecast && forecastAndHold(decision.horizon_days).hold ? <br /> : null}
                     {forecastAndHold(decision.horizon_days).hold}
                   </div>
                 </div>

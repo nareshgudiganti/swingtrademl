@@ -1,8 +1,9 @@
 """The how-to for adding a model or connector (#259) must not go stale.
 
 Every backticked repo path in docs/how-to/add-a-model-or-connector.md must exist, every backticked
-`swing_trade_ml...` name must be importable or defined, every backticked test name must exist in tests/, and every
-`swingtrade <command>` must be a command in cli.py. If code moves, this test says which line of the doc to fix.
+`swing_trade_ml...` name must be importable or defined, every backticked test name must exist in tests/,
+and every `swingtrade <command>` must be a command in cli.py.
+If code moves, this test says which line of the doc to fix.
 """
 
 from __future__ import annotations

@@ -14,6 +14,7 @@ without a scenario fails; (2) every v1 risk refusal is produced by the REAL `ris
 from __future__ import annotations
 
 import ast
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -86,7 +87,7 @@ RULE_SCENARIOS = {
         lambda: _idea(market_mode=MarketMode.DEFENSIVE, stock=c.StockState(symbol="ABC", trend="down")),
         IdeaWord.WATCH, "this stock is falling", "careful_market_falling",
     ),
-    "sector_gate": (lambda: _idea(sector_rank=7), IdeaWord.WAIT, "ranks 7 of 15", "sector_rank"),
+    "sector_gate": (lambda: _idea(sector_rank=7, sector_total=15), IdeaWord.WAIT, "ranks 7 of 15", "sector_rank"),
     "playbook_gate": (lambda: _idea(playbook_match=False), IdeaWord.WAIT, "No classic setup", "no_setup"),
 }
 
@@ -100,7 +101,12 @@ def test_each_idea_rule_gives_a_word_a_named_reason_evidence_and_a_what_would_ch
     monkeypatch.setattr(settings, "BRAIN_SECTOR_GATE_TOP_N", 3)
     monkeypatch.setattr(settings, "BRAIN_PLAYBOOK_GATE", True)
     make, word, needle, key = RULE_SCENARIOS[rule_id]
-    d = decide_idea(make(), POLICY)
+    facts = make()
+    if facts.sector_rank is None:
+        # With the sector gate on, an unranked sector is held back too (#488); give the other rules a top
+        # sector so each scenario shows its own rule.
+        facts = replace(facts, sector_rank=1, sector_total=15)
+    d = decide_idea(facts, POLICY)
     assert d.word is word and d.qty == 0
     assert needle in d.reasons[0], d.reasons  # the FIRST reason names the real cause
     assert d.reasons[0] not in GENERIC and d.downgrade_reason == d.reasons[0] and d.downgraded_from is IdeaWord.TRADE
@@ -111,9 +117,17 @@ def test_each_idea_rule_gives_a_word_a_named_reason_evidence_and_a_what_would_ch
 
 def test_the_sector_line_quotes_the_same_top_n_the_rule_used(monkeypatch):
     monkeypatch.setattr(settings, "BRAIN_SECTOR_GATE_TOP_N", 3)
-    d = decide_idea(_idea(sector_rank=7), POLICY)
+    d = decide_idea(_idea(sector_rank=7, sector_total=15), POLICY)
     line = what_would_change(d)[0]["text"]
     assert "top 3" in line and "7 of 15" in line
+
+
+def test_an_unranked_sector_waits_and_explains_itself_when_the_gate_is_on(monkeypatch):
+    monkeypatch.setattr(settings, "BRAIN_SECTOR_GATE_TOP_N", 3)
+    d = decide_idea(_idea(), POLICY)  # no sector rank: missing data never lets an idea through (#488)
+    assert d.word is IdeaWord.WAIT and "no strength rank" in d.reasons[0]
+    items = what_would_change(d)
+    assert items[0]["key"] == "sector_unranked" and "top 3" in items[0]["text"]
 
 
 def test_the_weak_signal_and_negative_result_reasons_quote_the_numbers_the_rules_used():

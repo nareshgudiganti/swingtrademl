@@ -158,11 +158,38 @@ def test_careful_market_and_falling_stock():
 
 def test_sector_gate(monkeypatch):
     monkeypatch.setattr(settings, "BRAIN_SECTOR_GATE_TOP_N", 5)
-    d, items = _one(_facts(sector_rank=9))
+    d, items = _one(_facts(sector_rank=9, sector_total=15, sector_name="Metals"))
     assert d.word is IdeaWord.WAIT
+    assert d.reasons[0].startswith("Its sector (Metals) ranks 9 of 15")
     assert items[0] == {
         "key": "sector_rank",
         "text": "Its sector would need to climb into the top 5 (today it ranks 9 of 15).",
+    }
+
+
+@pytest.mark.parametrize(
+    "reason, text",
+    [
+        # records stored before #488 keep their line
+        ("Its sector ranks 9 of 15 — outside the top 5 for new ideas.", "(today it ranks 9 of 15)."),
+        ("Its sector (Metals) ranks 9 — outside the top 5 for new ideas.", "(today it ranks 9)."),
+    ],
+)
+def test_sector_gate_reason_wordings_old_and_new(reason, text):
+    items = what_would_change(_watch(reason))
+    assert items[0]["key"] == "sector_rank" and items[0]["text"].endswith(text)
+
+
+def test_sector_gate_unranked(monkeypatch):
+    monkeypatch.setattr(settings, "BRAIN_SECTOR_GATE_TOP_N", 5)
+    d, items = _one(_facts(sector_name="Metals"))
+    assert d.word is IdeaWord.WAIT and "no strength rank" in d.reasons[0]
+    assert items[0] == {
+        "key": "sector_unranked",
+        "text": (
+            "Its sector would need a strength rank in the top 5 "
+            "(today there is not enough sector data to rank it)."
+        ),
     }
 
 

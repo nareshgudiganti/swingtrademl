@@ -65,6 +65,34 @@ follow the resume steps at the top of the queue. Resuming approves no merge, dep
 - Any change that touches order placement, sizing, stops or limits needs a test and the
   owner's approval before it reaches `main` (= prod).
 
+## Core platform standards (see ADR-002 to ADR-005; items marked *planned* are proposed, not built)
+
+Source: `docs/architecture/TARGET-ARCHITECTURE-PROPOSAL.md` (its header table says what is built). Follow *planned*
+items for new code; never claim they exist.
+
+- **Where a feature goes and how it is switched on**: one module declared in `REGISTRY` (`core/modules.py`), its
+  router mounted with `optional("<module id>")` in `api/v1/router.py`. The owner switches the module in Admin ("Parts
+  of the app"); plan access comes from the plan features the module names (`core/plans.py`, `core/capabilities.py`).
+- **Module boundaries** (tested by `tests/test_module_boundaries.py`): `core`, `db`, `services`, `brain`, `workers`
+  and `ml` never import `api`; product modules do not import each other's internals; the brain reads only through
+  `DatedReader`. External systems (broker, holdings, billing, notifier, feeds) are reached only through their port.
+- **Capability registration**: the backend enforces access, the frontend only hides. One registry with stable
+  capability IDs, `require_capability` and `/me/capabilities` is *planned* (ADR-003); until it exists, do not add a
+  sixth ad-hoc switch beside plan FEATURES, `ROUTE_RULES`, release switches, environment flags and role checks.
+  Risk, sizing, exits, live-trading guards and the trial freeze are protected: never admin-editable.
+- **Identity rules**: a stock in a new table is one `security_id` (`services/identity`, #389), never a symbol string.
+  Resolve with a date (`on_date`) for anything historical. Score history is append-only (`score_ledger`); a new
+  score, signal or decision row records its model, research-config version and code version.
+- **No business numbers in the frontend**: target, stop, horizon, limits, P&L and totals come from the backend
+  (`GET /config/trading-rules`). The frontend formats; it does not decide or calculate rules.
+- **Change-impact checklist** (answer in the PR before coding): can an existing module or shared service be reused?
+  Which module owns it? Which switch or plan feature gates it? Is there a migration? Does it touch a trial-frozen
+  file or a protected safeguard? Which tests prove it, and what is the rollback (revert or switch off)?
+- **Migrations** (*proposed* rule, ADR-004): the lead owns ordering and numbering; developers do not create or
+  renumber Alembic migrations. Each needs the owner's approval, nullable columns first, a downgrade and a
+  clean-upgrade drill. The owner-gate check (`.github/scripts/owner_gate.py`) already asks the owner to approve any
+  PR that touches `backend/alembic/**`.
+
 ## Secrets and API keys — never read, print, log or commit
 
 - `.env` (root) holds real credentials; it is gitignored. Do not `cat` it or echo its values.
@@ -121,6 +149,7 @@ follow the resume steps at the top of the queue. Resuming approves no merge, dep
 | Service 1 architecture | `docs/architecture/service-01-market-data.md` |
 | Gap list + status | `docs/architecture/architecture-gaps.md` |
 | Why Service 1 gaps / Brain split | `docs/decisions/ADR-001-service-01-gaps.md` |
+| Target architecture, ADR index (ADR-002 to ADR-005) | `docs/architecture/TARGET-ARCHITECTURE-PROPOSAL.md`, `docs/decisions/README.md` |
 | Brain build notes, lessons | `docs/brain/BUILD_NOTES.md` (brain worktree) |
 | M18 go-live guide | `docs/brain/GO_LIVE.md` (brain worktree) |
 | Brain build book (spec) | `docs/superpowers/specs/2026-09-29-trademind-brain-build-book.html` |

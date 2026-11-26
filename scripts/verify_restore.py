@@ -193,7 +193,8 @@ def main() -> int:
         cmp = bm.compare(manifest, rows, files)
         result.update(compare=cmp, tables=tables, restore_errors=len(real_errors), seconds=round(restore_seconds, 1))
         db_ok = len(real_errors) == 0 and tables.get("ml_models") is not None
-        card_result = card_check_result(card_query_ok, cmp.get("manifest_cards", 0), cmp["problem_counts"].get("card_mismatch", 0))
+        card_mismatches = cmp["problem_counts"].get("card_mismatch", 0)
+        card_result = card_check_result(card_query_ok, cmp.get("manifest_cards", 0), card_mismatches)
         ok = db_ok and cmp["ok"] and card_result != "FAIL"
 
         print(f"\nBackup folder : {folder}")
@@ -229,7 +230,7 @@ def main() -> int:
                       f"{n('card_mismatch')} differ)")
         print(f"{card_label:<44}{card_result:>10}")
         if not card_query_ok:
-            print("   card query on the restored ml_models failed: card check against the database rows NOT done")
+            print("   card query on restored ml_models failed: database card check NOT done")
         for p in cmp["problems"][:40]:
             print(f"   {p['kind']}: {p['what']}")
         if len(cmp["problems"]) > 40:

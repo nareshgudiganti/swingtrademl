@@ -52,7 +52,7 @@ COPY src ./src
 # Model artifacts and their backup copies are written at runtime and must
 # survive as mounted volumes; each directory has to exist and be writable by
 # appuser first, or a fresh named volume mounts there owned by root.
-RUN mkdir -p /app/data/models /app/data/model_backups && chown -R appuser:appuser /app
+RUN mkdir -p /app/data/models /app/data/model_backups /app/data/reliability && chown -R appuser:appuser /app
 
 # Declared last among the layers so a new commit sha does not invalidate the apt-get and pip layers above.
 # The commit this image was built from. Passed by compose from release.sh; read by ml/model_card.py so a

@@ -258,6 +258,7 @@ def start_scheduler() -> None:
     # lane on AND accepted the protocol hash. Nothing of the lane is imported otherwise.
     add_h05_job(scheduler)
     add_weekly_paper_report_job(scheduler)
+    add_weekly_reliability_report_job(scheduler)
 
     # Shared shadow lanes (10D / 15D, disabled by default): the daily job exists only when the owner has set
     # LANE_SHADOW_ENABLED. It never picks a model by itself and never trades.
@@ -395,6 +396,20 @@ def add_weekly_paper_report_job(target: BackgroundScheduler) -> None:
         jobs.job_weekly_paper_report,
         CronTrigger(day_of_week="sun", hour=9, minute=30, timezone=IST),
         id="weekly_paper_report",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=1800,
+    )
+
+
+def add_weekly_reliability_report_job(target: BackgroundScheduler) -> None:
+    """Sunday 10:15 IST: the dated prediction-reliability report. Reads only; clear of the other Sunday jobs
+    (08:00 instruments, 09:30 paper report)."""
+    target.add_job(
+        jobs.job_weekly_reliability_report,
+        CronTrigger(day_of_week="sun", hour=10, minute=15, timezone=IST),
+        id="weekly_reliability_report",
         replace_existing=True,
         max_instances=1,
         coalesce=True,

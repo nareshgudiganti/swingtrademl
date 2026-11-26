@@ -179,3 +179,32 @@ def test_endpoint_not_run_yet_then_last_result(client, db_session):
 
 def test_endpoint_needs_the_key(client):
     assert client.get("/api/v1/brain/weekly-health").status_code in (401, 403)
+
+
+def test_drift_below_alarm_stays_ok_and_at_alarm_becomes_a_warning(db_session):
+    db_session.add(
+        BrainLearningRun(
+            created_at=SAT - timedelta(hours=2),
+            drift=[{"feature": "rsi_14", "psi": w.DRIFT_ALARM_PSI - 0.01, "level": "moderate"}],
+            drift_lines=["RSI moved a little"],
+        )
+    )
+    db_session.flush()
+    assert w.check_learning(db_session, SAT)["ok"]
+    db_session.add(
+        BrainLearningRun(
+            created_at=SAT - timedelta(hours=1),
+            drift=[
+                {"feature": "rsi_14", "psi": w.DRIFT_ALARM_PSI, "level": "major"},
+                {"feature": "atr_pct", "psi": 0.9, "level": "major"},
+            ],
+            drift_lines=["x"],
+        )
+    )
+    db_session.flush()
+    c = w.check_learning(db_session, SAT)
+    assert not c["ok"] and c["level"] == "warn"
+    assert "0.90" in c["detail"] and "nothing was changed" in c["detail"]
+    # the warning reaches the existing weekly Telegram message as a CHECK line
+    msg = w.format_message({"checks": [c]})
+    assert "1 thing(s) to look at" in msg and "CHECK Learning and drift" in msg

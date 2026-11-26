@@ -909,6 +909,28 @@ def job_weekly_paper_report() -> None:
         _report_error("weekly_paper_report", exc)
 
 
+def job_weekly_reliability_report() -> None:
+    """Sunday: write the dated prediction-reliability report (reads only; skips when this week's file exists
+    or there is no data). Never raised, never trades."""
+    from pathlib import Path
+
+    from swing_trade_ml.brain import prediction_reliability as rel
+
+    try:
+        today = datetime.now(IST).date()
+        with session_scope() as db:
+            path = rel.run_weekly_report(db, Path(settings.RELIABILITY_REPORT_DIR), today)
+        log.info("job.weekly_reliability_report.done", written=str(path) if path else None)
+        if path is not None:
+            notifier.send_sync(
+                f"Weekly prediction reliability report is ready: {path.name}. "
+                "It checks how often the model's scores matched what happened (read only).",
+                kind=alert_policy.WEEKLY_REPORT,
+            )
+    except Exception as exc:  # noqa: BLE001
+        _report_error("weekly_reliability_report", exc)
+
+
 def job_brain_weekly_health() -> None:
     """Saturday: run the owner's weekly checklist, store the result and send
     one Telegram summary. Reads and reports only; never raised, and a

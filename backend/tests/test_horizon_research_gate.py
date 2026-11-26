@@ -18,7 +18,11 @@ from swing_trade_ml.core import research_config
 from swing_trade_ml.services import lane_slots
 
 SRC = Path(swing_trade_ml.__file__).parent
-LANE_MODULES = ("swing_trade_ml.shadow_lanes", "swing_trade_ml.db.models.lane_shadow", "swing_trade_ml.services.lane_slots")
+LANE_MODULES = (
+    "swing_trade_ml.shadow_lanes",
+    "swing_trade_ml.db.models.lane_shadow",
+    "swing_trade_ml.services.lane_slots",
+)
 HORIZON_MODULES = (
     "swing_trade_ml.brain.horizons",
     "swing_trade_ml.brain.lanes",
@@ -86,7 +90,11 @@ def test_no_brain_decision_path_reads_lane_or_horizon_records():
     ]
     assert len(decision) > 20
     bad = {
-        _rel(p): sorted(m for m in _imports(p) if any(m == x or m.startswith(x + ".") for x in (*LANE_MODULES, *HORIZON_MODULES)))
+        _rel(p): sorted(
+            m
+            for m in _imports(p)
+            if any(m == x or m.startswith(x + ".") for x in (*LANE_MODULES, *HORIZON_MODULES))
+        )
         for p in decision
         if p.exists()
     }
@@ -96,10 +104,16 @@ def test_no_brain_decision_path_reads_lane_or_horizon_records():
 def test_only_known_owner_only_files_read_lane_records():
     allowed_api = {"api/v1/endpoints/lanes.py"}
     api_importers = {p for p in _importers(LANE_MODULES) if p.startswith("api/")}
-    assert api_importers <= allowed_api, f"a new route file reads lane records: {sorted(api_importers - allowed_api)}"
-    outside = {p for p in _importers(("swing_trade_ml.brain.horizons",)) if not p.startswith("brain/horizons/")}
+    assert api_importers <= allowed_api, (
+        f"a new route file reads lane records: {sorted(api_importers - allowed_api)}"
+    )
+    outside = {
+        p for p in _importers(("swing_trade_ml.brain.horizons",)) if not p.startswith("brain/horizons/")
+    }
     # Only the 5-session nightly job (off by default) may call the workflow, and it runs only the 5-session one.
-    assert outside == {"services/horizon_nightly.py"}, f"live code imports the horizon workflows: {sorted(outside)}"
+    assert outside == {"services/horizon_nightly.py"}, (
+        f"live code imports the horizon workflows: {sorted(outside)}"
+    )
 
 
 @pytest.mark.parametrize("name", ["lanes", "lane_picks", "h05", "weekly_report"])
@@ -124,13 +138,19 @@ def test_nothing_reads_horizon_records_outside_its_own_service_and_the_nightly_w
     table_importers = _importers(("swing_trade_ml.db.models.horizon",)) - {"services/horizon_records.py"}
     # #385: the owner-only admin model overview reads each model's last record date and research flag (no picks, no
     # scores), behind the admin console's owner + two-step guard (test_admin_console_every_route.py).
-    assert table_importers <= {"db/models/__init__.py", "services/admin_model_overview.py"}, sorted(table_importers)
+    assert table_importers <= {"db/models/__init__.py", "services/admin_model_overview.py"}, sorted(
+        table_importers
+    )
 
 
 # Every module outside the lane and horizon packages that reads their records or tables, pinned. A new reader anywhere
 # (api, services, brain, workers) fails here until it is added on purpose, with its owner-only proof below.
 KNOWN_READERS = {
-    "swing_trade_ml.shadow_lanes": {"api/v1/endpoints/lanes.py", "brain/prediction_reliability.py", "workers/scheduler.py"},
+    "swing_trade_ml.shadow_lanes": {
+        "api/v1/endpoints/lanes.py",
+        "brain/prediction_reliability.py",
+        "workers/scheduler.py",
+    },
     "swing_trade_ml.db.models.lane_shadow": {
         "api/v1/endpoints/lanes.py",
         "brain/prediction_reliability.py",
@@ -138,7 +158,11 @@ KNOWN_READERS = {
         "services/admin_model_overview.py",  # #385: owner-only admin console, reads the last pick day per model only
     },
     "swing_trade_ml.services.lane_slots": {"services/model_registry.py"},
-    "swing_trade_ml.brain.lanes": {"api/v1/endpoints/h05.py", "brain/eligibility_report.py", "workers/scheduler.py"},
+    "swing_trade_ml.brain.lanes": {
+        "api/v1/endpoints/h05.py",
+        "brain/eligibility_report.py",
+        "workers/scheduler.py",
+    },
     "swing_trade_ml.db.models.lanes": {
         "api/v1/endpoints/lane_picks.py",
         "brain/eligibility_report.py",
@@ -163,6 +187,12 @@ def test_the_readers_that_serve_a_route_are_owner_only():
 
     for module in (lanes, lane_picks, h05, weekly_report):
         assert require_owner in {d.dependency for d in module.router.dependencies}, module.__name__
-    # the other pinned readers are reports and jobs that no route imports
-    served = set(_importers(("swing_trade_ml.brain.prediction_reliability", "swing_trade_ml.brain.eligibility_report")))
+    # the other pinned readers are reports and jobs that no route imports (scheduled jobs are not routes)
+    served = {
+        p
+        for p in _importers(
+            ("swing_trade_ml.brain.prediction_reliability", "swing_trade_ml.brain.eligibility_report")
+        )
+        if not p.startswith("workers/")
+    }
     assert served == set(), sorted(served)

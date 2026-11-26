@@ -317,6 +317,8 @@ class Settings(BaseSettings):
     # - a mounted volume, a synced folder, an object-storage mount. Three
     # model files were lost once with nothing to restore them from.
     MODEL_BACKUP_DIR: str | None = None
+    # Where the weekly prediction-reliability report (Sunday job) saves its dated files.
+    RELIABILITY_REPORT_DIR: str = "./data/reliability"
     # The trade the system actually takes: +8% before -4%, within 15 trading
     # days. These three move together — changing one without the others
     # recreates the mismatch this replaced, where the model scored a 5-day

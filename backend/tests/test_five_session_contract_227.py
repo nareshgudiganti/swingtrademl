@@ -71,7 +71,7 @@ def test_a_calendar_window_would_disagree_the_holiday_changes_the_answer():
         (
             _ist(2026, 11, 25, 15, 35),
             23,
-        ),  # 15:30 market close is NOT the cut: the bar is not final until 15:40
+        ),  # 15:35, after the 15:30 close: still not the cut, the bar is not final until 15:40
         (_ist(2026, 11, 24, 12, 0), 23),  # holiday: last closed is Monday
         (_ist(2026, 11, 28, 12, 0), 27),  # Saturday: Friday
         (_ist(2026, 11, 29, 20, 0), 27),  # Sunday: Friday
@@ -103,6 +103,7 @@ def test_no_frontend_copy_of_the_window_exists():
 
 @pytest.mark.xfail(
     strict=True,
+    raises=AssertionError,
     reason=(
         "#227/#281 contract gap, owner decision needed: the protocol ends a 5-day trade at the "
         "close of session 5 after the signal (entry = session 1 open; session 6 never read). "

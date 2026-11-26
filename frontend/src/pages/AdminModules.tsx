@@ -12,6 +12,11 @@ export type ModuleRow = {
   state: string
   enabled: boolean
   jobs: string[]
+  // The inventory (#291). Optional here so an older server that omits them still renders.
+  route_prefixes?: string[]
+  capabilities?: string[]
+  depends_on?: string[]
+  packages?: string[]
 }
 export type ModuleList = { modules: ModuleRow[]; scope: string; state_unknown: boolean }
 /** The caller (the admin screen) sends the request with the two-step code; a failure carries status and code. */
@@ -69,6 +74,31 @@ export function summaryText(rows: ModuleRow[]): string {
   return `${off.length} ${off.length === 1 ? 'part is' : 'parts are'} switched off: ${off.map((m) => m.label).join(', ')}.`
 }
 
+function Facts({ m }: { m: ModuleRow }) {
+  const items: [string, string[] | undefined][] = [
+    ['Needs', m.depends_on],
+    ['Screens’ data paths', m.route_prefixes],
+    ['Background jobs', m.jobs],
+    ['What it can do', m.capabilities],
+    ['Code packages', m.packages],
+  ]
+  return (
+    <details style={{ marginTop: 6 }}>
+      <summary>
+        {m.core ? 'Core' : 'Optional'} · Stage: {m.state} · Details
+      </summary>
+      <dl style={{ margin: '6px 0 0' }}>
+        {items.map(([label, values]) => (
+          <div key={label}>
+            <dt style={{ fontWeight: 600 }}>{label}</dt>
+            <dd style={{ margin: '0 0 4px' }}>{values && values.length > 0 ? values.join(', ') : 'none'}</dd>
+          </div>
+        ))}
+      </dl>
+    </details>
+  )
+}
+
 type RowProps = {
   m: ModuleRow
   call: AdminCall
@@ -123,6 +153,7 @@ function Row({ m, call, onChanged, onExpired, locked }: RowProps) {
           )}
         </div>
       </div>
+      <Facts m={m} />
       {!m.core && open && (
         <div style={{ marginTop: 8 }}>
           <label>

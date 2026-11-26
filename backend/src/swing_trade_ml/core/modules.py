@@ -111,6 +111,10 @@ REGISTRY: tuple[Module, ...] = (
     ),
     Module("core.orders", "Orders and the paper-mode guards", core=True, route_prefixes=("/orders",)),
     Module("core.health", "Health and readiness", core=True, route_prefixes=("/health", "/ready")),
+    # The owner's console (this switch board included) must stay reachable to switch anything back on.
+    Module("core.admin", "Admin console", core=True, route_prefixes=("/admin",)),
+    # What the account holds is never hidden by a switch: the holdings and their stops stay visible.
+    Module("core.portfolio", "Portfolio and holdings", core=True, route_prefixes=("/portfolio",)),
     # ---- optional: on by default
     Module(
         "finance",
@@ -137,6 +141,32 @@ REGISTRY: tuple[Module, ...] = (
         # A plan reaches the brain's consumer views only with the TradeMind feature (core/plans.py).
         capabilities=("trademind",),
         packages=("swing_trade_ml.brain",),
+    ),
+    Module(
+        "discover",
+        "Discover (company pages and stock compare)",
+        route_prefixes=("/company", "/compare"),
+        packages=("swing_trade_ml.services.company_filings",),
+    ),
+    Module(
+        "today",
+        "Today (plain-English answers for beginners)",
+        route_prefixes=("/beginner",),
+        packages=("swing_trade_ml.services.beginner_views",),
+    ),
+    # The Groww Tracker lives under the same routes as each person's watchlist (/me/watchlist/...).
+    Module(
+        "watchlist",
+        "Watchlist and Groww Tracker",
+        route_prefixes=("/me/watchlist",),
+        packages=("swing_trade_ml.services.watchlist_tracker",),
+    ),
+    Module(
+        "reports",
+        "Reports (real-account report and weekly paper report)",
+        route_prefixes=("/real-report", "/research/weekly-report"),
+        jobs=("weekly_paper_report",),
+        packages=("swing_trade_ml.services.real_report", "swing_trade_ml.services.weekly_paper_report"),
     ),
     Module(
         "research_lanes",

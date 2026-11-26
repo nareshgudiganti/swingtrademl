@@ -31,7 +31,9 @@ ROUTE = {
     "brain": "/brain/health",
     "research_lanes": "/research/lanes",
 }
-OPTIONAL = [m.id for m in modules.REGISTRY if not m.core]
+# Only the modules behind the plan check (optional() in the router). The others (switchable()) are on/off
+# switches only and keep the access rules they had; tests/test_module_lifecycle.py covers those.
+OPTIONAL = list(ROUTE)
 
 # The written-down expectation (not derived from the code under test): only TradeMind, a Pro feature, reaches
 # a plan caller; every other optional module is owner-only, as it is today.

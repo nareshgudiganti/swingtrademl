@@ -793,14 +793,7 @@ TRACE_SECRET = "ISO-RISK-GATE-ANSWER"
         # with plans OFF a tester is "unrestricted" in require_auth, which returns before the trace-specific
         # gate in brain_route_access, and /brain/runs/{id}/trace is not in TESTER_PRIVATE_PREFIXES.
         # strict: the day this is fixed the test passes and the marker must be removed.
-        pytest.param(
-            "t",
-            False,
-            marks=pytest.mark.xfail(
-                strict=True,
-                reason="REAL DEFECT (#414): tester reads the raw brain trace while plans are off.",
-            ),
-        ),
+        ("t", False),
         ("t", True),
     ],
 )
@@ -812,6 +805,14 @@ def test_a_member_or_tester_cannot_read_a_runs_raw_trace(
     r = client.get(f"{API}/brain/runs/{brain_run.id}/trace", headers=people[who])
     assert r.status_code == 403, (who, plans_on, r.status_code)
     assert TRACE_SECRET not in r.text
+
+
+@pytest.mark.parametrize("plans_on", [False, True])
+def test_a_tester_cannot_read_a_runs_alert_preview(client, db_session, people, brain_run, plans_on):
+    """The run's Telegram preview is the owner's alert text: owner-only, plans on or off (#414)."""
+    set_plans_enabled(db_session, plans_on)
+    r = client.get(f"{API}/brain/runs/{brain_run.id}/alerts", headers=people["t"])
+    assert r.status_code == 403, (plans_on, r.status_code)
 
 
 @pytest.mark.parametrize("plans_on", [False, True])

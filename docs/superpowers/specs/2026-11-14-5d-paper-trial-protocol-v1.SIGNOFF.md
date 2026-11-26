@@ -10,6 +10,8 @@
 
 The spec file is not edited to add this signature: editing it would change its sha256. Any change to the rules is a new file (`-v2.md`).
 
+**Note (2026-11-26).** The spec file's own header still reads "DRAFT FOR OWNER SIGN-OFF" on purpose: the file is sha256-pinned (`c5cfbaf1…934f`) and is not edited. This record, not the header, is the evidence of approval. Exact time of the typed reply: 2026-11-25 00:57:25 IST (issue #279 comment of 26 Nov).
+
 ## Approved (as recommended)
 
 - **Section H:** H-1 (this file governs, separate from h05), H-2 (+2% / −4% from the entry fill, max 5 sessions, stop first, both-levels candle = stop, gaps at the open), H-2b (model target: session-5 close at least signal close × 1.02), H-7 (SELECTION and ECONOMIC, never merged), H-11 (60-session runs, at least 40 matured days, shortfall at most 20%), H-11b (per verdict: at least 2 PASS, no FAIL, pooled range above 0; a PASS is evidence for the owner, never automatic promotion).

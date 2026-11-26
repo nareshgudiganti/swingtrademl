@@ -2,12 +2,13 @@
 // area charts, candlesticks and the brain artwork.
 
 import { useId, type ReactNode } from 'react'
-import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { Area, AreaChart, CartesianGrid, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import clsx from 'clsx'
 
 import { useQuery } from '@tanstack/react-query'
 
 import { api } from '../api/client'
+import { MISSING_DAY_NOTE } from './chartSessions'
 import { runFailedNote } from './emptyReasons'
 import { useBrainStatus, useLatestRun } from './live'
 import { PageState, StaleNotice } from './PageState'
@@ -499,7 +500,10 @@ export function GlowArea({
   extra?: ReactNode
 }) {
   const id = useId().replace(/:/g, '')
+  // Trading days with no price on file (chartSessions.ts) are marked, never filled in.
+  const missing = data.filter((p) => (p as { missing?: boolean }).missing === true)
   return (
+    <>
     <div className="tm-chart tm-chart-glow" style={{ height, color }}>
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={data} margin={{ top: 6, right: axes ? 4 : 0, left: axes ? -8 : 0, bottom: 0 }}>
@@ -522,16 +526,21 @@ export function GlowArea({
           <Tooltip
             cursor={{ stroke: 'rgba(160,140,255,0.35)' }}
             content={({ active, payload }) =>
-              active && payload?.length ? (
+              active && payload?.length && payload[0]?.value != null ? (
                 <div className="tm-tooltip">{formatter(Number(payload[0]?.value))}</div>
               ) : null
             }
           />
           {extra}
+          {missing.map((m, i) => (
+            <ReferenceLine key={`miss${i}`} x={(m as { t: string }).t} stroke="#ffb020" strokeDasharray="3 3" data-testid="missing-day" />
+          ))}
           <Area type="monotone" dataKey="v" stroke={color} strokeWidth={2} fill={`url(#ga${id})`} dot={false} isAnimationActive={false} />
         </AreaChart>
       </ResponsiveContainer>
     </div>
+    {missing.length > 0 && <div className="sp-small" data-testid="missing-day-note">{MISSING_DAY_NOTE}</div>}
+    </>
   )
 }
 

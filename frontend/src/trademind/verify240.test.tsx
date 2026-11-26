@@ -164,6 +164,7 @@ describe('the candle chart draws only the candles it is given', () => {
     // height NaN. Real candles with volume 0 exist.
     const html = renderToString(<Candles bars={[{ t: '1 Dec', o: 100, h: 101, l: 99, c: 100, vol: 0 }]} height={300} />)
     expect(html).not.toMatch(/NaN|Infinity/)
+    expect(html).toContain('stroke-width="1"') // the candle itself is still drawn
   })
 
   it('FIXED (#486) c1 (latent): the chart given no candles draws nothing invalid', () => {

@@ -30,6 +30,7 @@ import type {
   BrainAlertRecord,
   BrainAlertSend,
   BrainApproval,
+  ModelApprovalBody,
   BrainCompare,
   BrainDecision,
   BrainEpisode,
@@ -575,7 +576,12 @@ export const api = {
 
   // ---------------------------------------------------------------- ml --
   models: () => get<MLModel[]>('/ml/models'),
-  activateModel: (id: number) => post<MLModel>(`/ml/models/${id}/activate`),
+  activateModel: (id: number, approvalId?: number) =>
+    post<MLModel>(`/ml/models/${id}/activate`, approvalId === undefined ? undefined : { approval_id: approvalId }),
+  rollbackModel: (id: number, approvalId: number) =>
+    post<MLModel>(`/ml/models/${id}/rollback`, { approval_id: approvalId }),
+  recordModelApproval: (body: ModelApprovalBody) =>
+    post<{ approval_id: number; recorded_at: string; kind: string; target: string }>('/ml/approvals', body),
   train: (body: Record<string, unknown>) => post<MessageResponse>('/ml/train', body),
   predictionAccuracy: (modelId?: number) =>
     get<{

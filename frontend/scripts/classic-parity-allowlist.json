@@ -5,6 +5,8 @@
   },
   "Models": {
     "activateModel": { "status": "decide", "task": "oa15", "note": "chooses which trained model the live system uses; TradeMind Setup is view-only. NOT assumed v2: the classic Models page stays until the owner decides." },
+    "recordModelApproval": { "status": "decide", "task": "oa15", "note": "part of the #328 approval form on the classic Models page: records the owner approval. Stays with activateModel until the owner decides." },
+    "rollbackModel": { "status": "decide", "task": "oa15", "note": "part of the #328 approval form on the classic Models page: goes back to the previous model with an approval. Stays with activateModel until the owner decides." },
     "train": { "status": "v2", "decision": "owner 2026-10-04: no create/delete/train until v2" },
     "predictions": { "status": "planned", "task": "oa11", "note": "model prediction history moves to Insights (owner 2026-10-16)" }
   },

@@ -31,6 +31,7 @@ other code makes a model active.
 from __future__ import annotations
 
 import hashlib
+import os
 import re
 from datetime import UTC, datetime, timedelta
 from pathlib import Path, PurePosixPath, PureWindowsPath
@@ -125,13 +126,20 @@ def _is_repo_relative(rel: str) -> bool:
     return bool(rel) and not win.anchor and not PurePosixPath(rel).is_absolute() and ".." not in win.parts
 
 
+def evidence_root() -> Path:
+    """Folder that evidence paths are relative to. Normally REPO_ROOT; in the production image REPO_ROOT lands
+    inside site-packages (no docs there), so the prod compose file mounts docs/model-audit read-only under
+    /app/evidence and sets EVIDENCE_ROOT to it."""
+    return Path(os.environ.get("EVIDENCE_ROOT") or REPO_ROOT).resolve()
+
+
 def check_evidence(evidence: Any) -> list[dict]:
     """Each ref is {"path": repo-relative file, "sha256": its hash} (checked on disk now) or {"pr": number}
     (recorded only). At least one file ref is required. Returns the cleaned list."""
     if not isinstance(evidence, list | tuple) or not evidence or len(evidence) > MAX_EVIDENCE:
         raise PromotionError(f"Evidence must list 1 to {MAX_EVIDENCE} references.")
     cleaned: list[dict] = []
-    root = Path(REPO_ROOT).resolve()
+    root = evidence_root()
     for ref in evidence:
         if isinstance(ref, dict) and set(ref) == {"pr"} and isinstance(ref["pr"], int) and ref["pr"] > 0:
             cleaned.append({"pr": ref["pr"]})

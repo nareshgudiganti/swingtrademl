@@ -67,7 +67,13 @@ def test_entry_fallbacks():
     assert t.pick_entry(D + timedelta(days=9), None, closes) == (None, None, [])
     # user price wins
     assert t.pick_entry(D, 95.5, closes)[:2] == (95.5, "your_price")
-    assert t.pick_entry(D, 0.0, closes)[1] == "added_close"  # a non-positive price is ignored
+    # Zero is a real cost (only Groww can store it: bonus shares), never replaced by a close; a negative
+    # price is ignored. Profit is the whole value and there is no percentage (Codex R-Q41-e4b8a192).
+    assert t.pick_entry(D, 0.0, closes)[:2] == (0.0, "your_price")
+    assert t.pick_entry(D, -1.0, closes)[1] == "added_close"
+    assert t.invested_amount(0.0, 5) == 0.0
+    assert t.profit_amount(0.0, 120.0, 5) == 600.0
+    assert t.invested_amount(-1.0, 5) is None and t.profit_amount(-1.0, 120.0, 5) is None
 
 
 def test_days_done():

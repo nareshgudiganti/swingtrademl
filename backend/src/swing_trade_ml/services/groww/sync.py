@@ -10,6 +10,8 @@ import logging
 import math
 import re
 import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Any
 
 from sqlalchemy import select
@@ -180,6 +182,18 @@ def _release_lock(lock: tuple[Any, str] | None) -> None:
         logger.warning("groww sync lock could not be released")
 
 
+@contextmanager
+def refresh_lock() -> Iterator[None]:
+    """Hold the refresh lock around an owner's write that must not interleave with a refresh (a
+    confirmation checks the newest sync and then applies). Raises SyncAlreadyRunning when a refresh
+    holds it; with Redis down it runs unlocked, as a refresh does."""
+    lock = _acquire_lock()
+    try:
+        yield
+    finally:
+        _release_lock(lock)
+
+
 def _store_rows(db: Session, sync: GrowwSync, rows: list[Any]) -> None:
     dict_rows = [r if isinstance(r, dict) else {} for r in rows]
     for row, instrument_id, state in match_rows(db, dict_rows):
@@ -199,17 +213,31 @@ def _store_rows(db: Session, sync: GrowwSync, rows: list[Any]) -> None:
 
 
 def _apply_safely(db: Session, sync: GrowwSync, user_id: int) -> None:
-    """Apply a stored complete sync. A failure undoes the apply only; the stored sync stays."""
+    """Apply a stored complete sync. A failure undoes the apply only; the stored holdings stay, and the
+    sync is marked failed ("apply"), so neither the refresh answer nor "last successful sync" claims the
+    tracker changed."""
     try:
         with db.begin_nested():
             groww_apply.apply_sync(db, sync, user_id=user_id)
     except Exception as exc:  # noqa: BLE001 - never raised; no exception text (may hold data)
         logger.error("groww sync %s could not be applied to the tracker (%s)", sync.id, type(exc).__name__)
+        _mark_apply_failed(db, sync)
         return
     try:
         db.commit()
     except Exception as exc:  # noqa: BLE001
         logger.error("groww sync %s apply could not be saved (%s)", sync.id, type(exc).__name__)
+        db.rollback()
+        _mark_apply_failed(db, sync)
+
+
+def _mark_apply_failed(db: Session, sync: GrowwSync) -> None:
+    try:
+        sync.status = SYNC_FAILED
+        sync.error_code = "apply"
+        db.commit()
+    except Exception as exc:  # noqa: BLE001 - never raised
+        logger.error("groww sync %s could not be marked failed (%s)", sync.id, type(exc).__name__)
         db.rollback()
 
 

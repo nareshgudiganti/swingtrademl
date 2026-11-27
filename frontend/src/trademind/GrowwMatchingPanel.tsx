@@ -112,6 +112,11 @@ export function GrowwMatchingPanel() {
               {unknownOr(i.average_price, (n) => `₹${n.toLocaleString('en-IN')}`)}{i.average_price == null ? ' price' : ''}
               {i.match_state === 'suggested' && i.suggested_symbol ? ` · Suggested: ${i.suggested_symbol}` : ''}
             </div>
+            {i.conflict_symbol && (
+              <div className="tm-neg tmn-small" data-testid="groww-conflict">
+                Another Groww holding is also matched to {i.conflict_symbol}, so neither is followed. Pick the right stock for this one.
+              </div>
+            )}
           </div>
           <div className="gt-gpick">
             {i.match_state === 'suggested' && i.suggested_symbol && i.suggested_instrument_id != null && (

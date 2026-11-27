@@ -10,7 +10,9 @@ Run it twice, by hand, on your own machine:
     day2   after 06:00 IST     -> checks yesterday's token is dead, mints a NEW
            the next day           token with TOTP only, reads holdings again
 
-PASS on day2 = hands-off sync works. Anything else = stop and report.
+PASS on day2 = hands-off sync works (yesterday's token was refused AND a fresh one worked).
+INCONCLUSIVE = the old token still worked or could not be checked (e.g. a timeout): run day2
+again later. Anything else = stop and report.
 
     fetch  any time            -> ONE read-only fetch that shows your holdings
                                   (symbol, ISIN, shares, average price) on YOUR
@@ -116,6 +118,19 @@ def describe(rows: list[dict]) -> None:
         say(f"   rows with non-zero {extra}: {nonzero}")
 
 
+_AUTH_WORDS = ("auth", "unauthori", "forbidden", "token", "expired", "session")
+
+
+def is_auth_rejection(exc: BaseException) -> bool:
+    """True only when the failure says the token was refused (HTTP 401/403, or an SDK error whose class
+    name says so). A timeout or network error proves nothing about expiry."""
+    for attr in ("code", "status_code", "status"):
+        if getattr(exc, attr, None) in (401, 403, "401", "403"):
+            return True
+    name = type(exc).__name__.lower()
+    return any(word in name for word in _AUTH_WORDS)
+
+
 def next_cutoff(after: datetime) -> datetime:
     """The first 06:00 IST strictly after `after` - when Groww says tokens expire."""
     cut = datetime.combine(after.date(), time(6, 0), tzinfo=IST)
@@ -143,15 +158,25 @@ def day2() -> None:
 
     from growwapi import GrowwAPI
 
+    expiry_proven = False
     try:
         GrowwAPI(state["token"]).get_holdings_for_user(timeout=10)
-        say("NOTE yesterday's token still works - expiry not observed, result is weaker evidence")
+        say("NOTE yesterday's token still works - expiry not observed")
     except Exception as exc:  # noqa: BLE001
-        say(f"OK yesterday's token is rejected as expected ({type(exc).__name__})")
+        if is_auth_rejection(exc):
+            expiry_proven = True
+            say(f"OK yesterday's token is rejected as expected ({type(exc).__name__})")
+        else:
+            say(f"NOTE yesterday's token could not be checked ({type(exc).__name__}) - not a rejection")
 
     totp_token, totp_secret = creds()
     access = mint_token(totp_token, totp_secret)
     describe(read_holdings(access, "day 2"))
+    if not expiry_proven:
+        # Keep the state: the owner can run day2 again (e.g. after a timeout) without redoing day 1.
+        say("INCONCLUSIVE: a fresh token works, but yesterday's token was not shown to be rejected. "
+            "Run 'day2' again later; do not count this as a pass.")
+        sys.exit(2)
     STATE.unlink()
     say("PASS: holdings fetched after the token expiry with no sign-in, paste or approve.")
 

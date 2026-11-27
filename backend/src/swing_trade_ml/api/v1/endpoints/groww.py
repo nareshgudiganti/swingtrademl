@@ -23,6 +23,7 @@ from swing_trade_ml.api.deps import DbSession, Principal, require_real_account
 from swing_trade_ml.db.base import utcnow
 from swing_trade_ml.db.models.groww import (
     MATCH_CONFIRMED,
+    MATCH_NEEDS,
     SYNC_COMPLETE,
     SYNC_PARTIAL,
     GrowwHolding,
@@ -153,27 +154,56 @@ def matching(db: DbSession) -> dict:
     )
     # A row with no ISIN cannot be matched (the match is saved by ISIN): it is left out and counted.
     rows = [r for r in all_rows if (r.isin or "").strip()]
-    ids = {r.instrument_id for r in rows if r.instrument_id is not None}
+    confirmed = list(
+        db.scalars(
+            select(GrowwHolding)
+            .where(
+                GrowwHolding.sync_id == latest.id,
+                GrowwHolding.match_state == MATCH_CONFIRMED,
+                GrowwHolding.instrument_id.is_not(None),
+            )
+            .order_by(GrowwHolding.trading_symbol, GrowwHolding.id)
+        )
+    )
+    ids = {r.instrument_id for r in [*rows, *confirmed] if r.instrument_id is not None}
     symbols = (
         dict(db.execute(select(Instrument.id, Instrument.tradingsymbol).where(Instrument.id.in_(ids))).all())
         if ids
         else {}
     )
-    return {
-        "items": [
-            {
-                "isin": r.isin,
-                "trading_symbol": r.trading_symbol,
-                "quantity": r.quantity,
-                "average_price": r.average_price,
-                "match_state": r.match_state,
-                "suggested_symbol": symbols.get(r.instrument_id),
-                "suggested_instrument_id": r.instrument_id if r.instrument_id in symbols else None,
-            }
-            for r in rows
-        ],
-        "without_isin": len(all_rows) - len(rows),
-    }
+    # Confirmed rows that share one stock are applied to none of them (apply.apply_sync): they still need the
+    # owner, so they are listed as needing a match, with the stock they clash on.
+    by_symbol: dict[str, list[GrowwHolding]] = {}
+    for r in confirmed:
+        if r.instrument_id in symbols and (r.isin or "").strip():
+            by_symbol.setdefault(symbols[r.instrument_id], []).append(r)
+    clashes = [(sym, r) for sym, group in by_symbol.items() if len(group) > 1 for r in group]
+    items = [
+        {
+            "isin": r.isin,
+            "trading_symbol": r.trading_symbol,
+            "quantity": r.quantity,
+            "average_price": r.average_price,
+            "match_state": r.match_state,
+            "suggested_symbol": symbols.get(r.instrument_id),
+            "suggested_instrument_id": r.instrument_id if r.instrument_id in symbols else None,
+            "conflict_symbol": None,
+        }
+        for r in rows
+    ] + [
+        {
+            "isin": r.isin,
+            "trading_symbol": r.trading_symbol,
+            "quantity": r.quantity,
+            "average_price": r.average_price,
+            "match_state": MATCH_NEEDS,
+            "suggested_symbol": None,
+            "suggested_instrument_id": None,
+            "conflict_symbol": sym,
+        }
+        for sym, r in clashes
+    ]
+    return {"items": items, "without_isin": len(all_rows) - len(rows)}
 
 
 @router.post("/matching/confirm-all")
@@ -199,14 +229,20 @@ def confirm_one(isin: str, body: MatchBody, db: DbSession, principal: Owner) -> 
 
 @router.post("/syncs/{sync_id}/confirm-empty")
 def confirm_empty(sync_id: int, db: DbSession, principal: Owner) -> dict:
-    """The owner confirms "I hold nothing in Groww": the empty result is applied."""
+    """The owner confirms "I hold nothing in Groww": the empty result is applied. It holds the refresh lock
+    from the newer-sync check to the commit, so a refresh cannot store holdings in between."""
+    user_id = _user_id(db, principal)
     try:
-        groww_apply.confirm_empty(db, user_id=_user_id(db, principal), sync_id=sync_id)
-    except ValueError as exc:  # raised before anything is written
-        if "newer" in str(exc):
-            msg = "A newer Groww refresh exists. Only the latest empty result can be confirmed."
-        else:
-            msg = "This Groww result is not an empty one waiting for your OK."
-        raise HTTPException(status.HTTP_409_CONFLICT, msg) from None
-    db.commit()
+        with groww_sync.refresh_lock():
+            try:
+                groww_apply.confirm_empty(db, user_id=user_id, sync_id=sync_id)
+            except ValueError as exc:  # raised before anything is written
+                if "newer" in str(exc):
+                    msg = "A newer Groww refresh exists. Only the latest empty result can be confirmed."
+                else:
+                    msg = "This Groww result is not an empty one waiting for your OK."
+                raise HTTPException(status.HTTP_409_CONFLICT, msg) from None
+            db.commit()
+    except groww_sync.SyncAlreadyRunning:
+        raise HTTPException(status.HTTP_409_CONFLICT, "already refreshing") from None
     return {"sync_id": sync_id, "status": SYNC_COMPLETE}

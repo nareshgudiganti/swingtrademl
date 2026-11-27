@@ -56,6 +56,7 @@ PrincipalNow = Annotated[Principal, Depends(get_principal)]
 FROM_GROWW = "This comes from Groww and updates on every sync."
 NO_PENDING_SALE = "There is no unconfirmed sale for this stock."
 TOO_MANY_SOLD = "That is more shares than Groww shows as sold."
+PENDING_CHANGED = "The shares waiting to be confirmed have changed. Check the stock again before saving."
 
 
 def _groww_linked(item: UserWatchlistItem) -> bool:
@@ -96,6 +97,9 @@ class SoldBody(BaseModel):
     sold_on: date | None = None
     #: Shares sold. Omitted: all of them (manual rows) or the shares Groww shows as gone (linked rows).
     quantity: float | None = Field(default=None, gt=0, le=1e9)
+    #: Groww-linked rows: the unconfirmed shares the screen showed. When sent, the sale is refused (409) if
+    #: that is no longer the count, so a retried request never takes a second bite of the same drop.
+    pending_qty: float | None = Field(default=None, gt=0, le=1e9)
 
 
 class InstrumentHit(BaseModel):
@@ -388,16 +392,24 @@ def mark_sold(symbol: str, body: SoldBody, db: DbSession, me: Me) -> dict:
         # Only a drop Groww showed can be confirmed, and only once (a retry finds nothing pending).
         if pending is None:
             raise HTTPException(status.HTTP_409_CONFLICT, NO_PENDING_SALE)
+        if body.pending_qty is not None and abs(body.pending_qty - pending) > 1e-9:
+            raise HTTPException(status.HTTP_409_CONFLICT, PENDING_CHANGED)
         if body.quantity is not None and body.quantity > pending + 1e-9:
             raise HTTPException(status.HTTP_409_CONFLICT, TOO_MANY_SOLD)
+        # The sale is of the holding Groww showed as gone: a later re-buy reset the row's date and price.
+        added_at, buy_price = groww_apply.holding_before_last_drop(db, item)
+    else:
+        added_at, buy_price = item.added_at, item.buy_price
     today = tracker.today_ist()
-    bought_on = tracker.ist_date(item.added_at)
+    bought_on = tracker.ist_date(added_at)
     sold_on = body.sold_on or today
     if sold_on > today:
         raise HTTPException(422, "The sell date cannot be in the future.")
     if sold_on < bought_on:
         raise HTTPException(422, "The sell date cannot be before the buy date.")
-    entry, source = item.buy_price, "your_price" if item.buy_price and item.buy_price > 0 else None
+    # Zero is a real cost on a Groww row (bonus shares); a typed price is always above zero.
+    has_price = buy_price is not None and (buy_price > 0 or (linked and buy_price == 0))
+    entry, source = buy_price, "your_price" if has_price else None
     if source is None:
         iid = db.execute(
             select(Instrument.id).where(Instrument.exchange == EXCHANGE, Instrument.tradingsymbol == sym)

@@ -297,6 +297,11 @@ describe('Groww Tracker page', () => {
       expect(saleBody('120.5', '2026-11-21', '')).toEqual({ sell_price: 120.5, sold_on: '2026-11-21' })
     })
 
+    it('a Groww sale also sends the unconfirmed count it showed, so a retry cannot be recorded twice', () => {
+      expect(saleBody('120.5', '2026-11-21', '2', 6)).toEqual({ sell_price: 120.5, sold_on: '2026-11-21', quantity: 2, pending_qty: 6 })
+      expect(saleBody('120.5', '2026-11-21', '2', null)).toEqual({ sell_price: 120.5, sold_on: '2026-11-21', quantity: 2 })
+    })
+
     it('quantity and price inputs are read-only on Groww rows', () => {
       const groww = rowHtml({ source: 'groww' })
       expect(groww).toContain('from Groww')
@@ -453,6 +458,15 @@ describe('Groww Tracker page', () => {
       expect(html).not.toContain('Use ACMEIND')
       expect(html).toContain('aria-label="Find the stock for INE000A01011"') // the search box is on both rows
       expect(html).toContain('aria-label="Find the stock for INE000B01022"')
+    })
+
+    it('matching: two holdings confirmed to one stock say so, and both keep the search box', () => {
+      const clash = (isin: string): GrowwMatchItem => ({ ...UNMATCHED, isin, conflict_symbol: 'ACME' })
+      const html = render('/trademind/groww-tracker', withGroww({ ...GROWW_FAILED, last_status: 'complete' }), (c) =>
+        c.setQueryData(GROWW_MATCH_KEY, { items: [clash('INE000A01011'), clash('INE000A01012')] }),
+      )
+      expect(html.replace(/<!-- -->/g, '').match(/also matched to ACME/g)).toHaveLength(2)
+      expect(html).toContain('aria-label="Find the stock for INE000A01012"')
     })
 
     it('matching that could not be loaded says so, instead of showing nothing', () => {

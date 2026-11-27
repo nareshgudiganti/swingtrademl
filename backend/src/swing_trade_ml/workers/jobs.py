@@ -470,7 +470,8 @@ def _ingest_groww_held(db, already: set[str]) -> None:
     try:
         symbols = sorted(set(groww_held_symbols(db)) - already)
         if symbols:
-            results = ingestion.backfill_symbols(db, symbols, interval="day")
+            # NSE only: Groww holdings are matched to their NSE stock, never a BSE listing of the same symbol.
+            results = ingestion.backfill_symbols(db, symbols, interval="day", exchange="NSE")
             log.info("job.ingest.groww_held_done", symbols=len(results), bars=sum(results.values()))
     except Exception as exc:  # noqa: BLE001 - display-only prices; the rest of the ingest goes on
         log.warning("job.ingest.groww_held_failed", error=type(exc).__name__)

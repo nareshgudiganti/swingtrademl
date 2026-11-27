@@ -192,7 +192,9 @@ def _groww_row(db, user, symbol, **kw):
 
     kw.setdefault("source", SOURCE_GROWW)
     kw.setdefault("held_state", HELD)
-    item = UserWatchlistItem(user_id=user.id, symbol=symbol, buy_price=100.0, quantity=10, **kw)
+    kw.setdefault("buy_price", 100.0)
+    kw.setdefault("quantity", 10)
+    item = UserWatchlistItem(user_id=user.id, symbol=symbol, **kw)
     db.add(item)
     db.flush()
     return item
@@ -307,3 +309,89 @@ def test_sold_manual_row_still_leaves_the_list(client, db_session, stocks):
     assert r.json()["quantity"] == 4
     items = client.get(URL, headers=me).json()["items"]
     assert items[0]["removed_at"] is not None
+
+
+# --- Codex review R-Q41-e4b8a192 ------------------------------------------------------------------
+
+
+def _change(db, item, field: str, old, new, hours_ago: float):
+    from datetime import UTC, datetime, timedelta
+
+    from swing_trade_ml.db.models.user_watchlist import UserWatchlistItemChange
+
+    db.add(
+        UserWatchlistItemChange(
+            item_id=item.id,
+            field=field,
+            old_value=None if old is None else str(old),
+            new_value=None if new is None else str(new),
+            changed_by="groww_sync",
+            changed_at=datetime.now(UTC) - timedelta(hours=hours_ago),
+        )
+    )
+    db.flush()
+
+
+def test_linked_sale_retry_with_the_pending_count_it_saw_is_refused(client, db_session, stocks):
+    """A lost response must not let a retry eat another part of the same drop: the screen sends the
+    pending shares it showed, and the server refuses when that no longer matches."""
+    owner, me = _as(db_session, "wl-gw-retry", "owner")
+    item = _groww_row(db_session, owner, "WLTESTA", groww_isin="INE782A01011")
+    _groww_drop(db_session, item, 10.0, 4.0)
+    body = {"sell_price": 110.0, "quantity": 2, "pending_qty": 6}
+    first = client.post(f"{URL}/WLTESTA/sold", json=body, headers=me)
+    assert first.status_code == 200, first.text
+    again = client.post(f"{URL}/WLTESTA/sold", json=body, headers=me)
+    assert again.status_code == 409
+    assert "changed" in again.json()["detail"]
+    assert [s.quantity for s in _sales(db_session, owner)] == [2]
+    # Without the count (an older screen) the old rules still apply.
+    ok = client.post(f"{URL}/WLTESTA/sold", json={"sell_price": 110.0, "quantity": 1}, headers=me)
+    assert ok.status_code == 200, ok.text
+
+
+def test_linked_sale_after_a_rebuy_uses_the_sold_holdings_date_and_price(client, db_session, stocks):
+    """Sold all four, then Groww showed four bought back at a higher price: the pending sale is of the
+    OLD holding, so it keeps the old buy date and price, and its own sell date is allowed."""
+    from datetime import UTC, datetime, timedelta
+
+    from swing_trade_ml.services import watchlist_tracker as tracker
+
+    owner, me = _as(db_session, "wl-gw-rebuy", "owner")
+    old_added = datetime.now(UTC) - timedelta(days=20)
+    new_added = datetime.now(UTC) - timedelta(days=1)
+    item = _groww_row(db_session, owner, "WLTESTA", groww_isin="INE783A01011", added_at=old_added)
+    item.quantity = 4.0
+    _change(db_session, item, "quantity", 4.0, 0.0, hours_ago=72)  # sold: Groww shows none
+    _change(db_session, item, "held_state", "held", "not_held", hours_ago=72)
+    _change(db_session, item, "added_at", old_added.isoformat(), new_added.isoformat(), hours_ago=24)
+    _change(db_session, item, "quantity", 0.0, 4.0, hours_ago=24)  # bought back
+    _change(db_session, item, "buy_price", 100.0, 150.0, hours_ago=24)
+    item.added_at, item.buy_price = new_added, 150.0
+    db_session.flush()
+
+    sold_on = (datetime.now(UTC) - timedelta(days=3)).astimezone(tracker.IST).date()
+    r = client.post(
+        f"{URL}/WLTESTA/sold", json={"sell_price": 120.0, "sold_on": sold_on.isoformat()}, headers=me
+    )
+    assert r.status_code == 200, r.text
+    out = r.json()
+    assert out["quantity"] == 4
+    assert out["entry_price"] == 100.0
+    assert out["bought_on"] == old_added.astimezone(tracker.IST).date().isoformat()
+
+
+def test_linked_sale_of_zero_cost_shares_counts_the_whole_price_as_profit(client, db_session, stocks):
+    """Groww shows a zero cost for bonus shares, and the sync keeps it as a real price: the sale's profit
+    is the whole sale value, never worked out from a market close."""
+    owner, me = _as(db_session, "wl-gw-bonus", "owner")
+    item = _groww_row(db_session, owner, "WLTESTA", groww_isin="INE784A01011", buy_price=0.0)
+    item.quantity = 5.0
+    _groww_drop(db_session, item, 5.0, 0.0)
+    r = client.post(f"{URL}/WLTESTA/sold", json={"sell_price": 120.0}, headers=me)
+    assert r.status_code == 200, r.text
+    out = r.json()
+    assert out["entry_price"] == 0.0 and out["entry_source"] == "your_price"
+    assert out["profit_amount"] == 600.0
+    assert out["invested"] == 0.0
+    assert out["return_pct"] is None  # a percentage of nothing is not a number

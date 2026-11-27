@@ -767,6 +767,9 @@ export interface GrowwMatchItem {
   suggested_symbol: string | null
   /** The stock the suggestion points at: what a one-tap "Use ..." posts. Null without a suggestion. */
   suggested_instrument_id: number | null
+  /** Set when this holding was confirmed to a stock another Groww holding is also confirmed to: neither is
+   *  followed until the owner picks the right stock for one of them. */
+  conflict_symbol?: string | null
 }
 
 /** GET /groww/matching. Rows with no ISIN cannot be matched, so the server leaves them out of `items` and counts them. */

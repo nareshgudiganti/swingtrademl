@@ -826,7 +826,7 @@ export function Detail({
   const qtyNum = Number(sellQty)
   const qtyOk = sellQty.trim() === '' ? !growwLinked : Number.isFinite(qtyNum) && qtyNum > 0
   const sell = useMutation({
-    mutationFn: () => api.myWatchlistSold(k.symbol, saleBody(sellPrice, soldOn, sellQty)),
+    mutationFn: () => api.myWatchlistSold(k.symbol, saleBody(sellPrice, soldOn, sellQty, k.pending_sale_qty)),
     onSuccess: onRemoved,
     onError: (e) => setError((e as Error).message),
   })

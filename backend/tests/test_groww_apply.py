@@ -18,6 +18,7 @@ from swing_trade_ml.db.models.groww import (
     SOURCE_MANUAL,
     SYNC_COMPLETE,
     SYNC_EMPTY,
+    SYNC_FAILED,
     GrowwHolding,
     GrowwSync,
     StockAlias,
@@ -461,7 +462,14 @@ def test_apply_error_keeps_stored_sync_and_never_raises(db_session, user, wired,
 
     monkeypatch.setattr(gapply, "apply_sync", boom)
     sync = gsync.run_sync(db_session, user_id=user.id, trigger="manual")
-    assert sync.status == SYNC_COMPLETE
+    # Codex R-Q41-e4b8a192 P2: the tracker did not change, so the sync must not read as a success.
+    assert sync.status == SYNC_FAILED
+    assert sync.error_code == "apply"
+    from swing_trade_ml.api.v1.endpoints.groww import status_payload
+
+    payload = status_payload(db_session)
+    assert payload["last_status"] == SYNC_FAILED
+    assert payload["last_success_at"] is None
     assert db_session.query(GrowwSync).filter_by(id=sync.id).count() == 1
     assert db_session.query(GrowwHolding).filter_by(sync_id=sync.id).count() == 1
     assert _history(db_session, item) == []  # the failed apply was rolled back

@@ -29,13 +29,14 @@ def return_pct(entry: float | None, last: float | None) -> float | None:
 
 
 def invested_amount(entry: float | None, quantity: float | None) -> float | None:
-    if entry is None or quantity is None or entry <= 0 or quantity <= 0:
+    # A zero entry is a real cost (Groww bonus shares): nothing invested, every rupee of the value is profit.
+    if entry is None or quantity is None or entry < 0 or quantity <= 0:
         return None
     return entry * quantity
 
 
 def profit_amount(entry: float | None, last: float | None, quantity: float | None) -> float | None:
-    if entry is None or last is None or quantity is None or entry <= 0 or quantity <= 0:
+    if entry is None or last is None or quantity is None or entry < 0 or quantity <= 0:
         return None
     return (last - entry) * quantity
 
@@ -52,7 +53,9 @@ def pick_entry(
 ) -> tuple[float | None, str | None, list[tuple[date, float]]]:
     """(entry price, source, closes from the entry day onward). Closes are oldest first."""
     after = [(d, c) for d, c in closes if d >= added]
-    if buy_price is not None and buy_price > 0:
+    # Zero only ever comes from Groww (a typed price must be above zero): bonus shares cost nothing, and
+    # replacing that with a market close would invent a cost. return_pct stays empty for a zero entry.
+    if buy_price is not None and buy_price >= 0:
         return buy_price, "your_price", after
     if after:
         return after[0][1], "added_close", after

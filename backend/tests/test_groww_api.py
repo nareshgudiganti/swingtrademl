@@ -266,7 +266,11 @@ def test_matching_lists_latest_non_confirmed_rows(client, db_session):
     assert r.status_code == 200, r.text
     r = client.post(API + "/groww/matching/confirm-all", headers=hdr)
     assert r.status_code == 200 and r.json()["confirmed"] == 1
-    assert client.get(API + "/groww/matching", headers=hdr).json()["items"] == []
+    # All three ISINs are now confirmed to the same stock: none is applied, so all three stay listed with the
+    # stock they clash on (Codex R-Q41-e4b8a192 P2), never silently dropped.
+    after = client.get(API + "/groww/matching", headers=hdr).json()["items"]
+    assert {i["isin"] for i in after} == {"INE900A01011", "INE900A01012", "INE900A01013"}
+    assert {i["conflict_symbol"] for i in after} == {"GWMATCHA"}
     bad = client.post(API + "/groww/matching/INE900A01012", json={"instrument_id": 0}, headers=hdr)
     assert bad.status_code == 404
 
@@ -282,6 +286,52 @@ def test_confirm_empty_only_latest(client, db_session):
     assert r.status_code == 200, r.text
     db_session.refresh(new)
     assert new.status == SYNC_COMPLETE
+
+
+def test_matching_lists_confirmed_rows_that_clash_on_one_stock(client, db_session):
+    """Codex R-Q41-e4b8a192 P2: two ISINs confirmed to the same stock are applied to neither, so both must
+    stay in the matching list (with the stock they clash on) for the owner to correct."""
+    _, hdr = _as(db_session, OWNER)
+    a = _inst(db_session, "GWCLASH")
+    ok = _inst(db_session, "GWFINE")
+    sync = _sync(db_session, status=SYNC_COMPLETE, count=3)
+    for isin, inst in (("INE901A01011", a), ("INE901A01012", a), ("INE901A01013", ok)):
+        db_session.add(
+            GrowwHolding(
+                sync_id=sync.id,
+                isin=isin,
+                trading_symbol="X",
+                quantity=1,
+                average_price=5.0,
+                instrument_id=inst.id,
+                match_state=MATCH_CONFIRMED,
+            )
+        )
+    db_session.flush()
+    body = client.get(API + "/groww/matching", headers=hdr).json()
+    assert sorted(i["isin"] for i in body["items"]) == ["INE901A01011", "INE901A01012"]
+    for i in body["items"]:
+        assert i["match_state"] == "needs_matching"
+        assert i["conflict_symbol"] == "GWCLASH"
+        assert i["suggested_instrument_id"] is None
+
+
+def test_confirm_empty_waits_for_a_running_refresh(client, db_session, monkeypatch):
+    """Codex R-Q41-e4b8a192 P2: confirming "I hold nothing" shares the refresh lock, so a refresh that is
+    storing new holdings at that moment cannot be overwritten by the empty result."""
+    _, hdr = _as(db_session, OWNER)
+    empty = _sync(db_session, status=SYNC_EMPTY, started=utcnow() - timedelta(minutes=5))
+
+    class _Busy:
+        def set(self, *args, **kwargs):
+            return False  # another refresh holds the lock
+
+    monkeypatch.setattr(gsync, "_get_redis", _Busy)
+    r = client.post(API + f"/groww/syncs/{empty.id}/confirm-empty", headers=hdr)
+    assert r.status_code == 409
+    assert r.json() == {"detail": "already refreshing"}
+    db_session.refresh(empty)
+    assert empty.status == SYNC_EMPTY
 
 
 # --- jobs ----------------------------------------------------------------------------------------
@@ -319,6 +369,35 @@ def test_groww_held_symbols_backfilled_but_not_watchlisted(db_session, monkeypat
     assert any("GWPRICE" in c for c in calls)
     db_session.refresh(inst)
     assert inst.is_watchlisted is False
+
+
+def test_groww_backfill_asks_for_the_nse_listing_only(db_session, monkeypatch):
+    """Codex R-Q41-e4b8a192 P3: a Groww holding is matched to its NSE stock, so its daily prices come from
+    that listing only, never from a BSE listing that shares the trading symbol."""
+    from swing_trade_ml.services import ingestion
+
+    nse = _inst(db_session, "GWBOTH")
+    global _token
+    _token += 1
+    bse = Instrument(instrument_token=_token, tradingsymbol="GWBOTH", name="GWBOTH Ltd", exchange="BSE")
+    db_session.add(bse)
+    db_session.flush()
+    seen: list[list[int]] = []
+    def capture(db, insts, *args):
+        seen.append([i.id for i in insts])
+        return {}
+
+    monkeypatch.setattr(ingestion, "_backfill_many", capture)
+    ingestion.backfill_symbols(db_session, ["GWBOTH"], interval="day", exchange="NSE")
+    assert seen == [[nse.id]]
+    ingestion.backfill_symbols(db_session, ["GWBOTH"], interval="day")  # no exchange: as before
+    assert sorted(seen[-1]) == sorted([nse.id, bse.id])
+
+    calls: list[dict] = []
+    monkeypatch.setattr(jobs.ingestion, "backfill_symbols", lambda db, symbols, **k: calls.append(k) or {})
+    monkeypatch.setattr(jobs, "groww_held_symbols", lambda db: ["GWBOTH"])
+    jobs._ingest_groww_held(db_session, set())
+    assert calls == [{"interval": "day", "exchange": "NSE"}]
 
 
 def test_groww_backfill_failure_does_not_block_ingest(db_session, monkeypatch):

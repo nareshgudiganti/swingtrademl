@@ -628,7 +628,7 @@ export const api = {
   myWatchlistAdd: (symbol: string, note?: string) => post<MyWatchlistItem>('/me/watchlist', { symbol, note }),
   myWatchlistRemove: (symbol: string) => del<MyWatchlistItem>(`/me/watchlist/${encodeURIComponent(symbol)}`),
   /** Record a sale made in Groww: the stock leaves the tracker and its result is kept in Sold records. */
-  myWatchlistSold: (symbol: string, body: { sell_price: number; sold_on?: string; quantity?: number }) =>
+  myWatchlistSold: (symbol: string, body: { sell_price: number; sold_on?: string; quantity?: number; pending_qty?: number }) =>
     post<SoldRecord>(`/me/watchlist/${encodeURIComponent(symbol)}/sold`, body),
   myWatchlistSoldList: () => get<{ items: SoldRecord[] }>('/me/watchlist/sold'),
   // ------------------------------------------------ Groww holdings sync (owner only) --

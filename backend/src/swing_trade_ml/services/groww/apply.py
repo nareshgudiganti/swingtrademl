@@ -16,6 +16,7 @@ None of these functions commit; the caller does (run_sync commits after applying
 
 from __future__ import annotations
 
+import contextlib
 from collections.abc import Sequence
 from datetime import datetime, time
 from typing import Any
@@ -428,6 +429,51 @@ def pending_sale_qty_for(db: Session, items: Sequence[UserWatchlistItem]) -> dic
             pending = pending + shares if kind == 0 else max(0.0, pending - shares)
         out[item_id] = pending if pending > _EPS else None
     return out
+
+
+def holding_before_last_drop(
+    db: Session, item: UserWatchlistItem
+) -> tuple[datetime | None, float | None]:
+    """(buy date, buy price) of the holding the latest Groww drop sold. A re-buy after that drop resets
+    both on the row (the change history keeps the old values), so a pending sale of the earlier holding
+    must read them as they were at the drop: the oldest change after the drop holds the value it had."""
+    drop_at = None
+    for old_s, new_s, at in db.execute(
+        select(
+            UserWatchlistItemChange.old_value,
+            UserWatchlistItemChange.new_value,
+            UserWatchlistItemChange.changed_at,
+        ).where(
+            UserWatchlistItemChange.item_id == item.id,
+            UserWatchlistItemChange.field == "quantity",
+            UserWatchlistItemChange.changed_by == CHANGED_BY,
+        )
+    ).all():
+        old, new = _parse(old_s), _parse(new_s)
+        if old is not None and new is not None and new < old and (drop_at is None or at > drop_at):
+            drop_at = at
+    added_at, buy_price = item.added_at, item.buy_price
+    if drop_at is None:
+        return added_at, buy_price
+    for field in ("added_at", "buy_price"):
+        first = db.scalar(
+            select(UserWatchlistItemChange.old_value)
+            .where(
+                UserWatchlistItemChange.item_id == item.id,
+                UserWatchlistItemChange.field == field,
+                UserWatchlistItemChange.changed_at > drop_at,
+            )
+            .order_by(UserWatchlistItemChange.changed_at, UserWatchlistItemChange.id)
+            .limit(1)
+        )
+        if first is None:
+            continue
+        if field == "added_at":
+            with contextlib.suppress(ValueError):
+                added_at = datetime.fromisoformat(first)
+        else:
+            buy_price = _parse(first)
+    return added_at, buy_price
 
 
 def pending_sale_qty(db: Session, item: UserWatchlistItem) -> float | None:

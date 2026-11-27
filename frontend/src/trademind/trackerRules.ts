@@ -271,9 +271,21 @@ export function buildPatch(item: WatchTrackerItem, form: EditForm, today: string
 }
 
 /** The sell request for the Sold form: quantity is sent only when typed (or when Groww shows fewer shares). */
-export function saleBody(sellPrice: string, soldOn: string, qtyText: string): { sell_price: number; sold_on: string; quantity?: number } {
+/** The sale request. `pendingQty` is the unconfirmed Groww count the screen showed: the server refuses the sale if
+ *  that count has changed since, so a retried request (say, after a lost answer) is never recorded twice. */
+export function saleBody(
+  sellPrice: string,
+  soldOn: string,
+  qtyText: string,
+  pendingQty?: number | null,
+): { sell_price: number; sold_on: string; quantity?: number; pending_qty?: number } {
   const q = Number(qtyText)
-  return { sell_price: Number(sellPrice), sold_on: soldOn, ...(qtyText.trim() !== '' ? { quantity: q } : {}) }
+  return {
+    sell_price: Number(sellPrice),
+    sold_on: soldOn,
+    ...(qtyText.trim() !== '' ? { quantity: q } : {}),
+    ...(pendingQty != null && pendingQty > 0 ? { pending_qty: pendingQty } : {}),
+  }
 }
 
 /** Groww no longer lists this stock. */

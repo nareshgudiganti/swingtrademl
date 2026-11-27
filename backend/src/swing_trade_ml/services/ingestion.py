@@ -517,7 +517,7 @@ def backfill_watchlist(
 
 def backfill_symbols(
     db: Session, symbols: list[str], interval: str = "day",
-    days: int | None = None, incremental: bool = True,
+    days: int | None = None, incremental: bool = True, exchange: str | None = None,
 ) -> dict[str, int]:
     """Backfill an explicit symbol list, independent of the watchlist flag —
     the daily top-up for a strategy that deliberately keeps its own
@@ -526,11 +526,10 @@ def backfill_symbols(
     path — predict_watchlist/Recommendations, refresh_quotes, coverage — on
     purpose, so it's never scored with the wrong model)."""
     wanted = [s.strip().upper() for s in symbols if s.strip()]
-    instruments = list(
-        db.execute(select(Instrument).where(Instrument.tradingsymbol.in_(wanted)))
-        .scalars()
-        .all()
-    )
+    query = select(Instrument).where(Instrument.tradingsymbol.in_(wanted))
+    if exchange is not None:  # e.g. Groww holdings: only the NSE listing they were matched to
+        query = query.where(Instrument.exchange == exchange)
+    instruments = list(db.execute(query).scalars().all())
     if not instruments:
         log.warning("ingestion.backfill.no_symbols_matched", symbols=wanted)
         return {}

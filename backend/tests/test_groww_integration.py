@@ -712,6 +712,7 @@ MATCH_KEYS = {
     "match_state",
     "suggested_symbol",
     "suggested_instrument_id",
+    "conflict_symbol",
 }
 
 

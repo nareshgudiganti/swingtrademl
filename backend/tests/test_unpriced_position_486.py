@@ -1,7 +1,8 @@
 """#486 (from the #240 verification): a position nobody has priced is not shown as exactly flat.
 
-The row still carries the entry price as its stand-in (totals and old callers keep working), but now says so:
-`price_status` is "none" and `has_price` is false, so a screen can say "No price yet" instead of "0.0%".
+(Superseded in part by #281 D2: the stand-in entry price is gone, price and percent are now null.)
+The row said so with:
+`price_status` is "none" and `has_price` is false, so a screen can say "Price unavailable", not "0.0%".
 Failed on `5de3b9c` (the row had no such field); passes with the fix.
 """
 
@@ -59,9 +60,10 @@ def test_a_priced_position_says_so(client, db_session):
     assert row["current_price"] == 103.0 and round(row["unrealized_pnl_pct"], 4) == 0.03
 
 
-def test_the_stand_in_numbers_stay_so_totals_and_older_callers_are_unchanged(client, db_session):
+def test_the_stand_in_numbers_are_gone_but_the_value_stays_at_cost_so_totals_are_whole(client, db_session):
+    """#281 D2 supersedes the #486 stand-in: price and percent are null, never the entry price as live;
+    the value stays at cost so a sum over the book still counts the position."""
     _position(db_session, "STANDIN486", None)
     row = _rows(client)["STANDIN486"]
-    assert (
-        row["current_price"] == 100.0 and row["unrealized_pnl_pct"] == 0.0
-    )  # the entry price, flagged by has_price
+    assert row["current_price"] is None and row["unrealized_pnl_pct"] is None
+    assert row["current_value"] == row["invested"]

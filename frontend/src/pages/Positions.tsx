@@ -7,6 +7,7 @@ import Stat from '../components/Stat'
 import { Empty, ErrorBox, Loading } from '../components/Loading'
 import StockDetailModal, { type StockDetail } from '../components/StockDetailModal'
 import { formatCurrency, formatDate, formatPercent, formatSignedPercent, pnlClass } from '../lib/format'
+import { PRICE_UNAVAILABLE, priceUnavailableText } from '../lib/priceUnavailable'
 import { usePlan } from '../lib/plan'
 import { strategyLabel } from '../lib/tiers'
 
@@ -191,6 +192,7 @@ export function PositionsTable({
                       tone: ACTION_TONE[p.action_code],
                       actionLabel: ACTION_LABEL_TEXT[p.action_code],
                       price: p.current_price,
+                      priceAsOf: p.price_as_of,
                       entryPrice: p.entry_price,
                       stopLoss: p.stop_loss,
                       takeProfit: p.take_profit,
@@ -216,18 +218,24 @@ export function PositionsTable({
               </td>
               <td className="num">{p.quantity}</td>
               <td className="num">{formatCurrency(p.entry_price)}</td>
-              <td className="num">{formatCurrency(p.current_price)}</td>
+              <td className="num">
+                {p.current_price == null ? priceUnavailableText(p.price_as_of) : formatCurrency(p.current_price)}
+              </td>
               <td className={`num ${chg == null ? 'muted' : pnlClass(chg)}`}>
                 {chg == null ? '—' : formatSignedPercent(chg)}
               </td>
               <td className="num">{formatCurrency(p.invested)}</td>
-              <td className="num">{formatCurrency(p.current_value)}</td>
+              <td className="num">{p.current_price == null ? '—' : formatCurrency(p.current_value)}</td>
               <td className={`num ${p.day_pnl == null ? 'muted' : pnlClass(p.day_pnl)}`}>
                 {p.day_pnl == null ? '—' : formatCurrency(p.day_pnl)}
               </td>
-              <td className={`num ${pnlClass(p.unrealized_pnl)}`}>{formatCurrency(p.unrealized_pnl)}</td>
-              <td className={`num ${pnlClass(p.unrealized_pnl)}`}>
-                {p.has_price === false ? 'No price yet' : formatSignedPercent(p.unrealized_pnl_pct)}
+              <td className={`num ${pnlClass(p.unrealized_pnl ?? 0)}`}>
+                {p.unrealized_pnl == null ? '—' : formatCurrency(p.unrealized_pnl)}
+              </td>
+              <td className={`num ${pnlClass(p.unrealized_pnl ?? 0)}`}>
+                {p.unrealized_pnl_pct == null || p.has_price === false
+                  ? PRICE_UNAVAILABLE
+                  : formatSignedPercent(p.unrealized_pnl_pct)}
               </td>
               <td>
                 <span className={`badge ${ACTION_BADGE[p.action_code]}`} title={p.action_label}>
@@ -317,13 +325,18 @@ export default function Positions() {
   if (positions.isLoading) return <Loading />
   if (positions.error) return <ErrorBox error={positions.error} />
 
-  const totalPnl = unsorted.reduce((sum, p) => sum + p.unrealized_pnl, 0)
+  const totalPnl = unsorted.reduce((sum, p) => sum + (p.unrealized_pnl ?? 0), 0)
   const dayPnl = unsorted.reduce((sum, p) => sum + (p.day_pnl ?? 0), 0)
   const invested = unsorted.reduce((sum, p) => sum + p.invested, 0)
   const currentValue = unsorted.reduce((sum, p) => sum + p.current_value, 0)
-  const absoluteReturnPct = invested ? totalPnl / invested : 0
+  // The return is measured on the priced positions only: an unpriced one has no gain or loss to count.
+  const pricedInvested = unsorted.reduce((sum, p) => sum + (p.has_price === false ? 0 : p.invested), 0)
+  const absoluteReturnPct = pricedInvested ? totalPnl / pricedInvested : 0
 
-  const bySizeOfReturn = [...unsorted].sort((a, b) => b.unrealized_pnl_pct - a.unrealized_pnl_pct)
+  // Only priced positions can be "doing best" or "doing worst"; an unpriced one has no return.
+  const bySizeOfReturn = unsorted
+    .filter((p) => p.unrealized_pnl_pct != null && p.current_price != null)
+    .sort((a, b) => (b.unrealized_pnl_pct ?? 0) - (a.unrealized_pnl_pct ?? 0))
   const maxGainer = bySizeOfReturn[0]
   const maxLoser = bySizeOfReturn[bySizeOfReturn.length - 1]
 
@@ -413,19 +426,19 @@ export default function Positions() {
             sub={`${formatSignedPercent(absoluteReturnPct)} on ${formatCurrency(invested)} invested`}
             tone={pnlClass(totalPnl) as 'pos' | 'neg' | 'flat'}
           />
-          {maxGainer && maxGainer.unrealized_pnl_pct > 0 && (
+          {maxGainer && (maxGainer.unrealized_pnl_pct ?? 0) > 0 && (
             <Stat
               label="Doing best"
               value={maxGainer.symbol}
-              sub={`${formatCurrency(maxGainer.current_price)}  (${formatSignedPercent(maxGainer.unrealized_pnl_pct)})`}
+              sub={`${formatCurrency(maxGainer.current_price ?? 0)}  (${formatSignedPercent(maxGainer.unrealized_pnl_pct ?? 0)})`}
               tone="pos"
             />
           )}
-          {maxLoser && maxLoser.unrealized_pnl_pct < 0 && (
+          {maxLoser && (maxLoser.unrealized_pnl_pct ?? 0) < 0 && (
             <Stat
               label="Doing worst"
               value={maxLoser.symbol}
-              sub={`${formatCurrency(maxLoser.current_price)}  (${formatSignedPercent(maxLoser.unrealized_pnl_pct)})`}
+              sub={`${formatCurrency(maxLoser.current_price ?? 0)}  (${formatSignedPercent(maxLoser.unrealized_pnl_pct ?? 0)})`}
               tone="neg"
             />
           )}

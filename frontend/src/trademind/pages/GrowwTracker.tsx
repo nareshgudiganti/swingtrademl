@@ -48,6 +48,7 @@ import {
 } from '../trackerRules'
 import { useTrackerTab } from '../trackerTab'
 import { AddStock } from './WatchlistNew'
+import { PRICE_UNAVAILABLE } from '../../lib/priceUnavailable'
 import '../newlook-w2.css'
 import '../newlook-tracker.css'
 
@@ -354,7 +355,7 @@ function Bar({ ret }: { ret: number | null }) {
   const mark = (v: number) => ((v - BAR_LO) / (BAR_HI - BAR_LO)) * 100
   return (
     <>
-      <div className="gt-prog" role="img" aria-label={ret == null ? 'No price yet' : `Return ${fmtPct(ret)} between the stop and the target`}>
+      <div className="gt-prog" role="img" aria-label={ret == null ? PRICE_UNAVAILABLE : `Return ${fmtPct(ret)} between the stop and the target`}>
         <b style={{ left: `${mark(0)}%` }} />
         {x != null && <i style={{ left: `${x}%` }} />}
       </div>

@@ -14,6 +14,7 @@ import { PageState, QueryNotice, StaleNotice } from '../PageState'
 import TaxExportCard from '../TaxExport'
 import RealSoldResults from './RealSoldResults'
 import { actionLabelText } from '../scoreText'
+import { PRICE_UNAVAILABLE, priceUnavailableText } from '../../lib/priceUnavailable'
 
 const TABS = ['My holdings', 'Straight from Zerodha', 'Real-money report'] as const
 type TabId = (typeof TABS)[number]
@@ -88,7 +89,7 @@ const VERDICT: Record<DetailedPosition['action_code'], { head: string; tone: 're
 
 function stopText(p: DetailedPosition) {
   if (p.stop_loss == null) return '—'
-  const gap = p.current_price > 0 ? (p.current_price - p.stop_loss) / p.current_price : null
+  const gap = p.current_price != null && p.current_price > 0 ? (p.current_price - p.stop_loss) / p.current_price : null
   if (gap == null) return rupees(p.stop_loss)
   return `${rupees(p.stop_loss)} (${pct(Math.abs(gap), 1)} ${gap < 0 ? 'below, passed' : 'away'})`
 }
@@ -123,8 +124,9 @@ function SoldDialog({
       </p>
       <label style={{ display: 'block' }}>
         <span className="tm-dim" style={{ fontSize: '0.75rem' }}>
-          The price you sold at, per share (₹) — type the real price from Zerodha (today’s price: ₹
-          {position.current_price.toLocaleString('en-IN', { maximumFractionDigits: 2 })})
+          The price you sold at, per share (₹) — type the real price from Zerodha ({position.current_price == null
+            ? `today’s price: ${priceUnavailableText(position.price_as_of)}`
+            : `today’s price: ₹${position.current_price.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`})
         </span>
         <input
           className="tm-input"
@@ -245,7 +247,8 @@ function SellRealDialog({
     >
       <p style={{ margin: '0 0 0.6rem' }}>
         This sends a <strong>real sell order to Zerodha</strong> at the market price. You hold {position.quantity}{' '}
-        shares; about {rupees(position.current_price * (quantity || 0))} at today’s price.
+        shares{position.current_price == null ? '. ' : `; about ${rupees(position.current_price * (quantity || 0))} at today’s price. `}
+        {position.current_price == null && priceUnavailableText(position.price_as_of)}
       </p>
       <label style={{ display: 'block' }}>
         <span className="tm-dim" style={{ fontSize: '0.75rem' }}>Shares to sell</span>
@@ -396,10 +399,14 @@ function HoldingsTable({
                 <td className="tm-dim">{day(p.entry_at)}</td>
                 <td className="tm-right">{p.quantity}</td>
                 <td className="tm-right">{rupees(p.entry_price)}</td>
-                <td className="tm-right">{rupees(p.current_price)}</td>
-                <td className="tm-right">{rupees(p.current_value)}</td>
-                <td className={`tm-right ${toneClass(p.unrealized_pnl)}`}>
-                  {p.has_price === false ? 'No price yet' : `${signedRupees(p.unrealized_pnl)} (${signed(p.unrealized_pnl_pct * 100)})`}
+                <td className="tm-right">
+                  {p.current_price == null ? priceUnavailableText(p.price_as_of) : rupees(p.current_price)}
+                </td>
+                <td className="tm-right">{p.current_price == null ? '—' : rupees(p.current_value)}</td>
+                <td className={`tm-right ${toneClass(p.unrealized_pnl ?? 0)}`}>
+                  {p.unrealized_pnl == null || p.unrealized_pnl_pct == null || p.has_price === false
+                    ? PRICE_UNAVAILABLE
+                    : `${signedRupees(p.unrealized_pnl)} (${signed(p.unrealized_pnl_pct * 100)})`}
                 </td>
                 <td className="tm-right">{p.stop_loss != null ? rupees(p.stop_loss) : '—'}</td>
                 <td className="tm-right">{p.take_profit != null ? rupees(p.take_profit) : '—'}</td>
@@ -524,6 +531,7 @@ function HoldingsTab() {
   const rows = tracked.data ?? []
   const totals = useMemo(() => {
     const invested = rows.reduce((s, p) => s + p.invested, 0)
+    // An unpriced holding is valued at cost by the server, so it adds nothing to the gain or loss.
     const current = rows.reduce((s, p) => s + p.current_value, 0)
     return { invested, current, pnl: current - invested }
   }, [rows])
@@ -619,8 +627,11 @@ function HoldingsTab() {
                   <ScoreTrail p={p} />
                 </div>
                 <div className="tm-dim" style={{ marginTop: '0.4rem' }}>
-                  {p.quantity} shares · paid {rupees(p.entry_price)} · now {rupees(p.current_price)} ·{' '}
-                  <span className={toneClass(p.unrealized_pnl)}>{signedRupees(p.unrealized_pnl)}</span>
+                  {p.quantity} shares · paid {rupees(p.entry_price)} · now{' '}
+                  {p.current_price == null ? priceUnavailableText(p.price_as_of) : rupees(p.current_price)} ·{' '}
+                  {p.unrealized_pnl != null && (
+                    <span className={toneClass(p.unrealized_pnl)}>{signedRupees(p.unrealized_pnl)}</span>
+                  )}
                   <br />
                   Stop-loss: {stopText(p)}
                 </div>

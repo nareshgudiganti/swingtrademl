@@ -7,14 +7,20 @@ import type { DetailedPosition } from '../../api/types'
 import ScoreTrail from '../ScoreTrail'
 import { inr, signed, toneClass } from '../ui'
 import { halfText, plan, stopText, targetText } from '../tradingRules'
+import { priceUnavailableText } from '../../lib/priceUnavailable'
 import { NO_PRICE_LEVEL, barPercent, levelFor, levels, priceAt, type Level } from './positionLevels'
 import '../newlook-w4.css'
 
-export const retPct = (p: DetailedPosition) => p.unrealized_pnl_pct * 100
-/** False only when the server says nobody has priced the position (an older server sends no flag: priced). */
-export const hasPrice = (p: DetailedPosition) => p.has_price !== false
-/** The return as text, or "No price yet": a position nobody has priced is never shown as exactly flat (#486). */
-export const returnText = (p: DetailedPosition) => (hasPrice(p) ? signed(retPct(p)) : 'No price yet')
+export const retPct = (p: DetailedPosition) => (p.unrealized_pnl_pct ?? 0) * 100
+/** False when the server says nobody has priced the position, or sends no price or return (an older server sends no flag: priced). */
+export const hasPrice = (p: DetailedPosition) =>
+  p.has_price !== false && p.current_price != null && p.unrealized_pnl_pct != null
+/** The return as text, or "Price unavailable" (with the last price time when known): a position nobody has priced is
+ *  never shown as exactly flat (#486, #281). */
+export const returnText = (p: DetailedPosition) => (hasPrice(p) ? signed(retPct(p)) : priceUnavailableText(p.price_as_of))
+/** The price as ₹ text, or "Price unavailable". */
+export const priceText = (p: DetailedPosition) =>
+  hasPrice(p) ? `₹${inr(p.current_price ?? 0)}` : priceUnavailableText(p.price_as_of)
 export const levelOf = (p: DetailedPosition): Level =>
   hasPrice(p) ? levelFor(retPct(p), p.suggestion === 'WATCH') : NO_PRICE_LEVEL
 
@@ -69,7 +75,7 @@ export function ActToday({ rows, onPick }: { rows: DetailedPosition[]; onPick: (
                 <b>
                   {p.symbol} — {l.title}
                 </b>
-                <span className={`op-act-pct ${toneClass(p.unrealized_pnl)}`}>{returnText(p)}</span>
+                <span className={`op-act-pct ${toneClass(p.unrealized_pnl ?? 0)}`}>{returnText(p)}</span>
                 <span>{l.advice}</span>
               </button>
             )
@@ -116,10 +122,10 @@ export function DetailPanel({
         </span>
       </div>
       <div className="tm-dim">Current return</div>
-      <div className={`op-panel-ret ${toneClass(p.unrealized_pnl)}`}>
+      <div className={`op-panel-ret ${toneClass(p.unrealized_pnl ?? 0)}`}>
         {hasPrice(p) ? (
           <>
-            {signed(retPct(p))} <small>({rupee(p.unrealized_pnl, 0)})</small>
+            {signed(retPct(p))} <small>({rupee(p.unrealized_pnl ?? 0, 0)})</small>
           </>
         ) : (
           returnText(p)
@@ -131,7 +137,7 @@ export function DetailPanel({
           <dt>Entry price</dt>
           <dd>₹{inr(p.entry_price)}</dd>
           <dt>Current price</dt>
-          <dd>₹{inr(p.current_price)}</dd>
+          <dd>{priceText(p)}</dd>
           <dt>Quantity</dt>
           <dd>{p.quantity}</dd>
           <dt>Invested</dt>

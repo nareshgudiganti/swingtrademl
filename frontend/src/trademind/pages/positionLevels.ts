@@ -70,9 +70,9 @@ export const priceAt = (entry: number, pct: number) => entry * (1 + pct / 100)
 /** What a position nobody has priced yet reads as: never "Hold: nothing to do", which would be a guess (#486). */
 export const NO_PRICE_LEVEL: Level = {
   state: 'no_price',
-  tag: 'No price yet',
-  title: 'No price yet',
-  advice: 'No price has been stored for this stock yet, so its stop and target cannot be checked. Check it by hand.',
+  tag: 'Price unavailable',
+  title: 'Price unavailable',
+  advice: 'No price has been stored for this stock, so its stop and target cannot be checked. Check it by hand.',
   tone: 'grey',
   act: true, // listed under "Act today": its stop and target cannot be checked until someone looks
 }

@@ -307,9 +307,9 @@ export default function Portfolio() {
                         <td><StockLink symbol={h.symbol} /></td>
                         <td className="tm-right tm-num">{p ? p.quantity : '—'}</td>
                         <td className="tm-right tm-num">{p ? `₹${inr(p.entry_price)}` : '—'}</td>
-                        <td className="tm-right tm-num">{p ? `₹${inr(p.current_value, 0)}` : '—'}</td>
-                        <td className={`tm-right tm-num ${p ? toneClass(p.unrealized_pnl) : ''}`}>
-                          {p ? `${p.unrealized_pnl >= 0 ? '+' : '−'}₹${inr(Math.abs(p.unrealized_pnl), 0)}` : '—'}
+                        <td className="tm-right tm-num">{p && p.current_price != null ? `₹${inr(p.current_value, 0)}` : '—'}</td>
+                        <td className={`tm-right tm-num ${p ? toneClass(p.unrealized_pnl ?? 0) : ''}`}>
+                          {p && p.unrealized_pnl != null ? `${p.unrealized_pnl >= 0 ? '+' : '−'}₹${inr(Math.abs(p.unrealized_pnl), 0)}` : '—'}
                         </td>
                         <td>
                           <WordTag word={finalWord(h)} />

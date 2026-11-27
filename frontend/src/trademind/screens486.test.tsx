@@ -78,14 +78,17 @@ const position = (over: Partial<DetailedPosition>): DetailedPosition =>
   }) as unknown as DetailedPosition
 
 describe('a position nobody has priced is not shown as flat', () => {
-  it('says "No price yet" instead of 0.0%', () => {
-    expect(returnText(position({ has_price: false, price_status: 'none' }))).toBe('No price yet')
+  it('says "Price unavailable" instead of 0.0%, with the last price time when known (#281 D2)', () => {
+    expect(returnText(position({ has_price: false, price_status: 'none', unrealized_pnl_pct: null }))).toBe('Price unavailable')
+    expect(
+      returnText(position({ has_price: false, price_status: 'none', price_as_of: '2026-11-25T10:00:00Z' })),
+    ).toBe('Price unavailable · last price 25 Nov 15:30 IST')
   })
 
   it('has a level that says so, and is not "Hold: nothing to do"', () => {
     const level = levelOf(position({ has_price: false, price_status: 'none' }))
     expect(level.state).toBe('no_price')
-    expect(level.title).toBe('No price yet')
+    expect(level.title).toBe('Price unavailable')
     expect(level.act).toBe(true) // flagged under "Act today" (#486 review)
     expect(level.advice).not.toMatch(/Keep holding/)
   })

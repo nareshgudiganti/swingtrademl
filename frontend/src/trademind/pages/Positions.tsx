@@ -18,7 +18,8 @@ import { Confirm } from '../Confirm'
 import ScoreTrail from '../ScoreTrail'
 import { SCORE_HINT, scoreLabel, withoutScorePercent } from '../scoreText'
 import { halfText, plan } from '../tradingRules'
-import { hasPrice, returnText } from './PositionParts'
+import { hasPrice, priceText, retPct, returnText } from './PositionParts'
+import { priceUnavailableText } from '../../lib/priceUnavailable'
 
 const TABS = ['Position Overview', 'Re-evaluation & Exit', 'Notes'] as const
 type TabId = (typeof TABS)[number]
@@ -197,9 +198,9 @@ function PositionsBody() {
           <dt>Entry Price</dt>
           <dd>{pos ? `₹${inr(pos.entry_price)}` : '—'}</dd>
           <dt>Current Price</dt>
-          <dd>{pos && hasPrice(pos) ? `₹${inr(pos.current_price)}` : pos ? 'No price yet' : '—'}</dd>
+          <dd>{pos ? priceText(pos) : '—'}</dd>
           <dt>P&amp;L</dt>
-          <dd className={pos && hasPrice(pos) ? toneClass(pos.unrealized_pnl_pct) : undefined}>
+          <dd className={pos && hasPrice(pos) ? toneClass(pos.unrealized_pnl_pct ?? 0) : undefined}>
             {pos ? returnText(pos) : '—'}
           </dd>
           <dt>Quantity</dt>
@@ -267,10 +268,10 @@ function PositionsBody() {
         {pos && (
           <>
             <span className="tm-num" style={{ fontSize: '1.1rem', fontWeight: 600 }}>
-              {hasPrice(pos) ? `₹${inr(pos.current_price)}` : 'No price yet'}
+              {priceText(pos)}
             </span>
-            <span className={`tm-num ${hasPrice(pos) ? toneClass(pos.unrealized_pnl_pct) : 'tm-dim'}`} style={{ fontWeight: 600 }}>
-              {hasPrice(pos) ? signed(pos.unrealized_pnl_pct * 100) : ''}
+            <span className={`tm-num ${hasPrice(pos) ? toneClass(pos.unrealized_pnl_pct ?? 0) : 'tm-dim'}`} style={{ fontWeight: 600 }}>
+              {hasPrice(pos) ? signed(retPct(pos)) : ''}
             </span>
           </>
         )}
@@ -316,7 +317,7 @@ function PositionsBody() {
           onClose={() => { setClosing(false); setPickedId(null) }}
         >
           This sends a sell order now for all {pos.quantity} shares of {pos.symbol} held by {ownerOf(pos.strategy_name)}
-          (bought {formatDate(pos.entry_at)}), at the market price (about ₹{inr(pos.current_price)} a share).{' '}
+          (bought {formatDate(pos.entry_at)}), at the market price ({hasPrice(pos) ? `about ₹${inr(pos.current_price ?? 0)} a share` : priceUnavailableText(pos.price_as_of)}).{' '}
           {realButClosed && market.data
             ? `The market is closed right now (${market.data.plain.replace(/^Market closed · /, '')}), so a real-money sale cannot be sent until then. `
             : ''}

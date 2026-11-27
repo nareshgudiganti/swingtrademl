@@ -31,7 +31,7 @@ from swing_trade_ml.core.enums import (
     TradingMode,
 )
 from swing_trade_ml.core.strategy_policy import is_staged
-from swing_trade_ml.db.models.market import Candle, Instrument
+from swing_trade_ml.db.models.market import Candle, Instrument, Quote
 from swing_trade_ml.db.models.trading import Order, Position, Signal, Strategy, Trade
 from swing_trade_ml.ml.registry import get_active_model
 from swing_trade_ml.ml.sector_map import get_sector_bucket, sector_display_name
@@ -262,19 +262,38 @@ def detailed_positions(
         ):
             prev_close_by_instrument[inst_id] = float(close)
 
+    # When the latest cached quote for each stock was taken (display only). Null when no quote exists.
+    quote_ts_by_instrument: dict[int, datetime] = {}
+    if rows:
+        for inst_id, quote_ts in db.execute(
+            select(Quote.instrument_id, Quote.ts).where(
+                Quote.instrument_id.in_({position.instrument_id for position, _, _ in rows})
+            )
+        ):
+            quote_ts_by_instrument[inst_id] = quote_ts
+
     trails = score_history.trails_for(db, [position.id for position, _, _ in rows])
     exits_enabled, check_job_ok = sell_labels.exit_check_health(db)
 
     result = []
     for position, symbol, name in rows:
-        current = position.current_price or position.entry_price
+        has_price = bool(position.current_price)
+        # A never-priced position is NOT valued at its entry price as if that were a live price (#281 D2):
+        # price, percent and today's move are null. `current_value` stays at cost so a sum over the book keeps
+        # the position (display only; risk and equity code read services/portfolio.py, not this endpoint).
+        current = position.current_price if has_price else None
+        value_price = current if has_price else position.entry_price
         invested = position.entry_price * position.quantity
 
         entered_today = position.entry_at.astimezone(IST) >= today_start_ist
         day_reference = (
             position.entry_price if entered_today else prev_close_by_instrument.get(position.instrument_id)
         )
-        day_pnl = (current - day_reference) * position.quantity if day_reference is not None else None
+        day_pnl = (
+            (current - day_reference) * position.quantity
+            if has_price and day_reference is not None
+            else None
+        )
 
         pending_at = latest_pending_exit.get((position.instrument_id, position.strategy_id))
         exit_signal_pending = pending_at is not None and pending_at >= position.entry_at
@@ -309,14 +328,18 @@ def detailed_positions(
                 "quantity": position.quantity,
                 "entry_price": position.entry_price,
                 "current_price": current,
-                # False for a position nobody has priced yet: `current_price` is then only the entry price
-                # standing in, so a screen must say "No price yet", never "0.0%" (#486).
-                "has_price": bool(position.current_price),
-                "price_status": "ok" if position.current_price else "none",
+                # False for a never-priced position: `current_price` and `unrealized_pnl_pct` are then
+                # null, so a screen says "Price unavailable", never "0.0%" (#486, #281).
+                "has_price": has_price,
+                "price_status": "ok" if has_price else "none",
+                # When the latest quote for this stock was taken (ISO, UTC); null when none is known.
+                "price_as_of": quote_ts_by_instrument.get(position.instrument_id),
                 "invested": invested,
-                "current_value": current * position.quantity,
-                "unrealized_pnl": position.unrealized_pnl,
-                "unrealized_pnl_pct": (current / position.entry_price - 1) if position.entry_price else 0.0,
+                "current_value": value_price * position.quantity,
+                "unrealized_pnl": position.unrealized_pnl if has_price else None,
+                "unrealized_pnl_pct": (
+                    (current / position.entry_price - 1) if has_price and position.entry_price else None
+                ),
                 "day_pnl": day_pnl,
                 "stop_loss": position.stop_loss,
                 "take_profit": position.take_profit,
@@ -358,7 +381,7 @@ def detailed_positions(
                     position,
                     action_code,
                     action_label,
-                    (current / position.entry_price - 1) if position.entry_price else 0.0,
+                    (current / position.entry_price - 1) if has_price and position.entry_price else 0.0,
                 ),
             }
         )

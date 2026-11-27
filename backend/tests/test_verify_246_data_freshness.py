@@ -250,10 +250,7 @@ def test_a8_the_backtest_places_each_bar_on_its_ist_trading_day(db_session):
     assert _last_close(frame, date(2026, 11, 30)) == 100.0  # backtest.py:109 returns 200.0 (Dec 1's bar)
 
 
-@pytest.mark.xfail(
-    **GAP,
-    reason="gap a9: late and corrected candles are stored (a correction also invalidates feature snapshots at write time) but no screen, API or report reads them back; this test checks imports only",
-)
+# a9 closed by #565: services/admin_candle_log.py reads both tables for the admin screen.
 def test_a9_late_and_corrected_candles_can_be_read_back_outside_the_writer():
     readers = set()
     for path in SRC.rglob("*.py"):

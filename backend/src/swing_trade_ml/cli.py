@@ -5,7 +5,9 @@ swingtrade create-user --username admin --password "a long passphrase here" --ro
 swingtrade sync-instruments
 swingtrade sync-context-indices
 swingtrade backfill --days 1825
-swingtrade train --algorithm lightgbm --activate
+swingtrade train --algorithm lightgbm
+swingtrade promote 42 --approval-id 7   (approval recorded by the signed-in owner: POST /ml/approvals)
+swingtrade rollback 41 --approval-id 8
 swingtrade scan
 swingtrade status
 swingtrade brain modules | set M02 off | run [--as-of 2026-09-15] | replay-week [--days 5] |
@@ -391,9 +393,11 @@ def cmd_train(args: argparse.Namespace) -> int:
     from swing_trade_ml.db.session import session_scope
     from swing_trade_ml.ml.train import train_model
 
-    if args.activate and (refusal := promotion_refusal()):
-        print(f"❌ {refusal}")
-        print("   Nothing was trained. Run again without --activate to train and save the model.")
+    if args.activate:
+        # #328: activation needs the owner's approval of the finished file, so it is never done here.
+        print(f"❌ {promotion_refusal() or 'Activating straight after training is not allowed.'}")
+        print("   Nothing was trained. Run again without --activate to train and save the model,")
+        print("   review it, then make it active with `swingtrade promote`.")
         return 1
 
     with session_scope() as db:
@@ -448,7 +452,7 @@ def cmd_train(args: argparse.Namespace) -> int:
         )
         print(f"   status           {model.status}")
         if not args.activate:
-            print(f"\n   Activate it with: POST /api/v1/ml/models/{model.id}/activate")
+            print(f"\n   After review, make it active with: swingtrade promote {model.id} (owner approval)")
 
         top = list(model.feature_importance.items())[:10]
         if top:
@@ -456,6 +460,32 @@ def cmd_train(args: argparse.Namespace) -> int:
             for name, value in top:
                 print(f"     {name:<22} {value:.4f}")
     return 0
+
+
+def _promotion_command(args: argparse.Namespace, action: str) -> int:
+    """`swingtrade promote` / `rollback` (#328): spends an approval the signed-in owner recorded through
+    POST /ml/approvals. No approver name is typed here; the approval carries who approved."""
+    from swing_trade_ml.db.session import session_scope
+    from swing_trade_ml.ml import promotion
+
+    with session_scope() as db:
+        fn = promotion.promote if action == "promote" else promotion.rollback
+        try:
+            model = fn(db, args.model_id, args.approval_id, invoked_by="cli")
+        except ValueError as exc:
+            print(f"❌ {exc}")
+            print("   Nothing changed.")
+            return 1
+        print(f"✅ {model.name}:{model.version} is now active ({action}, approval {args.approval_id})")
+    return 0
+
+
+def cmd_promote(args: argparse.Namespace) -> int:
+    return _promotion_command(args, "promote")
+
+
+def cmd_rollback(args: argparse.Namespace) -> int:
+    return _promotion_command(args, "rollback")
 
 
 def cmd_scan(args: argparse.Namespace) -> int:
@@ -658,8 +688,14 @@ def cmd_brain(args: argparse.Namespace) -> int:
             return 0
         if args.brain_command == "set":
             try:
+                if args.module_id.upper() == "M06" and args.mode == "on":
+                    # #328: M06 on serves the newest saved combiner; spend the owner's recorded approval
+                    # (audited, committed together with the switch by set_mode).
+                    from swing_trade_ml.ml import promotion
+
+                    promotion.approve_m06_on(db, getattr(args, "approval_id", None), invoked_by="cli")
                 service.set_mode(db, args.module_id, args.mode, by="cli")
-            except (service.UnknownModuleError, service.ModeRefusedError) as exc:
+            except (service.UnknownModuleError, service.ModeRefusedError, ValueError) as exc:
                 print(f"❌ {exc}", file=sys.stderr)
                 return 1
             print(f"✅ {args.module_id.upper()} is now {args.mode}")
@@ -687,11 +723,17 @@ def cmd_brain(args: argparse.Namespace) -> int:
             _print_run(db, run_id)
             return 0
         if args.brain_command == "meta-train":
-            from swing_trade_ml.brain.modules.m06_reason.training import TrainingError, train_and_save
+            from swing_trade_ml.brain.modules.m06_reason import training
+            from swing_trade_ml.ml import promotion
 
             try:
-                result = train_and_save(db, args.barrier_model, args.swing_model)
-            except TrainingError as exc:
+                promotion.refuse_combiner_save_while_m06_on(db)
+            except promotion.PromotionError as exc:
+                print(f"❌ {exc}", file=sys.stderr)
+                return 1
+            try:
+                result = training.train_and_save(db, args.barrier_model, args.swing_model)
+            except training.TrainingError as exc:
                 print(f"❌ {exc}", file=sys.stderr)
                 return 1
             r = result["report"]
@@ -1040,8 +1082,21 @@ def build_parser() -> argparse.ArgumentParser:
         help="Train on the same stocks the newest model with this name was trained on "
         "(e.g. swing_classifier_midcap) - how the mid/small-cap tier lists are reproduced",
     )
-    p.add_argument("--activate", action="store_true", help="Promote to ACTIVE after training")
+    p.add_argument(
+        "--activate", action="store_true", help="Refused (#328): train, review, then use `swingtrade promote`"
+    )
     p.set_defaults(func=cmd_train)
+
+    for verb, func, what in (
+        ("promote", cmd_promote, "Make a trained model active with a recorded owner approval"),
+        ("rollback", cmd_rollback, "Restore the model the last recorded promotion replaced"),
+    ):
+        p = sub.add_parser(verb, help=what)
+        p.add_argument("model_id", type=int)
+        p.add_argument(
+            "--approval-id", type=int, required=True, help="Owner approval id (POST /ml/approvals)"
+        )
+        p.set_defaults(func=func)
 
     p = sub.add_parser("scan", help="Run all active strategies now")
     p.add_argument("--interval", default="day")
@@ -1063,6 +1118,7 @@ def build_parser() -> argparse.ArgumentParser:
     b = brain_sub.add_parser("set", help="Switch a module on, to shadow, or off")
     b.add_argument("module_id")
     b.add_argument("mode", choices=["on", "shadow", "off"])
+    b.add_argument("--approval-id", type=int, default=None, help="Owner approval id (needed for M06 on)")
     b = brain_sub.add_parser("run", help="Run the brain now (or replay a past date)")
     b.add_argument("--kind", default="nightly", choices=["nightly", "intraday", "why"])
     b.add_argument("--as-of", default=None, help="YYYY-MM-DD: replay that day (no live-only inputs)")

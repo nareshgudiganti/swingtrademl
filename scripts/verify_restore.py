@@ -4,12 +4,14 @@
 Given a backup folder:
     manifest.json            written by swing_trade_ml.ml.backup_manifest at backup time
     database.sql[.gz]        a pg_dump or pg_dumpall of the app database
-    files/                   the model files (and brain_meta_v* files) named as in the manifest
+    files/                   the model files (and brain_meta_v* files, and model cards <model file>.card.json)
+                             named as in the manifest
 this script
   1. restores the dump into a SCRATCH database (drill_scratch_<timestamp>) on a local Docker Postgres,
   2. recomputes the sha256 of every file and compares it with the manifest,
   3. compares the restored ml_models rows with the manifest and the files (every row has a file, every
-     file has a row, version and status as recorded),
+     file has a row, version and status as recorded), and that every model card (sidecar file, or the card
+     kept in the restored row's metrics) names the sha256 of the restored model file (#328),
   4. prints a PASS/FAIL table, drops the scratch database (also on failure) and exits 0 / 1.
 
 Safety: it only ever runs SQL inside a database whose name starts with drill_scratch_, except "select 1",
@@ -109,6 +111,29 @@ def find_dump(folder: Path) -> Path:
     return found[-1]
 
 
+def fetch_model_rows(pg, scratch: str) -> tuple[list, bool]:
+    """ml_models rows from the restored database, with the card kept in the row (ml/train.py, #328).
+    Returns (rows, card_query_ok). If the card query errors (an older dump may have no metrics column) the
+    plain query is used and card_query_ok is False, so the drill can show the card check as not done."""
+    try:
+        raw = pg.sql(scratch, "select coalesce(json_agg(row_to_json(t)), '[]') from "
+                              "(select id, name, version, status, artifact_path, "
+                              "metrics::json->'card'->>'artifact_sha256' as card_artifact_sha256 "
+                              "from ml_models order by id) t")
+        return json.loads(raw), True
+    except RuntimeError:
+        raw = pg.sql(scratch, "select coalesce(json_agg(row_to_json(t)), '[]') from (select id, name, "
+                              "version, status, artifact_path from ml_models order by id) t")
+        return json.loads(raw), False
+
+
+def card_check_result(card_query_ok: bool, manifest_cards: int, mismatches: int) -> str:
+    """PASS / FAIL / SKIPPED for the card check. Never PASS when the card query could not run."""
+    if not card_query_ok:
+        return "FAIL" if manifest_cards else "SKIPPED"
+    return "PASS" if mismatches == 0 else "FAIL"
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Restore drill: database + model files + registry")
     ap.add_argument("--backup-dir", required=True, type=Path)
@@ -163,14 +188,14 @@ def main() -> int:
                 tables[t] = int(pg.sql(scratch, f"select count(*) from {t}"))
             except RuntimeError:
                 tables[t] = None
-        raw = pg.sql(scratch, "select coalesce(json_agg(row_to_json(t)), '[]') from "
-                              "(select id, name, version, status, artifact_path from ml_models order by id) t")
-        rows = json.loads(raw)
+        rows, card_query_ok = fetch_model_rows(pg, scratch)
         files = bm.hash_folder(folder / "files")
         cmp = bm.compare(manifest, rows, files)
         result.update(compare=cmp, tables=tables, restore_errors=len(real_errors), seconds=round(restore_seconds, 1))
         db_ok = len(real_errors) == 0 and tables.get("ml_models") is not None
-        ok = db_ok and cmp["ok"]
+        card_mismatches = cmp["problem_counts"].get("card_mismatch", 0)
+        card_result = card_check_result(card_query_ok, cmp.get("manifest_cards", 0), card_mismatches)
+        ok = db_ok and cmp["ok"] and card_result != "FAIL"
 
         print(f"\nBackup folder : {folder}")
         print(f"Dump          : {dump.name} -> scratch database {scratch}")
@@ -186,7 +211,8 @@ def main() -> int:
         def n(*kinds: str) -> int:
             return sum(c.get(k, 0) for k in kinds)
 
-        expected = cmp["manifest_models"] - n("missing_at_source") + cmp["manifest_extra_files"]
+        expected = (cmp["manifest_models"] - n("missing_at_source") + cmp["manifest_extra_files"]
+                    + cmp.get("manifest_cards", 0))
         lines = [
             ("database restored (no real errors)", db_ok),
             (f"ml_models rows restored ({cmp['db_rows']})", tables.get("ml_models") is not None),
@@ -200,11 +226,17 @@ def main() -> int:
         ]
         for label, good in lines:
             print(f"{label:<44}{'PASS' if good else 'FAIL':>10}")
+        card_label = (f"model cards name their file ({cmp.get('manifest_cards', 0)} files; "
+                      f"{n('card_mismatch')} differ)")
+        print(f"{card_label:<44}{card_result:>10}")
+        if not card_query_ok:
+            print("   card query on restored ml_models failed: database card check NOT done")
         for p in cmp["problems"][:40]:
             print(f"   {p['kind']}: {p['what']}")
         if len(cmp["problems"]) > 40:
             print(f"   ... {len(cmp['problems']) - 40} more")
         print(f"\nOVERALL: {'PASS' if ok else 'FAIL'}")
+        result["card_check"] = card_result
         result["ok"] = ok
         if args.json_out:
             args.json_out.write_text(json.dumps(result, indent=2, default=str), encoding="utf-8")

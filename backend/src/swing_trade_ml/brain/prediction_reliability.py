@@ -596,6 +596,39 @@ def write_report(text: str, directory: Path, today: date) -> Path:
     return path
 
 
+# The scheduled weekly report looks back this far (calendar days), ending today.
+WEEKLY_REPORT_WINDOW_DAYS = 180
+
+
+def run_weekly_report(
+    db, directory: Path, today: date, window_days: int = WEEKLY_REPORT_WINDOW_DAYS
+) -> Path | None:
+    """The scheduled run of the report (reads only; same gates as the command line).
+
+    Returns the written path, or None when it skipped: a report for this ISO week already exists
+    (one per week, so a restart or a retry does not write a second), or there is no recorded data
+    to report on (never an empty report that reads like a result)."""
+    year, week, _ = today.isocalendar()
+    if directory.is_dir():
+        for f in directory.glob("prediction-reliability-*.md"):
+            try:
+                when = date.fromisoformat(f.stem.removeprefix("prediction-reliability-"))
+            except ValueError:
+                continue
+            if when.isocalendar()[:2] == (year, week):
+                return None
+    series, notes = collect_with_notes(db, today - timedelta(days=window_days), today)
+    if not any(recs for _, recs, _, _ in series):
+        return None
+    text = plain_report(build_report(series))
+    if notes:
+        text += "\nNot recorded:\n" + "".join(f"- {n}\n" for n in notes)
+    try:
+        return write_report(text, directory, today)
+    except FileExistsError:
+        return None
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     from swing_trade_ml.db.session import SessionLocal
 

@@ -9,13 +9,14 @@ import tempfile
 import zipfile
 from collections.abc import Iterator
 from datetime import UTC, datetime
-from typing import IO, Literal
+from typing import IO, Annotated, Literal
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
 from sqlalchemy import Integer, cast, func, select
 
-from swing_trade_ml.api.deps import DbSession
+from swing_trade_ml.api.deps import DbSession, Principal, require_owner
 from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.core.release_switches import promotion_refusal
 from swing_trade_ml.db.models.market import Instrument
@@ -23,9 +24,10 @@ from swing_trade_ml.db.models.ml import MLModel, Prediction
 from swing_trade_ml.db.session import session_scope
 from swing_trade_ml.ml import calibration as calibration_service
 from swing_trade_ml.ml import predict as predict_service
+from swing_trade_ml.ml import promotion
 from swing_trade_ml.ml import train as train_service
 from swing_trade_ml.ml.backup import registered_artifacts
-from swing_trade_ml.ml.registry import activate_model, get_active_model
+from swing_trade_ml.ml.registry import get_active_model
 from swing_trade_ml.schemas import (
     CalibrationReport,
     MessageResponse,
@@ -147,8 +149,10 @@ def train(payload: TrainRequest, background: BackgroundTasks) -> MessageResponse
     daily bars runs for minutes, well past an HTTP timeout. Poll GET /ml/models
     for the result.
     """
-    if payload.auto_activate and (refusal := promotion_refusal()):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, refusal)
+    if payload.auto_activate:
+        # Switch message first; even with the switch on, activation needs the owner's approval of the
+        # finished file (#328): train, review, then POST /ml/models/{id}/activate with the evidence.
+        raise HTTPException(status.HTTP_403_FORBIDDEN, promotion_refusal() or AUTO_ACTIVATE_REFUSED)
 
     def _run() -> None:
         try:
@@ -181,17 +185,106 @@ def train(payload: TrainRequest, background: BackgroundTasks) -> MessageResponse
     )
 
 
-@router.post("/models/{model_id}/activate", response_model=MLModelOut)
-def activate(model_id: int, db: DbSession) -> MLModel:
-    """Promote a model to ACTIVE; any previous active version is archived."""
-    if refusal := promotion_refusal():
-        raise HTTPException(status.HTTP_403_FORBIDDEN, refusal)
+AUTO_ACTIVATE_REFUSED = (
+    "Activating straight after training is not allowed: train, review the result, record an owner "
+    "approval with POST /ml/approvals, then POST /ml/models/{id}/activate with that approval id."
+)
+
+
+class EvidenceRef(BaseModel):
+    """A repo file and its sha256 (checked on disk), or a PR number (recorded only)."""
+
+    path: str | None = Field(default=None, max_length=300)
+    sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    pr: int | None = Field(default=None, gt=0)
+
+    def as_ref(self) -> dict:
+        return {k: v for k, v in self.model_dump().items() if v is not None}
+
+
+class ApprovalRequest(BaseModel):
+    """The designated owner's approval. The approver is the signed-in user, never the body."""
+
+    kind: Literal["promote", "rollback", "brain_module_on", "strategy_model"]
+    target: str = Field(min_length=1, max_length=64)
+    reason: str = Field(min_length=promotion.MIN_REASON_CHARS, max_length=promotion.MAX_TEXT_CHARS)
+    evidence: list[EvidenceRef] = Field(min_length=1, max_length=promotion.MAX_EVIDENCE)
+    protocol_verdict: str = Field(max_length=32)
+    artifact_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    model_name: str | None = Field(default=None, max_length=128)
+
+
+class UseApproval(BaseModel):
+    approval_id: int
+
+
+def _owner_or_403(principal: Principal):
     try:
-        model = activate_model(db, model_id)
+        return promotion.signed_in_owner(principal)
+    except promotion.PromotionError as exc:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from exc
+
+
+@router.post("/approvals", status_code=status.HTTP_201_CREATED)
+def record_approval(
+    payload: ApprovalRequest, db: DbSession, principal: Annotated[Principal, Depends(require_owner)]
+) -> dict:
+    """Signed-in designated owner only: record an approval (#328). It changes nothing by itself; it is
+    used once, within 7 days, by activate / rollback / the M06 switch / a strategy model change."""
+    user = _owner_or_403(principal)
+    try:
+        row = promotion.record_approval(
+            db,
+            user,
+            kind=payload.kind,
+            target=payload.target,
+            reason=payload.reason,
+            evidence=[e.as_ref() for e in payload.evidence],
+            protocol_verdict=payload.protocol_verdict,
+            artifact_sha256=payload.artifact_sha256,
+            model_name=payload.model_name,
+        )
     except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    db.commit()
+    return {"approval_id": row.id, "recorded_at": row.ts, "kind": payload.kind, "target": row.target_id}
+
+
+def _gated(fn, db: DbSession, model_id: int, payload: UseApproval | None, principal: Principal) -> MLModel:
+    if refusal := promotion_refusal():  # checked before the body, so "switched off" is always the answer
+        raise HTTPException(status.HTTP_403_FORBIDDEN, refusal)
+    _owner_or_403(principal)
+    if payload is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, promotion.APPROVAL_REQUIRED)
+    try:
+        model = fn(db, model_id, payload.approval_id, invoked_by="api")
+    except ValueError as exc:  # PromotionError, ArtifactMismatchError, wrong status: nothing changed
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
     predict_service.clear_cache()
     return model
+
+
+@router.post("/models/{model_id}/activate", response_model=MLModelOut)
+def activate(
+    model_id: int,
+    db: DbSession,
+    principal: Annotated[Principal, Depends(require_owner)],
+    payload: Annotated[UseApproval | None, Body()] = None,
+) -> MLModel:
+    """Signed-in designated owner only: make a model ACTIVE through the promotion safeguard (#328), using
+    a recorded approval; the previous active version is archived. Needs ALLOW_MODEL_PROMOTION."""
+    return _gated(promotion.promote, db, model_id, payload, principal)
+
+
+@router.post("/models/{model_id}/rollback", response_model=MLModelOut)
+def rollback(
+    model_id: int,
+    db: DbSession,
+    principal: Annotated[Principal, Depends(require_owner)],
+    payload: Annotated[UseApproval | None, Body()] = None,
+) -> MLModel:
+    """Signed-in designated owner only: restore the model the last recorded promotion replaced."""
+    return _gated(promotion.rollback, db, model_id, payload, principal)
 
 
 @router.post("/predict", response_model=list[PredictionRunOut])

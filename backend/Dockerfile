@@ -14,12 +14,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
+# constraints.txt pins every runtime dependency (#525): same commit, same versions.
 WORKDIR /build
-COPY pyproject.toml ./
+COPY pyproject.toml constraints.txt ./
 COPY src ./src
 
 RUN pip install --upgrade pip setuptools wheel \
-    && pip wheel --wheel-dir /wheels .
+    && pip wheel --constraint constraints.txt --wheel-dir /wheels .
 
 
 FROM python:3.12-slim AS runtime
@@ -40,8 +41,9 @@ RUN useradd --create-home --uid 1000 appuser
 
 WORKDIR /app
 
+COPY constraints.txt ./
 COPY --from=builder /wheels /wheels
-RUN pip install --no-index --find-links=/wheels swing-trade-ml && rm -rf /wheels
+RUN pip install --no-index --constraint constraints.txt --find-links=/wheels swing-trade-ml && rm -rf /wheels
 
 COPY alembic.ini ./
 COPY alembic ./alembic
@@ -50,7 +52,7 @@ COPY src ./src
 # Model artifacts and their backup copies are written at runtime and must
 # survive as mounted volumes; each directory has to exist and be writable by
 # appuser first, or a fresh named volume mounts there owned by root.
-RUN mkdir -p /app/data/models /app/data/model_backups && chown -R appuser:appuser /app
+RUN mkdir -p /app/data/models /app/data/model_backups /app/data/reliability && chown -R appuser:appuser /app
 
 # Declared last among the layers so a new commit sha does not invalidate the apt-get and pip layers above.
 # The commit this image was built from. Passed by compose from release.sh; read by ml/model_card.py so a

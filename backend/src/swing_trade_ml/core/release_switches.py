@@ -7,9 +7,11 @@ surfaces added later - it is deliberately not attached to any existing route.
 Where each switch applies today:
   open_signup       -> settings.ALLOW_SIGNUP (existing, enforced in auth.py)
   customer_screens  -> NEW; apply with Depends(require_release("customer_screens"))
-  model_promotion   -> enforced at POST /ml/models/{id}/activate, POST /ml/train with
-                       auto_activate, and `swingtrade train --activate` (see
-                       `promotion_refusal`). Training itself is never blocked.
+  model_promotion   -> enforced by ml/promotion.py (#328) for every change of what model
+                       serves: POST /ml/models/{id}/activate and /rollback, `swingtrade
+                       promote` / `rollback`, PUT /brain/modules/M06 to on, `swingtrade
+                       brain set M06 on`, and PATCH /strategies/{id} params.model_name.
+                       Train-and-activate is always refused. Training itself is never blocked.
   real_orders       -> settings.ALLOW_REAL_HOLDINGS_ORDERS (existing, My Holdings
                        orders); live trading is separately latched by ALLOW_LIVE_TRADING
 """

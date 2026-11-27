@@ -40,6 +40,9 @@ REQUIRED_MODULES = ("M01", "M02", "M07", "M08")
 FEED_MAX_AGE_TRADING_DAYS = 3
 # The learning loop runs Saturdays; a result older than this is "not this week".
 LEARNING_MAX_AGE_DAYS = 8
+# Drift alarm: a stability index (PSI) at or above this on any input the model relies on turns the
+# "Learning and drift" check into a warning. It only changes the weekly message; it never touches a decision.
+DRIFT_ALARM_PSI = 0.25
 HISTORY_KEPT = 52
 # Models are backed up daily (16:30 job); a newest copy older than this means the job stopped.
 BACKUP_MAX_AGE_DAYS = 7
@@ -204,6 +207,19 @@ def check_learning(db: Session, now: datetime) -> dict:
     when = _day(_ist_date(row.created_at))
     if now - row.created_at > timedelta(days=LEARNING_MAX_AGE_DAYS):
         return _check("Learning and drift", True, f"Last checked {when}, not this week.", "info")
+    alarmed = [d for d in (row.drift or []) if (d.get("psi") or 0) >= DRIFT_ALARM_PSI]
+    if alarmed:
+        from swing_trade_ml.brain.modules.m09_learn.drift import _plain_feature_name
+
+        worst = max(alarmed, key=lambda d: d["psi"])
+        return _check(
+            "Learning and drift",
+            False,
+            f"Checked {when}. {_plain_feature_name(worst['feature'])} has moved far from what the model "
+            f"learnt on (stability index {worst['psi']:.2f}, alarm at {DRIFT_ALARM_PSI:.2f}); "
+            "its scores may be less reliable. This is a warning only, nothing was changed.",
+            "warn",
+        )
     lines = list(row.drift_lines or [])
     if lines:
         return _check("Learning and drift", True, f"Checked {when}. Drift noted: {lines[0]}", "info")

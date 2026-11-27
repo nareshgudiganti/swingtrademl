@@ -460,3 +460,80 @@ def test_sample_gates_equal_the_existing_ones_and_lanes_package_is_not_imported(
     assert g["brain"] == {"min_days": MIN_SESSIONS, "min_completed": GATE_MIN_IDEAS}
     assert g["lane"] == {"min_days": CHECKPOINTS[0], "min_completed": CHECKPOINTS[0]}
     assert "brain.lanes" not in inspect.getsource(pr)
+
+
+def test_weekly_report_skips_without_data_and_writes_once_per_week(tmp_path, monkeypatch):
+    from datetime import date
+
+    from swing_trade_ml.brain import prediction_reliability as pr
+
+    out = tmp_path / "rel"
+    monkeypatch.setattr(pr, "collect_with_notes", lambda db, a, b: ([], []))
+    assert pr.run_weekly_report(None, out, date(2026, 11, 29)) is None
+    assert not out.exists() or not list(out.iterdir())
+
+    monkeypatch.setattr(pr, "collect_with_notes", lambda db, a, b: ([({}, [object()], "", False)], ["n"]))
+    monkeypatch.setattr(pr, "build_report", lambda s: {})
+    monkeypatch.setattr(pr, "plain_report", lambda r: "REPORT\n")
+    p = pr.run_weekly_report(None, out, date(2026, 11, 29))  # Sunday
+    assert p is not None and p.name == "prediction-reliability-2026-11-29.md"
+    assert "REPORT" in p.read_text(encoding="utf-8") and "Not recorded" in p.read_text(encoding="utf-8")
+    # same ISO week (even a retry on another day) writes nothing more; the next week does
+    assert pr.run_weekly_report(None, out, date(2026, 11, 29)) is None
+    assert pr.run_weekly_report(None, out, date(2026, 11, 30 - 3)) is None
+    assert pr.run_weekly_report(None, out, date(2026, 12, 6)) is not None
+
+
+def test_weekly_reliability_job_is_registered_on_sunday_with_a_unique_id():
+    import importlib
+
+    from apscheduler.schedulers.background import BackgroundScheduler
+
+    sch = importlib.import_module("swing_trade_ml.workers.scheduler")
+    s = BackgroundScheduler(timezone="Asia/Kolkata")
+    sch.add_weekly_paper_report_job(s)
+    sch.add_weekly_reliability_report_job(s)
+    sch.add_brain_jobs(s)
+    ids = [j.id for j in s.get_jobs()]
+    assert len(ids) == len(set(ids)) and "weekly_reliability_report" in ids
+    t = str(s.get_job("weekly_reliability_report").trigger)
+    assert "day_of_week='sun'" in t and "hour='10'" in t and "minute='15'" in t
+
+
+def test_weekly_reliability_job_sends_one_line_only_when_a_report_is_written(monkeypatch, tmp_path):
+    """Independent review of #550: a report nobody sees is not a report. One Telegram line when written,
+    nothing when skipped."""
+    from contextlib import contextmanager
+
+    from swing_trade_ml.brain import prediction_reliability as rel
+    from swing_trade_ml.workers import jobs
+
+    @contextmanager
+    def scope():
+        yield None
+
+    sent: list[tuple[str, str]] = []
+    monkeypatch.setattr(jobs, "session_scope", scope)
+    monkeypatch.setattr(jobs.notifier, "send_sync", lambda text, kind=None: sent.append((text, kind)))
+
+    monkeypatch.setattr(rel, "run_weekly_report", lambda db, d, today: None)
+    jobs.job_weekly_reliability_report()
+    assert sent == []
+
+    written = tmp_path / "prediction-reliability-2026-11-29.md"
+    monkeypatch.setattr(rel, "run_weekly_report", lambda db, d, today: written)
+    jobs.job_weekly_reliability_report()
+    assert len(sent) == 1
+    text, kind = sent[0]
+    assert written.name in text and kind == jobs.alert_policy.WEEKLY_REPORT
+
+
+def test_prod_worker_keeps_reliability_reports_on_a_volume():
+    """The report folder must survive a deploy (release.sh recreates the worker)."""
+    from pathlib import Path
+
+    compose = (Path(__file__).resolve().parents[2] / "docker-compose.prod.yml").read_text(encoding="utf-8")
+    worker = compose.split("\n  worker:", 1)[1].split("\n  frontend:", 1)[0]
+    assert "RELIABILITY_REPORT_DIR: /app/data/reliability" in worker
+    assert "- reliability_reports:/app/data/reliability" in worker
+    assert "\n  reliability_reports:" in compose.split("\nvolumes:", 1)[1]

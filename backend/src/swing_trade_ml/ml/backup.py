@@ -15,6 +15,10 @@ where that path points, which is the one part this code cannot guarantee.
 Archived versions are copied alongside the active one: rollback is why the
 registry keeps them, and a backup holding only the champion would make
 rollback impossible after exactly the failure it is meant to survive.
+
+A model's card (`<model file>.card.json`, #328) is copied with it: it records how the file was made, and the
+model file alone cannot say. Cards are small and can be repaired (brain/card_trainers.py), so a card copy is
+compared by sha256 and replaced when the source changed; model files are never recopied.
 """
 
 from __future__ import annotations
@@ -31,6 +35,7 @@ from sqlalchemy.orm import Session
 from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.logging import get_logger
 from swing_trade_ml.db.models.ml import MLModel
+from swing_trade_ml.ml.backup_manifest import CARD_SUFFIX, sha256_file
 
 log = get_logger(__name__)
 
@@ -45,6 +50,7 @@ def write_run_record(destination: Path | str, result: dict[str, Any], at: dateti
         "at": (at or datetime.now(UTC)).isoformat(),
         "copied": result.get("copied", 0),
         "already_present": result.get("already_present", 0),
+        "cards_copied": result.get("cards_copied", 0),
         "missing": list(result.get("missing", [])),
     }
     (Path(destination) / RUN_RECORD).write_text(json.dumps(record), encoding="utf-8")
@@ -84,12 +90,20 @@ def backup_model_artifacts(db: Session, destination: Path | str | None = None) -
         destination = settings.MODEL_BACKUP_DIR or None
     if destination is None:
         log.info("model.backup.disabled")
-        return {"enabled": False, "copied": 0, "already_present": 0, "missing": [], "bytes": 0}
+        return {
+            "enabled": False,
+            "copied": 0,
+            "already_present": 0,
+            "missing": [],
+            "bytes": 0,
+            "cards_copied": 0,
+            "cards_present": 0,
+        }
 
     target = Path(destination)
     target.mkdir(parents=True, exist_ok=True)
 
-    copied = already_present = 0
+    copied = already_present = cards_copied = cards_present = 0
     missing: list[str] = []
     total_bytes = 0
 
@@ -97,6 +111,15 @@ def backup_model_artifacts(db: Session, destination: Path | str | None = None) -
         if source is None:
             missing.append(f"{model.name}:{model.version}")
             continue
+
+        card = source.with_name(source.name + CARD_SUFFIX)
+        if card.is_file():
+            card_copy = target / card.name
+            if card_copy.is_file() and sha256_file(card_copy) == sha256_file(card):
+                cards_present += 1
+            else:
+                shutil.copy2(card, card_copy)
+                cards_copied += 1
 
         copy = target / source.name
         # Size is enough to detect "already backed up": the filename carries
@@ -111,13 +134,23 @@ def backup_model_artifacts(db: Session, destination: Path | str | None = None) -
 
     if missing:
         log.error("model.backup.artifact_missing", models=missing, count=len(missing))
-    write_run_record(target, {"copied": copied, "already_present": already_present, "missing": missing})
+    write_run_record(
+        target,
+        {
+            "copied": copied,
+            "already_present": already_present,
+            "missing": missing,
+            "cards_copied": cards_copied,
+        },
+    )
     log.info(
         "model.backup.done",
         destination=str(target),
         copied=copied,
         already_present=already_present,
         missing=len(missing),
+        cards_copied=cards_copied,
+        cards_present=cards_present,
     )
     return {
         "enabled": True,
@@ -125,5 +158,7 @@ def backup_model_artifacts(db: Session, destination: Path | str | None = None) -
         "already_present": already_present,
         "missing": missing,
         "bytes": total_bytes,
+        "cards_copied": cards_copied,
+        "cards_present": cards_present,
         "destination": str(target),
     }

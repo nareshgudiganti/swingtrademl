@@ -94,8 +94,12 @@ def _atomic_write(path: Path, text: str) -> None:
 
 
 def default_trainer(db, candidate: str, cutoff: date, universe: dict, name: str):
-    """Train the passed candidate on an explicit stock list, as of `cutoff`. Registered TRAINED, never activated."""
-    from swing_trade_ml.brain import selection_lab as sl
+    """Train the passed candidate on an explicit stock list, as of `cutoff`. Registered TRAINED, never activated.
+
+    The barrier candidates' model card is written by ml/train.py into the row; the lab candidates go through the
+    card wrapper, which calls `selection_lab.train_lab_model` unchanged and then writes `<model file>.card.json`
+    (#328). A card that cannot be written never fails the freeze; `card_trainers backfill` repairs it later."""
+    from swing_trade_ml.brain.card_trainers import train_lab_model_with_card
     from swing_trade_ml.brain.selection_lab_run import collect_db
     from swing_trade_ml.ml.train import train_model
 
@@ -124,7 +128,15 @@ def default_trainer(db, candidate: str, cutoff: date, universe: dict, name: str)
         symbols, ref = sorted(set(mid_group) | set(extra)), mid_group
     else:
         raise FreezeRefusedError(f"no trainer for {candidate}")
-    return sl.train_lab_model(db, name=name, cutoff=cutoff, symbols=symbols, candidates=ref, bars=bars)
+    return train_lab_model_with_card(
+        db,
+        invoked_by="shadow_lanes.lane_freeze",
+        name=name,
+        cutoff=cutoff,
+        symbols=symbols,
+        candidates=ref,
+        bars=bars,
+    )
 
 
 def _mark_final(db, model, slot_key: str, candidate: str, report_path: Path, stamp: str) -> None:

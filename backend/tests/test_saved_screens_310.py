@@ -299,7 +299,7 @@ def test_migration_chain_and_round_trip(db_session):
     mig = module_from_spec(spec)
     spec.loader.exec_module(mig)
     assert mig.revision == "savedscreen01"
-    assert mig.down_revision == "signalkey01"  # lands after the #260 PR (scanrank01, scanrank02)
+    assert mig.down_revision == "scanrank02"  # lands after the #260 PR (scanrank01, scanrank02)
     conn = db_session.connection()
     mig.op = Operations(MigrationContext.configure(conn))
     mig.downgrade()

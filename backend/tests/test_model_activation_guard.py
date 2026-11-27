@@ -132,6 +132,7 @@ PINNED_MIGRATIONS = frozenset(
         "20261124_1400_module_switches.py",
         "20261125_1200_simulation_persistence.py",
         "20261126_1200_signal_key.py",
+        "20261127_1200_saved_screens.py",
         "20261126_1200_simulation_rule_ref.py",
     }
 )

@@ -11,11 +11,13 @@ close" means anything.
 from __future__ import annotations
 
 import contextlib
-from datetime import UTC, datetime, timedelta
+from dataclasses import dataclass
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, select
+from sqlalchemy.orm import Session
 
 from swing_trade_ml.core.config import settings
 from swing_trade_ml.core.enums import PositionStatus
@@ -26,8 +28,8 @@ from swing_trade_ml.db.models.trading import Position, Strategy
 from swing_trade_ml.db.session import session_scope
 from swing_trade_ml.ml.backup import backup_model_artifacts
 from swing_trade_ml.notifications import alert_policy, notifier
-from swing_trade_ml.services import engine, held_read, ingestion, portfolio
-from swing_trade_ml.workers import heartbeat, job_runs
+from swing_trade_ml.services import engine, held_read, ingestion, portfolio, scan_readiness
+from swing_trade_ml.workers import heartbeat, job_runs, scan_claim
 
 log = get_logger(__name__)
 
@@ -498,61 +500,410 @@ def _blocked_entries_message(blocked: list[dict[str, Any]]) -> str:
 
 
 def job_signal_scan() -> None:
-    """The main daily scan.
+    """The main daily scan (15:45 IST by default).
 
     Runs after the close so every strategy sees a completed daily bar. Scanning
     intraday would evaluate a half-formed candle and produce signals that
-    disappear by 15:30.
+    disappear by 15:30. See run_daily_scan for waiting, retries and recovery.
     """
+    run_daily_scan("scheduled")
+
+
+def job_scan_retry() -> None:
+    """Every few minutes after the scan time until the deadline: scan a session still waiting for prices."""
+    run_daily_scan("retry")
+
+
+def job_scan_recovery() -> None:
+    """Once, shortly after the worker starts: scan a session the worker missed while it was down."""
+    run_daily_scan("recovery")
+
+
+_COUNT_KEYS = (
+    "strategies_run",
+    "instruments_evaluated",
+    "signals_generated",
+    "buys",
+    "exits",
+    "executed",
+    "errors",
+)
+
+
+def _zero_counts() -> dict[str, Any]:
+    # The status page reads these on every record, so records without a scan carry zeros, not gaps.
+    return {**dict.fromkeys(_COUNT_KEYS, 0), "blocked": []}
+
+
+def run_daily_scan(trigger: str, now: datetime | None = None) -> str:
+    """Scan the target session at most once, whoever asks (#316). Returns what happened, for logs and tests.
+
+    - The session's candles missing: record `waiting`, scan nothing (no signals or orders from yesterday's
+      bar). Retries re-check until the deadline (17:00 IST by default), then `gave_up` with one alert.
+    - Retries and the start-up recovery act only on today's session, between the scan time and the
+      deadline. After the deadline an unscanned session is closed as `gave_up` (one alert); it is never
+      scanned late. Later recovery slots are an owner decision.
+    - One run at a time (workers/scan_claim.py). A finished session (`partial`/`complete`) is never scanned
+      again. A record left at `running` with no one holding the claim means a scan was cut off part-way:
+      it is marked `interrupted` with one alert and not re-run, because re-running could duplicate the
+      signals it already wrote.
+    """
+    return _run_daily_scan(trigger, now)[0]
+
+
+@dataclass(frozen=True)
+class ManualScan:
+    """What a scan started by hand did: the outcome, the engine's result when it ran, why not otherwise."""
+
+    outcome: str
+    result: engine.ScanResult | None = None
+    message: str = ""  # plain English, when the scan did not run
+
+    @property
+    def ran(self) -> bool:
+        return self.result is not None
+
+
+def run_manual_scan(now: datetime | None = None) -> ManualScan:
+    """A whole-session scan started by hand (API "scan all", CLI `scan`). It may start before the
+    scan window opens; after the deadline (17:00 IST by default) it gives the session up instead of scanning
+    late (owner decision O7, #316).
+
+    It goes the same way as the scheduled scan: same claim, same wait for the session's prices, at most
+    once per session, `running` marked before the strategies run, and the held jobs run afterwards.
+    """
+    now = (now or _now_ist()).astimezone(IST)
+    outcome, result = _run_daily_scan("manual", now)
+    if result is not None:
+        return ManualScan(outcome, result)
+    return ManualScan(outcome, None, _manual_refusal(outcome, scan_readiness.target_session(now), now))
+
+
+def _prices_label(target: date, now: datetime) -> str:
+    return "today's prices" if target == now.date() else f"the {target:%d %b} prices"
+
+
+def _manual_refusal(outcome: str, target: date, now: datetime) -> str:
+    when = f"{target:%d %b}"
+    reason = (heartbeat.read_last_scan() or {}).get("waiting_reason") or ""
+    if outcome == "already_done":
+        return "Today's scan already ran" if target == now.date() else f"The scan for {when} already ran"
+    if outcome == "waiting":
+        return f"Waiting for {_prices_label(target, now)}: {reason}"
+    if outcome == "busy":
+        return "Another scan is running"
+    if outcome == "interrupted":
+        return f"The scan for {when} stopped part-way; it is not re-run automatically"
+    if outcome == "gave_up":
+        return f"The scan for {when} was given up" + (f" ({reason})" if reason else "")
+    if outcome == "error":
+        return "The scan failed part-way; it is not re-run automatically. The error was sent as an alert"
+    return f"The scan did not run ({outcome})"
+
+
+def run_manual_strategy_scan(
+    db: Session, strategy: Strategy, interval: str = "day", now: datetime | None = None
+) -> ManualScan:
+    """Run one strategy by hand (how a strategy is tested), under the scan's safeguards.
+
+    It takes the scan claim (never alongside another scan) and waits for the session's prices. An ACTIVE
+    strategy is always refused: the daily scan scores it, so a run by hand before that scan would be
+    duplicated by it, and one after would duplicate it. An inactive strategy may be run once prices are
+    in. The session's scan record is not touched. A ValueError from the engine (e.g. the wrong mode) is
+    raised to the caller.
+    """
+    now = (now or _now_ist()).astimezone(IST)
+    with scan_claim.claim(db) as claimed:
+        if not claimed:
+            return ManualScan("busy", None, "Another scan is running")
+        readiness = scan_readiness.check(db, now)
+        if not readiness.ready:
+            label = _prices_label(readiness.target_session, now)
+            return ManualScan("waiting", None, f"Waiting for {label}: {readiness.reason}")
+        if strategy.is_active:
+            return ManualScan(
+                "active",
+                None,
+                "Active strategies are scanned by the daily scan; use Scan all, "
+                "or pause this strategy to test it",
+            )
+        result = engine.run_strategy(db, strategy, interval)
+        log.info("job.scan.manual_strategy", strategy=strategy.name, signals=result.signals_generated)
+        return ManualScan(readiness.status, result)
+
+
+def _run_daily_scan(trigger: str, now: datetime | None) -> tuple[str, engine.ScanResult | None]:
     try:
-        started = datetime.now(IST)
-        with session_scope() as db:
-            result = engine.run_all_active(db, interval="day")
-            # Testing positions belong to a strategy that is never scanned, so their daily
-            # score is taken here, after the scan. Display only, and it never raises. Kept
-            # out of services/engine.py, which is frozen for the forward trial.
-            held_read.score_tester_positions(db)
-            # Same for stocks followed in the Groww Tracker (they are not in any strategy's list).
-            held_read.score_tracked_stocks(db)
-            log.info(
-                "job.scan.done",
-                strategies=result.strategies_run,
-                signals=result.signals_generated,
-                executed=result.executed,
-            )
-            blocked = _blocked_entries(db, started)
-            heartbeat.write_last_scan(
-                {
-                    "ts": datetime.now(IST).isoformat(),
-                    "strategies_run": result.strategies_run,
-                    "instruments_evaluated": result.instruments_evaluated,
-                    "signals_generated": result.signals_generated,
-                    "buys": result.buys,
-                    "exits": result.exits,
-                    "executed": result.executed,
-                    "errors": len(result.errors),
-                    "blocked": blocked,
-                }
-            )
-
-            # Gated on a refusal actually being recorded, not on
-            # `buys and not executed`: a full book re-signals BUY on stocks it
-            # already holds every single day, and those are routine scan
-            # outcomes rather than limits biting. Alerting on them would nag
-            # daily and train the alert to be ignored — which is what has to
-            # hold for this to still be read on the day it matters.
-            if blocked and not result.executed:
-                log.warning("job.scan.no_entries", rules=[b["rule"] for b in blocked])
-                notifier.send_sync(_blocked_entries_message(blocked), "error")
-
-            if result.errors:
-                notifier.send_sync(
-                    f"⚠️ Scan finished with {len(result.errors)} error(s):\n"
-                    + "\n".join(f"• {e}" for e in result.errors[:10]),
-                    "error",
-                )
+        outcome, result = _daily_scan_once(trigger, (now or _now_ist()).astimezone(IST))
     except Exception as exc:  # noqa: BLE001
         _report_error("signal_scan", exc)
+        return "error", None
+    # Also on `already_done`: after a restart that came between the scan finishing and its held jobs
+    # running, the start-up recovery and the retries pick those jobs up (only `deferred` ones).
+    if outcome in ("partial", "complete", "gave_up", "interrupted", "already_done"):
+        _run_held_followups()
+    return outcome, result
+
+
+def _now_ist() -> datetime:
+    return datetime.now(IST)
+
+
+def _scan_window(target: date) -> tuple[datetime, datetime]:
+    """When the session's scan may start, and the deadline after which it is given up."""
+    opens = datetime.combine(
+        target, time(settings.SIGNAL_SCAN_CRON_HOUR, settings.SIGNAL_SCAN_CRON_MINUTE), tzinfo=IST
+    )
+    deadline = datetime.combine(
+        target, time(settings.SCAN_RETRY_DEADLINE_HOUR, settings.SCAN_RETRY_DEADLINE_MINUTE), tzinfo=IST
+    )
+    # A scan time configured after the deadline must still get its run.
+    return opens, max(deadline, opens + timedelta(minutes=30))
+
+
+def _legacy_scan_done(previous: dict, opens: datetime) -> bool:
+    """A record written before #316 has no session marker. If it was written at or after this session's scan
+    time, that scan already ran under the old code: count it as done so the first recovery after a deploy
+    never scans the same session twice."""
+    if not previous or "target_session" in previous or not previous.get("ts"):
+        return False
+    try:
+        written = datetime.fromisoformat(previous["ts"])
+    except (TypeError, ValueError):
+        return False
+    if written.tzinfo is None:
+        written = written.replace(tzinfo=IST)
+    return written >= opens
+
+
+def _daily_scan_once(trigger: str, now: datetime) -> tuple[str, engine.ScanResult | None]:
+    """Returns the outcome, and the engine's result when the strategies ran."""
+    target = scan_readiness.target_session(now)
+    opens, deadline = _scan_window(target)
+    # The 15:45 job and a scan started by hand may start before the window; retries and recovery only in it.
+    if trigger not in ("scheduled", "manual") and (target != now.date() or now < opens):
+        return "outside_window", None
+
+    with session_scope() as db, scan_claim.claim(db) as claimed:
+        if not claimed:
+            log.info("job.scan.busy", trigger=trigger, target_session=target.isoformat())
+            return "busy", None
+
+        previous = heartbeat.read_last_scan() or {}
+        same_session = previous.get("target_session") == target.isoformat()
+        status = previous.get("status") if same_session else None
+        attempts = int(previous.get("attempts") or 0) + 1 if same_session else 1
+        # Jobs held until this session's scan finishes (run_followup); kept across every rewrite.
+        followups = dict(previous.get("followups") or {}) if same_session else {}
+        when = f"{target:%d %b}"
+
+        if status in ("partial", "complete") or _legacy_scan_done(previous, opens):
+            return "already_done", None
+        if status in ("interrupted", "gave_up"):
+            return status, None
+        if status == "running":
+            heartbeat.write_last_scan({**previous, "status": "interrupted", "ts": _now_ist().isoformat()})
+            log.error("job.scan.interrupted", target_session=target.isoformat())
+            notifier.send_sync(
+                f"⚠️ The {when} daily scan stopped part-way (the worker restarted or the scan failed). "
+                "It was not re-run automatically, so no signal is duplicated. Check the scan before the "
+                "next market open.",
+                "error",
+            )
+            return "interrupted", None
+
+        readiness = scan_readiness.check(db, now)
+        base = {
+            "ts": _now_ist().isoformat(),
+            "trigger": trigger,
+            "attempts": attempts,
+            **_zero_counts(),
+            **readiness.record(),
+            "prices_ready": readiness.ready,
+            "followups": followups,
+        }
+        if now >= deadline:
+            reason = readiness.reason or f"the scan did not run by {deadline:%H:%M} IST"
+            heartbeat.write_last_scan({**base, "status": "gave_up", "waiting_reason": reason})
+            log.error("job.scan.gave_up", target_session=target.isoformat(), reason=reason)
+            headline = (
+                f"⚠️ The {when} daily scan did not run"
+                if readiness.ready
+                else f"⚠️ No daily scan for {when}: prices did not arrive by {deadline:%H:%M} IST"
+            )
+            notifier.send_sync(f"{headline} ({reason}). No buys or sells were made from old prices.", "error")
+            return "gave_up", None
+        if not readiness.ready:
+            log.warning(
+                "job.scan.waiting",
+                target_session=target.isoformat(),
+                reason=readiness.reason,
+                missing=readiness.missing[:20],
+                attempts=attempts,
+            )
+            heartbeat.write_last_scan(base)
+            return "waiting", None
+
+        # Marked before the strategies run: if this process dies mid-scan, the next run sees
+        # `running` with no claim held and reports it instead of scanning a second time.
+        heartbeat.write_last_scan({**base, "status": "running"})
+        return readiness.status, _scan_session(db, readiness, base)
+
+
+# ---------------------------------------------------------------- jobs that follow the scan (#316) --
+
+# In the order they are run when the scan finishes late: the brain (and the brain strategy it chains),
+# its health check, then the end-of-day summary.
+FOLLOWUPS = ("brain_nightly", "brain_daily_check", "daily_summary")
+FOLLOWUP_BODIES: dict[str, Any] = {
+    "brain_nightly": lambda: _run_brain_job("nightly"),
+    "brain_daily_check": lambda: _brain_daily_check_body(),
+    "daily_summary": lambda: _daily_summary_body(),
+}
+FOLLOWUP_WAIT_SECONDS = 1800.0  # how long a due job waits for a scan in progress
+FOLLOWUP_POLL_SECONDS = 5.0
+
+
+def run_followup(name: str) -> str:
+    """Run a job that uses the day's scan only once that scan is finished. Returns what happened.
+
+    - No session today (weekend, holiday): runs, as before.
+    - Scan finished (partial/complete): runs now. Normal days take this path.
+    - Scan not finished yet: held ("deferred"); run_daily_scan runs it the moment the scan finishes.
+    - Scan given up or cut off, or its deadline passed: the reports still run; the brain runs only if the
+      day's prices were in, otherwise it is skipped for the day (it would read the same missing prices).
+    - Each job runs at most once per session ("already").
+    """
+    now = _now_ist()
+    target = scan_readiness.target_session(now)
+    body = FOLLOWUP_BODIES[name]
+    if target != now.date():
+        body()
+        return "ran"
+    decision = _decide_followup(name, target, now)
+    if decision != "run":
+        return decision
+    try:
+        body()
+    finally:
+        _set_followup(name, target, "done")
+    return "ran"
+
+
+def _decide_followup(name: str, target: date, now: datetime) -> str:
+    with session_scope() as db, scan_claim.claim(
+        db, wait_seconds=FOLLOWUP_WAIT_SECONDS, poll_seconds=FOLLOWUP_POLL_SECONDS
+    ) as claimed:
+        if not claimed:
+            log.error("job.followup.timeout", job=name, target_session=target.isoformat())
+            return "timeout"
+        record = heartbeat.read_last_scan() or {}
+        if record.get("target_session") != target.isoformat():
+            # Due before any scan of this session (e.g. the worker restarted): start the session's record.
+            record = {
+                "ts": now.isoformat(),
+                **_zero_counts(),
+                "status": "not_started",
+                "target_session": target.isoformat(),
+                "attempts": 0,
+            }
+        followups = dict(record.get("followups") or {})
+        state = followups.get(name)
+        if state in ("running", "done", "skipped"):
+            return "already"
+        status = record.get("status")
+        if status in ("partial", "complete"):
+            new = "running"
+        elif status in ("gave_up", "interrupted") or now >= _scan_window(target)[1]:
+            new = "skipped" if name == "brain_nightly" and not record.get("prices_ready") else "running"
+        else:
+            new = "deferred"
+        if not (state == new == "deferred"):
+            followups[name] = new
+            heartbeat.write_last_scan({**record, "followups": followups})
+        log.info("job.followup", job=name, decision=new, scan_status=status)
+        return "run" if new == "running" else new
+
+
+def _set_followup(name: str, target: date, state: str) -> None:
+    with session_scope() as db, scan_claim.claim(
+        db, wait_seconds=FOLLOWUP_WAIT_SECONDS, poll_seconds=FOLLOWUP_POLL_SECONDS
+    ) as claimed:
+        record = heartbeat.read_last_scan() or {}
+        if not claimed or record.get("target_session") != target.isoformat():
+            log.warning("job.followup.not_recorded", job=name, state=state)
+            return
+        heartbeat.write_last_scan({**record, "followups": {**(record.get("followups") or {}), name: state}})
+
+
+def _run_held_followups() -> None:
+    """After the scan finishes (or is given up), run the jobs that were held for it, in order.
+
+    Only `deferred` jobs run. One left at `running` was cut off part-way and may already have written
+    brain ideas or sent the digest, so it is left alone rather than repeated."""
+    for name in FOLLOWUPS:
+        record = heartbeat.read_last_scan() or {}
+        if (record.get("followups") or {}).get(name) == "deferred":
+            try:
+                run_followup(name)
+            except Exception as exc:  # noqa: BLE001 — one job must not stop the next
+                _report_error(f"held {name}", exc)
+
+
+def _scan_session(
+    db: Session, readiness: scan_readiness.Readiness, base: dict[str, Any]
+) -> engine.ScanResult:
+    started = datetime.now(IST)
+    result = engine.run_all_active(db, interval="day")
+    # Testing positions belong to a strategy that is never scanned, so their daily
+    # score is taken here, after the scan. Display only, and it never raises. Kept
+    # out of services/engine.py, which is frozen for the forward trial.
+    held_read.score_tester_positions(db)
+    # Same for stocks followed in the Groww Tracker (they are not in any strategy's list).
+    held_read.score_tracked_stocks(db)
+    log.info(
+        "job.scan.done",
+        strategies=result.strategies_run,
+        signals=result.signals_generated,
+        executed=result.executed,
+    )
+    blocked = _blocked_entries(db, started)
+    heartbeat.write_last_scan(
+        {
+            "ts": datetime.now(IST).isoformat(),
+            "strategies_run": result.strategies_run,
+            "instruments_evaluated": result.instruments_evaluated,
+            "signals_generated": result.signals_generated,
+            "buys": result.buys,
+            "exits": result.exits,
+            "executed": result.executed,
+            "errors": len(result.errors),
+            "blocked": blocked,
+            **readiness.record(),
+            "trigger": base["trigger"],
+            "attempts": base["attempts"],
+            "prices_ready": True,
+            "followups": base["followups"],
+        }
+    )
+
+    # Gated on a refusal actually being recorded, not on
+    # `buys and not executed`: a full book re-signals BUY on stocks it
+    # already holds every single day, and those are routine scan
+    # outcomes rather than limits biting. Alerting on them would nag
+    # daily and train the alert to be ignored — which is what has to
+    # hold for this to still be read on the day it matters.
+    if blocked and not result.executed:
+        log.warning("job.scan.no_entries", rules=[b["rule"] for b in blocked])
+        notifier.send_sync(_blocked_entries_message(blocked), "error")
+
+    if result.errors:
+        notifier.send_sync(
+            f"⚠️ Scan finished with {len(result.errors)} error(s):\n"
+            + "\n".join(f"• {e}" for e in result.errors[:10]),
+            "error",
+        )
+    return result
 
 
 def job_predict_watchlist() -> None:
@@ -606,6 +957,11 @@ def job_backup_models() -> None:
 
 
 def job_daily_summary() -> None:
+    """16:00 IST: the end-of-day digest, once the day's scan is finished (run_followup, #316)."""
+    run_followup("daily_summary")
+
+
+def _daily_summary_body() -> None:
     """Snapshot the equity curve and push the end-of-day Telegram digest."""
     try:
         with session_scope() as db:
@@ -816,7 +1172,8 @@ def job_brain_approvals_open() -> None:
 
 
 def job_brain_nightly() -> None:
-    _run_brain_job("nightly")
+    """15:50 IST: the brain's nightly run, once the day's scan is finished (run_followup, #316)."""
+    run_followup("brain_nightly")
 
 
 def job_brain_intraday() -> None:
@@ -865,6 +1222,11 @@ def _ist_today():
 
 
 def job_brain_daily_check() -> None:
+    """16:20 IST: the brain's daily health record, after the nightly run (run_followup, #316)."""
+    run_followup("brain_daily_check")
+
+
+def _brain_daily_check_body() -> None:
     """Trading days, after the nightly run: store one record of the brain's health, wiring and the
     trial so far (services/brain_daily_check.py). Telegram only when something needs a look. Never
     raises; reads and reports only."""

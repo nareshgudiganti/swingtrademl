@@ -489,11 +489,18 @@ def cmd_rollback(args: argparse.Namespace) -> int:
 
 
 def cmd_scan(args: argparse.Namespace) -> int:
-    from swing_trade_ml.db.session import session_scope
-    from swing_trade_ml.services import engine
+    # The day's scan itself (#316): one at a time, only once the session's prices are in,
+    # and at most once per session. Exit code 1, with the reason, when it did not run.
+    from swing_trade_ml.workers.jobs import run_manual_scan
 
-    with session_scope() as db:
-        result = engine.run_all_active(db, interval=args.interval)
+    if args.interval != "day":
+        print("❌ Only the daily scan can be started by hand")
+        return 2
+    scan = run_manual_scan()
+    if scan.result is None:
+        print(f"❌ Scan not run: {scan.message}")
+        return 1
+    result = scan.result
 
     print("✅ Scan complete")
     print(f"   strategies   {result.strategies_run}")

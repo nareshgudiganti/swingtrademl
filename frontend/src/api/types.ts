@@ -125,6 +125,15 @@ export interface SystemStatus {
     errors: number
     /** `reason` is null for a tester: it quotes the bot's own positions and cash (issue #374). */
     blocked?: { rule: string; count: number; reason: string | null }[] | null
+    /** #316: 'waiting' = the session's candles had not arrived, so the strategies did not run. */
+    status?: 'not_started' | 'waiting' | 'running' | 'partial' | 'complete' | 'interrupted' | 'gave_up'
+    /** Jobs held until the scan finishes: brain nightly, brain daily check, daily summary. */
+    followups?: Record<string, 'deferred' | 'running' | 'done' | 'skipped'>
+    attempts?: number
+    target_session?: string
+    missing_count?: number
+    missing_symbols?: string[]
+    waiting_reason?: string | null
   } | null
   status_level: 'ok' | 'warning'
   status_message: string

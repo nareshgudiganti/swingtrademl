@@ -9,7 +9,7 @@ like a week of quiet markets.
 from __future__ import annotations
 
 from contextlib import contextmanager
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 from swing_trade_ml.db.models.safety import RiskEvent
 from swing_trade_ml.workers import jobs
@@ -24,6 +24,13 @@ def _use_test_session(monkeypatch, db_session) -> None:
         yield db_session
 
     monkeypatch.setattr(jobs, "session_scope", scope)
+    monkeypatch.setattr(jobs.heartbeat, "read_last_scan", lambda: None)  # no scan recorded yet today
+    # These tests are about the refusal alert, not candle readiness (#316): treat the day's data as in.
+    monkeypatch.setattr(
+        jobs.scan_readiness,
+        "check",
+        lambda db, now=None: jobs.scan_readiness.Readiness(date(2026, 11, 13), "complete", 0, 0),
+    )
 
 
 def _event(db_session, rule: str, reason: str, *, minutes_ago: int = 1) -> None:
@@ -94,7 +101,7 @@ def test_alert_fires_when_candidates_were_refused_and_nothing_bought(db_session,
     )
     monkeypatch.setattr(jobs.heartbeat, "write_last_scan", lambda data: None)
 
-    jobs.job_signal_scan()
+    jobs.run_daily_scan("scheduled", now=datetime(2026, 11, 13, 10, 15, tzinfo=UTC))  # 15:45 IST
 
     assert len(sent) == 1
     assert "You already hold 40 positions" in sent[0]
@@ -124,6 +131,6 @@ def test_no_alert_when_a_buy_went_through(db_session, monkeypatch):
     )
     monkeypatch.setattr(jobs.heartbeat, "write_last_scan", lambda data: None)
 
-    jobs.job_signal_scan()
+    jobs.run_daily_scan("scheduled", now=datetime(2026, 11, 13, 10, 15, tzinfo=UTC))  # 15:45 IST
 
     assert sent == []

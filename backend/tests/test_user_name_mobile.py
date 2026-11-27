@@ -98,8 +98,10 @@ def test_invalid_names_are_refused(raw):
 def test_single_migration_head_and_parent():
     script = ScriptDirectory.from_config(Config(str(BACKEND / "alembic.ini")))
     heads = script.get_heads()
-    assert heads == ["signalkey01"]  # signals.signal_key (#360) sits on simulation02
-    assert script.get_revision("signalkey01").down_revision == "simulation02"
+    assert heads == ["scanrank02"]  # horizon_ranks (#260) sits on scan_runs, which sits on signalkey01
+    assert script.get_revision("scanrank02").down_revision == "scanrank01"
+    assert script.get_revision("scanrank01").down_revision == "signalkey01"
+    assert script.get_revision("signalkey01").down_revision == "simulation02"  # signals.signal_key (#360)
     assert script.get_revision("simulation02").down_revision == "modswitch01"  # momentum rule ref (#321)
     assert script.get_revision("modswitch01").down_revision == "simulation01"  # the module switches (#291)
     assert script.get_revision("simulation01").down_revision == "horizon01"  # the simulation tables (#321)

@@ -85,6 +85,7 @@ from swing_trade_ml.db.models.trading import (
     Strategy,
     Trade,
 )
+from swing_trade_ml.db.models.saved_screen import SavedScreen
 from swing_trade_ml.db.models.user_watchlist import UserWatchlistItem, UserWatchlistSale
 
 __all__ = [
@@ -180,6 +181,7 @@ __all__ = [
     "TradingRestriction",
     "UpcomingEvent",
     "User",
+    "SavedScreen",
     "UserWatchlistItem",
     "UserWatchlistSale",
     "WatchlistSnapshot",

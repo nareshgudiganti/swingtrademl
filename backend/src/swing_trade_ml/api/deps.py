@@ -196,6 +196,12 @@ SELF_SERVICE_ROUTES: frozenset[tuple[str, str]] = frozenset(
         ("GET", "/me/watchlist/tracker"),
         ("GET", "/me/watchlist/sold"),
         ("POST", "/me/watchlist/{symbol}/sold"),
+        # Saved screens (#310): a person's own named filters. The digests are NOT here: they are plan-gated.
+        ("GET", "/me/screens"),
+        ("POST", "/me/screens"),
+        ("GET", "/me/screens/{screen_id}"),
+        ("PATCH", "/me/screens/{screen_id}"),
+        ("DELETE", "/me/screens/{screen_id}"),
     }
 )
 SELF_SERVICE_NEEDS_PERSON = "Sign in with your own account to use your watchlist."

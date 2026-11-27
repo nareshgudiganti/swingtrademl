@@ -71,6 +71,11 @@ FEATURES: dict[str, dict[str, str]] = {
         "group": "Models",
         "description": "How accurate each model's confidence really is (Model Lab page).",
     },
+    "screen_digest": {
+        "label": "What changed on my saved screens",
+        "group": "TradeMind",
+        "description": "Which brain ideas came into or dropped out of a saved screen or the watchlist since the last scan.",  # noqa: E501
+    },
     "trademind": {
         "label": "TradeMind",
         "group": "TradeMind",
@@ -95,18 +100,33 @@ LIMITS: dict[str, dict[str, Any]] = {
         "description": "How far back past picks and trades go. 0 = no limit.",
         "kind": "int",
     },
+    "saved_screens": {
+        "label": "Saved screens",
+        "description": "How many Discover filter sets a person can save. 0 = the most the app allows (10).",
+        "kind": "int",
+    },
 }
 
 DEFAULT_PLANS: dict[str, dict[str, Any]] = {
     "free": {
         "name": "Free",
         "features": {"picks": True, "regime": True, "track_record": True},
-        "limits": {"picks_per_day": 5, "allowed_cap_tiers": ["large"], "history_days": 30},
+        "limits": {
+            "picks_per_day": 5,
+            "allowed_cap_tiers": ["large"],
+            "history_days": 30,
+            "saved_screens": 3,
+        },
     },
     "pro": {
         "name": "Pro",
         "features": dict.fromkeys(FEATURES, True),
-        "limits": {"picks_per_day": 0, "allowed_cap_tiers": list(CAP_TIERS), "history_days": 0},
+        "limits": {
+            "picks_per_day": 0,
+            "allowed_cap_tiers": list(CAP_TIERS),
+            "history_days": 0,
+            "saved_screens": 10,
+        },
     },
 }
 
@@ -126,6 +146,9 @@ ROUTE_RULES: dict[tuple[str, str], tuple[str, dict[str, str]]] = {
     ("GET", "/signals/buy-list"): ("bot_portfolio", {}),
     ("GET", "/ml/models"): ("model_lab", {}),
     ("GET", "/ml/calibration"): ("model_lab", {}),
+    # Saved screens' "what changed" notes (#310): a Pro feature. The screen CRUD itself is self-service.
+    ("GET", "/me/screens/{screen_id}/digest"): ("screen_digest", {}),
+    ("GET", "/me/watchlist/digest"): ("screen_digest", {}),
 }
 
 

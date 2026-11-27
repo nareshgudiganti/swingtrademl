@@ -136,10 +136,14 @@ def test_a_member_or_tester_cannot_change_the_bots_watchlist_or_a_strategys_limi
     assert strat.capital_allocation is None and strat.max_positions is None
 
 
-def test_the_only_routes_open_to_every_person_are_the_eight_watchlist_ones():
-    assert {path for _method, path in SELF_SERVICE_ROUTES} <= {
+def test_the_only_routes_open_to_every_person_are_the_watchlist_and_saved_screen_ones():
+    watchlist = {r for r in SELF_SERVICE_ROUTES if r[1].startswith("/me/watchlist")}
+    screens = {r for r in SELF_SERVICE_ROUTES if r[1].startswith("/me/screens")}
+    assert {path for _method, path in watchlist} <= {
         "/me/watchlist", "/me/watchlist/search", "/me/watchlist/{symbol}", "/me/watchlist/tracker", "/me/watchlist/sold", "/me/watchlist/{symbol}/sold"
-    } and len(SELF_SERVICE_ROUTES) == 8
+    } and len(watchlist) == 8
+    # Saved screens (#310): a person's own filters; the two digests are plan-gated, not self-service.
+    assert len(screens) == 5 and watchlist | screens == set(SELF_SERVICE_ROUTES)
 
 
 # ------------------------------------------------------------------------------- an entry through a symbol change

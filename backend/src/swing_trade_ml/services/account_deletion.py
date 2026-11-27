@@ -27,6 +27,7 @@ from swing_trade_ml.db.models.audit import AuditLog, LoginCode
 from swing_trade_ml.db.models.auth_tokens import AuthToken
 from swing_trade_ml.db.models.billing import Subscription
 from swing_trade_ml.db.models.invites import InviteRequest
+from swing_trade_ml.db.models.saved_screen import SavedScreen
 from swing_trade_ml.db.models.session import User
 from swing_trade_ml.db.models.user_watchlist import UserWatchlistItem
 from swing_trade_ml.services import audit, auth_tokens
@@ -168,6 +169,7 @@ def anonymise(db: Session, user: User) -> None:
     db.execute(delete(AuthToken).where(AuthToken.user_id == user.id))
     db.execute(delete(LoginCode).where(LoginCode.user_id == user.id))
     db.execute(delete(UserWatchlistItem).where(UserWatchlistItem.user_id == user.id))
+    db.execute(delete(SavedScreen).where(SavedScreen.user_id == user.id))
     db.execute(
         update(InviteRequest)
         .where(InviteRequest.user_id == user.id)
@@ -246,6 +248,11 @@ def export_data(db: Session, user: User) -> dict:
         .scalars()
         .all()
     )
+    screens = (
+        db.execute(select(SavedScreen).where(SavedScreen.user_id == user.id).order_by(SavedScreen.id))
+        .scalars()
+        .all()
+    )
     subs = (
         db.execute(select(Subscription).where(Subscription.user_id == user.id).order_by(Subscription.id))
         .scalars()
@@ -272,6 +279,10 @@ def export_data(db: Session, user: User) -> dict:
                 "buy_price": i.buy_price,
             }
             for i in items
+        ],
+        "saved_screens": [
+            {"name": sc.name, "spec": sc.spec, "created_at": _iso(getattr(sc, "created_at", None))}
+            for sc in screens
         ],
         "subscriptions": [
             {

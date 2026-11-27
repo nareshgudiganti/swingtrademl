@@ -163,6 +163,8 @@ def test_the_self_service_set_is_only_the_watchlist():
         "/me/watchlist/tracker",
         "/me/watchlist/sold",
         "/me/watchlist/{symbol}/sold",
+        "/me/screens",  # saved screens (#310): a person's own filters
+        "/me/screens/{screen_id}",
     }
 
 

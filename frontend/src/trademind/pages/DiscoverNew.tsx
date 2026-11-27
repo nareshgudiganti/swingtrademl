@@ -3,7 +3,7 @@
 // run (and the sector map when this account may read it) and changes nothing. The classic card list, with its paper
 // test-buy button and the version 1 strategy signals, stays one tap away (?view=cards).
 
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link, useSearchParams } from 'react-router-dom'
 
@@ -18,8 +18,17 @@ import {
   sectorsIn,
   type DiscoverFilter,
 } from '../discoverRules'
+import ChangesPanel from '../ChangesPanel'
 import { noTradeReason } from '../emptyReasons'
 import { ideasFrom, shownWord, useLatestRun } from '../live'
+import SavedScreensBar from '../SavedScreensBar'
+import {
+  applyExtras,
+  controlsFromSpec,
+  listBlocked,
+  screenProblems,
+  type SavedScreen,
+} from '../savedScreens'
 import { scoreRank } from '../scoreText'
 import { StockRail, type RailCard } from '../StockRail'
 import { BrainGate, Icon } from '../ui'
@@ -82,7 +91,22 @@ function DiscoverBody() {
   const sectorList = sectorsIn(ideas, sectorOf)
 
   const counts = discoverCounts(ideas)
-  const filtered = filterIdeas(ideas, { filter, sector: sector || null, query, sectorOf })
+  // A saved screen (#310): opening one sets the controls below; nothing is substituted for a value that is gone.
+  const [active, setActive] = useState<SavedScreen | null>(null)
+  const openScreen = useCallback((s: SavedScreen) => {
+    const c = controlsFromSpec(s.spec)
+    setActive(s)
+    setFilter(c.filter)
+    setSector(c.sector)
+    setQuery(c.query)
+    setLayout(c.layout)
+  }, [])
+  const watch = useQuery({ queryKey: ['myWatchlist'], queryFn: api.myWatchlist, enabled: !!active?.spec.watch_only, retry: false })
+  const watchSet = watch.data ? new Set(watch.data.items.filter((i) => !i.removed_at).map((i) => i.symbol.toUpperCase())) : null
+  const problems = active ? screenProblems(active.spec, sectorOf ? sectorList : null) : []
+  const blocked = active ? listBlocked(active.spec) : false
+  const plain = blocked ? [] : filterIdeas(ideas, { filter, sector: sector || null, query, sectorOf })
+  const filtered = active && !blocked ? applyExtras(plain, active.spec, { tierOf: (sym) => caps.get(sym), watch: watchSet }) : plain
   const { sorted: rows, sorter } = useIdeaSort(filtered)
   const dayScores = ideas.map((d) => d.confidence)
   const noTrade = noTradeReason(run.banner, ideas.length, counts.TRADE)
@@ -98,6 +122,15 @@ function DiscoverBody() {
         </div>
         <span className="tm-dim tmn-small">Brain’s run on {formatDateTime(run.started_at)}</span>
       </div>
+
+      <SavedScreensBar
+        controls={{ filter, sector, query, layout }}
+        active={active}
+        problems={problems}
+        onOpen={openScreen}
+        onClose={() => setActive(null)}
+      />
+      {active && <ChangesPanel screenId={active.id} />}
 
       <div className="tmn-w2-toolbar">
         <div className="tmn-w2-pills" role="group" aria-label="Filter by decision" data-testid="discover-filters">
@@ -133,6 +166,9 @@ function DiscoverBody() {
             Sector
             <select value={sector} onChange={(e) => setSector(e.target.value)} data-testid="sector-filter">
               <option value="">All sectors</option>
+              {sector && !sectorList.includes(sector) && (
+                <option value={sector}>{sector} (no longer available)</option>
+              )}
               {sectorList.map((s) => (
                 <option key={s} value={s}>
                   {s}
@@ -192,7 +228,11 @@ function DiscoverBody() {
       <section className="tmn-card tmn-w2-tablecard" aria-label="Stocks the brain checked">
         {rows.length === 0 ? (
           <p className="tm-dim tmn-w2-empty" data-state="empty">
-            {ideas.length === 0 ? (noTrade ?? 'The brain checked no stocks on its last run.') : 'No stocks match these filters.'}
+            {ideas.length === 0
+              ? (noTrade ?? 'The brain checked no stocks on its last run.')
+              : blocked
+                ? (problems[0] ?? 'Nothing to show for this saved screen.')
+                : 'No stocks match these filters.'}
           </p>
         ) : (
           <IdeasTable

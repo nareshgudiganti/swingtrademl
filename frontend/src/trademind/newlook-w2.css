@@ -847,3 +847,41 @@
   max-height: max(420px, calc(100vh - 330px));
   scrollbar-width: auto;
 }
+
+/* ---- Saved screens and the "what changed" note (#310) ---- */
+.tm-new .tmn-w2-screens {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.tm-new .tmn-w2-screens-row,
+.tm-new .tmn-w2-screens-form {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.tm-new .tmn-w2-screens button,
+.tm-new .tmn-w2-screens input[type='text'] {
+  min-height: 40px;
+}
+.tm-new .tmn-w2-screens input[type='text'] {
+  max-width: 100%;
+  min-width: 0;
+  width: 18rem;
+}
+.tm-new .tmn-w2-digest {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.tm-new .tmn-w2-digest-title,
+.tm-new .tmn-w2-digest-h {
+  margin: 0;
+}
+.tm-new .tmn-w2-digest-list {
+  margin: 0.25rem 0 0.5rem;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: 0.4rem;
+}

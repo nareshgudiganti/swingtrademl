@@ -35,6 +35,7 @@ from swing_trade_ml.api.v1.endpoints import (
     ml,
     model_registry,
     mutual_funds,
+    my_screens,
     my_watchlist,
     notifications,
     ops,
@@ -132,3 +133,5 @@ api_router.include_router(beginner.router, dependencies=protected)
 # Each person's own watchlist: require_auth opens these few routes to every signed-in person
 # (deps.SELF_SERVICE_ROUTES); the handlers only touch the caller's own rows.
 api_router.include_router(my_watchlist.router, dependencies=protected)
+# Saved screens: self-service CRUD (SELF_SERVICE_ROUTES) and two Pro digests (core/plans.py ROUTE_RULES).
+api_router.include_router(my_screens.router, dependencies=protected)

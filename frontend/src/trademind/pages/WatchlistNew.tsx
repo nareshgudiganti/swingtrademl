@@ -10,6 +10,7 @@ import { Link } from 'react-router-dom'
 import { api } from '../../api/client'
 import type { BrainRun } from '../../api/types'
 import { CapFlag, useSymbolCaps } from '../cap'
+import ChangesPanel from '../ChangesPanel'
 import { useLatestRun } from '../live'
 import { QueryNotice } from '../PageState'
 import { rankText, SCORE_HINT, scorePoints } from '../scoreText'
@@ -87,6 +88,8 @@ export default function WatchlistNew() {
           {error}
         </p>
       )}
+
+      <ChangesPanel screenId={null} />
 
       <div className="tmn-w2-pills" role="group" aria-label="Show" data-testid="watch-tabs">
         {TABS.map((t) => (

@@ -126,6 +126,7 @@ import type { AuthOptions, InviteForm } from '../auth/authRules'
 import type { DeletionStatus } from '../lib/deletionRules'
 import type { InviteDecision, InviteRequestRow } from '../trademind/invites'
 import type { BrainChanges } from '../trademind/changes'
+import type { SavedScreen, SavedScreens, ScreenDigest, ScreenSpec } from '../trademind/savedScreens'
 import type { RealTaxExport } from '../trademind/taxRecords'
 
 export const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000/api/v1'
@@ -630,6 +631,15 @@ export const api = {
   myWatchlistSoldList: () => get<{ items: SoldRecord[] }>('/me/watchlist/sold'),
   /** Groww Tracker: each stock on the list followed like an open position. */
   myWatchlistTracker: () => get<WatchTracker>('/me/watchlist/tracker'),
+
+  // ---------------------------------------------- saved screens (per person) --
+  // A person's own named Discover filters (#310). The two digests are a Pro feature.
+  mySavedScreens: () => get<SavedScreens>('/me/screens'),
+  saveScreen: (name: string, spec: ScreenSpec) => post<SavedScreen>('/me/screens', { name, spec }),
+  changeScreen: (id: number, body: { name?: string; spec?: ScreenSpec }) => patch<SavedScreen>(`/me/screens/${id}`, body),
+  deleteScreen: (id: number) => del<{ deleted: boolean; id: number }>(`/me/screens/${id}`),
+  screenDigest: (id: number) => get<ScreenDigest>(`/me/screens/${id}/digest`),
+  watchlistDigest: () => get<ScreenDigest>('/me/watchlist/digest'),
   /** Edit one stock's Groww entry: buy price, shares, buy date (YYYY-MM-DD) and/or note. Only sent fields change. */
   myWatchlistUpdate: (
     symbol: string,

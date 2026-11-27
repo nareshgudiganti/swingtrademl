@@ -2,9 +2,29 @@
 // "what to do" sentence. The status of each stock (stop / target / time / weak / ok) comes from the server and is
 // never recomputed here. Every number can be null: show a dash, never NaN.
 
+import { ApiError } from '../api/client'
 import type { SoldRecord, TrackerState, WatchTrackerItem } from '../api/types'
 import { levels } from './pages/positionLevels'
 import { halfText, stopText, targetText } from './tradingRules'
+
+// A bare HTTP phrase ("Forbidden", "Internal Server Error") is not a sentence the owner can use.
+const BARE_HTTP_PHRASE =
+  /^(bad request|unauthorized|forbidden|not found|conflict|too many requests|internal server error|bad gateway|service unavailable|gateway timeout)$/i
+
+/** What the owner reads when a Groww call is refused or breaks: the server's own plain sentence when it wrote one,
+ *  otherwise a plain sentence for the status (403, 409, 429, 503), otherwise "Groww did not answer". */
+export function refusalText(e: unknown): string {
+  const msg = e instanceof Error ? e.message.trim() : ''
+  const status = e instanceof ApiError ? e.status : null
+  const serverError = status != null && status >= 500 && status !== 503
+  const usable = msg !== '' && !BARE_HTTP_PHRASE.test(msg) && !serverError && !(e instanceof TypeError)
+  if (usable) return msg.replace(/[.]$/, '')
+  if (status === 403) return "This is a private account. You don't have access"
+  if (status === 409) return 'Groww is busy or has no account to update right now'
+  if (status === 429) return 'Groww was refreshed less than a minute ago. Try again soon'
+  if (status === 503) return 'Groww is not connected yet. Add the Groww keys on the server first'
+  return 'Groww did not answer'
+}
 
 // The stop, half-profit and target percentages come from the server: use `levels()` (pages/positionLevels.ts).
 export { levels } from './pages/positionLevels'
@@ -41,6 +61,7 @@ export const FILTERS: { id: TrackerFilter; label: string }[] = [
 
 function matchesFilter(item: WatchTrackerItem, filter: TrackerFilter): boolean {
   if (filter === 'all') return true
+  if (isNotHeld(item)) return false // not owned any more: no warnings
   if (filter === 'act') return item.state !== 'ok'
   return item.state === filter
 }
@@ -51,19 +72,21 @@ export function filterItems(items: WatchTrackerItem[], filter: TrackerFilter): W
 
 /** How many stocks need action (anything but "on track"). Drives the menu badge. */
 export function needsActionCount(items: readonly WatchTrackerItem[] | undefined): number {
-  return (items ?? []).filter((i) => i.state !== 'ok').length
+  return (items ?? []).filter((i) => !isNotHeld(i) && i.state !== 'ok').length
 }
 
 export function symbolsIn(items: WatchTrackerItem[], state: TrackerState): string[] {
-  return items.filter((i) => i.state === state).map((i) => i.symbol)
+  return items.filter((i) => !isNotHeld(i) && i.state === state).map((i) => i.symbol)
 }
 
 const URGENCY: Record<TrackerState, number> = { stop: 0, target: 1, time: 2, weak: 3, ok: 4 }
+// A stock Groww no longer lists sorts last: it is not owned, so nothing about it is urgent.
+const urgency = (i: WatchTrackerItem): number => (isNotHeld(i) ? 5 : URGENCY[i.state])
 
 /** Stocks that need action first (stop, target, time, weak), then by most days done, then by symbol. */
 export function sortItems(items: WatchTrackerItem[]): WatchTrackerItem[] {
   return [...items].sort(
-    (a, b) => URGENCY[a.state] - URGENCY[b.state] || b.days_done - a.days_done || a.symbol.localeCompare(b.symbol),
+    (a, b) => urgency(a) - urgency(b) || b.days_done - a.days_done || a.symbol.localeCompare(b.symbol),
   )
 }
 
@@ -81,6 +104,11 @@ export function fmtPct(x: number | null | undefined, digits = 1): string {
 export function fmtPrice(x: number | null | undefined): string {
   if (!isNum(x)) return '—'
   return `₹${x.toLocaleString('en-IN', { maximumFractionDigits: x >= 1000 ? 0 : 2 })}`
+}
+
+/** The price now, or "no price yet": a stock with no price (or a zero) never shows a made-up value of 0. */
+export function fmtNowPrice(x: number | null | undefined): string {
+  return isNum(x) && x > 0 ? fmtPrice(x) : 'no price yet'
 }
 
 export function signClass(x: number | null | undefined): 'pos' | 'neg' | 'dim' {
@@ -131,6 +159,7 @@ export function pips(daysDone: number, horizon: number): { filled: boolean; late
 
 /** Plain-English "what to do", by the server's status. */
 export function whatToDo(item: WatchTrackerItem, horizon: number): string {
+  if (isNotHeld(item)) return `Groww no longer lists ${item.symbol}, so it is not counted as held and has no warnings. If you did sell it, record the sale to keep the result.`
   const ret = fmtPct(item.return_pct)
   const left = Math.max(0, horizon - item.days_done)
   switch (item.state) {
@@ -241,6 +270,52 @@ export function buildPatch(item: WatchTrackerItem, form: EditForm, today: string
   return { patch, errors, changed: Object.keys(patch).length > 0 }
 }
 
+/** The sell request for the Sold form: quantity is sent only when typed (or when Groww shows fewer shares). */
+/** The sale request. `pendingQty` is the unconfirmed Groww count the screen showed: the server refuses the sale if
+ *  that count has changed since, so a retried request (say, after a lost answer) is never recorded twice. */
+export function saleBody(
+  sellPrice: string,
+  soldOn: string,
+  qtyText: string,
+  pendingQty?: number | null,
+): { sell_price: number; sold_on: string; quantity?: number; pending_qty?: number } {
+  const q = Number(qtyText)
+  return {
+    sell_price: Number(sellPrice),
+    sold_on: soldOn,
+    ...(qtyText.trim() !== '' ? { quantity: q } : {}),
+    ...(pendingQty != null && pendingQty > 0 ? { pending_qty: pendingQty } : {}),
+  }
+}
+
+/** Groww no longer lists this stock. */
+export const isNotHeld = (i: WatchTrackerItem): boolean => i.held_state === 'not_held'
+/** Quantity and price come from Groww on every sync, so they cannot be typed in. A row is linked to Groww when it
+ *  was added from Groww, or when a sync has seen it (held or not held): a hand-entered row that a sync linked keeps
+ *  source "manual", and the server refuses an edit of its shares or price. Missing or "unknown" stays hand-entered. */
+export const isGrowwRow = (i: WatchTrackerItem): boolean =>
+  i.source === 'groww' || i.held_state === 'held' || i.held_state === 'not_held'
+
+const IST_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+/** "21 Nov, 15:35 IST" from an ISO time; null when missing or not a time. */
+export function fmtIstStamp(iso: string | null | undefined): string | null {
+  if (!iso) return null
+  const t = new Date(iso).getTime()
+  if (!Number.isFinite(t)) return null
+  const d = new Date(t + 5.5 * 3600 * 1000)
+  const hh = String(d.getUTCHours()).padStart(2, '0')
+  const mm = String(d.getUTCMinutes()).padStart(2, '0')
+  return `${d.getUTCDate()} ${IST_MONTHS[d.getUTCMonth()]}, ${hh}:${mm} IST`
+}
+
+/** "7 Nov" from a YYYY-MM-DD date; null when missing. */
+export function fmtDayMonth(ymd: string | null | undefined): string | null {
+  const m = /^\d{4}-(\d{2})-(\d{2})$/.exec(ymd ?? '')
+  if (!m) return null
+  const month = IST_MONTHS[Number(m[1]) - 1]
+  return month ? `${Number(m[2])} ${month}` : null
+}
+
 export function entryNote(item: WatchTrackerItem): string {
   if (item.entry_source === 'your_price') return 'Your Groww price'
   if (item.entry_source === 'added_close') return 'Close on the day you added it'
@@ -268,6 +343,7 @@ export function portfolioSummary(items: readonly WatchTrackerItem[]): PortfolioS
   let yesterday = 0
   let counted = 0
   for (const i of items) {
+    if (isNotHeld(i)) continue // Groww says it is not held any more: not part of what you hold
     if (!isNum(i.invested) || !isNum(i.profit_amount)) continue
     counted += 1
     invested += i.invested

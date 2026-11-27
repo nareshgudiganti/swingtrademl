@@ -299,11 +299,13 @@ def groww_user_ids(db, principal) -> list[int]:
 
 def held_or_sold_symbols(db, mode: str, groww_user_ids: Sequence[int] = ()) -> set[str]:
     """Upper-case symbols we hold or sold: every position in this trading mode (open or closed),
-    plus, for the given users only, Groww Tracker stocks they hold (on the list with a buy price)
-    or sold (Sold records)."""
+    plus, for the given users only, Groww Tracker stocks they currently hold (the shared
+    `is_currently_held_clause`: held in Groww, or a hand-entered row with a buy price) or sold
+    (Sold records). A stock Groww shows as no longer held counts only if it was sold."""
     from swing_trade_ml.db.models.market import Instrument
     from swing_trade_ml.db.models.trading import Position
     from swing_trade_ml.db.models.user_watchlist import UserWatchlistItem, UserWatchlistSale
+    from swing_trade_ml.services.groww.apply import is_currently_held_clause
 
     rows = db.execute(
         select(Instrument.tradingsymbol)
@@ -318,7 +320,7 @@ def held_or_sold_symbols(db, mode: str, groww_user_ids: Sequence[int] = ()) -> s
             select(UserWatchlistItem.symbol).where(
                 UserWatchlistItem.user_id.in_(ids),
                 UserWatchlistItem.removed_at.is_(None),
-                UserWatchlistItem.buy_price.is_not(None),
+                is_currently_held_clause(),
             )
         ).scalars()
         sold = db.execute(

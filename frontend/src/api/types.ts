@@ -711,7 +711,12 @@ export interface WatchTrackerItem {
   score_first: number | null
   scores: { date: string; score: number }[]
   closes: { date: string; close: number }[]
-  state: TrackerState
+  state: TrackerState  /** Where the quantity and price come from. Older servers omit these four fields. */
+  source?: 'manual' | 'groww'
+  held_state?: 'unknown' | 'held' | 'not_held'
+  groww_synced_at?: string | null
+  /** Groww shows this many fewer shares than we have: the sale to confirm. */
+  pending_sale_qty?: number | null
 }
 
 /** One sold stock in the Groww Tracker's "Sold records" (GET /me/watchlist/sold). */
@@ -732,10 +737,52 @@ export interface SoldRecord {
   result: 'win' | 'loss' | 'flat' | null
 }
 
+export type GrowwSyncStatus = 'complete' | 'partial' | 'failed' | 'empty_unconfirmed'
+
+/** Owner only. The server leaves it out for everyone else. */
+export interface GrowwStatus {
+  configured: boolean
+  last_success_at: string | null
+  last_status: GrowwSyncStatus | null
+  last_attempt_at: string | null
+  /** The sync to confirm when it came back empty. */
+  last_sync_id?: number | null
+}
+
+export interface GrowwSyncResult {
+  status: GrowwSyncStatus
+  /** How many holdings Groww returned; null when the refresh failed before it had a count. */
+  holdings_count: number | null
+  /** When the refresh finished; null while it has not (the server may answer before it is stamped). */
+  finished_at: string | null
+}
+
+export interface GrowwMatchItem {
+  isin: string
+  /** Groww's name for the holding, quantity and average price: any of them can be missing in a partial sync. */
+  trading_symbol: string | null
+  quantity: number | null
+  average_price: number | null
+  match_state: 'suggested' | 'needs_matching'
+  suggested_symbol: string | null
+  /** The stock the suggestion points at: what a one-tap "Use ..." posts. Null without a suggestion. */
+  suggested_instrument_id: number | null
+  /** Set when this holding was confirmed to a stock another Groww holding is also confirmed to: neither is
+   *  followed until the owner picks the right stock for one of them. */
+  conflict_symbol?: string | null
+}
+
+/** GET /groww/matching. Rows with no ISIN cannot be matched, so the server leaves them out of `items` and counts them. */
+export interface GrowwMatching {
+  items: GrowwMatchItem[]
+  without_isin: number
+}
+
 export interface WatchTracker {
   as_of: string | null
   horizon_days: number
   items: WatchTrackerItem[]
+  groww?: GrowwStatus
 }
 
 export interface WatchlistHit {

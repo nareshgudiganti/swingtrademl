@@ -95,6 +95,9 @@ import type {
   WatchlistHit,
   SoldRecord,
   WatchTracker,
+  GrowwMatching,
+  GrowwStatus,
+  GrowwSyncResult,
   KiteLoginResponse,
   LatestSignal,
   HorizonAccuracy,
@@ -625,9 +628,17 @@ export const api = {
   myWatchlistAdd: (symbol: string, note?: string) => post<MyWatchlistItem>('/me/watchlist', { symbol, note }),
   myWatchlistRemove: (symbol: string) => del<MyWatchlistItem>(`/me/watchlist/${encodeURIComponent(symbol)}`),
   /** Record a sale made in Groww: the stock leaves the tracker and its result is kept in Sold records. */
-  myWatchlistSold: (symbol: string, body: { sell_price: number; sold_on?: string }) =>
+  myWatchlistSold: (symbol: string, body: { sell_price: number; sold_on?: string; quantity?: number; pending_qty?: number }) =>
     post<SoldRecord>(`/me/watchlist/${encodeURIComponent(symbol)}/sold`, body),
   myWatchlistSoldList: () => get<{ items: SoldRecord[] }>('/me/watchlist/sold'),
+  // ------------------------------------------------ Groww holdings sync (owner only) --
+  growwSync: () => post<GrowwSyncResult>('/groww/sync'),
+  growwStatus: () => get<GrowwStatus>('/groww/status'),
+  growwMatching: () => get<GrowwMatching>('/groww/matching'),
+  growwMatch: (isin: string, instrumentId: number) =>
+    post<unknown>(`/groww/matching/${encodeURIComponent(isin)}`, { instrument_id: instrumentId }),
+  growwConfirmAll: () => post<unknown>('/groww/matching/confirm-all'),
+  growwConfirmEmpty: (syncId: number) => post<unknown>(`/groww/syncs/${syncId}/confirm-empty`),
   /** Groww Tracker: each stock on the list followed like an open position. */
   myWatchlistTracker: () => get<WatchTracker>('/me/watchlist/tracker'),
   /** Edit one stock's Groww entry: buy price, shares, buy date (YYYY-MM-DD) and/or note. Only sent fields change. */

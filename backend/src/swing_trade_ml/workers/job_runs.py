@@ -58,6 +58,7 @@ JOB_LABELS: dict[str, tuple[str, str]] = {
     "check_exits": ("Stop-loss and target check", "Checks open positions for exits"),
     "reconcile_orders": ("Order status check", "Matches orders with Zerodha"),
     "brain_intraday": ("Brain: holdings check", "Re-checks held stocks every 15 minutes"),
+    "groww_sync": ("Groww holdings sync", "Reads your Groww shares into the Groww Tracker"),
     "daily_ingest": ("Daily candles", "Downloads the day's prices after the close"),
     "predict_watchlist": ("Watchlist scores", "Scores the watchlist with the model"),
     "signal_scan": ("Daily scan", "Looks for new trades"),

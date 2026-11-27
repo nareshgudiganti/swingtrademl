@@ -27,6 +27,9 @@ from swing_trade_ml.db.session import session_scope
 from swing_trade_ml.ml.backup import backup_model_artifacts
 from swing_trade_ml.notifications import alert_policy, notifier
 from swing_trade_ml.services import engine, held_read, ingestion, portfolio
+from swing_trade_ml.services.groww import client as groww_client
+from swing_trade_ml.services.groww import sync as groww_sync
+from swing_trade_ml.services.groww.apply import groww_held_symbols
 from swing_trade_ml.workers import heartbeat, job_runs
 
 log = get_logger(__name__)
@@ -451,12 +454,61 @@ def job_daily_ingest() -> None:
                     symbols=len(extra_results),
                     bars=sum(extra_results.values()),
                 )
+            _ingest_groww_held(db, watchlisted | extra_symbols)
             from swing_trade_ml.services.watchlist_snapshots import record_watchlist_snapshot
 
             record_watchlist_snapshot(db)
             db.commit()
     except Exception as exc:  # noqa: BLE001
         _report_error("daily_ingest", exc)
+
+
+def _ingest_groww_held(db, already: set[str]) -> None:
+    """Daily candles for stocks the owner holds in Groww, as unwatchlisted symbols (like strategy
+    lists): they get Kite prices for the Groww Tracker without entering any scan or trade list.
+    `is_watchlisted` is never touched. Its own try/except: a failure here never blocks the ingest."""
+    try:
+        symbols = sorted(set(groww_held_symbols(db)) - already)
+        if symbols:
+            # NSE only: Groww holdings are matched to their NSE stock, never a BSE listing of the same symbol.
+            results = ingestion.backfill_symbols(db, symbols, interval="day", exchange="NSE")
+            log.info("job.ingest.groww_held_done", symbols=len(results), bars=sum(results.values()))
+    except Exception as exc:  # noqa: BLE001 - display-only prices; the rest of the ingest goes on
+        log.warning("job.ingest.groww_held_failed", error=type(exc).__name__)
+        # Clear a failed transaction so the snapshot below still runs. Candles written above are
+        # already saved: ingestion commits after every stock.
+        with contextlib.suppress(Exception):
+            db.rollback()
+
+
+def _kind_only(exc: BaseException) -> Exception:
+    """A stand-in for `exc` that keeps its class name and drops its text, so a failure report (log, alert and
+    the Admin jobs page, which shows the class name) says what kind of failure it was and nothing else."""
+    kind = type(exc).__name__
+    return type(kind, (Exception,), {})(kind)
+
+
+def job_groww_sync() -> None:
+    """15:35 IST weekdays: read the owner's Groww holdings into the Groww Tracker.
+
+    Display/tracking only (no order is placed or changed). Skipped when Groww is not configured or
+    the owner account (first name in REAL_ACCOUNT_USERS) is not found."""
+    if not groww_client.is_configured():
+        log.info("job.groww_sync.skipped", reason="not_configured")
+        return
+    try:
+        with session_scope() as db:
+            user_id = groww_sync.owner_user_id(db)
+            if user_id is None:
+                log.warning("job.groww_sync.skipped", reason="owner_not_found")
+                return
+            sync = groww_sync.run_sync(db, user_id=user_id, trigger="scheduled")
+            log.info("job.groww_sync.done", status=getattr(sync, "status", None))
+    except groww_sync.SyncAlreadyRunning:
+        log.info("job.groww_sync.skipped", reason="already_running")
+    except Exception as exc:  # noqa: BLE001
+        # Only the kind of failure goes out: the text of a Groww error can carry account details.
+        _report_error("groww_sync", _kind_only(exc))
 
 
 def _blocked_entries(db, since: datetime) -> list[dict[str, Any]]:

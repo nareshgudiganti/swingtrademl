@@ -44,6 +44,7 @@ from swing_trade_ml.db.models.finance import (
     FinanceRecurringBillPayment,
     FinanceTransaction,
 )
+from swing_trade_ml.db.models.groww import GrowwHolding, GrowwSync, StockAlias
 from swing_trade_ml.db.models.horizon import HorizonRecordRow
 from swing_trade_ml.db.models.identity import ScoreLedger, Security, SecurityAlias, SecuritySymbol
 from swing_trade_ml.db.models.invites import InviteRequest
@@ -85,9 +86,16 @@ from swing_trade_ml.db.models.trading import (
     Strategy,
     Trade,
 )
-from swing_trade_ml.db.models.user_watchlist import UserWatchlistItem, UserWatchlistSale
+from swing_trade_ml.db.models.user_watchlist import (
+    UserWatchlistItem,
+    UserWatchlistItemChange,
+    UserWatchlistSale,
+)
 
 __all__ = [
+    "GrowwHolding",
+    "GrowwSync",
+    "StockAlias",
     "AlertOutbox",
     "AlertSettings",
     "AuditLog",
@@ -181,6 +189,7 @@ __all__ = [
     "UpcomingEvent",
     "User",
     "UserWatchlistItem",
+    "UserWatchlistItemChange",
     "UserWatchlistSale",
     "WatchlistSnapshot",
 ]

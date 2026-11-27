@@ -25,6 +25,7 @@ from swing_trade_ml.api.v1.endpoints import (
     compare,
     experiments,
     finance,
+    groww,
     h05,
     instruments,
     invites,
@@ -132,3 +133,5 @@ api_router.include_router(beginner.router, dependencies=protected)
 # Each person's own watchlist: require_auth opens these few routes to every signed-in person
 # (deps.SELF_SERVICE_ROUTES); the handlers only touch the caller's own rows.
 api_router.include_router(my_watchlist.router, dependencies=protected)
+# Groww holdings sync: owner only (each route also requires require_real_account), display only.
+api_router.include_router(groww.router, dependencies=protected)

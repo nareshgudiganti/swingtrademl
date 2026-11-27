@@ -202,6 +202,12 @@ class Settings(BaseSettings):
     KITE_PASSWORD: str = ""
     KITE_TOTP_SECRET: str = ""
 
+    # Groww holdings sync (read-only: token + holdings, nothing else). Blank
+    # disables the feature. GROWW_TOTP_TOKEN is the TOTP API key from the Groww
+    # cloud API page; GROWW_TOTP_SECRET is its base32 secret, not a 6-digit code.
+    GROWW_TOTP_TOKEN: str = ""
+    GROWW_TOTP_SECRET: str = ""
+
     # -------------------------------------------------------- market data --
     DEFAULT_WATCHLIST: str = "RELIANCE,TCS,INFY,HDFCBANK,ICICIBANK"
     HISTORICAL_BACKFILL_DAYS: int = 1825

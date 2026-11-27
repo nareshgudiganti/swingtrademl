@@ -206,3 +206,35 @@ def test_groww_user_ids_follow_the_real_account_privacy_rule(db_session):
     assert r.groww_user_ids(db_session, Principal(user=member)) == []
     assert r.groww_user_ids(db_session, None) == []
     assert r.groww_user_ids(db_session, Principal(user=None, via_api_key=True)) == [owner.id]
+
+
+def test_not_held_excluded_from_held_or_sold(db_session):
+    from datetime import UTC, datetime
+
+    from swing_trade_ml.db.models.groww import HELD, NOT_HELD, SOURCE_GROWW
+    from swing_trade_ml.db.models.user_watchlist import UserWatchlistItem, UserWatchlistSale
+
+    owner = _watch_user(db_session, "sudeeksha")
+    db_session.add_all(
+        [
+            # Groww says these are gone: kept on the list, but not held any more.
+            UserWatchlistItem(user_id=owner.id, symbol="GWGONE", buy_price=100.0, quantity=0,
+                              source=SOURCE_GROWW, groww_isin="INE1", held_state=NOT_HELD),
+            UserWatchlistItem(user_id=owner.id, symbol="GWGONESOLD", buy_price=100.0, quantity=0,
+                              source=SOURCE_GROWW, groww_isin="INE2", held_state=NOT_HELD),
+            # Held in Groww (even without a buy price) counts as held.
+            UserWatchlistItem(user_id=owner.id, symbol="GWHELD", source=SOURCE_GROWW, held_state=HELD),
+            # A manual row with a buy price still counts, as before.
+            UserWatchlistItem(user_id=owner.id, symbol="MANUALHELD", buy_price=10.0),
+            UserWatchlistItem(user_id=owner.id, symbol="GWREMOVED", source=SOURCE_GROWW, held_state=HELD,
+                              removed_at=datetime.now(UTC)),
+        ]
+    )
+    db_session.add(
+        UserWatchlistSale(user_id=owner.id, symbol="GWGONESOLD", bought_on=date(2026, 11, 1),
+                          entry_price=100.0, entry_source="your_price", sell_price=110.0,
+                          sold_on=date(2026, 11, 5))
+    )
+    db_session.flush()
+    got = r.held_or_sold_symbols(db_session, "paper", [owner.id])
+    assert got == {"GWGONESOLD", "GWHELD", "MANUALHELD"}

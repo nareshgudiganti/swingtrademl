@@ -565,7 +565,9 @@ class ManualScan:
 
 
 def run_manual_scan(now: datetime | None = None) -> ManualScan:
-    """A whole-session scan started by hand (API "scan all", CLI `scan`), allowed at any time.
+    """A whole-session scan started by hand (API "scan all", CLI `scan`). It may start before the
+    scan window opens; after the deadline (17:00 IST by default) it gives the session up instead of scanning
+    late (owner decision O7, #316).
 
     It goes the same way as the scheduled scan: same claim, same wait for the session's prices, at most
     once per session, `running` marked before the strategies run, and the held jobs run afterwards.
@@ -659,11 +661,26 @@ def _scan_window(target: date) -> tuple[datetime, datetime]:
     return opens, max(deadline, opens + timedelta(minutes=30))
 
 
+def _legacy_scan_done(previous: dict, opens: datetime) -> bool:
+    """A record written before #316 has no session marker. If it was written at or after this session's scan
+    time, that scan already ran under the old code: count it as done so the first recovery after a deploy
+    never scans the same session twice."""
+    if not previous or "target_session" in previous or not previous.get("ts"):
+        return False
+    try:
+        written = datetime.fromisoformat(previous["ts"])
+    except (TypeError, ValueError):
+        return False
+    if written.tzinfo is None:
+        written = written.replace(tzinfo=IST)
+    return written >= opens
+
+
 def _daily_scan_once(trigger: str, now: datetime) -> tuple[str, engine.ScanResult | None]:
     """Returns the outcome, and the engine's result when the strategies ran."""
     target = scan_readiness.target_session(now)
     opens, deadline = _scan_window(target)
-    # The 15:45 job and a scan started by hand may run at any time; retries and recovery only in the window.
+    # The 15:45 job and a scan started by hand may start before the window; retries and recovery only in it.
     if trigger not in ("scheduled", "manual") and (target != now.date() or now < opens):
         return "outside_window", None
 
@@ -680,7 +697,7 @@ def _daily_scan_once(trigger: str, now: datetime) -> tuple[str, engine.ScanResul
         followups = dict(previous.get("followups") or {}) if same_session else {}
         when = f"{target:%d %b}"
 
-        if status in ("partial", "complete"):
+        if status in ("partial", "complete") or _legacy_scan_done(previous, opens):
             return "already_done", None
         if status in ("interrupted", "gave_up"):
             return status, None

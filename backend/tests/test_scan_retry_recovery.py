@@ -216,3 +216,19 @@ def test_the_scan_record_is_replaced_in_one_step(tmp_path, monkeypatch):
     heartbeat.write_last_scan({"status": "complete", "target_session": "2026-11-13"})
     assert heartbeat.read_last_scan() == {"status": "complete", "target_session": "2026-11-13"}
     assert [p.name for p in tmp_path.iterdir()] == [".last_scan.json"]  # no temp file left behind
+
+
+def test_a_scan_recorded_by_the_old_code_today_counts_as_done(world):
+    """First deploy after 16:30 IST: the 15:45 scan already ran under the old code, whose record has no
+    session marker. The start-up recovery must not scan the same session a second time (review 27 Nov)."""
+    world.record = {"ts": at(15, 46).isoformat(), "strategies_run": 3, "signals_generated": 2}
+    world.prices_in = True
+    assert jobs.run_daily_scan("recovery", now=at(16, 31)) == "already_done"
+    assert world.scans == 0 and world.alerts == []
+
+
+def test_an_old_code_record_from_before_todays_scan_time_does_not_count(world):
+    world.record = {"ts": at(15, 46, date(2026, 11, 12)).isoformat(), "strategies_run": 3}
+    world.prices_in = True
+    assert jobs.run_daily_scan("recovery", now=at(16, 31)) == "complete"
+    assert world.scans == 1
